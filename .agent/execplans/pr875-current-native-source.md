@@ -494,3 +494,76 @@ Graphify rebuilt the source graph; its optional HTML view exceeded the size cap.
 A fresh full actual collector/router and hosted CI remain required and unclaimed.
 Local validation receipt: tmp/pr875-repair/bot-receivers/v5-actual-retry/receipt.json,
 SHA256 2e768278bfe5efee8df724832b4963868d43b8cc17f6738c1de621d286dbadad.
+
+### Finite historical J owner transitions (2026-10-24, implementation pending proof)
+
+The actual 38330 producer rejected audit_identity_test.go at J3071, after the
+existing separate audit.go permission succeeded. Read-only replay classified all
+75 duplicate rows: 59 existing Native qualifications, five existing whole-unit
+ordinary routes, one existing audit.go permission and ten missing permissions.
+Equal blobs alone do not authorize the ten owner replacements. The independently
+reviewed finite unit binds their complete literal prior/incoming rows, 114 source
+versions, 168 parent edges and 17 original contribution context entries. Its raw
+SHA256 is e455c1059f0e59ffe127843957dc603e9f0a5917aff1e880976400e651d6ebad.
+All ten occur consecutively at indices117..126 in the complete203-path J operation.
+Six differ in the current checkout: this permission makes no current-source or
+runtime-equivalence claim. Full aggregate=true obligations and inherited evidence
+survive every replacement; original current-source and router gates remain required.
+
+A private invocation-local worker reconstructs the entire actual trace before
+serving its first request. Each request freshly verifies the validated prefix,
+all appended events, current complete map, ready bytes and production capability.
+Only the exact pending row can receive permission; conservation precedes mutation.
+Replies do not advance state: the next request must observe the real appended
+permission/conservation/remove/after/committed events. Restart reconstructs the
+full trace, and explicit finish requires the tenth committed row. The final trace
+validator independently reconstructs the same permission and conservation without
+trusting the worker. No serialized checkpoint grants authority. Existing audit.go
+behavior and all predecessor source predicates remain intact.
+
+Initial three-test RED established missing source-unit/receipt behavior. Focused
+nine-test state-machine checks passed, explicitly using a mocked bootstrap only
+for state-machine isolation. Actual preserved-prefix replay, transport checks,
+full regression results, final independent CODE review and a fresh complete
+collector/router run remain separate pending gates. No full producer PASS is
+claimed. The first expanded suite exposed Linux E2BIG in four old fixture calls;
+the harness now executes the exact generated Bash program from a private file,
+preserving its environment, working directory and assertions.
+
+Frozen source received independent CODE CLEAR. The corrected full F54 suite
+passed 74/74 in158.326s; two later test-only additions then passed with all finite
+contracts (13/13 in5.041s), including rehashed source-unit semantic negatives and
+actual extracted shell/CLI/AF_UNIX success, failed-consumer and worker-death cases.
+The transport test explicitly mocks authority State; it proves wiring/cleanup,
+not historical permission. Python compilation and Bash syntax passed. Helper
+SHA256 ac2b68eadb461cafacd37c26f0bf19b67564301de842f13988fd8a4b83886614,
+test fadba01e164e8418bb8dd45f40624072295a368048de6bd668f508ba9f923b2f,
+shell 822ad1955f6d3c437513453e40def4d5ca8d9f36a6ede026c3a0b6117b7d98a4.
+
+Historical-prefix replay is NOT COMPLETED. The final38330 trace is preserved at
+SHA256 9f7c0b33e4d56ca34b5fe0ac3337c1fa7ab6e0e4c2c46363fb971bd67ecfb308,
+but the observer did not retain two referenced supplemental traces: J-prior
+99cad47de790cd92602570343cddc757de4209bae490c7cee4421055d151f9f7 and range-side
+b9499cf1c8b86ac053578bcaeb2f722d4f5f321dcb6449ccfb5c73308396b220.
+An exhaustive recursive input inventory and retained-copy search confirmed the
+gap. Setup/import/materialization/carrier/current-capability preflight passed;
+the full fold then rejected the missing structural-capability sidecar. One
+bounded reconstruction attempt recovered that capability through the original
+constructor, but extracted original side-collector Bash failed syntax before
+producing either trace. All failed attempts remain evidence; no bytes, checkpoint
+or successful row transition were invented. Further historical reconstruction
+was explicitly stopped. Independent review accepts publishing this CODE-cleared
+candidate to obtain the mandatory fresh full producer/hosted proof; that run must
+still execute unchanged initialization, permission, conservation, final fold and
+router to terminal success. Publication is not completion or runtime acceptance.
+
+Final combined Linux compatibility run pins actual R d0554787 and private
+synthetic K bdb1542bb3b9388a652fd87f98465ed103abb5d9. All19 artifact modes/raw
+bytes passed; production33/33 (250.250s), Native7/7 (5.286s), F5476/76 (160.097s),
+Python compilation and Bash syntax passed, exit0. Frozen helper/test/shell hashes
+above are unchanged. Receipt SHA256
+f7a502b456a226ddaa31bca0bcd462d00ca6f84dfedfe0893c826feec7581345 at
+tmp/pr875-repair/bot-receivers/v5-actual-final-receipt.json; full log SHA256
+0af6de8ba20a5b9b91383558fca88d14011d226d3f042e6e66b9c34bc2fa2447.
+Graphify rebuilt115978 nodes/239868 edges; optional HTML exceeded its size cap.
+These are component/fixture results, not a full actual collector/router result.

@@ -14,6 +14,8 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import contextmanager, ExitStack
+import copy
 from unittest.mock import patch
 
 from f13_guarded_merge_test import definitions, git
@@ -29,6 +31,298 @@ def module():
     spec = importlib.util.spec_from_file_location('f54', HELPER)
     value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
     return value
+
+
+class FiniteJHistoricalContract(unittest.TestCase):
+    """Finite source and transition controls; actual full-prefix replay is separate."""
+    def test_finite_permission_is_distinct_required_and_consumed_exactly(self):
+        m=module(); permission={'type':'finite-control','path':'historical-only'}
+        item=dict(op='F5/J/2',finite_J_owner_permission=permission)
+        m.validate_exact_conservation(item,item['op'],dict(finite_J_owner_permission=permission))
+        for receipt in ({},dict(exact_J_owner_permission=permission),
+                        dict(finite_J_owner_permission=None),dict(finite_J_owner_permission={'changed':True})):
+            with self.subTest(receipt=receipt),self.assertRaises(m.Rejected):
+                m.validate_exact_conservation(item,item['op'],receipt)
+        with self.assertRaises(m.Rejected):
+            m.validate_exact_conservation(dict(op=item['op']),item['op'],dict(finite_J_owner_permission=permission))
+
+    def test_source_unit_preserves_ten_literal_rows_and_no_current_equivalence(self):
+        m=module(); unit=m.finite_J_source_unit(ROOT)
+        self.assertEqual(len(unit['cases']),10)
+        self.assertNotIn(m.EXACT_J_AUDIT_PATH,[x['path'] for x in unit['cases']])
+        self.assertFalse(unit['admission']);self.assertFalse(unit['runtime_pass'])
+        for case in unit['cases']:
+            self.assertEqual(case['prior'].split('\t')[1],'false')
+            self.assertEqual(case['incoming'].split('\t')[1],'true')
+        self.assertEqual(sum(len(x['versions']) for x in unit['cases']),114)
+        self.assertEqual(sum(len(x['edges']) for x in unit['cases']),168)
+
+    def test_source_unit_mutations_cannot_become_permission(self):
+        m=module()
+        for old,new in ((b'100644 blob',b'100755 blob'),(b'2445e81',b'1445e81'),(b'false',b'true')):
+            with self.subTest(change=new),patch.object(m,'FINITE_J_SOURCE_UNIT_RAW',m.FINITE_J_SOURCE_UNIT_RAW.replace(old,new,1)):
+                with self.assertRaisesRegex(m.Rejected,'finite_J_frozen_source_unit'):
+                    m.finite_J_source_unit(ROOT)
+
+    def test_rehashed_source_inventory_still_reconstructs_actual_git(self):
+        m=module()
+        for change,reason in (('version','complete_source_inventory'),('edge','complete_source_inventory'),
+                              ('parent','ordered_parents'),('bytes','historical_complete_bytes'),
+                              ('tree','historical_tree_entry')):
+            with self.subTest(change=change):
+                unit=json.loads(m.FINITE_J_SOURCE_UNIT_RAW);case=unit['cases'][0]
+                if change=='version':case['versions'].pop(next(iter(case['versions'])))
+                elif change=='edge':case['edges'].pop(next(iter(case['edges'])))
+                elif change=='parent':unit['ordered_parents'].reverse()
+                else:
+                    version=next(v for v in case['versions'].values() if v['content'])
+                    if change=='bytes':version['content']['sha256']='0'*64
+                    else:version['tree_record']=version['tree_record'].replace('100644','100755')
+                raw=m.canonical(unit)
+                with patch.object(m,'FINITE_J_SOURCE_UNIT_RAW',raw),patch.object(m,'FINITE_J_SOURCE_UNIT_SHA',m.sha(raw)):
+                    with self.assertRaisesRegex(m.Rejected,'finite_J_'+reason):m.finite_J_source_unit(ROOT)
+
+    @contextmanager
+    def session_fixture(self):
+        """FSM-only fixture: bootstrap authority is mocked, never claimed as proof."""
+        m=module();unit=json.loads(m.FINITE_J_SOURCE_UNIT_RAW);cases=unit['cases']
+        op='F5/'+m.J3071+'/2';cap=dict(type='F54_FIXED3071_PRODUCTION_CAPABILITIES_v1',fixture=True)
+        ready=dict(frame='F5',operation=op,operation_binding=dict(paths=[c['path'] for c in cases]),
+            capability_sha256=m.sha(m.canonical(cap)),composition=dict(whole={'fixture':True}),
+            required_qualification={c['path']:dict(aggregate=True,retained_evidence=[{'prior':'kept'}],
+                inherited_qualification=[{'aggregate':True}],prior_span_evidence=[],J_classification={'trigger':'true'}) for c in cases})
+        rows=[c['prior'] for c in cases];events=[]
+        with tempfile.TemporaryDirectory() as folder,ExitStack() as patches:
+            folder=Path(folder);trace=folder/'trace';map_path=folder/'map';ready_path=folder/'ready';cap_path=folder/'cap'
+            def map_bytes():return ('\n'.join(rows)+'\n').encode()
+            def append(kind,payload,operation=op):
+                event=dict(schema=m.SCHEMA,sequence=len(events)+1,previous=events[-1]['digest'] if events else '0'*64,
+                    kind=kind,frame='F5',operation=operation,payload=payload)
+                event['digest']=m.sha(m.canonical(event));events.append(event)
+                with trace.open('ab') as stream:stream.write(m.canonical(event)+b'\n')
+                return event
+            def pending(index):
+                case=cases[index]
+                return append('row_before',dict(path=case['path'],prior=m.raw_binding(case['prior']),
+                    prior_rows=[m.raw_binding(case['prior'])],incoming=m.raw_binding(case['incoming']),
+                    map_before=m.file_digest(map_bytes()),phase='before_qualification'))
+            prior_op='F5/'+cases[0]['prior'].split('\t')[2]+'/2'
+            append('operation_begin',{},prior_op);append('classification',{'trigger':'false'},prior_op)
+            for case in cases:
+                append('row_after',dict(path=case['path'],row=m.raw_binding(case['prior'])),prior_op)
+                append('row_committed',dict(path=case['path'],row=m.raw_binding(case['prior'])),prior_op)
+            pending(0);map_path.write_bytes(map_bytes());ready_path.write_bytes(m.canonical(ready));cap_path.write_bytes(m.canonical(cap))
+            initial=dict(ready=ready,capability=cap,map=map_bytes().decode(),phase='permission',index=0,permission=None)
+            bootstrap=patches.enter_context(patch.object(m,'validate_trace',return_value={'finite_J_checkpoint':initial}))
+            patches.enter_context(patch.object(m,'verified_3071_capabilities',return_value=cap))
+            patches.enter_context(patch.object(m,'checked_3071_capability_value',return_value=cap))
+            patches.enter_context(patch.object(m,'finite_J_source_unit',return_value=unit))
+            patches.enter_context(patch.object(m,'manual_3071_composition',return_value={'fixture':True}))
+            state=m.FiniteJSession(ROOT,cap_path,ready_path,m.sha(ready_path.read_bytes()),trace,map_path)
+            def complete(index):
+                case=cases[index];name=case['path'];incoming=m.raw_binding(case['incoming'])
+                permission=json.loads(state.request('permission',name))
+                append('finite_J_owner_permission',dict(path=name,receipt=permission,admission=False))
+                conserved=json.loads(state.request('consume',name))
+                append('range_J_ledger_conserved',dict(path=name,receipt=conserved,policy_result=None,admission=False))
+                append('row_remove',dict(path=name,row=incoming,reason='original_guarded_map_replacement',phase='before_mutation'))
+                rows[:]=[r for r in rows if r.split('\t')[0]!=name]
+                append('row_after',dict(path=name,row=incoming,reason='original_owner_and_row_assignment',phase='before_mutation'))
+                rows.append(case['incoming']);map_path.write_bytes(map_bytes())
+                append('row_committed',dict(path=name,row=incoming,retained_rows=[incoming],map_after=m.file_digest(map_bytes())))
+                return permission,conserved
+            yield dict(m=m,state=state,cases=cases,ready=ready,cap=cap,unit=unit,trace=trace,map=map_path,
+                ready_path=ready_path,cap_path=cap_path,events=events,rows=rows,append=append,pending=pending,
+                complete=complete,bootstrap=bootstrap)
+
+    def test_process_local_unit_consumes_all_ten_only_after_actual_commits(self):
+        with self.session_fixture() as f:
+            for index,case in enumerate(f['cases']):
+                if index:f['pending'](index)
+                permission=f['state'].request('permission',case['path'])
+                self.assertEqual(permission,f['state'].request('permission',case['path']), 'exact pending retry')
+                self.assertEqual(f['rows'][index if index==0 else 0].split('\t')[1],'false')
+                p,c=f['complete'](index)
+                self.assertEqual(c['finite_J_owner_permission'],p)
+                self.assertEqual(c['obligations'],f['ready']['required_qualification'][case['path']])
+            self.assertEqual(f['state'].request('finish',''),'')
+            self.assertEqual(f['bootstrap'].call_count,1)
+            with self.assertRaisesRegex(f['m'].Rejected,'finished_session'):f['state'].request('finish','')
+
+    def test_no_future_phase_partial_finish_or_intervening_event_is_accepted(self):
+        for kind in ('future','consume_early','finish_early','unexpected','duplicate_permission','remove_before_conservation'):
+            with self.subTest(kind=kind),self.session_fixture() as f:
+                m=f['m'];state=f['state'];name=f['cases'][0]['path']
+                if kind in ('duplicate_permission','remove_before_conservation'):
+                    p=json.loads(state.request('permission',name));payload=dict(path=name,receipt=p,admission=False)
+                    f['append']('finite_J_owner_permission',payload)
+                    f['append']('finite_J_owner_permission' if kind=='duplicate_permission' else 'row_remove',payload)
+                elif kind=='unexpected':f['append']('classification',dict(path=name,trigger='true'))
+                with self.assertRaises(m.Rejected):
+                    state.request('finish' if kind=='finish_early' else 'consume' if kind=='consume_early' else 'permission',
+                        '' if kind=='finish_early' else f['cases'][1]['path'] if kind=='future' else name)
+
+    def test_prefix_ready_map_capability_and_event_context_are_fresh(self):
+        for kind in ('prefix','ready','map','capability','event'):
+            with self.subTest(kind=kind),self.session_fixture() as f:
+                m=f['m'];state=f['state'];name=f['cases'][0]['path']
+                if kind in ('prefix','ready','map'):
+                    path=f['trace'] if kind=='prefix' else f['ready_path'] if kind=='ready' else f['map']
+                    stat=path.stat();raw=path.read_bytes();path.write_bytes(bytes([raw[0]^1])+raw[1:])
+                    os.utime(path,ns=(stat.st_atime_ns,stat.st_mtime_ns))
+                if kind=='capability':
+                    with patch.object(m,'verified_3071_capabilities',return_value=dict(f['cap'],changed=True)),self.assertRaises(m.Rejected):
+                        state.request('permission',name)
+                elif kind=='event':
+                    with patch.dict(os.environ,{'GITHUB_SHA':'changed'}),self.assertRaises(m.Rejected):state.request('permission',name)
+                else:
+                    with self.assertRaises(m.Rejected):state.request('permission',name)
+
+    def test_lost_obligations_or_changed_permission_cannot_authorize_removal(self):
+        for kind in ('aggregate','evidence','permission','map','row'):
+            with self.subTest(kind=kind),self.session_fixture() as f:
+                m=f['m'];name=f['cases'][0]['path'];p=json.loads(f['state'].request('permission',name))
+                f['append']('finite_J_owner_permission',dict(path=name,receipt=p,admission=False))
+                c=json.loads(f['state'].request('consume',name))
+                if kind=='aggregate':c['aggregate']=False
+                elif kind=='evidence':c['obligations']['retained_evidence']=[]
+                elif kind=='permission':c['finite_J_owner_permission']['prior_operation']='independent-same-blob-owner'
+                elif kind=='map':c['expected_post_map']['sha256']='0'*64
+                else:c['after_gate_row']=m.raw_binding(c['after_gate_row']['raw'].replace('\ttrue\t','\tfalse\t',1))
+                f['append']('range_J_ledger_conserved',dict(path=name,receipt=c,policy_result=None,admission=False))
+                with self.assertRaisesRegex(m.Rejected,'finite_J_tail_complete_conservation'):
+                    f['state'].request('consume',name)
+
+    def test_each_literal_prior_and_incoming_field_is_required(self):
+        for field in ('prior','incoming'):
+            for index in range(8):
+                with self.subTest(field=field,index=index),self.session_fixture() as f:
+                    m=f['m'];events=copy.deepcopy(f['events']);before=events[-1]
+                    parts=before['payload'][field]['raw'].split('\t');parts[index]+='-changed'
+                    before['payload'][field]=m.raw_binding('\t'.join(parts))
+                    if field=='prior':before['payload']['prior_rows']=[before['payload']['prior']]
+                    with self.assertRaisesRegex(m.Rejected,'finite_J_complete_literal_rows'):
+                        m.finite_J_owner_evidence(ROOT,f['cap'],f['ready'],events,f['state'].prefix,f['map'].read_bytes())
+
+    def test_worker_restart_always_reconstructs_and_never_accepts_disk_state(self):
+        with self.session_fixture() as f:
+            m=f['m'];f['state'].request('permission',f['cases'][0]['path'])
+            m.FiniteJSession(ROOT,f['cap_path'],f['ready_path'],m.sha(f['ready_path'].read_bytes()),f['trace'],f['map'])
+            self.assertEqual(f['bootstrap'].call_count,2)
+            with patch.object(m,'validate_trace',side_effect=m.Rejected('changed-prefix')),self.assertRaisesRegex(m.Rejected,'changed-prefix'):
+                m.FiniteJSession(ROOT,f['cap_path'],f['ready_path'],m.sha(f['ready_path'].read_bytes()),f['trace'],f['map'])
+
+
+class FiniteJTransportContract(unittest.TestCase):
+    def test_extracted_shell_drives_real_cli_socket_and_owned_cleanup(self):
+        # Only authority State is mocked; real shell functions, CLI framing,
+        # socket server/client, explicit finish and EXIT cleanup execute.
+        wanted={'f13_cleanup','f13_f54_finite_J_owner_permission','f13_f54_consume_J_before_mutation','f13_f54_finite_J_finish'}
+        functions={match.group(1):match.group(0) for match in re.finditer(
+            r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}\n',SHELL.read_text()) if match.group(1) in wanted}
+        self.assertEqual(set(functions),wanted)
+        for mode in ('success','failed_consume','worker_death'):
+            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as directory:
+                folder=Path(directory);temp=folder/'private';temp.mkdir(mode=0o700)
+                wrapper=folder/'observer.py';calls=folder/'calls';events=folder/'events';pid=folder/'pid'
+                wrapper.write_text('''import importlib.util,json,os,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('candidate',sys.argv.pop(1))
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+class State:
+    def __init__(self,*args):self.event_context=m.finite_J_event_context()
+    def request(self,command,name):
+        with open(os.environ['CALLS'],'a') as stream:stream.write(command+'\\n')
+        if command=='consume' and os.environ['MODE']=='failed_consume':raise m.Rejected('fixture-consumer-denied')
+        if command=='finish':return ''
+        incoming=m.raw_binding(os.environ['INCOMING'])
+        return json.dumps(dict(incoming=incoming,transition='replace',after_gate_row=incoming))+'\\n'
+m.FiniteJSession=State
+sys.exit(m.main())
+''')
+                # The shell's observer takes argv directly; pin helper in wrapper.
+                wrapper.write_text(wrapper.read_text().replace("sys.argv.pop(1)",repr(str(HELPER))))
+                m=module();case=json.loads(m.FINITE_J_SOURCE_UNIT_RAW)['cases'][-1]
+                env=dict(os.environ,CALLS=str(calls),MODE=mode,INCOMING=case['incoming'])
+                values=dict(TMP_DIR=str(temp),f13_f54_observer=str(wrapper),f13_f54_frame='F5',
+                    f13_f54_operation='F5/'+m.J3071+'/2',f13_f54_J_operation='F5/'+m.J3071+'/2',
+                    f13_f54_3071_capability_file='fixture',f13_f54_J_ledger='fixture',f13_f54_J_ledger_sha='fixture',
+                    f13_f54_trace_file='fixture',name=case['path'],incoming=case['incoming'])
+                program='set -eu\n'+'\n'.join(functions.values())+'\n'
+                program+='\n'.join(k+'='+shlex.quote(v) for k,v in values.items())+'\ntrap f13_cleanup EXIT\n'
+                program+='f13_f54_trace_event() { printf "%s\\n" "$1" >>'+shlex.quote(str(events))+'; }\n'
+                program+='f13_f54_finite_J_owner_permission unused "$name" unused "$incoming"\n'
+                program+='printf "%s" "$f13_finite_J_worker_pid" >'+shlex.quote(str(pid))+'\n'
+                if mode=='worker_death':program+='kill "$f13_finite_J_worker_pid"; wait "$f13_finite_J_worker_pid" || true\n'
+                program+='f13_f54_consume_J_before_mutation unused "$name" unused "$incoming" replace || exit 37\n'
+                program+='f13_f54_finite_J_finish "$name"\n[[ -z "$f13_finite_J_worker_pid" ]]\n'
+                script=folder/'driver.sh';script.write_text(program)
+                result=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True,timeout=20)
+                self.assertEqual(result.returncode,0 if mode=='success' else 37,result.stderr)
+                self.assertFalse(temp.exists())
+                self.assertEqual(events.read_text().splitlines(),['finite_J_owner_permission']+(['range_J_ledger_conserved'] if mode=='success' else []))
+                self.assertEqual(calls.read_text().splitlines(),['permission','consume','finish'] if mode=='success' else
+                                 ['permission','consume'] if mode=='failed_consume' else ['permission'])
+                with self.assertRaises(ProcessLookupError):os.kill(int(pid.read_text()),0)
+
+    def test_client_rejects_changed_identity_malformed_frames_and_dead_worker(self):
+        m=module()
+        for change in ('nonce','session','command','path','context','extra','status','output','eof','trailing'):
+            with self.subTest(change=change),tempfile.TemporaryDirectory() as folder:
+                path=str(Path(folder)/'s')
+                with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
+                    server.bind(path);server.listen(1)
+                    def reply():
+                        connection,_=server.accept()
+                        with connection:
+                            request=m._router_socket_read(connection,65536)
+                            response=dict(request,status=0,output='')
+                            if change in request:response[change]='wrong'
+                            elif change=='extra':response['extra']=True
+                            elif change=='status':response['status']=False
+                            elif change=='output':response['output']={}
+                            if change!='eof':connection.sendall(json.dumps(response).encode()+(b'{}' if change=='trailing' else b''))
+                    thread=threading.Thread(target=reply);thread.start()
+                    with self.assertRaises((m.Rejected,ValueError)):
+                        m.finite_J_worker_request(path,'a'*64,'permission','some/path')
+                    thread.join(timeout=5);self.assertFalse(thread.is_alive())
+        with tempfile.TemporaryDirectory() as folder,self.assertRaises(OSError):
+            m.finite_J_worker_request(str(Path(folder)/'missing'),'a'*64,'permission','path')
+
+    def test_worker_publishes_ready_atomically_and_requires_explicit_finish(self):
+        # Transport-only oracle. The session's authority reconstruction has its own tests.
+        m=module();entered=threading.Event();release=threading.Event();errors=[];calls=[]
+        class State:
+            event_context=m.finite_J_event_context()
+            def request(self,command,name):
+                calls.append((command,name));return '' if command=='finish' else 'receipt\n'
+        with tempfile.TemporaryDirectory() as folder:
+            os.chmod(folder,0o700);path=str(Path(folder)/'s');session='a'*64;link=os.link
+            def paused_link(source,target):
+                self.assertEqual(Path(source).read_text(),session+'\n')
+                self.assertFalse(Path(target).exists());entered.set()
+                if not release.wait(5):raise AssertionError('publication release missing')
+                link(source,target)
+            def serve():
+                try:m.finite_J_worker(path,session,*(['unused']*6))
+                except Exception as error:errors.append(error)
+            with patch.object(m,'FiniteJSession',return_value=State()) as bootstrap,patch.object(m.os,'link',paused_link):
+                thread=threading.Thread(target=serve);thread.start()
+                try:
+                    self.assertTrue(entered.wait(5));self.assertFalse(Path(path+'.ready').exists());release.set()
+                    for _ in range(200):
+                        if Path(path+'.ready').exists():break
+                        time.sleep(.01)
+                    self.assertEqual(Path(path+'.ready').read_text(),session+'\n')
+                    self.assertEqual(Path(path).stat().st_mode & 0o777,0o600)
+                    self.assertEqual(m.finite_J_worker_request(path,session,'permission','p'),'receipt\n')
+                    self.assertTrue(thread.is_alive())
+                    self.assertEqual(m.finite_J_worker_request(path,session,'finish',''),'')
+                finally:release.set();thread.join(timeout=5)
+                bootstrap.assert_called_once()
+            self.assertFalse(thread.is_alive());self.assertEqual(errors,[])
+            self.assertEqual(calls,[('permission','p'),('finish','')])
+            self.assertFalse(Path(path).exists());self.assertFalse(Path(path+'.ready').exists())
 
 
 class ReadyDigestHoistContract(unittest.TestCase):
@@ -1763,7 +2057,10 @@ f13_retained_history_row() { return 1; }
                 program+='f13_f54_trace_event span_link "$ROOT" '+shlex.quote(json.dumps(origin))+'\n'
         program += f'f13_collect_develop_contributions "$ROOT" {self.base} {target or git(self.repo,"rev-parse","HEAD")} "$TMP_DIR/map" "$TMP_DIR/category" {str(allow).lower()} {str(partition).lower()}\n'
         if cross_scope: program += 'f13_cross_scope_path_allowed ' + shlex.quote(PROTO) + ' true\n'
-        p = subprocess.run(['bash', '-c', program], capture_output=True, text=True)
+        # A complete inherited origin plus the real extracted shell can exceed
+        # Linux's per-argument limit; preserve the program verbatim as a file.
+        script=out/'collect.sh';script.write_bytes(program.encode())
+        p = subprocess.run(['bash', str(script)], capture_output=True, text=True)
         return p, out
 
     def hidden_runtime(self):

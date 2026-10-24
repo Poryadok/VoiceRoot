@@ -6,14 +6,16 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 TMP_DIR="$(mktemp -d)"
 f13_cleanup() {
-  local status=$? child
-  if [[ -n "${f13_router_worker_pid:-}" ]]; then
+  local status=$? child worker
+  for worker in "${f13_router_worker_pid:-}" "${f13_finite_J_worker_pid:-}"; do
+  if [[ -n "${worker}" ]]; then
     # Signal only our still-running shell job; never a recycled numeric PID.
     while IFS= read -r child; do
-      [[ "${child}" != "${f13_router_worker_pid}" ]] || kill "${child}" 2>/dev/null || true
+      [[ "${child}" != "${worker}" ]] || kill "${child}" 2>/dev/null || true
     done < <(jobs -pr)
-    wait "${f13_router_worker_pid}" 2>/dev/null || true
+    wait "${worker}" 2>/dev/null || true
   fi
+  done
   rm -rf "${TMP_DIR}"
   return "${status}"
 }
@@ -3589,8 +3591,14 @@ f13_f54_consume_J_before_mutation() {
   local repo="$1" path="$2" output="$3" incoming="$4" transition="$5" receipt="${TMP_DIR}/fixed3071-J-consumed.json"
   [[ -n "${f13_f54_J_operation:-}" && "${f13_f54_operation:-}" == "${f13_f54_J_operation}" ]] || return 0
   [[ -n "${f13_f54_J_ledger_sha:-}" ]] || return 1
-  python3 "${f13_f54_observer}" 3071-J-consume "${f13_f54_J_ledger}" "${f13_f54_J_ledger_sha}" \
-    "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" "${transition}" >"${receipt}" || return 1
+  if python3 "${f13_f54_observer}" finite-J-path "${path}"; then
+    [[ "${transition}" == replace && -n "${f13_finite_J_worker_pid:-}" ]] || return 1
+    python3 "${f13_f54_observer}" finite-J-request "${f13_finite_J_socket}" "${f13_finite_J_session}" \
+      consume "${path}" "${incoming}" >"${receipt}" || return 1
+  else
+    python3 "${f13_f54_observer}" 3071-J-consume "${f13_f54_J_ledger}" "${f13_f54_J_ledger_sha}" \
+      "${f13_f54_trace_file}" "${path}" "${output}" "${incoming}" "${transition}" >"${receipt}" || return 1
+  fi
   f13_f54_trace_event range_J_ledger_conserved "${repo}" "${path}" "${receipt}"
 }
 
@@ -4080,6 +4088,42 @@ f13_f54_exact_J_owner_permission() {
   f13_f54_trace_event exact_J_owner_permission "${repo}" "${path}" "${receipt}"
 }
 
+f13_f54_finite_J_owner_permission() {
+  local repo="$1" path="$2" output="$3" incoming="$4" receipt attempt
+  [[ -n "${f13_f54_frame:-}" && "${f13_f54_operation:-}" == "${f13_f54_frame}/3071ddad390443de4119c796cdad9899ff08f7fd/2" &&
+     "${f13_f54_operation}" == "${f13_f54_J_operation:-}" && -n "${f13_f54_3071_capability_file:-}" ]] || return 1
+  python3 "${f13_f54_observer}" finite-J-path "${path}" || return 1
+  if [[ -z "${f13_finite_J_worker_pid:-}" ]]; then
+    f13_finite_J_socket="${TMP_DIR}/finite-j.sock"
+    f13_finite_J_session="$(python3 -c 'import secrets;print(secrets.token_hex(32))')" || return 1
+    python3 "${f13_f54_observer}" finite-J-worker "${f13_finite_J_socket}" "${f13_finite_J_session}" \
+      "${repo}" "${f13_f54_3071_capability_file}" "${f13_f54_J_ledger}" "${f13_f54_J_ledger_sha}" \
+      "${f13_f54_trace_file}" "${output}" &
+    f13_finite_J_worker_pid=$!
+    # Whole historical reconstruction completes before readiness is published.
+    for ((attempt=0; attempt<3600; attempt++)); do
+      if [[ -f "${f13_finite_J_socket}.ready" ]]; then
+        [[ "$(<"${f13_finite_J_socket}.ready")" == "${f13_finite_J_session}" ]] || return 1
+        break
+      fi
+      kill -0 "${f13_finite_J_worker_pid}" 2>/dev/null || return 1
+      sleep 1
+    done
+    [[ -f "${f13_finite_J_socket}.ready" ]] || return 1
+  fi
+  receipt="${TMP_DIR}/f54-finite-J-owner-permission.json"
+  python3 "${f13_f54_observer}" finite-J-request "${f13_finite_J_socket}" "${f13_finite_J_session}" \
+    permission "${path}" "${incoming}" >"${receipt}" || return 1
+  f13_f54_trace_event finite_J_owner_permission "${repo}" "${path}" "${receipt}"
+}
+
+f13_f54_finite_J_finish() {
+  [[ -n "${f13_finite_J_worker_pid:-}" && "$1" == src/backend/space/internal/lifecycleprincipal/interceptor.go ]] || return 0
+  python3 "${f13_f54_observer}" finite-J-request "${f13_finite_J_socket}" "${f13_finite_J_session}" finish '' '' || return 1
+  wait "${f13_finite_J_worker_pid}" || return 1
+  f13_finite_J_worker_pid=''
+}
+
 f13_evaluate_guarded_owner_qualifiers() {
   local repo="$1" path="$2" output="$3"
   incremental_merge=false
@@ -4181,12 +4225,21 @@ f13_evaluate_guarded_owner_qualifiers() {
     fi
   fi
   exact_J_owner_permission=false
+  finite_J_owner_permission=false
   if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
     "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true &&
     "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true ]]; then
     if f13_f54_exact_J_owner_permission "${repo}" "${path}" "${output}" \
       "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")"; then
       exact_J_owner_permission=true
+    fi
+  fi
+  if [[ "${allow_direct_followup}" == true && "${is_direct}" != true && "${incremental_merge}" != true &&
+    "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true &&
+    "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && "${exact_J_owner_permission}" != true ]]; then
+    if f13_f54_finite_J_owner_permission "${repo}" "${path}" "${output}" \
+      "$(printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s' "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}")"; then
+      finite_J_owner_permission=true
     fi
   fi
   return 0
@@ -4196,7 +4249,8 @@ f13_guarded_owner_transition_allowed() {
   local guarded_correction_allowed="$1" role_duplicate_allowed="$2" space_audit_allowed="$3"
   local exact_unit_supersession="$4" allow_direct_followup="$5" is_direct="$6" incremental_merge="$7"
   local exact_J_owner_permission="${8:-false}"
-  if [[ "${exact_J_owner_permission}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
+  local finite_J_owner_permission="${9:-false}"
+  if [[ "${finite_J_owner_permission}" != true && "${exact_J_owner_permission}" != true && "${guarded_correction_allowed}" != true && "${role_duplicate_allowed}" != true && "${space_audit_allowed}" != true && "${exact_unit_supersession}" != true && \
     ( "${allow_direct_followup}" != true || \
     ( "${is_direct}" != true && "${incremental_merge}" != true ) ) ]]; then
     return 1
@@ -4582,7 +4636,7 @@ f13_collect_develop_contributions() {
         fi
       fi
       native_supersession_status=1
-      local exact_unit_supersession=false exact_J_owner_permission=false
+      local exact_unit_supersession=false exact_J_owner_permission=false finite_J_owner_permission=false
       if [[ -n "${owners[${path}]+present}" ]] && f13_path_is_guarded "${path}"; then
         # A release PR may directly correct a guarded path imported by an
         # earlier merge, or re-import its exact descendant source in a later
@@ -4592,7 +4646,7 @@ f13_collect_develop_contributions() {
         f13_evaluate_guarded_owner_qualifiers "${repo}" "${path}" "${output}" || return 1
         if ! f13_guarded_owner_transition_allowed "${guarded_correction_allowed}" \
           "${role_duplicate_allowed}" "${space_audit_allowed}" "${exact_unit_supersession}" \
-          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}" "${exact_J_owner_permission}"; then
+          "${allow_direct_followup}" "${is_direct}" "${incremental_merge}" "${exact_J_owner_permission}" "${finite_J_owner_permission}"; then
           f13_emit_guarded_failure_diagnostic duplicate_guarded_owner "${path}" \
             "${commit}" "${game_checkpoint_aggregate_head:-}" "${owners[${path}]:-}" \
             "${nested_head:-}" "${guarded_entries[${path}]:-}" "${source_entry}" \
@@ -4660,6 +4714,7 @@ f13_collect_develop_contributions() {
         "${path}" "${trigger}" "${commit}" "${first_parent}" "${nested_base}" "${nested_head}" "${content_base}" "${source_base_candidates}" >>"${output}"
       if [[ -n "${f13_f54_trace_file:-}" ]]; then
         f13_f54_trace_event row_committed "${repo}" "${path}" "${output}" || return 1
+        f13_f54_finite_J_finish "${path}" || return 1
       fi
       if [[ "${native_p3_active:-false}" == true ]] && native_p3_path_bound "${repo}" "${path}"; then
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
