@@ -82,3 +82,31 @@ duration to the SLO mean.
 | --- | --- | --- | --- |
 | 72745aa1e9e4771ecbf4cd6e40654f8c1b2499cd | [40080795912](https://github.com/Poryadok/VoiceRoot/actions/runs/40080795912) | cancelled; censored | 4.0s |
 | 96aed431f921d8529a5e0f7e1aab4cb734966143 | [40081751202](https://github.com/Poryadok/VoiceRoot/actions/runs/40081751202) | cancelled; censored | 33.0s |
+
+## Warm layer-cache experiment and removal
+
+Source2032aa0262bffbd30529187936d4a5fa599a89b3,
+[run40083676615](https://github.com/Poryadok/VoiceRoot/actions/runs/40083676615),
+attempt1, PASS: gate1304s (21m44s), initial queue4s, execution envelope1300s. Compose
+separately waited230s for a runner; that wait remains in gate wall-clock. This is
+another head of the same CI/global PR, not an independent representative PR.
+
+Bake build/load304s plus startup70s did not improve materially over original378s. Its
+post-processing34s and builder cleanup18s add to wall-clock. Smoke488s passed. Logs
+show508 CACHED records but also two recoverable web cache blob-not-found errors,
+followed by142.7s base extraction and70.2s Flutter rebuilding; the web cache exporter
+took53s including preparation. Cache storage existed and all25 exports completed, which
+did not establish a useful latency gain.
+
+The final implementation removes the Bake layer-cache consumer and its helpers,
+restoring the original Compose build/start command. The independently proven host Go
+cache fix remains: setup-go explicitly hashes Gateway, Notification and shared pkg
+module sums, all Go live test commands rerun with count=1, and the isolated warm-cache
+source-mutation proof must fail after a source change. This first hosted Go cache key
+was cold-seeded; subsequent benefit is still preliminary. All experimental runs remain
+visible above; none is discarded to improve the mean.
+
+The cleanup candidate is validated on its exact head before integration. Its final
+run link and per-head raw timing summary are published in
+[PR880](https://github.com/Poryadok/VoiceRoot/pull/880) and the CI-GATE-10M tracker
+attachments, avoiding a self-referential report commit that restarts the gate.
