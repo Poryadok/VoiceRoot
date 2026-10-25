@@ -1118,6 +1118,42 @@ abstract class AppLocalizations {
   /// **'Schedule message'**
   String get chatSchedulePickerTitle;
 
+  /// No description provided for @chatScheduledCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled · {count}'**
+  String chatScheduledCount(int count);
+
+  /// No description provided for @chatScheduledCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse scheduled messages'**
+  String get chatScheduledCollapse;
+
+  /// No description provided for @chatScheduledExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand scheduled messages'**
+  String get chatScheduledExpand;
+
+  /// No description provided for @chatScheduledDismiss.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get chatScheduledDismiss;
+
+  /// No description provided for @chatScheduledEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted message'**
+  String get chatScheduledEncrypted;
+
+  /// No description provided for @chatScheduledContentInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a message of 1–4000 characters.'**
+  String get chatScheduledContentInvalid;
+
   /// No description provided for @chatSchedulePending.
   ///
   /// In en, this message translates to:

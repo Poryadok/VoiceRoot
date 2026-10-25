@@ -615,6 +615,27 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatSchedulePickerTitle => 'Запланировать сообщение';
 
   @override
+  String chatScheduledCount(int count) {
+    return 'Запланировано · $count';
+  }
+
+  @override
+  String get chatScheduledCollapse => 'Свернуть запланированные сообщения';
+
+  @override
+  String get chatScheduledExpand => 'Развернуть запланированные сообщения';
+
+  @override
+  String get chatScheduledDismiss => 'Скрыть ошибку';
+
+  @override
+  String get chatScheduledEncrypted => 'Зашифрованное сообщение';
+
+  @override
+  String get chatScheduledContentInvalid =>
+      'Введите сообщение от 1 до 4000 символов.';
+
+  @override
   String get chatSchedulePending => 'Ожидает отправки';
 
   @override
