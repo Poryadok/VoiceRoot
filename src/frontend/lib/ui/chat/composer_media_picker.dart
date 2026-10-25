@@ -221,11 +221,12 @@ class _ComposerMediaPickerBodyState
                         foregroundColor: _tab == tab
                             ? Theme.of(context).colorScheme.primary
                             : Theme.of(context).colorScheme.onSurfaceVariant,
-                        textStyle: TextStyle(
-                          fontWeight: _tab == tab
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
+                        textStyle: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(
+                              fontWeight: _tab == tab
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
                       ),
                       onPressed: () => _selectTab(tab),
                       child: Text(labels[tab.index]),
