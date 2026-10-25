@@ -21,7 +21,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -189,7 +188,7 @@ func deletionFixtureRepository(t *testing.T) string {
 		}
 		parent := filepath.Dir(directory)
 		if parent == directory {
-			t.Fatal(fmt.Sprintf("repository root not found from %s", file))
+			t.Fatalf("repository root not found from %s", file)
 		}
 	}
 }
