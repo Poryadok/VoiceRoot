@@ -1259,6 +1259,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get composerEmojiPanelTitle => 'Эмодзи';
 
   @override
+  String get composerEmojiRecent => 'Недавние';
+
+  @override
   String get composerAttachPhotoOrVideo => 'Фото или видео';
 
   @override

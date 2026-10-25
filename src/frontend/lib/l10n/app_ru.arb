@@ -525,6 +525,7 @@
   "chatAttachmentDownloadFailed": "Не удалось открыть ссылку на файл. Попробуйте снова.",
   "chatExpiredFileTooltip": "Файл удалён. Подписка сохраняет файлы навсегда",
   "composerEmojiPanelTitle": "Эмодзи",
+  "composerEmojiRecent": "Недавние",
   "composerAttachPhotoOrVideo": "Фото или видео",
   "composerAttachDocument": "Документ",
   "mobileStripRemoved": "Убрано из активных чатов",

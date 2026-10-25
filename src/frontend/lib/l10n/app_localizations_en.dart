@@ -1247,6 +1247,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override
+  String get composerEmojiRecent => 'Recent';
+
+  @override
   String get composerAttachPhotoOrVideo => 'Photo or video';
 
   @override

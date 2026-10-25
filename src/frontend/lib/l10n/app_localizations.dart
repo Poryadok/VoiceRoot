@@ -2258,6 +2258,12 @@ abstract class AppLocalizations {
   /// **'Emoji'**
   String get composerEmojiPanelTitle;
 
+  /// No description provided for @composerEmojiRecent.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get composerEmojiRecent;
+
   /// No description provided for @composerAttachPhotoOrVideo.
   ///
   /// In en, this message translates to:
