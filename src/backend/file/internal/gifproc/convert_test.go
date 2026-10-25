@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func fixture(t *testing.T, delays []int, disposal []byte) []byte {
@@ -63,6 +64,9 @@ func TestRejectInvalidAndBoundedInput(t *testing.T) {
 	malformed = malformed[:len(malformed)-3]
 	duration := fixture(t, []int{12001}, []byte{gif.DisposalNone})
 	frames := fixture(t, make([]int, 601), make([]byte, 601))
+	canvasBudget := fixture(t, make([]int, 5), make([]byte, 5))
+	binary.LittleEndian.PutUint16(canvasBudget[6:8], 4096)
+	binary.LittleEndian.PutUint16(canvasBudget[8:10], 4096)
 	for _, tc := range []struct {
 		name string
 		raw  []byte
@@ -70,6 +74,7 @@ func TestRejectInvalidAndBoundedInput(t *testing.T) {
 	}{
 		{"not GIF", []byte("not a GIF"), ErrInvalid}, {"truncated", malformed, ErrInvalid},
 		{"dimensions", oversized, ErrTooLarge}, {"duration", duration, ErrTooLarge}, {"frames", frames, ErrTooLarge},
+		{"cumulative logical canvas", canvasBudget, ErrTooLarge},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Convert(context.Background(), tc.raw)
@@ -82,6 +87,37 @@ func TestRejectInvalidAndBoundedInput(t *testing.T) {
 	cancel()
 	if _, err := Convert(ctx, raw); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation: %v", err)
+	}
+}
+
+func TestRealCodecRunningProcessCancellation(t *testing.T) {
+	codecAvailable(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := run(ctx, "ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=100", "-t", "3600", "-f", "null", "-")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("running process cancellation: %v", err)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatalf("child was not promptly reaped: %s", time.Since(start))
+	}
+}
+
+func TestOutputByteLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "output.mp4")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Truncate((5 << 20) + 1); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = readCapped(path); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("oversized derivative: %v", err)
 	}
 }
 

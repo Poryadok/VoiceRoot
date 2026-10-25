@@ -6,6 +6,10 @@ Odd edges are padded to even dimensions without rescaling; transparent pixels
 are composited on black. GIF disposal previous/background and positive delays
 are preserved. A zero delay becomes 10 centiseconds; duration metadata rounds
 the normalized duration upward to whole seconds (minimum one).
+Positive frame start timestamps retain centisecond precision. A final repeated
+frame supplies the last hold and adds one 10 ms terminal packet; ffprobe checks
+the complete MP4 duration against the source within 21 ms. H.264 B frames are
+disabled to prevent reordering from shortening the final variable-duration hold.
 
 Technical rejection budgets, before decompression: 200 MiB input, 4096 pixels
 per edge, 16 Mi logical canvas pixels, 600 frames, 64 Mi cumulative logical
