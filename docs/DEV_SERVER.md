@@ -391,3 +391,18 @@ baseline; текущая целостность проверяется неза�
 billing/push/provider integrations в эту установку не входили. Federation
 остаётся вне разрешённой области. Общая инфраструктура и заполнение `/home`
 могут повлиять сразу на dev, staging и соседние проекты.
+
+### Ordinary operator operation observation
+
+A reviewed DEV checkout provides python3 scripts/dev/operation_journal.py for
+pmd on pmdebook. The fixed GET-only reader exposes sanitized namespace/retained
+updater-lock/workload identity and immutable image evidence plus metadata-only
+markers for the two known caller-owned recovery operations. See
+[scripts/dev/README.md](../scripts/dev/README.md#read-only-dev-operation-observation)
+for fields, exit codes, redaction, consistency and the exact permission boundary.
+
+This is a PARTIAL observation, never recovery admission. Protected queue/journal
+and global executor state remain UNKNOWN until a legitimate reviewed DEV-only
+publisher is installed; lock age, marker presence and an unchanged read do not
+establish inactivity or safety. The installed NATS preservation bridge is
+STAGING-only; it is excluded from DEV inventory and request observation.
