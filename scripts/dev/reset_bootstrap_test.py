@@ -277,17 +277,25 @@ class ForwardExecutionTest(unittest.TestCase):
             objects += [{'kind': 'ConfigMap', 'metadata': dev.metadata('voice-app-config')}, {'kind': 'PersistentVolumeClaim', 'metadata': dev.metadata('voice-nats-jsdata')}]
             for obj in objects:
                 if obj['kind'] in ('Deployment', 'StatefulSet', 'Job'):
-                    obj['spec'] = {'template': {'spec': {'containers': [{'name': 'fixture', 'image': image}]}}}
+                    obj['spec'] = {'template': {'spec': {'containers': [{'name': 'fixture', 'image': image}],
+                                                        'nodeSelector': {'kubernetes.io/hostname': 'pmdebook'}}}}
             values = {'prepared.json': {'items': objects}, 'secrets.json': {'items': [tls]},
                       'foundation.json': {'items': [dev.foundation('pmdebook')[0]]},
                       'package-receipt.json': {'schema': 'voice-dev-reset-package-v1', 'source_sha': 'a' * 40,
                           'storage_class': 'local-path', 'storage_mode': 'fresh-dynamic-no-retained-pv-binding',
-                          'sources': source_rows, 'images': [{'reference': image}], 'tool_images': tools}}
+                          'node': 'pmdebook', 'sources': source_rows, 'images': [{'reference': image}], 'tool_images': tools}}
             for name, value in values.items():
                 reset.write_private(directory / name, value)
             descriptor = reset.os.open(directory / 'source-revision', reset.os.O_WRONLY | reset.os.O_CREAT, 0o600)
             with reset.os.fdopen(descriptor, 'w') as stream:
                 stream.write('a' * 40)
+            reset.validate_package(directory, root)
+            objects[0]['spec']['template']['spec']['nodeSelector'] = {'kubernetes.io/hostname': 'foreign-node'}
+            (directory / 'prepared.json').write_text(json.dumps({'items': objects}))
+            with self.assertRaisesRegex(ValueError, 'placement'):
+                reset.validate_package(directory, root)
+            objects[0]['spec']['template']['spec']['nodeSelector'] = {'kubernetes.io/hostname': 'pmdebook'}
+            (directory / 'prepared.json').write_text(json.dumps({'items': objects}))
             ns, claims, volumes = storage_fixture()
             ns['metadata']['resourceVersion'] = '1'
             sc = {'metadata': {'name': 'local-path', 'uid': 'class', 'resourceVersion': '1'},

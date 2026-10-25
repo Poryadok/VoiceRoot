@@ -464,6 +464,8 @@ def validate_package(directory, root):
             or receipt.get('source_sha') != revision or receipt.get('storage_class') != 'local-path'
             or receipt.get('storage_mode') != 'fresh-dynamic-no-retained-pv-binding'):
         raise ValueError('source-bound fresh package required')
+    if receipt.get('node') != 'pmdebook':
+        raise ValueError('approved DEV node placement required')
     source_paths = {source['path'] for source in receipt['sources']}
     if not {'deploy/staging/services.yaml', 'deploy/staging/infra.yaml', 'deploy/staging/configmap-app.yaml'} <= source_paths:
         raise ValueError('complete canonical source manifest required')
@@ -492,6 +494,8 @@ def validate_package(directory, root):
             raise ValueError('unexpected fresh package kind')
         if obj['kind'] in ('Deployment', 'StatefulSet', 'Job'):
             pod = obj.get('spec', {}).get('template', {}).get('spec', {})
+            if pod.get('nodeSelector', {}).get('kubernetes.io/hostname') != receipt['node']:
+                raise ValueError('package workload placement differs from approved node')
             if (not pod.get('containers') or any(pod.get(k) for k in ('hostNetwork', 'hostPID', 'hostIPC', 'nodeName'))
                     or any('hostPath' in v for v in pod.get('volumes', []))
                     or any(c.get('securityContext', {}).get('privileged') for c in pod.get('containers', []) + pod.get('initContainers', []))):
