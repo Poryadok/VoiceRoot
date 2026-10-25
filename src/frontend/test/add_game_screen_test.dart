@@ -170,8 +170,20 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      if (size.width < 560) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pumpAndSettle();
+        final position = tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position;
+        position.jumpTo(position.maxScrollExtent);
+      }
       await tester.pumpAndSettle();
       expect(find.byKey(AddGameScreen.submitKey).hitTestable(), findsOneWidget);
+      expect(
+        tester.getRect(find.byKey(AddGameScreen.submitKey)).bottom,
+        lessThanOrEqualTo(size.height),
+      );
       expect(tester.takeException(), isNull);
       if (const bool.fromEnvironment('VOICE_CAPTURE_ADD_GAME')) {
         await _capture(tester, 'addgame-${size.width.toInt()}-footer');
