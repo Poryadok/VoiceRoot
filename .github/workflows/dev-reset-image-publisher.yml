@@ -102,6 +102,7 @@ jobs:
           spec = importlib.util.spec_from_file_location('migrations', 'source/scripts/dev/migrations.py')
           migrations = importlib.util.module_from_spec(spec)
           import sys
+          sys.dont_write_bytecode = True
           sys.modules[spec.name] = migrations
           spec.loader.exec_module(migrations)
           source_digest = migrations.space_source_digest(pathlib.Path('source'))
