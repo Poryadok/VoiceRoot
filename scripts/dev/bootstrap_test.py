@@ -9,6 +9,18 @@ import environment as dev
 
 
 class FreshNamespaceTests(unittest.TestCase):
+    def test_dynamic_command_rejects_replaced_namespace_before_submission(self):
+        dynamic = {'new_namespace_uid': 'expected', 'operation': 'owned', 'host': {}, 'deadline': '2099-01-01T00:00:00+00:00'}
+        response = type('Response', (), {'returncode': 0, 'stdout': b'{"metadata":{"uid":"foreign"}}'})()
+        with patch.object(bootstrap, 'dynamic_storage', return_value=dynamic), \
+                patch.object(bootstrap.reset_bootstrap, 'observe_host', return_value={}), \
+                patch.object(bootstrap.reset_bootstrap, 'quiet_window'), \
+                patch.object(bootstrap.subprocess, 'run', return_value=response) as run:
+            with self.assertRaisesRegex(ValueError, 'namespace identity'):
+                bootstrap.run('kubectl', 'apply', '-f', '-')
+            self.assertEqual(run.call_count, 1)
+            self.assertIn('get', run.call_args.args[0])
+
     def test_dynamic_apply_pins_tool_images_and_rejects_unmapped_mutable_images(self):
         obj = {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': dev.metadata('voice-dev-mail'),
                'spec': {'template': {'spec': {'containers': [{'image': 'node:24-alpine'}]}}}}

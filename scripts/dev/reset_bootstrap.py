@@ -552,6 +552,8 @@ def prepare_plan(kube, directory, root, *, namespace_uid, staging_uid, actor, cl
             'host': original, 'package_files': hashes, 'source_sha': receipt['source_sha'],
             'adapter_code': adapter_binding(),
             'staging_storage': staging,
+            # Reserve observer/TERM/KILL time inside the reviewed window.
+            'deadline': (datetime.now(timezone.utc) + timedelta(seconds=budget_seconds - 15)).isoformat(),
             'budget_seconds': budget_seconds, 'budget_evidence': budget_evidence}
     write_private(directory / 'reset-plan.json', plan)
     return plan
@@ -598,6 +600,78 @@ def execute_plan(kube, directory, root, *, actor, claim):
         return execute_locked(kube, directory, root, actor=actor, claim=claim)
 
 
+def submitted_work(kube):
+    """Accepted server-side work survives client death; record exact identities."""
+    namespace = kube.get('namespace', dev.NS)
+    return {'namespace_uid': namespace['metadata']['uid'] if namespace else None,
+            'workloads': sorted((o['kind'], o['metadata']['name'], o['metadata']['uid'], digest(o.get('spec', {})))
+                                for o in kube.objects(WRITERS)) if namespace else []}
+
+
+def run_bootstrap(args, *, env, timeout, check_window, log, interval=2, observer_timeout=5, grace=5):
+    """Supervise only our local POSIX session; accepted K8s work stays unresolved."""
+    if os.name != 'posix':
+        raise ValueError('bootstrap supervision requires the actual Linux execution host')
+    import signal
+    import queue
+    import threading
+    deadline = time.monotonic() + timeout
+    def observe():
+        responses = queue.Queue()
+        def check():
+            try:
+                check_window()
+                responses.put(None)
+            except BaseException as error:
+                responses.put(error)
+        threading.Thread(target=check, daemon=True).start()
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ValueError('bootstrap operation deadline exhausted')
+        try:
+            error = responses.get(timeout=min(observer_timeout, remaining))
+        except queue.Empty:
+            raise ValueError('bootstrap observer timeout; outcome unresolved') from None
+        if error:
+            raise error
+    observe()
+    descriptor = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, 'ab') as stream:
+        process = subprocess.Popen(args, env=env, stdout=stream, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            while True:
+                observe()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError('bootstrap operation deadline exhausted; reconcile accepted Kubernetes work')
+                try:
+                    result = process.wait(timeout=min(interval, remaining))
+                    observe()
+                    return subprocess.CompletedProcess(args, result, b'', b'')
+                except subprocess.TimeoutExpired:
+                    continue
+        finally:
+            # Also clean descendants after a normal leader exit. Never signal
+            # another session or equate local death with cancelled K8s work.
+            for sig in (signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(process.pid, sig)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=grace)
+                except subprocess.TimeoutExpired:
+                    continue
+                if sig == signal.SIGTERM:
+                    end = time.monotonic() + grace
+                    while time.monotonic() < end:
+                        try:
+                            os.killpg(process.pid, 0)
+                        except ProcessLookupError:
+                            break
+                        time.sleep(0.01)
+
+
 def execute_locked(kube, directory, root, *, actor, claim):
     plan = json.loads(private_read(directory / 'reset-plan.json'))
     receipt, hashes = validate_package(directory, root)
@@ -606,7 +680,11 @@ def execute_locked(kube, directory, root, *, actor, claim):
         raise ValueError('operator claim/package changed; no mutation')
     journal = Journal(directory, plan)
     def check_window():
-        quiet_window(observe_host(), plan['host'], now=datetime.now(timezone.utc), remaining_seconds=plan['budget_seconds'])
+        now = datetime.now(timezone.utc)
+        remaining = int((datetime.fromisoformat(plan['deadline']) - now).total_seconds())
+        if remaining <= 0:
+            raise ValueError('original operation deadline exhausted; preserve interrupted state')
+        quiet_window(observe_host(), plan['host'], now=now, remaining_seconds=remaining)
         if digest(staging_storage(kube)) != digest(plan['staging_storage']):
             raise ValueError('STAGING storage/identity changed')
         current_sc = kube.command(['get', 'storageclass', 'local-path', '-o', 'json'])
@@ -630,6 +708,7 @@ def execute_locked(kube, directory, root, *, actor, claim):
     dynamic = runtime / 'fresh-storage.json'
     dynamic_binding = {'schema': 'voice-dev-fresh-storage-v1', 'operation': plan['operation'],
         'old_namespace_uid': plan['namespace_uid'], 'retained': plan['retained'],
+        'host': plan['host'], 'deadline': plan['deadline'],
         'storage_class': plan['storage_class'], 'tool_images': receipt['tool_images'],
         'image_references': sorted({r['reference'] for r in receipt['images']} | set(receipt['tool_images'].values())
                                    | set(migrations.GAMEINTEGRATION_IMAGES.values()))}
@@ -647,18 +726,30 @@ def execute_locked(kube, directory, root, *, actor, claim):
     if journal.state['steps'].get('delete-namespace', {}).get('status') != 'complete':
         raise ValueError('interrupted namespace deletion needs observed reconciliation')
     if journal.state['steps'].get('bootstrap', {}).get('status') != 'complete':
+        check_window()
+        interruptions = sorted(runtime.glob('bootstrap-interrupted-*.json'))
+        if interruptions:
+            previous = json.loads(private_read(interruptions[-1]))
+            if not previous.get('observed') or previous['work'] != json.loads(json.dumps(submitted_work(kube))):
+                raise ValueError('accepted Kubernetes work changed or remains unknown; exact operator reconciliation required')
         if not journal.state['steps'].get('bootstrap'):
             journal.begin('bootstrap')
         # Only forward bootstrap may resume; old namespace deletion never replays.
         environment = dict(os.environ, SPACE_NATIVE_INSTALLER_IMAGE=receipt['tool_images']['space-native-installer'])
-        result = subprocess.run([sys.executable, str(Path(__file__).with_name('bootstrap.py')), 'start', '--work-dir', str(runtime), '--source-root', str(root)],
-                                env=environment, capture_output=True, timeout=24000)
         log = runtime / 'bootstrap.log'
-        descriptor = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(descriptor, 'ab') as stream:
-            stream.write(result.stdout + result.stderr)
-        if result.returncode:
-            raise ValueError('forward bootstrap incomplete; inspect private bootstrap.log, preserve state')
+        try:
+            result = run_bootstrap([sys.executable, str(Path(__file__).with_name('bootstrap.py')), 'start', '--work-dir', str(runtime), '--source-root', str(root)],
+                                   env=environment, timeout=max(1, int((datetime.fromisoformat(plan['deadline']) - datetime.now(timezone.utc)).total_seconds())),
+                                   check_window=check_window, log=log)
+            if result.returncode:
+                raise ValueError('forward bootstrap incomplete; inspect private bootstrap.log, preserve state')
+        except BaseException:
+            try:
+                observation = {'observed': True, 'work': submitted_work(kube), 'accepted_work_cancelled': False}
+            except Exception:
+                observation = {'observed': False, 'accepted_work_cancelled': False}
+            write_private(runtime / ('bootstrap-interrupted-%06d.json' % len(interruptions)), observation)
+            raise
         journal.complete('bootstrap', {'namespace_uid': kube.get('namespace', dev.NS)['metadata']['uid']})
     if digest(staging_storage(kube)) != digest(plan['staging_storage']):
         raise ValueError('STAGING storage/identity changed during DEV operation')

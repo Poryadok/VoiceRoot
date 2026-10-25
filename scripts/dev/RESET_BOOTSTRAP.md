@@ -96,6 +96,17 @@ GIS prerequisites and User/Space cycle handling remain in use. All applied tool
 images are pinned. Retained PV identity/spec and fresh claim bindings are checked.
 
 A failed/interrupted command retains the private journal, runtime and logs.
+The actual Linux execution host supervises its own bootstrap session, observes
+the window at most every two seconds, bounds observer waits, and terminates its
+own process group on unsafe observations or the fixed original deadline. The
+reviewed budget reserves fifteen seconds for observer and TERM/KILL cleanup.
+Each command also checks the fresh namespace UID/operation and quiet window.
+Normal wrapper exit cannot leave a descendant writing in the background.
+Accepted Kubernetes Jobs, rollouts and remote exec work are not cancelled by
+client termination. An interruption records their exact controller/Job UID and
+specification snapshot. Resume re-observes that snapshot; unknown or changed
+server-side work requires actual operator reconciliation. It never grants a
+safe resource release or a new deadline merely because a client was killed.
 Re-run the same command only with the same package, actor and live claim. Resume
 re-observes the old namespace/controller identities; it never deletes a newly
 recreated namespace by name. An already absent old namespace can complete its

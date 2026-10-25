@@ -333,16 +333,66 @@ class ForwardExecutionTest(unittest.TestCase):
                     (directory / 'runtime/secrets.json').write_text('{"runtime":"updated"}')
                     kube.current = {'metadata': {'uid': 'fresh-namespace'}}
                     return SimpleNamespace(returncode=1, stdout=b'interrupted', stderr=b'')
-                with patch.object(reset.subprocess, 'run', side_effect=bootstrap):
+                with patch.object(reset, 'run_bootstrap', side_effect=bootstrap):
                     with self.assertRaisesRegex(ValueError, 'forward bootstrap incomplete'):
                         reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
                 self.assertEqual(kube.deletes, 1)
-                with patch.object(reset.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout=b'pass', stderr=b'')) as run:
+                with patch.object(reset, 'run_bootstrap', return_value=SimpleNamespace(returncode=0, stdout=b'pass', stderr=b'')) as run:
                     state = reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
                     self.assertEqual(run.call_count, 1)
                 self.assertEqual(kube.deletes, 1)
                 self.assertEqual(state['steps']['bootstrap']['status'], 'complete')
                 self.assertEqual((directory / 'secrets.json').read_bytes(), before)
+
+    @unittest.skipUnless(reset.os.name == 'posix', 'actual executor requires POSIX process groups')
+    def test_unsafe_window_stops_owned_bootstrap_process(self):
+        checks = []
+        def check():
+            checks.append(True)
+            if len(checks) > 1:
+                raise ValueError('writer activated')
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, 'writer activated'):
+                reset.run_bootstrap([reset.sys.executable, '-c', 'import time; time.sleep(30)'],
+                    env=dict(reset.os.environ), timeout=10, check_window=check,
+                    log=Path(tmp) / 'bootstrap.log', interval=0.01)
+        self.assertGreater(len(checks), 1)
+
+    @unittest.skipUnless(reset.os.name == 'posix', 'actual POSIX descendants')
+    def test_normal_leader_exit_cannot_leave_term_ignoring_writer(self):
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / 'late-write'
+            child = 'import signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(.3); pathlib.Path(' + repr(str(marker)) + ').write_text("bad")'
+            parent = 'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",' + repr(child) + ']); time.sleep(.1)'
+            unrelated = reset.subprocess.Popen([reset.sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True)
+            try:
+                result = reset.run_bootstrap([reset.sys.executable, '-c', parent], env=dict(reset.os.environ), timeout=5,
+                    check_window=lambda: None, log=Path(tmp) / 'log', interval=.01, grace=.05)
+                self.assertEqual(result.returncode, 0)
+                time.sleep(.35)
+                self.assertFalse(marker.exists())
+                self.assertIsNone(unrelated.poll())
+            finally:
+                unrelated.terminate()
+                unrelated.wait(timeout=2)
+
+    @unittest.skipUnless(reset.os.name == 'posix', 'actual POSIX supervisor')
+    def test_observer_hang_and_absolute_budget_are_bounded(self):
+        import time
+        for hanging in (True, False):
+            checks = []
+            def check():
+                checks.append(True)
+                if hanging and len(checks) > 1:
+                    time.sleep(.4)
+            with self.subTest(observer_hang=hanging), tempfile.TemporaryDirectory() as tmp:
+                started = time.monotonic()
+                with self.assertRaisesRegex(ValueError, 'observer timeout|deadline exhausted'):
+                    reset.run_bootstrap([reset.sys.executable, '-c', 'import time; time.sleep(30)'],
+                        env=dict(reset.os.environ), timeout=.1, check_window=check, log=Path(tmp) / 'log',
+                        interval=.01, observer_timeout=.02, grace=.02)
+                self.assertLess(time.monotonic() - started, 1)
 
 
 

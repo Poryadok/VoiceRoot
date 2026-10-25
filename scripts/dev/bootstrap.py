@@ -27,8 +27,22 @@ NATS_JOBS = ['voice-nats-' + role + '-bootstrap' for role in ('realtime', 'notif
 INFRA = {'voice-redis', 'voice-nats-pvc-candidate', 'voice-livekit', 'voice-clamav'}
 
 
-def run(*args, body=None, timeout=600, check=True):
-    result = subprocess.run(args, input=body, capture_output=True, timeout=timeout)
+def run(*args, body=None, timeout=600, check=True, env=None):
+    dynamic = dynamic_storage()
+    if dynamic:
+        now = reset_bootstrap.datetime.now(reset_bootstrap.timezone.utc)
+        remaining = int((reset_bootstrap.datetime.fromisoformat(dynamic['deadline']) - now).total_seconds())
+        if remaining <= 0:
+            raise ValueError('original bootstrap deadline exhausted')
+        reset_bootstrap.quiet_window(reset_bootstrap.observe_host(), dynamic['host'], now=now, remaining_seconds=remaining)
+        timeout = min(timeout, remaining)
+        if dynamic.get('new_namespace_uid'):
+            observed = subprocess.run(['kubectl', 'get', 'namespace', dev.NS, '-o', 'json'], capture_output=True, timeout=min(15, remaining))
+            metadata = json.loads(observed.stdout).get('metadata', {}) if not observed.returncode else {}
+            if (metadata.get('uid') != dynamic['new_namespace_uid']
+                    or metadata.get('annotations', {}).get('voice.dev/reset-operation') != dynamic['operation']):
+                raise ValueError('fresh namespace identity changed before command')
+    result = subprocess.run(args, input=body, capture_output=True, timeout=timeout, env=env)
     if check and result.returncode:
         (WORK / 'last-error.txt').write_bytes(result.stderr + result.stdout)
         raise RuntimeError('dev command failed: ' + args[0])
@@ -384,14 +398,14 @@ def activate():
     dev.validate_target(json.loads(run('kubectl', 'get', 'namespace', dev.NS, '-o', 'json').stdout))
     rendered = json.loads((WORK / 'prepared.json').read_text())['items']
     env = dict(os.environ, VOICE_K8S_NAMESPACE=dev.NS, VOICE_ENABLE_GAME_INTEGRATION_DB='true')
-    initial = subprocess.run(['bash', str(ROOT / 'scripts/staging/init-postgres-databases.sh')], env=env, capture_output=True, timeout=600)
+    initial = run('bash', str(ROOT / 'scripts/staging/init-postgres-databases.sh'), env=env, timeout=600, check=False)
     (WORK / 'init-postgres-databases.sh.log').write_bytes(initial.stdout + initial.stderr)
     if initial.returncode:
         raise RuntimeError('dev database creation failed')
     postgres_image = next(o for o in rendered if o['kind'] == 'StatefulSet' and o['metadata']['name'] == 'voice-postgres')['spec']['template']['spec']['containers'][0]['image']
     migrations.apply_all(ROOT, postgres_image, apply, run, get)
     for script in ('ensure-gateway-schema.sh', 'apply-clickhouse-init.sh'):
-        result = subprocess.run(['bash', str(ROOT / 'scripts/staging' / script)], env=env, capture_output=True, timeout=1800)
+        result = run('bash', str(ROOT / 'scripts/staging' / script), env=env, timeout=1800, check=False)
         (WORK / (script + '.log')).write_bytes(result.stdout + result.stderr)
         if result.returncode:
             raise RuntimeError('dev database initialization failed: ' + script)
