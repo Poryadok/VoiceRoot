@@ -166,8 +166,8 @@ func DecodeGISState(raw []byte) (GISState, error) {
 }
 func gisRevision(v uint64) bool { return v > 0 && v <= math.MaxInt64 }
 
-// Time never rewrites canonical bytes at a revision. The publisher evaluates
-// every raw lease and cannot renew active rights beyond this earlier cutoff.
+// ValidUntilUnixMillis bounds active rights without rewriting canonical bytes
+// at a revision. The publisher evaluates every raw lease on each use.
 func (s GISState) ValidUntilUnixMillis(now int64) int64 {
 	if !s.EnvironmentExists || s.EnvironmentStatus != "active" || s.ApplicationStatus != "sandbox" && s.ApplicationStatus != "active" {
 		return 0
