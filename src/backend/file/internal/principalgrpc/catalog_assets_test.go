@@ -23,6 +23,7 @@ func TestCatalogAssetRoutesRequireExactProtectedServiceAndRequest(t *testing.T) 
 		{filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName, "chat", &filev1.ImportCatalogAssetRequest{ProtocolVersion: 1, DestinationChat: &chatv1.ChatRef{Id: "00000000-0000-4000-8000-000000000001"}}},
 		{filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName, "messaging", &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1}},
 		{filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, "messaging", &filev1.LookupCatalogAssetRequest{ProtocolVersion: 1}},
+		{filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName, "chat", &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 1}},
 	} {
 		t.Run(tc.issuer, func(t *testing.T) {
 			hash, err := principal.RequestHash(tc.request)

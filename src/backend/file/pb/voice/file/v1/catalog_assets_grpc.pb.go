@@ -19,9 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CatalogAssetService_ImportCatalogAsset_FullMethodName   = "/voice.file.v1.CatalogAssetService/ImportCatalogAsset"
-	CatalogAssetService_ValidateCatalogAsset_FullMethodName = "/voice.file.v1.CatalogAssetService/ValidateCatalogAsset"
-	CatalogAssetService_LookupCatalogAsset_FullMethodName   = "/voice.file.v1.CatalogAssetService/LookupCatalogAsset"
+	CatalogAssetService_ImportCatalogAsset_FullMethodName    = "/voice.file.v1.CatalogAssetService/ImportCatalogAsset"
+	CatalogAssetService_ValidateCatalogAsset_FullMethodName  = "/voice.file.v1.CatalogAssetService/ValidateCatalogAsset"
+	CatalogAssetService_LookupCatalogAsset_FullMethodName    = "/voice.file.v1.CatalogAssetService/LookupCatalogAsset"
+	CatalogAssetService_GetCatalogAssetStatus_FullMethodName = "/voice.file.v1.CatalogAssetService/GetCatalogAssetStatus"
 )
 
 // CatalogAssetServiceClient is the client API for CatalogAssetService service.
@@ -36,6 +37,8 @@ type CatalogAssetServiceClient interface {
 	ValidateCatalogAsset(ctx context.Context, in *ValidateCatalogAssetRequest, opts ...grpc.CallOption) (*ValidateCatalogAssetResponse, error)
 	// @voice.security=protected;callers=service:messaging
 	LookupCatalogAsset(ctx context.Context, in *LookupCatalogAssetRequest, opts ...grpc.CallOption) (*LookupCatalogAssetResponse, error)
+	// @voice.security=protected;callers=service:chat
+	GetCatalogAssetStatus(ctx context.Context, in *GetCatalogAssetStatusRequest, opts ...grpc.CallOption) (*GetCatalogAssetStatusResponse, error)
 }
 
 type catalogAssetServiceClient struct {
@@ -76,6 +79,16 @@ func (c *catalogAssetServiceClient) LookupCatalogAsset(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *catalogAssetServiceClient) GetCatalogAssetStatus(ctx context.Context, in *GetCatalogAssetStatusRequest, opts ...grpc.CallOption) (*GetCatalogAssetStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetCatalogAssetStatusResponse)
+	err := c.cc.Invoke(ctx, CatalogAssetService_GetCatalogAssetStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CatalogAssetServiceServer is the server API for CatalogAssetService service.
 // All implementations must embed UnimplementedCatalogAssetServiceServer
 // for forward compatibility.
@@ -88,6 +101,8 @@ type CatalogAssetServiceServer interface {
 	ValidateCatalogAsset(context.Context, *ValidateCatalogAssetRequest) (*ValidateCatalogAssetResponse, error)
 	// @voice.security=protected;callers=service:messaging
 	LookupCatalogAsset(context.Context, *LookupCatalogAssetRequest) (*LookupCatalogAssetResponse, error)
+	// @voice.security=protected;callers=service:chat
+	GetCatalogAssetStatus(context.Context, *GetCatalogAssetStatusRequest) (*GetCatalogAssetStatusResponse, error)
 	mustEmbedUnimplementedCatalogAssetServiceServer()
 }
 
@@ -106,6 +121,9 @@ func (UnimplementedCatalogAssetServiceServer) ValidateCatalogAsset(context.Conte
 }
 func (UnimplementedCatalogAssetServiceServer) LookupCatalogAsset(context.Context, *LookupCatalogAssetRequest) (*LookupCatalogAssetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LookupCatalogAsset not implemented")
+}
+func (UnimplementedCatalogAssetServiceServer) GetCatalogAssetStatus(context.Context, *GetCatalogAssetStatusRequest) (*GetCatalogAssetStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCatalogAssetStatus not implemented")
 }
 func (UnimplementedCatalogAssetServiceServer) mustEmbedUnimplementedCatalogAssetServiceServer() {}
 func (UnimplementedCatalogAssetServiceServer) testEmbeddedByValue()                             {}
@@ -182,6 +200,24 @@ func _CatalogAssetService_LookupCatalogAsset_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CatalogAssetService_GetCatalogAssetStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCatalogAssetStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogAssetServiceServer).GetCatalogAssetStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CatalogAssetService_GetCatalogAssetStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogAssetServiceServer).GetCatalogAssetStatus(ctx, req.(*GetCatalogAssetStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CatalogAssetService_ServiceDesc is the grpc.ServiceDesc for CatalogAssetService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -200,6 +236,10 @@ var CatalogAssetService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupCatalogAsset",
 			Handler:    _CatalogAssetService_LookupCatalogAsset_Handler,
+		},
+		{
+			MethodName: "GetCatalogAssetStatus",
+			Handler:    _CatalogAssetService_GetCatalogAssetStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

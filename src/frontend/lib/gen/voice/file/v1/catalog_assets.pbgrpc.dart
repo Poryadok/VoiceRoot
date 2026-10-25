@@ -57,6 +57,14 @@ class CatalogAssetServiceClient extends $grpc.Client {
     return $createUnaryCall(_$lookupCatalogAsset, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:chat
+  $grpc.ResponseFuture<$0.GetCatalogAssetStatusResponse> getCatalogAssetStatus(
+    $0.GetCatalogAssetStatusRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getCatalogAssetStatus, request, options: options);
+  }
+
   // method descriptors
 
   static final _$importCatalogAsset = $grpc.ClientMethod<
@@ -74,6 +82,11 @@ class CatalogAssetServiceClient extends $grpc.Client {
       '/voice.file.v1.CatalogAssetService/LookupCatalogAsset',
       ($0.LookupCatalogAssetRequest value) => value.writeToBuffer(),
       $0.LookupCatalogAssetResponse.fromBuffer);
+  static final _$getCatalogAssetStatus = $grpc.ClientMethod<
+          $0.GetCatalogAssetStatusRequest, $0.GetCatalogAssetStatusResponse>(
+      '/voice.file.v1.CatalogAssetService/GetCatalogAssetStatus',
+      ($0.GetCatalogAssetStatusRequest value) => value.writeToBuffer(),
+      $0.GetCatalogAssetStatusResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.file.v1.CatalogAssetService')
@@ -108,6 +121,15 @@ abstract class CatalogAssetServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.LookupCatalogAssetRequest.fromBuffer(value),
         ($0.LookupCatalogAssetResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetCatalogAssetStatusRequest,
+            $0.GetCatalogAssetStatusResponse>(
+        'GetCatalogAssetStatus',
+        getCatalogAssetStatus_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetCatalogAssetStatusRequest.fromBuffer(value),
+        ($0.GetCatalogAssetStatusResponse value) => value.writeToBuffer()));
   }
 
   $async.Future<$0.ImportCatalogAssetResponse> importCatalogAsset_Pre(
@@ -136,4 +158,13 @@ abstract class CatalogAssetServiceBase extends $grpc.Service {
 
   $async.Future<$0.LookupCatalogAssetResponse> lookupCatalogAsset(
       $grpc.ServiceCall call, $0.LookupCatalogAssetRequest request);
+
+  $async.Future<$0.GetCatalogAssetStatusResponse> getCatalogAssetStatus_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetCatalogAssetStatusRequest> $request) async {
+    return getCatalogAssetStatus($call, await $request);
+  }
+
+  $async.Future<$0.GetCatalogAssetStatusResponse> getCatalogAssetStatus(
+      $grpc.ServiceCall call, $0.GetCatalogAssetStatusRequest request);
 }
