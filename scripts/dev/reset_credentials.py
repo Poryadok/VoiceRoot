@@ -487,6 +487,56 @@ def build_union(fresh, captured, retained_names):
     return result
 
 
+def init_runtime_files(obj, volumes):
+    """Recognize the source-owned NATS recipe, never runtime file existence.
+
+    qualify() first binds the complete pod and immutable image to a fresh
+    canonical source render. Unknown producers and shell outputs stay denied.
+    """
+    if (obj['kind'], obj['metadata']['name']) != ('Deployment', 'voice-nats-pvc-candidate'):
+        return set()
+    pod = obj['spec']['template']['spec']
+    producers = [c for c in pod.get('initContainers', []) if c.get('name') == 'nats-config-renderer']
+    if len(producers) != 1:
+        return set()
+    producer = producers[0]
+    inputs = ['operator.jwt', 'account.jwt', 'system-account.jwt', 'account.public', 'system-account.public']
+    args = ['/run/nats/input/' + key for key in inputs] + [
+        '/run/nats/template/nats.conf', '/run/nats-rendered/config/nats.conf']
+    if (producer.get('command') or producer.get('args') != args
+            or not re.fullmatch(r'[^\s]+@sha256:[a-f0-9]{64}', producer.get('image', ''))):
+        return set()
+    expected = [
+        {'name': 'nats-resolver-input', 'mountPath': '/run/nats/input', 'readOnly': True},
+        {'name': 'nats-config-template', 'mountPath': '/run/nats/template', 'readOnly': True},
+        {'name': 'nats-rendered-config', 'mountPath': '/run/nats-rendered'}]
+    mounts = producer.get('volumeMounts', [])
+    if any(mounts.count(mount) != 1 for mount in expected):
+        return set()
+    if any(m not in expected and (m.get('name') in {e['name'] for e in expected}
+           or m.get('mountPath', '').startswith('/run/nats')) for m in mounts):
+        return set()
+    output = [v for v in pod.get('volumes', []) if v['name'] == 'nats-rendered-config']
+    if output != [{'name': 'nats-rendered-config', 'emptyDir': {'medium': 'Memory', 'sizeLimit': '1Mi'}}]:
+        return set()
+    if any(volumes.get('nats-resolver-input', {}).get(key) != ('Secret', 'voice-nats-operator', key) for key in inputs):
+        return set()
+    if volumes.get('nats-config-template', {}).get('nats.conf') != ('ConfigMap', 'voice-nats-hub-config', 'nats.conf'):
+        return set()
+    consumer_mount = {'name': 'nats-rendered-config', 'mountPath': '/etc/nats/nats.conf',
+                      'subPath': 'config/nats.conf', 'readOnly': True}
+    consumers = []
+    for container in pod.get('containers', []) + pod.get('initContainers', []):
+        if container is producer:
+            continue
+        for mount in container.get('volumeMounts', []):
+            if mount.get('name') == 'nats-rendered-config':
+                if container.get('name') != 'nats' or mount != consumer_mount or container not in pod.get('containers', []):
+                    return set()
+                consumers.append(mount)
+    return {('nats-rendered-config', 'config/nats.conf')} if len(consumers) == 1 else set()
+
+
 def references(prepared, secrets):
     """Return only object/key/consumer metadata; resolve whole-volume runtime files."""
     available = objects_by_identity([o for o in prepared if o.get('kind') == 'ConfigMap'] + secrets)
@@ -539,6 +589,7 @@ def references(prepared, secrets):
         consumer = obj['kind'] + '/' + obj['metadata']['name']
         pod = obj['spec']['template']['spec']
         volumes = {v['name']: source_files(v, consumer) for v in pod.get('volumes', [])}
+        runtime_files = init_runtime_files(obj, volumes)
         for ref in pod.get('imagePullSecrets', []):
             data = require('Secret', ref['name'], ['.dockerconfigjson'], consumer, 'imagePullSecret')
             try:
@@ -556,8 +607,10 @@ def references(prepared, secrets):
                     fail('dynamic_subpath_contract')
                 if mount.get('subPath'):
                     if mount['subPath'] not in files:
-                        fail('subpath_missing:' + actor)
-                    mounted[mount['mountPath']] = files[mount['subPath']]
+                        if (mount['name'], mount['subPath']) not in runtime_files:
+                            fail('subpath_missing:' + actor)
+                    else:
+                        mounted[mount['mountPath']] = files[mount['subPath']]
                 else:
                     for path, identity in files.items():
                         mounted[str(PurePosixPath(mount['mountPath']) / path)] = identity
