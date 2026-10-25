@@ -492,7 +492,7 @@ enabling the consumer. No Compose manifest enables this consumer in PR A.
 
 GetProfileDeletionStates is a read-only Messaging-only method on the existing
 USER_MESSAGING_PRINCIPAL_ mTLS listener (:9096). It requires the exact
-request-bound service:messaging principal (iss=messaging, ud=user, exact
+request-bound service:messaging principal (iss=messaging, aud=user, exact
 RPC/hash/request ID), shared Redis replay admission and the existing trusted
 client certificate/JWKS identity configuration. Ordinary User, Social, Auth,
 Notification and Gateway do not expose this authority.
