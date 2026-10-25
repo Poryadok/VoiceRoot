@@ -21,6 +21,47 @@ def git(*args,data=None,env=None):
     return subprocess.check_output(['git','--no-replace-objects','-C',str(ROOT),*args],input=data,env=env).decode().strip()
 
 
+class DirectoryInventoryGroupingTest(unittest.TestCase):
+    @staticmethod
+    def original(entries,directory):
+        return {p:v for p,v in entries.items() if str(Path(p).parent).replace('\\','/')==directory}
+
+    def test_real_source_trees_preserve_all_directory_comparisons_with_one_path_pass(self):
+        record=json.loads(source.fixed_artifact(ROOT,documentation.CONTEXT_RECORD_COMMIT,
+            dict(path=documentation.CONTEXT_RECORD_PATH,sha256=documentation.CONTEXT_RECORD_SHA256)))
+        directories=[row['directory'] for row in record['closure']['directory_inventories']]
+        self.assertEqual(len(directories),89)
+        for revision in (source.FIXTURE_SOURCE,source.BOOTSTRAP_SOURCE):
+            with self.subTest(revision=revision):
+                entries=source.entries(ROOT,revision)
+                with patch.object(source,'Path',wraps=Path) as paths:
+                    grouped=source.directory_entries(entries)
+                self.assertEqual(paths.call_count,len(entries))
+                with patch(__name__+'.Path',wraps=Path) as old_paths:
+                    expected=[self.original(entries,directory) for directory in directories]
+                self.assertEqual(old_paths.call_count,len(entries)*len(directories))
+                self.assertEqual([grouped.get(directory,{}) for directory in directories],expected)
+
+    def test_root_nested_normalization_empty_and_duplicate_directories(self):
+        entries={'root.txt':'root','a/file':'immediate','a/deep/file':'nested',
+            'a//other':'repeated','a\\file':'backslash','a\\\\pair':'paired-backslash','./dot':'dot'}
+        original=dict(entries);grouped=source.directory_entries(entries)
+        directories=['.','a','a/deep','missing','a','a\\directory']
+        self.assertEqual([grouped.get(d,{}) for d in directories],
+            [self.original(entries,d) for d in directories])
+        self.assertEqual(entries,original)
+        self.assertEqual(source.directory_entries({}),{})
+
+    def test_changed_added_deleted_entries_are_fresh_each_call(self):
+        entries={'a/keep':'old','a/delete':'deleted','b/file':'other'}
+        first=source.directory_entries(entries)
+        entries['a/keep']='changed';entries['a/new']='added';del entries['a/delete']
+        second=source.directory_entries(entries)
+        self.assertEqual(first['a'],{'a/keep':'old','a/delete':'deleted'})
+        self.assertEqual(second['a'],self.original(entries,'a'))
+        self.assertNotEqual(first,second)
+
+
 class BootstrapSourceUnitTest(unittest.TestCase):
     def test_exact_bootstrap_successor_retains_fixture_and_native(self):
         records=source.load_bootstrap_fix(ROOT);record=records[0]

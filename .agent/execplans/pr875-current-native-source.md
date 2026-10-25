@@ -1055,3 +1055,53 @@ e1756263f058ee885fbec7de603680ecd97b953d0e066f9e01f437247f2531d8
 binds helper00d53bee and test9b6a1450. Graphify completed with 117536 nodes and
 245798 edges; diff check passed. Existing source/Native records and the integrated
 shell88b468 are unchanged. Fresh final-head producer and hosted CI remain required.
+
+### Fresh directory inventory grouping
+
+A bounded profile of a stable copy captured during the K11 manual-F append stage
+identified 7,326,653 Path.parent calls taking 77.29 of 132.75 profiled seconds.
+The two latest source loaders rescanned the full freshly read tree once for each
+of 89 directory inventories. Whole-spec serialization was approximately 2.9 ms
+per call and was not the dominant cost. The profile was deliberately interrupted;
+it is diagnostic evidence, not a completed manual-F validation. Its receipt is
+main tmp/pr875-repair/f13-k11-profile/receipt.md, SHA256
+dcf6e8e8b8d7b814e2013ac22cf9acdd8297e224fe3c4b7e9b626d82b0159cf0.
+
+The two source loaders now group their freshly read tree entries by directory
+once per call, using the identical Path parent normalization. All inventory rows
+are still compared in their original order with the same rejection predicates;
+missing and repeated directories retain their behavior. No input is mutated,
+and no grouping, Git read, authority decision or validation result is retained
+between calls. Current repository, event, HEAD, carrier, source and Native
+checks remain unchanged. The source-record chain and shell88b468 are unchanged.
+
+Three new differential tests first failed because the helper was absent, then
+passed. They compare every one of the 89 directories on both actual H9 and H10
+trees against the original comprehension and assert N rather than 89*N Path
+constructions. Edge cases cover root/nested paths, normalization, empty and
+repeated directories, and fresh changed/added/deleted entries on a second call.
+Independent applied CODE review is main
+tmp/pr875-repair/f13-directory-grouping-independent-review.md, SHA256
+ce39380ace6912da8cdb6d2ec435045ede1d557b59af012ac87e0c293530cea6.
+
+Single paired, unprofiled loader measurements in separate clean clones gave
+load_fixture_fix 5.708436 to 2.675457 seconds and load_bootstrap_fix 9.162959 to
+3.267203 seconds. Complete canonical returns were byte-identical (248708 and
+400431 bytes respectively). Git 2.43.0/Python 3.12.3 and a 2-CPU/3-GiB cap were
+used; a separate resource-limited compatibility suite ran concurrently. Benchmark
+JSON is main tmp/pr875-repair/f13-k11-profile/loader-benchmark.json, SHA256
+7a2071c15c32e844f8209c5e15e0c9abbeebaaec4c4941d9a417e07ce1f1ab00.
+These are source-loader timings, not a full-producer speed or timeout claim.
+
+Compatibility completed on clean synthetic K
+d88a17a65a0fb137cbab4be206350fed74d9b362: production source 67/67 passed in
+1034.262 seconds, Native documentation 9/9 in 6.531 seconds and historical
+successor 20/20 in 4.949 seconds. Python compilation and unchanged shell syntax
+checks passed. Both changed carrier entries in that exact initial test commit
+were mode 100644; the earlier reported mode concern was disproved by direct
+Git tree and filesystem inspection. The validation receipt is main
+tmp/pr875-repair/f13-k11-profile/directory-grouping-validation-receipt.md,
+SHA256 371a9bf3224f9b2a5f4728b2d89663af22e1c21b7ad6470d2495edf5fd7d21ef.
+Graphify completed with 117543 nodes and 245831 edges. Fresh final-head full
+producer and hosted CI remain required; no saved manual trace was validated
+under substituted carrier identities.
