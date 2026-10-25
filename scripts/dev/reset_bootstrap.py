@@ -1,6 +1,6 @@
 """Explicit disposable-DEV reset preparation; no implicit cluster mutation."""
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import subprocess
 import hashlib
 import os
@@ -20,6 +20,11 @@ import migrations
 CLAIMS = {'postgres': 'pgdata-voice-postgres-0', 'minio': 'data-voice-minio-0',
           'clickhouse': 'chdata-voice-clickhouse-0', 'nats': 'voice-nats-jsdata'}
 APPS = frozenset('analytics bot chat file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice auth web developer-portal admin'.split())
+PROVIDER_CONTRACT = 'local-path-local-uid-v1'
+PROVIDER_ROOT = '/var/lib/rancher/k3s/storage'
+PROVIDER_NODE = 'pmdebook'
+PROVIDER_AFFINITY = {'required': {'nodeSelectorTerms': [{'matchExpressions': [
+    {'key': 'kubernetes.io/hostname', 'operator': 'In', 'values': [PROVIDER_NODE]}]}]}}
 
 
 def old_storage(namespace, pvcs, pvs, *, namespace_uid):
@@ -52,6 +57,7 @@ def storage_class_pin(storage_class, *, available_bytes):
     if (storage_class.get('metadata', {}).get('name') != 'local-path'
             or not storage_class['metadata'].get('uid')
             or storage_class.get('provisioner') != 'rancher.io/local-path'
+            or storage_class['metadata'].get('annotations', {}).get('defaultVolumeType') != 'local'
             or storage_class.get('volumeBindingMode') != 'WaitForFirstConsumer'
             or storage_class.get('reclaimPolicy') != 'Delete'
             or storage_class.get('parameters') not in (None, {})
@@ -69,30 +75,93 @@ def verify_retained(pvs, retained):
             raise ValueError('old retained PV identity/spec changed')
 
 
-def verify_fresh(namespace, pvcs, pvs, *, old_namespace_uid, retained):
+def verify_dynamic_binding(claim, pvs):
+    """The sole supported profile: actual local-path local/PVC-UID output."""
+    meta, spec = claim['metadata'], claim['spec']
+    matches = [p for p in pvs if p['metadata']['name'] == spec.get('volumeName')]
+    if len(matches) != 1:
+        raise ValueError('unique dynamic PV required')
+    pv = matches[0]
+    volume = pv.get('spec', {})
+    path = PROVIDER_ROOT + '/pvc-' + meta['uid'] + '_' + meta['namespace'] + '_' + meta['name']
+    if (not meta.get('uid') or meta.get('deletionTimestamp')
+            or meta.get('annotations', {}).get('volume.kubernetes.io/selected-node') != PROVIDER_NODE
+            or claim.get('status', {}).get('phase') != 'Bound'
+            or spec.get('storageClassName') != 'local-path'
+            or any(spec.get(k) for k in ('selector', 'dataSource', 'dataSourceRef'))
+            or not pv['metadata'].get('uid') or pv['metadata'].get('deletionTimestamp')
+            or pv['metadata']['name'] != 'pvc-' + meta['uid']
+            or pv['metadata'].get('annotations', {}).get('pv.kubernetes.io/provisioned-by') != 'rancher.io/local-path'
+            or pv.get('status', {}).get('phase') != 'Bound'
+            or volume.get('storageClassName') != 'local-path'
+            or volume.get('persistentVolumeReclaimPolicy') != 'Delete'
+            or volume.get('local') != {'path': path} or 'hostPath' in volume
+            or volume.get('nodeAffinity') != PROVIDER_AFFINITY
+            or {k: volume.get('claimRef', {}).get(k) for k in ('namespace', 'name', 'uid')}
+            != {k: meta[k] for k in ('namespace', 'name', 'uid')}):
+        raise ValueError('supported local-path dynamic binding not established')
+    for other in pvs:
+        if other is pv:
+            continue
+        if other['metadata'].get('uid') == pv['metadata']['uid']:
+            raise ValueError('dynamic PV identity is not unique')
+        for backend in ('local', 'hostPath'):
+            other_path = other.get('spec', {}).get(backend, {}).get('path')
+            if other_path:
+                candidate, protected = PurePosixPath(path), PurePosixPath(other_path)
+                if (not protected.is_absolute() or '..' in protected.parts or str(protected) != other_path
+                        or other_path.startswith('//')
+                        or candidate.is_relative_to(protected) or protected.is_relative_to(candidate)):
+                    raise ValueError('dynamic path overlaps another PV or is unresolved')
+    return pv
+
+
+def provider_qualification(kube, receipt, *, provider, storage_class):
+    """Reobserve an operator-qualified disposable output; never provision here."""
+    if (not isinstance(receipt, dict) or receipt.get('schema') != 'voice-dev-provider-qualification-v1'
+            or receipt.get('contract') != PROVIDER_CONTRACT
+            or receipt.get('provider') != provider or receipt.get('storage_class') != storage_class):
+        raise ValueError('matching actual provider qualification required')
+    namespace_pin, claim_pin, volume_pin = (receipt.get(k, {}) for k in ('namespace', 'claim', 'volume'))
+    name = namespace_pin.get('name', '')
+    if (not re.fullmatch(r'voice-dev-provider-probe-[a-z0-9-]+', name)
+            or len(name) > 63
+            or not all(pin.get('uid') and isinstance(pin.get('name'), str)
+                       and re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?', pin['name'])
+                       and len(pin['name']) <= 253 for pin in (namespace_pin, claim_pin, volume_pin))):
+        raise ValueError('disposable provider qualification identities required')
+    namespace = kube.command(['get', 'namespace', name, '-o', 'json'])
+    claim = kube.command(['-n', name, 'get', 'pvc', claim_pin['name'], '-o', 'json'])
+    volumes = kube.command(['get', 'pv', '-o', 'json'])['items']
+    if (namespace['metadata'].get('uid') != namespace_pin['uid']
+            or namespace['metadata'].get('name') != name or namespace['metadata'].get('deletionTimestamp')
+            or namespace['metadata'].get('labels', {}).get('voice.dev/provider-probe') != 'true'
+            or claim['metadata'].get('namespace') != name
+            or {k: claim['metadata'].get(k) for k in ('name', 'uid')} != claim_pin):
+        raise ValueError('provider qualification namespace/claim identity changed')
+    volume = verify_dynamic_binding(claim, volumes)
+    if {k: volume['metadata'].get(k) for k in ('name', 'uid')} != volume_pin:
+        raise ValueError('provider qualification volume identity changed')
+    return {'contract': PROVIDER_CONTRACT, 'receipt': receipt,
+            'claim_spec_sha256': digest(claim['spec']), 'volume_spec_sha256': digest(volume['spec'])}
+
+
+def verify_fresh(namespace, pvcs, pvs, *, old_namespace_uid, retained, provider_contract=None):
     dev.validate_target(namespace)
     if not namespace['metadata'].get('uid') or namespace['metadata']['uid'] == old_namespace_uid:
         raise ValueError('new DEV namespace identity required')
+    if provider_contract != PROVIDER_CONTRACT:
+        raise ValueError('admitted provider contract required for fresh storage')
     if len(pvcs) != 4 or {p['metadata']['name'] for p in pvcs} != set(CLAIMS.values()):
         raise ValueError('exact four fresh claims required')
-    by_name = {p['metadata']['name']: p for p in pvs}
     forbidden_pvs = {p['uid'] for p in retained}
     forbidden_claims = {p['claim_uid'] for p in retained}
     verify_retained(pvs, retained)
     for claim in pvcs:
-        meta, spec = claim['metadata'], claim['spec']
-        pv = by_name.get(spec.get('volumeName'), {})
+        meta = claim['metadata']
+        pv = verify_dynamic_binding(claim, pvs)
         if (meta.get('namespace') != dev.NS or not meta.get('uid') or meta['uid'] in forbidden_claims
-                or claim.get('status', {}).get('phase') != 'Bound' or spec.get('storageClassName') != 'local-path'
-                or any(spec.get(k) for k in ('selector', 'dataSource', 'dataSourceRef'))
-                or not pv.get('metadata', {}).get('uid') or pv['metadata']['uid'] in forbidden_pvs
-                or pv['metadata']['name'] != 'pvc-' + meta['uid']
-                or pv.get('spec', {}).get('storageClassName') != 'local-path'
-                or pv['spec'].get('persistentVolumeReclaimPolicy') != 'Delete'
-                or pv['spec'].get('local', {}).get('path') != '/var/lib/rancher/k3s/storage/pvc-' + meta['uid'] + '_' + dev.NS + '_' + meta['name']
-                or pv.get('spec', {}).get('claimRef', {}).get('uid') != meta['uid']
-                or pv['spec']['claimRef'].get('namespace') != dev.NS
-                or pv['spec']['claimRef'].get('name') != meta['name']):
+                or pv['metadata']['uid'] in forbidden_pvs):
             raise ValueError('fresh dynamic storage binding not established')
 
 
@@ -518,7 +587,11 @@ def validate_package(directory, root):
     return receipt, {name: hashlib.sha256(value).hexdigest() for name, value in raw.items()}
 
 
-def prepare_plan(kube, directory, root, *, namespace_uid, staging_uid, actor, claim, budget_seconds, budget_evidence):
+def prepare_plan(kube, directory, root, *, namespace_uid, staging_uid, actor, claim, budget_seconds, budget_evidence,
+                 qualification=None):
+    if qualification is None:
+        raise ValueError('actual provider qualification receipt required before planning')
+    qualification_receipt = json.loads(private_read(qualification))
     receipt, hashes = validate_package(directory, root)
     if not actor or not claim or budget_seconds < 1800 or len(budget_evidence.strip()) < 40:
         raise ValueError('actual operator claim and reviewed recovery budget evidence required')
@@ -536,6 +609,7 @@ def prepare_plan(kube, directory, root, *, namespace_uid, staging_uid, actor, cl
     sc = kube.command(['get', 'storageclass', 'local-path', '-o', 'json'])
     storage_pin = storage_class_pin(sc, available_bytes=shutil_disk_free())
     provider = provider_pin(kube)
+    qualified = provider_qualification(kube, qualification_receipt, provider=provider, storage_class=storage_pin)
     original = observe_host()
     quiet_window(original, original, now=datetime.now(timezone.utc), remaining_seconds=budget_seconds)
     existing_tls = kube.get('secret', signal_tls.SECRET)
@@ -548,7 +622,7 @@ def prepare_plan(kube, directory, root, *, namespace_uid, staging_uid, actor, cl
     plan = {'schema': 'voice-dev-reset-plan-v1', 'operation': os.urandom(6).hex(), 'actor': actor,
             'resource_claim': claim, 'namespace_uid': namespace_uid, 'staging_uid': staging_uid,
             'writers': writers, 'retained': retained, 'storage_class': storage_pin,
-            'provider': provider,
+            'provider': provider, 'provider_qualification': qualified,
             'host': original, 'package_files': hashes, 'source_sha': receipt['source_sha'],
             'adapter_code': adapter_binding(),
             'staging_storage': staging,
@@ -570,7 +644,12 @@ def provider_pin(kube):
     node = kube.command(['get', 'node', 'pmdebook', '-o', 'json'])
     expected = {'nodePathMap': [{'node': 'DEFAULT_PATH_FOR_NON_LISTED_NODES', 'paths': ['/var/lib/rancher/k3s/storage']}]}
     if (json.loads(config.get('data', {}).get('config.json', '{}')) != expected
-            or not deployment.get('status', {}).get('availableReplicas')
+            or deployment.get('spec', {}).get('replicas') != 1
+            or deployment.get('status', {}).get('observedGeneration') != deployment['metadata'].get('generation')
+            or any(deployment.get('status', {}).get(k) != 1
+                   for k in ('availableReplicas', 'readyReplicas', 'updatedReplicas', 'replicas'))
+            or node.get('metadata', {}).get('name') != PROVIDER_NODE
+            or node['metadata'].get('labels', {}).get('kubernetes.io/hostname') != PROVIDER_NODE
             or node.get('spec', {}).get('unschedulable')
             or not any(c.get('type') == 'Ready' and c.get('status') == 'True' for c in node.get('status', {}).get('conditions', []))):
         raise ValueError('approved ready DEV local-path provider/node required')
@@ -679,6 +758,8 @@ def execute_locked(kube, directory, root, *, actor, claim):
             or adapter_binding() != plan['adapter_code']):
         raise ValueError('operator claim/package changed; no mutation')
     journal = Journal(directory, plan)
+    if plan.get('provider_qualification', {}).get('contract') != PROVIDER_CONTRACT:
+        raise ValueError('admitted provider qualification required; no mutation')
     def check_window():
         now = datetime.now(timezone.utc)
         remaining = int((datetime.fromisoformat(plan['deadline']) - now).total_seconds())
@@ -692,6 +773,10 @@ def execute_locked(kube, directory, root, *, actor, claim):
             raise ValueError('fresh storage provider changed')
         if provider_pin(kube) != plan['provider']:
             raise ValueError('fresh storage provisioner/node identity changed')
+        qualified = plan.get('provider_qualification', {})
+        if provider_qualification(kube, qualified.get('receipt'), provider=plan['provider'],
+                                  storage_class=plan['storage_class']) != qualified:
+            raise ValueError('provider qualification output changed')
         if journal.state['steps'].get('delete-namespace', {}).get('status') == 'complete':
             context = json.loads(private_read(runtime / 'fresh-storage.json'))
             namespace = kube.get('namespace', dev.NS)
@@ -718,7 +803,8 @@ def execute_locked(kube, directory, root, *, actor, claim):
     dynamic_binding = {'schema': 'voice-dev-fresh-storage-v1', 'operation': plan['operation'],
         'old_namespace_uid': plan['namespace_uid'], 'retained': plan['retained'],
         'host': plan['host'], 'deadline': plan['deadline'],
-        'storage_class': plan['storage_class'], 'tool_images': receipt['tool_images'],
+        'storage_class': plan['storage_class'], 'provider_contract': plan['provider_qualification']['contract'],
+        'tool_images': receipt['tool_images'],
         'image_references': sorted({r['reference'] for r in receipt['images']} | set(receipt['tool_images'].values())
                                    | set(migrations.GAMEINTEGRATION_IMAGES.values()))}
     if not dynamic.exists():
@@ -736,12 +822,13 @@ def execute_locked(kube, directory, root, *, actor, claim):
         raise ValueError('interrupted namespace deletion needs observed reconciliation')
     if journal.state['steps'].get('bootstrap', {}).get('status') != 'complete':
         interruptions = sorted(runtime.glob('bootstrap-interrupted-*.json'))
-        if interruptions:
+        # The durable start is written before launch. Abrupt supervisor/host
+        # loss may prevent writing the richer interruption receipt entirely.
+        if journal.state['steps'].get('bootstrap') or interruptions:
             raise ValueError('interrupted bootstrap requires explicit operator recovery; remote execution outcomes remain unresolved')
         check_window()
-        if not journal.state['steps'].get('bootstrap'):
-            journal.begin('bootstrap')
-        # Only forward bootstrap may resume; old namespace deletion never replays.
+        journal.begin('bootstrap')
+        # This invocation alone owns the first launch; no automatic replay.
         environment = dict(os.environ, SPACE_NATIVE_INSTALLER_IMAGE=receipt['tool_images']['space-native-installer'])
         log = runtime / 'bootstrap.log'
         try:
@@ -774,6 +861,7 @@ def main():
     parser.add_argument('--staging-uid')
     parser.add_argument('--budget-seconds', type=int, default=0)
     parser.add_argument('--budget-evidence', default='')
+    parser.add_argument('--provider-qualification', type=Path)
     args = parser.parse_args()
     os.umask(0o077)
     directory = private_directory(args.work_dir.absolute())
@@ -782,7 +870,8 @@ def main():
         if (directory / 'reset-state.json').exists():
             raise ValueError('existing operation state must never be reset')
         prepare_plan(Kube(), directory, root, namespace_uid=args.namespace_uid, staging_uid=args.staging_uid,
-                     actor=args.actor, claim=args.resource_claim, budget_seconds=args.budget_seconds, budget_evidence=args.budget_evidence)
+                     actor=args.actor, claim=args.resource_claim, budget_seconds=args.budget_seconds,
+                     budget_evidence=args.budget_evidence, qualification=args.provider_qualification)
         print('DEV_RESET_PLAN_READY; no cluster mutation')
     else:
         execute_plan(Kube(), directory, root, actor=args.actor, claim=args.resource_claim)
