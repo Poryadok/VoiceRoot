@@ -1,5 +1,19 @@
 DO $$
 BEGIN
+    -- Locks do not refresh an already established transaction snapshot.
+    IF current_setting('transaction_isolation') <> 'read committed' THEN
+        RAISE EXCEPTION USING ERRCODE = '0A000',
+            MESSAGE = '000013 down requires READ COMMITTED isolation';
+    END IF;
+
+    -- Serialize the empty check with every first writer. Keep these locks until
+    -- the whole migration transaction completes, including the DROP statements.
+    -- Supported writers read operation receipts before touching session/grants.
+    PERFORM set_config('lock_timeout', '2s', true);
+    LOCK TABLE game_session_grant_operations,
+               game_session_grant_sessions,
+               game_session_grants IN ACCESS EXCLUSIVE MODE;
+
     IF EXISTS (SELECT 1 FROM game_session_grant_operations)
        OR EXISTS (SELECT 1 FROM game_session_grants)
        OR EXISTS (SELECT 1 FROM game_session_grant_sessions) THEN

@@ -5,10 +5,7 @@ import '../../l10n/app_localizations.dart';
 import '../../state/matchmaking_search_controller.dart';
 
 class RatedTeammate {
-  const RatedTeammate({
-    required this.profileId,
-    required this.displayName,
-  });
+  const RatedTeammate({required this.profileId, required this.displayName});
 
   final String profileId;
   final String displayName;
@@ -36,15 +33,15 @@ class MatchmakingRecoveryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final (title, body, actionLabel) = switch (reason) {
       SearchRecoveryReason.timeout => (
-          l10n.queueSearchTimeoutTitle,
-          l10n.queueSearchTimeoutBody,
-          l10n.queueSearchRecoveryReturnToQueue,
-        ),
+        l10n.queueSearchTimeoutTitle,
+        l10n.queueSearchTimeoutBody,
+        l10n.queueSearchRecoveryReturnToQueue,
+      ),
       SearchRecoveryReason.declined => (
-          l10n.queueSearchDeclinedTitle,
-          l10n.queueSearchDeclinedBody,
-          l10n.queueSearchRecoveryContinueSearch,
-        ),
+        l10n.queueSearchDeclinedTitle,
+        l10n.queueSearchDeclinedBody,
+        l10n.queueSearchRecoveryContinueSearch,
+      ),
     };
 
     return Card(
@@ -98,7 +95,8 @@ class MatchRatingOverlay extends StatefulWidget {
   static Key skipTeammateKey(String profileId) =>
       Key('match_rating_skip_$profileId');
   static const Key skipAllButtonKey = Key('match_rating_skip_all');
-  static Key banButtonKey(String profileId) => Key('match_rating_ban_$profileId');
+  static Key banButtonKey(String profileId) =>
+      Key('match_rating_ban_$profileId');
 
   @override
   State<MatchRatingOverlay> createState() => _MatchRatingOverlayState();
@@ -107,6 +105,11 @@ class MatchRatingOverlay extends StatefulWidget {
 class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
   final Map<String, int?> _stars = {};
   final Set<String> _skipped = {};
+  // Preserve acknowledged work across a retry of a later vote or ban.
+  final Set<String> _rated = {};
+  final Set<String> _banDecided = {};
+  final Set<String> _pendingBans = {};
+  final Set<String> _banned = {};
   bool _submitting = false;
 
   @override
@@ -121,21 +124,54 @@ class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
     if (_submitting) return;
     setState(() => _submitting = true);
     try {
+      var succeeded = true;
       for (final teammate in widget.teammates) {
-        if (_skipped.contains(teammate.profileId)) continue;
-        final stars = _stars[teammate.profileId];
+        final id = teammate.profileId;
+        if (_skipped.contains(id)) continue;
+        final stars = _stars[id];
         if (stars == null) continue;
-        final rated = await widget.onRate?.call(teammate.profileId, stars) ??
-            true;
-        if (!rated) continue;
-        if (stars <= 2) {
+        if (!_rated.contains(id)) {
+          final rated = await widget.onRate?.call(id, stars) ?? true;
+          if (!mounted) return;
+          if (!rated) {
+            succeeded = false;
+            continue;
+          }
+          _rated.add(id);
+        }
+        if (stars <= 2 && !_banDecided.contains(id) && !_banned.contains(id)) {
           final ban = await _confirmBan(teammate);
-          if (ban) {
-            await widget.onBan?.call(teammate.profileId);
+          if (!mounted) return;
+          _banDecided.add(id);
+          if (ban) _pendingBans.add(id);
+        }
+        if (_pendingBans.contains(id)) {
+          final banned = await widget.onBan?.call(id) ?? true;
+          if (!mounted) return;
+          if (banned) {
+            _pendingBans.remove(id);
+            _banned.add(id);
+          } else {
+            succeeded = false;
           }
         }
       }
-      widget.onDone?.call();
+      if (succeeded) widget.onDone?.call();
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _ban(String profileId) async {
+    if (_submitting || _banned.contains(profileId)) return;
+    setState(() => _submitting = true);
+    try {
+      final banned = await widget.onBan?.call(profileId) ?? true;
+      if (!mounted) return;
+      if (banned) {
+        _banned.add(profileId);
+        _pendingBans.remove(profileId);
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -176,20 +212,15 @@ class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                l10n.matchRatingTitle,
-                style: theme.textTheme.titleLarge,
-              ),
+              Text(l10n.matchRatingTitle, style: theme.textTheme.titleLarge),
               const SizedBox(height: 8),
-              Text(
-                l10n.matchRatingSubtitle,
-                style: theme.textTheme.bodyMedium,
-              ),
+              Text(l10n.matchRatingSubtitle, style: theme.textTheme.bodyMedium),
               const SizedBox(height: 16),
               Expanded(
                 child: ListView.separated(
                   itemCount: widget.teammates.length,
-                  separatorBuilder: (context, index) => const Divider(height: 24),
+                  separatorBuilder: (context, index) =>
+                      const Divider(height: 24),
                   itemBuilder: (context, index) {
                     final teammate = widget.teammates[index];
                     final skipped = _skipped.contains(teammate.profileId);
@@ -211,11 +242,15 @@ class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
                                   key: widget.teammates.length == 1
                                       ? MatchRatingOverlay.starButtonKey(stars)
                                       : null,
-                                  onPressed: () {
-                                    setState(() {
-                                      _stars[teammate.profileId] = stars;
-                                    });
-                                  },
+                                  onPressed:
+                                      _submitting ||
+                                          _rated.contains(teammate.profileId)
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _stars[teammate.profileId] = stars;
+                                          });
+                                        },
                                   icon: Icon(
                                     (_stars[teammate.profileId] ?? 0) >= stars
                                         ? Icons.star
@@ -229,19 +264,26 @@ class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
                             key: MatchRatingOverlay.skipTeammateKey(
                               teammate.profileId,
                             ),
-                            onPressed: () {
-                              setState(() {
-                                _skipped.add(teammate.profileId);
-                              });
-                            },
+                            onPressed:
+                                _submitting ||
+                                    _rated.contains(teammate.profileId)
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _skipped.add(teammate.profileId);
+                                    });
+                                  },
                             child: Text(l10n.matchRatingSkipTeammate),
                           ),
                           TextButton(
                             key: MatchRatingOverlay.banButtonKey(
                               teammate.profileId,
                             ),
-                            onPressed: () =>
-                                widget.onBan?.call(teammate.profileId),
+                            onPressed:
+                                _submitting ||
+                                    _banned.contains(teammate.profileId)
+                                ? null
+                                : () => _ban(teammate.profileId),
                             child: Text(l10n.matchRatingBanAction),
                           ),
                         ],
@@ -252,7 +294,9 @@ class _MatchRatingOverlayState extends State<MatchRatingOverlay> {
               ),
               TextButton(
                 key: MatchRatingOverlay.skipAllButtonKey,
-                onPressed: widget.onSkipAll ?? widget.onDone,
+                onPressed: _submitting
+                    ? null
+                    : widget.onSkipAll ?? widget.onDone,
                 child: Text(l10n.matchRatingSkipAll),
               ),
               const SizedBox(height: 8),

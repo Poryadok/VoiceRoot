@@ -1,0 +1,43 @@
+test_dirty_realtime_is_rejected_without_force (__main__.RealtimeBootstrapTest.test_dirty_realtime_is_rejected_without_force) ... FAIL
+test_existing_volume_creates_and_migrates_realtime (__main__.RealtimeBootstrapTest.test_existing_volume_creates_and_migrates_realtime) ... FAIL
+test_fresh_realtime_is_migrated (__main__.RealtimeBootstrapTest.test_fresh_realtime_is_migrated) ... FAIL
+test_untracked_nonempty_realtime_is_rejected_without_baseline (__main__.RealtimeBootstrapTest.test_untracked_nonempty_realtime_is_rejected_without_baseline) ... FAIL
+
+======================================================================
+FAIL: test_dirty_realtime_is_rejected_without_force (__main__.RealtimeBootstrapTest.test_dirty_realtime_is_rejected_without_force)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/docker/postgres/compose-realtime-migrations_test.py", line 102, in test_dirty_realtime_is_rejected_without_force
+    self.assertIn('realtime_db', result.stderr)
+AssertionError: 'realtime_db' not found in "python3: can't open file '/usr/local/bin/provision-bot-membership-source.py': [Errno 2] No such file or directory\n"
+
+======================================================================
+FAIL: test_existing_volume_creates_and_migrates_realtime (__main__.RealtimeBootstrapTest.test_existing_volume_creates_and_migrates_realtime)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/docker/postgres/compose-realtime-migrations_test.py", line 81, in test_existing_volume_creates_and_migrates_realtime
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 2 != 0 : python3: can't open file '/usr/local/bin/provision-bot-membership-source.py': [Errno 2] No such file or directory
+
+
+======================================================================
+FAIL: test_fresh_realtime_is_migrated (__main__.RealtimeBootstrapTest.test_fresh_realtime_is_migrated)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/docker/postgres/compose-realtime-migrations_test.py", line 93, in test_fresh_realtime_is_migrated
+    self.assertEqual(result.returncode, 0, result.stderr)
+AssertionError: 2 != 0 : python3: can't open file '/usr/local/bin/provision-bot-membership-source.py': [Errno 2] No such file or directory
+
+
+======================================================================
+FAIL: test_untracked_nonempty_realtime_is_rejected_without_baseline (__main__.RealtimeBootstrapTest.test_untracked_nonempty_realtime_is_rejected_without_baseline)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/docker/postgres/compose-realtime-migrations_test.py", line 111, in test_untracked_nonempty_realtime_is_rejected_without_baseline
+    self.assertIn('realtime_db', result.stderr)
+AssertionError: 'realtime_db' not found in "python3: can't open file '/usr/local/bin/provision-bot-membership-source.py': [Errno 2] No such file or directory\n"
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.141s
+
+FAILED (failures=4)

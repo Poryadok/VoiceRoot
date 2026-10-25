@@ -9,6 +9,7 @@ COPY matchmaking/go.mod matchmaking/go.sum ./matchmaking/
 COPY voice/pb/voice/matchmaking/go.mod ./voice/pb/voice/matchmaking/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
@@ -19,6 +20,7 @@ COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh matchmaking
 COPY pkg ./pkg
 COPY voice/pb ./voice/pb
+COPY role/pb/voice/role ./role/pb/voice/role
 COPY file/pb/voice/file ./file/pb/voice/file
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY user/pb ./user/pb

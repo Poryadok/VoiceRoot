@@ -110,7 +110,7 @@ func TestT16ComposeCrossServiceAcceptance(t *testing.T) {
 	mappingAuthority := &t16DiagnosticResourceMappingAuthority{
 		delegate: mappingClient, runtimeDB: gisRuntimeDB, t: t,
 	}
-	processor := &VerifiedGameMessageProcessor{Store: storeMessages, AuthKeys: gameAuthKeys,
+	processor := &VerifiedGameMessageProcessor{Store: storeMessages, AuthKeys: gameAuthKeys, CommunicationAdmission: (&MessagingGRPC{ChatThreadPolicy: &store.SQLChatThreadPolicy{Pool: chatDB}}).BeginCommunicationAction,
 		Permits: permitClient, Bindings: &AuthBackedGameBindingAuthority{
 			Chats: chatGuard, ResourceMappings: mappingAuthority,
 		}}
@@ -541,7 +541,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	require.False(t, t0Observed.IsZero(), "GIS must durably commit active→revoking before permit drain")
+	require.False(t, t0Observed.IsZero(), "GIS must durably commit activeâ†’revoking before permit drain")
 	// A new Auth/GIS permit is forbidden once the durable GIS binding transition
 	// has begun, even while permits issued before t0 are still draining.
 	postRevokeOperationID := uuid.New()
@@ -582,7 +582,7 @@ VALUES($1,$2,$3,'google','hmac-sha256-v1:t16-foreign:`+strings.Repeat("f", 64)+`
 		lastTerminalAt = expiryAt
 	}
 	gisDrain := lastTerminalAt.Sub(revokingAt)
-	require.LessOrEqual(t, gisDrain, 4250*time.Millisecond, "GIS persisted revoking→last-terminal must meet the 4.25s limit")
+	require.LessOrEqual(t, gisDrain, 4250*time.Millisecond, "GIS persisted revokingâ†’last-terminal must meet the 4.25s limit")
 	monotonicRequestToTerminal := time.Since(revokeStarted)
 	t.Logf("T16 revoke timing: GIS durable revoking_at(updated_at)=%s, last_terminal_at=%s, GIS drain=%s, DELETE request-to-last-terminal monotonic=%s, request-to-observed-t0=%s",
 		revokingAt.Format(time.RFC3339Nano), lastTerminalAt.Format(time.RFC3339Nano), gisDrain, monotonicRequestToTerminal, t0Observed.Sub(revokeStarted))
@@ -754,8 +754,9 @@ func cleanupT16GISUnavailableFixture(t *testing.T, fixture t16GISUnavailableFixt
 	require.NoError(t, err)
 	_, err = authDB.Exec(ctx, `DELETE FROM sdk_identities WHERE application_id=$1 AND environment_id=$2`, fixture.AppID, fixture.EnvID)
 	require.NoError(t, err)
-	_, err = authDB.Exec(ctx, `DELETE FROM accounts WHERE id IN ($1,$2)`, fixture.SourceAccountID, fixture.TargetAccountID)
-	require.NoError(t, err)
+	// Keep these two unique per-run Auth accounts until the owning T16 workflow
+	// tears down its disposable database volumes. Active accounts have not reached
+	// the real 30-day erasure boundary and must not be physically deleted here.
 	require.NoError(t, os.Remove(fixturePath))
 }
 

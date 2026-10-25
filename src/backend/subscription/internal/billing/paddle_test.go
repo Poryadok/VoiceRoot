@@ -54,18 +54,52 @@ func TestSpaceProFromCustomData(t *testing.T) {
 	require.Equal(t, purchaserID, gotPurchaser)
 }
 
-func TestValidateWebhookSecretConfig_rejectsDefaultInProduction(t *testing.T) {
-	t.Setenv("VOICE_ENV", "production")
-	t.Setenv("PADDLE_WEBHOOK_SECRET", "")
-	t.Setenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET", "")
-	require.Error(t, ValidateWebhookSecretConfig())
+func TestWebhookSecretProductionPolicy(t *testing.T) {
+	for _, environment := range []string{"production", " prod ", "PRODUCTION"} {
+		for _, secret := range []string{"", " \t", defaultWebhookSecret, " " + defaultWebhookSecret + " "} {
+			for _, override := range []string{"", "true"} {
+				t.Run(environment+"/"+secret+"/override="+override, func(t *testing.T) {
+					t.Setenv("VOICE_ENV", environment)
+					t.Setenv("PADDLE_WEBHOOK_SECRET", secret)
+					t.Setenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET", override)
+					require.ErrorIs(t, ValidateWebhookSecretConfig(), ErrWebhookSecretNotConfigured)
+
+					body := `{"event_id":"evt_unsafe","event_type":"subscription.activated"}`
+					// Even a correctly signed payload cannot authorize billing with
+					// the public fixture key in a production process.
+					require.ErrorIs(t, VerifySignature(body, SignWebhookForTest(body)), ErrWebhookSecretNotConfigured)
+				})
+			}
+		}
+	}
 }
 
-func TestValidateWebhookSecretConfig_allowsExplicitTestOverride(t *testing.T) {
+func TestWebhookSecretProductionConfiguredKey(t *testing.T) {
 	t.Setenv("VOICE_ENV", "production")
-	t.Setenv("PADDLE_WEBHOOK_SECRET", defaultWebhookSecret)
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "configured-private-test-fixture")
 	t.Setenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET", "true")
 	require.NoError(t, ValidateWebhookSecretConfig())
+	body := `{"event_id":"evt_configured","event_type":"subscription.activated"}`
+	require.NoError(t, VerifySignature(body, SignWebhookForTest(body)))
+
+	t.Setenv("PADDLE_WEBHOOK_SECRET", defaultWebhookSecret)
+	defaultSignature := SignWebhookForTest(body)
+	t.Setenv("PADDLE_WEBHOOK_SECRET", "configured-private-test-fixture")
+	require.Error(t, VerifySignature(body, defaultSignature))
+}
+
+func TestWebhookSecretNonproductionFixture(t *testing.T) {
+	for _, environment := range []string{"", "development", "test"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Setenv("VOICE_ENV", environment)
+			t.Setenv("PADDLE_WEBHOOK_SECRET", "")
+			t.Setenv("SUBSCRIPTION_ALLOW_TEST_WEBHOOK_SECRET", "")
+			require.NoError(t, ValidateWebhookSecretConfig())
+			require.Equal(t, defaultWebhookSecret, WebhookSecret())
+			body := `{"event_id":"evt_local","event_type":"subscription.activated"}`
+			require.NoError(t, VerifySignature(body, SignWebhookForTest(body)))
+		})
+	}
 }
 
 func TestSignWebhookForTest_roundTrip(t *testing.T) {

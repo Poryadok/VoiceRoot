@@ -1,0 +1,247 @@
+{
+  "source": "d1727a21dbe7aa72385228b21be6465eac66da50",
+  "qualified": "1c47dce37a88c2539c8dabb074d9eda46fb84999",
+  "manual_count": 33,
+  "repair_count": 4,
+  "unique_count": 34,
+  "entries": [
+    {
+      "path": ".agent/execplans/be265-native-p3.md",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 2752b84ae1acc4de32f59b151b50cb20711a2a82\t.agent/execplans/be265-native-p3.md\u0000",
+      "current": "100644 blob 2752b84ae1acc4de32f59b151b50cb20711a2a82\t.agent/execplans/be265-native-p3.md\u0000"
+    },
+    {
+      "path": "docs/microservices/voice-service.md",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 0e717f7e9c3dad3560945127e6fea6dbe3e1f422\tdocs/microservices/voice-service.md\u0000",
+      "current": "100644 blob 6d95089f9b55e46346b0dd722c8bf97c64a39565\tdocs/microservices/voice-service.md\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_media_join.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob db94e8a8b0719600a4de9209ad0b3adce12afd0e\tsrc/backend/voice/internal/grpcsvc/space_media_join.go\u0000",
+      "current": "100644 blob db94e8a8b0719600a4de9209ad0b3adce12afd0e\tsrc/backend/voice/internal/grpcsvc/space_media_join.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/space_media_join_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 3c0733fb786547f15e7052393139f6b313cece02\tsrc/backend/voice/internal/grpcsvc/space_media_join_test.go\u0000",
+      "current": "100644 blob 3c0733fb786547f15e7052393139f6b313cece02\tsrc/backend/voice/internal/grpcsvc/space_media_join_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_grpc.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob dc47f6b335d39e21944aee408f03efdd6057e781\tsrc/backend/voice/internal/grpcsvc/voice_grpc.go\u0000",
+      "current": "100644 blob dc47f6b335d39e21944aee408f03efdd6057e781\tsrc/backend/voice/internal/grpcsvc/voice_grpc.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/grpcsvc/voice_grpc_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 123064bf046368d8ffd788c254aed8a5ab3c9144\tsrc/backend/voice/internal/grpcsvc/voice_grpc_test.go\u0000",
+      "current": "100644 blob 123064bf046368d8ffd788c254aed8a5ab3c9144\tsrc/backend/voice/internal/grpcsvc/voice_grpc_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacebarrier/barrier.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 6d787b1e3d9929bcff57d678846a9cfc840bb502\tsrc/backend/voice/internal/spacebarrier/barrier.go\u0000",
+      "current": "100644 blob 6d787b1e3d9929bcff57d678846a9cfc840bb502\tsrc/backend/voice/internal/spacebarrier/barrier.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacegatetest/gates.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 575579c76f7e4f5bdc66b8192cae374cb77a9b74\tsrc/backend/voice/internal/spacegatetest/gates.go\u0000",
+      "current": "100644 blob 575579c76f7e4f5bdc66b8192cae374cb77a9b74\tsrc/backend/voice/internal/spacegatetest/gates.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/capture.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob b3ab397e5c415068b2724d4093f6b5312e2d49c0\tsrc/backend/voice/internal/spacelifecycle/capture.go\u0000",
+      "current": "100644 blob b3ab397e5c415068b2724d4093f6b5312e2d49c0\tsrc/backend/voice/internal/spacelifecycle/capture.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/effects.go",
+      "manual": true,
+      "repair": true,
+      "old": "100644 blob 33761d6cb090755ebba7b85ec2a43cb229829deb\tsrc/backend/voice/internal/spacelifecycle/effects.go\u0000",
+      "current": "100644 blob 33761d6cb090755ebba7b85ec2a43cb229829deb\tsrc/backend/voice/internal/spacelifecycle/effects.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/postgres.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 0b46ecb0f84afe4a57e8da06b77beab62cf84bc4\tsrc/backend/voice/internal/spacelifecycle/postgres.go\u0000",
+      "current": "100644 blob 0b46ecb0f84afe4a57e8da06b77beab62cf84bc4\tsrc/backend/voice/internal/spacelifecycle/postgres.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/recovery_publication_test.go",
+      "manual": false,
+      "repair": true,
+      "old": "100644 blob d945e5e75de9dceda69eac8424cef4004b35655c\tsrc/backend/voice/internal/spacelifecycle/recovery_publication_test.go\u0000",
+      "current": "100644 blob d945e5e75de9dceda69eac8424cef4004b35655c\tsrc/backend/voice/internal/spacelifecycle/recovery_publication_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/service.go",
+      "manual": true,
+      "repair": true,
+      "old": "100644 blob 45afb942be29f3b02a80b01f9ee195ff141e16d4\tsrc/backend/voice/internal/spacelifecycle/service.go\u0000",
+      "current": "100644 blob 45afb942be29f3b02a80b01f9ee195ff141e16d4\tsrc/backend/voice/internal/spacelifecycle/service.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacelifecycle/store.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 67e2a25efd8297aacc46ba5445aab1610c4d8911\tsrc/backend/voice/internal/spacelifecycle/store.go\u0000",
+      "current": "100644 blob 67e2a25efd8297aacc46ba5445aab1610c4d8911\tsrc/backend/voice/internal/spacelifecycle/store.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/captured_drain.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 451b3a80e38758f95ae5df76da5818384134cc16\tsrc/backend/voice/internal/spacemedia/captured_drain.go\u0000",
+      "current": "100644 blob 451b3a80e38758f95ae5df76da5818384134cc16\tsrc/backend/voice/internal/spacemedia/captured_drain.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/communication_timeout_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 2cbaf4d23418d7ca936e6c1a4942f2e2001fedd0\tsrc/backend/voice/internal/spacemedia/communication_timeout_test.go\u0000",
+      "current": "100644 blob 2cbaf4d23418d7ca936e6c1a4942f2e2001fedd0\tsrc/backend/voice/internal/spacemedia/communication_timeout_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/consumer_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 4e8b112d504ab9bbc742c0c462eba6babe26616f\tsrc/backend/voice/internal/spacemedia/consumer_test.go\u0000",
+      "current": "100644 blob 4e8b112d504ab9bbc742c0c462eba6babe26616f\tsrc/backend/voice/internal/spacemedia/consumer_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 93454778dbf31c5aaeca6c3923d8bdf5020cd14f\tsrc/backend/voice/internal/spacemedia/coordinator.go\u0000",
+      "current": "100644 blob 93454778dbf31c5aaeca6c3923d8bdf5020cd14f\tsrc/backend/voice/internal/spacemedia/coordinator.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator_floor_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 7cf293c162a3a5ff230d581024b4c93eda73c44b\tsrc/backend/voice/internal/spacemedia/coordinator_floor_test.go\u0000",
+      "current": "100644 blob 7cf293c162a3a5ff230d581024b4c93eda73c44b\tsrc/backend/voice/internal/spacemedia/coordinator_floor_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/coordinator_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 1898ee9d93803247b3b139e8c78d795942d2f52a\tsrc/backend/voice/internal/spacemedia/coordinator_test.go\u0000",
+      "current": "100644 blob 1898ee9d93803247b3b139e8c78d795942d2f52a\tsrc/backend/voice/internal/spacemedia/coordinator_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/grants.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 31f9a524aebb60a025355e4395d2f22c8ea6da6e\tsrc/backend/voice/internal/spacemedia/grants.go\u0000",
+      "current": "100644 blob 31f9a524aebb60a025355e4395d2f22c8ea6da6e\tsrc/backend/voice/internal/spacemedia/grants.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_barrier_integration_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 04744b6833d4e523358b3528a71007c54c005329\tsrc/backend/voice/internal/spacemedia/p3_barrier_integration_test.go\u0000",
+      "current": "100644 blob 04744b6833d4e523358b3528a71007c54c005329\tsrc/backend/voice/internal/spacemedia/p3_barrier_integration_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_composition_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 794e9e9b32b6d3a07a78870a13fa4f5e5cf17497\tsrc/backend/voice/internal/spacemedia/p3_composition_test.go\u0000",
+      "current": "100644 blob 794e9e9b32b6d3a07a78870a13fa4f5e5cf17497\tsrc/backend/voice/internal/spacemedia/p3_composition_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob b57b5133cf73949bdf769d268a6276b536ece7da\tsrc/backend/voice/internal/spacemedia/p3_gate_integration_test.go\u0000",
+      "current": "100644 blob b57b5133cf73949bdf769d268a6276b536ece7da\tsrc/backend/voice/internal/spacemedia/p3_gate_integration_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 4ebac4b08044ee918b287040231e8b340f748185\tsrc/backend/voice/internal/spacemedia/postgres_admission.go\u0000",
+      "current": "100644 blob 4ebac4b08044ee918b287040231e8b340f748185\tsrc/backend/voice/internal/spacemedia/postgres_admission.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/postgres_admission_integration_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 266ae736561c75b830c6e34071e3697223bcf2ec\tsrc/backend/voice/internal/spacemedia/postgres_admission_integration_test.go\u0000",
+      "current": "100644 blob 266ae736561c75b830c6e34071e3697223bcf2ec\tsrc/backend/voice/internal/spacemedia/postgres_admission_integration_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/spacemedia/projection_authority.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob d24d2d7fbd4137f887d4e2496396ffdb07e8548f\tsrc/backend/voice/internal/spacemedia/projection_authority.go\u0000",
+      "current": "100644 blob d24d2d7fbd4137f887d4e2496396ffdb07e8548f\tsrc/backend/voice/internal/spacemedia/projection_authority.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/store/call_store.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 16d691b13e16861b5ab5bf7ad56785dab7fe9fd6\tsrc/backend/voice/internal/store/call_store.go\u0000",
+      "current": "100644 blob 16d691b13e16861b5ab5bf7ad56785dab7fe9fd6\tsrc/backend/voice/internal/store/call_store.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/store/redis_store.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 906b69408f7b08bdb227836ba99a87f25de0dc89\tsrc/backend/voice/internal/store/redis_store.go\u0000",
+      "current": "100644 blob 906b69408f7b08bdb227836ba99a87f25de0dc89\tsrc/backend/voice/internal/store/redis_store.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/store/redis_store_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 6ff65cefba8aedae7d348484f0b23b159d13e3d5\tsrc/backend/voice/internal/store/redis_store_test.go\u0000",
+      "current": "100644 blob 6ff65cefba8aedae7d348484f0b23b159d13e3d5\tsrc/backend/voice/internal/store/redis_store_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_gate_incarnation_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 9f648a193f9ac2670b7feb49a71d4b2bec1e07d2\tsrc/backend/voice/internal/store/space_gate_incarnation_test.go\u0000",
+      "current": "100644 blob 9f648a193f9ac2670b7feb49a71d4b2bec1e07d2\tsrc/backend/voice/internal/store/space_gate_incarnation_test.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_lifecycle.go",
+      "manual": true,
+      "repair": false,
+      "old": "100644 blob 06b10b13f105347cf894c23629036f01a9c0558c\tsrc/backend/voice/internal/store/space_lifecycle.go\u0000",
+      "current": "100644 blob 06b10b13f105347cf894c23629036f01a9c0558c\tsrc/backend/voice/internal/store/space_lifecycle.go\u0000"
+    },
+    {
+      "path": "src/backend/voice/internal/store/space_lifecycle_test.go",
+      "manual": true,
+      "repair": false,
+      "old": "",
+      "current": ""
+    },
+    {
+      "path": "src/backend/voice/main.go",
+      "manual": true,
+      "repair": true,
+      "old": "100644 blob eb2c4f2b13aa361b5f8d01238546afb8d925458e\tsrc/backend/voice/main.go\u0000",
+      "current": "100644 blob 540a91513cfd19d1499183302b3880a578951d56\tsrc/backend/voice/main.go\u0000"
+    }
+  ]
+}

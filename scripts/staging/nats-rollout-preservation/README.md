@@ -1,5 +1,84 @@
 # Per-rollout NATS preservation
 
+## Fixed A3 roster authority v6
+
+The separately versioned `voice-nats-additive-contract-v6` migration is
+`chat-space-social-role-media-music-a3-roster-v6`; its census receipt is
+`voice-nats-additive-census-proof-v5`. It selects the complete immutable
+four-template owner147 tuple, adds only `voice.roster_membership_changed` to
+voice13 and the exact pull/all/explicit `matchmaking_voice_roster_v1` durable.
+The exact source bytes are held as qualification fixtures in
+`testdata/a3-roster-source`; this work does not install those templates or keys.
+Every v3/v4/v5 literal source, declaration, API and proof pairing remains fixed.
+
+Fresh `voice-bootstrap-auth-v5` evidence contains exactly five ordered normalized
+rows. Its full four-row Authv4 projection must equal the immutable enrollment;
+existing enrollment is never replaced. Actual installed bootstrap, Voice and
+MM permissions remain a separate pre-fence gate. Signed disposable credentials
+qualify only their fixture policy, never the installed identities.
+
+Before mutation, `voice-nats-deliver-all-cut-v1` binds the original archive,
+manifest/census, complete stream state, operation/plan/enrollment/live-auth and
+the exact retained matching-subject count from authenticated filtered INFO on
+an isolated restore. The selected store is never pulled or ACKed. A newly
+created durable must prove native original absence, an owned durably issued
+and closed CREATE attempt, checksum-validated native Created and exact native
+state. For original first sequence F and last L, S is 1 when F=0 and otherwise
+min(F,L+1): CLOSED Delivered is (0,S-1), AckFloor (0,0), pending is independently
+counted M, with no activity, waiting, native pending or redelivery. Matching
+configuration alone cannot recover a creation. An already-existing durable
+retains its exact old state instead of being reinitialized.
+
+Only successful preservation permits the existing four guarded ConfigMap
+CAS/readbacks and serialized v6 active receipt. Broker delivery and lost-ACK
+checks use separate post-proof clones. Actual product MM/PostgreSQL inbox
+commit-before-ACK and duplicate-effect evidence is owned by147/145 (C4/C5),
+and remains open until those consumers supply it. Producer relay activation
+also requires accepted installed v6 authority and product consumer gates.
+
+## Fixed participant/Auth observation authority v5
+
+The v5 subject expansion is a distinct migration,
+`chat-space-social-role-media-music-participant-auth-observations-v5`, with plan
+schema `voice-nats-additive-contract-v5` and census proof
+`voice-nats-additive-census-proof-v4`. It retains the exact four v4 consumer
+declarations and unchanged `voice-bootstrap-auth-v4` enrollment semantics.
+
+Root selects one complete fixed four-file tuple: realtime, analytics-chat,
+search and notification. All four target script hashes come from those pinned
+files; no per-file old/new mixture, arbitrary caller hash or pin refresh is
+accepted. Voice declarations must agree in realtime/analytics/notification;
+user declarations must agree in realtime/analytics/search. The preexisting
+historical contract and previous receipts remain byte-identical. The fourth
+notification source is required because its strict stream comparison must
+recognize the same expanded voice subjects; omitting its root-derived hash
+correctly fails the compiler.
+
+Only complete old or target sets are eligible: voice 10 or 12 subjects and user
+10 or 14, independently. V5 adds exactly `voice.participant_joined`,
+`voice.participant_left`, `user.registered`, `user.logged_in`, `user.logged_out`
+and `user.2fa_enabled`, using exact stream UPDATE APIs. It deep-copies the live
+config and changes only the ordered missing subjects. Missing streams, partial
+sets, duplicates, foreign ownership/wildcards or unrelated config drift fail.
+Dynamic and declared old consumers are preserved without recreation.
+
+V5 execution, actor INFO/WRITE, issued-intent recovery and receipt readers admit
+these two extra stream targets only for v5. Old v3/v4 plans cannot acquire their
+authority. V5 receipts require all four exact source digests; the unpublished
+three-source prototype is invalid. After semantic/native preservation proof,
+custody performs the same UID/RV/operation-annotation guarded CAS for all four
+ConfigMaps. A partial or foreign fourth CAS cannot authorize the next rollout;
+the serialized complete receipt and next compile must produce a no-op.
+
+The isolated populated fixture checks pending voice/user consumers including
+`notif_voice`, old message/index and consumer state bytes, actual interruptions
+after both new UPDATEs, all six new subjects and no-op repeat. Exact UPDATE
+grants are exercised with the existing disposable authenticated identity on an
+empty scratch realm before mutating its populated store. This does not modify
+installed credentials, renew permissions, run a bootstrap Job or grant stand
+access. It uses the repository's exact pinned NATS image; its result is separate
+from hosted CI, helper installation, rollout and appointed acceptance.
+
 Normal staging deployment uses a root-owned captured bridge installed once by
 the operator. Every subsequent release creates a new operation and cold cut;
 an earlier reset baseline or successful backup cannot authorize another release.
@@ -171,9 +250,37 @@ default postconditions gate restart. Already-applied16 does not repeat its
 backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
 (including empty strings) are rechecked under the writer fence before any
 native contract mutation or database Job; conflicting data is not rewritten.
-The same read-only prerequisite accepts clean Bot schema versions1 through6,
-including the canonical `000006_bot_chat_create_requests` target after migration;
-newer versions, dirty state and duplicate token groups still refuse admission.
+The same read-only prerequisite accepts clean Bot schema versions1 through8.
+Bot007 excludes legacy empty message tokens from the unique interaction index;
+Bot008 adds the native membership journal without changing that index. The
+prerequisite still rejects duplicate nonempty token groups, dirty state and
+versions newer than8; before Bot007 it also rejects duplicate empty tokens.
+
+The root-owned private `policy.json` may explicitly carry `release_policy`.
+Installation validates its source-bound profile, immutable object, digest and
+owner paths; preparation validates the same input against the captured candidate
+SHA before image selection, and the compiler independently requires it for
+current release-policy templates. Missing or malformed input is not filled from
+environment variables or target source. Historical templates keep their existing
+admission checks. Upgrades preserve the existing private policy bytes; this
+transport change does not provision a policy object or authorize deployment.
+
+FULL/app-only may include the already-existing `voice-p3-principal-jwks`
+publisher when the approved source contains its exact Deployment/Service/config
+triple. Its sole `jwks` container retains the observed nginx digest bound through
+the existing Deployment/ReplicaSet/running-Pod capture; it never receives a Voice
+application image or an unpinned source tag. The reviewed GET-only nginx config
+is hash-bound, and only the named public document, TLS certificate/key and config
+mounts are admitted. The external `voice-p3-principal-public` ConfigMap must be
+immutable and contain exactly `realtime.json`; its bytes and identity remain
+bound by the ordinary non-NATS preflight and revalidation. Missing enrollment or
+public material fails closed; this path does not create a first installation.
+The publisher uses the same pause, target, rollback and guarded restart as the
+captured workloads, but becomes ready after the hub and before Chat. Completed
+recovery readiness is observed without repeating its scale action. Pod readiness
+and byte preservation do not prove issuer key correspondence or successful JWKS
+retrieval; external provisioning and actual protected application calls still
+must establish those facts.
 
 The hub renderer is a separately bound root-only init image transition; the
 runner cannot apply arbitrary hub changes. Exact captured inputs and private

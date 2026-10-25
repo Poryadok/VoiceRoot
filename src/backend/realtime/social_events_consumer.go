@@ -270,15 +270,15 @@ func preflightFriendRemovedConsumerWithWait(natsURL, instanceID string, startupW
 	}
 }
 
-func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
+func runSocialEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger, shared ...*nats.Conn) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("social events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-social-events")...)
+	nc, release, err := consumerNATSConnection(natsURL, "voice-realtime-social-events", shared...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
+	defer release()
 	js, err := nc.JetStream()
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)

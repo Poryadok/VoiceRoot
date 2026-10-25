@@ -15,6 +15,7 @@ import (
 
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -48,14 +49,31 @@ func (s *SpaceGRPC) ListSpaceTree(ctx context.Context, req *spacev1.ListSpaceTre
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireSpaceMember(ctx, spaceID); err != nil {
-		return nil, err
+	viewer, ok := authctx.ProfileID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
-	data, err := s.Store.ListSpaceTree(ctx, spaceID)
+	cut, err := s.Store.ReadSpaceTreeForViewer(ctx, spaceID, viewer)
 	if err != nil {
-		return nil, mapSpaceStoreError(err)
+		return nil, mapTreeViewerError(err)
 	}
-	return s.spaceTreeDataToProto(ctx, data), nil
+	// Chat enrichment performs network I/O outside the Space transaction. Its
+	// completion cannot extend a membership or source revision checked earlier.
+	response := s.spaceTreeDataToProto(ctx, cut.Data)
+	if err := s.Store.ValidateSpaceTreeViewer(ctx, cut); err != nil {
+		return nil, mapTreeViewerError(err)
+	}
+	return response, nil
+}
+
+func mapTreeViewerError(err error) error {
+	if errors.Is(err, store.ErrTreeViewerDenied) {
+		return status.Error(codes.PermissionDenied, "not a space member")
+	}
+	if errors.Is(err, store.ErrTreeViewerChanged) {
+		return status.Error(codes.Unavailable, "space tree temporarily unavailable")
+	}
+	return mapSpaceStoreError(err)
 }
 
 func (s *SpaceGRPC) CreateCategory(ctx context.Context, req *spacev1.CreateCategoryRequest) (*spacev1.CreateCategoryResponse, error) {
@@ -154,6 +172,20 @@ func (s *SpaceGRPC) storeCategorySpaceID(ctx context.Context, categoryID uuid.UU
 }
 
 func (s *SpaceGRPC) CreateVoiceRoom(ctx context.Context, req *spacev1.CreateVoiceRoomRequest) (*spacev1.CreateVoiceRoomResponse, error) {
+	call, err := lifecycleprincipal.RequireVoiceRoomCreate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := call.ActorFor(req)
+	if err != nil {
+		return nil, err
+	}
+	remaining, err := call.Remaining(req)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, remaining)
+	defer cancel()
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -161,19 +193,35 @@ func (s *SpaceGRPC) CreateVoiceRoom(ctx context.Context, req *spacev1.CreateVoic
 	if err != nil {
 		return nil, err
 	}
+	if spaceID.String() != req.SpaceId || strings.TrimSpace(req.Name) == "" {
+		return nil, status.Error(codes.InvalidArgument, "canonical space_id and voice room name required")
+	}
+	// Role observes Space authority; never invoke it while holding Space fences.
+	if err := s.requireVoiceCreatePermission(ctx, spaceID, uuid.MustParse(actor.ProfileID)); err != nil {
+		return nil, err
+	}
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpaceTreeManage(ctx, spaceID); err != nil {
+	if _, err := call.ActorFor(req); err != nil {
 		return nil, err
 	}
-	room, node, err := s.Store.CreateVoiceRoom(ctx, spaceID, req.GetName(), nil)
+	room, node, err := s.Store.CreateVoiceRoom(ctx, spaceID, req.GetName(), nil, func(ctx context.Context) error {
+		if err := ctx.Err(); err != nil {
+			return status.FromContextError(err).Err()
+		}
+		_, err := call.ActorFor(req)
+		return err
+	})
 	if errors.Is(err, store.ErrTreeNodeLimit) {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
 	if err != nil {
+		if status.Code(err) != codes.Unknown {
+			return nil, err
+		}
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	s.publishTreeUpserted(ctx, spaceID, node)

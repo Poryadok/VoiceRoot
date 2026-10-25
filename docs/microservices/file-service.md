@@ -281,11 +281,18 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 |---------------|--------------|
 | `file_id` | Lookup messages referencing attachment |
 | `status` | `ready` → swap thumb/dimensions; `failed` → composer error state |
-| `converted_url`, `thumb_url` | Bubble + list-row preview (presigned or CDN URLs) |
-| `width`, `height`, `duration_seconds` | Video note / GIF / music metadata |
-| `intent` (or `upload_intent`) | Branch refresh logic (`gif`, `sticker`, `video_note`, …) |
+| `preview` | Complete File-owned v1 snapshot with independent positive revision, category, persisted intent, size/scan, optional dimensions/duration and variant availability; never URLs/storage keys |
 
-**Messaging consumer (spec — not yet implemented):** on `file.processed`, update attachment JSON on affected messages, recompute `GetChatListMetadata` for impacted `chat_id`s, emit Realtime `message_update` so client refreshes bubble + inbox row without full history reload. Applies to all intents including `video_note`, `music`, `sticker`, `gif`. Checklist — [todo/backend.md](../todo/backend.md).
+**BE-080 contract:** File commits state, preview revision and stable event bytes
+in one transaction. Generic snapshots exclude Music and E2E. The new protected
+Messaging-only exact-reference resolver refreshes an existing MESSAGE projection,
+without creating a reference or authorizing a viewer. Terminal snapshots expose
+only identity/revision/status. Messaging privately binds attachment slots and
+updates its ordinary message.edited outbox atomically; URL resolution retains
+real-viewer authorization. Existing Music remains a separate mutually exclusive
+payload and revision namespace. This extension does not create processors for
+unsupported intents. Implementation and staged activation are tracked in the
+[BE-080 plan](../testing/be080-file-preview-exec-plan.md).
 
 ## Публикуемые события (→ NATS)
 
@@ -294,7 +301,7 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 | Событие              | Данные                                    |
 |----------------------|-------------------------------------------|
 | `file.uploaded`      | file_id, uploader_id, type, size          |
-| `file.processed`     | file_id, status, converted_url, thumb_url, **width**, **height**, **duration_seconds**, **intent** |
+| `file.processed`     | file_id, status, mutually exclusive redacted revisioned preview or existing Music snapshot; no URL |
 | `file.scan_infected` | file_id, uploader_id                      |
 | `file.expired`       | file_id, chat_id                          |
 | `file.downloaded`    | `file_id`, `downloader_profile_id`        |
@@ -343,6 +350,29 @@ listener rejects all other methods. See Story's deployment runbook and
 `docs/todo/backend.md` for the remaining lifecycle-binding work.
 
 ## Масштабирование
+
+Legacy uploader deletion and expiry must always use persistence-backed blob
+authority, independently of protected listener/reference feature flags. Lock the
+target file `FOR NO KEY UPDATE`, then its blob `FOR UPDATE`; in a fresh statement
+reject any live reference across all aliases, or another usable legacy alias
+whose ledger may be incomplete. Preserve ordinary zero-reference singleton
+deletion. Commit terminal file status, music tombstone and irreversible durable
+GC intent before touching object storage. Missing storage, partial deletion or
+response loss leaves the intent pending for the ordinary reference-GC worker;
+RPC success requires observed completion. Retries preserve the original terminal
+status and operation. Shared/dedup/backfill activation still requires sealed
+owner evidence and writers serialized by the same blob authority. See
+[BE-264 execution plan](../testing/be264-legacy-delete-authority-exec-plan.md)
+for outstanding runtime and concurrency gates.
+
+The first logical `expired` transition also commits the exact `file.expired`
+envelope in `file_expiry_event_outbox`. The existing expiry worker drains this
+queue even when storage deletion fails or no ready files remain after restart.
+Publication is independent of byte-GC completion: consumers observe logical
+expiry. A bounded row lock covers PubAck; failure/response loss leaves the same
+event ID, time and payload pending. JetStream uses that ID as `Nats-Msg-Id`.
+NATS-disabled/Noop mode does not acknowledge queued events. Apply migration
+`000008` before the binary; DOWN refuses to erase any retained event evidence.
 
 Upload/download — через presigned URLs (R2 обслуживает напрямую). Конвертация — отдельный пул воркеров, масштабируется по очереди задач.
 

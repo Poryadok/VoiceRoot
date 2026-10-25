@@ -20,11 +20,14 @@ import (
 	"voice/backend/messaging/internal/grpcsvc"
 	"voice/backend/messaging/internal/store"
 	"voice/backend/pkg/grpcclient"
+	"voice/backend/pkg/principal"
 )
 
 type managedChatPurgeRuntime struct {
+	Issuer      *principal.Issuer
 	Coordinator *grpcsvc.ManagedChatPurgeCoordinator
 	JWKS        *http.Server
+	RoleJWKS    *http.Server
 	Connections []*grpc.ClientConn
 }
 
@@ -35,6 +38,9 @@ func (r *managedChatPurgeRuntime) Close() {
 	if r.JWKS != nil {
 		_ = r.JWKS.Close()
 	}
+	if r.RoleJWKS != nil {
+		_ = r.RoleJWKS.Close()
+	}
 	for _, conn := range r.Connections {
 		_ = conn.Close()
 	}
@@ -42,12 +48,16 @@ func (r *managedChatPurgeRuntime) Close() {
 
 func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*managedChatPurgeRuntime, error) {
 	config := managedChatPurgeRuntimeConfigFromEnv(os.Getenv)
+	roleJWKSConfig, roleJWKSEnabled, err := loadRolePrincipalJWKSConfig(os.LookupEnv)
+	if err != nil {
+		return nil, err
+	}
 	issuer, handler, enabled, err := loadManagedChatPurgePrincipal()
 	if err != nil {
 		return nil, err
 	}
 	if !enabled {
-		if config.configured() {
+		if config.configured() || roleJWKSEnabled {
 			return nil, errors.New("managed chat purge TLS/owner configuration requires the signing-key configuration")
 		}
 		return nil, nil
@@ -55,14 +65,16 @@ func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*manag
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
-	if pool == nil {
+	if config.ownersConfigured() && pool == nil {
 		return nil, errors.New("managed chat purge requires Messaging PostgreSQL")
 	}
-	check, stop := context.WithTimeout(ctx, 5*time.Second)
-	err = store.RequireAttachmentIntentSchema(check, pool)
-	stop()
-	if err != nil {
-		return nil, err
+	if config.ownersConfigured() {
+		check, stop := context.WithTimeout(ctx, 5*time.Second)
+		err = store.RequireAttachmentIntentSchema(check, pool)
+		stop()
+		if err != nil {
+			return nil, err
+		}
 	}
 	serverCert, err := tls.LoadX509KeyPair(config.JWKSCertFile, config.JWKSKeyFile)
 	if err != nil {
@@ -80,13 +92,23 @@ func newManagedChatPurgeRuntime(ctx context.Context, pool *pgxpool.Pool) (*manag
 	if err != nil {
 		return nil, fmt.Errorf("messaging purge JWKS listen: %w", err)
 	}
-	runtime := &managedChatPurgeRuntime{JWKS: &http.Server{Handler: handler, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs}}}
+	runtime := &managedChatPurgeRuntime{Issuer: issuer, JWKS: &http.Server{Handler: handler, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs}}}
 	go func() {
 		if serveErr := runtime.JWKS.ServeTLS(listener, "", ""); serveErr != nil && serveErr != http.ErrServerClosed {
 			// Serve failures are observable through health checks and client retries.
 			fmt.Fprintf(os.Stderr, "messaging purge JWKS server exited: %v\n", serveErr)
 		}
 	}()
+	if roleJWKSEnabled {
+		runtime.RoleJWKS, err = roleJWKSConfig.start(handler)
+		if err != nil {
+			runtime.Close()
+			return nil, err
+		}
+	}
+	if !config.ownersConfigured() {
+		return runtime, nil
+	}
 	fileConn, err := dialManagedChatPurgeOwner(config.FileAddr, config.FileCA, config.FileServerName, config.ClientCertFile, config.ClientKeyFile)
 	if err != nil {
 		runtime.Close()
@@ -137,25 +159,36 @@ func managedChatPurgeRuntimeConfigFromEnv(getenv func(string) string) managedCha
 }
 
 func (c managedChatPurgeRuntimeConfig) validate() error {
-	for name, value := range map[string]string{
-		"MESSAGING_PURGE_PRINCIPAL_JWKS_LISTEN":      c.JWKSListen,
-		"MESSAGING_PURGE_PRINCIPAL_TLS_CERT_FILE":    c.JWKSCertFile,
-		"MESSAGING_PURGE_PRINCIPAL_TLS_KEY_FILE":     c.JWKSKeyFile,
-		"MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE":   c.ClientCAFile,
-		"MESSAGING_PURGE_PRINCIPAL_CLIENT_CERT_FILE": c.ClientCertFile,
-		"MESSAGING_PURGE_PRINCIPAL_CLIENT_KEY_FILE":  c.ClientKeyFile,
-		"FILE_MANAGED_CHAT_PURGE_GRPC_ADDR":          c.FileAddr,
-		"FILE_MANAGED_CHAT_PURGE_TLS_CA_FILE":        c.FileCA,
-		"FILE_MANAGED_CHAT_PURGE_TLS_SERVER_NAME":    c.FileServerName,
-		"SEARCH_MANAGED_CHAT_PURGE_GRPC_ADDR":        c.SearchAddr,
-		"SEARCH_MANAGED_CHAT_PURGE_TLS_CA_FILE":      c.SearchCA,
-		"SEARCH_MANAGED_CHAT_PURGE_TLS_SERVER_NAME":  c.SearchServerName,
-	} {
+	required := map[string]string{
+		"MESSAGING_PURGE_PRINCIPAL_JWKS_LISTEN":    c.JWKSListen,
+		"MESSAGING_PURGE_PRINCIPAL_TLS_CERT_FILE":  c.JWKSCertFile,
+		"MESSAGING_PURGE_PRINCIPAL_TLS_KEY_FILE":   c.JWKSKeyFile,
+		"MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE": c.ClientCAFile,
+	}
+	if c.ownersConfigured() {
+		for name, value := range map[string]string{
+			"MESSAGING_PURGE_PRINCIPAL_CLIENT_CERT_FILE": c.ClientCertFile,
+			"MESSAGING_PURGE_PRINCIPAL_CLIENT_KEY_FILE":  c.ClientKeyFile,
+			"FILE_MANAGED_CHAT_PURGE_GRPC_ADDR":          c.FileAddr,
+			"FILE_MANAGED_CHAT_PURGE_TLS_CA_FILE":        c.FileCA,
+			"FILE_MANAGED_CHAT_PURGE_TLS_SERVER_NAME":    c.FileServerName,
+			"SEARCH_MANAGED_CHAT_PURGE_GRPC_ADDR":        c.SearchAddr,
+			"SEARCH_MANAGED_CHAT_PURGE_TLS_CA_FILE":      c.SearchCA,
+			"SEARCH_MANAGED_CHAT_PURGE_TLS_SERVER_NAME":  c.SearchServerName,
+		} {
+			required[name] = value
+		}
+	}
+	for name, value := range required {
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("managed chat purge runtime requires %s", name)
 		}
 	}
 	return nil
+}
+
+func (c managedChatPurgeRuntimeConfig) ownersConfigured() bool {
+	return c.ClientCertFile != "" || c.ClientKeyFile != "" || c.FileAddr != "" || c.FileCA != "" || c.FileServerName != "" || c.SearchAddr != "" || c.SearchCA != "" || c.SearchServerName != ""
 }
 
 func dialManagedChatPurgeOwner(address, caFile, serverName, certFile, keyFile string) (*grpc.ClientConn, error) {

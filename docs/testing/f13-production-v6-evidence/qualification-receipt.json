@@ -1,0 +1,90 @@
+{
+  "receipt_type": "bounded_historical_artifact_qualification",
+  "conclusion": "The mismatch is solely Git index abbreviation length; the approved helper qualifies this historical tuple under default and core.abbrev 7, 10, and 40.",
+  "provenance": {
+    "failed_full_producer_head": "122bcedd7757139d441bc7b40220d98e21b117c4",
+    "actual_merge": "5c53b1ccd4cd3f6d00908a1757f11fa2a5fc3d86",
+    "actual_merge_first_parent": "288e6a4fb963b3d5775f885e14ecfda1b603a4ff",
+    "synthetic_candidate_commit": "9aca38441d559156d2fbcdd637f2951a20397b2a",
+    "synthetic_candidate_parent": "5c53b1ccd4cd3f6d00908a1757f11fa2a5fc3d86",
+    "synthetic_candidate_tree_clean": true,
+    "repository": "/workspace/run-122-candidate",
+    "runner_container": "pr875-f13-producer-runner-v5",
+    "git_version": "2.39.5",
+    "python_version": "3.12",
+    "candidate_helper": "scripts/ci/f13_historical_composition.py",
+    "candidate_helper_sha256": "e1ed9f7f4c779f83fa1872a34a00dd7181c93c01cab3a9c043457a50b829b2c1",
+    "helper_commit_scope": "only scripts/ci/f13_historical_composition.py; one-line change"
+  },
+  "failed_artifact": {
+    "name": "historical-composition/e963849df092/first-result__protos__voice__space__v1__space.proto.diff",
+    "expected_bytes": 1550,
+    "expected_sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2",
+    "actual_bytes": 1552,
+    "actual_sha256": "60b876b7e549fde158eacdcfe77295754f9ec80122169746efb504b18acbb6a8",
+    "captured_raw_file": "D:\\Git\\Voice\\tmp\\pr875-repair\\f13-current-producer-122bcedd\\historical-artifact-122-data\\actual.bin",
+    "raw_index_line": "index 8573e97a4e..a2332d23b3 100644",
+    "normalized_actual_bytes": 1550,
+    "normalized_actual_sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2",
+    "normalized_equals_expected": true,
+    "normalization": "replace only each 10-hex index object ID with its first 9 hex characters"
+  },
+  "rendering_comparison": {
+    "command": "git diff --no-ext-diff --abbrev=9 a635c0ad19a233f9bd934dca57943bc6363a6da3 e963849df092f28ca0d4a79de04ba5abe609cf38 -- ':(literal)protos/voice/space/v1/space.proto'",
+    "output_bytes": 1550,
+    "output_sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2",
+    "equals_expected": true,
+    "captured_output_file": "D:\\Git\\Voice\\tmp\\pr875-repair\\f13-current-producer-122bcedd\\historical-artifact-122-abbrev9.diff"
+  },
+  "qualification": {
+    "command": "python3 scripts/ci/f13_historical_composition.py --repo /workspace/run-122-candidate --target 9aca38441d559156d2fbcdd637f2951a20397b2a --merge e963849df092f28ca0d4a79de04ba5abe609cf38 --first a635c0ad19a233f9bd934dca57943bc6363a6da3 --source-base 9c59b3d753d1594e205f3c61b8592f3b5fa3d60d --source 0c94544318f0057feee3e180d93d7cab103edf7b --path protos/voice/space/v1/space.proto",
+    "base_case": {
+      "exit_code": 0,
+      "stdout_sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    "core_abbrev_cases": [
+      {
+        "value": 7,
+        "environment": "GIT_CONFIG_COUNT=1; GIT_CONFIG_KEY_0=core.abbrev; GIT_CONFIG_VALUE_0=7",
+        "exit_code": 0,
+        "stdout_sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+      },
+      {
+        "value": 10,
+        "environment": "GIT_CONFIG_COUNT=1; GIT_CONFIG_KEY_0=core.abbrev; GIT_CONFIG_VALUE_0=10",
+        "exit_code": 0,
+        "stdout_sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+      },
+      {
+        "value": 40,
+        "environment": "GIT_CONFIG_COUNT=1; GIT_CONFIG_KEY_0=core.abbrev; GIT_CONFIG_VALUE_0=40",
+        "exit_code": 0,
+        "stdout_sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+      }
+    ],
+    "result_metrics": {
+      "merges": 8,
+      "occurrences": 38,
+      "artifact_bindings": 243,
+      "record": "ee312e653589ddf76103d55cd2036b9dcc6107c4",
+      "record_sha256": "fd858cc753de4d86fac572f8972737cc7f451d5f06548d40a47656e68645b92f",
+      "runtime_pass": false,
+      "activation_authority": false,
+      "current_or_future_path_authority": false
+    },
+    "logs_directory": "D:\\Git\\Voice\\tmp\\pr875-repair\\f13-current-producer-122bcedd\\historical-abbrev9-candidate",
+    "stdout_files": [
+      "historical-abbrev9-default.log",
+      "historical-abbrev9-core7.log",
+      "historical-abbrev9-core10.log",
+      "historical-abbrev9-core40.log"
+    ],
+    "exit_files": [
+      "historical-abbrev9-default.exit",
+      "historical-abbrev9-core7.exit",
+      "historical-abbrev9-core10.exit",
+      "historical-abbrev9-core40.exit"
+    ]
+  },
+  "scope_limit": "Synthetic fixture qualification only; it does not certify or claim that the full production source producer passes."
+}

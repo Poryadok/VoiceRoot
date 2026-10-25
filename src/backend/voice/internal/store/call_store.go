@@ -31,8 +31,8 @@ var (
 	ErrNotScreenSharing                = errors.New("profile is not screen sharing")
 	ErrScreenShareDenied               = errors.New("screen share not permitted")
 	ErrOperationConflict               = errors.New("operation id conflicts with a different request")
-	ErrSpaceMediaStaleGrant = errors.New("space media grant is below the current authority floor")
-	ErrSpaceMediaTransition = errors.New("space media participant transition is in progress")
+	ErrSpaceMediaStaleGrant            = errors.New("space media grant is below the current authority floor")
+	ErrSpaceMediaTransition            = errors.New("space media participant transition is in progress")
 	// ErrMoveContention means the bounded Redis CAS retry budget was exhausted.
 	// It is deliberately distinct from a dependency outage so the transport can
 	// expose the same safe retryable result without leaking Redis details.
@@ -43,6 +43,7 @@ var (
 // participant between two already-authorized Space voice rooms.  The service
 // performs all discovery and permission checks before it reaches the store.
 type VoiceRoomMoveRequest struct {
+	ProjectionTicket     SpaceProjectionTicket `json:"-"`
 	ActorProfileID       string
 	ParticipantProfileID string
 	OperationID          string
@@ -89,16 +90,18 @@ type SpaceMediaGrant struct {
 }
 
 type SpaceMediaParticipant struct {
-	AccountID            string          `json:"account_id,omitempty"`
-	AdmissionOperationID string          `json:"admission_operation_id,omitempty"`
-	RoomGeneration       uint64          `json:"room_generation,omitempty"`
-	CreatedRoom          bool            `json:"created_room,omitempty"`
-	ProfileID            string          `json:"profile_id"`
-	Identity             string          `json:"identity"`
-	Generation           string          `json:"generation"`
-	Issued               SpaceMediaGrant `json:"issued"`
-	Reconciled           SpaceMediaGrant `json:"reconciled"`
-	Revoking             bool            `json:"revoking"`
+	ProjectionTicket     SpaceProjectionTicket `json:"-"`
+	LifecycleGeneration  int64                 `json:"lifecycle_generation,omitempty"`
+	AccountID            string                `json:"account_id,omitempty"`
+	AdmissionOperationID string                `json:"admission_operation_id,omitempty"`
+	RoomGeneration       uint64                `json:"room_generation,omitempty"`
+	CreatedRoom          bool                  `json:"created_room,omitempty"`
+	ProfileID            string                `json:"profile_id"`
+	Identity             string                `json:"identity"`
+	Generation           string                `json:"generation"`
+	Issued               SpaceMediaGrant       `json:"issued"`
+	Reconciled           SpaceMediaGrant       `json:"reconciled"`
+	Revoking             bool                  `json:"revoking"`
 }
 
 type SpaceMediaAdmissionEvent struct {
@@ -108,40 +111,43 @@ type SpaceMediaAdmissionEvent struct {
 }
 
 type SpaceMediaAdmission struct {
-	OperationID       uuid.UUID
-	Generation        string
-	RoomGeneration    uint64
-	AccountID         uuid.UUID
-	ProfileID         uuid.UUID
-	SpaceID           uuid.UUID
-	RoomID            string
-	VoiceRoomID       string
-	Identity          string
-	CreatedRoom       bool
-	CallStartedAt     time.Time
-	MaxParticipants   int
-	SessionEpoch      uint64
-	AccessEpoch       uint64
-	PolicyEpoch       uint64
-	CanJoin           bool
-	CanPublishAudio   bool
-	CanSubscribe      bool
-	State             string
-	ParticipantState  string
-	ProjectionApplied bool
-	Events            []SpaceMediaAdmissionEvent
+	Ownership           SpaceAdmissionOwnership `json:"-"`
+	LifecycleGeneration int64
+	OperationID         uuid.UUID
+	Generation          string
+	RoomGeneration      uint64
+	AccountID           uuid.UUID
+	ProfileID           uuid.UUID
+	SpaceID             uuid.UUID
+	RoomID              string
+	VoiceRoomID         string
+	Identity            string
+	CreatedRoom         bool
+	CallStartedAt       time.Time
+	MaxParticipants     int
+	SessionEpoch        uint64
+	AccessEpoch         uint64
+	PolicyEpoch         uint64
+	CanJoin             bool
+	CanPublishAudio     bool
+	CanSubscribe        bool
+	State               string
+	ParticipantState    string
+	ProjectionApplied   bool
+	Events              []SpaceMediaAdmissionEvent
 }
 
 // SpaceMediaRoomHead is the PostgreSQL authority for one canonical Space
 // voice-room incarnation. Redis indexes are only projections of this claim.
 type SpaceMediaRoomHead struct {
-	VoiceRoomID        string
-	SpaceID            string
-	RoomID             string
-	RoomGeneration     uint64
-	CreatorOperationID uuid.UUID
-	State              string
-	Ready              bool
+	LifecycleGeneration int64
+	VoiceRoomID         string
+	SpaceID             string
+	RoomID              string
+	RoomGeneration      uint64
+	CreatorOperationID  uuid.UUID
+	State               string
+	Ready               bool
 }
 
 type SpaceMediaEpochKind uint8
@@ -165,31 +171,37 @@ type SpaceMediaEpochProgress struct {
 }
 
 type Call struct {
-	RoomID             string `json:"room_id"`
-	LivekitRoomName    string `json:"livekit_room_name"`
-	ChatID             string `json:"chat_id"`
-	ManagedGameSession bool   `json:"managed_game_session,omitempty"`
+	SpaceProjectionTicket    SpaceProjectionTicket `json:"-"`
+	SpaceLifecycleGeneration int64                 `json:"space_lifecycle_generation,omitempty"`
+	// Ordinary journal provenance is projection metadata, never authorization.
+	OrdinaryOperationID     string            `json:"ordinary_operation_id,omitempty"`
+	OrdinaryVersion         uint64            `json:"ordinary_version,omitempty"`
+	OrdinaryMediaIdentities map[string]string `json:"ordinary_media_identities,omitempty"`
+	RoomID                  string            `json:"room_id"`
+	LivekitRoomName         string            `json:"livekit_room_name"`
+	ChatID                  string            `json:"chat_id"`
+	ManagedGameSession      bool              `json:"managed_game_session,omitempty"`
 	// MatchSquadMatchID marks a Redis call document as a repairable projection
 	// of an exact current MatchSquad row. It never grants authorization.
-	MatchSquadMatchID        string                      `json:"match_squad_match_id,omitempty"`
-	MatchSquadMemberEpochs   map[string]string           `json:"match_squad_member_epochs,omitempty"`
-	MatchSquadTerminalEpochs map[string]map[string]bool  `json:"match_squad_terminal_epochs,omitempty"`
-	ApplicationID            string                      `json:"application_id,omitempty"`
-	EnvironmentID            string                      `json:"environment_id,omitempty"`
-	SessionID                string                      `json:"session_id,omitempty"`
-	VoiceRoomID              string                      `json:"voice_room_id,omitempty"`
-	SpaceID                  string                      `json:"space_id,omitempty"`
-	SessionKind              callsv1.VoiceSessionKind    `json:"session_kind,omitempty"`
-	InitiatorProfileID       string                      `json:"initiator_profile_id"`
-	CalleeProfileID          string                      `json:"callee_profile_id"`
-	MediaKind                callsv1.CallMediaKind       `json:"media_kind"`
-	Status                   callsv1.CallStatus          `json:"status"`
-	StartedAt                time.Time                   `json:"started_at"`
-	ExpiresAt                time.Time                   `json:"expires_at"`
-	EndedAt                  time.Time                   `json:"ended_at,omitempty"`
-	States                   map[string]ParticipantState `json:"states"`
-	ScreenShares             []ScreenShareEntry          `json:"screen_shares,omitempty"`
-	SpaceMedia         map[string]SpaceMediaParticipant `json:"space_media,omitempty"`
+	MatchSquadMatchID        string                           `json:"match_squad_match_id,omitempty"`
+	MatchSquadMemberEpochs   map[string]string                `json:"match_squad_member_epochs,omitempty"`
+	MatchSquadTerminalEpochs map[string]map[string]bool       `json:"match_squad_terminal_epochs,omitempty"`
+	ApplicationID            string                           `json:"application_id,omitempty"`
+	EnvironmentID            string                           `json:"environment_id,omitempty"`
+	SessionID                string                           `json:"session_id,omitempty"`
+	VoiceRoomID              string                           `json:"voice_room_id,omitempty"`
+	SpaceID                  string                           `json:"space_id,omitempty"`
+	SessionKind              callsv1.VoiceSessionKind         `json:"session_kind,omitempty"`
+	InitiatorProfileID       string                           `json:"initiator_profile_id"`
+	CalleeProfileID          string                           `json:"callee_profile_id"`
+	MediaKind                callsv1.CallMediaKind            `json:"media_kind"`
+	Status                   callsv1.CallStatus               `json:"status"`
+	StartedAt                time.Time                        `json:"started_at"`
+	ExpiresAt                time.Time                        `json:"expires_at"`
+	EndedAt                  time.Time                        `json:"ended_at,omitempty"`
+	States                   map[string]ParticipantState      `json:"states"`
+	ScreenShares             []ScreenShareEntry               `json:"screen_shares,omitempty"`
+	SpaceMedia               map[string]SpaceMediaParticipant `json:"space_media,omitempty"`
 }
 
 // MatchSquadProjectionAuthority must reread the current owned SQL membership

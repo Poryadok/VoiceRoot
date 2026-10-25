@@ -91,6 +91,34 @@ source-bound acceptance when integrating and never overwrite shipped migrations.
 
 - Изменения в контрактах API, SLO или поведении фич сопровождаются правками в `docs/` в том же PR, если иначе документация становится ложной.
 
+## Managed worktrees and process custody
+
+Preserve a dirty main checkout and inspect `git status --short` before choosing
+write scope. Product writers use the repository's managed worktrees: acquire an
+actual lease, record its absolute physical checkout path, lease identity,
+branch/base and writer, then run edits and checks in that path. Before integrating,
+inspect the exact diff and base; a completion message is not the change itself.
+
+Before returning a lease or cleaning a checkout, account for its live processes,
+persistent test containers and needed ignored artifacts. A lease ID identifies
+the reservation; it does not establish which checkout a process uses. A shared
+SDK path, generic basename, timestamp or dead parent is insufficient attribution.
+Use the full physical checkout or a known owned command handle. If the manager
+would terminate an unattributed process, retain the lease and report custody.
+
+Tool session handles are not OS PIDs. A handle unavailable to the next agent does
+not establish that execution stopped or that its container was removed. Preserve
+the original owner, handle and container/cache identities; obtain the terminal
+result from the owning session when possible before restarting anything. These
+rules do not authorize killing unknown processes or reclaiming another lease.
+
+Repository-owned Codex skill sources and the normal local installation route are
+documented in [the migration map](../.agent/codex/README.md#portable-codex-assets).
+Do not independently edit installed copies: review the source change first and
+preserve local differences before synchronization. The full installer replaces
+all matching local skill directories, so do not run it to update one reference
+without checking its actual scope.
+
 ---
 
 ## Связанные документы

@@ -128,6 +128,24 @@ func TestVerifySpaceBindsExactRequestAndRejectsReplay(t *testing.T) {
 		}
 		return token
 	}
+	decision := &botv1.CheckBotInstallationScopeRequest{BotId: "bot", SpaceId: "space", ActorProfileId: "actor", InstallationId: "installation", BotScope: "TEXT_CHAT_CREATE_IN_SPACE"}
+	decisionHash, err := principal.RequestHash(decision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionMethod := botv1.BotService_CheckBotInstallationScope_FullMethodName
+	decisionToken := issue("bot", decisionMethod, "decision-1", decisionHash)
+	if _, err := runtime.VerifySpace(context.Background(), decisionToken, decisionMethod, "decision-1", decisionHash); err != nil {
+		t.Fatalf("signed installation decision rejected: %v", err)
+	}
+	if _, err := runtime.VerifySpace(context.Background(), decisionToken, decisionMethod, "decision-1", decisionHash); err == nil {
+		t.Fatal("installation decision replay accepted")
+	}
+	decision.InstallationId = "replacement"
+	changedHash, _ := principal.RequestHash(decision)
+	if _, err := runtime.VerifySpace(context.Background(), issue("bot", decisionMethod, "decision-1", decisionHash), decisionMethod, "decision-1", changedHash); err == nil {
+		t.Fatal("installation substitution accepted")
+	}
 	token := issue("bot", method, "request-1", hash)
 	verified, err := runtime.VerifySpace(context.Background(), token, method, "request-1", hash)
 	if err != nil || verified.Issuer != "space" || verified.Audience != "bot" {

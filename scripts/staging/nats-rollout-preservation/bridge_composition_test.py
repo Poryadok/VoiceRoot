@@ -94,7 +94,7 @@ class CompositionTests(unittest.TestCase):
                 base=Path(directory);installed=base/'installed';(installed/'sources').mkdir(parents=True)
                 kube,p=fixtures.SourceTests().canonical_fixture(mode)
                 p.update(generation='r20260930a4',dataPVC='voice-nats-jsdata-d202610040049430b')
-                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration'}
+                targets={'voice-gateway',*('voice-'+n for n in runtime_stage.LEAVES),'voice-web','voice-admin','voice-developer-portal','voice-gameintegration','voice-p3-principal-jwks'}
                 snapshots={name:copy.deepcopy(obj) for (kind,name),obj in kube.objects.items() if kind=='Deployment' and name in targets}
                 renderer_repo=bridge_root.source_authority.REGISTRY+'/nats-hub-config-renderer'
                 snapshots[bridge_root.HUB]={'apiVersion':'apps/v1','kind':'Deployment',
@@ -105,6 +105,7 @@ class CompositionTests(unittest.TestCase):
                 old={name+'/'+c['name']:'example.invalid/'+c['name']+'@sha256:'+'a'*64 for name,obj in snapshots.items() if name!=bridge_root.HUB for c in obj['spec']['template']['spec'].get('initContainers',[])+obj['spec']['template']['spec']['containers']}
                 old[bridge_root.HUB+'/nats-config-renderer']=renderer_repo+'@sha256:'+'b'*64
                 old[bridge_root.HUB+'/nats']='docker.io/library/nats@sha256:'+'c'*64
+                old['voice-p3-principal-jwks/jwks']='docker.io/library/nginx@sha256:'+'e'*64
                 stage=SimpleNamespace(snapshots=snapshots,original_snapshots=copy.deepcopy(snapshots),old_images=old,
                     expected={'generation':p['generation'],'source_claim':p['dataPVC'],'source_claim_uid':'pvc','source_pv_uid':'pv'})
                 code=base/'code';(code/'nats-known-baseline').mkdir(parents=True)
@@ -113,9 +114,9 @@ class CompositionTests(unittest.TestCase):
                     raw=(fixtures.SOURCE/('deploy/templates/nats-'+part+'-bootstrap.yaml')).read_bytes().split(b'---')[0]
                     contract['scripts'].append({'part':part,'sha256':hashlib.sha256(fixtures.decoder(raw)['data']['bootstrap.sh'].encode()).hexdigest()})
                 (code/'nats-known-baseline/deployed-contract.json').write_text(json.dumps(contract))
-                optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
+                optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}
                 policy={k:v for k,v in p.items() if k in optional};(installed/'policy.json').write_text(json.dumps(policy));(installed/'policy.json').chmod(0o600)
-                approved={'source_sha':p['tag'],'images':{name.removeprefix('voice-'):bridge_root.source_authority.REGISTRY+'/'+name.removeprefix('voice-')+'@sha256:'+'a'*64 for name in targets}}
+                approved={'source_sha':p['tag'],'images':{name.removeprefix('voice-'):bridge_root.source_authority.REGISTRY+'/'+name.removeprefix('voice-')+'@sha256:'+'a'*64 for name in targets if name!='voice-p3-principal-jwks'}}
                 approved['images']['nats-hub-config-renderer']=renderer_repo+'@sha256:'+'d'*64
                 import renderer_root,renderer_transition,actor_root
                 def renderer_proof(kube,current,source_sha,image):
@@ -165,6 +166,20 @@ class CompositionTests(unittest.TestCase):
                     patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))
                     patches.enter_context(patch.object(bridge_root.root_cli,'prepare_value',side_effect=prepare_value))
                     patches.enter_context(patch.object(actions,'_encrypt',side_effect=lambda base,state,execution:state))
+                    for digit,invalid in (('1',None),('2',{}),('3',dict(p['release_policy'],source_sha='f'*40))):
+                        with self.subTest(release_policy=invalid):
+                            (installed/'policy.json').write_text(json.dumps(dict(policy,release_policy=invalid)))
+                            with patch.object(bridge_root.compiler,'main') as build,patch.object(bridge_root.root_cli,'prepare_value') as prepare:
+                                with self.assertRaisesRegex(bridge_root.Blocked,'bridge_release_policy_invalid'):
+                                    actions._prepare({'nonce':digit*64,'token':'private','mode':mode,'changed_services':[]})
+                                build.assert_not_called();prepare.assert_not_called()
+                    missing={key:value for key,value in policy.items() if key!='release_policy'}
+                    (installed/'policy.json').write_text(json.dumps(missing))
+                    with patch.object(bridge_root.root_cli,'prepare_value') as prepare:
+                        with self.assertRaisesRegex(ValueError,'release_policy_input_shape'):
+                            actions._prepare({'nonce':'4'*64,'token':'private','mode':mode,'changed_services':[]})
+                        prepare.assert_not_called()
+                    (installed/'policy.json').write_text(json.dumps(policy))
                     result=actions._prepare({'nonce':'a'*64,'token':'private','mode':mode,'changed_services':[]})
                     # Required v4 admission cannot be bypassed by a private
                     # but malformed JSON file. Stop before compilation/fencing.

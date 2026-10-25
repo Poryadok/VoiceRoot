@@ -11,7 +11,7 @@ import (
 )
 
 // ServerOptions secures the dedicated mTLS listener and exposes only trusted
-// ownership, retirement, and GIS/Voice game-session grant RPCs.
+// ownership, retirement, protected Space decisions, and GIS/Voice grant RPCs.
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{
 		grpc.Creds(r.credentials),
@@ -22,7 +22,8 @@ func (r *Runtime) ServerOptions() []grpc.ServerOption {
 				}
 				return r.authoritySourceInterceptor(ctx, req, info, handler)
 			}
-			if !isTrustedServiceMethod(info.FullMethod) {
+			botRemoval := r.botLifecycleEnabled && info.FullMethod == rolev1.RoleService_ApplyBotInstallationRemoval_FullMethodName
+			if !botRemoval && !isTrustedServiceMethod(info.FullMethod) && !principalgrpc.IsSpaceRoleRead(info.FullMethod) && (!r.delegatedUserEnabled || !principalgrpc.IsDelegatedRoleMethod(info.FullMethod)) {
 				return nil, status.Error(codes.PermissionDenied, "method unavailable on trusted-service listener")
 			}
 			return principalgrpc.StrictUnaryInterceptor(r)(ctx, req, info, handler)

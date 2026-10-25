@@ -100,6 +100,36 @@ class StageTest(unittest.TestCase):
         with patch.object(runtime_stage.Staging,'restart') as restart:
             with self.assertRaisesRegex(Blocked,'renderer_restart_proof_missing'):self.stage.restart()
         restart.assert_not_called()
+
+    def test_principal_publisher_is_ready_before_any_business_start(self):
+        self.marker['data']['phase']='rollout-verified'
+        name=runtime_stage.PRINCIPAL_PUBLISHER
+        self.stage.snapshots[name]={}
+        for unavailable in (False,True):
+            calls=[]
+            def ready(stage,workload):
+                calls.append(('ready',workload))
+                if unavailable and workload==name:raise Blocked('publisher_not_ready')
+            def restart(stage):
+                stage.scale(runtime_stage.HUB,1);stage.wait_ready(runtime_stage.HUB)
+                stage.scale('voice-chat',1)
+            with self.subTest(unavailable=unavailable),patch.object(self.stage,'seal_before_business_resume'),\
+                    patch.object(runtime_stage.Staging,'restart',restart),patch.object(runtime_stage.Staging,'wait_ready',ready),\
+                    patch.object(self.stage,'scale',side_effect=lambda workload,n:calls.append(('scale',workload))):
+                if unavailable:
+                    with self.assertRaisesRegex(Blocked,'publisher_not_ready'):self.stage.restart()
+                else:self.stage.restart()
+            wanted=[('scale',runtime_stage.HUB),('ready',runtime_stage.HUB),('scale',name),('ready',name)]
+            self.assertEqual(calls,wanted+([] if unavailable else [('scale','voice-chat')]))
+
+    def test_completed_principal_publisher_is_observed_without_repeat_scale(self):
+        name=runtime_stage.PRINCIPAL_PUBLISHER
+        self.stage.snapshots[name]={}
+        self.stage.finish_ledger=unittest.mock.Mock(record={'pending':[], 'completed':[name]})
+        with patch.object(runtime_stage.Staging,'wait_ready') as ready,patch.object(self.stage,'scale') as scale:
+            self.stage.wait_ready(runtime_stage.HUB)
+        self.assertEqual([call.args[0] for call in ready.call_args_list],[runtime_stage.HUB,name])
+        scale.assert_not_called()
     def test_user_restore_cas_is_durable_before_readiness_wait_can_interrupt(self):
         original={"metadata":{"annotations":{}},"spec":{"containers":[{"name":"user","env":[]}]}}
         baseline={"metadata":{"uid":"user","resourceVersion":"1"},"spec":{"template":original}}

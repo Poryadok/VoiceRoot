@@ -135,3 +135,12 @@ primary profile purchaser с контекстом Space. Renewal/оплата п
 reminders. Email не используется: он по-прежнему только для auth-событий.
 Durable dedupe и stale/out-of-order правила —
 [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
+
+## Ordinary chat push burst policy
+
+Ordinary message, request, reply and mention pushes share 60 logical messages
+per rolling minute per recipient, across chats and devices. Suppressed bursts
+are not replayed as delayed push spam; unread/in-app behavior is unchanged.
+Calls, system/security and subscription reminders do not use this ordinary
+budget. Retry decisions retain 192h; provider delivery remains at-least-once.
+See the Notification service ordinary chat quota contract for exact scope.

@@ -49,6 +49,33 @@ ACTIVATION = re.compile(
     r'\.(?:Handle|HandleFunc)\s*\([^)]*(?:lifecycle|room)', re.S)
 
 
+# Exact reviewed e409 Native/P3 source and rollback-race repair package.
+# Source e409cd05c40e857b61109513eb2154f968970c02, record
+# f87ee933aa1f599284e1932e44bf32b4e2af48ba: no future path/content authority.
+REVIEWED_TRANSITIONS = {'src/backend/migrations/auth_db/000009_guest_conversion_operations.down.sql': ('100644 blob '
+                                                                                'df7ab6deeb0e77de9a6b68a1803fcd660fc084c1',
+                                                                                '100644 blob '
+                                                                                '967c11f2f4a57ddc84e188d453f6da9db7a252f9'),
+ 'src/backend/migrations/messaging_db/000025_space_file_producer.down.sql': ('100644 blob '
+                                                                             'b2211787546381e4725ae65192e2afef8adeb3b2',
+                                                                             '100644 blob '
+                                                                             'f2be8b9e29165a15f791f62d7e27980ba6e0c5f4'),
+ 'src/backend/migrations/messaging_db/000026_attachment_send_intents.down.sql': ('100644 blob '
+                                                                                 '338db36c8b247ffa8d6db7392633bc0e552fd0d8',
+                                                                                 '100644 blob '
+                                                                                 '01181fad12cbb8f202bbec16a3a8fece4ffd3a91'),
+ 'src/backend/migrations/role_db/000013_game_session_grants.down.sql': ('100644 blob '
+                                                                        'cec72a64a43e369be4199fb3b9056ee664c50ba7',
+                                                                        '100644 blob '
+                                                                        '3ca06b04b93ba22c830f99387d135fe17aeb179d'),
+ 'src/backend/voice/logger.go': (None, '100644 blob 44ff46d26c9e4f9d7b067e84d4e7771a797290f3'),
+ 'src/backend/voice/main.go': ('100644 blob b5434cfd21b94bd69ff25f912858f12f0aec6813',
+                               '100644 blob 540a91513cfd19d1499183302b3880a578951d56'),
+ 'src/backend/voice/ordinary_runtime.go': (None, '100644 blob b51436bec28c17c8ecb93cad68176564026802e3'),
+ 'src/backend/voice/party_outbox_runtime.go': (None, '100644 blob e7c5eab30a054008d7d16862f622f5d92f5351f6'),
+ 'src/backend/voice/space_media_runtime.go': (None, '100644 blob beff70aecd2d4dd42cbc21ba88691193caf4ac56')}
+
+
 def validate(repo, base, target='HEAD', pr_head=None):
     base = commit(repo, base, 'base')
     target = commit(repo, target, 'target')
@@ -72,7 +99,21 @@ def validate(repo, base, target='HEAD', pr_head=None):
             raise Refused('merge_tree_mismatch')
     before, after = entries(repo, base), entries(repo, target)
     changed = sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
+    # Consume the complete finite repair package, never a path-only exemption.
+    # Identity, ancestry and exact event merge checks above remain mandatory.
+    reviewed = set()
+    if any(raw in changed and after.get(raw) == pair[1].encode()
+           for path, pair in REVIEWED_TRANSITIONS.items()
+           for raw in [path.encode()]):
+        for path, (old, new) in REVIEWED_TRANSITIONS.items():
+            raw = path.encode()
+            if (before.get(raw), after.get(raw)) != (
+                    old.encode() if old else None, new.encode()):
+                raise Refused("reviewed_transition: " + path)
+            reviewed.add(raw)
     for raw_path in changed:
+        if raw_path in reviewed:
+            continue
         path = raw_path.decode('utf-8')
         if migration(path) and raw_path in before:
             raise Refused('immutable_migration: ' + path)

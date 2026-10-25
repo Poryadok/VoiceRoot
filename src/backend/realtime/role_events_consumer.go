@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"voice/backend/pkg/natslog"
+	"voice/backend/pkg/roleeventwire"
 )
 
 const jsStreamRoleEvents = "role_events"
@@ -32,17 +33,22 @@ type roleEventJSON struct {
 }
 
 func roleEventToFanout(subject string, data []byte) (profileID, chatID string, env fanoutEnvelope, ok bool) {
-	var payload roleEventJSON
-	if err := json.Unmarshal(data, &payload); err != nil {
+	event, err := roleeventwire.Decode(subject, data)
+	if err != nil {
 		return "", "", fanoutEnvelope{}, false
 	}
+	return roleDecodedEventToFanout(event)
+}
+
+func roleDecodedEventToFanout(event roleeventwire.Event) (profileID, chatID string, env fanoutEnvelope, ok bool) {
+	payload, subject := event.Mutation, event.Subject
 	d, err := json.Marshal(map[string]string{
-		"space_id":      payload.SpaceID,
-		"role_id":       payload.RoleID,
-		"profile_id":    payload.ProfileID,
-		"name":          payload.Name,
-		"chat_id":       payload.ChatID,
-		"voice_room_id": payload.VoiceRoomID,
+		"space_id":      payload.GetSpaceId(),
+		"role_id":       payload.GetRoleId(),
+		"profile_id":    payload.GetProfileId(),
+		"name":          payload.GetName(),
+		"chat_id":       payload.GetChatId(),
+		"voice_room_id": payload.GetVoiceRoomId(),
 		"subject":       subject,
 	})
 	if err != nil {
@@ -51,12 +57,12 @@ func roleEventToFanout(subject string, data []byte) (profileID, chatID string, e
 	env = fanoutEnvelope{Op: "role_update", D: d}
 	switch subject {
 	case "role.assigned", "role.revoked":
-		return payload.ProfileID, "", env, payload.ProfileID != ""
+		return payload.GetProfileId(), "", env, payload.GetProfileId() != ""
 	case "role.chat_override_set", "role.chat_override_removed":
-		return "", payload.ChatID, env, payload.ChatID != ""
+		return "", payload.GetChatId(), env, payload.GetChatId() != ""
 	case "role.created", "role.updated", "role.deleted",
 		"role.voice_override_set", "role.voice_override_removed":
-		return "", "", env, payload.SpaceID != "" || payload.ChatID != ""
+		return "", "", env, payload.GetSpaceId() != "" || payload.GetChatId() != ""
 	default:
 		return "", "", fanoutEnvelope{}, false
 	}
@@ -68,7 +74,12 @@ func subscribeRoleEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 		return nil, err
 	}
 	handler := func(msg *nats.Msg) {
-		profileID, chatID, fe, ok := roleEventToFanout(msg.Subject, msg.Data)
+		event, decodeErr := roleeventwire.Decode(msg.Subject, msg.Data)
+		if decodeErr != nil {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "ignored ordinary Role event", slog.String("disposition", decodeErr.Error()))
+			return
+		}
+		profileID, chatID, fe, ok := roleDecodedEventToFanout(event)
 		if !ok {
 			natslog.LogConsume(logger, msg, slog.LevelWarn, "unknown role event payload")
 			return
@@ -92,15 +103,15 @@ func subscribeRoleEvents(js nats.JetStreamContext, hub *wsHub, instanceID string
 	return sub, nil
 }
 
-func runRoleEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger) error {
+func runRoleEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instanceID string, logger *slog.Logger, shared ...*nats.Conn) error {
 	if hub == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("role events consumer: missing hub or NATS URL")
 	}
-	nc, err := nats.Connect(natsURL, natsConnectOptions("voice-realtime-role")...)
+	nc, release, err := consumerNATSConnection(natsURL, "voice-realtime-role", shared...)
 	if err != nil {
 		return fmt.Errorf("nats connect: %w", err)
 	}
-	defer func() { _ = nc.Drain() }()
+	defer release()
 	js, err := nc.JetStream()
 	if err != nil {
 		return fmt.Errorf("jetstream: %w", err)

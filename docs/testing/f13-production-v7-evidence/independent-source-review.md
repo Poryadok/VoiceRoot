@@ -1,0 +1,18 @@
+# Independent production v7 source review
+
+Reviewer: /root/f13_review. Date: 2026-10-24. Result: SOURCE ACCEPT, bounded to the exact source and evidence below. CODE, runtime and full producer acceptance remain separate.
+
+H: bc8552fbec6432a36151ab9afe9f85fecb1ccd20. Sole parent: 88856ee15a403e436b5f1d7f6d67e58d223e027b. Tree: 3065062ae8e43fc2ebee82f8d4ce1fa2ada9edcc.
+Reviewed pending record SHA256: 536e55ed3ccb8ffd47a8ecee77db0e7ecfda7c049f7c6221a7c6580d8bcaa32a. This artifact is intended to be bound into the finalized source record; it is not a final R commit pin.
+
+Independent read-only Git comparison confirmed identical complete tree path sets and identical entries outside src/backend/social/internal/socialevents/jetstream_test.go. The sole change is six added lines: two subscriber FlushTimeout(3*time.Second) barriers after subscription setup and before constructing the separate publisher. Existing delivery, payload, reply-inbox, stable message/event/request identity, two core deliveries and single stored JetStream event assertions remain unchanged. Existing receive deadlines remain unchanged. No production source or policy is changed.
+
+Both entries are mode 100644 blobs. Before: ad26d44374c60d3fece76cd2ac32c630f8074544, 3477 bytes, SHA256 090974c2b3a1a0e09686d23e40bad93f7e830cbcd5a8e44b3d32f59d06800e3a. After: 265179e8054251d164acc362375d308c3adfaa90, 3747 bytes, SHA256 3a6877f3fd60c93a0737424f9760df5ca836f76b8d44d5d40a1c34424d3c6e89. Exact raw delta SHA256: 3746ca87c24167a189c6efc0f42b5e4448c48901ca1835cfc174e9cbd844edfe.
+
+The complete 1044-entry D6-to-H inventory, including exact reference/current entries and raw-diff hash, was independently reconstructed from Git and matched. All 13 draft inventory/evidence references matched their raw hashes. All 11 transported original files matched byte-for-byte, including the hosted log's BOM and the unsuccessful runner setup attempts. Independent semantic review e46596f76969656e06c53569874a8449c321c818dece56cb6ced10c3912bf74c and receipt e25b4caa3f2f2a584a51ff1b13126f063054eca7e9cfb5fe07ad47447381bdb8 were inspected.
+
+Evidence boundaries: the hosted failure is retained; the corrected local baseline passed and did not reproduce the intermittent failure. Candidate targeted repetition, package repetition and race checks passed as reported in the bound receipt. The initial missing-Go command and no-tests regex attempt are explicitly not successful test runs. This review ran no tests and does not convert the local baseline into RED or claim hosted acceptance.
+
+Predecessor R6 28e929e65fa1a038662ea8620ac2bd8537c96291 and its raw record c7241b4a59d8b571f44004ae9e3c8537698f2f4eb7342275396608d1f35b4a05 remain byte-identical at H. R6-to-predecessor changes are confined to six existing named carriers, within the unchanged ten-carrier ceiling. The retained Native v3 tuple remains f87ee933aa1f599284e1932e44bf32b4e2af48ba / e409cd05c40e857b61109513eb2154f968970c02 / raw record 4ed3acd7cecfef97d03724115e57bf418600bd8e3210d992fd7ed1a325de8a67, with its record unchanged at H. The single Social test path adds no Native or current/future path authority.
+
+R7 must be a direct metadata/evidence child of this H; K7 must retain exact source/event/ordered-parent/result-tree checks, immutable predecessor records, independently requalify retained Native against actual B/S/T, and permit only the existing ten post-record carriers. No test-path wildcard or alternative producer fallback is accepted. The existing run on 88856 remains evidence for that source only. Fresh complete producer and router proof for the integrated successor remains required.

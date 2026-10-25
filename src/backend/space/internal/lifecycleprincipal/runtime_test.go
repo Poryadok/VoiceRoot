@@ -153,7 +153,7 @@ func TestRealLifecycleTLSJWKSReplayAndRevocation(t *testing.T) {
 	ctx = metadata.AppendToOutgoingContext(sign("current"), "x-voice-profile-id", profile)
 	_, err = client.RestoreSpace(ctx, req)
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
-	_, err = client.CreateSpace(sign("current"), &spacev1.CreateSpaceRequest{Name: "denied"})
+	_, err = client.ListMySpaces(sign("current"), &spacev1.ListMySpacesRequest{})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	for _, certs := range [][]tls.Certificate{nil, {foreignCert}} {
 		ctx, cancel := context.WithTimeout(sign("current"), time.Second)

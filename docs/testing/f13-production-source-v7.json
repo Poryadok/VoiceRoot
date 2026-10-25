@@ -1,0 +1,101 @@
+{
+  "activation_authority": false,
+  "changes": [
+    {
+      "after": {
+        "bytes": 3747,
+        "entry": "100644 blob 265179e8054251d164acc362375d308c3adfaa90\tsrc/backend/social/internal/socialevents/jetstream_test.go\u0000",
+        "sha256": "3a6877f3fd60c93a0737424f9760df5ca836f76b8d44d5d40a1c34424d3c6e89"
+      },
+      "before": {
+        "bytes": 3477,
+        "entry": "100644 blob ad26d44374c60d3fece76cd2ac32c630f8074544\tsrc/backend/social/internal/socialevents/jetstream_test.go\u0000",
+        "sha256": "090974c2b3a1a0e09686d23e40bad93f7e830cbcd5a8e44b3d32f59d06800e3a"
+      },
+      "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
+      "path": "src/backend/social/internal/socialevents/jetstream_test.go"
+    }
+  ],
+  "current_inputs": {
+    "path": "docs/testing/f13-production-current-inputs-v7.json",
+    "sha256": "0b0d2a9623909c3b839da1717a8803dd292082a4d836fea4f9dad77029bff15a"
+  },
+  "current_or_future_path_authority": false,
+  "delta_sha256": "3746ca87c24167a189c6efc0f42b5e4448c48901ca1835cfc174e9cbd844edfe",
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-v7-evidence/hosted-social-red.log",
+      "sha256": "d63bef525f319c1ea2a87e22988f54f494ea491596e20d1e6e4a4c7607d15df8"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/independent-review.md",
+      "sha256": "e46596f76969656e06c53569874a8449c321c818dece56cb6ced10c3912bf74c"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/independent-source-review.md",
+      "sha256": "6b2fa93a7dd0a1b2fbb77bcf2911018f2e49a2fece578871f005b6dd01d9081c"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/receipt.json",
+      "sha256": "e25b4caa3f2f2a584a51ff1b13126f063054eca7e9cfb5fe07ad47447381bdb8"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-baseline-no-tests.log",
+      "sha256": "dbc29a8efd8c9edad07868936063444812887ea43ec73959d402cdbb0bad1586"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-baseline-shell-failure.log",
+      "sha256": "94f22754cb44f049703cca9c32ec29b12cbc55179c9840f7b418ab2aa9b823fb"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-baseline.log",
+      "sha256": "695ee8f37ce6b139641283dfd1802a24b8a8cf9918b2f8344bdaf02a904bc62b"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-candidate-gofmt.log",
+      "sha256": "e68281e0a45db3d391966b90b024aec2e718fd8c8f26f3d36cd3fe8ef97de508"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-green-env.log",
+      "sha256": "a6474b73f90b1498137616ef0e4d9d031395210e83a683a38c386c6f4f20dcee"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-package-20.log",
+      "sha256": "8777c6ced57bbf01e257f462104505a4522bdc4a6b064c2abda5e8739aec0b56"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-race-10.log",
+      "sha256": "27c8e09df3620084483beda3c82da4b8f7ad16bf079def9a43624ee00b06f97b"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/social-target-100.log",
+      "sha256": "caabd3c69f63f7ff17edc6fabf065fc4173447866f7d489cc28ac1d0b81e93d4"
+    },
+    {
+      "path": "docs/testing/f13-production-v7-evidence/transport-manifest.json",
+      "sha256": "40000e25436c0e84f3b4b974f6a517a40de7e6ec806fa6bdb03a339d3ab21dde"
+    }
+  ],
+  "native_record": {
+    "commit": "f87ee933aa1f599284e1932e44bf32b4e2af48ba",
+    "path": "docs/testing/native-p3-source-v3.json",
+    "sha256": "4ed3acd7cecfef97d03724115e57bf418600bd8e3210d992fd7ed1a325de8a67",
+    "source": "e409cd05c40e857b61109513eb2154f968970c02",
+    "version": "NATIVE-P3-SOURCE-v3"
+  },
+  "predecessor": {
+    "carrier": "88856ee15a403e436b5f1d7f6d67e58d223e027b",
+    "path": "docs/testing/f13-production-source-v6.json",
+    "record": "28e929e65fa1a038662ea8620ac2bd8537c96291",
+    "sha256": "c7241b4a59d8b571f44004ae9e3c8537698f2f4eb7342275396608d1f35b4a05"
+  },
+  "review": [
+    "docs/testing/f13-production-v7-evidence/independent-review.md",
+    "docs/testing/f13-production-v7-evidence/independent-source-review.md"
+  ],
+  "runtime_pass": false,
+  "source": "bc8552fbec6432a36151ab9afe9f85fecb1ccd20",
+  "source_tree": "3065062ae8e43fc2ebee82f8d4ce1fa2ada9edcc",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "version": "F13-PRODUCTION-SOURCE-v7"
+}

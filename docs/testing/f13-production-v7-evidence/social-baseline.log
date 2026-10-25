@@ -1,0 +1,4 @@
+go version go1.26.9 linux/amd64
+090974c2b3a1a0e09686d23e40bad93f7e830cbcd5a8e44b3d32f59d06800e3a  internal/socialevents/jetstream_test.go
+815de8ba56144a53e9bd9535f6a42ebf2ce86900f31667aefa7358eb450394c9  ../pkg/go.mod
+ok  	voice/backend/social/internal/socialevents	5.672s

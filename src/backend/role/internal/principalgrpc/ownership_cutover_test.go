@@ -24,6 +24,7 @@ func TestOwnershipUnaryInterceptor_DrainsEveryProtectedProtocolOnLegacyListener(
 		rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_CompensateOwnershipTransfer_FullMethodName,
 		rolev1.RoleService_ResolveVoiceRoomGrants_FullMethodName,
+		rolev1.RoleService_RetireSpace_FullMethodName,
 	}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
@@ -47,8 +48,6 @@ func TestOwnershipUnaryInterceptor_DrainsEveryProtectedProtocolOnLegacyListener(
 func TestOwnershipUnaryInterceptor_PreservesNonOwnershipMethods(t *testing.T) {
 	for _, method := range []string{
 		rolev1.RoleService_CheckPermission_FullMethodName,
-		rolev1.RoleService_AssignRole_FullMethodName,
-		rolev1.RoleService_ListRoles_FullMethodName,
 		rolev1.RoleService_ApplyOwnershipTransfer_FullMethodName + "Other",
 	} {
 		t.Run(method, func(t *testing.T) {
@@ -60,5 +59,14 @@ func TestOwnershipUnaryInterceptor_PreservesNonOwnershipMethods(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, 1, handled)
 		})
+	}
+}
+
+func TestOrdinaryListenerRejectsPublicActorBeforeHandler(t *testing.T) {
+	for _, method := range []string{rolev1.RoleService_AssignRole_FullMethodName, rolev1.RoleService_ListRoles_FullMethodName} {
+		handled := false
+		_, err := OwnershipUnaryInterceptor(nil)(context.Background(), &emptypb.Empty{}, &grpc.UnaryServerInfo{FullMethod: method}, func(context.Context, any) (any, error) { handled = true; return nil, nil })
+		require.Equal(t, codes.Unauthenticated, status.Code(err))
+		require.False(t, handled, "no actor metadata on ordinary listener may dispatch")
 	}
 }

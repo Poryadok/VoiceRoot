@@ -32,6 +32,11 @@ func loadGatewayConfigFromEnv() gatewayConfig {
 }
 
 func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
+	for _, service := range auditInitiatingServices {
+		if _, _, err := auditInitiatingClientConfigFromEnv(service); err != nil {
+			return gatewayConfig{}, err
+		}
+	}
 	strict, err := sessionEpochStrictFromEnv()
 	if err != nil {
 		return gatewayConfig{}, err
@@ -40,6 +45,9 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 		return gatewayConfig{}, err
 	}
 	if _, _, err := spaceLifecycleClientConfigFromEnv(); err != nil {
+		return gatewayConfig{}, err
+	}
+	if _, _, err := storyConsentClientConfigFromEnv(); err != nil {
 		return gatewayConfig{}, err
 	}
 	if _, _, err := matchSquadMemberClientConfigFromEnv(); err != nil {
@@ -63,9 +71,9 @@ func loadGatewayConfigFromEnvChecked() (gatewayConfig, error) {
 	}
 	config.principalIssuer = issuer
 	config.principalJWKS = jwks
-	if config.transcoder != nil && (config.transcoder.clients.spaceLifecycle != nil || config.transcoder.clients.voiceUser != nil) {
+	if config.transcoder != nil && (config.transcoder.clients.spaceLifecycle != nil || config.transcoder.clients.voiceUser != nil || config.transcoder.clients.storyConsent != nil || len(config.transcoder.clients.auditInitiatingTransports) != 0) {
 		if issuer == nil || !strict {
-			return gatewayConfig{}, errors.New("delegated Voice/Space transport requires Gateway signing keys and strict session epochs")
+			return gatewayConfig{}, errors.New("delegated transport requires Gateway signing keys and strict session epochs")
 		}
 		config.transcoder.lifecycleIssuer = issuer
 	}

@@ -21,8 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
@@ -72,14 +71,16 @@ class RegistrationSessionEpochJdbcIntegrationTest {
       JwtService.forTests("voice-auth", "voice-client", "test-key", Duration.ofMinutes(15), CLOCK);
 
   @Container
-  static final PostgreSQLContainer<?> POSTGRES =
+  final PostgreSQLContainer<?> POSTGRES =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           .withDatabaseName("auth_registration")
           .withUsername("voice")
           .withPassword("voice");
 
-  @BeforeAll
-  static void migrate() {
+  // Each method owns a fully migrated database; container disposal is fixture
+  // cleanup, not a request to erase still-active production accounts.
+  @BeforeEach
+  void migrate() {
     Flyway.configure()
         .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
         .locations(
@@ -90,11 +91,44 @@ class RegistrationSessionEpochJdbcIntegrationTest {
         .migrate();
   }
 
-  @AfterEach
-  void clear() {
-    jdbc().getJdbcTemplate().update("DELETE FROM backup_codes");
-    jdbc().getJdbcTemplate().update("DELETE FROM refresh_tokens");
-    jdbc().getJdbcTemplate().update("DELETE FROM accounts");
+  @Test
+  void twoFaObservationFollowsRealJdbcCommitAndDisappearsOnRollback() {
+    var dataSource = dataSource();
+    var jdbc = new NamedParameterJdbcTemplate(dataSource);
+    var accounts = new JdbcAccountRepository(jdbc);
+    var floors = new SwitchableFloors();
+    var tokens = new JdbcRefreshTokenRepository(jdbc);
+    var profiles = org.mockito.Mockito.mock(RecordingProfiles.class);
+    org.mockito.Mockito.when(profiles.ensurePrimaryProfile(org.mockito.ArgumentMatchers.any(),
+        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyBoolean()))
+        .thenReturn(UUID.randomUUID().toString());
+    AuthService service = service(dataSource, jdbc, accounts, tokens, floors, profiles);
+    var registered = service.register(command("observation-commit@example.test", false));
+    var observations = org.mockito.Mockito.mock(voice.backend.auth.events.AuthObservations.class);
+    service.configureObservations(observations);
+    var outer = new TransactionTemplate(new DataSourceTransactionManager(dataSource));
+    outer.executeWithoutResult(status -> {
+      // 2FA confirmation is a complete SQL-owned Auth operation inside this outer transaction.
+      accounts.saveTotpSecret(UUID.fromString(registered.accountId()),
+          new TotpService(jdbcTotpProperties()).encryptSecret("JBSWY3DPEHPK3PXP"), false);
+      String code = String.format("%06d", new com.warrenstrange.googleauth.GoogleAuthenticator()
+          .getTotpPassword("JBSWY3DPEHPK3PXP"));
+      service.verify2FA(registered.accessToken(), code);
+      org.mockito.Mockito.verifyNoInteractions(observations);
+      status.setRollbackOnly();
+    });
+    assertThat(accounts.findById(registered.accountId()).orElseThrow().totpEnabled()).isFalse();
+    org.mockito.Mockito.verifyNoInteractions(observations);
+    outer.executeWithoutResult(status -> {
+      accounts.saveTotpSecret(UUID.fromString(registered.accountId()),
+          new TotpService(jdbcTotpProperties()).encryptSecret("JBSWY3DPEHPK3PXP"), false);
+      String code = String.format("%06d", new com.warrenstrange.googleauth.GoogleAuthenticator()
+          .getTotpPassword("JBSWY3DPEHPK3PXP"));
+      service.verify2FA(registered.accessToken(), code);
+      org.mockito.Mockito.verifyNoInteractions(observations);
+    });
+    org.mockito.Mockito.verify(observations).twoFaEnabled(UUID.fromString(registered.accountId()));
+    assertThat(accounts.findById(registered.accountId()).orElseThrow().totpEnabled()).isTrue();
   }
 
   @Test
@@ -473,7 +507,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     return service;
   }
 
-  private static DriverManagerDataSource dataSource() {
+  private DriverManagerDataSource dataSource() {
     return new DriverManagerDataSource(
         POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
   }
@@ -586,7 +620,7 @@ class RegistrationSessionEpochJdbcIntegrationTest {
     }
   }
 
-  private static final class RecordingProfiles implements PrimaryProfileProvisioner {
+  private final class RecordingProfiles implements PrimaryProfileProvisioner {
     final boolean fail;
     int calls;
     boolean sawCommittedPositiveEpoch;

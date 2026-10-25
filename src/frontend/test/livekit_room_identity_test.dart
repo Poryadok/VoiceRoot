@@ -12,6 +12,121 @@ void main() {
     const generationTwo = 'a2c980c6-d703-40fb-9b20-dd51d14aa680';
 
     test(
+      'ordinary screen share maps exact membership identity to public profile',
+      () {
+        final track = _RemoteVideoTrack();
+        final participant = _participant('ov:$profileId:$generationOne', track);
+        final room = LiveKitVoiceRoom(
+          room: _FakeRoom({participant.identity: participant}),
+          ordinaryVoicePresentation: true,
+        );
+
+        expect(room.remoteScreenShareTracks(participantIdentity: profileId), [
+          track,
+        ]);
+        expect(
+          room.remoteScreenShareTracks(participantIdentity: otherProfileId),
+          isEmpty,
+        );
+        expect(participant.identity, 'ov:$profileId:$generationOne');
+      },
+    );
+
+    test('ordinary exact SDK identity selects only its generation', () {
+      final oldTrack = _RemoteVideoTrack();
+      final newTrack = _RemoteVideoTrack();
+      final oldParticipant = _participant(
+        'ov:$profileId:$generationOne',
+        oldTrack,
+      );
+      final newParticipant = _participant(
+        'ov:$profileId:$generationTwo',
+        newTrack,
+      );
+      final participants = <String, livekit.RemoteParticipant>{
+        oldParticipant.identity: oldParticipant,
+        newParticipant.identity: newParticipant,
+      };
+      final room = LiveKitVoiceRoom(
+        room: _FakeRoom(participants),
+        ordinaryVoicePresentation: true,
+      );
+
+      expect(
+        room.remoteScreenShareTracks(participantIdentity: profileId),
+        isEmpty,
+        reason: 'profile-only lookup cannot choose an ambiguous membership',
+      );
+      expect(
+        room.remoteScreenShareTracks(
+          participantIdentity: newParticipant.identity,
+        ),
+        [newTrack],
+      );
+      participants.remove(oldParticipant.identity);
+      expect(room.remoteScreenShareTracks(participantIdentity: profileId), [
+        newTrack,
+      ]);
+      participants.remove(oldParticipant.identity);
+      expect(room.remoteScreenShareTracks(participantIdentity: profileId), [
+        newTrack,
+      ]);
+    });
+
+    test('ordinary and foreign presentation contexts remain separate', () {
+      final track = _RemoteVideoTrack();
+      final participant = _participant('ov:$profileId:$generationOne', track);
+      final room = LiveKitVoiceRoom(
+        room: _FakeRoom({participant.identity: participant}),
+      );
+      expect(
+        room.remoteScreenShareTracks(participantIdentity: profileId),
+        isEmpty,
+      );
+      room.ordinaryVoicePresentation = true;
+      expect(room.remoteScreenShareTracks(participantIdentity: profileId), [
+        track,
+      ]);
+      room.ordinaryVoicePresentation = false;
+      expect(
+        room.remoteScreenShareTracks(participantIdentity: profileId),
+        isEmpty,
+      );
+    });
+
+    test(
+      'ordinary malformed identities never use claimed profile attributes',
+      () {
+        for (final identity in [
+          'ov:${profileId.toUpperCase()}:$generationOne',
+          'ov:$profileId:$generationOne:extra',
+          'ov:$profileId:not-a-uuid',
+          'ov:$profileId:00000000-0000-0000-0000-000000000000',
+          'ov:00000000-0000-0000-0000-000000000000:$generationOne',
+          'ov::$generationOne',
+          ' ov:$profileId:$generationOne',
+          'unknown:$profileId:$generationOne',
+        ]) {
+          final track = _RemoteVideoTrack();
+          final participant = _participant(
+            identity,
+            track,
+            attributes: {'profile_id': profileId},
+          );
+          final room = LiveKitVoiceRoom(
+            room: _FakeRoom({identity: participant}),
+            ordinaryVoicePresentation: true,
+          );
+          expect(
+            room.remoteScreenShareTracks(participantIdentity: profileId),
+            isEmpty,
+            reason: identity,
+          );
+        }
+      },
+    );
+
+    test(
       'matches signed Space identities by canonical profile across generations',
       () {
         final firstTrack = _RemoteVideoTrack();

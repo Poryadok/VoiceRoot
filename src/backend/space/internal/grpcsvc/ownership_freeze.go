@@ -9,6 +9,12 @@ import (
 )
 
 func mapSpaceStoreError(err error) error {
+	if errors.Is(err, store.ErrAdmissionRequired) || errors.Is(err, store.ErrLegacyEntryPolicyWrite) || errors.Is(err, store.ErrEntryPolicyVersion) {
+		return status.Error(codes.FailedPrecondition, "entry verification required")
+	}
+	if errors.Is(err, store.ErrEntryPolicyUnavailable) {
+		return status.Error(codes.Unavailable, "entry verification unavailable")
+	}
 	if errors.Is(err, store.ErrOwnershipFrozen) || errors.Is(err, store.ErrLifecycleFrozen) || errors.Is(err, store.ErrOwnershipScopeUnavailable) {
 		return status.Error(codes.Unavailable, "space temporarily unavailable")
 	}

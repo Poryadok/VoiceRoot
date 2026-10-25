@@ -88,6 +88,13 @@ the backend must not substitute convenient event counters for these metrics.
 
 Grafana: `voice-analytics-*.json` в [`deploy/observability/grafana/`](../../deploy/observability/grafana/). Admin UI дублирует ключевые product-панели через REST.
 
+Registrations в Grafana и REST Product dashboard считают логические события
+`user_registered` из `voice.events_logical`, с дедупликацией по `event_id`.
+`profile_created` — отдельный шаг воронки создания профиля, а не регистрация
+аккаунта: дополнительные профили не увеличивают Registrations. Grafana stat
+показывает текущий день ClickHouse (`today()`); REST считает выбранный интервал
+`[from, to)`. Совпадение чисел требует одинакового временного окна и источника.
+
 ---
 
 ## Архитектура (кратко)

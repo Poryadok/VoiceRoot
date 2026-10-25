@@ -13,10 +13,23 @@ TAG="${VOICE_IMAGE_TAG:?VOICE_IMAGE_TAG required for production}"
 NS="${VOICE_K8S_NAMESPACE:-voice-prod}"
 MODE="${DEPLOY_MODE:-full}"
 
+# Reject an invalid/no-op selective request before the first cluster effect.
+python3 "${ROOT}/scripts/prod/production_image_refs.py" \
+  --catalog "${ROOT}/scripts/ci/staging-image-catalog.json" \
+  --registry "${REGISTRY}" --tag "${TAG}" --mode "${MODE}" \
+  --changed-services "${CHANGED_SERVICES:-}" >/dev/null
+
 export VOICE_IMAGE_REGISTRY="${REGISTRY}"
 export VOICE_IMAGE_TAG="${TAG}"
 export VOICE_K8S_NAMESPACE="${NS}"
 export PROD_MANIFEST_DIR="${PROD_MANIFEST_DIR:-${ROOT}/deploy/prod}"
+
+# Validate the same required passive release input before ANY branch dispatch,
+# including infrastructure/gateway/migration helpers in full/app-only modes.
+# This source preflight neither creates the external object nor attests images.
+python3 "${ROOT}/scripts/staging/nats-rollout-preservation/release_policy_wiring.py" \
+  "${VOICE_RELEASE_POLICY_INPUT:-}" "${TAG}" "${NS}" \
+  "${PROD_MANIFEST_DIR}/services.yaml" >/dev/null
 
 echo "Applying Voice production: ${REGISTRY} tag ${TAG} namespace ${NS} mode=${MODE}"
 
@@ -41,7 +54,11 @@ case "${MODE}" in
     bash "${ROOT}/scripts/prod/apply-infra.sh"
     bash "${ROOT}/scripts/prod/apply-gateway-ingress.sh"
     bash "${ROOT}/scripts/prod/apply-app-manifests.sh"
-    bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+    if [ "${NEEDS_FULL_ROLLOUT:-false}" != "true" ] && [ "${NEEDS_USER_SPACE_ROLLOUT:-false}" = "true" ]; then
+      bash "${ROOT}/scripts/staging/rollout-subset.sh"
+    else
+      bash "${ROOT}/scripts/staging/rollout-app-tier.sh"
+    fi
     bash "${ROOT}/scripts/prod/apply-livekit-ingress.sh"
     kubectl rollout status "deployment/voice-gateway" -n "${NS}" --timeout=300s
     for dep in voice-developer-portal voice-web voice-admin; do

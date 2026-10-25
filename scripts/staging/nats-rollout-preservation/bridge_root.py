@@ -187,7 +187,10 @@ class Actions:
         frontends=[s for s in request['changed_services'] if s in ('web','admin','developer-portal')] if request['mode']=='images-only' else ['web','admin','developer-portal']
         full_story=previous is not None and previous['input_target']['mode']=='full'
         renderer_selected=request['mode']=='full' or previous is not None and not full_story and previous.get('renderer_authority') is not None
-        stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else []))
+        import source_plan
+        publisher_selected=request['mode'] in ('full','app-only') and source_plan.principal_publisher_source(workspace,compiler.decode_yaml)
+        stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else [])+
+            ([source_plan.PRINCIPAL_PUBLISHER] if publisher_selected else []))
         self._report('workload-capture','COMPLETE')
         gis_transition=None
         if (request.get('gis_first_install') is not True and request['mode'] in ('full','app-only')
@@ -195,13 +198,29 @@ class Actions:
             gis_transition=self._previous_gis_transition(kube)
         self._report('policy-validation','STARTED')
         policy=private_json(INSTALLED/'policy.json')
-        optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin'}
+        optional={'s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability','minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','release_policy'}
         if not set(policy)<=optional or 's3_signing_endpoint' not in policy:raise Blocked('bridge_policy_invalid')
+        if 'release_policy' in policy:
+            import release_policy_wiring
+            try:release_policy_wiring.validate(policy['release_policy'],approved['source_sha'],guard.NS)
+            except ValueError as exc:raise Blocked('bridge_release_policy_invalid') from exc
         self._report('policy-validation','COMPLETE')
         self._report('image-selection','STARTED')
         names=request['changed_services'] if request['mode']=='images-only' else [n.removeprefix('voice-') for n in stage.snapshots if n!=HUB]
         images={};image_deadline=time.monotonic()+600
         for service in names:
+            if service=='p3-principal-jwks':
+                if not publisher_selected:raise Blocked('bridge_principal_publisher_not_selected')
+                name=source_plan.PRINCIPAL_PUBLISHER;row=stage.snapshots[name]
+                spec=row['spec']['template']['spec']
+                if spec.get('initContainers') or [c['name'] for c in spec['containers']]!=['jwks']:
+                    raise Blocked('bridge_principal_publisher_container_changed')
+                key=name+'/jwks';image=source_plan.principal_publisher_image(stage.old_images[key])
+                if previous is not None:
+                    if previous['target']['images'].get(key)!=image or previous['context']['old_images'].get(key)!=image:
+                        raise Blocked('bridge_principal_publisher_rollback_image_changed')
+                images[key]=image
+                continue
             if service not in approved['images'] or service=='nats-hub-config-renderer':raise Blocked('bridge_target_service_invalid')
             name='voice-'+service;row=stage.snapshots[name]
             for container in row['spec']['template']['spec'].get('initContainers',[])+row['spec']['template']['spec']['containers']:

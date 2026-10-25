@@ -39,6 +39,34 @@ func lifecycleScopeSnapshot(t *testing.T, st *SpaceStore, spaceID uuid.UUID) str
 	return r20ScopeSnapshot(t, st, spaceID) + "\n" + lifecycle
 }
 
+// These raw entry points cannot mint protected intent or Bot installation
+// authority. LIVE only permits reaching that refusal, never a raw mutation.
+func TestLifecycleScope_DisabledRawMethodsRemainUnavailableWhenLive(t *testing.T) {
+	st := lifecycleStoreFixture(t)
+	want := map[string]error{
+		"BanMember":       ErrAccountBanUnavailable,
+		"UnbanMember":     ErrAccountBanUnavailable,
+		"AddBotMember":    ErrMemberAuthorityUnavailable,
+		"RemoveBotMember": ErrMemberAuthorityUnavailable,
+	}
+	checked := 0
+	for _, tc := range r20OrdinaryScopeCases() {
+		expected, ok := want[tc.name]
+		if !ok {
+			continue
+		}
+		checked++
+		t.Run(tc.name, func(t *testing.T) {
+			f := newR20ScopeFixture(t, st, "")
+			seedLifecycleScopePhase(t, st, f.binding.SpaceID, "LIVE")
+			before := lifecycleScopeSnapshot(t, st, f.binding.SpaceID)
+			require.ErrorIs(t, tc.call(st, f), expected)
+			require.Equal(t, before, lifecycleScopeSnapshot(t, st, f.binding.SpaceID), "disabled raw operation mutated durable data")
+		})
+	}
+	require.Equal(t, len(want), checked, "all four disabled raw entry points must retain their refusal")
+}
+
 func TestLifecycleScope_OrdinaryMethodsRejectEveryNonLivePhase(t *testing.T) {
 	st := lifecycleStoreFixture(t)
 	for _, phase := range lifecycleFrozenPhases {

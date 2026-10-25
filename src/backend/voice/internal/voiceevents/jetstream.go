@@ -142,7 +142,7 @@ func (p *JetStreamPublisher) PublishAdmissionEvent(ctx context.Context, eventID 
 	if p == nil || p.js == nil || eventID == uuid.Nil || len(payload) == 0 {
 		return fmt.Errorf("invalid durable Voice event")
 	}
-	if subject != "voice.call_started" && subject != "voice.member_joined" {
+	if subject != "voice.call_started" && subject != "voice.member_joined" && subject != "voice.participant_joined" && subject != "voice.participant_left" && subject != "voice.roster_membership_changed" {
 		return fmt.Errorf("unsupported durable Voice event subject")
 	}
 	envelope := new(eventsv1.VoiceStreamEvent)
@@ -150,6 +150,12 @@ func (p *JetStreamPublisher) PublishAdmissionEvent(ctx context.Context, eventID 
 		return fmt.Errorf("invalid durable Voice event envelope")
 	}
 	switch subject {
+	case "voice.roster_membership_changed":
+		event := envelope.GetVoiceRosterMembershipChanged()
+		if event == nil || !validParticipantEnvelope(envelope, event.GetRoomId(), event.GetProfileId()) || event.GetProtocolVersion() != 1 || event.GetRosterVersion() == 0 ||
+			(event.GetChange() != eventsv1.VoiceRosterMembershipChanged_CHANGE_JOINED && event.GetChange() != eventsv1.VoiceRosterMembershipChanged_CHANGE_LEFT) {
+			return fmt.Errorf("invalid durable roster membership event binding")
+		}
 	case "voice.call_started":
 		if envelope.GetCallStarted() == nil {
 			return fmt.Errorf("durable Voice event subject does not match envelope")
@@ -157,6 +163,16 @@ func (p *JetStreamPublisher) PublishAdmissionEvent(ctx context.Context, eventID 
 	case "voice.member_joined":
 		if envelope.GetVoiceMemberJoined() == nil {
 			return fmt.Errorf("durable Voice event subject does not match envelope")
+		}
+	case "voice.participant_joined":
+		event := envelope.GetVoiceParticipantJoined()
+		if event == nil || !validParticipantEnvelope(envelope, event.RoomId, event.ProfileId) {
+			return fmt.Errorf("invalid durable participant event binding")
+		}
+	case "voice.participant_left":
+		event := envelope.GetVoiceParticipantLeft()
+		if event == nil || !validParticipantEnvelope(envelope, event.RoomId, event.ProfileId) {
+			return fmt.Errorf("invalid durable participant event binding")
 		}
 	}
 	message := &nats.Msg{Subject: subject, Data: payload, Header: nats.Header{}}
@@ -171,6 +187,12 @@ func (p *JetStreamPublisher) PublishAdmissionEvent(ctx context.Context, eventID 
 	}
 	natslog.LogPublish(p.Logger, subject, correlation.FromGRPC(ctx), "durable Voice event published", slog.String("event_id", eventID.String()))
 	return nil
+}
+
+func validParticipantEnvelope(envelope *eventsv1.VoiceStreamEvent, roomID, profileID string) bool {
+	room, roomErr := uuid.Parse(roomID)
+	profile, profileErr := uuid.Parse(profileID)
+	return roomErr == nil && profileErr == nil && room != uuid.Nil && profile != uuid.Nil && envelope.OccurredAt != nil && envelope.OccurredAt.CheckValid() == nil
 }
 
 func (p *JetStreamPublisher) publish(ctx context.Context, subject string, env *eventsv1.VoiceStreamEvent) error {

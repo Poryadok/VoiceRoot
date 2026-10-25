@@ -19,6 +19,7 @@ import (
 	"voice/backend/pkg/principal"
 	"voice/backend/pkg/socialprincipal"
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -39,10 +40,11 @@ func startUserSettingsTestServer(t *testing.T, profiles *store.ProfileStore, pri
 	t.Cleanup(func() { _ = lis.Close() })
 	srv := grpc.NewServer()
 	userv1.RegisterUserServiceServer(srv, &UserGRPC{
-		Profiles:        profiles,
-		Privacy:         privacy,
-		Presence:        store.NewPresenceStore(rdb),
-		DeletedAccounts: &deletedAccountCheckerStub{},
+		Profiles:         profiles,
+		ProfileMutations: profilemutation.New(rdb),
+		Privacy:          privacy,
+		Presence:         store.NewPresenceStore(rdb),
+		DeletedAccounts:  &deletedAccountCheckerStub{},
 	})
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)

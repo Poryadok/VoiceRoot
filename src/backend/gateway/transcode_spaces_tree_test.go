@@ -163,7 +163,7 @@ func TestTranscodeSpacesCreateCategory(t *testing.T) {
 	require.Equal(t, "General", rec.lastCategory.GetName())
 }
 
-func TestTranscodeSpacesCreateVoiceRoom(t *testing.T) {
+func TestTranscodeSpacesCreateVoiceRoomRejectsLegacyUnsignedActor(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceTree{}
 	spaceClient, chatClient, cleanup := startBufconnSpaceTreeClients(t, rec, &recordingChatsForSpaceTree{})
@@ -180,11 +180,11 @@ func TestTranscodeSpacesCreateVoiceRoom(t *testing.T) {
 	resp := performRequest(h, http.MethodPost, "/api/v1/spaces/space-1/voice-rooms", body, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.Equal(t, "Lobby", rec.lastVoiceRoom.GetName())
+	require.GreaterOrEqual(t, resp.Code, 400)
+	require.Nil(t, rec.lastVoiceRoom)
 }
 
-func TestTranscodeSpacesOrchestrateChat(t *testing.T) {
+func TestTranscodeSpacesCreateChatRejectsLegacyOrchestration(t *testing.T) {
 	t.Parallel()
 	rec := &recordingSpaceTree{}
 	chatRec := &recordingChatsForSpaceTree{}
@@ -202,15 +202,9 @@ func TestTranscodeSpacesOrchestrateChat(t *testing.T) {
 	resp := performRequest(h, http.MethodPost, "/api/v1/spaces/space-1/chats", body, map[string]string{
 		"Authorization": "Bearer valid-user-token",
 	})
-	require.Equal(t, http.StatusOK, resp.Code)
-	require.NotNil(t, chatRec.lastCreate)
-	require.Equal(t, 1, chatRec.createCalls, "composite POST must create one chat")
-	require.Equal(t, "space-1", chatRec.lastCreate.GetSpaceId())
-	require.Equal(t, 1, rec.upsertCalls, "composite POST must emit one tree mutation, hence one tree audit effect")
-	require.Equal(t, "text_chat", rec.lastUpsert.GetKind())
-	require.Equal(t, "chat-99", rec.lastUpsert.GetLinkedChat().GetId())
-	require.Contains(t, resp.Body.String(), `"display_name":"general"`)
-	require.Contains(t, resp.Body.String(), `"CHAT_TYPE_GROUP"`)
+	require.Equal(t, http.StatusUnauthorized, resp.Code)
+	require.Zero(t, chatRec.createCalls, "unverified actor cannot fall back to legacy Chat")
+	require.Zero(t, rec.upsertCalls, "composite route never issues ordinary second Upsert")
 }
 
 type listTreeWithLinkedChat struct {

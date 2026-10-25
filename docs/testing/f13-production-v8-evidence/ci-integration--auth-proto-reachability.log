@@ -1,0 +1,11 @@
+Command: bash scripts/ci/check-auth-proto-sync_test.sh
+== matching proto copies pass ==
+auth proto copy in sync with protos/voice/auth/v1/auth.proto
+== comments and whitespace are ignored ==
+auth proto copy in sync with protos/voice/auth/v1/auth.proto
+== wire mismatch fails with canonical and copy labels ==
+== missing Auth copy fails clearly ==
+== canonical CI wiring covers either auth proto path ==
+Auth proto sync guard regression tests passed.
+
+exit_code=0

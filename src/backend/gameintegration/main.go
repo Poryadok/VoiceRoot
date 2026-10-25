@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"voice/backend/gameintegration/internal/botproof"
@@ -22,6 +21,7 @@ import (
 	"voice/backend/gameintegration/internal/sessionowners"
 	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
+	"voice/backend/pkg/postgres"
 	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
 	"voice/backend/pkg/runtimeconfig"
@@ -33,7 +33,7 @@ func main() {
 		log.Fatal(err)
 	}
 	connectCtx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
-	pool, err := pgxpool.New(connectCtx, cfg.DatabaseURL)
+	pool, err := postgres.NewPool(connectCtx, cfg.DatabaseURL)
 	if err == nil {
 		err = pool.Ping(connectCtx)
 	}

@@ -1,0 +1,83 @@
+{
+  "version": "F13-REVIEWED-TEST-MERGE-v1",
+  "consumer": "HISTORICAL-TEST-MERGE-ONLY",
+  "merge": "31276e7cdd661ec93cb9c2e0369a0f102adf7efd",
+  "parents": [
+    "2e8c29f26c4e95cead8c0634256c409af3db14a8",
+    "10b3b7ba032df521818ce9a90852352298b53b21"
+  ],
+  "best_bases": [
+    "698d4f064f032ea74abf3ede2017100b26c8ee69"
+  ],
+  "conflicts": [
+    {
+      "path": "src/backend/role/permissions/permissions_test.go",
+      "base": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f5c6aeb055745f85e0b4c8a5bbd9d2a644031c7a"
+      },
+      "first": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "a1cff5ba704c8cd2bcce501559ac8f8812997a8a"
+      },
+      "source": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "3f622ed60b97f2f03ac6e9e7f8b757f197202d42"
+      },
+      "result": {
+        "mode": "100644",
+        "type": "blob",
+        "oid": "f4f97caca966ea4c43301a3e17a2b1cd06785098"
+      }
+    }
+  ],
+  "review": "http://192.168.0.109:30990/?project=voice&task=REVIEW-NATIVE-P3-CLOSURE-53f75f745237#comment-c6",
+  "evidence": [
+    {
+      "name": "master-intake/role31276/base-permissions_test.go",
+      "sha256": "51fd39da3751dcd73ec4012c562aceb85e178625547600cd84a47df643e0571e"
+    },
+    {
+      "name": "master-intake/role31276/first-permissions_test.go",
+      "sha256": "30a9e490a61b5054119680620488613bdc82f6d0ec7c52ab19cbfaf8e154e8c2"
+    },
+    {
+      "name": "master-intake/role31276/first-result.diff",
+      "sha256": "4907de0d8b17b5f2f0204a1311d79d7dca00cc819442793a7727ccd7a331eb52"
+    },
+    {
+      "name": "master-intake/role31276/merge-tree.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "master-intake/role31276/merge-tree.stdout",
+      "sha256": "c6031d622b0d440a9fabaa0f6acdb192852db0523fb0ce66e46d5d95db320608"
+    },
+    {
+      "name": "master-intake/role31276/resolution-proof.json",
+      "sha256": "34c955b38f33678531d2fe4dd46deb66a430dbe263c7ec07b4f26664e86ac71b"
+    },
+    {
+      "name": "master-intake/role31276/result-permissions_test.go",
+      "sha256": "f57bfb27e5d04d95c71f4a13fd0c49ff7e0e01f934c56919006cceaf818e8964"
+    },
+    {
+      "name": "master-intake/role31276/source-permissions_test.go",
+      "sha256": "e4bf06e30ca7a695a01a8dbaf42c9d389dac9822a0333688102582f7d3454f45"
+    },
+    {
+      "name": "master-intake/role31276/source-result.diff",
+      "sha256": "ef23ab6320cc49fb82f95f368344c5feba97cfa0f95b4545825d080a17e4700a"
+    }
+  ],
+  "exclusions": [
+    "No Role/current/future path exemption",
+    "No runtime/source authority or taint reset",
+    "Only exact historical commit/parents/best-base/mode/type/OID conflict tuple",
+    "Clean merges must separately satisfy actual deterministic merge-tree verification",
+    "Missing/tampered record or non-test/runtime/conflict-path expansion refuses"
+  ]
+}

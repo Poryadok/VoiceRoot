@@ -20,10 +20,31 @@ class AuthPrincipalConfigurationTest {
     verifyNoInteractions(epochs, redis);
   }
 
+  @Test void optionalBotPeerConfigurationNeverDisablesTheExistingVerifier() {
+    for (String value : List.of("", "not a URI", "urn:voice:*", "urn:voice:test:bot-floor")) {
+      try (var interceptor = AuthPrincipalConfiguration.fromEnvironment(new MockEnvironment()
+          .withProperty(URLS, VALID).withProperty("AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN", value), epochs, redis)) {
+        assertTrue(interceptor.enabled());
+      }
+    }
+    verifyNoInteractions(epochs, redis);
+  }
+
   @Test void completeHttpsConfigurationUsesDefaultsAndDoesNotFetchUntilRequest() {
     // These deliberately unresolvable hosts make eager fetching observable as a failure.
     var environment = new MockEnvironment().withProperty(URLS, VALID);
     assertTrue(AuthPrincipalConfiguration.fromEnvironment(environment, epochs, redis).enabled());
+    verifyNoInteractions(epochs, redis);
+  }
+
+  @Test void optionalChatJwksUsesExistingHttpsConfigurationWithoutChangingOldRequirements() {
+    String configured = VALID.substring(0, VALID.length() - 1) + ",\"chat\":\"https://chat.invalid/jwks\"}";
+    try (var interceptor = AuthPrincipalConfiguration.fromEnvironment(new MockEnvironment()
+        .withProperty(URLS, configured), epochs, redis)) {
+      assertTrue(interceptor.enabled());
+    }
+    assertThrows(IllegalArgumentException.class, () -> AuthPrincipalConfiguration.fromEnvironment(
+        new MockEnvironment().withProperty(URLS, configured.replace("https://chat.invalid", "http://chat.invalid")), epochs, redis));
     verifyNoInteractions(epochs, redis);
   }
 

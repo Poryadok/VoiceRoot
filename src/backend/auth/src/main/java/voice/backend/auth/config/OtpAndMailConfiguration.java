@@ -60,8 +60,8 @@ public class OtpAndMailConfiguration {
 
   @Bean
   @ConditionalOnProperty(name = "auth.persistence", havingValue = "memory")
-  OtpThrottle inMemoryOtpThrottle() {
-    return new InMemoryOtpThrottle();
+  OtpThrottle inMemoryOtpThrottle(java.time.Clock clock) {
+    return new InMemoryOtpThrottle(clock);
   }
 
   @Bean
@@ -87,8 +87,9 @@ public class OtpAndMailConfiguration {
       OtpThrottle throttle,
       java.time.Clock clock,
       GuestConversionOtpAcceptance guestConversionAcceptance,
-      GuestConversionPendingUserWorker pendingUserWorker) {
-    return new OtpService(
+      GuestConversionPendingUserWorker pendingUserWorker,
+      voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy) {
+    OtpService service = new OtpService(
         accounts,
         otpCodes,
         refreshTokens,
@@ -99,6 +100,8 @@ public class OtpAndMailConfiguration {
         clock,
         guestConversionAcceptance,
         pendingUserWorker);
+    service.configureReleasePolicy(releasePolicy);
+    return service;
   }
 
   /** Compatibility factory for narrow configuration contract tests without a recovery worker. */

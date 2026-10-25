@@ -13,7 +13,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -32,14 +32,16 @@ import voice.backend.auth.repository.JdbcAccountDeletionOperationRepository;
 @Testcontainers(disabledWithoutDocker = true)
 class AccountDeletionOperationRepositoryJdbcIntegrationTest {
   @Container
-  static final PostgreSQLContainer<?> postgres =
+  final PostgreSQLContainer<?> postgres =
       new PostgreSQLContainer<>(DockerImageName.parse("postgres:16-alpine"))
           .withDatabaseName("auth_db")
           .withUsername("voice")
           .withPassword("voice");
 
-  @BeforeAll
-  static void migrateAuthSchema() {
+  // Dispose the owned database after each method; an active deletion operation
+  // is not evidence that its account may already be physically erased.
+  @BeforeEach
+  void migrateAuthSchema() {
     Flyway.configure()
         .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
         .locations(
@@ -97,9 +99,6 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
     } finally {
       executor.shutdownNow();
       assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
-      jdbc().update("DELETE FROM account_deletion_operations WHERE account_id = :accountId",
-          new MapSqlParameterSource("accountId", accountId));
-      jdbc().update("DELETE FROM accounts WHERE id = :accountId", new MapSqlParameterSource("accountId", accountId));
     }
   }
 
@@ -112,8 +111,7 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
     AccountDeletionOperation operation =
         repository.createOrResume(UUID.randomUUID(), accountId, 3, "token-verifier", now);
     Instant leaseUntil = now.plus(2, ChronoUnit.MINUTES);
-    try {
-      assertThat(repository.leaseDue(AccountDeletionState.PENDING_FLOOR, 1, now, leaseUntil))
+    assertThat(repository.leaseDue(AccountDeletionState.PENDING_FLOOR, 1, now, leaseUntil))
           .containsExactly(
               new AccountDeletionOperation(
                   operation.operationId(),
@@ -129,11 +127,6 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
                   null,
                   now,
                   now));
-    } finally {
-      jdbc().update("DELETE FROM account_deletion_operations WHERE account_id = :accountId",
-          new MapSqlParameterSource("accountId", accountId));
-      jdbc().update("DELETE FROM accounts WHERE id = :accountId", new MapSqlParameterSource("accountId", accountId));
-    }
   }
 
   private static Optional<AccountDeletionOperation> claimAfterBarrier(
@@ -153,8 +146,8 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
   private void seedAccount(UUID accountId) {
     jdbc().update(
         """
-        INSERT INTO accounts (id, password_hash, type, status)
-        VALUES (:accountId, 'test-hash', 'regular', 'deleted')
+        INSERT INTO accounts (id, password_hash, type, status, deleted_at)
+        VALUES (:accountId, 'test-hash', 'regular', 'deleted', CURRENT_TIMESTAMP)
         """,
         new MapSqlParameterSource("accountId", accountId));
   }

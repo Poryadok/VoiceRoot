@@ -16,6 +16,7 @@ COPY messaging/pb/voice/messaging/go.mod ./messaging/pb/voice/messaging/
 COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY user/pb/voice/gameintegration/go.mod ./user/pb/voice/gameintegration/
 RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/local/bin/docker-go-mod-download.sh story
 COPY user/pb/voice/gameintegration ./user/pb/voice/gameintegration
@@ -30,6 +31,7 @@ COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
 COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY role/pb/voice/role ./role/pb/voice/role
 COPY story ./story
 COPY migrations/story_db ./migrations/story_db
 WORKDIR /src/story

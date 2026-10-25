@@ -7,6 +7,7 @@ COPY scripts/docker-go-mod-download.sh /usr/local/bin/docker-go-mod-download.sh
 COPY pkg/go.mod ./pkg/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
+COPY messaging/pb/voice/events/go.mod ./messaging/pb/voice/events/
 COPY voice/pb/voice/calls/go.mod ./voice/pb/voice/calls/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
@@ -17,6 +18,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,id=voice-gomod,sharing=locked sh /usr/
 COPY pkg ./pkg
 COPY chat/pb/voice/chat ./chat/pb/voice/chat
 COPY file/pb/voice/file ./file/pb/voice/file
+COPY messaging/pb/voice/events ./messaging/pb/voice/events
 COPY voice/pb/voice/calls ./voice/pb/voice/calls
 COPY voice/pb/voice/space ./voice/pb/voice/space
 COPY voice/pb/voice/story ./voice/pb/voice/story

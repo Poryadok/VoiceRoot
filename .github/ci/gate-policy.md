@@ -16,7 +16,20 @@ Moving it does not assert that lexical activation checks prove arbitrary program
 semantics. The bounded guard refuses additions to prohibited root wiring and
 scans full modified source-disabled lifecycle files; ordinary service tests
 remain responsible for runtime behavior. Shipped migrations can only be extended
-additively. An authorized historical renumber needs a separate reviewed policy
+additively, except the exact reviewed nine-entry Native/P3 repair transition
+from source `e409cd05c40e857b61109513eb2154f968970c02` (record
+`f87ee933aa1f599284e1932e44bf32b4e2af48ba`). The validator pins both original
+and repaired mode/type/blob entries and requires the whole package: four DOWN
+rollback race fixes (Auth9, Messaging25/26, Role13), and the five existing Voice
+composition entries (`main.go`, `logger.go`, `ordinary_runtime.go`,
+`party_outbox_runtime.go`, `space_media_runtime.go`). This is no future file or
+migration allowance: byte, mode, path, deletion, baseline or partial-package
+drift rejects; unrelated paths still undergo normal checks. The four rollback
+fixes retain admitted work by fencing writers before probing. Auth9 and
+Messaging25/26 keep guard and DROP in one DO statement; Role13 requires its
+existing whole-migration transaction, tested through one SQL execution. Existing
+Native A3 roster relay and roomlifecycle activation remain prohibited. Exact
+source entries authorize no runtime/deployment result. An authorized historical renumber needs a separate reviewed policy
 change, not an environment override.
 
 The four Make shards preserve all 70 original shell/Python recipe commands;

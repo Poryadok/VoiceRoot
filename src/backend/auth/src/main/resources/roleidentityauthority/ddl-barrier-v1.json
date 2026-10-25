@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "postgresMajor": 16,
+  "schema": "public",
+  "barrier": "auth_identity_ddl_barrier",
+  "function": "auth_identity_ddl_gate",
+  "eventTrigger": "auth_identity_ddl_gate",
+  "tags": [
+    "CREATE FUNCTION",
+    "ALTER FUNCTION",
+    "DROP FUNCTION",
+    "CREATE PROCEDURE",
+    "ALTER PROCEDURE",
+    "DROP PROCEDURE",
+    "ALTER ROUTINE",
+    "DROP ROUTINE",
+    "CREATE EXTENSION",
+    "ALTER EXTENSION",
+    "DROP EXTENSION",
+    "CREATE LANGUAGE",
+    "ALTER LANGUAGE",
+    "DROP LANGUAGE",
+    "ALTER SCHEMA",
+    "DROP SCHEMA",
+    "DROP OWNED",
+    "GRANT",
+    "REVOKE",
+    "ALTER DEFAULT PRIVILEGES"
+  ],
+  "sourceSha256": "c7223bb69eba7c4804578cb6a0e4aeb2bf0593ed61de9282b96d34e0b5b2fdde"
+}

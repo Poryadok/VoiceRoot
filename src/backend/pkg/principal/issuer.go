@@ -33,6 +33,7 @@ type DelegatedUserInput struct {
 	AccountID    string
 	ProfileID    string
 	SessionEpoch int64
+	AccountType  string
 	// ClientExpiresAt is the expiry of the verified upstream client session.
 	// A delegated credential can never outlive it.
 	ClientExpiresAt time.Time
@@ -88,6 +89,9 @@ func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
 	if strings.TrimSpace(input.AccountID) == "" || strings.TrimSpace(input.ProfileID) == "" || input.SessionEpoch <= 0 || input.ClientExpiresAt.IsZero() {
 		return "", fmt.Errorf("account id, profile id, and positive session epoch are required")
 	}
+	if !validAccountType(input.AccountType) {
+		return "", fmt.Errorf("invalid delegated account type")
+	}
 	now := i.clock().UTC()
 	clientExpiresAt := input.ClientExpiresAt.UTC()
 	remaining := clientExpiresAt.Sub(now)
@@ -108,6 +112,7 @@ func (i *Issuer) IssueDelegatedUser(input DelegatedUserInput) (string, error) {
 		AccountID:    input.AccountID,
 		ProfileID:    input.ProfileID,
 		SessionEpoch: input.SessionEpoch,
+		AccountType:  input.AccountType,
 	}, now, remaining, clientExpiresAt)
 }
 
@@ -174,18 +179,24 @@ func isCanonicalRequestHash(value string) bool {
 }
 
 type rawClaims struct {
-	Type         string `json:"principal_type"`
-	Issuer       string `json:"iss"`
-	Subject      string `json:"sub"`
-	Audience     string `json:"aud"`
-	RPC          string `json:"rpc"`
-	RequestID    string `json:"request_id"`
-	RequestHash  string `json:"request_hash"`
-	AccountID    string `json:"account_id,omitempty"`
-	ProfileID    string `json:"profile_id,omitempty"`
-	SessionEpoch int64  `json:"session_epoch,omitempty"`
-	IssuedAt     int64  `json:"iat"`
-	NotBefore    int64  `json:"nbf"`
-	ExpiresAt    int64  `json:"exp"`
-	JWTID        string `json:"jti"`
+	Type           string `json:"principal_type"`
+	Issuer         string `json:"iss"`
+	Subject        string `json:"sub"`
+	Audience       string `json:"aud"`
+	RPC            string `json:"rpc"`
+	RequestID      string `json:"request_id"`
+	RequestHash    string `json:"request_hash"`
+	AccountID      string `json:"account_id,omitempty"`
+	ProfileID      string `json:"profile_id,omitempty"`
+	SessionEpoch   int64  `json:"session_epoch,omitempty"`
+	AccountType    string `json:"account_type,omitempty"`
+	ActorProfileID string `json:"actor_profile_id,omitempty"`
+	BotID          string `json:"bot_id,omitempty"`
+	SpaceID        string `json:"space_id,omitempty"`
+	InstallationID string `json:"installation_id,omitempty"`
+	BotScope       string `json:"bot_scope,omitempty"`
+	IssuedAt       int64  `json:"iat"`
+	NotBefore      int64  `json:"nbf"`
+	ExpiresAt      int64  `json:"exp"`
+	JWTID          string `json:"jti"`
 }

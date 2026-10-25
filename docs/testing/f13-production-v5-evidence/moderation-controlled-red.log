@@ -1,0 +1,13 @@
+[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
+go: downloading github.com/klauspost/compress v1.18.0
+--- FAIL: TestAutoModScanOutcomes_BoundedAndSkipped (0.00s)
+    --- FAIL: TestAutoModScanOutcomes_BoundedAndSkipped/budget (0.00s)
+        automod_scan_outcomes_test.go:74: 
+            	Error Trace:	/workspace/src/backend/moderation/internal/grpcsvc/automod_scan_outcomes_test.go:74
+            	Error:      	Not equal: 
+            	            	expected: int(1)
+            	            	actual  : int64(0)
+            	Test:       	TestAutoModScanOutcomes_BoundedAndSkipped/budget
+FAIL
+FAIL	voice/backend/moderation/internal/grpcsvc	0.011s
+FAIL

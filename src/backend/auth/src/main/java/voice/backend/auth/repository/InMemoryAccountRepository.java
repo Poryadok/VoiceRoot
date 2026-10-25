@@ -278,7 +278,7 @@ public class InMemoryAccountRepository implements AccountRepository {
     if (existing == null
         || !"deleted".equals(existing.status())
         || existing.deletedAt() == null
-        || existing.deletedAt().plus(Duration.ofDays(30)).isBefore(clock.instant())) {
+        || !existing.deletedAt().plus(Duration.ofDays(30)).isAfter(clock.instant())) {
       return false;
     }
     byId.put(accountId, copy(existing, "active", existing.totpSecret(), existing.totpEnabled(), null));

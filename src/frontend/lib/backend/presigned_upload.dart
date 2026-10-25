@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'gateway_http.dart';
 import 'presigned_connect_stub.dart'
     if (dart.library.io) 'presigned_connect_io.dart'
@@ -9,8 +11,10 @@ import 'presigned_connect_stub.dart'
 ///
 /// File/User sign URLs with docker-compose endpoints (`host.docker.internal` or
 /// `minio`). Host Flutter must connect via `127.0.0.1` (see docs/TESTING.md)
-/// while keeping the signed `Host` header.
+/// while keeping the signed `Host` header. Browsers must use the original URL:
+/// they cannot override Host, so the signed endpoint must be browser-reachable.
 Uri rewritePresignedUrlForHost(Uri uri) {
+  if (kIsWeb) return uri;
   if (uri.host == 'host.docker.internal' || uri.host == 'minio') {
     return uri.replace(host: '127.0.0.1');
   }

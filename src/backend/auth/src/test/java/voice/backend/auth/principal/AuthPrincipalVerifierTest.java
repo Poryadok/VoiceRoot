@@ -199,6 +199,69 @@ class AuthPrincipalVerifierTest {
         AuthPrincipalServerInterceptor.LOOKUP_RPC, "request-1", "sha256:" + "0".repeat(64)));
     assertEquals(Status.Code.PERMISSION_DENIED, failure.getStatus().getCode());
   }
+  @Test void roleFloorRequiresExactFreshBoundServiceAuthority() {
+    String rpc = AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC;
+    var base = claims();
+    base.put("iss", "role"); base.put("sub", "service:role");
+    base.put("principal_type", "service"); base.put("rpc", rpc);
+    base.remove("account_id"); base.remove("profile_id"); base.remove("session_epoch");
+    assertEquals("role", verifier.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64)).issuer());
+    assertThrows(StatusRuntimeException.class,
+        () -> verifier.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64)));
+    for (String field : List.of("aud", "rpc", "request_id", "request_hash", "iss", "sub", "jti")) {
+      var changed = new HashMap<>(base);
+      changed.put("jti", UUID.randomUUID().toString());
+      if (field.equals("jti")) changed.remove(field); else changed.put(field, "wrong");
+      assertThrows(StatusRuntimeException.class,
+          () -> verifier.verify(token(changed), rpc, "request-1", "sha256:" + "0".repeat(64)), field);
+    }
+    for (String other : List.of(AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC,
+        AuthPrincipalServerInterceptor.CONSUME_RPC, AuthPrincipalServerInterceptor.LOOKUP_RPC,
+        AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC, AuthPrincipalServerInterceptor.ISSUE_RPC)) {
+      var changed = new HashMap<>(base);
+      changed.put("jti", UUID.randomUUID().toString()); changed.put("rpc", other);
+      var denied = assertThrows(StatusRuntimeException.class,
+          () -> verifier.verify(token(changed), other, "request-1", "sha256:" + "0".repeat(64)));
+      assertEquals(Status.Code.PERMISSION_DENIED, denied.getStatus().getCode());
+    }
+    for (boolean keyFailure : List.of(true, false)) {
+      var unavailable = new AuthPrincipalVerifier(
+          (issuer, kid) -> { if (keyFailure) throw new IllegalStateException("JWKS unavailable"); return (RSAPublicKey) KEY.getPublic(); },
+          account -> { throw new AssertionError("service floor verification must not query user epoch"); },
+          (issuer, jti, expires) -> { throw new IllegalStateException("replay unavailable"); },
+          Clock.fixed(NOW, ZoneOffset.UTC));
+      assertThrows(StatusRuntimeException.class,
+          () -> unavailable.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64)));
+    }
+  }
+
+  @Test void spaceFloorBindsExactServiceAndRejectsReplayOrChangedFields() {
+    String rpc = AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC;
+    var base = claims();
+    base.put("iss", "space"); base.put("sub", "service:space");
+    base.put("principal_type", "service"); base.put("rpc", rpc);
+    base.remove("account_id"); base.remove("profile_id"); base.remove("session_epoch");
+    assertEquals("space", verifier.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64)).issuer());
+    assertEquals(Status.Code.UNAUTHENTICATED, assertThrows(StatusRuntimeException.class,
+        () -> verifier.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64))).getStatus().getCode());
+    for (String field : List.of("aud", "rpc", "request_id", "request_hash", "iss", "sub", "jti")) {
+      var changed = new HashMap<>(base);
+      changed.put("jti", UUID.randomUUID().toString());
+      if (field.equals("jti")) changed.remove(field); else changed.put(field, "wrong");
+      assertEquals(Status.Code.UNAUTHENTICATED, assertThrows(StatusRuntimeException.class,
+          () -> verifier.verify(token(changed), rpc, "request-1", "sha256:" + "0".repeat(64)), field).getStatus().getCode());
+    }
+    for (boolean keyFailure : List.of(true, false)) {
+      var unavailable = new AuthPrincipalVerifier(
+          (issuer, kid) -> { if (keyFailure) throw new PrincipalDependencyUnavailableException(); return (RSAPublicKey) KEY.getPublic(); },
+          account -> { throw new AssertionError("service floor must not read delegated epoch"); },
+          (issuer, jti, expires) -> { throw new PrincipalDependencyUnavailableException(); },
+          Clock.fixed(NOW, ZoneOffset.UTC));
+      assertEquals(Status.Code.UNAVAILABLE, assertThrows(StatusRuntimeException.class,
+          () -> unavailable.verify(token(base), rpc, "request-1", "sha256:" + "0".repeat(64))).getStatus().getCode());
+    }
+  }
+
   @Test void canonicalHashIgnoresProtobufMapInsertionOrder() {
     var a=Struct.newBuilder().putFields("z",Value.newBuilder().setStringValue("last").build()).putFields("a",Value.newBuilder().setNumberValue(1).build()).build();
     var b=Struct.newBuilder().putFields("a",Value.newBuilder().setNumberValue(1).build()).putFields("z",Value.newBuilder().setStringValue("last").build()).build();

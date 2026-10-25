@@ -231,7 +231,7 @@ Federation ──gRPC bidirectional stream──► External Node
 | Bot Service          | PostgreSQL `bot_db`                                                                 |
 | Federation Service   | PostgreSQL `federation_db`                                                          |
 | Story Service        | PostgreSQL `story_db`, R2 (медиа)                                                   |
-| Analytics Service    | ClickHouse, Redis (буфер)                                                           |
+| Analytics Service    | ClickHouse; JetStream durable backlog + in-memory batch buffer                       |
 
 ## Масштабирование
 
@@ -254,6 +254,28 @@ Federation ──gRPC bidirectional stream──► External Node
 ## Отказоустойчивость
 
 - **Circuit breaker** на всех gRPC-вызовах между сервисами
+- Первый активный Go slice — unary-вызовы обычных upstream ClientConn Gateway
+  через shared `pkg/grpcclient`. Каждый ClientConn владеет независимым breaker
+  с ключом полного RPC method; protected principal/mTLS clients, другие Go
+  consumers, Java Auth и streaming ещё требуют отдельного внедрения.
+- Контракт `BE040-GATEWAY-UNARY-v1`: default threshold `5` failures в окне
+  `30s` от первого failure, OPEN `10s`, HALF_OPEN — один реальный caller.
+  Только `Unavailable`/`DeadlineExceeded` при живом caller context считаются
+  failures. Успех сбрасывает историю; business errors, caller cancellation и
+  caller deadline нейтральны. Нейтральный probe снова открывает breaker на
+  `10s`, поскольку deny/cancel не доказывает recovery. Это не slow-call detector.
+- State изолирован по ClientConn и method; generation/entry fencing запрещает
+  позднему ответу менять новый цикл. Default cap — `1024` methods; удалять можно
+  только CLOSED entries без outstanding calls после `10min` idle. При исчерпании
+  cap новый method получает local `Unavailable`, без обхода admission. Config
+  immutable, без env/live reload; положительные maxima: threshold `100`, окно
+  `5min`, OPEN `1min`, cap `4096`, idle `1h`. Health Check/List не меняют business
+  breaker; rejection не вызывает upstream и не продлевает OPEN.
+- Breaker не добавляет application retry, hedging, deadlines или fallback/cache
+  responses. Допущенный logical call вызывает invoker максимум один раз;
+  `WithDisableRetry` отключает configured retry, но сохраняет transparent retries
+  grpc-go. Это не гарантия одного wire attempt/exactly-once mutation. Новый retry
+  требует отдельного method-specific idempotency/outcome и authority contract.
 - **Retry с exponential backoff** для NATS и внешних API
 - **Graceful degradation**: поиск, аналитика, сторис — некритичные, деградируют без остановки core
 - **Порядок деградации и целевые SLO** по пользовательским путям, canary/rollback, владение миграциями БД — [OPERATIONS.md](OPERATIONS.md) (Tier 0: Gateway, Auth, User, Chat, Messaging, Realtime + критичный Redis/NATS; Tier 1/2 — см. там)

@@ -2,7 +2,9 @@ package grpcsvc
 
 import (
 	"context"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -28,6 +30,7 @@ func (s *ModerationGRPC) CheckMessage(ctx context.Context, req *moderationv1.Che
 			CheckResult: &moderationv1.CheckResult{Allowed: true},
 		}, nil
 	}
+	defer s.recordScanBestEffort(ctx)
 	content := strings.TrimSpace(req.GetContent())
 	if !isSpamPattern(content) {
 		return &moderationv1.CheckMessageResponse{
@@ -54,6 +57,42 @@ func (s *ModerationGRPC) CheckMessage(ctx context.Context, req *moderationv1.Che
 	return &moderationv1.CheckMessageResponse{
 		CheckResult: &moderationv1.CheckResult{Allowed: false, BlockReason: &reason},
 	}, nil
+}
+
+// Metrics run only after the business decision, with a separate cancellation
+// budget. A locked counter must neither expire later business queries nor use
+// the remaining transport deadline before the computed result can be returned.
+func (s *ModerationGRPC) recordScanBestEffort(ctx context.Context) {
+	outcome := "acknowledged"
+	defer func() {
+		metrics := s.ScanMetrics
+		if metrics == nil {
+			metrics = defaultScanMetrics
+		}
+		metrics.outcomes.WithLabelValues(outcome).Inc()
+	}()
+	if ctx.Err() != nil {
+		outcome = "skipped_canceled"
+		return
+	}
+	budget := 50 * time.Millisecond
+	if deadline, ok := ctx.Deadline(); ok {
+		budget = min(budget, time.Until(deadline)/4)
+	}
+	if budget < time.Millisecond {
+		outcome = "skipped_budget"
+		return
+	}
+	metricCtx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	record := s.scanRecorder
+	if record == nil {
+		record = s.AutoMod.RecordScan
+	}
+	if err := record(metricCtx); err != nil {
+		outcome = "unconfirmed"
+		slog.WarnContext(ctx, "automod scan counter update failed")
+	}
 }
 
 func (s *ModerationGRPC) GetAutoModStats(ctx context.Context, _ *moderationv1.GetAutoModStatsRequest) (*moderationv1.GetAutoModStatsResponse, error) {

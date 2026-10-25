@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"voice/backend/user/internal/authctx"
+	"voice/backend/user/internal/profilemutation"
 	"voice/backend/user/internal/store"
 
 	userv1 "voice.app/voice/user/v1"
@@ -211,8 +212,11 @@ func (s *UserGRPC) CheckOrganizationVerification(ctx context.Context, req *userv
 			},
 		}, nil
 	}
-	updated, err := s.Profiles.MarkOrgVerificationVerified(ctx, profileID)
+	updated, err := s.Profiles.MarkOrgVerificationVerified(ctx, profileID, token)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.FailedPrecondition, "org verification expired or superseded")
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if s.Events != nil {
@@ -259,8 +263,11 @@ func (s *UserGRPC) ApplyDowngradeProfiles(ctx context.Context, req *userv1.Apply
 // DeleteProfile soft-archives a secondary profile.
 func (s *UserGRPC) DeleteProfile(ctx context.Context, req *userv1.DeleteProfileRequest) (*userv1.DeleteProfileResponse, error) {
 	accountID, ok := authctx.AccountID(ctx)
-	if !ok {
+	if !ok || accountID == uuid.Nil {
 		return nil, status.Error(codes.Unauthenticated, "missing credentials")
+	}
+	if err := s.allowProfileMutation(ctx, accountID, profilemutation.Delete); err != nil {
+		return nil, err
 	}
 	profileID, err := uuid.Parse(strings.TrimSpace(req.GetProfileId()))
 	if err != nil {

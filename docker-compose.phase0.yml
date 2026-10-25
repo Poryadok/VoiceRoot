@@ -1,10 +1,50 @@
 # Opt-in LOCAL/CI fixture only. Generate PHASE0_FIXTURE_DIR before using it.
 services:
+  search:
+    environment:
+      S2S_JWKS_CA_FILE: /run/phase0/jwks-ca/ca.crt
+    volumes:
+      - phase0_space_jwks_ca:/run/phase0/jwks-ca:ro
+    depends_on:
+      phase0-space-jwks-ca:
+        condition: service_completed_successfully
+
+  # Space uses fixture signing keys in this opt-in overlay. Consume its actual
+  # HTTPS set, rather than the base initializer's distinct Space key generation.
+  realtime:
+    environment:
+      REALTIME_SPACE_PRINCIPAL_JWKS_URL: https://space:8443/.well-known/jwks.json
+      REALTIME_SPACE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+    depends_on:
+      space:
+        condition: service_healthy
   gateway:
     user: "0:0"
     environment:
+      GATEWAY_BOT_ADMIN_AUDIT_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
+      GATEWAY_BOT_ADMIN_AUDIT_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_BOT_ADMIN_AUDIT_TLS_SERVER_NAME: bot
+      GATEWAY_BOT_ADMIN_AUDIT_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_BOT_ADMIN_AUDIT_GRPC_ADDR: bot:9446
+      GATEWAY_ROLE_AUDIT_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
+      GATEWAY_ROLE_AUDIT_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_ROLE_AUDIT_TLS_SERVER_NAME: role
+      GATEWAY_ROLE_AUDIT_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_ROLE_AUDIT_GRPC_ADDR: role:9091
       GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/gateway
       GATEWAY_PRINCIPAL_ACTIVE_KID: current
+      GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR: space:9096
+      GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME: space
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_SPACE_LIFECYCLE_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
+      GATEWAY_CHAT_AUDIT_GRPC_ADDR: chat:9094
+      GATEWAY_CHAT_AUDIT_TLS_CA_FILE: /run/phase0/ca.crt
+      GATEWAY_CHAT_AUDIT_TLS_SERVER_NAME: chat
+      GATEWAY_CHAT_AUDIT_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt
+      GATEWAY_CHAT_AUDIT_CLIENT_KEY_FILE: /run/phase0/gateway-client.key
       GATEWAY_MATCHMAKING_COMPLETE_GRPC_ADDR: matchmaking:9092
       GATEWAY_MATCHMAKING_COMPLETE_TLS_CA_FILE: /run/phase0/ca.crt
       GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME: matchmaking
@@ -18,10 +58,63 @@ services:
   space:
     user: "0:0"
     environment:
+      SPACE_BOT_MEMBERSHIP_REPLAY_REDIS_ADDR: redis:6379
+      SPACE_BOT_MEMBERSHIP_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_BOT_MEMBERSHIP_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_BOT_MEMBERSHIP_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_BOT_MEMBERSHIP_GRPC_LISTEN: :9100
       SPACE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/space
       SPACE_PRINCIPAL_ACTIVE_KID: current
       SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
       SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN: :9096
+      SPACE_ROLE_OVERRIDE_PRINCIPAL_GRPC_LISTEN: :9099
+      SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_ROLE_OVERRIDE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_ROLE_OVERRIDE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_ROLE_OVERRIDE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      SPACE_GATEWAY_LIFECYCLE_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_GATEWAY_LIFECYCLE_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_GATEWAY_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_GATEWAY_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/gateway/jwks.json
+      SPACE_GATEWAY_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_GATEWAY_PRINCIPAL_REDIS_ADDR: redis:6379
+      SPACE_CREATOR_AUTH_GRPC_ADDR: auth:9092
+      SPACE_CREATOR_AUTH_TLS_CA_FILE: /run/phase0/ca.crt
+      SPACE_CREATOR_AUTH_TLS_SERVER_NAME: auth
+      SPACE_CREATOR_AUTH_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
+      SPACE_CREATOR_AUTH_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
+      SPACE_CHAT_COMPOSITE_GRPC_LISTEN: :9097
+      SPACE_CHAT_COMPOSITE_TLS_CERT_FILE: /run/phase0/space-chat-composite-grpc.crt
+      SPACE_CHAT_COMPOSITE_TLS_KEY_FILE: /run/phase0/space-chat-composite-grpc.key
+      SPACE_CHAT_COMPOSITE_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_URL: https://chat:8443/.well-known/jwks.json
+      SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
+      SPACE_CHAT_COMPOSITE_PRINCIPAL_JWKS_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
+      SPACE_CHAT_COMPOSITE_PRINCIPAL_REDIS_ADDR: redis:6379
+      SPACE_AUDIT_PRINCIPAL_GRPC_LISTEN: :9098
+      SPACE_AUDIT_PRINCIPAL_TLS_CERT_FILE: /run/phase0/space-audit-grpc.crt
+      SPACE_AUDIT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/space-audit-grpc.key
+      SPACE_AUDIT_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_AUDIT_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
+      S2S_JWKS_URLS_JSON: '{"social":"https://social:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json","messaging":"https://messaging:8445/.well-known/principal-jwks.json"}'
+      SPACE_MESSAGING_COMMUNICATION_GRPC_LISTEN: :9101
+      SPACE_MESSAGING_COMMUNICATION_REPLAY_REDIS_ADDR: redis:6379
+      SPACE_MESSAGING_COMMUNICATION_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
+      SPACE_MESSAGING_COMMUNICATION_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
+      SPACE_MESSAGING_COMMUNICATION_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_MESSAGING_COMMUNICATION_JWKS_CA_FILE: /run/phase0/ca.crt
+      SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
+      SPACE_MESSAGING_COMMUNICATION_JWKS_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
+      S2S_JWKS_CA_FILE: /run/phase0/jwks-ca/ca.crt
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/space-role-client.key
+      SPACE_BOT_COMPOSITE_GRPC_ADDR: bot:9444
+      SPACE_BOT_COMPOSITE_TLS_CA_FILE: /run/phase0/ca.crt
+      SPACE_BOT_COMPOSITE_TLS_SERVER_NAME: bot
+      SPACE_BOT_COMPOSITE_CLIENT_CERT_FILE: /run/phase0/space-lifecycle-client.crt
+      SPACE_BOT_COMPOSITE_CLIENT_KEY_FILE: /run/phase0/space-lifecycle-client.key
       ROLE_PRINCIPAL_GRPC_ADDR: role:9091
       ROLE_PRINCIPAL_TLS_CA_FILE: /run/phase0/ca.crt
       SPACE_ROLE_CLIENT_CERT_FILE: /run/phase0/space-role-client.crt
@@ -37,6 +130,14 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-client.key:/run/phase0/space-role-client.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.crt:/run/phase0/space-lifecycle-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-lifecycle-client.key:/run/phase0/space-lifecycle-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-chat-composite-grpc.crt:/run/phase0/space-chat-composite-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-chat-composite-grpc.key:/run/phase0/space-chat-composite-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-audit-grpc.crt:/run/phase0/space-audit-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/space-audit-grpc.key:/run/phase0/space-audit-grpc.key:ro
+      - phase0_space_jwks_ca:/run/phase0/jwks-ca:ro
+    depends_on:
+      phase0-space-jwks-ca:
+        condition: service_completed_successfully
   matchmaking:
     environment:
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
@@ -116,18 +217,61 @@ services:
     user: "0:0"
     expose: ["9443", "9444", "8444"]
     environment:
-      BOT_PRINCIPAL_PRIVATE_KEY_FILE: /run/phase0/bot/current.pem
-      BOT_PRINCIPAL_KEY_ID: current
+      BOT_SPACE_MEMBERSHIP_SOURCE_FILE: /native-bot-evidence/source.uuid
+      BOT_SPACE_MEMBERSHIP_SOURCE_KIND: KNOWN_RETAINED
+      BOT_INSTALL_AUTH_TLS_KEY_FILE: /run/phase0/bot-client.key
+      BOT_INSTALL_AUTH_TLS_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_INSTALL_AUTH_TLS_SERVER_NAME: auth
+      BOT_INSTALL_AUTH_TLS_CA_FILE: /run/phase0/ca.crt
+      BOT_INSTALL_AUTH_GRPC_ADDR: auth:9092
+      BOT_INSTALL_MESSAGING_TLS_KEY_FILE: /run/phase0/bot-client.key
+      BOT_INSTALL_MESSAGING_TLS_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_INSTALL_MESSAGING_TLS_SERVER_NAME: messaging
+      BOT_INSTALL_MESSAGING_TLS_CA_FILE: /run/phase0/ca.crt
+      BOT_INSTALL_MESSAGING_GRPC_ADDR: messaging:9094
+      BOT_INSTALL_CHAT_TLS_KEY_FILE: /run/phase0/bot-client.key
+      BOT_INSTALL_CHAT_TLS_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_INSTALL_CHAT_TLS_SERVER_NAME: chat
+      BOT_INSTALL_CHAT_TLS_CA_FILE: /run/phase0/ca.crt
+      BOT_INSTALL_CHAT_GRPC_ADDR: chat:9095
+      BOT_INSTALL_ROLE_TLS_KEY_FILE: /run/phase0/bot-client.key
+      BOT_INSTALL_ROLE_TLS_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_INSTALL_ROLE_TLS_SERVER_NAME: role
+      BOT_INSTALL_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
+      BOT_INSTALL_ROLE_GRPC_ADDR: role:9091
+      BOT_SPACE_MEMBERSHIP_TLS_KEY_FILE: /run/phase0/bot-client.key
+      BOT_SPACE_MEMBERSHIP_TLS_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_SPACE_MEMBERSHIP_TLS_SERVER_NAME: space
+      BOT_SPACE_MEMBERSHIP_TLS_CA_FILE: /run/phase0/ca.crt
+      BOT_SPACE_MEMBERSHIP_GRPC_ADDR: space:9100
+      BOT_INSTALL_GATEWAY_JWKS_CA_FILE: /run/phase0/ca.crt
+      BOT_INSTALL_GATEWAY_JWKS_URL: https://phase0-jwks:8443/gateway-bootstrap/jwks.json
+      BOT_INSTALL_TLS_CLIENT_CA_FILE: /run/phase0/ca.crt
+      BOT_INSTALL_TLS_KEY_FILE: /run/phase0/bot-game-event.key
+      BOT_INSTALL_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
+      BOT_INSTALL_GRPC_LISTEN: :9446
+      BOT_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/bot
+      BOT_PRINCIPAL_ACTIVE_KID: current
       BOT_PRINCIPAL_JWKS_LISTEN: :8444
       BOT_PRINCIPAL_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
       BOT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/bot-game-event.key
-      BOT_PRINCIPAL_TLS_CLIENT_CA_FILE: /run/phase0/gameintegration-client-ca.crt
+      BOT_PRINCIPAL_TLS_CLIENT_CA_FILE: /run/phase0/bot-jwks-client-ca.crt
       BOT_PRINCIPAL_REPLAY_REDIS_URL: redis://redis:6379/0
       BOT_GAME_EVENT_GRPC_LISTEN: :9443
       BOT_GAME_EVENT_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
       BOT_GAME_EVENT_TLS_KEY_FILE: /run/phase0/bot-game-event.key
       BOT_GAME_EVENT_CLIENT_CA_FILE: /run/phase0/ca.crt
       BOT_SPACE_LIFECYCLE_GRPC_LISTEN: :9444
+      BOT_MESSAGE_SEND_GRPC_ADDR: messaging:9095
+      BOT_MESSAGE_SEND_TLS_CA_FILE: /run/phase0/ca.crt
+      BOT_MESSAGE_SEND_TLS_SERVER_NAME: messaging
+      BOT_MESSAGE_SEND_CLIENT_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_MESSAGE_SEND_CLIENT_KEY_FILE: /run/phase0/bot-client.key
+      BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_URL: https://messaging:8445/.well-known/principal-jwks.json
+      BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CA_FILE: /run/phase0/ca.crt
+      BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CLIENT_CERT_FILE: /run/phase0/bot-client.crt
+      BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CLIENT_KEY_FILE: /run/phase0/bot-client.key
+      BOT_MESSAGE_AUTHORITY_MESSAGING_URI_SAN: spiffe://voice.local/phase0/messaging
       BOT_SPACE_LIFECYCLE_TLS_CERT_FILE: /run/phase0/bot-game-event.crt
       BOT_SPACE_LIFECYCLE_TLS_KEY_FILE: /run/phase0/bot-game-event.key
       BOT_SPACE_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/space-lifecycle-client-ca.crt
@@ -145,6 +289,10 @@ services:
       phase0-jwks:
         condition: service_started
     volumes:
+      - bot_membership_source:/native-bot-evidence:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/bot-jwks-client-ca.crt:/run/phase0/bot-jwks-client-ca.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/bot-client.key:/run/phase0/bot-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/bot-client.crt:/run/phase0/bot-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/bot:/run/phase0/bot:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/bot-game-event.crt:/run/phase0/bot-game-event.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/bot-game-event.key:/run/phase0/bot-game-event.key:ro
@@ -226,12 +374,31 @@ services:
     user: "0:0"
     expose: ["9091"]
     environment:
+      ROLE_AUTH_SESSION_FLOOR_CLIENT_KEY_FILE: /run/phase0/role-client.key
+      ROLE_AUTH_SESSION_FLOOR_CLIENT_CERT_FILE: /run/phase0/role-client.crt
+      ROLE_AUTH_SESSION_FLOOR_TLS_SERVER_NAME: auth
+      ROLE_AUTH_SESSION_FLOOR_TLS_CA_FILE: /run/phase0/ca.crt
+      ROLE_AUTH_SESSION_FLOOR_GRPC_ADDR: auth:9092
+      S2S_JWKS_CLIENT_KEY_FILE: /run/phase0/role-client.key
+      S2S_JWKS_CLIENT_CERT_FILE: /run/phase0/role-client.crt
+      ROLE_BOT_LIFECYCLE_ENABLED: "true"
+      ROLE_DELEGATED_USER_ENABLED: "true"
       ROLE_PRINCIPAL_GRPC_LISTEN: :9091
+      ROLE_SPACE_MEMBER_AUTHORITY_GRPC_ADDR: space:9099
+      ROLE_SPACE_MEMBER_AUTHORITY_TLS_CA_FILE: /run/phase0/ca.crt
+      ROLE_SPACE_MEMBER_AUTHORITY_TLS_SERVER_NAME: space
+      ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_CERT_FILE: /run/phase0/role-client.crt
+      ROLE_SPACE_MEMBER_AUTHORITY_CLIENT_KEY_FILE: /run/phase0/role-client.key
       ROLE_PRINCIPAL_TLS_CERT_FILE: /run/phase0/role.crt
       ROLE_PRINCIPAL_TLS_KEY_FILE: /run/phase0/role.key
       ROLE_PRINCIPAL_CLIENT_CA_FILE: /run/phase0/ca.crt
       ROLE_PRINCIPAL_REPLAY_REDIS_ADDR: redis:6379
-      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
+      ROLE_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/role
+      ROLE_PRINCIPAL_ACTIVE_KID: current
+      ROLE_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/role.crt
+      ROLE_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/role.key
+      ROLE_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
+      S2S_JWKS_URLS_JSON: '{"space":"https://phase0-jwks:8443/space/jwks.json","gameintegration":"https://gameintegration:8443/internal/v1/principal/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","gateway":"https://phase0-jwks:8443/gateway-bootstrap/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json","chat":"https://chat:8443/.well-known/jwks.json","messaging":"https://messaging:8445/.well-known/principal-jwks.json"}'
       S2S_JWKS_CA_FILE: /run/phase0/ca.crt
     depends_on:
       redis:
@@ -241,11 +408,59 @@ services:
     volumes:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.crt:/run/phase0/role.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role.key:/run/phase0/role.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role-client.crt:/run/phase0/role-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/role-client.key:/run/phase0/role-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/role:/run/phase0/role:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
   chat:
     user: "0:0"
-    expose: ["9091"]
+    expose: ["9091", "9094", "8443"]
     environment:
+      CHAT_ROLE_DECISION_GRPC_ADDR: role:9091
+      CHAT_ROLE_DECISION_TLS_CA_FILE: /run/phase0/ca.crt
+      CHAT_ROLE_DECISION_TLS_SERVER_NAME: role
+      CHAT_ROLE_DECISION_CLIENT_CERT_FILE: /run/phase0/chat-client.crt
+      CHAT_ROLE_DECISION_CLIENT_KEY_FILE: /run/phase0/chat-client.key
+      CHAT_SCOPE_BOT_REPLAY_REDIS_ADDR: redis:6379
+      CHAT_SCOPE_BOT_JWKS_CLIENT_KEY_FILE: /run/phase0/chat-jwks-client.key
+      CHAT_SCOPE_BOT_JWKS_CLIENT_CERT_FILE: /run/phase0/chat-jwks-client.crt
+      CHAT_SCOPE_BOT_JWKS_CA_FILE: /run/phase0/ca.crt
+      CHAT_SCOPE_BOT_JWKS_URL: https://bot:8444/.well-known/principal-jwks.json
+      CHAT_SCOPE_BOT_CLIENT_CA_FILE: /run/phase0/ca.crt
+      CHAT_SCOPE_BOT_TLS_KEY_FILE: /run/phase0/chat-create-grpc.key
+      CHAT_SCOPE_BOT_TLS_CERT_FILE: /run/phase0/chat-create-grpc.crt
+      CHAT_SCOPE_BOT_GRPC_LISTEN: :9095
+      CHAT_PRINCIPAL_SIGNING_KEYS_DIR: /run/phase0/chat
+      CHAT_PRINCIPAL_ACTIVE_KID: current
+      CHAT_PRINCIPAL_JWKS_TLS_CERT_FILE: /run/phase0/chat-jwks.crt
+      CHAT_PRINCIPAL_JWKS_TLS_KEY_FILE: /run/phase0/chat-jwks.key
+      CHAT_PRINCIPAL_JWKS_CLIENT_CA_FILE: /run/phase0/ca.crt
+      CHAT_PRINCIPAL_JWKS_HTTPS_LISTEN: :8443
+      CHAT_CREATE_GRPC_LISTEN: :9094
+      CHAT_CREATE_TLS_CERT_FILE: /run/phase0/chat-create-grpc.crt
+      CHAT_CREATE_TLS_KEY_FILE: /run/phase0/chat-create-grpc.key
+      CHAT_CREATE_CLIENT_CA_FILE: /run/phase0/ca.crt
+      CHAT_CREATE_PRINCIPAL_JWKS_URL: https://phase0-jwks:8443/gateway/jwks.json
+      CHAT_CREATE_BOT_PRINCIPAL_JWKS_URL: https://bot:8444/.well-known/principal-jwks.json
+      CHAT_CREATE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      CHAT_CREATE_PRINCIPAL_JWKS_CLIENT_CERT_FILE: /run/phase0/chat-jwks-client.crt
+      CHAT_CREATE_PRINCIPAL_JWKS_CLIENT_KEY_FILE: /run/phase0/chat-jwks-client.key
+      CHAT_CREATE_PRINCIPAL_REDIS_ADDR: redis:6379
+      CHAT_CREATE_AUTH_GRPC_ADDR: auth:9092
+      CHAT_CREATE_AUTH_TLS_CA_FILE: /run/phase0/ca.crt
+      CHAT_CREATE_AUTH_TLS_SERVER_NAME: auth
+      CHAT_CREATE_AUTH_CLIENT_CERT_FILE: /run/phase0/chat-client.crt
+      CHAT_CREATE_AUTH_CLIENT_KEY_FILE: /run/phase0/chat-client.key
+      CHAT_CREATE_SPACE_GRPC_ADDR: space:9097
+      CHAT_CREATE_SPACE_TLS_CA_FILE: /run/phase0/ca.crt
+      CHAT_CREATE_SPACE_TLS_SERVER_NAME: space
+      CHAT_CREATE_SPACE_CLIENT_CERT_FILE: /run/phase0/chat-client.crt
+      CHAT_CREATE_SPACE_CLIENT_KEY_FILE: /run/phase0/chat-client.key
+      CHAT_CREATE_AUDIT_GRPC_ADDR: space:9098
+      CHAT_CREATE_AUDIT_TLS_CA_FILE: /run/phase0/ca.crt
+      CHAT_CREATE_AUDIT_TLS_SERVER_NAME: space
+      CHAT_CREATE_AUDIT_CLIENT_CERT_FILE: /run/phase0/chat-client.crt
+      CHAT_CREATE_AUDIT_CLIENT_KEY_FILE: /run/phase0/chat-client.key
       CHAT_GIS_GRPC_LISTEN: :9091
       CHAT_GIS_TLS_CERT_FILE: /run/phase0/chat-gis-grpc.crt
       CHAT_GIS_TLS_KEY_FILE: /run/phase0/chat-gis-grpc.key
@@ -259,6 +474,15 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/chat:/run/phase0/chat:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-jwks.crt:/run/phase0/chat-jwks.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-jwks.key:/run/phase0/chat-jwks.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-create-grpc.crt:/run/phase0/chat-create-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-create-grpc.key:/run/phase0/chat-create-grpc.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-client.crt:/run/phase0/chat-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-client.key:/run/phase0/chat-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-jwks-client.crt:/run/phase0/chat-jwks-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-jwks-client.key:/run/phase0/chat-jwks-client.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-gis-grpc.crt:/run/phase0/chat-gis-grpc.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/chat-gis-grpc.key:/run/phase0/chat-gis-grpc.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
@@ -267,6 +491,43 @@ services:
     user: "0:0"
     expose: ["9091"]
     environment:
+      ROLE_GRPC_ADDR: role:9091
+      MESSAGING_ROLE_TLS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_SPACE_COMMUNICATION_GRPC_ADDR: space:9101
+      MESSAGING_SPACE_COMMUNICATION_TLS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_SPACE_COMMUNICATION_CLIENT_CERT_FILE: /run/phase0/messaging-client.crt
+      MESSAGING_SPACE_COMMUNICATION_CLIENT_KEY_FILE: /run/phase0/messaging-client.key
+      MESSAGING_BOT_SEND_GRPC_LISTEN: :9095
+      MESSAGING_BOT_SEND_TLS_CERT_FILE: /run/phase0/messaging-gameintegration-grpc.crt
+      MESSAGING_BOT_SEND_TLS_KEY_FILE: /run/phase0/messaging-gameintegration-grpc.key
+      MESSAGING_BOT_SEND_CLIENT_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_BOT_SEND_AUTHORITY_GRPC_ADDR: bot:9444
+      MESSAGING_BOT_SEND_AUTHORITY_TLS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_BOT_SEND_AUTHORITY_TLS_SERVER_NAME: bot
+      MESSAGING_BOT_SEND_AUTHORITY_CLIENT_CERT_FILE: /run/phase0/messaging-bot-authority-client.crt
+      MESSAGING_BOT_SEND_AUTHORITY_CLIENT_KEY_FILE: /run/phase0/messaging-bot-authority-client.key
+      MESSAGING_BOT_SEND_SPACE_GRPC_ADDR: space:9099
+      MESSAGING_BOT_SEND_SPACE_TLS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_BOT_SEND_SPACE_TLS_SERVER_NAME: space
+      MESSAGING_BOT_SEND_SPACE_CLIENT_CERT_FILE: /run/phase0/messaging-client.crt
+      MESSAGING_BOT_SEND_SPACE_CLIENT_KEY_FILE: /run/phase0/messaging-client.key
+      MESSAGING_ROLE_TLS_SERVER_NAME: role
+      MESSAGING_ROLE_CLIENT_CERT_FILE: /run/phase0/messaging-client.crt
+      MESSAGING_ROLE_CLIENT_KEY_FILE: /run/phase0/messaging-client.key
+      MESSAGING_ROLE_JWKS_LISTEN: :8445
+      MESSAGING_ROLE_JWKS_TLS_CERT_FILE: /run/phase0/messaging-gameintegration-grpc.crt
+      MESSAGING_ROLE_JWKS_TLS_KEY_FILE: /run/phase0/messaging-gameintegration-grpc.key
+      MESSAGING_ROLE_JWKS_CLIENT_CA_FILE: /run/phase0/ca.crt
+      SPACE_PRINCIPAL_JWKS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_BOT_PIN_CLEANUP_REPLAY_REDIS_URL: redis://redis:6379/0
+      MESSAGING_BOT_PIN_CLEANUP_JWKS_CLIENT_KEY_FILE: /run/phase0/gameintegration-messaging-client.key
+      MESSAGING_BOT_PIN_CLEANUP_JWKS_CLIENT_CERT_FILE: /run/phase0/gameintegration-messaging-client.crt
+      MESSAGING_BOT_PIN_CLEANUP_JWKS_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_BOT_PIN_CLEANUP_JWKS_URL: https://bot:8444/.well-known/principal-jwks.json
+      MESSAGING_BOT_PIN_CLEANUP_CLIENT_CA_FILE: /run/phase0/ca.crt
+      MESSAGING_BOT_PIN_CLEANUP_TLS_KEY_FILE: /run/phase0/messaging-gameintegration-grpc.key
+      MESSAGING_BOT_PIN_CLEANUP_TLS_CERT_FILE: /run/phase0/messaging-gameintegration-grpc.crt
+      MESSAGING_BOT_PIN_CLEANUP_GRPC_LISTEN: :9094
       BOT_PRINCIPAL_JWKS_URL: https://bot:8444/.well-known/principal-jwks.json
       MESSAGING_BOT_PRINCIPAL_TLS_CERT_FILE: /run/phase0/gameintegration-messaging-client.crt
       MESSAGING_BOT_PRINCIPAL_TLS_KEY_FILE: /run/phase0/gameintegration-messaging-client.key
@@ -289,6 +550,10 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.crt:/run/phase0/gameintegration-messaging-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-messaging-client.key:/run/phase0/gameintegration-messaging-client.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-gameintegration-grpc.crt:/run/phase0/messaging-gameintegration-grpc.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-client.crt:/run/phase0/messaging-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-client.key:/run/phase0/messaging-client.key:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-bot-authority-client.crt:/run/phase0/messaging-bot-authority-client.crt:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-bot-authority-client.key:/run/phase0/messaging-bot-authority-client.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/messaging-gameintegration-grpc.key:/run/phase0/messaging-gameintegration-grpc.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.crt:/run/phase0/gameintegration-client.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/gameintegration-client.key:/run/phase0/gameintegration-client.key:ro
@@ -299,10 +564,13 @@ services:
     expose: ["9091"]
     environment:
       AUTH_PRINCIPAL_GRPC_PORT: "9091"
+      AUTH_SESSION_FLOOR_GRPC_PORT: "9092"
+      AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE: /run/phase0/ca.crt
       AUTH_GRPC_TLS_CERT_FILE: /run/phase0/auth.crt
       AUTH_GRPC_TLS_KEY_FILE: /run/phase0/auth.key
-      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json"}'
-      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12
+      S2S_JWKS_URLS_JSON: '{"gateway":"https://phase0-jwks:8443/gateway/jwks.json","space":"https://phase0-jwks:8443/space/jwks.json","voice":"https://voice:8443/internal/v1/principal/jwks.json","chat":"https://chat:8443/.well-known/jwks.json","role":"https://role:8443/.well-known/jwks.json","bot":"https://bot:8444/.well-known/principal-jwks.json"}'
+      AUTH_BOT_SESSION_FLOOR_ALLOWED_CLIENT_URI_SAN: spiffe://voice.local/phase0/bot
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/phase0/truststore.p12 -Djavax.net.ssl.trustStorePassword=phase0-fixture -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.keyStore=/run/phase0/auth-jwks-client.p12 -Djavax.net.ssl.keyStorePassword=phase0-fixture -Djavax.net.ssl.keyStoreType=PKCS12
     depends_on:
       phase0-jwks:
         condition: service_started
@@ -310,6 +578,22 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.crt:/run/phase0/auth.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/tls/auth.key:/run/phase0/auth.key:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/truststore.p12:/run/phase0/truststore.p12:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/auth-jwks-client.p12:/run/phase0/auth-jwks-client.p12:ro
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
+  # Preserve Space's existing Social issuer trust while adding fixture owners.
+  # Only public CA certificates enter the project-scoped bundle volume.
+  phase0-space-jwks-ca:
+    profiles: ["app"]
+    image: alpine:3.22
+    network_mode: none
+    command: ["sh", "-ec", "cat /fixture/ca.crt /social/ca.crt > /bundle/ca.crt; chmod 644 /bundle/ca.crt"]
+    volumes:
+      - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/fixture/ca.crt:ro
+      - social_principal_ca:/social:ro
+      - phase0_space_jwks_ca:/bundle
+    depends_on:
+      social-principal-init:
+        condition: service_completed_successfully
   phase0-jwks:
     profiles: ["app"]
     image: nginx:1.28-alpine
@@ -322,3 +606,6 @@ services:
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/ca.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/ca/ca.crt:/run/phase0/space-ca/ca.crt:ro
       - ${PHASE0_FIXTURE_DIR:?generate a local Phase0 fixture first}/jwks/gateway/jwks.json:/run/phase0/gateway/jwks.json:ro
+
+volumes:
+  phase0_space_jwks_ca:

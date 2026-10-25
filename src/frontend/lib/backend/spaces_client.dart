@@ -430,7 +430,6 @@ class VoiceSpacesClient {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/invites/$code/join'),
       authorization: authorization,
-      body: space_pb.JoinByInviteRequest(code: code),
       createEmpty: space_pb.JoinByInviteResponse.create,
     );
     return _map(
@@ -454,6 +453,20 @@ class VoiceSpacesClient {
     );
     final result = await _gateway.getJson(uri, authorization: authorization);
     return _mapJson(result, spaceMemberListFromJson);
+  }
+
+  /// Uses the shipped empty-body contract; owner and membership checks are server-owned.
+  Future<SpacesApiResult<void>> leaveSpace({
+    required String authorization,
+    required String spaceId,
+  }) async {
+    final result = await _gateway.postEmpty(
+      uri: _gateway.resolve(
+        '/api/v1/spaces/${Uri.encodeComponent(spaceId)}/leave',
+      ),
+      authorization: authorization,
+    );
+    return _mapVoidHttp(result);
   }
 
   Future<SpacesApiResult<void>> banMember({

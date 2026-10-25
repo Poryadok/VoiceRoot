@@ -179,7 +179,7 @@ commands:
 
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -233,7 +233,7 @@ commands:
 
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -276,7 +276,7 @@ commands:
 	require.NoError(t, err)
 
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, uuid.New(), profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -293,7 +293,7 @@ SELECT delivery_status FROM bot_event_log WHERE bot_id = $1 ORDER BY created_at 
 	require.Equal(t, "pending", status)
 }
 
-func TestUninstallAndListInstalledBots(t *testing.T) {
+func TestRawUninstallPreservesInstalledBots(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -310,7 +310,7 @@ func TestUninstallAndListInstalledBots(t *testing.T) {
 	botUUID, _ := uuid.Parse(botID)
 	spaceID := uuid.New()
 	chatID := uuid.New()
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -321,9 +321,9 @@ func TestUninstallAndListInstalledBots(t *testing.T) {
 	_, err = client.UninstallBotFromSpace(ctx, &botv1.UninstallBotFromSpaceRequest{
 		BotId: botID, SpaceId: spaceID.String(),
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	list, err = client.ListInstalledBots(ctx, &botv1.ListInstalledBotsRequest{SpaceId: spaceID.String()})
 	require.NoError(t, err)
-	require.Empty(t, list.GetInstalledBots())
+	require.Len(t, list.GetInstalledBots(), 1)
 }

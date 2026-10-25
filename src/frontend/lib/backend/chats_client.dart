@@ -143,14 +143,31 @@ class ChatMember {
     required this.role,
     this.joinedAt,
     this.isArchived = false,
+    this.explicitPostAsChat = false,
   });
 
   final String profileId;
   final String role;
   final DateTime? joinedAt;
   final bool isArchived;
+  final bool explicitPostAsChat;
 
   bool get isOwner => role == kChatRoleOwner;
+}
+
+class ChatPermissions {
+  const ChatPermissions({
+    required this.canPostAsChat,
+    required this.canAddMembers,
+    required this.canManagePermissions,
+    required this.memberAdditionsEnabled,
+    required this.explicitPostAsChat,
+  });
+  final bool canPostAsChat;
+  final bool canAddMembers;
+  final bool canManagePermissions;
+  final bool memberAdditionsEnabled;
+  final bool explicitPostAsChat;
 }
 
 class MemberListData {
@@ -421,6 +438,58 @@ class VoiceChatsClient {
       authorization,
       body: addMembersRequestToProto(profileIds: profileIds),
     );
+  }
+
+  Future<ChatsApiResult<ChatPermissions>> getChatPermissions({
+    required String authorization,
+    required String chatId,
+  }) async {
+    final result = await _gateway.getProto(
+      _gateway.resolve('/api/v1/chats/$chatId/permissions'),
+      authorization: authorization,
+      createEmpty: chat_pb.GetChatPermissionsResponse.create,
+    );
+    return _map(
+      result,
+      (data) => ChatPermissions(
+        canPostAsChat: data.canPostAsChat,
+        canAddMembers: data.canAddMembers,
+        canManagePermissions: data.canManagePermissions,
+        memberAdditionsEnabled: data.memberAdditionsEnabled,
+        explicitPostAsChat: data.explicitPostAsChat,
+      ),
+    );
+  }
+
+  Future<ChatsApiResult<void>> setMemberPostAsChat({
+    required String authorization,
+    required String chatId,
+    required String profileId,
+    required bool allowed,
+  }) async {
+    final result = await _gateway.putJson(
+      uri: _gateway.resolve(
+        '/api/v1/chats/$chatId/members/$profileId/post-as-chat',
+      ),
+      authorization: authorization,
+      body: {'allowed': allowed},
+      allowNoContent: true,
+    );
+    return _mapJsonEmpty(result);
+  }
+
+  Future<ChatsApiResult<void>> setMemberAdditionsEnabled({
+    required String authorization,
+    required String chatId,
+    required bool enabled,
+  }) async {
+    final result = await _gateway.patchProto(
+      uri: _gateway.resolve('/api/v1/chats/$chatId'),
+      authorization: authorization,
+      body: chat_pb.UpdateChatRequest(memberAdditionsEnabled: enabled),
+      createEmpty: chat_pb.UpdateChatResponse.create,
+    );
+    return _mapEmpty(result);
   }
 
   Future<ChatsApiResult<void>> removeGroupMember({

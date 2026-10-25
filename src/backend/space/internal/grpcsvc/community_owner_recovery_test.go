@@ -40,8 +40,7 @@ func (c *communityRecoveryRoleClient) FinalizeOwnershipTransfer(_ context.Contex
 
 func TestRecoverCommunityOwnerUsesRoleV2ReceiptAndFencesGeneration(t *testing.T) {
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	applySpaceMigration(t, ctx, pool)
+	pool := communityPublicationFixture(t, ctx)
 	ownerAccount, ownerProfile, replacementAccount, replacementProfile := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	role := &communityRecoveryRoleClient{newOwnerProfile: replacementProfile}
 	issuer := ownershipTestIssuer(t)

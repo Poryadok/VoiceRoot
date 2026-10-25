@@ -991,7 +991,7 @@ void main() {
     expect(find.byKey(MatchRatingOverlay.submitButtonKey), findsNothing);
   });
 
-  testWidgets('failed rating prevents ban and duplicate submission', (
+  testWidgets('failed rating preserves selection for retry before ban', (
     tester,
   ) async {
     final rateResponse = Completer<http.Response>();
@@ -1013,7 +1013,12 @@ void main() {
           200,
         );
       }
-      if (request.url.path.endsWith('/rate')) return rateResponse.future;
+      if (request.url.path.endsWith('/rate')) {
+        final attempts = requests.where((r) => r.url.path.endsWith('/rate'));
+        return attempts.length == 1
+            ? rateResponse.future
+            : http.Response('{}', 200);
+      }
       return http.Response('{}', 200);
     });
     await tester.pumpWidget(_postMatchFixture(client));
@@ -1047,6 +1052,26 @@ void main() {
       ),
       isEmpty,
     );
+    expect(find.byKey(MatchRatingOverlay.submitButtonKey), findsOneWidget);
+
+    await tester.tap(find.byKey(MatchRatingOverlay.submitButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.text(l10n.matchRatingBanConfirm));
+    await tester.pumpAndSettle();
+
+    final votes = requests.where((r) => r.url.path.endsWith('/rate')).toList();
+    expect(votes, hasLength(2));
+    expect(jsonDecode(votes.last.body), {
+      'ratedProfileId': 'profile-2',
+      'stars': 1,
+    });
+    expect(
+      requests.where((r) => r.url.path == '/api/v1/matchmaking/bans'),
+      hasLength(1),
+    );
+    expect(find.byKey(MatchRatingOverlay.submitButtonKey), findsNothing);
   });
 }
 

@@ -227,7 +227,6 @@ class SpaceDeletionProofJdbcIntegrationTest {
       "totp_enabled=TRUE|totp_enabled=FALSE",
       "totp_secret=decode('01','hex')|totp_secret=NULL",
       "status='suspended'|status='active'",
-      "deleted_at=CURRENT_TIMESTAMP|deleted_at=NULL",
       "session_epoch=8|session_epoch=7",
       "type='guest'|type='regular'",
       "email='changed@example.com'|email=NULL",
@@ -245,6 +244,23 @@ class SpaceDeletionProofJdbcIntegrationTest {
             "SELECT consumed_at IS NULL FROM space_deletion_proofs WHERE operation_id=:operation",
             params("operation", binding.operationId()), Boolean.class).booleanValue())
         .isTrue();
+  }
+
+  @Test
+  void deleteAndConditionalRestorePermanentlyRevokesUnconsumedProof() {
+    var issued = service().issue(binding, "Space", "correct-password", "", "");
+    var accounts = new voice.backend.auth.repository.JdbcAccountRepository(jdbc);
+    accounts.markDeleted(accountId, Instant.now());
+    assertThat(accounts.restoreDeleted(accountId)).isTrue();
+    assertThat(accounts.findById(accountId.toString())).get()
+        .extracting(voice.backend.auth.repository.Account::status,
+            voice.backend.auth.repository.Account::deletedAt)
+        .containsExactly("active", null);
+    assertThatThrownBy(() -> service().consume(binding, "Space", issued.proof()))
+        .isInstanceOf(DeletionProofDeniedException.class);
+    assertThat(jdbc.queryForObject(
+        "SELECT consumed_at IS NULL FROM space_deletion_proofs WHERE operation_id=:operation",
+        params("operation", binding.operationId()), Boolean.class).booleanValue()).isTrue();
   }
 
   @Test

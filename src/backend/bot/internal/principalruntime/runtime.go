@@ -2,7 +2,6 @@ package principalruntime
 
 import (
 	"context"
-	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -22,35 +21,42 @@ import (
 )
 
 type Config struct {
+	MessagingURISAN                                                                                 string
+	MessagingJWKSURL, MessagingJWKSCAFile, MessagingJWKSClientCert, MessagingJWKSClientKey          string
+	DeferSpaceJWKS                                                                                  bool
 	GISJWKSURL, GISTLSCert, GISTLSKey, GISCAFile, ReplayRedisURL                                    string
 	BotPrivateKeyFile, BotKeyID, BotJWKSListen, BotTLSCert, BotTLSKey                               string
+	BotSigningKeysDir, BotActiveKID                                                                 string
 	BotJWKSClientCA, BotGameEventListen, BotGameEventCert, BotGameEventKey, BotGameEventClientCA    string
 	BotSpaceLifecycleListen, BotSpaceLifecycleCert, BotSpaceLifecycleKey, BotSpaceLifecycleClientCA string
 	SpaceJWKSURL, SpaceJWKSCAFile                                                                   string
 }
 
 type Runtime struct {
-	issuer           *principal.Issuer
-	resolver         *principal.JWKSResolver
-	redis            *redis.Client
-	http             *http.Client
-	spaceHTTP        *http.Client
-	config           Config
-	privateKey       *rsa.PrivateKey
-	jwksCertificate  tls.Certificate
-	spaceResolver    *principal.JWKSResolver
-	spaceCertificate tls.Certificate
-	replayGuard      principal.ReplayGuard
+	messagingResolver *principal.JWKSResolver
+	messagingHTTP     *http.Client
+	issuer            *principal.Issuer
+	resolver          *principal.JWKSResolver
+	redis             *redis.Client
+	http              *http.Client
+	spaceHTTP         *http.Client
+	config            Config
+	publicKeys        []principal.JWKSKey
+	jwksCertificate   tls.Certificate
+	spaceResolver     *principal.JWKSResolver
+	spaceCertificate  tls.Certificate
+	replayGuard       principal.ReplayGuard
 }
 
 func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 	if getenv == nil {
 		return Config{}, false, errors.New("environment reader is required")
 	}
-	cfg := Config{GISJWKSURL: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_URL")),
+	cfg := Config{MessagingURISAN: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_URI_SAN")), MessagingJWKSURL: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_URL")), MessagingJWKSCAFile: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CA_FILE")), MessagingJWKSClientCert: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CLIENT_CERT_FILE")), MessagingJWKSClientKey: strings.TrimSpace(getenv("BOT_MESSAGE_AUTHORITY_MESSAGING_JWKS_CLIENT_KEY_FILE")), GISJWKSURL: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_JWKS_URL")),
 		GISTLSCert: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_CERT_FILE")), GISTLSKey: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_KEY_FILE")),
 		GISCAFile: strings.TrimSpace(getenv("GAME_INTEGRATION_PRINCIPAL_TLS_CA_FILE")), ReplayRedisURL: strings.TrimSpace(getenv("BOT_PRINCIPAL_REPLAY_REDIS_URL")),
 		BotPrivateKeyFile: strings.TrimSpace(getenv("BOT_PRINCIPAL_PRIVATE_KEY_FILE")), BotKeyID: strings.TrimSpace(getenv("BOT_PRINCIPAL_KEY_ID")),
+		BotSigningKeysDir: strings.TrimSpace(getenv("BOT_PRINCIPAL_SIGNING_KEYS_DIR")), BotActiveKID: strings.TrimSpace(getenv("BOT_PRINCIPAL_ACTIVE_KID")),
 		BotJWKSListen: strings.TrimSpace(getenv("BOT_PRINCIPAL_JWKS_LISTEN")), BotTLSCert: strings.TrimSpace(getenv("BOT_PRINCIPAL_TLS_CERT_FILE")), BotTLSKey: strings.TrimSpace(getenv("BOT_PRINCIPAL_TLS_KEY_FILE")),
 		BotJWKSClientCA: strings.TrimSpace(getenv("BOT_PRINCIPAL_TLS_CLIENT_CA_FILE")), BotGameEventListen: strings.TrimSpace(getenv("BOT_GAME_EVENT_GRPC_LISTEN")),
 		BotGameEventCert: strings.TrimSpace(getenv("BOT_GAME_EVENT_TLS_CERT_FILE")), BotGameEventKey: strings.TrimSpace(getenv("BOT_GAME_EVENT_TLS_KEY_FILE")),
@@ -63,6 +69,12 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		SpaceJWKSCAFile:           strings.TrimSpace(getenv("SPACE_PRINCIPAL_JWKS_CA_FILE"))}
 	values := []string{cfg.GISJWKSURL, cfg.GISTLSCert, cfg.GISTLSKey, cfg.GISCAFile, cfg.ReplayRedisURL, cfg.BotPrivateKeyFile, cfg.BotKeyID, cfg.BotJWKSListen, cfg.BotTLSCert, cfg.BotTLSKey,
 		cfg.BotJWKSClientCA, cfg.BotGameEventListen, cfg.BotGameEventCert, cfg.BotGameEventKey, cfg.BotGameEventClientCA}
+	if cfg.BotSigningKeysDir != "" || cfg.BotActiveKID != "" {
+		if cfg.BotSigningKeysDir == "" || cfg.BotActiveKID == "" || cfg.BotPrivateKeyFile != "" || cfg.BotKeyID != "" {
+			return Config{}, true, errors.New("bot canonical signing directory and active kid must be configured together without legacy signer settings")
+		}
+		values[5], values[6] = cfg.BotSigningKeysDir, cfg.BotActiveKID
+	}
 	count := 0
 	for _, value := range values {
 		if value != "" {
@@ -70,6 +82,9 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		}
 	}
 	if count == 0 {
+		if cfg.MessagingURISAN != "" || cfg.MessagingJWKSURL != "" || cfg.MessagingJWKSCAFile != "" || cfg.MessagingJWKSClientCert != "" || cfg.MessagingJWKSClientKey != "" {
+			return Config{}, true, errors.New("messaging authority requires Bot principal runtime")
+		}
 		return Config{}, false, nil
 	}
 	if count != len(values) {
@@ -90,9 +105,12 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 	}
 	if spaceCount > 0 {
 		parsed, err := url.Parse(cfg.SpaceJWKSURL)
-		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "/space/jwks.json" {
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.RawPath != "" || (parsed.Path != "/.well-known/jwks.json" && parsed.Path != "/space/jwks.json") {
 			return Config{}, true, errors.New("space principal JWKS URL must use the HTTPS Space JWKS endpoint")
 		}
+	}
+	if err := cfg.validateMessagingAuthority(); err != nil {
+		return Config{}, true, err
 	}
 	return cfg, true, nil
 }
@@ -102,14 +120,11 @@ func (c Config) SpaceLifecycleEnabled() bool {
 }
 
 func New(ctx context.Context, cfg Config) (*Runtime, error) {
-	if strings.TrimSpace(cfg.BotPrivateKeyFile) == "" || strings.TrimSpace(cfg.BotKeyID) == "" {
-		return nil, errors.New("bot principal signer is incomplete")
-	}
-	key, err := principal.LoadRSAPrivateKeyFile(cfg.BotPrivateKeyFile)
+	key, kid, publicKeys, err := loadBotSigningKeys(cfg)
 	if err != nil {
 		return nil, err
 	}
-	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: cfg.BotKeyID, PrivateKey: key})
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "bot", KeyID: kid, PrivateKey: key})
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +190,7 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		_ = redisClient.Close()
 		return nil, fmt.Errorf("bot principal JWKS TLS certificate: %w", err)
 	}
-	runtime := &Runtime{issuer: issuer, resolver: resolver, redis: redisClient, http: client, config: cfg, privateKey: key, jwksCertificate: botCertificate}
+	runtime := &Runtime{issuer: issuer, resolver: resolver, redis: redisClient, http: client, config: cfg, publicKeys: publicKeys, jwksCertificate: botCertificate}
 	runtime.replayGuard = runtime.recordReplay
 	if cfg.SpaceLifecycleEnabled() {
 		spaceCAPEM, err := os.ReadFile(cfg.SpaceJWKSCAFile)
@@ -220,13 +235,15 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			spaceTransport.CloseIdleConnections()
 			return nil, err
 		}
-		warmCtx, warmCancel := context.WithTimeout(ctx, 2*time.Second)
-		err = spaceResolver.Refresh(warmCtx, "space")
-		warmCancel()
-		if err != nil {
-			_ = redisClient.Close()
-			spaceTransport.CloseIdleConnections()
-			return nil, fmt.Errorf("initial Space principal JWKS refresh: %w", err)
+		if !cfg.DeferSpaceJWKS {
+			warmCtx, warmCancel := context.WithTimeout(ctx, 2*time.Second)
+			err = spaceResolver.Refresh(warmCtx, "space")
+			warmCancel()
+			if err != nil {
+				_ = redisClient.Close()
+				spaceTransport.CloseIdleConnections()
+				return nil, fmt.Errorf("initial Space principal JWKS refresh: %w", err)
+			}
 		}
 		spaceCert, err := tls.LoadX509KeyPair(cfg.BotSpaceLifecycleCert, cfg.BotSpaceLifecycleKey)
 		if err != nil {
@@ -235,6 +252,10 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 			return nil, fmt.Errorf("bot Space lifecycle TLS certificate: %w", err)
 		}
 		runtime.spaceResolver, runtime.spaceCertificate, runtime.spaceHTTP = spaceResolver, spaceCert, spaceClient
+	}
+	if err = runtime.initMessagingAuthority(); err != nil {
+		_ = runtime.Close()
+		return nil, err
 	}
 	return runtime, nil
 }
@@ -259,7 +280,7 @@ func (r *Runtime) JWKSHTTPServer() (*http.Server, error) {
 		return nil, errors.New("bot principal client CA contains no certificates")
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/.well-known/principal-jwks.json", principal.JWKSHandler(r.config.BotKeyID, &r.privateKey.PublicKey))
+	mux.Handle("/.well-known/principal-jwks.json", principal.JWKSHandlerKeys(r.publicKeys))
 	return &http.Server{Addr: r.config.BotJWKSListen, Handler: mux, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{r.jwksCertificate}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clients}}, nil
 }
 
@@ -308,7 +329,7 @@ func (r *Runtime) VerifySpace(ctx context.Context, token, method, requestID, has
 	if r == nil || r.spaceResolver == nil || r.replayGuard == nil {
 		return principal.Principal{}, errors.New("bot Space lifecycle runtime unavailable")
 	}
-	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" {
+	if method != "" && method != "/voice.bot.v1.BotService/ApplySpaceLifecycleFence" && method != "/voice.bot.v1.BotService/PurgeSpace" && method != "/voice.bot.v1.BotService/CheckBotInstallationScope" {
 		return principal.Principal{}, errors.New("space principal method is not allowed")
 	}
 	parts := strings.Split(token, ".")
@@ -377,6 +398,9 @@ func (r *Runtime) Close() error {
 	}
 	if r.http != nil {
 		r.http.CloseIdleConnections()
+	}
+	if r.messagingHTTP != nil {
+		r.messagingHTTP.CloseIdleConnections()
 	}
 	if r.spaceHTTP != nil {
 		r.spaceHTTP.CloseIdleConnections()

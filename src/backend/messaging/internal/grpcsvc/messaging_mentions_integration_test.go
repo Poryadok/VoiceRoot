@@ -71,7 +71,7 @@ func TestMessagingSendMessage_dmUserMention(t *testing.T) {
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
 	spy := &spyMessageEvents{}
-	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: spy})
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1}, MessageEvents: spy})
 
 	mentionsJSON := `[{"type":"user","target_id":"` + profB.String() + `"}]`
 	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
@@ -107,7 +107,7 @@ func TestMessagingEditMessage_SilentMessageMentionPreservesSilent(t *testing.T) 
 	seedDMChat(t, ctx, pool, chatID, profA, profB)
 
 	spy := &spyMessageEvents{}
-	client, _ := startMessagingServerWired(t, pool, messagingWire{MessageEvents: spy})
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1}, MessageEvents: spy})
 	sent, err := client.SendMessage(withProfileCtx(ctx, acctA, profA), &messagingv1.SendMessageRequest{
 		Chat:            chatDMRef(chatID),
 		Content:         "initial",
@@ -170,7 +170,7 @@ func TestMessagingSendMessage_everyoneInSpaceRequiresPermission(t *testing.T) {
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		RolePermissions: selectiveRolePerms{
 			allow: map[string]bool{
 				permissions.TextChatSendMessages:     true,
@@ -206,7 +206,7 @@ func TestMessagingSendMessage_everyoneInSpaceAllowed(t *testing.T) {
 	require.NoError(t, err)
 
 	spy := &spyMessageEvents{}
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		MessageEvents: spy,
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages:     true,
@@ -255,7 +255,7 @@ VALUES ($1, 'group', $2, 0, $3)
 	applyModerationSchemasForMessagingTest(t, ctx, pool)
 
 	spy := &spyMessageEvents{}
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		MessageEvents: spy,
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages:     true,
@@ -295,7 +295,7 @@ func TestMessagingSendMessage_bareEveryoneFromContent(t *testing.T) {
 	require.NoError(t, err)
 
 	spy := &spyMessageEvents{}
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		MessageEvents: spy,
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages:     true,
@@ -336,7 +336,7 @@ func TestMessagingSendMessage_bareEveryoneDeniedWithoutPermission(t *testing.T) 
 	_, err := pool.Exec(ctx, `UPDATE chats SET space_id = $2 WHERE id = $1`, chatID, spaceID)
 	require.NoError(t, err)
 
-	client, _ := startMessagingServerWired(t, pool, messagingWire{
+	client, _ := startMessagingServerWired(t, pool, messagingWire{CommunicationStates: &communicationStateStub{state: 1},
 		RolePermissions: selectiveRolePerms{allow: map[string]bool{
 			permissions.TextChatSendMessages:     true,
 			permissions.TextChatMentionAllInChat: false,

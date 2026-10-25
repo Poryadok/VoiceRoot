@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
-import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/messages_client.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 
@@ -35,7 +34,6 @@ class BotLiveHarness {
   }) async {
     final owner = await ctx.registerUser('$prefix-owner');
     final spaces = ctx.spacesClient();
-    final chats = ctx.chatsClient();
 
     final spaceResult = await spaces.createSpace(
       authorization: owner.authorizationHeader,
@@ -44,12 +42,18 @@ class BotLiveHarness {
     expect(spaceResult, isA<SpacesApiOk<VoiceSpace>>());
     final spaceId = (spaceResult as SpacesApiOk<VoiceSpace>).data.id;
 
-    final groupResult = await chats.createGroup(
+    final groupResult = await spaces.createSpaceChat(
       authorization: owner.authorizationHeader,
+      spaceId: spaceId,
       name: '$prefix-channel',
     );
-    expect(groupResult, isA<ChatsApiOk<VoiceChat>>());
-    final chatId = (groupResult as ChatsApiOk<VoiceChat>).data.id;
+    expect(groupResult, isA<SpacesApiOk<SpaceTreeNodeData>>());
+    final node = (groupResult as SpacesApiOk<SpaceTreeNodeData>).data;
+    expect(node.spaceId, spaceId);
+    expect(node.kind, 'text_chat');
+    expect(node.linkedChatId, isNotNull);
+    final chatId = node.linkedChatId!;
+    expect(chatId, isNotEmpty);
 
     final bots = VoiceBotsClient(gateway: ctx.gatewayHttp());
     final harness = BotLiveHarness(
@@ -124,18 +128,34 @@ commands:
   Future<void> ensureGroupReadyForBot() async {
     final memberB = await ctx.registerUser('bot-member-b');
     final memberC = await ctx.registerUser('bot-member-c');
-    await ctx.allowOpenGamingPrivacyMany([memberB, memberC]);
-    final resp = await httpClient.post(
-      Uri.parse('${ctx.config.baseUrl}/api/v1/chats/$chatId/members'),
-      headers: {
-        'Authorization': owner.authorizationHeader,
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'profile_ids': [memberB.activeProfileId, memberC.activeProfileId],
-      }),
+    await joinSpaceMember(memberB);
+    await joinSpaceMember(memberC);
+  }
+
+  Future<void> joinSpaceMember(AuthSession member) async {
+    // Space owns membership for its chats; standalone AddMembers cannot apply.
+    final spaces = ctx.spacesClient();
+    final invited = await spaces.createInvite(
+      authorization: owner.authorizationHeader,
+      spaceId: spaceId,
+      maxUses: 1,
     );
-    expect(resp.statusCode, 204, reason: resp.body);
+    expect(invited, isA<SpacesApiOk<SpaceInvite>>());
+    final joined = await spaces.joinByInvite(
+      authorization: member.authorizationHeader,
+      code: (invited as SpacesApiOk<SpaceInvite>).data.code,
+    );
+    expect(
+      joined,
+      isA<SpacesApiOk<SpaceMembershipData>>(),
+      reason: joined is SpacesApiFailure
+          ? 'join failed: HTTP ${joined.statusCode}, '
+              '${joined.errorCode}: ${joined.message}'
+          : null,
+    );
+    final membership = (joined as SpacesApiOk<SpaceMembershipData>).data;
+    expect(membership.spaceId, spaceId);
+    expect(membership.profileId, member.activeProfileId);
   }
 
   Future<void> _installBotRaw(String botId) async {

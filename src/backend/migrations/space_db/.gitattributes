@@ -1,0 +1,2 @@
+# Preserve source-qualified catalog body bytes copied from immutable M44.
+000050_account_ban_coverage.up.sql -text whitespace=cr-at-eol

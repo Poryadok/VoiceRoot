@@ -26,10 +26,12 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	rolev1 "voice.app/voice/role/v1"
 	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/integrationtest"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	"voice/backend/pkg/principal"
+	"voice/backend/role/internal/grpcsvc"
 	"voice/backend/role/internal/store"
 )
 
@@ -94,7 +96,7 @@ func TestRoleAuthoritySourceActualMigratorProtectedListener(t *testing.T) {
 	privateURL := &url.URL{Scheme: "postgres", User: url.UserPassword("source_fixture", "fixture_only"), Host: "127.0.0.1:5432", Path: "/source_listener", RawQuery: "sslmode=disable"}
 	process, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{ContainerRequest: testcontainers.ContainerRequest{
 		Image: "migrate/migrate:v4.18.1", NetworkMode: container.NetworkMode("container:" + pg.GetContainerID()), Files: copied,
-		Cmd: []string{"-path", "/migrations", "-database", privateURL.String(), "up"}, WaitingFor: wait.ForExit(),
+		Cmd: []string{"-path", "/migrations", "-database", privateURL.String(), "goto", "20"}, WaitingFor: wait.ForExit(),
 	}, Started: true})
 	if process != nil {
 		t.Cleanup(func() {
@@ -118,7 +120,7 @@ func TestRoleAuthoritySourceActualMigratorProtectedListener(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, runtime.ActivateAuthoritySource(ctx, reader))
 	require.Error(t, runtime.ActivateAuthoritySource(ctx, reader), "serving set must activate once")
-	legacy, protected := newRoleGRPCServers(nil, &principalBootstrapRoleServer{}, runtime)
+	legacy, protected := newRoleGRPCServers(nil, &grpcsvc.RoleGRPC{Store: reader}, runtime)
 	legacyClient, _ := sourceListenerClient(t, legacy, insecure.NewCredentials())
 	client, address := sourceListenerClient(t, protected, credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}}))
 	scope := &authorityv1.SourceScope{SchemaVersion: 1, SpaceId: space.String()}
@@ -150,6 +152,22 @@ func TestRoleAuthoritySourceActualMigratorProtectedListener(t *testing.T) {
 	state, err := authoritysource.DecodeRoleState(response.CanonicalState)
 	require.NoError(t, err)
 	require.Equal(t, state.AllPermissions, state.EffectiveMask(owner.String(), "", true))
+	// The admitted native methods reject malformed protocol bodies before the
+	// missing native authority dependency; this is not positive receipt proof.
+	roleConn, err := grpc.NewClient(address, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, Certificates: []tls.Certificate{certificate}})))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, roleConn.Close()) }()
+	roleClient := rolev1.NewRoleServiceClient(roleConn)
+	ensure := &rolev1.EnsureDefaultMemberRoleRequest{}
+	_, err = roleClient.EnsureDefaultMemberRole(sourceCallContext(t, key, "space", rolev1.RoleService_EnsureDefaultMemberRole_FullMethodName, "unregistered-ensure", ensure), ensure)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	remove := &rolev1.RemoveMemberRolesRequest{}
+	_, err = roleClient.RemoveMemberRoles(sourceCallContext(t, key, "space", rolev1.RoleService_RemoveMemberRoles_FullMethodName, "unregistered-remove", remove), remove)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	still, err := client.ReadSnapshot(sourceCallContext(t, key, "federation", method, "source-after-unregistered", request), request)
+	require.NoError(t, err)
+	require.Equal(t, response.Revision, still.Revision)
+	require.Equal(t, response.CanonicalState, still.CanonicalState)
 	_, err = client.ReadSnapshot(callCtx, request)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "replayed source credential must fail")
 	_, err = client.ReadSnapshot(sourceCallContext(t, key, "space", method, "source-wrong-issuer", request), request)

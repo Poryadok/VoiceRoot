@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 
 	"voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/jobs"
@@ -29,6 +31,7 @@ import (
 	"voice/backend/pkg/integrationtest"
 
 	chatv1 "voice.app/voice/chat/v1"
+	eventsv1 "voice.app/voice/events/v1"
 	filev1 "voice.app/voice/file/v1"
 	storyv1 "voice.app/voice/story/v1"
 )
@@ -694,6 +697,10 @@ INSERT INTO files (
 	require.Equal(t, int64(1), n)
 	require.ElementsMatch(t, []string{originalKey, convertedKey}, deleter.deleted)
 	require.Equal(t, []string{fileID.String()}, pub.fileIDs)
+	var expiryAcknowledged bool
+	err = pool.QueryRow(ctx, `SELECT published_at IS NOT NULL FROM file_expiry_event_outbox WHERE file_id=$1`, fileID).Scan(&expiryAcknowledged)
+	require.NoError(t, err)
+	require.True(t, expiryAcknowledged, "the durable expiry event must be acknowledged, not bypassed by a direct publication")
 
 	var statusValue string
 	err = pool.QueryRow(ctx, `SELECT status FROM files WHERE id = $1`, fileID).Scan(&statusValue)
@@ -708,6 +715,18 @@ type recordingFilePublisher struct {
 func (p *recordingFilePublisher) PublishFileExpired(_ context.Context, fileID string, _ *string) error {
 	p.fileIDs = append(p.fileIDs, fileID)
 	return nil
+}
+
+func (p *recordingFilePublisher) PublishExpiryEvent(ctx context.Context, payload []byte) error {
+	var event eventsv1.FileStreamEvent
+	if err := proto.Unmarshal(payload, &event); err != nil {
+		return err
+	}
+	expired := event.GetFileExpired()
+	if expired == nil {
+		return errors.New("expected durable file.expired envelope")
+	}
+	return p.PublishFileExpired(ctx, expired.GetFileId(), expired.ChatId)
 }
 
 func (p *recordingFilePublisher) PublishFileUploaded(context.Context, string, string) error {
@@ -748,11 +767,38 @@ func startFilePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	if testing.Short() {
 		t.Skip("integration test skipped in -short mode")
 	}
-	pool := integrationtest.StartPostgres(t, ctx, "db", "")
+	pool := startFilePostgresBackend(t, ctx)
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000001_init.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000003_story_context.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000004_file_reference_lifecycle.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000005_reference_gc_receipts.up.sql"))
 	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000006_music_metadata.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000007_preview_metadata.up.sql"))
+	applyFileSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000008_expiry_event_outbox.up.sql"))
+	return pool
+}
+
+// Private Linux proof runners can use an isolated internal-network database
+// without publishing a Docker port. Normal CI retains Testcontainers startup.
+func startFilePostgresBackend(t *testing.T, ctx context.Context) *pgxpool.Pool {
+	t.Helper()
+	dsn := os.Getenv("BE264_ROOT_TEST_POSTGRES_DSN")
+	if dsn == "" {
+		return integrationtest.StartPostgres(t, ctx, "db", "")
+	}
+	pool, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err)
+	schema := "root_file_" + strings.ReplaceAll(uuid.NewString(), "-", "_")
+	_, err = pool.Exec(ctx, `CREATE SCHEMA `+schema)
+	pool.Close()
+	require.NoError(t, err)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	require.NoError(t, err)
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	pool, err = pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
 	return pool
 }
 

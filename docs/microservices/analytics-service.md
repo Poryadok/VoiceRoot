@@ -28,6 +28,13 @@
 1. **Stream adapters** — подписка на доменные JetStream streams (`message_events`, `user_events`, `chat_events`, …) и маппинг `eventsv1.*StreamEvent` → `AnalyticsEvent`.
 2. **Прямые `analytics.*`** — telemetry без доменного stream: Notification (push), Search (queries), Gateway (sampled API latency), Subscription (payments), Moderation (reports).
 
+Direct telemetry publishers encode `voice.analytics.v1.AnalyticsEvent` as
+protobuf binary in `analytics_events`. `properties_json` remains the JSON
+properties field inside that typed envelope. Analytics also accepts retained
+ProtoJSON envelopes during migration; changing the writer does not rewrite or
+discard the existing stream. Both encodings preserve the source event ID,
+timestamp, hashed identity and properties through ingestion and redelivery.
+
 ```
 Domain NATS streams ──► adapters ──┐
 analytics.* publishers ──► ingest gRPC ──┤
@@ -74,6 +81,11 @@ GET  /api/v1/analytics/export            — CSV/JSON export
 
 ## ClickHouse схема
 
+Имена колонок соответствуют [init DDL](../../docker/clickhouse/init/001_events.sql).
+`user_id_hashed` и `profile_id_hashed` содержат HMAC идентификаторов аккаунта и
+профиля с `ANALYTICS_ID_HASH_KEY`, а не исходные UUID. Если исходный идентификатор
+не задан для события, соответствующее поле остаётся пустым.
+
 ### Raw events table
 ```sql
 CREATE TABLE events (
@@ -81,8 +93,8 @@ CREATE TABLE events (
   event_type String,
   source_service String,
   timestamp DateTime64(3),
-  user_id String,       -- hashed
-  profile_id String,    -- hashed
+  user_id_hashed String DEFAULT '',
+  profile_id_hashed String DEFAULT '',
   properties String,    -- JSON
   session_id Nullable(String),
   platform Nullable(String),
@@ -103,7 +115,7 @@ ENGINE = AggregatingMergeTree()
 ORDER BY (date)
 AS SELECT
   toDate(timestamp) AS date,
-  uniqState(user_id) AS unique_users
+  uniqState(user_id_hashed) AS unique_users
 FROM events
 GROUP BY date;
 
@@ -148,11 +160,23 @@ results from message-only hits, or concurrency/duration from coarse event counts
 
 Analytics Service — чистый consumer, не публикует события в NATS.
 
-Экспортирует метрики в Prometheus для:
-- `analytics.ingest.events_per_second`
-- `analytics.ingest.batch_size`
-- `analytics.ingest.lag_seconds`
-- `analytics.clickhouse.insert_latency`
+Экспортирует operational метрики на `/metrics` в формате Prometheus:
+
+| Метрика | Тип | Значение |
+|---|---|---|
+| `analytics_ingest_events_total` | Counter | События, принятые в buffer через NATS или gRPC; это не число уникальных durable events. |
+| `analytics_ingest_batch_size` | Histogram | Число строк в каждой непустой попытке flush с настроенным flusher, включая ошибки и повторные попытки. Пустой flush и отсутствие flusher не создают sample. Buckets: 1, 10, 100, 1000, 10000 и `+Inf`. |
+| `analytics_ingest_lag_seconds` | Histogram | Неотрицательный lag от timestamp события до NATS ingest; gRPC ingest не добавляет sample. |
+| `analytics_clickhouse_insert_latency_seconds` | Histogram | Длительность попытки ClickHouse insert, включая завершившиеся ошибкой. |
+| `analytics_flush_batches_total` | Counter | Успешные ClickHouse batch flush. |
+| `analytics_flush_errors_total` | Counter | ClickHouse batch flush, завершившиеся ошибкой. |
+| `analytics_buffer_depth` | Gauge | Последняя глубина buffer, наблюдённая NATS consumer; не непрерывное измерение всех gRPC/flush изменений. |
+
+Events per second вычисляется как `rate(analytics_ingest_events_total[5m])`,
+как в [Grafana ingest dashboard](../../deploy/observability/grafana/dashboards/voice-analytics-ingest.json).
+Отдельного gauge `events_per_second` нет. Histogram экспортирует серии
+`_bucket`, `_sum` и `_count`; повторная попытка учитывает фактический размер
+повторного batch и не означает повторный логический event в ClickHouse.
 
 ## Зависимости
 

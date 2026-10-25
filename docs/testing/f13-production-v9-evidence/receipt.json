@@ -1,0 +1,61 @@
+{
+  "schema": "voice-phase0-fixture-permission-test-receipt-v1",
+  "source": {
+    "worktree": "D:/Git/Voice/.treehouse/Voice-451d38/43/Voice",
+    "head": "c1c340c809aa619a4ee18230b99356959fdb4a40",
+    "candidate_test_sha256": "4a358406e826b70832f774e69658d444690e708e0fef0bf82f669545b7cc91ab",
+    "baseline_test_sha256": "c681dd23967350f10cdecf278dfd7b4f0b3cd55491e85dfc000845ab80a0dce3",
+    "tracked_files": 7388,
+    "tracked_files_missing_or_unreadable_as_uid_1000": 0
+  },
+  "environment": {
+    "container": "pr875-phase0-permission-red-20261024",
+    "image": "isaac12-phase0-contract:local",
+    "runner_uid_gid": "1000:1000",
+    "service_fixture_uid_gid_mode": "65532:65532/0700",
+    "docker_socket_mounted": false,
+    "compose_up_performed": false,
+    "compose_config_only": true
+  },
+  "red": {
+    "test": "ComposeTests.test_every_fixture_bind_source_is_generated",
+    "result": "expected baseline failure",
+    "errors": 2,
+    "cause": "PermissionError enumerating service-owned chat and space directories",
+    "log": "red.log",
+    "log_sha256": "f22d09c52ff63b7e649577dc5b8051cbbfe99f76cba813ccc10827d9a9af0320"
+  },
+  "candidate": {
+    "focused": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/phase0-fixture_test.py ComposeTests.test_every_fixture_bind_source_is_generated",
+      "result": "passed",
+      "tests": 1,
+      "seconds": 10.427,
+      "log": "focused-green.log",
+      "log_sha256": "03552dfdcce379d7e84f0cd3abbcbae04ae330e317a61c013c5e80795fe1db82"
+    },
+    "full": {
+      "command": "PYTHONDONTWRITEBYTECODE=1 python3 scripts/ci/phase0-fixture_test.py",
+      "result": "passed",
+      "tests": 78,
+      "skipped": 1,
+      "skip_reason": "root-only service/caller UID cleanup test; runner is UID 1000",
+      "seconds": 48.716,
+      "log": "full-verified.log",
+      "log_sha256": "f45e5fbcab6fe216e6c24b14767d822aed04343404dbb7021b73d918feaca143"
+    },
+    "helper_oracle": {
+      "empty_service_owned_directory": "rejected",
+      "nonempty_service_owned_directory": "accepted",
+      "owner_mode_before_and_after": "65532:65532/0700",
+      "log": "helper-negative.log",
+      "log_sha256": "4b7e1e134c7517fc91ff3ed0e0189d67a88feec7e05467221694e00d9b485549"
+    }
+  },
+  "invalid_initial_full_attempt": {
+    "counted": false,
+    "reason": "started while tracked source copy was still in progress; six source files were temporarily missing/unreadable",
+    "log": "full-invalid-copy-race.log",
+    "log_sha256": "8e67943ee3ed0ebd6a38c525d4c9ff292479b803fe5676ffe265a3907ab323a2"
+  }
+}

@@ -10,6 +10,9 @@ import (
 )
 
 func (t *transcoder) serveStories(w http.ResponseWriter, r *http.Request, rest string) bool {
+	if t.serveStoryConsent(w, r, rest) {
+		return true
+	}
 	if t.clients.story == nil {
 		return false
 	}

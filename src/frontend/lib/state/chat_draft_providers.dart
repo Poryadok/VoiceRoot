@@ -32,20 +32,20 @@ class ChatDraftController extends StateNotifier<AsyncValue<String>> {
         state = AsyncValue.data(restored);
       }
     } on Object catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
+      if (mounted && revision == _revision) {
+        state = AsyncValue.error(error, stackTrace);
+      }
     }
   }
 
   void update(String value) {
     _revision++;
     state = AsyncValue.data(value);
-    _pendingWrite = _pendingWrite.then((_) async {
-      if (value.isEmpty) {
-        await _storage.clear(key);
-      } else {
-        await _storage.write(key, value);
-      }
-    });
+    // Enqueue immediately: another controller may restore this key as soon as
+    // navigation disposes us. The storage preserves invocation order.
+    _pendingWrite = value.isEmpty
+        ? _storage.clear(key)
+        : _storage.write(key, value);
   }
 
   Future<void> clear() async {

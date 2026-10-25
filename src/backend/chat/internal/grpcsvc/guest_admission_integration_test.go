@@ -244,12 +244,9 @@ func TestGuestAdmission_SpaceChatsRemainOwnedBySpaceAndRole(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	name, spaceID := "Space channel", uuid.New().String()
-	created, err := client.CreateChat(ctxFor(t, accounts, owner), &chatv1.CreateChatRequest{
-		Type: chatv1.ChatType_CHAT_TYPE_CHANNEL, Name: &name, SpaceId: &spaceID,
-	})
-	require.NoError(t, err)
+	chat := seedSpaceChatForPolicyTest(t, pool, owner, spaceID, chatv1.ChatType_CHAT_TYPE_CHANNEL, name)
 	allow := true
-	_, err = client.UpdateChat(ctxFor(t, accounts, owner), &chatv1.UpdateChatRequest{ChatId: created.GetChat().GetId(), AllowGuests: &allow})
+	_, err := client.UpdateChat(ctxFor(t, accounts, owner), &chatv1.UpdateChatRequest{ChatId: chat.GetId(), AllowGuests: &allow})
 	// The chat layer has no membership authority for Space chats, so this is
 	// denied before a standalone setting can be written.
 	require.Equal(t, codes.PermissionDenied, status.Code(err))

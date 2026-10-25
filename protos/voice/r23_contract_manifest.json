@@ -33,7 +33,8 @@
             "PARTICIPANT_ID_SEARCH": 7,
             "PARTICIPANT_ID_SUBSCRIPTION": 8,
             "PARTICIPANT_ID_BOT": 9,
-            "PARTICIPANT_ID_NOTIFICATION": 10
+            "PARTICIPANT_ID_NOTIFICATION": 10,
+            "PARTICIPANT_ID_REALTIME": 11
           },
           "reserved_names": [],
           "reserved_ranges": []
@@ -348,7 +349,7 @@
           "reserved_ranges": []
         }
       ],
-      "contract_projection_sha256": "4211ab4ff354b541e67b25c8d1a1bba545004718d32d9c5cb4f5de0194faa636",
+      "contract_projection_sha256": "c52c1d97dc9fe347486e6fdb18a70e85d45c7e74d8d6995ae5e40dd34102a664",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto"
@@ -1292,14 +1293,15 @@
           ]
         }
       ],
-      "contract_projection_sha256": "c9ace599b4e409e8120a6c1009accfb6067e1ab34fff4b44da79d4c956d0a45c",
+      "contract_projection_sha256": "e8f20470da3a4ebb958e90172601f558162d364bd67151e0a33ddde74c68c2eb",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/common.proto",
         "voice/common/v1/space_lifecycle.proto",
-        "voice/file/v1/file.proto"
+        "voice/file/v1/file.proto",
+        "voice/space/v1/member_admission.proto"
       ],
       "options": {
         "go_package": "voice.app/voice/space/v1;spacev1"
@@ -3164,13 +3166,14 @@
           ]
         }
       ],
-      "contract_projection_sha256": "88500debd69207ddde085fcb13bffbe1816b92cd418e3c50d4f6061d96b7e3d2",
+      "contract_projection_sha256": "8a6521aec3bef87424fc1f29a971fce66c7e36a49f55831c6d4b4ee0e5aea750",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
         "voice/common/v1/common.proto",
         "voice/common/v1/space_lifecycle.proto",
+        "voice/events/v1/jetstream_events.proto",
         "voice/story/v1/story.proto"
       ],
       "options": {
@@ -3840,11 +3843,13 @@
           ]
         }
       ],
-      "contract_projection_sha256": "4fc1c8bfa7dbc11b0388eb912bf6d95986eb3f085bf2875aadb48dadb197a99e",
+      "contract_projection_sha256": "4832b627e4ff6e43e4e504eeea2e1208711862c54ebb84a02d081a6aa8828540",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
+        "voice/chat/v1/chat_scope_authority.proto",
+        "voice/common/v1/bot_message.proto",
         "voice/common/v1/common.proto",
         "voice/common/v1/space_lifecycle.proto",
         "voice/gameintegration/v1/game_event.proto"
@@ -4400,11 +4405,12 @@
           ]
         }
       ],
-      "contract_projection_sha256": "81451ccaaffc39873ec7debc85530be9bfe5caed05f7cc08916cb070271d84c7",
+      "contract_projection_sha256": "25d31183abcefbff0a11a028b25a25549f02f70144dabf9ffa573445bb465cb9",
       "syntax": "proto3",
       "dependencies": [
         "google/protobuf/timestamp.proto",
         "voice/chat/v1/chat.proto",
+        "voice/common/v1/bot_message.proto",
         "voice/common/v1/space_lifecycle.proto",
         "voice/gameintegration/v1/game_event.proto",
         "voice/messaging/v1/messaging.proto",
@@ -4524,12 +4530,280 @@
       "options": {
         "go_package": "voice.app/voice/notification/v1;notificationv1"
       }
+    },
+    {
+      "path": "voice/realtime/v1/realtime.proto",
+      "package": "voice.realtime.v1",
+      "syntax": "proto3",
+      "dependencies": [
+        "google/protobuf/timestamp.proto",
+        "voice/chat/v1/chat.proto",
+        "voice/common/v1/space_lifecycle.proto"
+      ],
+      "options": {
+        "go_package": "voice.app/voice/realtime/v1;realtimev1"
+      },
+      "contract_projection_sha256": "f6caa0cc1ddbc31a76e670db4ae10462fa036d55f0776d4504adeb6935ea969b",
+      "messages": [
+        {
+          "name": "ApplySpaceLifecycleFenceRequest",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "fence",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceRequest"
+            }
+          ],
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256"
+        },
+        {
+          "name": "ApplySpaceLifecycleFenceResponse",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpaceLifecycleFenceReceipt"
+            }
+          ],
+          "unknown_fields": "accept_preserve"
+        },
+        {
+          "name": "PurgeSpaceRequest",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "purge",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeRequest"
+            }
+          ],
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256"
+        },
+        {
+          "name": "PurgeSpaceResponse",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.SpacePurgeReceipt"
+            }
+          ],
+          "unknown_fields": "accept_preserve"
+        },
+        {
+          "name": "ImportSpacePurgeManifestPageRequest",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "space_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "schedule_generation",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "page",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.chat.v1.SpacePurgeManifestPage"
+            },
+            {
+              "name": "seals_manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BOOL"
+            }
+          ],
+          "unknown_fields": "reject",
+          "hashing": "domain_separated_sha256"
+        },
+        {
+          "name": "ImportSpacePurgeManifestPageReceipt",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "protocol_version",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT32"
+            },
+            {
+              "name": "receipt_id",
+              "number": 2,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "space_id",
+              "number": 3,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "deletion_operation_id",
+              "number": 4,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_STRING"
+            },
+            {
+              "name": "generation",
+              "number": 5,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "manifest",
+              "number": 6,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.common.v1.ManifestBinding"
+            },
+            {
+              "name": "page_index",
+              "number": 7,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "accepted_count",
+              "number": 8,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_UINT64"
+            },
+            {
+              "name": "page_sha256",
+              "number": 9,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "manifest_sealed",
+              "number": 10,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BOOL"
+            },
+            {
+              "name": "request_sha256",
+              "number": 11,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_BYTES"
+            },
+            {
+              "name": "completed_at",
+              "number": 12,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".google.protobuf.Timestamp"
+            }
+          ],
+          "unknown_fields": "accept_preserve"
+        },
+        {
+          "name": "ImportSpacePurgeManifestPageResponse",
+          "exact": true,
+          "reserved_names": [],
+          "reserved_ranges": [],
+          "fields": [
+            {
+              "name": "receipt",
+              "number": 1,
+              "label": "LABEL_OPTIONAL",
+              "type": "TYPE_MESSAGE",
+              "type_name": ".voice.realtime.v1.ImportSpacePurgeManifestPageReceipt"
+            }
+          ]
+        }
+      ],
+      "services": [
+        {
+          "name": "RealtimeLifecycleService",
+          "methods": [
+            {
+              "name": "ImportSpacePurgeManifestPage",
+              "input": ".voice.realtime.v1.ImportSpacePurgeManifestPageRequest",
+              "output": ".voice.realtime.v1.ImportSpacePurgeManifestPageResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "ApplySpaceLifecycleFence",
+              "input": ".voice.realtime.v1.ApplySpaceLifecycleFenceRequest",
+              "output": ".voice.realtime.v1.ApplySpaceLifecycleFenceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            },
+            {
+              "name": "PurgeSpace",
+              "input": ".voice.realtime.v1.PurgeSpaceRequest",
+              "output": ".voice.realtime.v1.PurgeSpaceResponse",
+              "exposure": "protected",
+              "callers": [
+                "service:space"
+              ],
+              "no_streaming": true
+            }
+          ]
+        }
+      ]
     }
   ],
   "forbidden_rpc_exposure": [
     {
       "package": "voice.realtime.v1",
-      "allowed_r23_methods": []
+      "allowed_r23_methods": [
+        "ImportSpacePurgeManifestPage",
+        "ApplySpaceLifecycleFence",
+        "PurgeSpace"
+      ]
     },
     {
       "package": "voice.analytics.v1",

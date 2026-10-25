@@ -25,8 +25,24 @@ func (s *SpaceGRPC) requireSpacePermission(ctx context.Context, spaceID uuid.UUI
 	if !ok {
 		return status.Error(codes.Unauthenticated, "missing profile")
 	}
+	return s.checkSpacePermissionForProfile(ctx, spaceID, caller, permission)
+}
+
+// requireSpacePermissionForProfile accepts an actor already validated by the
+// owning transport; it never falls back to raw metadata.
+func (s *SpaceGRPC) requireSpacePermissionForProfile(ctx context.Context, spaceID, caller uuid.UUID, permission string) error {
+	if s == nil || s.Store == nil {
+		return status.Error(codes.FailedPrecondition, "space persistence not configured")
+	}
+	if err := s.Store.CheckOwnershipAvailable(ctx, spaceID); err != nil {
+		return mapSpaceStoreError(err)
+	}
+	return s.checkSpacePermissionForProfile(ctx, spaceID, caller, permission)
+}
+
+func (s *SpaceGRPC) checkSpacePermissionForProfile(ctx context.Context, spaceID, caller uuid.UUID, permission string) error {
 	if s.Roles == nil {
-		return s.requireSpaceOwner(ctx, spaceID)
+		return s.requireSpaceOwnerForProfile(ctx, spaceID, caller)
 	}
 	resp, err := s.Roles.CheckPermission(ctx, &rolev1.CheckPermissionRequest{
 		SpaceId:        spaceID.String(),
@@ -50,6 +66,10 @@ func (s *SpaceGRPC) requireSpaceOwner(ctx context.Context, spaceID uuid.UUID) er
 	if !ok {
 		return status.Error(codes.Unauthenticated, "missing profile")
 	}
+	return s.requireSpaceOwnerForProfile(ctx, spaceID, caller)
+}
+
+func (s *SpaceGRPC) requireSpaceOwnerForProfile(ctx context.Context, spaceID, caller uuid.UUID) error {
 	if s == nil || s.Store == nil {
 		return status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -192,13 +212,18 @@ func (s *SpaceGRPC) revokeCommunityMemberRole(ctx context.Context, spaceID, prof
 }
 
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {
-	if s.Roles == nil {
+	if s.OwnershipRoles == nil || s.PrincipalIssuer == nil {
 		return nil
 	}
-	resp, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{
+	req := &rolev1.GetMemberRolesRequest{
 		SpaceId:   spaceID.String(),
 		ProfileId: profileID.String(),
-	})
+	}
+	signed, err := s.ownershipRoleContext(ctx, req, rolev1.RoleService_GetMemberRoles_FullMethodName, uuid.New())
+	if err != nil {
+		return nil
+	}
+	resp, err := s.OwnershipRoles.GetMemberRoles(signed, req)
 	if err != nil {
 		return nil
 	}

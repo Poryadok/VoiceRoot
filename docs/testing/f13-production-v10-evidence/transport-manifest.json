@@ -1,0 +1,29 @@
+{
+  "originals": [
+    {
+      "bytes": 984,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\realtime-bootstrap\\author-receipt.json",
+      "path": "author-receipt.json",
+      "sha256": "5d4d9da02efdab88c255dfd8464be6878a1d54d870b00df88b539bfc241fc3bb"
+    },
+    {
+      "bytes": 3262,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\realtime-bootstrap\\red.log",
+      "path": "red.log",
+      "sha256": "bc775ac62710b9804d52d6a5ae8f219a6b8b720cc17c38f114afdbc9c83380eb"
+    },
+    {
+      "bytes": 792,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\realtime-bootstrap\\candidate-green.log",
+      "path": "candidate-green.log",
+      "sha256": "68d8250d0f3b2b4bf1f38bd012ba397c53656afe49c6e5fe36779bb15ff55e8e"
+    },
+    {
+      "bytes": 2984,
+      "original": "D:\\Git\\Voice\\tmp\\pr875-repair\\realtime-bootstrap-independent-review.md",
+      "path": "independent-fixture-review.md",
+      "sha256": "b37ac82d458ff0375bda4e1294c462db2326c83b99576df6701550d4b1fd6156"
+    }
+  ],
+  "scope": "OFFLINE_FIXTURE_EVIDENCE_NOT_PRODUCER_COMPLETION"
+}

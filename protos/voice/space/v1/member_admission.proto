@@ -1,0 +1,152 @@
+syntax = "proto3";
+
+package voice.space.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "voice/common/v1/bot_message.proto";
+import "voice/role/v1/member_admission.proto";
+
+option go_package = "voice.app/voice/space/v1;spacev1";
+
+// Own-DB authority snapshot, never an ACL decision or a portable capability.
+// expected_generation and expected_admission_operation_id are present together.
+message GetMemberAdmissionAuthorityRequest {
+  uint32 protocol_version = 1; // exactly 1
+  string space_id = 2;
+  string profile_id = 3;
+  optional uint64 expected_generation = 4;
+  optional string expected_admission_operation_id = 5;
+  optional string chat_id = 6; // exact current Space-tree relation only
+  // Messaging-only exact native Bot observation; forbids expected generation/op.
+  optional voice.common.v1.BotMessageSendBinding bot_message_send_binding = 7;
+}
+
+enum MemberAdmissionLifecycleState {
+  MEMBER_ADMISSION_LIFECYCLE_STATE_UNSPECIFIED = 0;
+  MEMBER_ADMISSION_LIFECYCLE_STATE_LIVE = 1;
+  MEMBER_ADMISSION_LIFECYCLE_STATE_FROZEN = 2;
+  MEMBER_ADMISSION_LIFECYCLE_STATE_PURGE_DECIDED = 3;
+  MEMBER_ADMISSION_LIFECYCLE_STATE_RETIRED = 4;
+}
+
+enum MemberAdmissionOwnershipState {
+  MEMBER_ADMISSION_OWNERSHIP_STATE_UNSPECIFIED = 0;
+  MEMBER_ADMISSION_OWNERSHIP_STATE_AVAILABLE = 1;
+  MEMBER_ADMISSION_OWNERSHIP_STATE_PREPARED = 2;
+  MEMBER_ADMISSION_OWNERSHIP_STATE_RETIRED = 3;
+}
+
+enum MemberAdmissionSourceState {
+  MEMBER_ADMISSION_SOURCE_STATE_UNSPECIFIED = 0;
+  MEMBER_ADMISSION_SOURCE_STATE_NONE = 1;
+  MEMBER_ADMISSION_SOURCE_STATE_PREPARING = 2;
+  MEMBER_ADMISSION_SOURCE_STATE_ACTIVE = 3; // ordinary: published; community: live episode
+  MEMBER_ADMISSION_SOURCE_STATE_RETIRED = 4;
+}
+
+// Publication provenance does not grant a role or add another membership source.
+enum MemberAdmissionPublicationKind {
+  MEMBER_ADMISSION_PUBLICATION_KIND_UNSPECIFIED = 0;
+  MEMBER_ADMISSION_PUBLICATION_KIND_ADMISSION_ROLE_READY = 1;
+  MEMBER_ADMISSION_PUBLICATION_KIND_LEGACY_MIGRATED = 2;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_OWNER_CREATE = 3;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_CREATE = 4;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_COMMUNITY_OWNER_RECOVERY = 5;
+  MEMBER_ADMISSION_PUBLICATION_KIND_NATIVE_BOT_INSTALL = 6;
+}
+
+// Persisted private canonical bytes. SHA256 is domain-separated by
+// "voice.space.native-membership-publication.v1" plus NUL. The protected
+// authority response discloses only the compact proof below, not this metadata.
+message NativeMembershipPublicationBinding {
+  uint32 protocol_version = 1;
+  string publication_operation_id = 2;
+  string space_id = 3;
+  string profile_id = 4;
+  uint64 ordinary_generation = 5;
+  MemberAdmissionPublicationKind kind = 6;
+  string initiating_service = 7;
+  optional string initiating_account_id = 8;
+  string initiating_profile_id = 9;
+  bytes request_sha256 = 10;
+  string producer_operation_id = 11;
+  bytes producer_evidence_sha256 = 12;
+  optional string application_id = 13;
+  optional string environment_id = 14;
+  optional string corporation_key = 15;
+  optional string previous_owner_profile_id = 16;
+  optional string previous_owner_account_id = 17;
+  optional uint64 expected_owner_generation = 18;
+  optional uint64 result_owner_generation = 19;
+  optional string bot_id = 20;
+  optional string installation_id = 21;
+  google.protobuf.Timestamp published_at = 22;
+}
+
+message MemberAdmissionNativePublicationProof {
+  MemberAdmissionPublicationKind kind = 1;
+  string operation_id = 2;
+  bytes binding_sha256 = 3;
+}
+
+message MemberAdmissionLifecycleAuthority {
+  uint64 generation = 1;
+  MemberAdmissionLifecycleState state = 2;
+}
+
+message MemberAdmissionOwnershipAuthority {
+  uint64 generation = 1;
+  MemberAdmissionOwnershipState state = 2;
+  string current_owner_profile_id = 3;
+}
+
+message MemberAdmissionOrdinaryAuthority {
+  uint64 head_generation = 1;
+  uint64 retired_through = 2;
+  MemberAdmissionSourceState state = 3;
+  bool explicit_legacy = 4;
+  voice.role.v1.MembershipBinding published_binding = 5; // ORDINARY only
+  bytes role_receipt_sha256 = 6; // exact 32 bytes for positive published generation
+  // PREPARING is inert; this identifies the current candidate for Ensure only.
+  voice.role.v1.MembershipBinding preparing_binding = 7; // positive ORDINARY only
+  bytes preparing_admission_binding_sha256 = 8;
+  MemberAdmissionPublicationKind publication_kind = 9;
+  // Exactly one proof for ACTIVE positive ordinary publication: field6 for
+  // ADMISSION_ROLE_READY, this field for a native kind. Neither for legacy0.
+  MemberAdmissionNativePublicationProof native_publication = 10;
+}
+
+message MemberAdmissionCommunityAuthority {
+  MemberAdmissionSourceState state = 1;
+  voice.role.v1.MembershipBinding binding = 2; // COMMUNITY only
+  uint64 retired_through = 3;
+  uint64 roster_source_revision = 4;
+  // Minimum of current owner and member leases, sampled after the Space fence.
+  google.protobuf.Duration validity_remaining = 5;
+}
+
+message MemberAdmissionTreeRelationAuthority {
+  string chat_id = 1;
+  bool present = 2;
+  uint64 revision = 3;
+}
+
+message GetMemberAdmissionAuthorityResponse {
+  uint32 protocol_version = 1;
+  string space_id = 2;
+  string profile_id = 3;
+  uint64 space_authority_revision = 4; // monotonic, nonzero; covers every consumed input
+  MemberAdmissionLifecycleAuthority lifecycle = 5;
+  MemberAdmissionOwnershipAuthority ownership = 6;
+  MemberAdmissionOrdinaryAuthority ordinary = 7;
+  MemberAdmissionCommunityAuthority community = 8;
+  optional MemberAdmissionTreeRelationAuthority tree_relation = 9;
+  google.protobuf.Timestamp sampled_at = 10; // diagnostic; never compare service clocks
+  // Owner-selected observation bound, <=5s and no greater than any leased input.
+  // Role starts its monotonic deadline BEFORE dispatch and subtracts the full
+  // roundtrip/elapsed time. Missing/expired/unknown bounds fail closed.
+  google.protobuf.Duration validity_remaining = 11;
+  // Present only after exact current native Bot tuple and Chat tree validation.
+  optional voice.common.v1.BotMessageSendBinding bot_message_send_binding = 12;
+}

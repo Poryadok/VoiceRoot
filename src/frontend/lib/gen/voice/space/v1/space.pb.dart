@@ -15,12 +15,12 @@ import 'dart:core' as $core;
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 import 'package:protobuf/well_known_types/google/protobuf/timestamp.pb.dart'
-    as $1;
+    as $2;
 
-import '../../chat/v1/chat.pb.dart' as $3;
-import '../../common/v1/common.pb.dart' as $2;
-import '../../common/v1/space_lifecycle.pb.dart' as $4;
-import '../../file/v1/file.pb.dart' as $5;
+import '../../chat/v1/chat.pb.dart' as $4;
+import '../../common/v1/common.pb.dart' as $3;
+import '../../common/v1/space_lifecycle.pb.dart' as $5;
+import '../../file/v1/file.pb.dart' as $6;
 import 'space.pbenum.dart';
 
 export 'package:protobuf/protobuf.dart' show GeneratedMessageGenericExtensions;
@@ -42,10 +42,10 @@ class Space extends $pb.GeneratedMessage {
     $core.String? entryRequirement,
     $core.String? entryQuestionsJson,
     $core.String? mmConfigJson,
-    $1.Timestamp? createdAt,
-    $1.Timestamp? updatedAt,
-    $1.Timestamp? deletionScheduledAt,
-    $1.Timestamp? purgeAfter,
+    $2.Timestamp? createdAt,
+    $2.Timestamp? updatedAt,
+    $2.Timestamp? deletionScheduledAt,
+    $2.Timestamp? purgeAfter,
     $core.bool? allowGuests,
   }) {
     final result = create();
@@ -98,14 +98,14 @@ class Space extends $pb.GeneratedMessage {
     ..aOS(11, _omitFieldNames ? '' : 'entryRequirement')
     ..aOS(12, _omitFieldNames ? '' : 'entryQuestionsJson')
     ..aOS(13, _omitFieldNames ? '' : 'mmConfigJson')
-    ..aOM<$1.Timestamp>(14, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(15, _omitFieldNames ? '' : 'updatedAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(16, _omitFieldNames ? '' : 'deletionScheduledAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(17, _omitFieldNames ? '' : 'purgeAfter',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(14, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(15, _omitFieldNames ? '' : 'updatedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(16, _omitFieldNames ? '' : 'deletionScheduledAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(17, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $2.Timestamp.create)
     ..aOB(18, _omitFieldNames ? '' : 'allowGuests')
     ..hasRequiredFields = false;
 
@@ -245,48 +245,48 @@ class Space extends $pb.GeneratedMessage {
   void clearMmConfigJson() => $_clearField(13);
 
   @$pb.TagNumber(14)
-  $1.Timestamp get createdAt => $_getN(13);
+  $2.Timestamp get createdAt => $_getN(13);
   @$pb.TagNumber(14)
-  set createdAt($1.Timestamp value) => $_setField(14, value);
+  set createdAt($2.Timestamp value) => $_setField(14, value);
   @$pb.TagNumber(14)
   $core.bool hasCreatedAt() => $_has(13);
   @$pb.TagNumber(14)
   void clearCreatedAt() => $_clearField(14);
   @$pb.TagNumber(14)
-  $1.Timestamp ensureCreatedAt() => $_ensure(13);
+  $2.Timestamp ensureCreatedAt() => $_ensure(13);
 
   @$pb.TagNumber(15)
-  $1.Timestamp get updatedAt => $_getN(14);
+  $2.Timestamp get updatedAt => $_getN(14);
   @$pb.TagNumber(15)
-  set updatedAt($1.Timestamp value) => $_setField(15, value);
+  set updatedAt($2.Timestamp value) => $_setField(15, value);
   @$pb.TagNumber(15)
   $core.bool hasUpdatedAt() => $_has(14);
   @$pb.TagNumber(15)
   void clearUpdatedAt() => $_clearField(15);
   @$pb.TagNumber(15)
-  $1.Timestamp ensureUpdatedAt() => $_ensure(14);
+  $2.Timestamp ensureUpdatedAt() => $_ensure(14);
 
   @$pb.TagNumber(16)
-  $1.Timestamp get deletionScheduledAt => $_getN(15);
+  $2.Timestamp get deletionScheduledAt => $_getN(15);
   @$pb.TagNumber(16)
-  set deletionScheduledAt($1.Timestamp value) => $_setField(16, value);
+  set deletionScheduledAt($2.Timestamp value) => $_setField(16, value);
   @$pb.TagNumber(16)
   $core.bool hasDeletionScheduledAt() => $_has(15);
   @$pb.TagNumber(16)
   void clearDeletionScheduledAt() => $_clearField(16);
   @$pb.TagNumber(16)
-  $1.Timestamp ensureDeletionScheduledAt() => $_ensure(15);
+  $2.Timestamp ensureDeletionScheduledAt() => $_ensure(15);
 
   @$pb.TagNumber(17)
-  $1.Timestamp get purgeAfter => $_getN(16);
+  $2.Timestamp get purgeAfter => $_getN(16);
   @$pb.TagNumber(17)
-  set purgeAfter($1.Timestamp value) => $_setField(17, value);
+  set purgeAfter($2.Timestamp value) => $_setField(17, value);
   @$pb.TagNumber(17)
   $core.bool hasPurgeAfter() => $_has(16);
   @$pb.TagNumber(17)
   void clearPurgeAfter() => $_clearField(17);
   @$pb.TagNumber(17)
-  $1.Timestamp ensurePurgeAfter() => $_ensure(16);
+  $2.Timestamp ensurePurgeAfter() => $_ensure(16);
 
   /// Guest admission is explicit and defaults to false.
   @$pb.TagNumber(18)
@@ -814,7 +814,7 @@ class GetSpaceRequest extends $pb.GeneratedMessage {
 
 class ListMySpacesRequest extends $pb.GeneratedMessage {
   factory ListMySpacesRequest({
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (page != null) result.page = page;
@@ -834,8 +834,8 @@ class ListMySpacesRequest extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ListMySpacesRequest',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
-    ..aOM<$2.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(1, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -858,15 +858,15 @@ class ListMySpacesRequest extends $pb.GeneratedMessage {
   static ListMySpacesRequest? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $2.CursorPageRequest get page => $_getN(0);
+  $3.CursorPageRequest get page => $_getN(0);
   @$pb.TagNumber(1)
-  set page($2.CursorPageRequest value) => $_setField(1, value);
+  set page($3.CursorPageRequest value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasPage() => $_has(0);
   @$pb.TagNumber(1)
   void clearPage() => $_clearField(1);
   @$pb.TagNumber(1)
-  $2.CursorPageRequest ensurePage() => $_ensure(0);
+  $3.CursorPageRequest ensurePage() => $_ensure(0);
 }
 
 class SpaceList extends $pb.GeneratedMessage {
@@ -931,7 +931,7 @@ class SpaceList extends $pb.GeneratedMessage {
 class SearchPublicSpacesRequest extends $pb.GeneratedMessage {
   factory SearchPublicSpacesRequest({
     $core.String? query,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (query != null) result.query = query;
@@ -953,8 +953,8 @@ class SearchPublicSpacesRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'query')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -987,15 +987,15 @@ class SearchPublicSpacesRequest extends $pb.GeneratedMessage {
   void clearQuery() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 }
 
 class VoiceRoom extends $pb.GeneratedMessage {
@@ -1003,7 +1003,7 @@ class VoiceRoom extends $pb.GeneratedMessage {
     $core.String? id,
     $core.String? spaceId,
     $core.String? name,
-    $1.Timestamp? createdAt,
+    $2.Timestamp? createdAt,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -1029,8 +1029,8 @@ class VoiceRoom extends $pb.GeneratedMessage {
     ..aOS(1, _omitFieldNames ? '' : 'id')
     ..aOS(2, _omitFieldNames ? '' : 'spaceId')
     ..aOS(3, _omitFieldNames ? '' : 'name')
-    ..aOM<$1.Timestamp>(4, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(4, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1079,15 +1079,15 @@ class VoiceRoom extends $pb.GeneratedMessage {
   void clearName() => $_clearField(3);
 
   @$pb.TagNumber(4)
-  $1.Timestamp get createdAt => $_getN(3);
+  $2.Timestamp get createdAt => $_getN(3);
   @$pb.TagNumber(4)
-  set createdAt($1.Timestamp value) => $_setField(4, value);
+  set createdAt($2.Timestamp value) => $_setField(4, value);
   @$pb.TagNumber(4)
   $core.bool hasCreatedAt() => $_has(3);
   @$pb.TagNumber(4)
   void clearCreatedAt() => $_clearField(4);
   @$pb.TagNumber(4)
-  $1.Timestamp ensureCreatedAt() => $_ensure(3);
+  $2.Timestamp ensureCreatedAt() => $_ensure(3);
 }
 
 class CreateVoiceRoomRequest extends $pb.GeneratedMessage {
@@ -1285,7 +1285,7 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? categoryId,
     $core.String? kind,
-    $3.ChatRef? linkedChat,
+    $4.ChatRef? linkedChat,
     $core.String? voiceRoomId,
     $core.int? sortOrder,
     $core.bool? isSystem,
@@ -1325,8 +1325,8 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'spaceId')
     ..aOS(3, _omitFieldNames ? '' : 'categoryId')
     ..aOS(4, _omitFieldNames ? '' : 'kind')
-    ..aOM<$3.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
-        subBuilder: $3.ChatRef.create)
+    ..aOM<$4.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
+        subBuilder: $4.ChatRef.create)
     ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
     ..aI(7, _omitFieldNames ? '' : 'sortOrder')
     ..aOB(8, _omitFieldNames ? '' : 'isSystem')
@@ -1391,15 +1391,15 @@ class SpaceTreeNode extends $pb.GeneratedMessage {
   void clearKind() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $3.ChatRef get linkedChat => $_getN(4);
+  $4.ChatRef get linkedChat => $_getN(4);
   @$pb.TagNumber(5)
-  set linkedChat($3.ChatRef value) => $_setField(5, value);
+  set linkedChat($4.ChatRef value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasLinkedChat() => $_has(4);
   @$pb.TagNumber(5)
   void clearLinkedChat() => $_clearField(5);
   @$pb.TagNumber(5)
-  $3.ChatRef ensureLinkedChat() => $_ensure(4);
+  $4.ChatRef ensureLinkedChat() => $_ensure(4);
 
   @$pb.TagNumber(6)
   $core.String get voiceRoomId => $_getSZ(5);
@@ -1594,7 +1594,7 @@ class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
     $core.String? nodeId,
     $core.String? categoryId,
     $core.String? kind,
-    $3.ChatRef? linkedChat,
+    $4.ChatRef? linkedChat,
     $core.String? voiceRoomId,
     $core.int? sortOrder,
     $core.bool? isSystem,
@@ -1628,8 +1628,8 @@ class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'nodeId')
     ..aOS(3, _omitFieldNames ? '' : 'categoryId')
     ..aOS(4, _omitFieldNames ? '' : 'kind')
-    ..aOM<$3.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
-        subBuilder: $3.ChatRef.create)
+    ..aOM<$4.ChatRef>(5, _omitFieldNames ? '' : 'linkedChat',
+        subBuilder: $4.ChatRef.create)
     ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
     ..aI(7, _omitFieldNames ? '' : 'sortOrder')
     ..aOB(8, _omitFieldNames ? '' : 'isSystem')
@@ -1692,15 +1692,15 @@ class UpsertTreeNodeRequest extends $pb.GeneratedMessage {
   void clearKind() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $3.ChatRef get linkedChat => $_getN(4);
+  $4.ChatRef get linkedChat => $_getN(4);
   @$pb.TagNumber(5)
-  set linkedChat($3.ChatRef value) => $_setField(5, value);
+  set linkedChat($4.ChatRef value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasLinkedChat() => $_has(4);
   @$pb.TagNumber(5)
   void clearLinkedChat() => $_clearField(5);
   @$pb.TagNumber(5)
-  $3.ChatRef ensureLinkedChat() => $_ensure(4);
+  $4.ChatRef ensureLinkedChat() => $_ensure(4);
 
   @$pb.TagNumber(6)
   $core.String get voiceRoomId => $_getSZ(5);
@@ -2222,9 +2222,9 @@ class Invite extends $pb.GeneratedMessage {
     $core.String? creatorProfileId,
     $core.int? maxUses,
     $core.int? useCount,
-    $1.Timestamp? expiresAt,
-    $1.Timestamp? createdAt,
-    $1.Timestamp? revokedAt,
+    $2.Timestamp? expiresAt,
+    $2.Timestamp? createdAt,
+    $2.Timestamp? revokedAt,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -2258,12 +2258,12 @@ class Invite extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'creatorProfileId')
     ..aI(5, _omitFieldNames ? '' : 'maxUses')
     ..aI(6, _omitFieldNames ? '' : 'useCount')
-    ..aOM<$1.Timestamp>(7, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'revokedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(7, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(9, _omitFieldNames ? '' : 'revokedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2339,44 +2339,44 @@ class Invite extends $pb.GeneratedMessage {
   void clearUseCount() => $_clearField(6);
 
   @$pb.TagNumber(7)
-  $1.Timestamp get expiresAt => $_getN(6);
+  $2.Timestamp get expiresAt => $_getN(6);
   @$pb.TagNumber(7)
-  set expiresAt($1.Timestamp value) => $_setField(7, value);
+  set expiresAt($2.Timestamp value) => $_setField(7, value);
   @$pb.TagNumber(7)
   $core.bool hasExpiresAt() => $_has(6);
   @$pb.TagNumber(7)
   void clearExpiresAt() => $_clearField(7);
   @$pb.TagNumber(7)
-  $1.Timestamp ensureExpiresAt() => $_ensure(6);
+  $2.Timestamp ensureExpiresAt() => $_ensure(6);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get createdAt => $_getN(7);
+  $2.Timestamp get createdAt => $_getN(7);
   @$pb.TagNumber(8)
-  set createdAt($1.Timestamp value) => $_setField(8, value);
+  set createdAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasCreatedAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearCreatedAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureCreatedAt() => $_ensure(7);
+  $2.Timestamp ensureCreatedAt() => $_ensure(7);
 
   @$pb.TagNumber(9)
-  $1.Timestamp get revokedAt => $_getN(8);
+  $2.Timestamp get revokedAt => $_getN(8);
   @$pb.TagNumber(9)
-  set revokedAt($1.Timestamp value) => $_setField(9, value);
+  set revokedAt($2.Timestamp value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasRevokedAt() => $_has(8);
   @$pb.TagNumber(9)
   void clearRevokedAt() => $_clearField(9);
   @$pb.TagNumber(9)
-  $1.Timestamp ensureRevokedAt() => $_ensure(8);
+  $2.Timestamp ensureRevokedAt() => $_ensure(8);
 }
 
 class CreateInviteRequest extends $pb.GeneratedMessage {
   factory CreateInviteRequest({
     $core.String? spaceId,
     $core.int? maxUses,
-    $1.Timestamp? expiresAt,
+    $2.Timestamp? expiresAt,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -2400,8 +2400,8 @@ class CreateInviteRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aI(2, _omitFieldNames ? '' : 'maxUses')
-    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'expiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(3, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2442,15 +2442,15 @@ class CreateInviteRequest extends $pb.GeneratedMessage {
   void clearMaxUses() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $1.Timestamp get expiresAt => $_getN(2);
+  $2.Timestamp get expiresAt => $_getN(2);
   @$pb.TagNumber(3)
-  set expiresAt($1.Timestamp value) => $_setField(3, value);
+  set expiresAt($2.Timestamp value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasExpiresAt() => $_has(2);
   @$pb.TagNumber(3)
   void clearExpiresAt() => $_clearField(3);
   @$pb.TagNumber(3)
-  $1.Timestamp ensureExpiresAt() => $_ensure(2);
+  $2.Timestamp ensureExpiresAt() => $_ensure(2);
 }
 
 class RevokeInviteRequest extends $pb.GeneratedMessage {
@@ -2666,9 +2666,11 @@ class InviteList extends $pb.GeneratedMessage {
 class JoinByInviteRequest extends $pb.GeneratedMessage {
   factory JoinByInviteRequest({
     $core.String? code,
+    $core.String? operationId,
   }) {
     final result = create();
     if (code != null) result.code = code;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -2686,6 +2688,7 @@ class JoinByInviteRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'code')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2715,13 +2718,22 @@ class JoinByInviteRequest extends $pb.GeneratedMessage {
   $core.bool hasCode() => $_has(0);
   @$pb.TagNumber(1)
   void clearCode() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
 }
 
 class SpaceMembership extends $pb.GeneratedMessage {
   factory SpaceMembership({
     $core.String? spaceId,
     $core.String? profileId,
-    $1.Timestamp? joinedAt,
+    $2.Timestamp? joinedAt,
     $core.String? nickname,
     $core.Iterable<$core.String>? roleNames,
   }) {
@@ -2749,8 +2761,8 @@ class SpaceMembership extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
-    ..aOM<$1.Timestamp>(3, _omitFieldNames ? '' : 'joinedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(3, _omitFieldNames ? '' : 'joinedAt',
+        subBuilder: $2.Timestamp.create)
     ..aOS(4, _omitFieldNames ? '' : 'nickname')
     ..pPS(5, _omitFieldNames ? '' : 'roleNames')
     ..hasRequiredFields = false;
@@ -2793,15 +2805,15 @@ class SpaceMembership extends $pb.GeneratedMessage {
   void clearProfileId() => $_clearField(2);
 
   @$pb.TagNumber(3)
-  $1.Timestamp get joinedAt => $_getN(2);
+  $2.Timestamp get joinedAt => $_getN(2);
   @$pb.TagNumber(3)
-  set joinedAt($1.Timestamp value) => $_setField(3, value);
+  set joinedAt($2.Timestamp value) => $_setField(3, value);
   @$pb.TagNumber(3)
   $core.bool hasJoinedAt() => $_has(2);
   @$pb.TagNumber(3)
   void clearJoinedAt() => $_clearField(3);
   @$pb.TagNumber(3)
-  $1.Timestamp ensureJoinedAt() => $_ensure(2);
+  $2.Timestamp ensureJoinedAt() => $_ensure(2);
 
   @$pb.TagNumber(4)
   $core.String get nickname => $_getSZ(3);
@@ -2819,9 +2831,11 @@ class SpaceMembership extends $pb.GeneratedMessage {
 class JoinSpaceRequest extends $pb.GeneratedMessage {
   factory JoinSpaceRequest({
     $core.String? spaceId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -2839,6 +2853,7 @@ class JoinSpaceRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -2868,6 +2883,15 @@ class JoinSpaceRequest extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
 }
 
 class LeaveSpaceRequest extends $pb.GeneratedMessage {
@@ -2996,12 +3020,14 @@ class BanMemberRequest extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? reason,
     $core.String? profileId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (accountId != null) result.accountId = accountId;
     if (reason != null) result.reason = reason;
     if (profileId != null) result.profileId = profileId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -3022,6 +3048,7 @@ class BanMemberRequest extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
     ..aOS(3, _omitFieldNames ? '' : 'reason')
     ..aOS(4, _omitFieldNames ? '' : 'profileId')
+    ..aOS(5, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3078,16 +3105,28 @@ class BanMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(3);
   @$pb.TagNumber(4)
   void clearProfileId() => $_clearField(4);
+
+  /// Caller-chosen stable intent UUID, retained across retries; not a transport ID.
+  @$pb.TagNumber(5)
+  $core.String get operationId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set operationId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasOperationId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearOperationId() => $_clearField(5);
 }
 
 class UnbanMemberRequest extends $pb.GeneratedMessage {
   factory UnbanMemberRequest({
     $core.String? spaceId,
     $core.String? accountId,
+    $core.String? operationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (accountId != null) result.accountId = accountId;
+    if (operationId != null) result.operationId = operationId;
     return result;
   }
 
@@ -3106,6 +3145,7 @@ class UnbanMemberRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3144,12 +3184,22 @@ class UnbanMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasAccountId() => $_has(1);
   @$pb.TagNumber(2)
   void clearAccountId() => $_clearField(2);
+
+  /// Caller-chosen stable intent UUID, retained across retries; not a transport ID.
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
 }
 
 class ListMembersRequest extends $pb.GeneratedMessage {
   factory ListMembersRequest({
     $core.String? spaceId,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -3171,8 +3221,8 @@ class ListMembersRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3204,15 +3254,15 @@ class ListMembersRequest extends $pb.GeneratedMessage {
   void clearSpaceId() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 }
 
 class SpaceMemberList extends $pb.GeneratedMessage {
@@ -3384,7 +3434,7 @@ class SpaceBan extends $pb.GeneratedMessage {
     $core.String? accountId,
     $core.String? bannedByProfileId,
     $core.String? reason,
-    $1.Timestamp? bannedAt,
+    $2.Timestamp? bannedAt,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -3412,8 +3462,8 @@ class SpaceBan extends $pb.GeneratedMessage {
     ..aOS(2, _omitFieldNames ? '' : 'accountId')
     ..aOS(3, _omitFieldNames ? '' : 'bannedByProfileId')
     ..aOS(4, _omitFieldNames ? '' : 'reason')
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'bannedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'bannedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3471,15 +3521,15 @@ class SpaceBan extends $pb.GeneratedMessage {
   void clearReason() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get bannedAt => $_getN(4);
+  $2.Timestamp get bannedAt => $_getN(4);
   @$pb.TagNumber(5)
-  set bannedAt($1.Timestamp value) => $_setField(5, value);
+  set bannedAt($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasBannedAt() => $_has(4);
   @$pb.TagNumber(5)
   void clearBannedAt() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureBannedAt() => $_ensure(4);
+  $2.Timestamp ensureBannedAt() => $_ensure(4);
 }
 
 class TimeoutMemberRequest extends $pb.GeneratedMessage {
@@ -3711,10 +3761,13 @@ class AddBotMemberRequest extends $pb.GeneratedMessage {
   factory AddBotMemberRequest({
     $core.String? spaceId,
     $core.String? profileId,
+    BotInstallationIntent? installationIntent,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (profileId != null) result.profileId = profileId;
+    if (installationIntent != null)
+      result.installationIntent = installationIntent;
     return result;
   }
 
@@ -3733,6 +3786,8 @@ class AddBotMemberRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOM<BotInstallationIntent>(3, _omitFieldNames ? '' : 'installationIntent',
+        subBuilder: BotInstallationIntent.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3771,16 +3826,33 @@ class AddBotMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  BotInstallationIntent get installationIntent => $_getN(2);
+  @$pb.TagNumber(3)
+  set installationIntent(BotInstallationIntent value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInstallationIntent() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInstallationIntent() => $_clearField(3);
+  @$pb.TagNumber(3)
+  BotInstallationIntent ensureInstallationIntent() => $_ensure(2);
 }
 
 class RemoveBotMemberRequest extends $pb.GeneratedMessage {
   factory RemoveBotMemberRequest({
     $core.String? spaceId,
     $core.String? profileId,
+    BotInstallationIntent? installationIntent,
+    $core.String? installOperationId,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
     if (profileId != null) result.profileId = profileId;
+    if (installationIntent != null)
+      result.installationIntent = installationIntent;
+    if (installOperationId != null)
+      result.installOperationId = installOperationId;
     return result;
   }
 
@@ -3799,6 +3871,9 @@ class RemoveBotMemberRequest extends $pb.GeneratedMessage {
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
     ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOM<BotInstallationIntent>(3, _omitFieldNames ? '' : 'installationIntent',
+        subBuilder: BotInstallationIntent.create)
+    ..aOS(4, _omitFieldNames ? '' : 'installOperationId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3838,6 +3913,146 @@ class RemoveBotMemberRequest extends $pb.GeneratedMessage {
   $core.bool hasProfileId() => $_has(1);
   @$pb.TagNumber(2)
   void clearProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  BotInstallationIntent get installationIntent => $_getN(2);
+  @$pb.TagNumber(3)
+  set installationIntent(BotInstallationIntent value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInstallationIntent() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInstallationIntent() => $_clearField(3);
+  @$pb.TagNumber(3)
+  BotInstallationIntent ensureInstallationIntent() => $_ensure(2);
+
+  /// Original add operation, retained when the cancellation has its own key.
+  @$pb.TagNumber(4)
+  $core.String get installOperationId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set installOperationId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasInstallOperationId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearInstallOperationId() => $_clearField(4);
+}
+
+/// Bot-owned durable identity, verified only under the Bot service principal.
+/// Generation is distinct from Space's ordinary membership generation.
+class BotInstallationIntent extends $pb.GeneratedMessage {
+  factory BotInstallationIntent({
+    $core.String? operationId,
+    $core.String? botId,
+    $core.String? installationId,
+    $core.String? spaceId,
+    $core.String? actorProfileId,
+    $fixnum.Int64? generation,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (botId != null) result.botId = botId;
+    if (installationId != null) result.installationId = installationId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (generation != null) result.generation = generation;
+    return result;
+  }
+
+  BotInstallationIntent._();
+
+  factory BotInstallationIntent.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory BotInstallationIntent.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'BotInstallationIntent',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'botId')
+    ..aOS(3, _omitFieldNames ? '' : 'installationId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(5, _omitFieldNames ? '' : 'actorProfileId')
+    ..a<$fixnum.Int64>(
+        6, _omitFieldNames ? '' : 'generation', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotInstallationIntent clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  BotInstallationIntent copyWith(
+          void Function(BotInstallationIntent) updates) =>
+      super.copyWith((message) => updates(message as BotInstallationIntent))
+          as BotInstallationIntent;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static BotInstallationIntent create() => BotInstallationIntent._();
+  @$core.override
+  BotInstallationIntent createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static BotInstallationIntent getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<BotInstallationIntent>(create);
+  static BotInstallationIntent? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get botId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set botId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasBotId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearBotId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get installationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set installationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInstallationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInstallationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get actorProfileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set actorProfileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasActorProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearActorProfileId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $fixnum.Int64 get generation => $_getI64(5);
+  @$pb.TagNumber(6)
+  set generation($fixnum.Int64 value) => $_setInt64(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasGeneration() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearGeneration() => $_clearField(6);
 }
 
 class ListTemplatesRequest extends $pb.GeneratedMessage {
@@ -4085,7 +4300,7 @@ class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
     $fixnum.Int64? sourceRevision,
     $core.List<$core.int>? snapshotSha256,
     $core.Iterable<$core.String>? profileIds,
-    $1.Timestamp? leaseExpiresAt,
+    $2.Timestamp? leaseExpiresAt,
   }) {
     final result = create();
     if (operationId != null) result.operationId = operationId;
@@ -4124,8 +4339,8 @@ class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
     ..a<$core.List<$core.int>>(
         8, _omitFieldNames ? '' : 'snapshotSha256', $pb.PbFieldType.OY)
     ..pPS(9, _omitFieldNames ? '' : 'profileIds')
-    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'leaseExpiresAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'leaseExpiresAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4226,15 +4441,15 @@ class ApplyCommunityRosterRequest extends $pb.GeneratedMessage {
   $pb.PbList<$core.String> get profileIds => $_getList(8);
 
   @$pb.TagNumber(10)
-  $1.Timestamp get leaseExpiresAt => $_getN(9);
+  $2.Timestamp get leaseExpiresAt => $_getN(9);
   @$pb.TagNumber(10)
-  set leaseExpiresAt($1.Timestamp value) => $_setField(10, value);
+  set leaseExpiresAt($2.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasLeaseExpiresAt() => $_has(9);
   @$pb.TagNumber(10)
   void clearLeaseExpiresAt() => $_clearField(10);
   @$pb.TagNumber(10)
-  $1.Timestamp ensureLeaseExpiresAt() => $_ensure(9);
+  $2.Timestamp ensureLeaseExpiresAt() => $_ensure(9);
 }
 
 class ApplyCommunityRosterResponse extends $pb.GeneratedMessage {
@@ -4721,11 +4936,11 @@ class RecoverCommunityOwnerRequest extends $pb.GeneratedMessage {
 class GetAuditLogRequest extends $pb.GeneratedMessage {
   factory GetAuditLogRequest({
     $core.String? spaceId,
-    $2.CursorPageRequest? page,
+    $3.CursorPageRequest? page,
     $core.String? actorProfileId,
     $core.String? action,
-    $1.Timestamp? from,
-    $1.Timestamp? to,
+    $2.Timestamp? from,
+    $2.Timestamp? to,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -4751,14 +4966,14 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
-    ..aOM<$2.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
-        subBuilder: $2.CursorPageRequest.create)
+    ..aOM<$3.CursorPageRequest>(2, _omitFieldNames ? '' : 'page',
+        subBuilder: $3.CursorPageRequest.create)
     ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
     ..aOS(4, _omitFieldNames ? '' : 'action')
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'from',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(6, _omitFieldNames ? '' : 'to',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'from',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(6, _omitFieldNames ? '' : 'to',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4790,15 +5005,15 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
   void clearSpaceId() => $_clearField(1);
 
   @$pb.TagNumber(2)
-  $2.CursorPageRequest get page => $_getN(1);
+  $3.CursorPageRequest get page => $_getN(1);
   @$pb.TagNumber(2)
-  set page($2.CursorPageRequest value) => $_setField(2, value);
+  set page($3.CursorPageRequest value) => $_setField(2, value);
   @$pb.TagNumber(2)
   $core.bool hasPage() => $_has(1);
   @$pb.TagNumber(2)
   void clearPage() => $_clearField(2);
   @$pb.TagNumber(2)
-  $2.CursorPageRequest ensurePage() => $_ensure(1);
+  $3.CursorPageRequest ensurePage() => $_ensure(1);
 
   @$pb.TagNumber(3)
   $core.String get actorProfileId => $_getSZ(2);
@@ -4819,26 +5034,26 @@ class GetAuditLogRequest extends $pb.GeneratedMessage {
   void clearAction() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get from => $_getN(4);
+  $2.Timestamp get from => $_getN(4);
   @$pb.TagNumber(5)
-  set from($1.Timestamp value) => $_setField(5, value);
+  set from($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasFrom() => $_has(4);
   @$pb.TagNumber(5)
   void clearFrom() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureFrom() => $_ensure(4);
+  $2.Timestamp ensureFrom() => $_ensure(4);
 
   @$pb.TagNumber(6)
-  $1.Timestamp get to => $_getN(5);
+  $2.Timestamp get to => $_getN(5);
   @$pb.TagNumber(6)
-  set to($1.Timestamp value) => $_setField(6, value);
+  set to($2.Timestamp value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasTo() => $_has(5);
   @$pb.TagNumber(6)
   void clearTo() => $_clearField(6);
   @$pb.TagNumber(6)
-  $1.Timestamp ensureTo() => $_ensure(5);
+  $2.Timestamp ensureTo() => $_ensure(5);
 }
 
 class AuditLogList extends $pb.GeneratedMessage {
@@ -4911,7 +5126,7 @@ class AuditLogEntry extends $pb.GeneratedMessage {
     $core.String? targetType,
     $core.String? targetId,
     $core.String? detailsJson,
-    $1.Timestamp? createdAt,
+    $2.Timestamp? createdAt,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -4945,8 +5160,8 @@ class AuditLogEntry extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'targetType')
     ..aOS(6, _omitFieldNames ? '' : 'targetId')
     ..aOS(7, _omitFieldNames ? '' : 'detailsJson')
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5032,15 +5247,15 @@ class AuditLogEntry extends $pb.GeneratedMessage {
   void clearDetailsJson() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get createdAt => $_getN(7);
+  $2.Timestamp get createdAt => $_getN(7);
   @$pb.TagNumber(8)
-  set createdAt($1.Timestamp value) => $_setField(8, value);
+  set createdAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasCreatedAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearCreatedAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureCreatedAt() => $_ensure(7);
+  $2.Timestamp ensureCreatedAt() => $_ensure(7);
 }
 
 /// @voice.unknown_fields=reject
@@ -5053,7 +5268,7 @@ class AppendAuditEventRequest extends $pb.GeneratedMessage {
     $core.String? targetType,
     $core.String? targetId,
     $core.String? detailsJson,
-    $1.Timestamp? occurredAt,
+    $2.Timestamp? occurredAt,
   }) {
     final result = create();
     if (auditEventId != null) result.auditEventId = auditEventId;
@@ -5087,8 +5302,8 @@ class AppendAuditEventRequest extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'targetType')
     ..aOS(6, _omitFieldNames ? '' : 'targetId')
     ..aOS(7, _omitFieldNames ? '' : 'detailsJson')
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'occurredAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'occurredAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5175,15 +5390,15 @@ class AppendAuditEventRequest extends $pb.GeneratedMessage {
   void clearDetailsJson() => $_clearField(7);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get occurredAt => $_getN(7);
+  $2.Timestamp get occurredAt => $_getN(7);
   @$pb.TagNumber(8)
-  set occurredAt($1.Timestamp value) => $_setField(8, value);
+  set occurredAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasOccurredAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearOccurredAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureOccurredAt() => $_ensure(7);
+  $2.Timestamp ensureOccurredAt() => $_ensure(7);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -7562,6 +7777,11 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     $core.bool? active,
     $core.bool? discoverable,
     $fixnum.Int64? accessEpoch,
+    $core.int? protocolVersion,
+    $core.String? profileId,
+    $2.Timestamp? evaluatedAt,
+    MemberCommunicationState? communicationState,
+    $2.Timestamp? timedOutUntil,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
@@ -7569,6 +7789,12 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     if (active != null) result.active = active;
     if (discoverable != null) result.discoverable = discoverable;
     if (accessEpoch != null) result.accessEpoch = accessEpoch;
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (profileId != null) result.profileId = profileId;
+    if (evaluatedAt != null) result.evaluatedAt = evaluatedAt;
+    if (communicationState != null)
+      result.communicationState = communicationState;
+    if (timedOutUntil != null) result.timedOutUntil = timedOutUntil;
     return result;
   }
 
@@ -7592,6 +7818,16 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         5, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aI(6, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(7, _omitFieldNames ? '' : 'profileId')
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'evaluatedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aE<MemberCommunicationState>(
+        9, _omitFieldNames ? '' : 'communicationState',
+        enumValues: MemberCommunicationState.values)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'timedOutUntil',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -7660,6 +7896,287 @@ class ResolveVoiceRoomAccessResponse extends $pb.GeneratedMessage {
   $core.bool hasAccessEpoch() => $_has(4);
   @$pb.TagNumber(5)
   void clearAccessEpoch() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.int get protocolVersion => $_getIZ(5);
+  @$pb.TagNumber(6)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasProtocolVersion() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearProtocolVersion() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get profileId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set profileId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasProfileId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearProfileId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $2.Timestamp get evaluatedAt => $_getN(7);
+  @$pb.TagNumber(8)
+  set evaluatedAt($2.Timestamp value) => $_setField(8, value);
+  @$pb.TagNumber(8)
+  $core.bool hasEvaluatedAt() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearEvaluatedAt() => $_clearField(8);
+  @$pb.TagNumber(8)
+  $2.Timestamp ensureEvaluatedAt() => $_ensure(7);
+
+  @$pb.TagNumber(9)
+  MemberCommunicationState get communicationState => $_getN(8);
+  @$pb.TagNumber(9)
+  set communicationState(MemberCommunicationState value) =>
+      $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasCommunicationState() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearCommunicationState() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $2.Timestamp get timedOutUntil => $_getN(9);
+  @$pb.TagNumber(10)
+  set timedOutUntil($2.Timestamp value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasTimedOutUntil() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearTimedOutUntil() => $_clearField(10);
+  @$pb.TagNumber(10)
+  $2.Timestamp ensureTimedOutUntil() => $_ensure(9);
+}
+
+/// @voice.unknown_fields=reject
+class ResolveMemberCommunicationStateRequest extends $pb.GeneratedMessage {
+  factory ResolveMemberCommunicationStateRequest({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  ResolveMemberCommunicationStateRequest._();
+
+  factory ResolveMemberCommunicationStateRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveMemberCommunicationStateRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveMemberCommunicationStateRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateRequest copyWith(
+          void Function(ResolveMemberCommunicationStateRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveMemberCommunicationStateRequest))
+          as ResolveMemberCommunicationStateRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateRequest create() =>
+      ResolveMemberCommunicationStateRequest._();
+  @$core.override
+  ResolveMemberCommunicationStateRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateRequest getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveMemberCommunicationStateRequest>(create);
+  static ResolveMemberCommunicationStateRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+}
+
+/// A missing/expired timeout is CLEAR only for a live eligible current member.
+/// TIMED_OUT requires until > evaluated_at; CLEAR omits timed_out_until.
+class ResolveMemberCommunicationStateResponse extends $pb.GeneratedMessage {
+  factory ResolveMemberCommunicationStateResponse({
+    $core.int? protocolVersion,
+    $core.String? spaceId,
+    $core.String? profileId,
+    $fixnum.Int64? accessEpoch,
+    $2.Timestamp? evaluatedAt,
+    MemberCommunicationState? communicationState,
+    $2.Timestamp? timedOutUntil,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (accessEpoch != null) result.accessEpoch = accessEpoch;
+    if (evaluatedAt != null) result.evaluatedAt = evaluatedAt;
+    if (communicationState != null)
+      result.communicationState = communicationState;
+    if (timedOutUntil != null) result.timedOutUntil = timedOutUntil;
+    return result;
+  }
+
+  ResolveMemberCommunicationStateResponse._();
+
+  factory ResolveMemberCommunicationStateResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ResolveMemberCommunicationStateResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ResolveMemberCommunicationStateResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..a<$fixnum.Int64>(
+        4, _omitFieldNames ? '' : 'accessEpoch', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'evaluatedAt',
+        subBuilder: $2.Timestamp.create)
+    ..aE<MemberCommunicationState>(
+        6, _omitFieldNames ? '' : 'communicationState',
+        enumValues: MemberCommunicationState.values)
+    ..aOM<$2.Timestamp>(7, _omitFieldNames ? '' : 'timedOutUntil',
+        subBuilder: $2.Timestamp.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ResolveMemberCommunicationStateResponse copyWith(
+          void Function(ResolveMemberCommunicationStateResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ResolveMemberCommunicationStateResponse))
+          as ResolveMemberCommunicationStateResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateResponse create() =>
+      ResolveMemberCommunicationStateResponse._();
+  @$core.override
+  ResolveMemberCommunicationStateResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ResolveMemberCommunicationStateResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          ResolveMemberCommunicationStateResponse>(create);
+  static ResolveMemberCommunicationStateResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $fixnum.Int64 get accessEpoch => $_getI64(3);
+  @$pb.TagNumber(4)
+  set accessEpoch($fixnum.Int64 value) => $_setInt64(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAccessEpoch() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAccessEpoch() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $2.Timestamp get evaluatedAt => $_getN(4);
+  @$pb.TagNumber(5)
+  set evaluatedAt($2.Timestamp value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasEvaluatedAt() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearEvaluatedAt() => $_clearField(5);
+  @$pb.TagNumber(5)
+  $2.Timestamp ensureEvaluatedAt() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  MemberCommunicationState get communicationState => $_getN(5);
+  @$pb.TagNumber(6)
+  set communicationState(MemberCommunicationState value) =>
+      $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasCommunicationState() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearCommunicationState() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $2.Timestamp get timedOutUntil => $_getN(6);
+  @$pb.TagNumber(7)
+  set timedOutUntil($2.Timestamp value) => $_setField(7, value);
+  @$pb.TagNumber(7)
+  $core.bool hasTimedOutUntil() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearTimedOutUntil() => $_clearField(7);
+  @$pb.TagNumber(7)
+  $2.Timestamp ensureTimedOutUntil() => $_ensure(6);
 }
 
 class SyncSpaceProSubscriptionRequest extends $pb.GeneratedMessage {
@@ -7920,8 +8437,8 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
     $core.String? spaceId,
     $core.String? deletionOperationId,
     $fixnum.Int64? scheduleGeneration,
-    $4.ManifestBinding? chatManifest,
-    $core.Iterable<$5.FileReferenceProducerDeclaration>? fileProducers,
+    $5.ManifestBinding? chatManifest,
+    $core.Iterable<$6.FileReferenceProducerDeclaration>? fileProducers,
     $core.List<$core.int>? rootSha256,
   }) {
     final result = create();
@@ -7957,11 +8474,11 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
     ..a<$fixnum.Int64>(
         4, _omitFieldNames ? '' : 'scheduleGeneration', $pb.PbFieldType.OU6,
         defaultOrMaker: $fixnum.Int64.ZERO)
-    ..aOM<$4.ManifestBinding>(5, _omitFieldNames ? '' : 'chatManifest',
-        subBuilder: $4.ManifestBinding.create)
-    ..pPM<$5.FileReferenceProducerDeclaration>(
+    ..aOM<$5.ManifestBinding>(5, _omitFieldNames ? '' : 'chatManifest',
+        subBuilder: $5.ManifestBinding.create)
+    ..pPM<$6.FileReferenceProducerDeclaration>(
         6, _omitFieldNames ? '' : 'fileProducers',
-        subBuilder: $5.FileReferenceProducerDeclaration.create)
+        subBuilder: $6.FileReferenceProducerDeclaration.create)
     ..a<$core.List<$core.int>>(
         7, _omitFieldNames ? '' : 'rootSha256', $pb.PbFieldType.OY)
     ..hasRequiredFields = false;
@@ -8023,18 +8540,18 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
   void clearScheduleGeneration() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $4.ManifestBinding get chatManifest => $_getN(4);
+  $5.ManifestBinding get chatManifest => $_getN(4);
   @$pb.TagNumber(5)
-  set chatManifest($4.ManifestBinding value) => $_setField(5, value);
+  set chatManifest($5.ManifestBinding value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasChatManifest() => $_has(4);
   @$pb.TagNumber(5)
   void clearChatManifest() => $_clearField(5);
   @$pb.TagNumber(5)
-  $4.ManifestBinding ensureChatManifest() => $_ensure(4);
+  $5.ManifestBinding ensureChatManifest() => $_ensure(4);
 
   @$pb.TagNumber(6)
-  $pb.PbList<$5.FileReferenceProducerDeclaration> get fileProducers =>
+  $pb.PbList<$6.FileReferenceProducerDeclaration> get fileProducers =>
       $_getList(5);
 
   @$pb.TagNumber(7)
@@ -8050,11 +8567,11 @@ class SpaceDeletionManifestSet extends $pb.GeneratedMessage {
 /// @voice.unknown_fields=accept_preserve
 class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
   factory ParticipantCoordinatorStatus({
-    $4.ParticipantId? participantId,
+    $5.ParticipantId? participantId,
     ParticipantOperationState? state,
     $core.List<$core.int>? requestSha256,
     $core.List<$core.int>? receiptSha256,
-    $1.Timestamp? updatedAt,
+    $2.Timestamp? updatedAt,
   }) {
     final result = create();
     if (participantId != null) result.participantId = participantId;
@@ -8078,16 +8595,16 @@ class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
       _omitMessageNames ? '' : 'ParticipantCoordinatorStatus',
       package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
       createEmptyInstance: create)
-    ..aE<$4.ParticipantId>(1, _omitFieldNames ? '' : 'participantId',
-        enumValues: $4.ParticipantId.values)
+    ..aE<$5.ParticipantId>(1, _omitFieldNames ? '' : 'participantId',
+        enumValues: $5.ParticipantId.values)
     ..aE<ParticipantOperationState>(2, _omitFieldNames ? '' : 'state',
         enumValues: ParticipantOperationState.values)
     ..a<$core.List<$core.int>>(
         3, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
     ..a<$core.List<$core.int>>(
         4, _omitFieldNames ? '' : 'receiptSha256', $pb.PbFieldType.OY)
-    ..aOM<$1.Timestamp>(5, _omitFieldNames ? '' : 'updatedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(5, _omitFieldNames ? '' : 'updatedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8113,9 +8630,9 @@ class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
   static ParticipantCoordinatorStatus? _defaultInstance;
 
   @$pb.TagNumber(1)
-  $4.ParticipantId get participantId => $_getN(0);
+  $5.ParticipantId get participantId => $_getN(0);
   @$pb.TagNumber(1)
-  set participantId($4.ParticipantId value) => $_setField(1, value);
+  set participantId($5.ParticipantId value) => $_setField(1, value);
   @$pb.TagNumber(1)
   $core.bool hasParticipantId() => $_has(0);
   @$pb.TagNumber(1)
@@ -8149,15 +8666,15 @@ class ParticipantCoordinatorStatus extends $pb.GeneratedMessage {
   void clearReceiptSha256() => $_clearField(4);
 
   @$pb.TagNumber(5)
-  $1.Timestamp get updatedAt => $_getN(4);
+  $2.Timestamp get updatedAt => $_getN(4);
   @$pb.TagNumber(5)
-  set updatedAt($1.Timestamp value) => $_setField(5, value);
+  set updatedAt($2.Timestamp value) => $_setField(5, value);
   @$pb.TagNumber(5)
   $core.bool hasUpdatedAt() => $_has(4);
   @$pb.TagNumber(5)
   void clearUpdatedAt() => $_clearField(5);
   @$pb.TagNumber(5)
-  $1.Timestamp ensureUpdatedAt() => $_ensure(4);
+  $2.Timestamp ensureUpdatedAt() => $_ensure(4);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -8168,11 +8685,11 @@ class SpaceDeletionCoordinatorStatus extends $pb.GeneratedMessage {
     $core.String? deletionOperationId,
     $fixnum.Int64? generation,
     SpaceDeletionPhase? phase,
-    $4.ManifestBinding? manifest,
+    $5.ManifestBinding? manifest,
     $core.Iterable<ParticipantCoordinatorStatus>? participants,
-    $1.Timestamp? scheduledAt,
-    $1.Timestamp? purgeAfter,
-    $1.Timestamp? purgedAt,
+    $2.Timestamp? scheduledAt,
+    $2.Timestamp? purgeAfter,
+    $2.Timestamp? purgedAt,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -8211,17 +8728,17 @@ class SpaceDeletionCoordinatorStatus extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aE<SpaceDeletionPhase>(5, _omitFieldNames ? '' : 'phase',
         enumValues: SpaceDeletionPhase.values)
-    ..aOM<$4.ManifestBinding>(6, _omitFieldNames ? '' : 'manifest',
-        subBuilder: $4.ManifestBinding.create)
+    ..aOM<$5.ManifestBinding>(6, _omitFieldNames ? '' : 'manifest',
+        subBuilder: $5.ManifestBinding.create)
     ..pPM<ParticipantCoordinatorStatus>(
         7, _omitFieldNames ? '' : 'participants',
         subBuilder: ParticipantCoordinatorStatus.create)
-    ..aOM<$1.Timestamp>(8, _omitFieldNames ? '' : 'scheduledAt',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(9, _omitFieldNames ? '' : 'purgeAfter',
-        subBuilder: $1.Timestamp.create)
-    ..aOM<$1.Timestamp>(10, _omitFieldNames ? '' : 'purgedAt',
-        subBuilder: $1.Timestamp.create)
+    ..aOM<$2.Timestamp>(8, _omitFieldNames ? '' : 'scheduledAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(9, _omitFieldNames ? '' : 'purgeAfter',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<$2.Timestamp>(10, _omitFieldNames ? '' : 'purgedAt',
+        subBuilder: $2.Timestamp.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8292,51 +8809,51 @@ class SpaceDeletionCoordinatorStatus extends $pb.GeneratedMessage {
   void clearPhase() => $_clearField(5);
 
   @$pb.TagNumber(6)
-  $4.ManifestBinding get manifest => $_getN(5);
+  $5.ManifestBinding get manifest => $_getN(5);
   @$pb.TagNumber(6)
-  set manifest($4.ManifestBinding value) => $_setField(6, value);
+  set manifest($5.ManifestBinding value) => $_setField(6, value);
   @$pb.TagNumber(6)
   $core.bool hasManifest() => $_has(5);
   @$pb.TagNumber(6)
   void clearManifest() => $_clearField(6);
   @$pb.TagNumber(6)
-  $4.ManifestBinding ensureManifest() => $_ensure(5);
+  $5.ManifestBinding ensureManifest() => $_ensure(5);
 
   @$pb.TagNumber(7)
   $pb.PbList<ParticipantCoordinatorStatus> get participants => $_getList(6);
 
   @$pb.TagNumber(8)
-  $1.Timestamp get scheduledAt => $_getN(7);
+  $2.Timestamp get scheduledAt => $_getN(7);
   @$pb.TagNumber(8)
-  set scheduledAt($1.Timestamp value) => $_setField(8, value);
+  set scheduledAt($2.Timestamp value) => $_setField(8, value);
   @$pb.TagNumber(8)
   $core.bool hasScheduledAt() => $_has(7);
   @$pb.TagNumber(8)
   void clearScheduledAt() => $_clearField(8);
   @$pb.TagNumber(8)
-  $1.Timestamp ensureScheduledAt() => $_ensure(7);
+  $2.Timestamp ensureScheduledAt() => $_ensure(7);
 
   @$pb.TagNumber(9)
-  $1.Timestamp get purgeAfter => $_getN(8);
+  $2.Timestamp get purgeAfter => $_getN(8);
   @$pb.TagNumber(9)
-  set purgeAfter($1.Timestamp value) => $_setField(9, value);
+  set purgeAfter($2.Timestamp value) => $_setField(9, value);
   @$pb.TagNumber(9)
   $core.bool hasPurgeAfter() => $_has(8);
   @$pb.TagNumber(9)
   void clearPurgeAfter() => $_clearField(9);
   @$pb.TagNumber(9)
-  $1.Timestamp ensurePurgeAfter() => $_ensure(8);
+  $2.Timestamp ensurePurgeAfter() => $_ensure(8);
 
   @$pb.TagNumber(10)
-  $1.Timestamp get purgedAt => $_getN(9);
+  $2.Timestamp get purgedAt => $_getN(9);
   @$pb.TagNumber(10)
-  set purgedAt($1.Timestamp value) => $_setField(10, value);
+  set purgedAt($2.Timestamp value) => $_setField(10, value);
   @$pb.TagNumber(10)
   $core.bool hasPurgedAt() => $_has(9);
   @$pb.TagNumber(10)
   void clearPurgedAt() => $_clearField(10);
   @$pb.TagNumber(10)
-  $1.Timestamp ensurePurgedAt() => $_ensure(9);
+  $2.Timestamp ensurePurgedAt() => $_ensure(9);
 }
 
 /// @voice.unknown_fields=reject
@@ -8486,6 +9003,2800 @@ class GetSpaceDeletionCoordinatorStatusResponse extends $pb.GeneratedMessage {
   void clearStatus() => $_clearField(1);
   @$pb.TagNumber(1)
   SpaceDeletionCoordinatorStatus ensureStatus() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+class ValidateRoleOverrideTargetRequest extends $pb.GeneratedMessage {
+  factory ValidateRoleOverrideTargetRequest({
+    $core.String? spaceId,
+    $core.String? voiceRoomId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    return result;
+  }
+
+  ValidateRoleOverrideTargetRequest._();
+
+  factory ValidateRoleOverrideTargetRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateRoleOverrideTargetRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateRoleOverrideTargetRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'voiceRoomId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetRequest copyWith(
+          void Function(ValidateRoleOverrideTargetRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as ValidateRoleOverrideTargetRequest))
+          as ValidateRoleOverrideTargetRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetRequest create() =>
+      ValidateRoleOverrideTargetRequest._();
+  @$core.override
+  ValidateRoleOverrideTargetRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateRoleOverrideTargetRequest>(
+          create);
+  static ValidateRoleOverrideTargetRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get voiceRoomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set voiceRoomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasVoiceRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearVoiceRoomId() => $_clearField(2);
+}
+
+class ValidateRoleOverrideTargetResponse extends $pb.GeneratedMessage {
+  factory ValidateRoleOverrideTargetResponse() => create();
+
+  ValidateRoleOverrideTargetResponse._();
+
+  factory ValidateRoleOverrideTargetResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ValidateRoleOverrideTargetResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ValidateRoleOverrideTargetResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ValidateRoleOverrideTargetResponse copyWith(
+          void Function(ValidateRoleOverrideTargetResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as ValidateRoleOverrideTargetResponse))
+          as ValidateRoleOverrideTargetResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetResponse create() =>
+      ValidateRoleOverrideTargetResponse._();
+  @$core.override
+  ValidateRoleOverrideTargetResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ValidateRoleOverrideTargetResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ValidateRoleOverrideTargetResponse>(
+          create);
+  static ValidateRoleOverrideTargetResponse? _defaultInstance;
+}
+
+class UpdateMemberNicknameRequest extends $pb.GeneratedMessage {
+  factory UpdateMemberNicknameRequest({
+    $core.String? spaceId,
+    $core.String? profileId,
+    $core.String? nickname,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (profileId != null) result.profileId = profileId;
+    if (nickname != null) result.nickname = nickname;
+    return result;
+  }
+
+  UpdateMemberNicknameRequest._();
+
+  factory UpdateMemberNicknameRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateMemberNicknameRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateMemberNicknameRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..aOS(3, _omitFieldNames ? '' : 'nickname')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameRequest copyWith(
+          void Function(UpdateMemberNicknameRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as UpdateMemberNicknameRequest))
+          as UpdateMemberNicknameRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameRequest create() =>
+      UpdateMemberNicknameRequest._();
+  @$core.override
+  UpdateMemberNicknameRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateMemberNicknameRequest>(create);
+  static UpdateMemberNicknameRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  /// Explicit target; actor is derived only from the verified principal.
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+
+  /// Required presence. Empty (after Unicode White_Space trim) clears SQL NULL.
+  /// Otherwise 1..64 Unicode scalars; Cc, separators and Bidi_Control forbidden.
+  @$pb.TagNumber(3)
+  $core.String get nickname => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set nickname($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasNickname() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearNickname() => $_clearField(3);
+}
+
+class UpdateMemberNicknameResponse extends $pb.GeneratedMessage {
+  factory UpdateMemberNicknameResponse({
+    SpaceMembership? spaceMembership,
+  }) {
+    final result = create();
+    if (spaceMembership != null) result.spaceMembership = spaceMembership;
+    return result;
+  }
+
+  UpdateMemberNicknameResponse._();
+
+  factory UpdateMemberNicknameResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory UpdateMemberNicknameResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'UpdateMemberNicknameResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceMembership>(1, _omitFieldNames ? '' : 'spaceMembership',
+        subBuilder: SpaceMembership.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  UpdateMemberNicknameResponse copyWith(
+          void Function(UpdateMemberNicknameResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as UpdateMemberNicknameResponse))
+          as UpdateMemberNicknameResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameResponse create() =>
+      UpdateMemberNicknameResponse._();
+  @$core.override
+  UpdateMemberNicknameResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static UpdateMemberNicknameResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<UpdateMemberNicknameResponse>(create);
+  static UpdateMemberNicknameResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceMembership get spaceMembership => $_getN(0);
+  @$pb.TagNumber(1)
+  set spaceMembership(SpaceMembership value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceMembership() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceMembership() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceMembership ensureSpaceMembership() => $_ensure(0);
+}
+
+/// Immutable initiating facts copied only from Chat's verified admission context.
+/// @voice.unknown_fields=reject
+class SpaceChatCreationUser extends $pb.GeneratedMessage {
+  factory SpaceChatCreationUser({
+    $core.String? accountId,
+    $fixnum.Int64? sessionEpoch,
+    $core.String? accountType,
+  }) {
+    final result = create();
+    if (accountId != null) result.accountId = accountId;
+    if (sessionEpoch != null) result.sessionEpoch = sessionEpoch;
+    if (accountType != null) result.accountType = accountType;
+    return result;
+  }
+
+  SpaceChatCreationUser._();
+
+  factory SpaceChatCreationUser.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationUser.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationUser',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'accountId')
+    ..aInt64(2, _omitFieldNames ? '' : 'sessionEpoch')
+    ..aOS(3, _omitFieldNames ? '' : 'accountType')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationUser clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationUser copyWith(
+          void Function(SpaceChatCreationUser) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationUser))
+          as SpaceChatCreationUser;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationUser create() => SpaceChatCreationUser._();
+  @$core.override
+  SpaceChatCreationUser createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationUser getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationUser>(create);
+  static SpaceChatCreationUser? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get accountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set accountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get sessionEpoch => $_getI64(1);
+  @$pb.TagNumber(2)
+  set sessionEpoch($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSessionEpoch() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSessionEpoch() => $_clearField(2);
+
+  /// Explicit regular/guest; absence is never interpreted as regular.
+  @$pb.TagNumber(3)
+  $core.String get accountType => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set accountType($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAccountType() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAccountType() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=reject
+class SpaceChatCreationBot extends $pb.GeneratedMessage {
+  factory SpaceChatCreationBot({
+    $core.String? botId,
+    $core.String? installationId,
+    $core.String? botScope,
+  }) {
+    final result = create();
+    if (botId != null) result.botId = botId;
+    if (installationId != null) result.installationId = installationId;
+    if (botScope != null) result.botScope = botScope;
+    return result;
+  }
+
+  SpaceChatCreationBot._();
+
+  factory SpaceChatCreationBot.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationBot.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationBot',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'botId')
+    ..aOS(2, _omitFieldNames ? '' : 'installationId')
+    ..aOS(3, _omitFieldNames ? '' : 'botScope')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBot clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBot copyWith(void Function(SpaceChatCreationBot) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationBot))
+          as SpaceChatCreationBot;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBot create() => SpaceChatCreationBot._();
+  @$core.override
+  SpaceChatCreationBot createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBot getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationBot>(create);
+  static SpaceChatCreationBot? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get botId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set botId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBotId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBotId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get installationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set installationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasInstallationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearInstallationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get botScope => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set botScope($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBotScope() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBotScope() => $_clearField(3);
+}
+
+enum SpaceChatCreationBinding_Initiator { user, bot, notSet }
+
+/// @voice.unknown_fields=reject
+class SpaceChatCreationBinding extends $pb.GeneratedMessage {
+  factory SpaceChatCreationBinding({
+    $core.int? protocolVersion,
+    $core.String? operationId,
+    $core.String? creatorProfileId,
+    $core.String? spaceId,
+    $core.String? chatId,
+    $4.ChatType? chatType,
+    $core.String? nodeId,
+    $core.String? auditEventId,
+    $core.List<$core.int>? createRequestSha256,
+    SpaceChatCreationUser? user,
+    SpaceChatCreationBot? bot,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (operationId != null) result.operationId = operationId;
+    if (creatorProfileId != null) result.creatorProfileId = creatorProfileId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (chatId != null) result.chatId = chatId;
+    if (chatType != null) result.chatType = chatType;
+    if (nodeId != null) result.nodeId = nodeId;
+    if (auditEventId != null) result.auditEventId = auditEventId;
+    if (createRequestSha256 != null)
+      result.createRequestSha256 = createRequestSha256;
+    if (user != null) result.user = user;
+    if (bot != null) result.bot = bot;
+    return result;
+  }
+
+  SpaceChatCreationBinding._();
+
+  factory SpaceChatCreationBinding.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationBinding.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, SpaceChatCreationBinding_Initiator>
+      _SpaceChatCreationBinding_InitiatorByTag = {
+    10: SpaceChatCreationBinding_Initiator.user,
+    11: SpaceChatCreationBinding_Initiator.bot,
+    0: SpaceChatCreationBinding_Initiator.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationBinding',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [10, 11])
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'creatorProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aE<$4.ChatType>(6, _omitFieldNames ? '' : 'chatType',
+        enumValues: $4.ChatType.values)
+    ..aOS(7, _omitFieldNames ? '' : 'nodeId')
+    ..aOS(8, _omitFieldNames ? '' : 'auditEventId')
+    ..a<$core.List<$core.int>>(
+        9, _omitFieldNames ? '' : 'createRequestSha256', $pb.PbFieldType.OY)
+    ..aOM<SpaceChatCreationUser>(10, _omitFieldNames ? '' : 'user',
+        subBuilder: SpaceChatCreationUser.create)
+    ..aOM<SpaceChatCreationBot>(11, _omitFieldNames ? '' : 'bot',
+        subBuilder: SpaceChatCreationBot.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBinding clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationBinding copyWith(
+          void Function(SpaceChatCreationBinding) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationBinding))
+          as SpaceChatCreationBinding;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBinding create() => SpaceChatCreationBinding._();
+  @$core.override
+  SpaceChatCreationBinding createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationBinding getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationBinding>(create);
+  static SpaceChatCreationBinding? _defaultInstance;
+
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  SpaceChatCreationBinding_Initiator whichInitiator() =>
+      _SpaceChatCreationBinding_InitiatorByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(10)
+  @$pb.TagNumber(11)
+  void clearInitiator() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get creatorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set creatorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCreatorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCreatorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get spaceId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set spaceId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasSpaceId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearSpaceId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $4.ChatType get chatType => $_getN(5);
+  @$pb.TagNumber(6)
+  set chatType($4.ChatType value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatType() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatType() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get nodeId => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set nodeId($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasNodeId() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearNodeId() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get auditEventId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set auditEventId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasAuditEventId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearAuditEventId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.List<$core.int> get createRequestSha256 => $_getN(8);
+  @$pb.TagNumber(9)
+  set createRequestSha256($core.List<$core.int> value) => $_setBytes(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasCreateRequestSha256() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearCreateRequestSha256() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  SpaceChatCreationUser get user => $_getN(9);
+  @$pb.TagNumber(10)
+  set user(SpaceChatCreationUser value) => $_setField(10, value);
+  @$pb.TagNumber(10)
+  $core.bool hasUser() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearUser() => $_clearField(10);
+  @$pb.TagNumber(10)
+  SpaceChatCreationUser ensureUser() => $_ensure(9);
+
+  @$pb.TagNumber(11)
+  SpaceChatCreationBot get bot => $_getN(10);
+  @$pb.TagNumber(11)
+  set bot(SpaceChatCreationBot value) => $_setField(11, value);
+  @$pb.TagNumber(11)
+  $core.bool hasBot() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearBot() => $_clearField(11);
+  @$pb.TagNumber(11)
+  SpaceChatCreationBot ensureBot() => $_ensure(10);
+}
+
+/// The original result remains stable after ordinary node moves/removal.
+/// @voice.unknown_fields=reject
+class SpaceChatCreationOutcome extends $pb.GeneratedMessage {
+  factory SpaceChatCreationOutcome({
+    SpaceChatCreationBinding? binding,
+    SpaceChatCreationOutcomeState? state,
+    SpaceTreeNode? node,
+    $core.int? failureCode,
+  }) {
+    final result = create();
+    if (binding != null) result.binding = binding;
+    if (state != null) result.state = state;
+    if (node != null) result.node = node;
+    if (failureCode != null) result.failureCode = failureCode;
+    return result;
+  }
+
+  SpaceChatCreationOutcome._();
+
+  factory SpaceChatCreationOutcome.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationOutcome.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationOutcome',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationBinding>(1, _omitFieldNames ? '' : 'binding',
+        subBuilder: SpaceChatCreationBinding.create)
+    ..aE<SpaceChatCreationOutcomeState>(2, _omitFieldNames ? '' : 'state',
+        enumValues: SpaceChatCreationOutcomeState.values)
+    ..aOM<SpaceTreeNode>(3, _omitFieldNames ? '' : 'node',
+        subBuilder: SpaceTreeNode.create)
+    ..aI(4, _omitFieldNames ? '' : 'failureCode',
+        fieldType: $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationOutcome clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationOutcome copyWith(
+          void Function(SpaceChatCreationOutcome) updates) =>
+      super.copyWith((message) => updates(message as SpaceChatCreationOutcome))
+          as SpaceChatCreationOutcome;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationOutcome create() => SpaceChatCreationOutcome._();
+  @$core.override
+  SpaceChatCreationOutcome createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationOutcome getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationOutcome>(create);
+  static SpaceChatCreationOutcome? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding get binding => $_getN(0);
+  @$pb.TagNumber(1)
+  set binding(SpaceChatCreationBinding value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBinding() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBinding() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding ensureBinding() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  SpaceChatCreationOutcomeState get state => $_getN(1);
+  @$pb.TagNumber(2)
+  set state(SpaceChatCreationOutcomeState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearState() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  SpaceTreeNode get node => $_getN(2);
+  @$pb.TagNumber(3)
+  set node(SpaceTreeNode value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasNode() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearNode() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceTreeNode ensureNode() => $_ensure(2);
+
+  /// Stable safe gRPC status number for ABORTED; zero for COMMITTED.
+  @$pb.TagNumber(4)
+  $core.int get failureCode => $_getIZ(3);
+  @$pb.TagNumber(4)
+  set failureCode($core.int value) => $_setUnsignedInt32(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasFailureCode() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearFailureCode() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=reject
+class CommitSpaceChatCreationRequest extends $pb.GeneratedMessage {
+  factory CommitSpaceChatCreationRequest({
+    SpaceChatCreationBinding? binding,
+  }) {
+    final result = create();
+    if (binding != null) result.binding = binding;
+    return result;
+  }
+
+  CommitSpaceChatCreationRequest._();
+
+  factory CommitSpaceChatCreationRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CommitSpaceChatCreationRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CommitSpaceChatCreationRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationBinding>(1, _omitFieldNames ? '' : 'binding',
+        subBuilder: SpaceChatCreationBinding.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationRequest copyWith(
+          void Function(CommitSpaceChatCreationRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as CommitSpaceChatCreationRequest))
+          as CommitSpaceChatCreationRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationRequest create() =>
+      CommitSpaceChatCreationRequest._();
+  @$core.override
+  CommitSpaceChatCreationRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CommitSpaceChatCreationRequest>(create);
+  static CommitSpaceChatCreationRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding get binding => $_getN(0);
+  @$pb.TagNumber(1)
+  set binding(SpaceChatCreationBinding value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasBinding() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearBinding() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationBinding ensureBinding() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class CommitSpaceChatCreationResponse extends $pb.GeneratedMessage {
+  factory CommitSpaceChatCreationResponse({
+    SpaceChatCreationOutcome? outcome,
+  }) {
+    final result = create();
+    if (outcome != null) result.outcome = outcome;
+    return result;
+  }
+
+  CommitSpaceChatCreationResponse._();
+
+  factory CommitSpaceChatCreationResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CommitSpaceChatCreationResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CommitSpaceChatCreationResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationOutcome>(1, _omitFieldNames ? '' : 'outcome',
+        subBuilder: SpaceChatCreationOutcome.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CommitSpaceChatCreationResponse copyWith(
+          void Function(CommitSpaceChatCreationResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as CommitSpaceChatCreationResponse))
+          as CommitSpaceChatCreationResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationResponse create() =>
+      CommitSpaceChatCreationResponse._();
+  @$core.override
+  CommitSpaceChatCreationResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CommitSpaceChatCreationResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CommitSpaceChatCreationResponse>(
+          create);
+  static CommitSpaceChatCreationResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome get outcome => $_getN(0);
+  @$pb.TagNumber(1)
+  set outcome(SpaceChatCreationOutcome value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOutcome() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOutcome() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome ensureOutcome() => $_ensure(0);
+}
+
+enum SpaceChatCreationPublicActor_Initiator { user, bot, notSet }
+
+/// @voice.unknown_fields=reject
+class SpaceChatCreationPublicActor extends $pb.GeneratedMessage {
+  factory SpaceChatCreationPublicActor({
+    $core.String? profileId,
+    SpaceChatCreationUser? user,
+    SpaceChatCreationBot? bot,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (user != null) result.user = user;
+    if (bot != null) result.bot = bot;
+    return result;
+  }
+
+  SpaceChatCreationPublicActor._();
+
+  factory SpaceChatCreationPublicActor.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceChatCreationPublicActor.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, SpaceChatCreationPublicActor_Initiator>
+      _SpaceChatCreationPublicActor_InitiatorByTag = {
+    2: SpaceChatCreationPublicActor_Initiator.user,
+    3: SpaceChatCreationPublicActor_Initiator.bot,
+    0: SpaceChatCreationPublicActor_Initiator.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceChatCreationPublicActor',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [2, 3])
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aOM<SpaceChatCreationUser>(2, _omitFieldNames ? '' : 'user',
+        subBuilder: SpaceChatCreationUser.create)
+    ..aOM<SpaceChatCreationBot>(3, _omitFieldNames ? '' : 'bot',
+        subBuilder: SpaceChatCreationBot.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationPublicActor clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceChatCreationPublicActor copyWith(
+          void Function(SpaceChatCreationPublicActor) updates) =>
+      super.copyWith(
+              (message) => updates(message as SpaceChatCreationPublicActor))
+          as SpaceChatCreationPublicActor;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationPublicActor create() =>
+      SpaceChatCreationPublicActor._();
+  @$core.override
+  SpaceChatCreationPublicActor createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceChatCreationPublicActor getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceChatCreationPublicActor>(create);
+  static SpaceChatCreationPublicActor? _defaultInstance;
+
+  @$pb.TagNumber(2)
+  @$pb.TagNumber(3)
+  SpaceChatCreationPublicActor_Initiator whichInitiator() =>
+      _SpaceChatCreationPublicActor_InitiatorByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(2)
+  @$pb.TagNumber(3)
+  void clearInitiator() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  SpaceChatCreationUser get user => $_getN(1);
+  @$pb.TagNumber(2)
+  set user(SpaceChatCreationUser value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasUser() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearUser() => $_clearField(2);
+  @$pb.TagNumber(2)
+  SpaceChatCreationUser ensureUser() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  SpaceChatCreationBot get bot => $_getN(2);
+  @$pb.TagNumber(3)
+  set bot(SpaceChatCreationBot value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBot() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBot() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceChatCreationBot ensureBot() => $_ensure(2);
+}
+
+/// @voice.unknown_fields=reject
+class GetSpaceChatCreationOutcomeRequest extends $pb.GeneratedMessage {
+  factory GetSpaceChatCreationOutcomeRequest({
+    $core.String? spaceId,
+    $core.String? operationId,
+    SpaceChatCreationPublicActor? publicActor,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (publicActor != null) result.publicActor = publicActor;
+    return result;
+  }
+
+  GetSpaceChatCreationOutcomeRequest._();
+
+  factory GetSpaceChatCreationOutcomeRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceChatCreationOutcomeRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceChatCreationOutcomeRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOM<SpaceChatCreationPublicActor>(3, _omitFieldNames ? '' : 'publicActor',
+        subBuilder: SpaceChatCreationPublicActor.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeRequest copyWith(
+          void Function(GetSpaceChatCreationOutcomeRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceChatCreationOutcomeRequest))
+          as GetSpaceChatCreationOutcomeRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeRequest create() =>
+      GetSpaceChatCreationOutcomeRequest._();
+  @$core.override
+  GetSpaceChatCreationOutcomeRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetSpaceChatCreationOutcomeRequest>(
+          create);
+  static GetSpaceChatCreationOutcomeRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  /// Chat-only current verified actor for public result disclosure. Omission
+  /// preserves the private recovery lookup; Gateway uses its delegated principal.
+  @$pb.TagNumber(3)
+  SpaceChatCreationPublicActor get publicActor => $_getN(2);
+  @$pb.TagNumber(3)
+  set publicActor(SpaceChatCreationPublicActor value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPublicActor() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPublicActor() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceChatCreationPublicActor ensurePublicActor() => $_ensure(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class GetSpaceChatCreationOutcomeResponse extends $pb.GeneratedMessage {
+  factory GetSpaceChatCreationOutcomeResponse({
+    SpaceChatCreationOutcome? outcome,
+  }) {
+    final result = create();
+    if (outcome != null) result.outcome = outcome;
+    return result;
+  }
+
+  GetSpaceChatCreationOutcomeResponse._();
+
+  factory GetSpaceChatCreationOutcomeResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetSpaceChatCreationOutcomeResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetSpaceChatCreationOutcomeResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<SpaceChatCreationOutcome>(1, _omitFieldNames ? '' : 'outcome',
+        subBuilder: SpaceChatCreationOutcome.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetSpaceChatCreationOutcomeResponse copyWith(
+          void Function(GetSpaceChatCreationOutcomeResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as GetSpaceChatCreationOutcomeResponse))
+          as GetSpaceChatCreationOutcomeResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeResponse create() =>
+      GetSpaceChatCreationOutcomeResponse._();
+  @$core.override
+  GetSpaceChatCreationOutcomeResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetSpaceChatCreationOutcomeResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          GetSpaceChatCreationOutcomeResponse>(create);
+  static GetSpaceChatCreationOutcomeResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome get outcome => $_getN(0);
+  @$pb.TagNumber(1)
+  set outcome(SpaceChatCreationOutcome value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOutcome() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOutcome() => $_clearField(1);
+  @$pb.TagNumber(1)
+  SpaceChatCreationOutcome ensureOutcome() => $_ensure(0);
+}
+
+/// Safe requirements exclude configured answers and all private proof digests.
+class JoinQuestion extends $pb.GeneratedMessage {
+  factory JoinQuestion({
+    $core.String? questionId,
+    $core.String? prompt,
+  }) {
+    final result = create();
+    if (questionId != null) result.questionId = questionId;
+    if (prompt != null) result.prompt = prompt;
+    return result;
+  }
+
+  JoinQuestion._();
+
+  factory JoinQuestion.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinQuestion.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinQuestion',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'questionId')
+    ..aOS(2, _omitFieldNames ? '' : 'prompt')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinQuestion clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinQuestion copyWith(void Function(JoinQuestion) updates) =>
+      super.copyWith((message) => updates(message as JoinQuestion))
+          as JoinQuestion;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinQuestion create() => JoinQuestion._();
+  @$core.override
+  JoinQuestion createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinQuestion getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinQuestion>(create);
+  static JoinQuestion? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get questionId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set questionId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasQuestionId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearQuestionId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get prompt => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set prompt($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPrompt() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPrompt() => $_clearField(2);
+}
+
+class JoinRequirements extends $pb.GeneratedMessage {
+  factory JoinRequirements({
+    $core.bool? requirePhone,
+    $core.bool? requireCaptcha,
+    $core.Iterable<JoinQuestion>? questions,
+    $core.bool? requireManualApproval,
+  }) {
+    final result = create();
+    if (requirePhone != null) result.requirePhone = requirePhone;
+    if (requireCaptcha != null) result.requireCaptcha = requireCaptcha;
+    if (questions != null) result.questions.addAll(questions);
+    if (requireManualApproval != null)
+      result.requireManualApproval = requireManualApproval;
+    return result;
+  }
+
+  JoinRequirements._();
+
+  factory JoinRequirements.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinRequirements.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinRequirements',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOB(1, _omitFieldNames ? '' : 'requirePhone')
+    ..aOB(2, _omitFieldNames ? '' : 'requireCaptcha')
+    ..pPM<JoinQuestion>(3, _omitFieldNames ? '' : 'questions',
+        subBuilder: JoinQuestion.create)
+    ..aOB(4, _omitFieldNames ? '' : 'requireManualApproval')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinRequirements clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinRequirements copyWith(void Function(JoinRequirements) updates) =>
+      super.copyWith((message) => updates(message as JoinRequirements))
+          as JoinRequirements;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinRequirements create() => JoinRequirements._();
+  @$core.override
+  JoinRequirements createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinRequirements getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinRequirements>(create);
+  static JoinRequirements? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.bool get requirePhone => $_getBF(0);
+  @$pb.TagNumber(1)
+  set requirePhone($core.bool value) => $_setBool(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRequirePhone() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRequirePhone() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.bool get requireCaptcha => $_getBF(1);
+  @$pb.TagNumber(2)
+  set requireCaptcha($core.bool value) => $_setBool(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRequireCaptcha() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRequireCaptcha() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $pb.PbList<JoinQuestion> get questions => $_getList(2);
+
+  @$pb.TagNumber(4)
+  $core.bool get requireManualApproval => $_getBF(3);
+  @$pb.TagNumber(4)
+  set requireManualApproval($core.bool value) => $_setBool(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasRequireManualApproval() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearRequireManualApproval() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=reject
+class JoinAnswer extends $pb.GeneratedMessage {
+  factory JoinAnswer({
+    $core.String? questionId,
+    $core.String? value,
+  }) {
+    final result = create();
+    if (questionId != null) result.questionId = questionId;
+    if (value != null) result.value = value;
+    return result;
+  }
+
+  JoinAnswer._();
+
+  factory JoinAnswer.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinAnswer.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinAnswer',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'questionId')
+    ..aOS(2, _omitFieldNames ? '' : 'value')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinAnswer clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinAnswer copyWith(void Function(JoinAnswer) updates) =>
+      super.copyWith((message) => updates(message as JoinAnswer)) as JoinAnswer;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinAnswer create() => JoinAnswer._();
+  @$core.override
+  JoinAnswer createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinAnswer getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinAnswer>(create);
+  static JoinAnswer? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get questionId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set questionId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasQuestionId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearQuestionId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get value => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set value($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasValue() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearValue() => $_clearField(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class JoinAdmissionResult extends $pb.GeneratedMessage {
+  factory JoinAdmissionResult({
+    JoinAdmissionState? state,
+    $core.String? requestId,
+    SpaceMembership? spaceMembership,
+  }) {
+    final result = create();
+    if (state != null) result.state = state;
+    if (requestId != null) result.requestId = requestId;
+    if (spaceMembership != null) result.spaceMembership = spaceMembership;
+    return result;
+  }
+
+  JoinAdmissionResult._();
+
+  factory JoinAdmissionResult.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinAdmissionResult.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinAdmissionResult',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aE<JoinAdmissionState>(1, _omitFieldNames ? '' : 'state',
+        enumValues: JoinAdmissionState.values)
+    ..aOS(2, _omitFieldNames ? '' : 'requestId')
+    ..aOM<SpaceMembership>(3, _omitFieldNames ? '' : 'spaceMembership',
+        subBuilder: SpaceMembership.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinAdmissionResult clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinAdmissionResult copyWith(void Function(JoinAdmissionResult) updates) =>
+      super.copyWith((message) => updates(message as JoinAdmissionResult))
+          as JoinAdmissionResult;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinAdmissionResult create() => JoinAdmissionResult._();
+  @$core.override
+  JoinAdmissionResult createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinAdmissionResult getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinAdmissionResult>(create);
+  static JoinAdmissionResult? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  JoinAdmissionState get state => $_getN(0);
+  @$pb.TagNumber(1)
+  set state(JoinAdmissionState value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasState() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearState() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get requestId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set requestId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRequestId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRequestId() => $_clearField(2);
+
+  /// Present only for an exact saved completed native admission outcome.
+  @$pb.TagNumber(3)
+  SpaceMembership get spaceMembership => $_getN(2);
+  @$pb.TagNumber(3)
+  set spaceMembership(SpaceMembership value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSpaceMembership() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSpaceMembership() => $_clearField(3);
+  @$pb.TagNumber(3)
+  SpaceMembership ensureSpaceMembership() => $_ensure(2);
+}
+
+/// Original authenticated account AND profile only; foreign/missing is NOT_FOUND.
+/// @voice.unknown_fields=accept_preserve
+class JoinAttemptView extends $pb.GeneratedMessage {
+  factory JoinAttemptView({
+    $core.String? attemptId,
+    $core.String? spaceId,
+    $fixnum.Int64? policyVersion,
+    $2.Timestamp? expiresAt,
+    JoinRequirements? requirements,
+    JoinAdmissionResult? result,
+    $core.Iterable<JoinAnswer>? submittedAnswers,
+    $core.String? captchaChallengeContext,
+  }) {
+    final result$ = create();
+    if (attemptId != null) result$.attemptId = attemptId;
+    if (spaceId != null) result$.spaceId = spaceId;
+    if (policyVersion != null) result$.policyVersion = policyVersion;
+    if (expiresAt != null) result$.expiresAt = expiresAt;
+    if (requirements != null) result$.requirements = requirements;
+    if (result != null) result$.result = result;
+    if (submittedAnswers != null)
+      result$.submittedAnswers.addAll(submittedAnswers);
+    if (captchaChallengeContext != null)
+      result$.captchaChallengeContext = captchaChallengeContext;
+    return result$;
+  }
+
+  JoinAttemptView._();
+
+  factory JoinAttemptView.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinAttemptView.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinAttemptView',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'attemptId')
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aInt64(3, _omitFieldNames ? '' : 'policyVersion')
+    ..aOM<$2.Timestamp>(4, _omitFieldNames ? '' : 'expiresAt',
+        subBuilder: $2.Timestamp.create)
+    ..aOM<JoinRequirements>(5, _omitFieldNames ? '' : 'requirements',
+        subBuilder: JoinRequirements.create)
+    ..aOM<JoinAdmissionResult>(6, _omitFieldNames ? '' : 'result',
+        subBuilder: JoinAdmissionResult.create)
+    ..pPM<JoinAnswer>(7, _omitFieldNames ? '' : 'submittedAnswers',
+        subBuilder: JoinAnswer.create)
+    ..aOS(8, _omitFieldNames ? '' : 'captchaChallengeContext')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinAttemptView clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinAttemptView copyWith(void Function(JoinAttemptView) updates) =>
+      super.copyWith((message) => updates(message as JoinAttemptView))
+          as JoinAttemptView;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinAttemptView create() => JoinAttemptView._();
+  @$core.override
+  JoinAttemptView createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinAttemptView getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinAttemptView>(create);
+  static JoinAttemptView? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get attemptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set attemptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAttemptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAttemptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get policyVersion => $_getI64(2);
+  @$pb.TagNumber(3)
+  set policyVersion($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasPolicyVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearPolicyVersion() => $_clearField(3);
+
+  /// Collection deadline, never a pending-review TTL.
+  @$pb.TagNumber(4)
+  $2.Timestamp get expiresAt => $_getN(3);
+  @$pb.TagNumber(4)
+  set expiresAt($2.Timestamp value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasExpiresAt() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearExpiresAt() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $2.Timestamp ensureExpiresAt() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  JoinRequirements get requirements => $_getN(4);
+  @$pb.TagNumber(5)
+  set requirements(JoinRequirements value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasRequirements() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearRequirements() => $_clearField(5);
+  @$pb.TagNumber(5)
+  JoinRequirements ensureRequirements() => $_ensure(4);
+
+  @$pb.TagNumber(6)
+  JoinAdmissionResult get result => $_getN(5);
+  @$pb.TagNumber(6)
+  set result(JoinAdmissionResult value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasResult() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearResult() => $_clearField(6);
+  @$pb.TagNumber(6)
+  JoinAdmissionResult ensureResult() => $_ensure(5);
+
+  @$pb.TagNumber(7)
+  $pb.PbList<JoinAnswer> get submittedAnswers => $_getList(6);
+
+  /// Unavailable providers never synthesize a challenge or a successful pass.
+  @$pb.TagNumber(8)
+  $core.String get captchaChallengeContext => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set captchaChallengeContext($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasCaptchaChallengeContext() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearCaptchaChallengeContext() => $_clearField(8);
+}
+
+enum StartJoinAttemptRequest_Target { spaceId, inviteCode, notSet }
+
+/// @voice.unknown_fields=reject
+class StartJoinAttemptRequest extends $pb.GeneratedMessage {
+  factory StartJoinAttemptRequest({
+    $core.String? spaceId,
+    $core.String? operationId,
+    $core.String? inviteCode,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (inviteCode != null) result.inviteCode = inviteCode;
+    return result;
+  }
+
+  StartJoinAttemptRequest._();
+
+  factory StartJoinAttemptRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StartJoinAttemptRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, StartJoinAttemptRequest_Target>
+      _StartJoinAttemptRequest_TargetByTag = {
+    1: StartJoinAttemptRequest_Target.spaceId,
+    3: StartJoinAttemptRequest_Target.inviteCode,
+    0: StartJoinAttemptRequest_Target.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StartJoinAttemptRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [1, 3])
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..aOS(3, _omitFieldNames ? '' : 'inviteCode')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartJoinAttemptRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartJoinAttemptRequest copyWith(
+          void Function(StartJoinAttemptRequest) updates) =>
+      super.copyWith((message) => updates(message as StartJoinAttemptRequest))
+          as StartJoinAttemptRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StartJoinAttemptRequest create() => StartJoinAttemptRequest._();
+  @$core.override
+  StartJoinAttemptRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StartJoinAttemptRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StartJoinAttemptRequest>(create);
+  static StartJoinAttemptRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  @$pb.TagNumber(3)
+  StartJoinAttemptRequest_Target whichTarget() =>
+      _StartJoinAttemptRequest_TargetByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(1)
+  @$pb.TagNumber(3)
+  void clearTarget() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get inviteCode => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set inviteCode($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasInviteCode() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearInviteCode() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class StartJoinAttemptResponse extends $pb.GeneratedMessage {
+  factory StartJoinAttemptResponse({
+    JoinAttemptView? attempt,
+  }) {
+    final result = create();
+    if (attempt != null) result.attempt = attempt;
+    return result;
+  }
+
+  StartJoinAttemptResponse._();
+
+  factory StartJoinAttemptResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory StartJoinAttemptResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'StartJoinAttemptResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<JoinAttemptView>(1, _omitFieldNames ? '' : 'attempt',
+        subBuilder: JoinAttemptView.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartJoinAttemptResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  StartJoinAttemptResponse copyWith(
+          void Function(StartJoinAttemptResponse) updates) =>
+      super.copyWith((message) => updates(message as StartJoinAttemptResponse))
+          as StartJoinAttemptResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static StartJoinAttemptResponse create() => StartJoinAttemptResponse._();
+  @$core.override
+  StartJoinAttemptResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static StartJoinAttemptResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<StartJoinAttemptResponse>(create);
+  static StartJoinAttemptResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  JoinAttemptView get attempt => $_getN(0);
+  @$pb.TagNumber(1)
+  set attempt(JoinAttemptView value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAttempt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAttempt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  JoinAttemptView ensureAttempt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+class GetJoinAttemptRequest extends $pb.GeneratedMessage {
+  factory GetJoinAttemptRequest({
+    $core.String? spaceId,
+    $core.String? attemptId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (attemptId != null) result.attemptId = attemptId;
+    return result;
+  }
+
+  GetJoinAttemptRequest._();
+
+  factory GetJoinAttemptRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetJoinAttemptRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetJoinAttemptRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'attemptId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinAttemptRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinAttemptRequest copyWith(
+          void Function(GetJoinAttemptRequest) updates) =>
+      super.copyWith((message) => updates(message as GetJoinAttemptRequest))
+          as GetJoinAttemptRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetJoinAttemptRequest create() => GetJoinAttemptRequest._();
+  @$core.override
+  GetJoinAttemptRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetJoinAttemptRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetJoinAttemptRequest>(create);
+  static GetJoinAttemptRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get attemptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set attemptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAttemptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAttemptId() => $_clearField(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class GetJoinAttemptResponse extends $pb.GeneratedMessage {
+  factory GetJoinAttemptResponse({
+    JoinAttemptView? attempt,
+  }) {
+    final result = create();
+    if (attempt != null) result.attempt = attempt;
+    return result;
+  }
+
+  GetJoinAttemptResponse._();
+
+  factory GetJoinAttemptResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetJoinAttemptResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetJoinAttemptResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<JoinAttemptView>(1, _omitFieldNames ? '' : 'attempt',
+        subBuilder: JoinAttemptView.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinAttemptResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinAttemptResponse copyWith(
+          void Function(GetJoinAttemptResponse) updates) =>
+      super.copyWith((message) => updates(message as GetJoinAttemptResponse))
+          as GetJoinAttemptResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetJoinAttemptResponse create() => GetJoinAttemptResponse._();
+  @$core.override
+  GetJoinAttemptResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetJoinAttemptResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetJoinAttemptResponse>(create);
+  static GetJoinAttemptResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  JoinAttemptView get attempt => $_getN(0);
+  @$pb.TagNumber(1)
+  set attempt(JoinAttemptView value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAttempt() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAttempt() => $_clearField(1);
+  @$pb.TagNumber(1)
+  JoinAttemptView ensureAttempt() => $_ensure(0);
+}
+
+/// @voice.unknown_fields=reject
+class SubmitJoinAttemptRequest extends $pb.GeneratedMessage {
+  factory SubmitJoinAttemptRequest({
+    $core.String? spaceId,
+    $core.String? attemptId,
+    $core.String? operationId,
+    $core.Iterable<JoinAnswer>? answers,
+    $core.String? captchaToken,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (attemptId != null) result.attemptId = attemptId;
+    if (operationId != null) result.operationId = operationId;
+    if (answers != null) result.answers.addAll(answers);
+    if (captchaToken != null) result.captchaToken = captchaToken;
+    return result;
+  }
+
+  SubmitJoinAttemptRequest._();
+
+  factory SubmitJoinAttemptRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SubmitJoinAttemptRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SubmitJoinAttemptRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'attemptId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..pPM<JoinAnswer>(4, _omitFieldNames ? '' : 'answers',
+        subBuilder: JoinAnswer.create)
+    ..aOS(5, _omitFieldNames ? '' : 'captchaToken')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitJoinAttemptRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitJoinAttemptRequest copyWith(
+          void Function(SubmitJoinAttemptRequest) updates) =>
+      super.copyWith((message) => updates(message as SubmitJoinAttemptRequest))
+          as SubmitJoinAttemptRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SubmitJoinAttemptRequest create() => SubmitJoinAttemptRequest._();
+  @$core.override
+  SubmitJoinAttemptRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SubmitJoinAttemptRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SubmitJoinAttemptRequest>(create);
+  static SubmitJoinAttemptRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get attemptId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set attemptId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAttemptId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAttemptId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<JoinAnswer> get answers => $_getList(3);
+
+  /// Transport only. Never persist or return the raw provider token.
+  @$pb.TagNumber(5)
+  $core.String get captchaToken => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set captchaToken($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasCaptchaToken() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearCaptchaToken() => $_clearField(5);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class SubmitJoinAttemptResponse extends $pb.GeneratedMessage {
+  factory SubmitJoinAttemptResponse({
+    JoinAdmissionResult? result,
+  }) {
+    final result$ = create();
+    if (result != null) result$.result = result;
+    return result$;
+  }
+
+  SubmitJoinAttemptResponse._();
+
+  factory SubmitJoinAttemptResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SubmitJoinAttemptResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SubmitJoinAttemptResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<JoinAdmissionResult>(1, _omitFieldNames ? '' : 'result',
+        subBuilder: JoinAdmissionResult.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitJoinAttemptResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SubmitJoinAttemptResponse copyWith(
+          void Function(SubmitJoinAttemptResponse) updates) =>
+      super.copyWith((message) => updates(message as SubmitJoinAttemptResponse))
+          as SubmitJoinAttemptResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SubmitJoinAttemptResponse create() => SubmitJoinAttemptResponse._();
+  @$core.override
+  SubmitJoinAttemptResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SubmitJoinAttemptResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SubmitJoinAttemptResponse>(create);
+  static SubmitJoinAttemptResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  JoinAdmissionResult get result => $_getN(0);
+  @$pb.TagNumber(1)
+  set result(JoinAdmissionResult value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasResult() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearResult() => $_clearField(1);
+  @$pb.TagNumber(1)
+  JoinAdmissionResult ensureResult() => $_ensure(0);
+}
+
+class JoinRequestSummary extends $pb.GeneratedMessage {
+  factory JoinRequestSummary({
+    $core.String? requestId,
+    $core.String? spaceId,
+    $core.String? applicantProfileId,
+    $2.Timestamp? createdAt,
+    $core.int? attemptCount,
+  }) {
+    final result = create();
+    if (requestId != null) result.requestId = requestId;
+    if (spaceId != null) result.spaceId = spaceId;
+    if (applicantProfileId != null)
+      result.applicantProfileId = applicantProfileId;
+    if (createdAt != null) result.createdAt = createdAt;
+    if (attemptCount != null) result.attemptCount = attemptCount;
+    return result;
+  }
+
+  JoinRequestSummary._();
+
+  factory JoinRequestSummary.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinRequestSummary.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinRequestSummary',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'requestId')
+    ..aOS(2, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(3, _omitFieldNames ? '' : 'applicantProfileId')
+    ..aOM<$2.Timestamp>(4, _omitFieldNames ? '' : 'createdAt',
+        subBuilder: $2.Timestamp.create)
+    ..aI(5, _omitFieldNames ? '' : 'attemptCount',
+        fieldType: $pb.PbFieldType.OU3)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinRequestSummary clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinRequestSummary copyWith(void Function(JoinRequestSummary) updates) =>
+      super.copyWith((message) => updates(message as JoinRequestSummary))
+          as JoinRequestSummary;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinRequestSummary create() => JoinRequestSummary._();
+  @$core.override
+  JoinRequestSummary createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinRequestSummary getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinRequestSummary>(create);
+  static JoinRequestSummary? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get requestId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set requestId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRequestId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRequestId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get spaceId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set spaceId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSpaceId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSpaceId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get applicantProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set applicantProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasApplicantProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearApplicantProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $2.Timestamp get createdAt => $_getN(3);
+  @$pb.TagNumber(4)
+  set createdAt($2.Timestamp value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasCreatedAt() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearCreatedAt() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $2.Timestamp ensureCreatedAt() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  $core.int get attemptCount => $_getIZ(4);
+  @$pb.TagNumber(5)
+  set attemptCount($core.int value) => $_setUnsignedInt32(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAttemptCount() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAttemptCount() => $_clearField(5);
+}
+
+/// Authorized reviewer projection; answers are not human screening criteria.
+class JoinRequestAttempt extends $pb.GeneratedMessage {
+  factory JoinRequestAttempt({
+    $core.String? attemptId,
+    $fixnum.Int64? policyVersion,
+    JoinRequirements? requirements,
+    $core.Iterable<JoinAnswer>? submittedAnswers,
+  }) {
+    final result = create();
+    if (attemptId != null) result.attemptId = attemptId;
+    if (policyVersion != null) result.policyVersion = policyVersion;
+    if (requirements != null) result.requirements = requirements;
+    if (submittedAnswers != null)
+      result.submittedAnswers.addAll(submittedAnswers);
+    return result;
+  }
+
+  JoinRequestAttempt._();
+
+  factory JoinRequestAttempt.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory JoinRequestAttempt.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'JoinRequestAttempt',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'attemptId')
+    ..aInt64(2, _omitFieldNames ? '' : 'policyVersion')
+    ..aOM<JoinRequirements>(3, _omitFieldNames ? '' : 'requirements',
+        subBuilder: JoinRequirements.create)
+    ..pPM<JoinAnswer>(4, _omitFieldNames ? '' : 'submittedAnswers',
+        subBuilder: JoinAnswer.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinRequestAttempt clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  JoinRequestAttempt copyWith(void Function(JoinRequestAttempt) updates) =>
+      super.copyWith((message) => updates(message as JoinRequestAttempt))
+          as JoinRequestAttempt;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static JoinRequestAttempt create() => JoinRequestAttempt._();
+  @$core.override
+  JoinRequestAttempt createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static JoinRequestAttempt getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<JoinRequestAttempt>(create);
+  static JoinRequestAttempt? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get attemptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set attemptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasAttemptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearAttemptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get policyVersion => $_getI64(1);
+  @$pb.TagNumber(2)
+  set policyVersion($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasPolicyVersion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearPolicyVersion() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  JoinRequirements get requirements => $_getN(2);
+  @$pb.TagNumber(3)
+  set requirements(JoinRequirements value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRequirements() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRequirements() => $_clearField(3);
+  @$pb.TagNumber(3)
+  JoinRequirements ensureRequirements() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $pb.PbList<JoinAnswer> get submittedAnswers => $_getList(3);
+}
+
+/// @voice.unknown_fields=reject
+class ListJoinRequestsRequest extends $pb.GeneratedMessage {
+  factory ListJoinRequestsRequest({
+    $core.String? spaceId,
+    $core.int? limit,
+    $core.String? cursor,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (limit != null) result.limit = limit;
+    if (cursor != null) result.cursor = cursor;
+    return result;
+  }
+
+  ListJoinRequestsRequest._();
+
+  factory ListJoinRequestsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListJoinRequestsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListJoinRequestsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aI(2, _omitFieldNames ? '' : 'limit', fieldType: $pb.PbFieldType.OU3)
+    ..aOS(3, _omitFieldNames ? '' : 'cursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListJoinRequestsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListJoinRequestsRequest copyWith(
+          void Function(ListJoinRequestsRequest) updates) =>
+      super.copyWith((message) => updates(message as ListJoinRequestsRequest))
+          as ListJoinRequestsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListJoinRequestsRequest create() => ListJoinRequestsRequest._();
+  @$core.override
+  ListJoinRequestsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListJoinRequestsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListJoinRequestsRequest>(create);
+  static ListJoinRequestsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  /// Zero selects 50; maximum 100. Cursor binds Space and created_at/id order.
+  @$pb.TagNumber(2)
+  $core.int get limit => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set limit($core.int value) => $_setUnsignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasLimit() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLimit() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get cursor => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set cursor($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCursor() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCursor() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class ListJoinRequestsResponse extends $pb.GeneratedMessage {
+  factory ListJoinRequestsResponse({
+    $core.Iterable<JoinRequestSummary>? requests,
+    $core.String? nextCursor,
+  }) {
+    final result = create();
+    if (requests != null) result.requests.addAll(requests);
+    if (nextCursor != null) result.nextCursor = nextCursor;
+    return result;
+  }
+
+  ListJoinRequestsResponse._();
+
+  factory ListJoinRequestsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ListJoinRequestsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ListJoinRequestsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..pPM<JoinRequestSummary>(1, _omitFieldNames ? '' : 'requests',
+        subBuilder: JoinRequestSummary.create)
+    ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListJoinRequestsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ListJoinRequestsResponse copyWith(
+          void Function(ListJoinRequestsResponse) updates) =>
+      super.copyWith((message) => updates(message as ListJoinRequestsResponse))
+          as ListJoinRequestsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ListJoinRequestsResponse create() => ListJoinRequestsResponse._();
+  @$core.override
+  ListJoinRequestsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ListJoinRequestsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ListJoinRequestsResponse>(create);
+  static ListJoinRequestsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<JoinRequestSummary> get requests => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.String get nextCursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nextCursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNextCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNextCursor() => $_clearField(2);
+}
+
+/// @voice.unknown_fields=reject
+class GetJoinRequestRequest extends $pb.GeneratedMessage {
+  factory GetJoinRequestRequest({
+    $core.String? spaceId,
+    $core.String? requestId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (requestId != null) result.requestId = requestId;
+    return result;
+  }
+
+  GetJoinRequestRequest._();
+
+  factory GetJoinRequestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetJoinRequestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetJoinRequestRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'requestId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinRequestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinRequestRequest copyWith(
+          void Function(GetJoinRequestRequest) updates) =>
+      super.copyWith((message) => updates(message as GetJoinRequestRequest))
+          as GetJoinRequestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetJoinRequestRequest create() => GetJoinRequestRequest._();
+  @$core.override
+  GetJoinRequestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetJoinRequestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetJoinRequestRequest>(create);
+  static GetJoinRequestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get requestId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set requestId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRequestId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRequestId() => $_clearField(2);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class GetJoinRequestResponse extends $pb.GeneratedMessage {
+  factory GetJoinRequestResponse({
+    JoinRequestSummary? request,
+    $core.Iterable<JoinRequestAttempt>? attempts,
+  }) {
+    final result = create();
+    if (request != null) result.request = request;
+    if (attempts != null) result.attempts.addAll(attempts);
+    return result;
+  }
+
+  GetJoinRequestResponse._();
+
+  factory GetJoinRequestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetJoinRequestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetJoinRequestResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<JoinRequestSummary>(1, _omitFieldNames ? '' : 'request',
+        subBuilder: JoinRequestSummary.create)
+    ..pPM<JoinRequestAttempt>(2, _omitFieldNames ? '' : 'attempts',
+        subBuilder: JoinRequestAttempt.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinRequestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetJoinRequestResponse copyWith(
+          void Function(GetJoinRequestResponse) updates) =>
+      super.copyWith((message) => updates(message as GetJoinRequestResponse))
+          as GetJoinRequestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetJoinRequestResponse create() => GetJoinRequestResponse._();
+  @$core.override
+  GetJoinRequestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetJoinRequestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetJoinRequestResponse>(create);
+  static GetJoinRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  JoinRequestSummary get request => $_getN(0);
+  @$pb.TagNumber(1)
+  set request(JoinRequestSummary value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRequest() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRequest() => $_clearField(1);
+  @$pb.TagNumber(1)
+  JoinRequestSummary ensureRequest() => $_ensure(0);
+
+  @$pb.TagNumber(2)
+  $pb.PbList<JoinRequestAttempt> get attempts => $_getList(1);
+}
+
+/// @voice.unknown_fields=reject
+class ApproveJoinRequestRequest extends $pb.GeneratedMessage {
+  factory ApproveJoinRequestRequest({
+    $core.String? spaceId,
+    $core.String? requestId,
+    $core.String? operationId,
+    $core.String? attemptId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (requestId != null) result.requestId = requestId;
+    if (operationId != null) result.operationId = operationId;
+    if (attemptId != null) result.attemptId = attemptId;
+    return result;
+  }
+
+  ApproveJoinRequestRequest._();
+
+  factory ApproveJoinRequestRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApproveJoinRequestRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApproveJoinRequestRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'requestId')
+    ..aOS(3, _omitFieldNames ? '' : 'operationId')
+    ..aOS(4, _omitFieldNames ? '' : 'attemptId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveJoinRequestRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveJoinRequestRequest copyWith(
+          void Function(ApproveJoinRequestRequest) updates) =>
+      super.copyWith((message) => updates(message as ApproveJoinRequestRequest))
+          as ApproveJoinRequestRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApproveJoinRequestRequest create() => ApproveJoinRequestRequest._();
+  @$core.override
+  ApproveJoinRequestRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApproveJoinRequestRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApproveJoinRequestRequest>(create);
+  static ApproveJoinRequestRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get requestId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set requestId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRequestId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRequestId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get operationId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set operationId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasOperationId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearOperationId() => $_clearField(3);
+
+  /// Required for an ambiguous group; an omitted selector never means latest.
+  @$pb.TagNumber(4)
+  $core.String get attemptId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set attemptId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAttemptId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAttemptId() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class ApproveJoinRequestResponse extends $pb.GeneratedMessage {
+  factory ApproveJoinRequestResponse({
+    JoinAdmissionResult? result,
+  }) {
+    final result$ = create();
+    if (result != null) result$.result = result;
+    return result$;
+  }
+
+  ApproveJoinRequestResponse._();
+
+  factory ApproveJoinRequestResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ApproveJoinRequestResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ApproveJoinRequestResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOM<JoinAdmissionResult>(1, _omitFieldNames ? '' : 'result',
+        subBuilder: JoinAdmissionResult.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveJoinRequestResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ApproveJoinRequestResponse copyWith(
+          void Function(ApproveJoinRequestResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as ApproveJoinRequestResponse))
+          as ApproveJoinRequestResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ApproveJoinRequestResponse create() => ApproveJoinRequestResponse._();
+  @$core.override
+  ApproveJoinRequestResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ApproveJoinRequestResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ApproveJoinRequestResponse>(create);
+  static ApproveJoinRequestResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  JoinAdmissionResult get result => $_getN(0);
+  @$pb.TagNumber(1)
+  set result(JoinAdmissionResult value) => $_setField(1, value);
+  @$pb.TagNumber(1)
+  $core.bool hasResult() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearResult() => $_clearField(1);
+  @$pb.TagNumber(1)
+  JoinAdmissionResult ensureResult() => $_ensure(0);
+}
+
+/// Complete strict schema1 JSON. Configured answers are never returned by this RPC.
+/// @voice.unknown_fields=reject
+class SetEntryPolicyRequest extends $pb.GeneratedMessage {
+  factory SetEntryPolicyRequest({
+    $core.String? spaceId,
+    $core.String? operationId,
+    $fixnum.Int64? expectedPolicyVersion,
+    $core.List<$core.int>? privatePolicyJson,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (operationId != null) result.operationId = operationId;
+    if (expectedPolicyVersion != null)
+      result.expectedPolicyVersion = expectedPolicyVersion;
+    if (privatePolicyJson != null) result.privatePolicyJson = privatePolicyJson;
+    return result;
+  }
+
+  SetEntryPolicyRequest._();
+
+  factory SetEntryPolicyRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetEntryPolicyRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetEntryPolicyRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'expectedPolicyVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$core.List<$core.int>>(
+        4, _omitFieldNames ? '' : 'privatePolicyJson', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyRequest copyWith(
+          void Function(SetEntryPolicyRequest) updates) =>
+      super.copyWith((message) => updates(message as SetEntryPolicyRequest))
+          as SetEntryPolicyRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyRequest create() => SetEntryPolicyRequest._();
+  @$core.override
+  SetEntryPolicyRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetEntryPolicyRequest>(create);
+  static SetEntryPolicyRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get expectedPolicyVersion => $_getI64(2);
+  @$pb.TagNumber(3)
+  set expectedPolicyVersion($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasExpectedPolicyVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearExpectedPolicyVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.List<$core.int> get privatePolicyJson => $_getN(3);
+  @$pb.TagNumber(4)
+  set privatePolicyJson($core.List<$core.int> value) => $_setBytes(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPrivatePolicyJson() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPrivatePolicyJson() => $_clearField(4);
+}
+
+/// @voice.unknown_fields=accept_preserve
+class SetEntryPolicyResponse extends $pb.GeneratedMessage {
+  factory SetEntryPolicyResponse({
+    $core.String? operationId,
+    $fixnum.Int64? entryPolicyVersion,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (entryPolicyVersion != null)
+      result.entryPolicyVersion = entryPolicyVersion;
+    return result;
+  }
+
+  SetEntryPolicyResponse._();
+
+  factory SetEntryPolicyResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SetEntryPolicyResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SetEntryPolicyResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.space.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..a<$fixnum.Int64>(
+        2, _omitFieldNames ? '' : 'entryPolicyVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SetEntryPolicyResponse copyWith(
+          void Function(SetEntryPolicyResponse) updates) =>
+      super.copyWith((message) => updates(message as SetEntryPolicyResponse))
+          as SetEntryPolicyResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyResponse create() => SetEntryPolicyResponse._();
+  @$core.override
+  SetEntryPolicyResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SetEntryPolicyResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SetEntryPolicyResponse>(create);
+  static SetEntryPolicyResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get entryPolicyVersion => $_getI64(1);
+  @$pb.TagNumber(2)
+  set entryPolicyVersion($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasEntryPolicyVersion() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearEntryPolicyVersion() => $_clearField(2);
 }
 
 const $core.bool _omitFieldNames =

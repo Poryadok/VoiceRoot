@@ -2,9 +2,10 @@
 # Requires scripts/dev/generate-phase0-fixture.py output. No production KMS claim.
 services:
   space:
-    expose: ["9094"]
+    # The media overlay retains :9094 for Voice communication in this process.
+    expose: ["9095"]
     environment:
-      SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN: :9094
+      SPACE_GATEWAY_LIFECYCLE_GRPC_LISTEN: :9095
       SPACE_GATEWAY_LIFECYCLE_TLS_CERT_FILE: /run/phase0/space-lifecycle.crt
       SPACE_GATEWAY_LIFECYCLE_TLS_KEY_FILE: /run/phase0/space-lifecycle.key
       SPACE_GATEWAY_LIFECYCLE_CLIENT_CA_FILE: /run/phase0/ca.crt
@@ -34,7 +35,7 @@ services:
     environment:
       GATEWAY_SESSION_EPOCH_STRICT: "true"
       GATEWAY_REDIS_ADDR: redis:6379
-      GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR: space:9094
+      GATEWAY_SPACE_LIFECYCLE_GRPC_ADDR: space:9095
       GATEWAY_SPACE_LIFECYCLE_TLS_CA_FILE: /run/phase0/ca.crt
       GATEWAY_SPACE_LIFECYCLE_TLS_SERVER_NAME: space
       GATEWAY_SPACE_LIFECYCLE_CLIENT_CERT_FILE: /run/phase0/gateway-client.crt

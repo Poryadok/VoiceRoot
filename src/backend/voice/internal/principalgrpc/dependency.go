@@ -12,6 +12,8 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"voice/backend/pkg/correlation"
 )
 
 // DependencyFailure records only closed diagnostic labels. Never pass through
@@ -37,6 +39,7 @@ func dependencyFailure(ctx context.Context, stage string, err error, started tim
 		stage = "unknown"
 	}
 	slog.WarnContext(ctx, "Voice trust dependency failed",
+		"request_id", correlation.FromGRPC(ctx),
 		"event", "voice_trust_dependency_failure", "stage", stage,
 		"cause", dependencyCause(err), "duration_ms", time.Since(started).Milliseconds(),
 		"http_status", httpStatus)

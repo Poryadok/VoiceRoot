@@ -10,6 +10,7 @@ if [[ -z "${reports_dir}" || ! -d "${reports_dir}" ]]; then
 fi
 
 required_suites=(
+  "voice.backend.auth.events.AuthObservationJetStreamIntegrationTest"
   "voice.backend.auth.AccountDeletionEpochFloorJdbcIntegrationTest"
   "voice.backend.auth.AccountDeletionOperationRepositoryJdbcIntegrationTest"
   "voice.backend.auth.AuthJdbcRedisIntegrationTest"

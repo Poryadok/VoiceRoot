@@ -1,0 +1,35 @@
+name: Gateway media test build
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/gateway-media-build.yml
+      - src/backend/gateway/**
+      - src/backend/pkg/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gateway-media-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gateway-media-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: src/backend/gateway/go.mod
+      - name: Install native media libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
+      - name: Compile live-tagged Gateway tests without executing them
+        working-directory: src/backend/gateway
+        env:
+          CGO_ENABLED: "1"
+        run: go test -c -tags=live -o "$RUNNER_TEMP/gateway-media.test" .

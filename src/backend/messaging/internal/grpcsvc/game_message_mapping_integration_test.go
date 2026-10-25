@@ -66,7 +66,7 @@ func TestApplyGameMessageUsesGISMappingClientBeforePermitAndCommit(t *testing.T)
 			})
 			require.NoError(t, err)
 			defer resourceAuthority.Close()
-			processor := &VerifiedGameMessageProcessor{
+			processor := &VerifiedGameMessageProcessor{CommunicationAdmission: standaloneGameCommunicationAdmission,
 				Store:    &store.MessagesStore{Pool: pool},
 				AuthKeys: testGameAuthKeys{keys: map[string]*rsa.PublicKey{"auth-current": &authPrivate.PublicKey}, at: now},
 				Permits:  permits,

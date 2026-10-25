@@ -12,6 +12,7 @@ import migrations
 from apply import digest
 from controller import Blocked
 from commands import capture
+import release_policy_wiring
 
 SOURCE_MANIFESTS=('deploy/staging/services.yaml','deploy/staging/gateway-deployment.yaml',
  'deploy/templates/network-policy-social-privacy-principal.yaml',
@@ -97,6 +98,7 @@ def exclude_gis_first_install_from_generic_apply(pack):
     return pack
 
 def rendered_source(source,parameters,decoder):
+    release = release_policy_wiring.source_input(source, parameters)
     generation=parameters['generation'];claim=parameters['dataPVC']
     if not re.fullmatch(r'r[0-9]{8}[a-z0-9]{1,8}',generation) or not re.fullmatch(r'voice-nats-jsdata-d[0-9]{8}[a-z0-9]{0,8}',claim):
         raise Blocked('rollout_compile_identity_invalid')
@@ -115,6 +117,8 @@ def rendered_source(source,parameters,decoder):
         path=Path(source)/relative
         if path.is_symlink() or not path.is_file() or path.stat().st_size>2<<20:raise Blocked('rollout_compile_manifest_invalid')
         text=path.read_bytes().decode('utf-8')
+        if relative == 'deploy/staging/services.yaml' and release is not None:
+            text=release_policy_wiring.render(text,release,parameters['tag'],guard.NS)
         if '__GATEWAY_INGRESS_HOST__' in text:
             host=parameters.get('gateway_host')
             if host is None:
@@ -133,6 +137,8 @@ def rendered_source(source,parameters,decoder):
             row=decoder(piece.encode())
             if not isinstance(row,dict):raise Blocked('rollout_compile_decode_invalid')
             result.append(row)
+    if release is not None:
+        release_policy_wiring.check_documents(result,release,parameters['tag'],guard.NS)
     return result
 
 def decode_yaml(raw):
@@ -157,13 +163,15 @@ def main(args,*,producer=None):
     required={'registry','tag','mode','changed_services','images','contract','enrolled','generation','dataPVC','s3_signing_endpoint'}
     optional={'gateway_host','storage_host','livekit_host','web_host','admin_host','developer_portal_host','gis_first_install',
         'gateway_tls_secret','storage_tls_secret','image_pull_secret','apply_observability',
-        'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','bootstrap_target_scripts'}
+        'minio_image','minio_mc_image','minio_storage_class','minio_storage_size','web_origin','bootstrap_target_scripts','release_policy'}
     if not required<=set(p) or set(p)-required-optional:
         raise Blocked('rollout_compile_parameters_invalid')
     if 'gis_first_install' in p and (p['gis_first_install'] is not True or p['mode'] not in ('full','app-only')):
         raise Blocked('gis_first_install_admission_invalid')
     if not re.fullmatch(r'[a-z0-9][a-z0-9./_-]{1,253}',p['registry']) or not re.fullmatch(r'[a-f0-9]{40}',p['tag']):
         raise Blocked('rollout_compile_version_invalid')
+    # Fail before bootstrap decoding or any producer/cluster observation.
+    release_policy_wiring.source_input(source,p)
     scope={**p,'template_hashes':{'voice-'+name:None for name in p['changed_services']}}
     frontend_only=guard.frontend_image_only(scope)
     producer=ProducerKube() if producer is None else producer
@@ -245,6 +253,8 @@ def compile_target(source,documents,registry,tag,mode,changed,images,contract,en
     if mode not in ('full','app-only','images-only') or not re.fullmatch(r'[a-f0-9]{40}',tag) or not isinstance(documents,list) or not 1<=len(documents)<=128:
         raise Blocked('rollout_compile_input_invalid')
     result=copy.deepcopy(documents);templates={};used_images={};inventory=set();hashes={}
+    import source_plan
+    source_plan.principal_publisher_documents(result)
     def read(relative):
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not str(p).startswith(('deploy/','scripts/','src/backend/migrations/','src/backend/auth/src/main/resources/db/migration/','docker/clickhouse/init/')):
@@ -273,11 +283,13 @@ def compile_target(source,documents,registry,tag,mode,changed,images,contract,en
         if mode=='images-only' and kind!='Deployment':raise Blocked('rollout_images_only_resource_invalid')
         if kind=='Deployment':
             if name not in enrolled:raise Blocked('rollout_compile_unenrolled_deployment')
+            if name==source_plan.PRINCIPAL_PUBLISHER:source_plan.principal_publisher_shape(row)
             template=row['spec']['template']
             for container in template['spec'].get('initContainers',[])+template['spec']['containers']:
                 key=name+'/'+container['name'];image=images.get(key,'')
                 if not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',image):
                     raise Blocked('rollout_compile_image_unpinned')
+                if name==source_plan.PRINCIPAL_PUBLISHER:source_plan.principal_publisher_image(image)
                 container['image']=image;used_images[key]=image
             templates[name]=digest(template)
     if not templates or used_images!=images:raise Blocked('rollout_compile_image_inventory_changed')

@@ -332,12 +332,17 @@ func (s *BotStore) InstallInSpace(ctx context.Context, botID, spaceID, installer
 		return uuid.Nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Lock the bot first to serialize installation changes with delivery and revocation.
-	var lockedBotID uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if enabled, e := membershipJournalExists(ctx, tx); e != nil {
+		return uuid.Nil, e
+	} else if enabled {
+		return uuid.Nil, ErrMembershipSource
+	}
+	// Space guards always precede bot and whitelist row locks.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
 		return uuid.Nil, err
 	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+	var lockedBotID uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, err
 	}
 	var lifecycleState string
@@ -427,7 +432,15 @@ func (s *BotStore) UninstallFromSpace(ctx context.Context, botID, spaceID uuid.U
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Keep the same bot-first lock order as InstallInSpace and DeliverMessage.
+	if enabled, e := membershipJournalExists(ctx, tx); e != nil {
+		return e
+	} else if enabled {
+		return ErrMembershipSource
+	}
+	// Cleanup is allowed while frozen, but still serializes with guarded sends.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+		return err
+	}
 	var lockedBotID uuid.UUID
 	if err := tx.QueryRow(ctx, `SELECT id FROM bots WHERE id = $1 FOR UPDATE`, botID).Scan(&lockedBotID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
@@ -469,7 +482,10 @@ func (s *BotStore) SetChatEnabled(ctx context.Context, botID, chatID, spaceID, i
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,71431))`, spaceID.String()); err != nil {
+	// Serialize with lifecycle transitions at Space scope, and with delivery at
+	// the whitelist row. An exclusive Space lock here would queue unrelated
+	// recipients behind this bot's in-flight HTTP attempt.
+	if err = lockMessageSpaces(ctx, tx, []uuid.UUID{spaceID}); err != nil {
 		return err
 	}
 	var lifecycleState string
@@ -504,9 +520,24 @@ UPDATE bot_chat_whitelist SET enabled = $4 WHERE bot_id = $1 AND chat_id = $2 AN
 			return err
 		}
 	} else if enabled {
-		if _, err = tx.Exec(ctx, `
+		// New Space attachments require the protected installation coordinator's
+		// durable Chat authority observation. Existing entries can be toggled.
+		if present, e := membershipJournalExists(ctx, tx); e != nil {
+			return e
+		} else if present {
+			return ErrMembershipSource
+		}
+		var inserted int
+		err = tx.QueryRow(ctx, `
 INSERT INTO bot_chat_whitelist (bot_id, chat_id, space_id, enabled, added_by_profile_id)
-VALUES ($1, $2, $3, true, $4)`, botID, chatID, spaceID, installer); err != nil {
+VALUES ($1, $2, $3, true, $4)
+ON CONFLICT (bot_id, chat_id) DO UPDATE SET enabled=true
+WHERE bot_chat_whitelist.space_id=EXCLUDED.space_id
+RETURNING 1`, botID, chatID, spaceID, installer).Scan(&inserted)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -694,7 +725,7 @@ LIMIT $2`, botID, limit)
 func (s *BotStore) MarkEventDelivered(ctx context.Context, eventID uuid.UUID) error {
 	_, err := s.Pool.Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
-WHERE id = $1`, eventID)
+WHERE id = $1 AND delivery_status='pending'`, eventID)
 	return err
 }
 

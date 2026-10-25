@@ -174,6 +174,26 @@ class RoleServiceClient extends $grpc.Client {
     return $createUnaryCall(_$getDefaultJoinRole, request, options: options);
   }
 
+  /// Inert admission projection; READY never establishes Space membership.
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.EnsureDefaultMemberRoleResponse>
+      ensureDefaultMemberRole(
+    $0.EnsureDefaultMemberRoleRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$ensureDefaultMemberRole, request,
+        options: options);
+  }
+
+  /// Writes a generation floor even when no ordinary grants exist.
+  /// @voice.security=protected;callers=service:space
+  $grpc.ResponseFuture<$0.RemoveMemberRolesResponse> removeMemberRoles(
+    $0.RemoveMemberRolesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$removeMemberRoles, request, options: options);
+  }
+
   /// Called by Space Service after CreateSpace — seeds system roles and assigns Owner.
   $grpc.ResponseFuture<$0.BootstrapSpaceRolesResponse> bootstrapSpaceRoles(
     $0.BootstrapSpaceRolesRequest request, {
@@ -189,6 +209,28 @@ class RoleServiceClient extends $grpc.Client {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$deleteRolesCreatedByProfile, request,
+        options: options);
+  }
+
+  /// Durable one-installation Bot lifecycle cleanup; no generic actor mutation.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.ApplyBotInstallationRemovalResponse>
+      applyBotInstallationRemoval(
+    $0.ApplyBotInstallationRemovalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$applyBotInstallationRemoval, request,
+        options: options);
+  }
+
+  /// Minimal global BotActor Role fence; no per-Space cleanup authority.
+  /// @voice.security=protected;callers=service:bot
+  $grpc.ResponseFuture<$0.RegisterBotGlobalTerminalResponse>
+      registerBotGlobalTerminal(
+    $0.RegisterBotGlobalTerminalRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$registerBotGlobalTerminal, request,
         options: options);
   }
 
@@ -394,6 +436,17 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/GetDefaultJoinRole',
       ($0.GetDefaultJoinRoleRequest value) => value.writeToBuffer(),
       $0.GetDefaultJoinRoleResponse.fromBuffer);
+  static final _$ensureDefaultMemberRole = $grpc.ClientMethod<
+          $0.EnsureDefaultMemberRoleRequest,
+          $0.EnsureDefaultMemberRoleResponse>(
+      '/voice.role.v1.RoleService/EnsureDefaultMemberRole',
+      ($0.EnsureDefaultMemberRoleRequest value) => value.writeToBuffer(),
+      $0.EnsureDefaultMemberRoleResponse.fromBuffer);
+  static final _$removeMemberRoles = $grpc.ClientMethod<
+          $0.RemoveMemberRolesRequest, $0.RemoveMemberRolesResponse>(
+      '/voice.role.v1.RoleService/RemoveMemberRoles',
+      ($0.RemoveMemberRolesRequest value) => value.writeToBuffer(),
+      $0.RemoveMemberRolesResponse.fromBuffer);
   static final _$bootstrapSpaceRoles = $grpc.ClientMethod<
           $0.BootstrapSpaceRolesRequest, $0.BootstrapSpaceRolesResponse>(
       '/voice.role.v1.RoleService/BootstrapSpaceRoles',
@@ -405,6 +458,18 @@ class RoleServiceClient extends $grpc.Client {
       '/voice.role.v1.RoleService/DeleteRolesCreatedByProfile',
       ($0.DeleteRolesCreatedByProfileRequest value) => value.writeToBuffer(),
       $0.DeleteRolesCreatedByProfileResponse.fromBuffer);
+  static final _$applyBotInstallationRemoval = $grpc.ClientMethod<
+          $0.ApplyBotInstallationRemovalRequest,
+          $0.ApplyBotInstallationRemovalResponse>(
+      '/voice.role.v1.RoleService/ApplyBotInstallationRemoval',
+      ($0.ApplyBotInstallationRemovalRequest value) => value.writeToBuffer(),
+      $0.ApplyBotInstallationRemovalResponse.fromBuffer);
+  static final _$registerBotGlobalTerminal = $grpc.ClientMethod<
+          $0.RegisterBotGlobalTerminalRequest,
+          $0.RegisterBotGlobalTerminalResponse>(
+      '/voice.role.v1.RoleService/RegisterBotGlobalTerminal',
+      ($0.RegisterBotGlobalTerminalRequest value) => value.writeToBuffer(),
+      $0.RegisterBotGlobalTerminalResponse.fromBuffer);
   static final _$getOwnershipTransferCapabilities = $grpc.ClientMethod<
           $0.GetOwnershipTransferCapabilitiesRequest,
           $0.GetOwnershipTransferCapabilitiesResponse>(
@@ -633,6 +698,24 @@ abstract class RoleServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.GetDefaultJoinRoleRequest.fromBuffer(value),
         ($0.GetDefaultJoinRoleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.EnsureDefaultMemberRoleRequest,
+            $0.EnsureDefaultMemberRoleResponse>(
+        'EnsureDefaultMemberRole',
+        ensureDefaultMemberRole_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.EnsureDefaultMemberRoleRequest.fromBuffer(value),
+        ($0.EnsureDefaultMemberRoleResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RemoveMemberRolesRequest,
+            $0.RemoveMemberRolesResponse>(
+        'RemoveMemberRoles',
+        removeMemberRoles_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RemoveMemberRolesRequest.fromBuffer(value),
+        ($0.RemoveMemberRolesResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.BootstrapSpaceRolesRequest,
             $0.BootstrapSpaceRolesResponse>(
         'BootstrapSpaceRoles',
@@ -652,6 +735,25 @@ abstract class RoleServiceBase extends $grpc.Service {
             $0.DeleteRolesCreatedByProfileRequest.fromBuffer(value),
         ($0.DeleteRolesCreatedByProfileResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ApplyBotInstallationRemovalRequest,
+            $0.ApplyBotInstallationRemovalResponse>(
+        'ApplyBotInstallationRemoval',
+        applyBotInstallationRemoval_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ApplyBotInstallationRemovalRequest.fromBuffer(value),
+        ($0.ApplyBotInstallationRemovalResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RegisterBotGlobalTerminalRequest,
+            $0.RegisterBotGlobalTerminalResponse>(
+        'RegisterBotGlobalTerminal',
+        registerBotGlobalTerminal_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RegisterBotGlobalTerminalRequest.fromBuffer(value),
+        ($0.RegisterBotGlobalTerminalResponse value) => value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<$0.GetOwnershipTransferCapabilitiesRequest,
             $0.GetOwnershipTransferCapabilitiesResponse>(
         'GetOwnershipTransferCapabilities',
@@ -920,6 +1022,24 @@ abstract class RoleServiceBase extends $grpc.Service {
   $async.Future<$0.GetDefaultJoinRoleResponse> getDefaultJoinRole(
       $grpc.ServiceCall call, $0.GetDefaultJoinRoleRequest request);
 
+  $async.Future<$0.EnsureDefaultMemberRoleResponse> ensureDefaultMemberRole_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.EnsureDefaultMemberRoleRequest> $request) async {
+    return ensureDefaultMemberRole($call, await $request);
+  }
+
+  $async.Future<$0.EnsureDefaultMemberRoleResponse> ensureDefaultMemberRole(
+      $grpc.ServiceCall call, $0.EnsureDefaultMemberRoleRequest request);
+
+  $async.Future<$0.RemoveMemberRolesResponse> removeMemberRoles_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RemoveMemberRolesRequest> $request) async {
+    return removeMemberRoles($call, await $request);
+  }
+
+  $async.Future<$0.RemoveMemberRolesResponse> removeMemberRoles(
+      $grpc.ServiceCall call, $0.RemoveMemberRolesRequest request);
+
   $async.Future<$0.BootstrapSpaceRolesResponse> bootstrapSpaceRoles_Pre(
       $grpc.ServiceCall $call,
       $async.Future<$0.BootstrapSpaceRolesRequest> $request) async {
@@ -938,6 +1058,25 @@ abstract class RoleServiceBase extends $grpc.Service {
   $async.Future<$0.DeleteRolesCreatedByProfileResponse>
       deleteRolesCreatedByProfile($grpc.ServiceCall call,
           $0.DeleteRolesCreatedByProfileRequest request);
+
+  $async.Future<$0.ApplyBotInstallationRemovalResponse>
+      applyBotInstallationRemoval_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.ApplyBotInstallationRemovalRequest> $request) async {
+    return applyBotInstallationRemoval($call, await $request);
+  }
+
+  $async.Future<$0.ApplyBotInstallationRemovalResponse>
+      applyBotInstallationRemoval($grpc.ServiceCall call,
+          $0.ApplyBotInstallationRemovalRequest request);
+
+  $async.Future<$0.RegisterBotGlobalTerminalResponse>
+      registerBotGlobalTerminal_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.RegisterBotGlobalTerminalRequest> $request) async {
+    return registerBotGlobalTerminal($call, await $request);
+  }
+
+  $async.Future<$0.RegisterBotGlobalTerminalResponse> registerBotGlobalTerminal(
+      $grpc.ServiceCall call, $0.RegisterBotGlobalTerminalRequest request);
 
   $async.Future<$0.GetOwnershipTransferCapabilitiesResponse>
       getOwnershipTransferCapabilities_Pre(

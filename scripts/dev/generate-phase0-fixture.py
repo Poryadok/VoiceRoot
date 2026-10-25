@@ -33,11 +33,11 @@ def generate(destination):
     try:
         with tempfile.TemporaryDirectory(prefix=".phase0-", dir=destination.parent) as scratch:
             root = Path(scratch)
-            for directory in ("gateway", "space", "matchmaking", "gameintegration", "voice", "bot", "jwks", "tls", "ca"):
+            for directory in ("gateway", "space", "chat", "role", "matchmaking", "gameintegration", "voice", "bot", "jwks", "tls", "ca"):
                 (root / directory).mkdir(mode=0o700)
-            for issuer in ("gateway", "matchmaking"):
+            for issuer in ("gateway", "chat", "matchmaking"):
                 (root / "jwks" / issuer).mkdir(mode=0o700)
-            for issuer in ("gateway", "space", "matchmaking"):
+            for issuer in ("gateway", "space", "chat", "role", "matchmaking"):
                 for kid in ("current", "next"):
                     command("openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt",
                             "rsa_keygen_bits:2048", "-out", root / issuer / f"{kid}.pem")
@@ -64,7 +64,7 @@ def generate(destination):
             def b64url(value):
                 return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
-            for issuer in ("gateway", "matchmaking"):
+            for issuer in ("gateway", "chat", "matchmaking"):
                 issuer_keys = []
                 for kid in ("current", "next"):
                     der = subprocess.run(
@@ -129,7 +129,9 @@ def generate(destination):
                      ("voice-match-squad-member-grpc", "voice"),
                      ("space-lifecycle", "space"), ("bot-game-event", "bot"),
                      ("notification-lifecycle", "notification"),
-                     ("messaging-gameintegration-grpc", "messaging")), 1):
+                     ("messaging-gameintegration-grpc", "messaging"),
+                     ("chat-create-grpc", "chat"), ("chat-jwks", "chat"),
+                     ("space-chat-composite-grpc", "space"), ("space-audit-grpc", "space")), 1):
                 key, csr = root / f"tls/{leaf}.key", root / f"tls/{leaf}.csr"
                 extensions = root / "leaf.ext"
                 extensions.write_text(
@@ -144,14 +146,16 @@ def generate(destination):
                         "-extfile", extensions, "-out", root / f"tls/{leaf}.crt")
                 csr.unlink()
             extensions.unlink()
-            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking"), 100):
+            for serial, service in enumerate(("space", "gameintegration", "voice", "matchmaking", "chat", "auth-jwks", "role", "bot", "messaging"), 100):
                 client_key = root / f"tls/{service}-client.key"
                 client_csr = root / f"tls/{service}-client.csr"
                 client_extensions = root / "client.ext"
                 client_extensions.write_text(
                     "basicConstraints=critical,CA:FALSE\n"
                     "keyUsage=critical,digitalSignature\n"
-                    "extendedKeyUsage=clientAuth\n", encoding="ascii")
+                    "extendedKeyUsage=clientAuth\n"
+                    + ("subjectAltName=URI:spiffe://voice.local/phase0/bot\n" if service == "bot" else ""),
+                    encoding="ascii")
                 command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
                         "-keyout", client_key, "-out", client_csr, "-subj", f"/CN={service}")
                 command("openssl", "x509", "-req", "-in", client_csr, "-CA", ca_cert,
@@ -165,6 +169,11 @@ def generate(destination):
             ]
             scoped_clients.append(("gateway-client", "gateway", ca_cert, ca_key))
             scoped_clients.append(("space-lifecycle-client", "space", lifecycle_ca_cert, lifecycle_ca_key))
+            scoped_clients.append(("messaging-bot-authority-client", "messaging", lifecycle_ca_cert, lifecycle_ca_key))
+            # Chat's Gateway/Bot JWKS HTTP transport has its own identity. Bot's
+            # existing protected JWKS endpoint trusts the GIS client CA; owner
+            # RPCs use the independent root-CA Chat identity above.
+            scoped_clients.append(("chat-jwks-client", "chat", gis_ca_cert, gis_ca_key))
             for serial, (leaf, service, client_ca_cert, client_ca_key) in enumerate(scoped_clients, 200):
                 client_key = root / f"tls/{leaf}.key"
                 client_csr = root / f"tls/{leaf}.csr"
@@ -172,7 +181,9 @@ def generate(destination):
                 client_extensions.write_text(
                     "basicConstraints=critical,CA:FALSE\n"
                     "keyUsage=critical,digitalSignature\n"
-                    "extendedKeyUsage=clientAuth\n", encoding="ascii")
+                    "extendedKeyUsage=clientAuth\n"
+                    + ("subjectAltName=URI:spiffe://voice.local/phase0/messaging\n"
+                       if leaf == "messaging-bot-authority-client" else ""), encoding="ascii")
                 command("openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
                         "-keyout", client_key, "-out", client_csr, "-subj", f"/CN={service}")
                 command("openssl", "x509", "-req", "-in", client_csr, "-CA", client_ca_cert,
@@ -180,6 +191,16 @@ def generate(destination):
                         "-extfile", client_extensions, "-out", root / f"tls/{leaf}.crt")
                 client_csr.unlink()
                 client_extensions.unlink()
+            # Auth's default Java HttpClient uses the JSSE client keystore for
+            # Chat's mTLS JWKS endpoint. A truststore alone supplies no identity.
+            command("openssl", "pkcs12", "-export", "-name", "auth-jwks-client",
+                    "-inkey", root / "tls/auth-jwks-client.key",
+                    "-in", root / "tls/auth-jwks-client.crt", "-certfile", ca_cert,
+                    "-out", root / "auth-jwks-client.p12", "-passout", "pass:phase0-fixture")
+            # Bot publishes keys to both the existing GIS consumers and the
+            # native Space/Role/Auth installation consumers. RPC listener CA
+            # scopes remain independent; this bundle is only for JWKS HTTPS.
+            (root / "ca/bot-jwks-client-ca.crt").write_bytes(ca_cert.read_bytes() + gis_ca_cert.read_bytes())
             ca_key.unlink()
             gis_ca_key.unlink()
             lifecycle_ca_key.unlink()
@@ -191,7 +212,7 @@ def generate(destination):
             # This JWKS is public and bind-mounted into nginx, whose worker
             # drops root privileges. Make only the public document readable
             # by that worker; keep private fixture keys owner-only.
-            for issuer in ("gateway", "matchmaking"):
+            for issuer in ("gateway", "chat", "matchmaking"):
                 (root / "jwks" / issuer / "jwks.json").chmod(0o644)
             fixture_uid = os.environ.get("PHASE0_MATCHSQUAD_FIXTURE_UID")
             if fixture_uid is not None:
@@ -199,6 +220,12 @@ def generate(destination):
                     raise ValueError("unsupported MatchSquad fixture owner")
                 owned_paths = [
                     root / "matchmaking",
+                    root / "chat",
+                    root / "space",
+                    root / "tls/chat-client.crt",
+                    root / "tls/chat-client.key",
+                    root / "tls/chat-jwks.crt",
+                    root / "tls/chat-jwks.key",
                     root / "tls/chat-match-squad-grpc.crt",
                     root / "tls/chat-match-squad-grpc.key",
                     root / "tls/voice-match-squad-grpc.crt",
@@ -211,6 +238,10 @@ def generate(destination):
                     root / "tls/matchmaking-complete-grpc.key",
                     root / "tls/matchmaking-jwks.crt",
                     root / "tls/matchmaking-jwks.key",
+                    root / "tls/space-lifecycle.crt",
+                    root / "tls/space-lifecycle.key",
+                    root / "tls/space-client.crt",
+                    root / "tls/space-client.key",
                     root / "ca/ca.crt",
                 ]
                 # Permit path traversal to only the owner-only files below;
@@ -220,13 +251,13 @@ def generate(destination):
                     path.chmod(0o711)
                 if os.geteuid() == 0:
                     for path in owned_paths:
-                        entries = (path, *path.rglob("*")) if path == root / "matchmaking" else (path,)
+                        entries = (path, *path.rglob("*")) if path in (root / "matchmaking", root / "chat", root / "space") else (path,)
                         for entry in entries:
                             os.chown(entry, 65532, 65532)
                 else:
                     for path in owned_paths:
                         command_args = ["sudo", "-n", "chown"]
-                        if path == root / "matchmaking":
+                        if path in (root / "matchmaking", root / "chat", root / "space"):
                             command_args.append("-R")
                         command_args.extend(("65532:65532", str(path)))
                         result = subprocess.run(

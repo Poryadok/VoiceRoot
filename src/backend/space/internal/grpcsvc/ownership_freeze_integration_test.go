@@ -93,7 +93,8 @@ func newR20GRPCFreezeFixture(t *testing.T) r20GRPCFreezeFixture {
 }
 
 func r20IncomingProfile(accountID, profileID uuid.UUID) context.Context {
-	return metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+	ctx := context.WithValue(context.Background(), inviteFixtureActorKey{}, inviteFixtureActor{accountID, profileID})
+	return metadata.NewIncomingContext(ctx, metadata.Pairs(
 		authctx.HeaderUserID, accountID.String(), authctx.HeaderProfileID, profileID.String(),
 	))
 }
@@ -154,18 +155,19 @@ func TestOwnershipFreeze_GRPCOwnerAdminBotInviteVoiceAndBatchFailClosedWithoutEv
 			return svc.ListBans(ctx, &spacev1.ListBansRequest{SpaceId: f.space.String()})
 		}},
 		{"audit read", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
-			return svc.GetAuditLog(ctx, &spacev1.GetAuditLogRequest{SpaceId: f.space.String()})
+			request := &spacev1.GetAuditLogRequest{SpaceId: f.space.String()}
+			return svc.GetAuditLog(boundAuditFixture(ctx, f.account, f.owner, request), request)
 		}},
 		{"tree read", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
 			return svc.ListSpaceTree(ctx, &spacev1.ListSpaceTreeRequest{SpaceId: f.space.String()})
 		}},
 		{"owner shortcut", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
 			name := "forbidden"
-			return svc.UpdateSpace(ctx, &spacev1.UpdateSpaceRequest{SpaceId: f.space.String(), Name: &name})
+			return settingsFixtureUpdate(t, ctx, svc, &spacev1.UpdateSpaceRequest{SpaceId: f.space.String(), Name: &name})
 		}},
 		{"role admin allow", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
 			name := "forbidden"
-			return svc.UpdateSpace(ctx, &spacev1.UpdateSpaceRequest{SpaceId: f.space.String(), Name: &name})
+			return settingsFixtureUpdate(t, ctx, svc, &spacev1.UpdateSpaceRequest{SpaceId: f.space.String(), Name: &name})
 		}},
 		{"bot lifecycle", func(ctx context.Context, svc *SpaceGRPC, f r20GRPCFreezeFixture) (any, error) {
 			return svc.AddBotMember(ctx, &spacev1.AddBotMemberRequest{SpaceId: f.space.String(), ProfileId: uuid.NewString()})
@@ -216,7 +218,7 @@ func TestOwnershipFreeze_GRPCMutationDoesNotSelfDeadlockUnderLegacySessionLease(
 	name := "forbidden"
 	ctx, cancel := context.WithTimeout(r20IncomingProfile(f.account, f.owner), 2*time.Second)
 	defer cancel()
-	response, err := svc.UpdateSpace(ctx, &spacev1.UpdateSpaceRequest{SpaceId: f.space.String(), Name: &name})
+	response, err := settingsFixtureUpdate(t, ctx, svc, &spacev1.UpdateSpaceRequest{SpaceId: f.space.String(), Name: &name})
 	require.Zero(t, legacyLocker.calls.Load(), "R20 ordinary transaction scope must replace the legacy session advisory lease")
 	requireR20UnavailableWithoutDetail(t, response, err)
 	require.NotEqual(t, codes.DeadlineExceeded, status.Code(err))

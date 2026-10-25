@@ -1,0 +1,367 @@
+﻿2026-10-24T01:32:16.1123524Z Current runner version: '2.338.0'
+2026-10-24T01:32:16.1152656Z ##[group]Runner Image Provisioner
+2026-10-24T01:32:16.1153624Z Hosted Compute Agent
+2026-10-24T01:32:16.1154324Z Version: 20261012.601
+2026-10-24T01:32:16.1155141Z Commit: f3dc54e1fb89da6852db922499a0233137369e1d
+2026-10-24T01:32:16.1156045Z Build Date: 2026-10-12T17:48:21Z
+2026-10-24T01:32:16.1156875Z Worker ID: {5504a476-2e99-47ec-8ced-9f6a2b309134}
+2026-10-24T01:32:16.1157854Z Region: eastus
+2026-10-24T01:32:16.1158498Z Cloud: Azure
+2026-10-24T01:32:16.1159378Z ##[endgroup]
+2026-10-24T01:32:16.1161031Z ##[group]Operating System
+2026-10-24T01:32:16.1161881Z Ubuntu
+2026-10-24T01:32:16.1162516Z 24.04.5
+2026-10-24T01:32:16.1163114Z LTS
+2026-10-24T01:32:16.1164622Z ##[endgroup]
+2026-10-24T01:32:16.1165326Z ##[group]Runner Image
+2026-10-24T01:32:16.1166019Z Image: ubuntu-24.04
+2026-10-24T01:32:16.1166889Z Version: 20261012.334.1
+2026-10-24T01:32:16.1168523Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261012.334/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-24T01:32:16.1170809Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261012.334
+2026-10-24T01:32:16.1172104Z ##[endgroup]
+2026-10-24T01:32:16.1173720Z ##[group]GITHUB_TOKEN Permissions
+2026-10-24T01:32:16.1176158Z Actions: write
+2026-10-24T01:32:16.1176858Z Contents: read
+2026-10-24T01:32:16.1177568Z Metadata: read
+2026-10-24T01:32:16.1178281Z Packages: write
+2026-10-24T01:32:16.1179083Z ##[endgroup]
+2026-10-24T01:32:16.1181522Z Secret source: Actions
+2026-10-24T01:32:16.1182693Z Cache mode: write
+2026-10-24T01:32:16.1184068Z Prepare workflow directory
+2026-10-24T01:32:16.1611307Z Prepare all required actions
+2026-10-24T01:32:16.1666832Z Getting action download info
+2026-10-24T01:32:16.3580791Z Download action repository 'actions/checkout@v5' (SHA:fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09)
+2026-10-24T01:32:16.5078636Z Download action repository 'actions/setup-go@v5' (SHA:40f1582b2485089dde7abd97c1529aa768e1baff)
+2026-10-24T01:32:16.7519381Z Download action repository 'docker/setup-buildx-action@v4' (SHA:f87e5991a6d7451dcb8d9637bfbc97413f497069)
+2026-10-24T01:32:16.9719142Z Download action repository 'docker/build-push-action@v6' (SHA:10e90e3645eae34f1e60eeb005ba3a3d33f178e8)
+2026-10-24T01:32:17.2938458Z Complete job name: backend-go (moderation)
+2026-10-24T01:32:17.3738136Z ##[group]Run actions/checkout@v5
+2026-10-24T01:32:17.3739478Z with:
+2026-10-24T01:32:17.3740245Z   repository: Poryadok/VoiceRoot
+2026-10-24T01:32:17.3747724Z   token: ***
+2026-10-24T01:32:17.3748479Z   ssh-strict: true
+2026-10-24T01:32:17.3749348Z   ssh-user: git
+2026-10-24T01:32:17.3750129Z   persist-credentials: true
+2026-10-24T01:32:17.3750978Z   clean: true
+2026-10-24T01:32:17.3751753Z   sparse-checkout-cone-mode: true
+2026-10-24T01:32:17.3752655Z   fetch-depth: 1
+2026-10-24T01:32:17.3753418Z   fetch-tags: false
+2026-10-24T01:32:17.3754188Z   show-progress: true
+2026-10-24T01:32:17.3754979Z   lfs: false
+2026-10-24T01:32:17.3755727Z   submodules: false
+2026-10-24T01:32:17.3756559Z   set-safe-directory: true
+2026-10-24T01:32:17.3757449Z   allow-unsafe-pr-checkout: false
+2026-10-24T01:32:17.3758565Z env:
+2026-10-24T01:32:17.3759410Z   GO_VERSION: 1.26
+2026-10-24T01:32:17.3760186Z   FLUTTER_VERSION: 3.41.7
+2026-10-24T01:32:17.3761014Z   BUF_VERSION: v1.50.0
+2026-10-24T01:32:17.3762248Z   GOLANGCI_LINT_MOD: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+2026-10-24T01:32:17.3763564Z ##[endgroup]
+2026-10-24T01:32:17.4702542Z Syncing repository: Poryadok/VoiceRoot
+2026-10-24T01:32:17.4705702Z ##[group]Getting Git version info
+2026-10-24T01:32:17.4707382Z Working directory is '/home/runner/work/VoiceRoot/VoiceRoot'
+2026-10-24T01:32:17.4710147Z [command]/usr/bin/git version
+2026-10-24T01:32:17.5096470Z git version 2.55.0
+2026-10-24T01:32:17.5117624Z ##[endgroup]
+2026-10-24T01:32:17.5131225Z Temporarily overriding HOME='/home/runner/work/_temp/012fff05-573a-4df1-89ec-568f447222cc' before making global git config changes
+2026-10-24T01:32:17.5133599Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-24T01:32:17.5137125Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/VoiceRoot/VoiceRoot
+2026-10-24T01:32:17.5189104Z Deleting the contents of '/home/runner/work/VoiceRoot/VoiceRoot'
+2026-10-24T01:32:17.5192747Z ##[group]Initializing the repository
+2026-10-24T01:32:17.5196492Z [command]/usr/bin/git init /home/runner/work/VoiceRoot/VoiceRoot
+2026-10-24T01:32:17.5321733Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-24T01:32:17.5324176Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-24T01:32:17.5326372Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-24T01:32:17.5328114Z hint: call:
+2026-10-24T01:32:17.5329016Z hint:
+2026-10-24T01:32:17.5329893Z hint: 	git config --global init.defaultBranch <name>
+2026-10-24T01:32:17.5330982Z hint:
+2026-10-24T01:32:17.5332323Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-24T01:32:17.5334666Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-24T01:32:17.5336346Z hint:
+2026-10-24T01:32:17.5337283Z hint: 	git branch -m <name>
+2026-10-24T01:32:17.5338407Z hint:
+2026-10-24T01:32:17.5340102Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-24T01:32:17.5342489Z Initialized empty Git repository in /home/runner/work/VoiceRoot/VoiceRoot/.git/
+2026-10-24T01:32:17.5345318Z [command]/usr/bin/git remote add origin https://github.com/Poryadok/VoiceRoot
+2026-10-24T01:32:17.5597257Z ##[endgroup]
+2026-10-24T01:32:17.5598694Z ##[group]Disabling automatic garbage collection
+2026-10-24T01:32:17.5600133Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-24T01:32:17.5633373Z ##[endgroup]
+2026-10-24T01:32:17.5634779Z ##[group]Setting up auth
+2026-10-24T01:32:17.5638293Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-24T01:32:17.5667956Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-24T01:32:17.6757174Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-24T01:32:17.6788377Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-24T01:32:17.6973246Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-24T01:32:17.7003241Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-24T01:32:17.7190364Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-24T01:32:17.7226450Z ##[endgroup]
+2026-10-24T01:32:17.7227771Z ##[group]Fetching the repository
+2026-10-24T01:32:17.7234257Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +1cfa7c8eaf9e1ca1fe71aa14291e1a7debee8a4c:refs/remotes/pull/875/merge
+2026-10-24T01:32:21.5928755Z From https://github.com/Poryadok/VoiceRoot
+2026-10-24T01:32:21.5929720Z  * [new ref]         1cfa7c8eaf9e1ca1fe71aa14291e1a7debee8a4c -> pull/875/merge
+2026-10-24T01:32:21.5932593Z ##[endgroup]
+2026-10-24T01:32:21.5933355Z ##[group]Determining the checkout info
+2026-10-24T01:32:21.5935300Z ##[endgroup]
+2026-10-24T01:32:21.5941833Z [command]/usr/bin/git sparse-checkout disable
+2026-10-24T01:32:21.5988559Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-24T01:32:21.6018925Z ##[group]Checking out the ref
+2026-10-24T01:32:21.6022331Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/875/merge
+2026-10-24T01:32:22.1805516Z Note: switching to 'refs/remotes/pull/875/merge'.
+2026-10-24T01:32:22.1806340Z 
+2026-10-24T01:32:22.1806603Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-24T01:32:22.1807209Z changes and commit them, and you can discard any commits you make in this
+2026-10-24T01:32:22.1807786Z state without impacting any branches by switching back to a branch.
+2026-10-24T01:32:22.1808159Z 
+2026-10-24T01:32:22.1808439Z If you want to create a new branch to retain commits you create, you may
+2026-10-24T01:32:22.1809197Z do so (now or later) by using -c with the switch command. Example:
+2026-10-24T01:32:22.1809516Z 
+2026-10-24T01:32:22.1809638Z   git switch -c <new-branch-name>
+2026-10-24T01:32:22.1809857Z 
+2026-10-24T01:32:22.1809997Z Or undo this operation with:
+2026-10-24T01:32:22.1810201Z 
+2026-10-24T01:32:22.1810314Z   git switch -
+2026-10-24T01:32:22.1810497Z 
+2026-10-24T01:32:22.1810761Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-24T01:32:22.1811128Z 
+2026-10-24T01:32:22.1811552Z HEAD is now at 1cfa7c8 Merge 38330e20dfb23bb8be2298ba3e70182e01414481 into 288e6a4fb963b3d5775f885e14ecfda1b603a4ff
+2026-10-24T01:32:22.1836618Z ##[endgroup]
+2026-10-24T01:32:22.1877698Z [command]/usr/bin/git log -1 --format=%H
+2026-10-24T01:32:22.1900852Z 1cfa7c8eaf9e1ca1fe71aa14291e1a7debee8a4c
+2026-10-24T01:32:22.2114908Z ##[group]Run actions/setup-go@v5
+2026-10-24T01:32:22.2115155Z with:
+2026-10-24T01:32:22.2115351Z   go-version: 1.26
+2026-10-24T01:32:22.2115537Z   check-latest: false
+2026-10-24T01:32:22.2117631Z   token: ***
+2026-10-24T01:32:22.2117798Z   cache: true
+2026-10-24T01:32:22.2117957Z env:
+2026-10-24T01:32:22.2118129Z   GO_VERSION: 1.26
+2026-10-24T01:32:22.2118303Z   FLUTTER_VERSION: 3.41.7
+2026-10-24T01:32:22.2118489Z   BUF_VERSION: v1.50.0
+2026-10-24T01:32:22.2118990Z   GOLANGCI_LINT_MOD: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+2026-10-24T01:32:22.2119395Z ##[endgroup]
+2026-10-24T01:32:22.3098304Z Setup go version spec 1.26
+2026-10-24T01:32:22.3136652Z Found in cache @ /opt/hostedtoolcache/go/1.26.9/x64
+2026-10-24T01:32:22.3138210Z (node:2100) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-10-24T01:32:22.3138757Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-10-24T01:32:22.3141180Z Added go to the path
+2026-10-24T01:32:22.3143725Z Successfully set up Go version 1.26
+2026-10-24T01:32:22.4425877Z [command]/opt/hostedtoolcache/go/1.26.9/x64/bin/go env GOMODCACHE
+2026-10-24T01:32:22.4457135Z [command]/opt/hostedtoolcache/go/1.26.9/x64/bin/go env GOCACHE
+2026-10-24T01:32:22.4504240Z /home/runner/go/pkg/mod
+2026-10-24T01:32:22.4512999Z /home/runner/.cache/go-build
+2026-10-24T01:32:22.4541591Z ##[warning]Restore cache failed: Dependencies file is not found in /home/runner/work/VoiceRoot/VoiceRoot. Supported file pattern: go.sum
+2026-10-24T01:32:22.4565001Z go version go1.26.9 linux/amd64
+2026-10-24T01:32:22.4565185Z 
+2026-10-24T01:32:22.4565472Z ##[group]go env
+2026-10-24T01:32:22.7181003Z AR='ar'
+2026-10-24T01:32:22.7181262Z CC='gcc'
+2026-10-24T01:32:22.7181559Z CGO_CFLAGS='-O2 -g'
+2026-10-24T01:32:22.7181815Z CGO_CPPFLAGS=''
+2026-10-24T01:32:22.7182062Z CGO_CXXFLAGS='-O2 -g'
+2026-10-24T01:32:22.7182306Z CGO_ENABLED='1'
+2026-10-24T01:32:22.7182551Z CGO_FFLAGS='-O2 -g'
+2026-10-24T01:32:22.7182817Z CGO_LDFLAGS='-O2 -g'
+2026-10-24T01:32:22.7183068Z CXX='g++'
+2026-10-24T01:32:22.7183304Z GCCGO='gccgo'
+2026-10-24T01:32:22.7183501Z GO111MODULE=''
+2026-10-24T01:32:22.7183675Z GOAMD64='v1'
+2026-10-24T01:32:22.7183843Z GOARCH='amd64'
+2026-10-24T01:32:22.7184007Z GOAUTH='netrc'
+2026-10-24T01:32:22.7184162Z GOBIN=''
+2026-10-24T01:32:22.7184346Z GOCACHE='/home/runner/.cache/go-build'
+2026-10-24T01:32:22.7184563Z GOCACHEPROG=''
+2026-10-24T01:32:22.7184722Z GODEBUG=''
+2026-10-24T01:32:22.7184890Z GOENV='/home/runner/.config/go/env'
+2026-10-24T01:32:22.7185120Z GOEXE=''
+2026-10-24T01:32:22.7185276Z GOEXPERIMENT=''
+2026-10-24T01:32:22.7185461Z GOFIPS140='off'
+2026-10-24T01:32:22.7185626Z GOFLAGS=''
+2026-10-24T01:32:22.7186389Z GOGCCFLAGS='-fPIC -m64 -pthread -Wl,--no-gc-sections -fmessage-length=0 -ffile-prefix-map=/tmp/go-build3367421939=/tmp/go-build -gno-record-gcc-switches'
+2026-10-24T01:32:22.7186939Z GOHOSTARCH='amd64'
+2026-10-24T01:32:22.7187114Z GOHOSTOS='linux'
+2026-10-24T01:32:22.7187285Z GOINSECURE=''
+2026-10-24T01:32:22.7187463Z GOMOD='/dev/null'
+2026-10-24T01:32:22.7187668Z GOMODCACHE='/home/runner/go/pkg/mod'
+2026-10-24T01:32:22.7187951Z GONOPROXY=''
+2026-10-24T01:32:22.7188203Z GONOSUMDB=''
+2026-10-24T01:32:22.7188531Z GOOS='linux'
+2026-10-24T01:32:22.7188699Z GOPATH='/home/runner/go'
+2026-10-24T01:32:22.7189092Z GOPRIVATE=''
+2026-10-24T01:32:22.7189370Z GOPROXY='https://proxy.golang.org,direct'
+2026-10-24T01:32:22.7189682Z GOROOT='/opt/hostedtoolcache/go/1.26.9/x64'
+2026-10-24T01:32:22.7189944Z GOSUMDB='sum.golang.org'
+2026-10-24T01:32:22.7190167Z GOTELEMETRY='local'
+2026-10-24T01:32:22.7190408Z GOTELEMETRYDIR='/home/runner/.config/go/telemetry'
+2026-10-24T01:32:22.7190672Z GOTMPDIR=''
+2026-10-24T01:32:22.7190859Z GOTOOLCHAIN='auto'
+2026-10-24T01:32:22.7191141Z GOTOOLDIR='/opt/hostedtoolcache/go/1.26.9/x64/pkg/tool/linux_amd64'
+2026-10-24T01:32:22.7191436Z GOVCS=''
+2026-10-24T01:32:22.7191602Z GOVERSION='go1.26.9'
+2026-10-24T01:32:22.7191813Z GOWORK=''
+2026-10-24T01:32:22.7192226Z PKG_CONFIG='pkg-config'
+2026-10-24T01:32:22.7192367Z 
+2026-10-24T01:32:22.7192767Z ##[endgroup]
+2026-10-24T01:32:22.7305203Z ##[group]Run go mod tidy
+2026-10-24T01:32:22.7305457Z [36;1mgo mod tidy[0m
+2026-10-24T01:32:22.8056421Z shell: /usr/bin/bash -e {0}
+2026-10-24T01:32:22.8056655Z env:
+2026-10-24T01:32:22.8056834Z   GO_VERSION: 1.26
+2026-10-24T01:32:22.8057019Z   FLUTTER_VERSION: 3.41.7
+2026-10-24T01:32:22.8057203Z   BUF_VERSION: v1.50.0
+2026-10-24T01:32:22.8057500Z   GOLANGCI_LINT_MOD: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+2026-10-24T01:32:22.8057813Z ##[endgroup]
+2026-10-24T01:32:22.8232408Z go: downloading github.com/google/uuid v1.6.0
+2026-10-24T01:32:22.8233062Z go: downloading google.golang.org/grpc v1.70.0
+2026-10-24T01:32:22.9455682Z go: downloading google.golang.org/protobuf v1.36.5
+2026-10-24T01:32:23.5345992Z go: downloading github.com/nats-io/nats.go v1.39.1
+2026-10-24T01:32:23.6185897Z go: downloading github.com/nats-io/nats-server/v2 v2.11.0
+2026-10-24T01:32:23.6196667Z go: downloading github.com/stretchr/testify v1.10.0
+2026-10-24T01:32:23.6288599Z go: downloading github.com/jackc/pgx/v5 v5.7.6
+2026-10-24T01:32:23.6880056Z go: downloading github.com/prometheus/client_golang v1.20.5
+2026-10-24T01:32:23.7330988Z go: downloading github.com/prometheus/client_model v0.6.1
+2026-10-24T01:32:24.5058281Z go: downloading github.com/google/go-cmp v0.6.0
+2026-10-24T01:32:24.5617819Z go: downloading golang.org/x/net v0.32.0
+2026-10-24T01:32:24.8507542Z go: downloading github.com/klauspost/compress v1.18.0
+2026-10-24T01:32:24.8998983Z go: downloading github.com/nats-io/nkeys v0.4.10
+2026-10-24T01:32:24.9565890Z go: downloading github.com/nats-io/nuid v1.0.1
+2026-10-24T01:32:24.9987553Z go: downloading github.com/jackc/pgpassfile v1.0.0
+2026-10-24T01:32:25.0147403Z go: downloading github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+2026-10-24T01:32:25.0155467Z go: downloading golang.org/x/crypto v0.37.0
+2026-10-24T01:32:25.0473906Z go: downloading golang.org/x/text v0.24.0
+2026-10-24T01:32:25.1019386Z go: downloading github.com/jackc/puddle/v2 v2.2.2
+2026-10-24T01:32:25.1399917Z go: downloading google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a
+2026-10-24T01:32:25.1470894Z go: downloading github.com/beorn7/perks v1.0.1
+2026-10-24T01:32:25.1479282Z go: downloading github.com/cespare/xxhash/v2 v2.3.0
+2026-10-24T01:32:25.1609484Z go: downloading github.com/prometheus/common v0.55.0
+2026-10-24T01:32:25.1849360Z go: downloading github.com/prometheus/procfs v0.15.1
+2026-10-24T01:32:25.1850053Z go: downloading golang.org/x/sys v0.32.0
+2026-10-24T01:32:25.2857392Z go: downloading github.com/alicebob/miniredis/v2 v2.34.0
+2026-10-24T01:32:25.4439294Z go: downloading github.com/docker/docker v27.1.1+incompatible
+2026-10-24T01:32:25.4626027Z go: downloading github.com/testcontainers/testcontainers-go v0.35.0
+2026-10-24T01:32:25.5369115Z go: downloading github.com/testcontainers/testcontainers-go/modules/postgres v0.35.0
+2026-10-24T01:32:26.0505195Z go: downloading github.com/minio/highwayhash v1.0.3
+2026-10-24T01:32:26.0508997Z go: downloading github.com/nats-io/jwt/v2 v2.7.3
+2026-10-24T01:32:26.0613009Z go: downloading golang.org/x/time v0.11.0
+2026-10-24T01:32:26.3379979Z go: downloading github.com/davecgh/go-spew v1.1.1
+2026-10-24T01:32:26.3402126Z go: downloading github.com/pmezard/go-difflib v1.0.0
+2026-10-24T01:32:26.3462103Z go: downloading golang.org/x/sync v0.13.0
+2026-10-24T01:32:26.3468537Z go: downloading github.com/golang/protobuf v1.5.4
+2026-10-24T01:32:26.3477440Z go: downloading github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
+2026-10-24T01:32:26.3593457Z go: downloading github.com/alicebob/gopher-json v0.0.0-20230218143504-906a9b012302
+2026-10-24T01:32:26.3616280Z go: downloading github.com/yuin/gopher-lua v1.1.1
+2026-10-24T01:32:26.3814635Z go: downloading dario.cat/mergo v1.0.0
+2026-10-24T01:32:26.3941381Z go: downloading github.com/cenkalti/backoff/v4 v4.2.1
+2026-10-24T01:32:26.4014036Z go: downloading github.com/containerd/platforms v0.2.1
+2026-10-24T01:32:26.4043315Z go: downloading github.com/cpuguy83/dockercfg v0.3.2
+2026-10-24T01:32:26.4080634Z go: downloading github.com/docker/go-connections v0.5.0
+2026-10-24T01:32:26.4093280Z go: downloading github.com/moby/patternmatcher v0.6.0
+2026-10-24T01:32:26.4113336Z go: downloading github.com/moby/term v0.5.0
+2026-10-24T01:32:26.4153999Z go: downloading github.com/opencontainers/image-spec v1.1.0
+2026-10-24T01:32:26.4177910Z go: downloading github.com/lib/pq v1.10.9
+2026-10-24T01:32:26.4198998Z go: downloading github.com/mdelapenya/tlscert v0.1.0
+2026-10-24T01:32:26.4309588Z go: downloading github.com/redis/go-redis/v9 v9.7.0
+2026-10-24T01:32:26.4370040Z go: downloading gopkg.in/yaml.v3 v3.0.1
+2026-10-24T01:32:26.5777267Z go: downloading github.com/google/go-tpm v0.9.3
+2026-10-24T01:32:26.5805760Z go: downloading github.com/antithesishq/antithesis-sdk-go v0.4.3-default-no-op
+2026-10-24T01:32:26.7285624Z go: downloading github.com/docker/go-units v0.5.0
+2026-10-24T01:32:26.7353354Z go: downloading github.com/moby/docker-image-spec v1.3.1
+2026-10-24T01:32:26.7430911Z go: downloading gotest.tools/v3 v3.5.1
+2026-10-24T01:32:26.8162261Z go: downloading go.opentelemetry.io/otel v1.32.0
+2026-10-24T01:32:27.4037321Z go: downloading go.opentelemetry.io/otel/sdk/metric v1.32.0
+2026-10-24T01:32:27.4488945Z go: downloading github.com/kylelemons/godebug v1.1.0
+2026-10-24T01:32:27.5753509Z go: downloading go.opentelemetry.io/otel/sdk v1.32.0
+2026-10-24T01:32:27.7867112Z go: downloading github.com/pkg/errors v0.9.1
+2026-10-24T01:32:27.7895446Z go: downloading github.com/distribution/reference v0.6.0
+2026-10-24T01:32:27.7943949Z go: downloading github.com/opencontainers/go-digest v1.0.0
+2026-10-24T01:32:27.8023172Z go: downloading go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0
+2026-10-24T01:32:27.8044587Z go: downloading go.opentelemetry.io/otel/trace v1.32.0
+2026-10-24T01:32:27.8049464Z go: downloading github.com/containerd/containerd v1.7.18
+2026-10-24T01:32:27.8137869Z go: downloading github.com/containerd/log v0.1.0
+2026-10-24T01:32:27.8219156Z go: downloading github.com/moby/sys/sequential v0.5.0
+2026-10-24T01:32:27.8279679Z go: downloading github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
+2026-10-24T01:32:27.8422515Z go: downloading github.com/morikuni/aec v1.0.0
+2026-10-24T01:32:27.8427764Z go: downloading github.com/magiconair/properties v1.8.7
+2026-10-24T01:32:27.8538733Z go: downloading github.com/shirou/gopsutil/v3 v3.23.12
+2026-10-24T01:32:27.8555794Z go: downloading github.com/stretchr/objx v0.5.2
+2026-10-24T01:32:27.9080899Z go: downloading github.com/creack/pty v1.1.18
+2026-10-24T01:32:27.9242970Z go: downloading gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
+2026-10-24T01:32:27.9402129Z go: downloading github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f
+2026-10-24T01:32:27.9426590Z go: downloading github.com/bsm/ginkgo/v2 v2.12.0
+2026-10-24T01:32:27.9470415Z go: downloading github.com/bsm/gomega v1.27.10
+2026-10-24T01:32:28.0075985Z go: downloading go.opentelemetry.io/otel/metric v1.32.0
+2026-10-24T01:32:28.1873225Z go: downloading github.com/Microsoft/go-winio v0.6.2
+2026-10-24T01:32:28.1955069Z go: downloading go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.19.0
+2026-10-24T01:32:28.1955761Z go: downloading github.com/felixge/httpsnoop v1.0.4
+2026-10-24T01:32:28.2094707Z go: downloading github.com/sirupsen/logrus v1.9.3
+2026-10-24T01:32:28.2188576Z go: downloading github.com/moby/sys/user v0.1.0
+2026-10-24T01:32:28.2238426Z go: downloading golang.org/x/term v0.31.0
+2026-10-24T01:32:28.2247787Z go: downloading github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1
+2026-10-24T01:32:28.2346548Z go: downloading github.com/kr/pretty v0.3.1
+2026-10-24T01:32:28.2357241Z go: downloading github.com/tklauser/go-sysconf v0.3.12
+2026-10-24T01:32:28.2435942Z go: downloading github.com/go-logr/logr v1.4.2
+2026-10-24T01:32:28.2513076Z go: downloading github.com/go-logr/stdr v1.2.2
+2026-10-24T01:32:28.2550920Z go: downloading github.com/gogo/protobuf v1.3.2
+2026-10-24T01:32:28.2939362Z go: downloading go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.19.0
+2026-10-24T01:32:28.3065729Z go: downloading github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0
+2026-10-24T01:32:28.3154181Z go: downloading github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c
+2026-10-24T01:32:28.3244987Z go: downloading github.com/shoenig/go-m1cpu v0.1.6
+2026-10-24T01:32:28.3922960Z go: downloading github.com/yusufpapurcu/wmi v1.2.3
+2026-10-24T01:32:28.3954187Z go: downloading github.com/kr/text v0.2.0
+2026-10-24T01:32:28.4001774Z go: downloading github.com/rogpeppe/go-internal v1.10.0
+2026-10-24T01:32:28.4107991Z go: downloading github.com/tklauser/numcpus v0.6.1
+2026-10-24T01:32:28.4229447Z go: downloading github.com/shoenig/test v0.6.4
+2026-10-24T01:32:28.4416658Z go: downloading go.opentelemetry.io/proto/otlp v1.0.0
+2026-10-24T01:32:28.5123341Z go: downloading github.com/go-ole/go-ole v1.2.6
+2026-10-24T01:32:28.6279906Z go: downloading github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0
+2026-10-24T01:32:28.9444981Z go: downloading google.golang.org/genproto/googleapis/api v0.0.0-20241202173237-19429a94021a
+2026-10-24T01:32:29.0506368Z go: downloading google.golang.org/genproto v0.0.0-20230920204549-e6e6cdab5c13
+2026-10-24T01:32:29.9772887Z ##[group]Run go test -short ./...
+2026-10-24T01:32:29.9773154Z [36;1mgo test -short ./...[0m
+2026-10-24T01:32:29.9831002Z shell: /usr/bin/bash -e {0}
+2026-10-24T01:32:29.9831215Z env:
+2026-10-24T01:32:29.9831378Z   GO_VERSION: 1.26
+2026-10-24T01:32:29.9831554Z   FLUTTER_VERSION: 3.41.7
+2026-10-24T01:32:29.9831741Z   BUF_VERSION: v1.50.0
+2026-10-24T01:32:29.9832029Z   GOLANGCI_LINT_MOD: github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
+2026-10-24T01:32:29.9832357Z   CGO_ENABLED: 0
+2026-10-24T01:32:29.9832521Z ##[endgroup]
+2026-10-24T01:32:53.2867974Z ok  	voice/backend/moderation	0.009s
+2026-10-24T01:32:53.2869410Z ?   	voice/backend/moderation/internal/authclient	[no test files]
+2026-10-24T01:33:05.4559867Z 2026/10/24 01:33:05 WARN automod scan counter update failed
+2026-10-24T01:33:05.4589530Z 2026/10/24 01:33:05 WARN automod scan counter update failed
+2026-10-24T01:33:05.4599414Z --- FAIL: TestAutoModScanOutcomes_BoundedAndSkipped (0.07s)
+2026-10-24T01:33:05.4629581Z     --- FAIL: TestAutoModScanOutcomes_BoundedAndSkipped/budget (0.00s)
+2026-10-24T01:33:05.4660522Z         automod_scan_outcomes_test.go:73: 
+2026-10-24T01:33:05.4661909Z             	Error Trace:	/home/runner/work/VoiceRoot/VoiceRoot/src/backend/moderation/internal/grpcsvc/automod_scan_outcomes_test.go:73
+2026-10-24T01:33:05.4662815Z             	Error:      	Not equal: 
+2026-10-24T01:33:05.4663388Z             	            	expected: int(1)
+2026-10-24T01:33:05.4664333Z             	            	actual  : int64(0)
+2026-10-24T01:33:05.4665057Z             	Test:       	TestAutoModScanOutcomes_BoundedAndSkipped/budget
+2026-10-24T01:33:05.4665591Z 2026/10/24 01:33:05 WARN automod scan counter update failed
+2026-10-24T01:33:05.4666085Z 2026/10/24 01:33:05 WARN automod scan counter update failed
+2026-10-24T01:33:05.4666472Z FAIL
+2026-10-24T01:33:05.4666801Z FAIL	voice/backend/moderation/internal/grpcsvc	0.099s
+2026-10-24T01:33:05.4667323Z ?   	voice/backend/moderation/internal/mmclient	[no test files]
+2026-10-24T01:33:08.4097640Z ok  	voice/backend/moderation/internal/moderationevents	0.036s
+2026-10-24T01:33:08.4098182Z ok  	voice/backend/moderation/internal/store	0.002s
+2026-10-24T01:33:08.4098667Z ?   	voice/backend/moderation/internal/userclient	[no test files]
+2026-10-24T01:33:08.4099212Z FAIL
+2026-10-24T01:33:08.6827864Z ##[error]Process completed with exit code 1.
+2026-10-24T01:33:08.6949932Z Post job cleanup.
+2026-10-24T01:33:08.7640831Z [command]/usr/bin/git version
+2026-10-24T01:33:08.7677615Z git version 2.55.0
+2026-10-24T01:33:08.7707943Z Temporarily overriding HOME='/home/runner/work/_temp/43b2c441-1797-4140-b744-c59f463d7336' before making global git config changes
+2026-10-24T01:33:08.7709132Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-24T01:33:08.7711831Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/VoiceRoot/VoiceRoot
+2026-10-24T01:33:08.7744008Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-24T01:33:08.7772558Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-24T01:33:08.7994855Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-24T01:33:08.8018100Z http.https://github.com/.extraheader
+2026-10-24T01:33:08.8027760Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-10-24T01:33:08.8110609Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-24T01:33:08.8328390Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-24T01:33:08.8360781Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-24T01:33:08.8719047Z Cleaning up orphan processes
+2026-10-24T01:33:08.9030282Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/setup-go@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -523,6 +523,8 @@ class UserLoggedIn extends $pb.GeneratedMessage {
   @$pb.TagNumber(2)
   void clearDeviceInfoJson() => $_clearField(2);
 
+  /// BE211-OBS-v1: empty means unavailable/unverified. Current Auth producers
+  /// deliberately emit empty; never infer IP from device data or Gateway peer.
   @$pb.TagNumber(3)
   $core.String get ip => $_getSZ(2);
   @$pb.TagNumber(3)
@@ -1872,6 +1874,15 @@ enum RoleStreamEvent_Payload {
   roleAssignmentChanged,
   roleDefinitionChanged,
   voiceRoomPolicyInvalidated,
+  roleCreated,
+  roleUpdated,
+  roleDeleted,
+  roleAssigned,
+  roleRevoked,
+  roleChatOverrideSet,
+  roleChatOverrideRemoved,
+  roleVoiceOverrideSet,
+  roleVoiceOverrideRemoved,
   notSet
 }
 
@@ -1882,6 +1893,15 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     RoleAssignmentChanged? roleAssignmentChanged,
     RoleDefinitionChanged? roleDefinitionChanged,
     VoiceRoomPolicyInvalidated? voiceRoomPolicyInvalidated,
+    RoleMutation? roleCreated,
+    RoleMutation? roleUpdated,
+    RoleMutation? roleDeleted,
+    RoleMutation? roleAssigned,
+    RoleMutation? roleRevoked,
+    RoleMutation? roleChatOverrideSet,
+    RoleMutation? roleChatOverrideRemoved,
+    RoleMutation? roleVoiceOverrideSet,
+    RoleMutation? roleVoiceOverrideRemoved,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -1892,6 +1912,19 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       result.roleDefinitionChanged = roleDefinitionChanged;
     if (voiceRoomPolicyInvalidated != null)
       result.voiceRoomPolicyInvalidated = voiceRoomPolicyInvalidated;
+    if (roleCreated != null) result.roleCreated = roleCreated;
+    if (roleUpdated != null) result.roleUpdated = roleUpdated;
+    if (roleDeleted != null) result.roleDeleted = roleDeleted;
+    if (roleAssigned != null) result.roleAssigned = roleAssigned;
+    if (roleRevoked != null) result.roleRevoked = roleRevoked;
+    if (roleChatOverrideSet != null)
+      result.roleChatOverrideSet = roleChatOverrideSet;
+    if (roleChatOverrideRemoved != null)
+      result.roleChatOverrideRemoved = roleChatOverrideRemoved;
+    if (roleVoiceOverrideSet != null)
+      result.roleVoiceOverrideSet = roleVoiceOverrideSet;
+    if (roleVoiceOverrideRemoved != null)
+      result.roleVoiceOverrideRemoved = roleVoiceOverrideRemoved;
     return result;
   }
 
@@ -1909,6 +1942,15 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     10: RoleStreamEvent_Payload.roleAssignmentChanged,
     11: RoleStreamEvent_Payload.roleDefinitionChanged,
     12: RoleStreamEvent_Payload.voiceRoomPolicyInvalidated,
+    13: RoleStreamEvent_Payload.roleCreated,
+    14: RoleStreamEvent_Payload.roleUpdated,
+    15: RoleStreamEvent_Payload.roleDeleted,
+    16: RoleStreamEvent_Payload.roleAssigned,
+    17: RoleStreamEvent_Payload.roleRevoked,
+    18: RoleStreamEvent_Payload.roleChatOverrideSet,
+    19: RoleStreamEvent_Payload.roleChatOverrideRemoved,
+    20: RoleStreamEvent_Payload.roleVoiceOverrideSet,
+    21: RoleStreamEvent_Payload.roleVoiceOverrideRemoved,
     0: RoleStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -1916,7 +1958,7 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -1929,6 +1971,24 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
     ..aOM<VoiceRoomPolicyInvalidated>(
         12, _omitFieldNames ? '' : 'voiceRoomPolicyInvalidated',
         subBuilder: VoiceRoomPolicyInvalidated.create)
+    ..aOM<RoleMutation>(13, _omitFieldNames ? '' : 'roleCreated',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(14, _omitFieldNames ? '' : 'roleUpdated',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(15, _omitFieldNames ? '' : 'roleDeleted',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(16, _omitFieldNames ? '' : 'roleAssigned',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(17, _omitFieldNames ? '' : 'roleRevoked',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(18, _omitFieldNames ? '' : 'roleChatOverrideSet',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(19, _omitFieldNames ? '' : 'roleChatOverrideRemoved',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(20, _omitFieldNames ? '' : 'roleVoiceOverrideSet',
+        subBuilder: RoleMutation.create)
+    ..aOM<RoleMutation>(21, _omitFieldNames ? '' : 'roleVoiceOverrideRemoved',
+        subBuilder: RoleMutation.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1953,11 +2013,29 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
+  @$pb.TagNumber(15)
+  @$pb.TagNumber(16)
+  @$pb.TagNumber(17)
+  @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   RoleStreamEvent_Payload whichPayload() =>
       _RoleStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
   @$pb.TagNumber(11)
   @$pb.TagNumber(12)
+  @$pb.TagNumber(13)
+  @$pb.TagNumber(14)
+  @$pb.TagNumber(15)
+  @$pb.TagNumber(16)
+  @$pb.TagNumber(17)
+  @$pb.TagNumber(18)
+  @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -2015,6 +2093,105 @@ class RoleStreamEvent extends $pb.GeneratedMessage {
   void clearVoiceRoomPolicyInvalidated() => $_clearField(12);
   @$pb.TagNumber(12)
   VoiceRoomPolicyInvalidated ensureVoiceRoomPolicyInvalidated() => $_ensure(4);
+
+  @$pb.TagNumber(13)
+  RoleMutation get roleCreated => $_getN(5);
+  @$pb.TagNumber(13)
+  set roleCreated(RoleMutation value) => $_setField(13, value);
+  @$pb.TagNumber(13)
+  $core.bool hasRoleCreated() => $_has(5);
+  @$pb.TagNumber(13)
+  void clearRoleCreated() => $_clearField(13);
+  @$pb.TagNumber(13)
+  RoleMutation ensureRoleCreated() => $_ensure(5);
+
+  @$pb.TagNumber(14)
+  RoleMutation get roleUpdated => $_getN(6);
+  @$pb.TagNumber(14)
+  set roleUpdated(RoleMutation value) => $_setField(14, value);
+  @$pb.TagNumber(14)
+  $core.bool hasRoleUpdated() => $_has(6);
+  @$pb.TagNumber(14)
+  void clearRoleUpdated() => $_clearField(14);
+  @$pb.TagNumber(14)
+  RoleMutation ensureRoleUpdated() => $_ensure(6);
+
+  @$pb.TagNumber(15)
+  RoleMutation get roleDeleted => $_getN(7);
+  @$pb.TagNumber(15)
+  set roleDeleted(RoleMutation value) => $_setField(15, value);
+  @$pb.TagNumber(15)
+  $core.bool hasRoleDeleted() => $_has(7);
+  @$pb.TagNumber(15)
+  void clearRoleDeleted() => $_clearField(15);
+  @$pb.TagNumber(15)
+  RoleMutation ensureRoleDeleted() => $_ensure(7);
+
+  @$pb.TagNumber(16)
+  RoleMutation get roleAssigned => $_getN(8);
+  @$pb.TagNumber(16)
+  set roleAssigned(RoleMutation value) => $_setField(16, value);
+  @$pb.TagNumber(16)
+  $core.bool hasRoleAssigned() => $_has(8);
+  @$pb.TagNumber(16)
+  void clearRoleAssigned() => $_clearField(16);
+  @$pb.TagNumber(16)
+  RoleMutation ensureRoleAssigned() => $_ensure(8);
+
+  @$pb.TagNumber(17)
+  RoleMutation get roleRevoked => $_getN(9);
+  @$pb.TagNumber(17)
+  set roleRevoked(RoleMutation value) => $_setField(17, value);
+  @$pb.TagNumber(17)
+  $core.bool hasRoleRevoked() => $_has(9);
+  @$pb.TagNumber(17)
+  void clearRoleRevoked() => $_clearField(17);
+  @$pb.TagNumber(17)
+  RoleMutation ensureRoleRevoked() => $_ensure(9);
+
+  @$pb.TagNumber(18)
+  RoleMutation get roleChatOverrideSet => $_getN(10);
+  @$pb.TagNumber(18)
+  set roleChatOverrideSet(RoleMutation value) => $_setField(18, value);
+  @$pb.TagNumber(18)
+  $core.bool hasRoleChatOverrideSet() => $_has(10);
+  @$pb.TagNumber(18)
+  void clearRoleChatOverrideSet() => $_clearField(18);
+  @$pb.TagNumber(18)
+  RoleMutation ensureRoleChatOverrideSet() => $_ensure(10);
+
+  @$pb.TagNumber(19)
+  RoleMutation get roleChatOverrideRemoved => $_getN(11);
+  @$pb.TagNumber(19)
+  set roleChatOverrideRemoved(RoleMutation value) => $_setField(19, value);
+  @$pb.TagNumber(19)
+  $core.bool hasRoleChatOverrideRemoved() => $_has(11);
+  @$pb.TagNumber(19)
+  void clearRoleChatOverrideRemoved() => $_clearField(19);
+  @$pb.TagNumber(19)
+  RoleMutation ensureRoleChatOverrideRemoved() => $_ensure(11);
+
+  @$pb.TagNumber(20)
+  RoleMutation get roleVoiceOverrideSet => $_getN(12);
+  @$pb.TagNumber(20)
+  set roleVoiceOverrideSet(RoleMutation value) => $_setField(20, value);
+  @$pb.TagNumber(20)
+  $core.bool hasRoleVoiceOverrideSet() => $_has(12);
+  @$pb.TagNumber(20)
+  void clearRoleVoiceOverrideSet() => $_clearField(20);
+  @$pb.TagNumber(20)
+  RoleMutation ensureRoleVoiceOverrideSet() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  RoleMutation get roleVoiceOverrideRemoved => $_getN(13);
+  @$pb.TagNumber(21)
+  set roleVoiceOverrideRemoved(RoleMutation value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasRoleVoiceOverrideRemoved() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearRoleVoiceOverrideRemoved() => $_clearField(21);
+  @$pb.TagNumber(21)
+  RoleMutation ensureRoleVoiceOverrideRemoved() => $_ensure(13);
 }
 
 class RoleAssignmentChanged extends $pb.GeneratedMessage {
@@ -3773,6 +3950,7 @@ enum ChatStreamEvent_Payload {
   spaceRestored,
   chatUpdated,
   chatDeleted,
+  spaceMemberBanned,
   notSet
 }
 
@@ -3798,6 +3976,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     SpaceRestored? spaceRestored,
     ChatUpdated? chatUpdated,
     ChatDeleted? chatDeleted,
+    SpaceMemberBanned? spaceMemberBanned,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -3820,6 +3999,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     if (spaceRestored != null) result.spaceRestored = spaceRestored;
     if (chatUpdated != null) result.chatUpdated = chatUpdated;
     if (chatDeleted != null) result.chatDeleted = chatDeleted;
+    if (spaceMemberBanned != null) result.spaceMemberBanned = spaceMemberBanned;
     return result;
   }
 
@@ -3849,6 +4029,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
     22: ChatStreamEvent_Payload.spaceRestored,
     23: ChatStreamEvent_Payload.chatUpdated,
     24: ChatStreamEvent_Payload.chatDeleted,
+    25: ChatStreamEvent_Payload.spaceMemberBanned,
     0: ChatStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -3856,7 +4037,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -3892,6 +4073,8 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
         subBuilder: ChatUpdated.create)
     ..aOM<ChatDeleted>(24, _omitFieldNames ? '' : 'chatDeleted',
         subBuilder: ChatDeleted.create)
+    ..aOM<SpaceMemberBanned>(25, _omitFieldNames ? '' : 'spaceMemberBanned',
+        subBuilder: SpaceMemberBanned.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -3928,6 +4111,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(22)
   @$pb.TagNumber(23)
   @$pb.TagNumber(24)
+  @$pb.TagNumber(25)
   ChatStreamEvent_Payload whichPayload() =>
       _ChatStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -3945,6 +4129,7 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(22)
   @$pb.TagNumber(23)
   @$pb.TagNumber(24)
+  @$pb.TagNumber(25)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -4133,6 +4318,17 @@ class ChatStreamEvent extends $pb.GeneratedMessage {
   void clearChatDeleted() => $_clearField(24);
   @$pb.TagNumber(24)
   ChatDeleted ensureChatDeleted() => $_ensure(16);
+
+  @$pb.TagNumber(25)
+  SpaceMemberBanned get spaceMemberBanned => $_getN(17);
+  @$pb.TagNumber(25)
+  set spaceMemberBanned(SpaceMemberBanned value) => $_setField(25, value);
+  @$pb.TagNumber(25)
+  $core.bool hasSpaceMemberBanned() => $_has(17);
+  @$pb.TagNumber(25)
+  void clearSpaceMemberBanned() => $_clearField(25);
+  @$pb.TagNumber(25)
+  SpaceMemberBanned ensureSpaceMemberBanned() => $_ensure(17);
 }
 
 class ChatCreated extends $pb.GeneratedMessage {
@@ -4691,9 +4887,11 @@ class SpaceMemberLeft extends $pb.GeneratedMessage {
 class SpaceUpdated extends $pb.GeneratedMessage {
   factory SpaceUpdated({
     $core.String? spaceId,
+    $core.Iterable<$core.String>? changedFields,
   }) {
     final result = create();
     if (spaceId != null) result.spaceId = spaceId;
+    if (changedFields != null) result.changedFields.addAll(changedFields);
     return result;
   }
 
@@ -4712,6 +4910,7 @@ class SpaceUpdated extends $pb.GeneratedMessage {
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
     ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..pPS(2, _omitFieldNames ? '' : 'changedFields')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4741,6 +4940,11 @@ class SpaceUpdated extends $pb.GeneratedMessage {
   $core.bool hasSpaceId() => $_has(0);
   @$pb.TagNumber(1)
   void clearSpaceId() => $_clearField(1);
+
+  /// Sorted unique persisted property/aggregate names. Empty or unknown means
+  /// full invalidation; this is not a revision or an authorization grant.
+  @$pb.TagNumber(2)
+  $pb.PbList<$core.String> get changedFields => $_getList(1);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -5048,6 +5252,9 @@ enum VoiceStreamEvent_Payload {
   voiceStateChanged,
   screenShareStopped,
   voiceMemberJoined,
+  voiceParticipantJoined,
+  voiceParticipantLeft,
+  voiceRosterMembershipChanged,
   notSet
 }
 
@@ -5065,6 +5272,9 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     VoiceStateChanged? voiceStateChanged,
     ScreenShareStopped? screenShareStopped,
     VoiceMemberJoined? voiceMemberJoined,
+    VoiceParticipantJoined? voiceParticipantJoined,
+    VoiceParticipantLeft? voiceParticipantLeft,
+    VoiceRosterMembershipChanged? voiceRosterMembershipChanged,
   }) {
     final result = create();
     if (eventId != null) result.eventId = eventId;
@@ -5081,6 +5291,12 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     if (screenShareStopped != null)
       result.screenShareStopped = screenShareStopped;
     if (voiceMemberJoined != null) result.voiceMemberJoined = voiceMemberJoined;
+    if (voiceParticipantJoined != null)
+      result.voiceParticipantJoined = voiceParticipantJoined;
+    if (voiceParticipantLeft != null)
+      result.voiceParticipantLeft = voiceParticipantLeft;
+    if (voiceRosterMembershipChanged != null)
+      result.voiceRosterMembershipChanged = voiceRosterMembershipChanged;
     return result;
   }
 
@@ -5105,6 +5321,9 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
     17: VoiceStreamEvent_Payload.voiceStateChanged,
     18: VoiceStreamEvent_Payload.screenShareStopped,
     19: VoiceStreamEvent_Payload.voiceMemberJoined,
+    20: VoiceStreamEvent_Payload.voiceParticipantJoined,
+    21: VoiceStreamEvent_Payload.voiceParticipantLeft,
+    22: VoiceStreamEvent_Payload.voiceRosterMembershipChanged,
     0: VoiceStreamEvent_Payload.notSet
   };
   static final $pb.BuilderInfo _i = $pb.BuilderInfo(
@@ -5112,7 +5331,7 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
       package:
           const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
       createEmptyInstance: create)
-    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19])
+    ..oo(0, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22])
     ..aOS(1, _omitFieldNames ? '' : 'eventId')
     ..aOM<$0.Timestamp>(2, _omitFieldNames ? '' : 'occurredAt',
         subBuilder: $0.Timestamp.create)
@@ -5136,6 +5355,15 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
         subBuilder: ScreenShareStopped.create)
     ..aOM<VoiceMemberJoined>(19, _omitFieldNames ? '' : 'voiceMemberJoined',
         subBuilder: VoiceMemberJoined.create)
+    ..aOM<VoiceParticipantJoined>(
+        20, _omitFieldNames ? '' : 'voiceParticipantJoined',
+        subBuilder: VoiceParticipantJoined.create)
+    ..aOM<VoiceParticipantLeft>(
+        21, _omitFieldNames ? '' : 'voiceParticipantLeft',
+        subBuilder: VoiceParticipantLeft.create)
+    ..aOM<VoiceRosterMembershipChanged>(
+        22, _omitFieldNames ? '' : 'voiceRosterMembershipChanged',
+        subBuilder: VoiceRosterMembershipChanged.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -5167,6 +5395,9 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
   VoiceStreamEvent_Payload whichPayload() =>
       _VoiceStreamEvent_PayloadByTag[$_whichOneof(0)]!;
   @$pb.TagNumber(10)
@@ -5179,6 +5410,9 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   @$pb.TagNumber(17)
   @$pb.TagNumber(18)
   @$pb.TagNumber(19)
+  @$pb.TagNumber(20)
+  @$pb.TagNumber(21)
+  @$pb.TagNumber(22)
   void clearPayload() => $_clearField($_whichOneof(0));
 
   @$pb.TagNumber(1)
@@ -5310,6 +5544,290 @@ class VoiceStreamEvent extends $pb.GeneratedMessage {
   void clearVoiceMemberJoined() => $_clearField(19);
   @$pb.TagNumber(19)
   VoiceMemberJoined ensureVoiceMemberJoined() => $_ensure(11);
+
+  @$pb.TagNumber(20)
+  VoiceParticipantJoined get voiceParticipantJoined => $_getN(12);
+  @$pb.TagNumber(20)
+  set voiceParticipantJoined(VoiceParticipantJoined value) =>
+      $_setField(20, value);
+  @$pb.TagNumber(20)
+  $core.bool hasVoiceParticipantJoined() => $_has(12);
+  @$pb.TagNumber(20)
+  void clearVoiceParticipantJoined() => $_clearField(20);
+  @$pb.TagNumber(20)
+  VoiceParticipantJoined ensureVoiceParticipantJoined() => $_ensure(12);
+
+  @$pb.TagNumber(21)
+  VoiceParticipantLeft get voiceParticipantLeft => $_getN(13);
+  @$pb.TagNumber(21)
+  set voiceParticipantLeft(VoiceParticipantLeft value) => $_setField(21, value);
+  @$pb.TagNumber(21)
+  $core.bool hasVoiceParticipantLeft() => $_has(13);
+  @$pb.TagNumber(21)
+  void clearVoiceParticipantLeft() => $_clearField(21);
+  @$pb.TagNumber(21)
+  VoiceParticipantLeft ensureVoiceParticipantLeft() => $_ensure(13);
+
+  @$pb.TagNumber(22)
+  VoiceRosterMembershipChanged get voiceRosterMembershipChanged => $_getN(14);
+  @$pb.TagNumber(22)
+  set voiceRosterMembershipChanged(VoiceRosterMembershipChanged value) =>
+      $_setField(22, value);
+  @$pb.TagNumber(22)
+  $core.bool hasVoiceRosterMembershipChanged() => $_has(14);
+  @$pb.TagNumber(22)
+  void clearVoiceRosterMembershipChanged() => $_clearField(22);
+  @$pb.TagNumber(22)
+  VoiceRosterMembershipChanged ensureVoiceRosterMembershipChanged() =>
+      $_ensure(14);
+}
+
+/// A3 party eligibility fact, committed with the source membership transaction.
+class VoiceRosterMembershipChanged extends $pb.GeneratedMessage {
+  factory VoiceRosterMembershipChanged({
+    $core.int? protocolVersion,
+    $core.String? roomId,
+    $fixnum.Int64? rosterVersion,
+    VoiceRosterMembershipChanged_Change? change,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (roomId != null) result.roomId = roomId;
+    if (rosterVersion != null) result.rosterVersion = rosterVersion;
+    if (change != null) result.change = change;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  VoiceRosterMembershipChanged._();
+
+  factory VoiceRosterMembershipChanged.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceRosterMembershipChanged.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceRosterMembershipChanged',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'roomId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'rosterVersion', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aE<VoiceRosterMembershipChanged_Change>(
+        4, _omitFieldNames ? '' : 'change',
+        enumValues: VoiceRosterMembershipChanged_Change.values)
+    ..aOS(5, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRosterMembershipChanged clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceRosterMembershipChanged copyWith(
+          void Function(VoiceRosterMembershipChanged) updates) =>
+      super.copyWith(
+              (message) => updates(message as VoiceRosterMembershipChanged))
+          as VoiceRosterMembershipChanged;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceRosterMembershipChanged create() =>
+      VoiceRosterMembershipChanged._();
+  @$core.override
+  VoiceRosterMembershipChanged createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceRosterMembershipChanged getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceRosterMembershipChanged>(create);
+  static VoiceRosterMembershipChanged? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get roomId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set roomId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRoomId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRoomId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get rosterVersion => $_getI64(2);
+  @$pb.TagNumber(3)
+  set rosterVersion($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRosterVersion() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRosterVersion() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  VoiceRosterMembershipChanged_Change get change => $_getN(3);
+  @$pb.TagNumber(4)
+  set change(VoiceRosterMembershipChanged_Change value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasChange() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearChange() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get profileId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set profileId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProfileId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProfileId() => $_clearField(5);
+}
+
+/// A committed ordinary-call membership fact; not an SFU connection or invite.
+class VoiceParticipantJoined extends $pb.GeneratedMessage {
+  factory VoiceParticipantJoined({
+    $core.String? roomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  VoiceParticipantJoined._();
+
+  factory VoiceParticipantJoined.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceParticipantJoined.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceParticipantJoined',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantJoined clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantJoined copyWith(
+          void Function(VoiceParticipantJoined) updates) =>
+      super.copyWith((message) => updates(message as VoiceParticipantJoined))
+          as VoiceParticipantJoined;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantJoined create() => VoiceParticipantJoined._();
+  @$core.override
+  VoiceParticipantJoined createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantJoined getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceParticipantJoined>(create);
+  static VoiceParticipantJoined? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
+}
+
+class VoiceParticipantLeft extends $pb.GeneratedMessage {
+  factory VoiceParticipantLeft({
+    $core.String? roomId,
+    $core.String? profileId,
+  }) {
+    final result = create();
+    if (roomId != null) result.roomId = roomId;
+    if (profileId != null) result.profileId = profileId;
+    return result;
+  }
+
+  VoiceParticipantLeft._();
+
+  factory VoiceParticipantLeft.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory VoiceParticipantLeft.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'VoiceParticipantLeft',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'roomId')
+    ..aOS(2, _omitFieldNames ? '' : 'profileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantLeft clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  VoiceParticipantLeft copyWith(void Function(VoiceParticipantLeft) updates) =>
+      super.copyWith((message) => updates(message as VoiceParticipantLeft))
+          as VoiceParticipantLeft;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantLeft create() => VoiceParticipantLeft._();
+  @$core.override
+  VoiceParticipantLeft createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static VoiceParticipantLeft getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<VoiceParticipantLeft>(create);
+  static VoiceParticipantLeft? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get roomId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set roomId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasRoomId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearRoomId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get profileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set profileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProfileId() => $_clearField(2);
 }
 
 class VoiceMemberJoined extends $pb.GeneratedMessage {
@@ -8321,6 +8839,7 @@ class FileProcessed extends $pb.GeneratedMessage {
     $core.String? convertedR2Key,
     $core.String? thumbnailR2Key,
     FileMusicMetadata? music,
+    FilePreviewSnapshot? preview,
   }) {
     final result = create();
     if (fileId != null) result.fileId = fileId;
@@ -8328,6 +8847,7 @@ class FileProcessed extends $pb.GeneratedMessage {
     if (convertedR2Key != null) result.convertedR2Key = convertedR2Key;
     if (thumbnailR2Key != null) result.thumbnailR2Key = thumbnailR2Key;
     if (music != null) result.music = music;
+    if (preview != null) result.preview = preview;
     return result;
   }
 
@@ -8351,6 +8871,8 @@ class FileProcessed extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'thumbnailR2Key')
     ..aOM<FileMusicMetadata>(5, _omitFieldNames ? '' : 'music',
         subBuilder: FileMusicMetadata.create)
+    ..aOM<FilePreviewSnapshot>(6, _omitFieldNames ? '' : 'preview',
+        subBuilder: FilePreviewSnapshot.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -8419,6 +8941,232 @@ class FileProcessed extends $pb.GeneratedMessage {
   void clearMusic() => $_clearField(5);
   @$pb.TagNumber(5)
   FileMusicMetadata ensureMusic() => $_ensure(4);
+
+  /// Complete redacted plaintext non-Music snapshot. Mutually exclusive with music.
+  @$pb.TagNumber(6)
+  FilePreviewSnapshot get preview => $_getN(5);
+  @$pb.TagNumber(6)
+  set preview(FilePreviewSnapshot value) => $_setField(6, value);
+  @$pb.TagNumber(6)
+  $core.bool hasPreview() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearPreview() => $_clearField(6);
+  @$pb.TagNumber(6)
+  FilePreviewSnapshot ensurePreview() => $_ensure(5);
+}
+
+class FilePreviewSnapshot extends $pb.GeneratedMessage {
+  factory FilePreviewSnapshot({
+    $core.int? protocolVersion,
+    $core.String? fileId,
+    $fixnum.Int64? metadataRevision,
+    $core.String? status,
+    $core.String? fileType,
+    $core.String? uploadIntent,
+    $core.bool? isE2e,
+    $fixnum.Int64? sizeBytes,
+    $core.String? scanResult,
+    $core.int? width,
+    $core.int? height,
+    $core.int? durationSeconds,
+    $core.bool? hasThumbnail,
+    $core.bool? hasConverted,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (fileId != null) result.fileId = fileId;
+    if (metadataRevision != null) result.metadataRevision = metadataRevision;
+    if (status != null) result.status = status;
+    if (fileType != null) result.fileType = fileType;
+    if (uploadIntent != null) result.uploadIntent = uploadIntent;
+    if (isE2e != null) result.isE2e = isE2e;
+    if (sizeBytes != null) result.sizeBytes = sizeBytes;
+    if (scanResult != null) result.scanResult = scanResult;
+    if (width != null) result.width = width;
+    if (height != null) result.height = height;
+    if (durationSeconds != null) result.durationSeconds = durationSeconds;
+    if (hasThumbnail != null) result.hasThumbnail = hasThumbnail;
+    if (hasConverted != null) result.hasConverted = hasConverted;
+    return result;
+  }
+
+  FilePreviewSnapshot._();
+
+  factory FilePreviewSnapshot.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FilePreviewSnapshot.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FilePreviewSnapshot',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'fileId')
+    ..a<$fixnum.Int64>(
+        3, _omitFieldNames ? '' : 'metadataRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..aOS(4, _omitFieldNames ? '' : 'status')
+    ..aOS(5, _omitFieldNames ? '' : 'fileType')
+    ..aOS(6, _omitFieldNames ? '' : 'uploadIntent')
+    ..aOB(7, _omitFieldNames ? '' : 'isE2e')
+    ..aInt64(8, _omitFieldNames ? '' : 'sizeBytes')
+    ..aOS(9, _omitFieldNames ? '' : 'scanResult')
+    ..aI(10, _omitFieldNames ? '' : 'width')
+    ..aI(11, _omitFieldNames ? '' : 'height')
+    ..aI(12, _omitFieldNames ? '' : 'durationSeconds')
+    ..aOB(13, _omitFieldNames ? '' : 'hasThumbnail')
+    ..aOB(14, _omitFieldNames ? '' : 'hasConverted')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilePreviewSnapshot clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FilePreviewSnapshot copyWith(void Function(FilePreviewSnapshot) updates) =>
+      super.copyWith((message) => updates(message as FilePreviewSnapshot))
+          as FilePreviewSnapshot;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FilePreviewSnapshot create() => FilePreviewSnapshot._();
+  @$core.override
+  FilePreviewSnapshot createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FilePreviewSnapshot getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FilePreviewSnapshot>(create);
+  static FilePreviewSnapshot? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get fileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set fileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasFileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $fixnum.Int64 get metadataRevision => $_getI64(2);
+  @$pb.TagNumber(3)
+  set metadataRevision($fixnum.Int64 value) => $_setInt64(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasMetadataRevision() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearMetadataRevision() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get status => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set status($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasStatus() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearStatus() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get fileType => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set fileType($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasFileType() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearFileType() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get uploadIntent => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set uploadIntent($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasUploadIntent() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearUploadIntent() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.bool get isE2e => $_getBF(6);
+  @$pb.TagNumber(7)
+  set isE2e($core.bool value) => $_setBool(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasIsE2e() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearIsE2e() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get sizeBytes => $_getI64(7);
+  @$pb.TagNumber(8)
+  set sizeBytes($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasSizeBytes() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearSizeBytes() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $core.String get scanResult => $_getSZ(8);
+  @$pb.TagNumber(9)
+  set scanResult($core.String value) => $_setString(8, value);
+  @$pb.TagNumber(9)
+  $core.bool hasScanResult() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearScanResult() => $_clearField(9);
+
+  @$pb.TagNumber(10)
+  $core.int get width => $_getIZ(9);
+  @$pb.TagNumber(10)
+  set width($core.int value) => $_setSignedInt32(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasWidth() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearWidth() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.int get height => $_getIZ(10);
+  @$pb.TagNumber(11)
+  set height($core.int value) => $_setSignedInt32(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasHeight() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearHeight() => $_clearField(11);
+
+  @$pb.TagNumber(12)
+  $core.int get durationSeconds => $_getIZ(11);
+  @$pb.TagNumber(12)
+  set durationSeconds($core.int value) => $_setSignedInt32(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasDurationSeconds() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearDurationSeconds() => $_clearField(12);
+
+  @$pb.TagNumber(13)
+  $core.bool get hasThumbnail => $_getBF(12);
+  @$pb.TagNumber(13)
+  set hasThumbnail($core.bool value) => $_setBool(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasHasThumbnail() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearHasThumbnail() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $core.bool get hasConverted => $_getBF(13);
+  @$pb.TagNumber(14)
+  set hasConverted($core.bool value) => $_setBool(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasHasConverted() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearHasConverted() => $_clearField(14);
 }
 
 class FileMusicMetadata extends $pb.GeneratedMessage {
@@ -11892,6 +12640,212 @@ class ChatDeleted extends $pb.GeneratedMessage {
   $core.bool hasManifestSha256() => $_has(5);
   @$pb.TagNumber(6)
   void clearManifestSha256() => $_clearField(6);
+}
+
+/// Privileged internal fact. Never broadcast account/actor identity to members.
+class SpaceMemberBanned extends $pb.GeneratedMessage {
+  factory SpaceMemberBanned({
+    $core.String? spaceId,
+    $core.String? accountId,
+    $core.String? bannedByProfileId,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (accountId != null) result.accountId = accountId;
+    if (bannedByProfileId != null) result.bannedByProfileId = bannedByProfileId;
+    return result;
+  }
+
+  SpaceMemberBanned._();
+
+  factory SpaceMemberBanned.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SpaceMemberBanned.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SpaceMemberBanned',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'accountId')
+    ..aOS(3, _omitFieldNames ? '' : 'bannedByProfileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceMemberBanned clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SpaceMemberBanned copyWith(void Function(SpaceMemberBanned) updates) =>
+      super.copyWith((message) => updates(message as SpaceMemberBanned))
+          as SpaceMemberBanned;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SpaceMemberBanned create() => SpaceMemberBanned._();
+  @$core.override
+  SpaceMemberBanned createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SpaceMemberBanned getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SpaceMemberBanned>(create);
+  static SpaceMemberBanned? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get accountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set accountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get bannedByProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set bannedByProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasBannedByProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearBannedByProfileId() => $_clearField(3);
+}
+
+/// Appended to preserve descriptor indices for existing event message types.
+/// Ordinary Role notifications. The oneof arm selects the action and must match
+/// its exact role.* subject. This is neither an authorization command nor a role
+/// snapshot. Generic arms 10/11 retain unspecified legacy semantics; consumers
+/// must not infer their action or role_ids meaning from a subject.
+class RoleMutation extends $pb.GeneratedMessage {
+  factory RoleMutation({
+    $core.String? spaceId,
+    $core.String? roleId,
+    $core.String? profileId,
+    $core.String? name,
+    $core.String? chatId,
+    $core.String? voiceRoomId,
+    $core.Iterable<$core.String>? changedFields,
+  }) {
+    final result = create();
+    if (spaceId != null) result.spaceId = spaceId;
+    if (roleId != null) result.roleId = roleId;
+    if (profileId != null) result.profileId = profileId;
+    if (name != null) result.name = name;
+    if (chatId != null) result.chatId = chatId;
+    if (voiceRoomId != null) result.voiceRoomId = voiceRoomId;
+    if (changedFields != null) result.changedFields.addAll(changedFields);
+    return result;
+  }
+
+  RoleMutation._();
+
+  factory RoleMutation.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RoleMutation.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RoleMutation',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.events.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'spaceId')
+    ..aOS(2, _omitFieldNames ? '' : 'roleId')
+    ..aOS(3, _omitFieldNames ? '' : 'profileId')
+    ..aOS(4, _omitFieldNames ? '' : 'name')
+    ..aOS(5, _omitFieldNames ? '' : 'chatId')
+    ..aOS(6, _omitFieldNames ? '' : 'voiceRoomId')
+    ..pPS(7, _omitFieldNames ? '' : 'changedFields')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RoleMutation clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RoleMutation copyWith(void Function(RoleMutation) updates) =>
+      super.copyWith((message) => updates(message as RoleMutation))
+          as RoleMutation;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RoleMutation create() => RoleMutation._();
+  @$core.override
+  RoleMutation createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RoleMutation getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RoleMutation>(create);
+  static RoleMutation? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get spaceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set spaceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSpaceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSpaceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get roleId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set roleId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasRoleId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearRoleId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get profileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set profileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get name => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set name($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasName() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearName() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get voiceRoomId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set voiceRoomId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasVoiceRoomId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearVoiceRoomId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $pb.PbList<$core.String> get changedFields => $_getList(6);
 }
 
 const $core.bool _omitFieldNames =

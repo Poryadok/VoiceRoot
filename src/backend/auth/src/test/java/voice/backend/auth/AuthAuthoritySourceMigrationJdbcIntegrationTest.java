@@ -25,12 +25,22 @@ class AuthAuthoritySourceMigrationJdbcIntegrationTest {
       postgres.start();
       var dataSource = new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
       var jdbc = new JdbcTemplate(dataSource);
-      Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").load().migrate();
+      Flyway.configure().dataSource(dataSource).locations("classpath:db/migration").target("26").load().migrate();
       assertThat(revision(jdbc)).isEqualTo(1);
+      assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts", Long.class)).isZero();
+      // V28 executes UPDATE accounts even on an empty database. V26's statement
+      // trigger must advance exactly once; V31's DDL-only installation must not.
+      assertThat(Flyway.configure().dataSource(dataSource).locations("classpath:db/migration")
+          .target("28").load().migrate().migrationsExecuted).isEqualTo(1);
+      assertThat(revision(jdbc)).isEqualTo(2);
+      assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts", Long.class)).isZero();
+      assertThat(Flyway.configure().dataSource(dataSource).locations("classpath:db/migration")
+          .load().migrate().migrationsExecuted).isEqualTo(1);
+      assertThat(revision(jdbc)).isEqualTo(2);
       var account = UUID.randomUUID();
       jdbc.update("INSERT INTO accounts(id,password_hash,type,status) VALUES(?,'fixture','regular','active')", account);
       long created = revision(jdbc);
-      assertThat(created).isGreaterThan(1);
+      assertThat(created).isGreaterThan(2);
       try (var snapshot = dataSource.getConnection()) {
         snapshot.setAutoCommit(false);
         snapshot.setReadOnly(true);

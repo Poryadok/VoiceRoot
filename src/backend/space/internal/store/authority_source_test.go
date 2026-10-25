@@ -8,18 +8,28 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"path/filepath"
 	"voice/backend/pkg/authoritysource"
+	"voice/backend/pkg/integrationtest"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 )
 
 func spaceSourceStore(t *testing.T) (context.Context, *SpaceStore) {
 	t.Helper()
-	ctx, st := authorityRevisionSpace(t)
-	// Complete DDL fixture with private matching marker. Actual deployment-loader
-	// proof is separate; this helper never rewrites a live runtime's history.
+	ctx := context.Background()
+	database := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src/backend/migrations/space_db"))
+	database.Run(true, "goto", "34")
+	return ctx, &SpaceStore{Pool: database.Pool}
+}
+
+func TestSpaceSourceOriginal25CatalogRemainsQualified(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL original source catalog")
+	}
+	ctx, st := authorityRevisionSpaceThrough(t, 25)
 	_, err := st.Pool.Exec(ctx, `CREATE TABLE schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES(25,false)`)
 	require.NoError(t, err)
-	return ctx, st
+	require.NoError(t, st.CheckAuthoritySourceSchema(ctx))
 }
 
 func TestSpaceSourceCompleteMembershipAndStableLeaseExpiry(t *testing.T) {

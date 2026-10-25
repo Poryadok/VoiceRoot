@@ -31,19 +31,25 @@ type VerifyConfig struct {
 }
 
 type Principal struct {
-	Kind         string
-	Issuer       string
-	Subject      string
-	Audience     string
-	RPC          string
-	RequestID    string
-	RequestHash  string
-	AccountID    string
-	ProfileID    string
-	SessionEpoch int64
-	JWTID        string
-	IssuedAt     time.Time
-	ExpiresAt    time.Time
+	Kind           string
+	Issuer         string
+	Subject        string
+	Audience       string
+	RPC            string
+	RequestID      string
+	RequestHash    string
+	AccountID      string
+	ProfileID      string
+	SessionEpoch   int64
+	AccountType    string
+	ActorProfileID string
+	BotID          string
+	SpaceID        string
+	InstallationID string
+	BotScope       string
+	JWTID          string
+	IssuedAt       time.Time
+	ExpiresAt      time.Time
 }
 
 func VerifyService(ctx context.Context, token string, config VerifyConfig) (Principal, error) {
@@ -53,6 +59,9 @@ func VerifyService(ctx context.Context, token string, config VerifyConfig) (Prin
 	}
 	if claims.Subject != "service:"+claims.Issuer {
 		return Principal{}, fmt.Errorf("service subject does not match issuer")
+	}
+	if hasBotActorClaims(claims) || claims.AccountType != "" {
+		return Principal{}, fmt.Errorf("service credential contains actor capability")
 	}
 	return principalFromClaims(claims), nil
 }
@@ -70,6 +79,9 @@ func VerifyDelegatedUser(ctx context.Context, token string, config VerifyConfig)
 	}
 	if claims.Subject == "" || claims.AccountID == "" || claims.ProfileID == "" || claims.Subject != claims.AccountID || claims.SessionEpoch <= 0 {
 		return Principal{}, fmt.Errorf("invalid delegated user identity")
+	}
+	if hasBotActorClaims(claims) || !validAccountType(claims.AccountType) {
+		return Principal{}, fmt.Errorf("invalid delegated actor capability")
 	}
 	if err := config.SessionEpochChecker(ctx, claims.AccountID, claims.SessionEpoch); err != nil {
 		return Principal{}, fmt.Errorf("validate session epoch: %w", err)
@@ -154,7 +166,7 @@ func validateTemporal(claims rawClaims, now time.Time) error {
 }
 
 func principalFromClaims(c rawClaims) Principal {
-	return Principal{Kind: c.Type, Issuer: c.Issuer, Subject: c.Subject, Audience: c.Audience, RPC: c.RPC, RequestID: c.RequestID, RequestHash: c.RequestHash, AccountID: c.AccountID, ProfileID: c.ProfileID, SessionEpoch: c.SessionEpoch, JWTID: c.JWTID, IssuedAt: time.Unix(c.IssuedAt, 0).UTC(), ExpiresAt: time.Unix(c.ExpiresAt, 0).UTC()}
+	return Principal{Kind: c.Type, Issuer: c.Issuer, Subject: c.Subject, Audience: c.Audience, RPC: c.RPC, RequestID: c.RequestID, RequestHash: c.RequestHash, AccountID: c.AccountID, ProfileID: c.ProfileID, SessionEpoch: c.SessionEpoch, AccountType: c.AccountType, ActorProfileID: c.ActorProfileID, BotID: c.BotID, SpaceID: c.SpaceID, InstallationID: c.InstallationID, BotScope: c.BotScope, JWTID: c.JWTID, IssuedAt: time.Unix(c.IssuedAt, 0).UTC(), ExpiresAt: time.Unix(c.ExpiresAt, 0).UTC()}
 }
 
 type principalContextKey struct{}

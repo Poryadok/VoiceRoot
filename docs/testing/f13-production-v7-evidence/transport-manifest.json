@@ -1,0 +1,72 @@
+{
+  "files": [
+    {
+      "bytes": 26676,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/88856ee-social.zip",
+      "path": "docs/testing/f13-production-v7-evidence/hosted-social-red.log",
+      "sha256": "d63bef525f319c1ea2a87e22988f54f494ea491596e20d1e6e4a4c7607d15df8"
+    },
+    {
+      "bytes": 1526,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/independent-review.md",
+      "path": "docs/testing/f13-production-v7-evidence/independent-review.md",
+      "sha256": "e46596f76969656e06c53569874a8449c321c818dece56cb6ced10c3912bf74c"
+    },
+    {
+      "bytes": 3762,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/receipt.json",
+      "path": "docs/testing/f13-production-v7-evidence/receipt.json",
+      "sha256": "e25b4caa3f2f2a584a51ff1b13126f063054eca7e9cfb5fe07ad47447381bdb8"
+    },
+    {
+      "bytes": 291,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-baseline-no-tests.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-baseline-no-tests.log",
+      "sha256": "dbc29a8efd8c9edad07868936063444812887ea43ec73959d402cdbb0bad1586"
+    },
+    {
+      "bytes": 258,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-baseline-shell-failure.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-baseline-shell-failure.log",
+      "sha256": "94f22754cb44f049703cca9c32ec29b12cbc55179c9840f7b418ab2aa9b823fb"
+    },
+    {
+      "bytes": 273,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-baseline.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-baseline.log",
+      "sha256": "695ee8f37ce6b139641283dfd1802a24b8a8cf9918b2f8344bdaf02a904bc62b"
+    },
+    {
+      "bytes": 13,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-candidate-gofmt.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-candidate-gofmt.log",
+      "sha256": "e68281e0a45db3d391966b90b024aec2e718fd8c8f26f3d36cd3fe8ef97de508"
+    },
+    {
+      "bytes": 218,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-green-env.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-green-env.log",
+      "sha256": "a6474b73f90b1498137616ef0e4d9d031395210e83a683a38c386c6f4f20dcee"
+    },
+    {
+      "bytes": 134,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-package-20.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-package-20.log",
+      "sha256": "8777c6ced57bbf01e257f462104505a4522bdc4a6b064c2abda5e8739aec0b56"
+    },
+    {
+      "bytes": 208,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-race-10.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-race-10.log",
+      "sha256": "27c8e09df3620084483beda3c82da4b8f7ad16bf079def9a43624ee00b06f97b"
+    },
+    {
+      "bytes": 213,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-target-100.log",
+      "path": "docs/testing/f13-production-v7-evidence/social-target-100.log",
+      "sha256": "caabd3c69f63f7ff17edc6fabf065fc4173447866f7d489cc28ac1d0b81e93d4"
+    }
+  ],
+  "schema": "F13-v7-evidence-transport-v1",
+  "scope": "Hosted intermittent RED; local baseline PASS, candidate repeated/race PASS. No local reproduced failure or full producer authority."
+}

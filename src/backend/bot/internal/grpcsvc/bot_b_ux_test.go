@@ -2,6 +2,8 @@ package grpcsvc_test
 
 import (
 	"context"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"testing"
 
 	"github.com/google/uuid"
@@ -38,7 +40,7 @@ commands:
 	spaceID := uuid.New()
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -72,7 +74,7 @@ commands:
 	require.True(t, inChat.GetBots()[0].GetWhitelisted())
 }
 
-func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
+func TestRawUninstallPreservesWhitelist(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -90,7 +92,7 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 	spaceID := uuid.New()
 	chatID := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 
@@ -98,11 +100,11 @@ func TestUninstallFromSpace_clearsWhitelist(t *testing.T) {
 		BotId:   botID,
 		SpaceId: spaceID.String(),
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	allowed, err := st.IsChatWhitelisted(ctx, botUUID, chatID)
 	require.NoError(t, err)
-	require.False(t, allowed)
+	require.True(t, allowed)
 }
 
 func TestSetBotChatEnabled_enablesWhitelistForNewChat(t *testing.T) {
@@ -124,7 +126,7 @@ func TestSetBotChatEnabled_enablesWhitelistForNewChat(t *testing.T) {
 	chatA := uuid.New()
 	chatB := uuid.New()
 	botUUID, _ := uuid.Parse(botID)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatA})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatA})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 

@@ -3,7 +3,6 @@ package grpcsvc
 import (
 	"context"
 	"log/slog"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,17 +13,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 	"voice/backend/pkg/integrationtest"
 
 	"voice/backend/chat/internal/authctx"
 	"voice/backend/chat/internal/chatevents"
 	"voice/backend/chat/internal/store"
+	"voice/backend/chat/testcreate"
 	"voice/backend/pkg/privacy"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -44,7 +41,7 @@ func startChatPostgresForTest(t *testing.T, ctx context.Context) *pgxpool.Pool {
 
 func applyChatMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000008_folders.up.sql", "000009_folder_chats.up.sql", "000010_quick_access_chats.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql", "000013_sticker_packs.up.sql", "000014_managed_chats.up.sql", "000015_managed_chat_member_intervals.up.sql", "000016_managed_chat_retention.up.sql", "000017_managed_chat_add_members.up.sql", "000018_space_lifecycle.up.sql", "000019_space_lifecycle_source_manifest.up.sql", "000020_space_purge_owner_receipts.up.sql", "000021_chat_deleted_event_outbox.up.sql", "000022_chat_create_requests.up.sql", "000023_match_squad_operations.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_dm_requests.up.sql", "000003_groups.up.sql", "000004_slow_mode.up.sql", "000005_thread_settings.up.sql", "000006_e2e_enabled.up.sql", "000007_allow_guests.up.sql", "000008_folders.up.sql", "000009_folder_chats.up.sql", "000010_quick_access_chats.up.sql", "000011_deleted_for_self.up.sql", "000012_allow_guests_fail_closed.up.sql", "000013_sticker_packs.up.sql", "000014_managed_chats.up.sql", "000015_managed_chat_member_intervals.up.sql", "000016_managed_chat_retention.up.sql", "000017_managed_chat_add_members.up.sql", "000018_space_lifecycle.up.sql", "000019_space_lifecycle_source_manifest.up.sql", "000020_space_purge_owner_receipts.up.sql", "000021_chat_deleted_event_outbox.up.sql", "000022_chat_create_requests.up.sql", "000023_match_squad_operations.up.sql", "000024_chat_management_permissions.up.sql"} {
 		migrationPath := filepath.Join(repoRoot(t), "src", "backend", "migrations", "chat_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
 		require.NoError(t, err)
@@ -176,9 +173,6 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	if blocks == nil {
 		blocks = stubBlocks{}
 	}
-	const bufSize = 1 << 20
-	lis := bufconn.Listen(bufSize)
-	srv := grpc.NewServer()
 	svc := &ChatGRPC{
 		DM:              &store.DMStore{Pool: pool},
 		Profiles:        profiles,
@@ -193,24 +187,7 @@ func startChatGRPCTestServer(t *testing.T, pool *pgxpool.Pool, profiles UserProf
 	if svc.Privacy == nil {
 		svc.Privacy = allowDMPrivacyChecker{}
 	}
-	chatv1.RegisterChatServiceServer(srv, svc)
-	go func() {
-		if err := srv.Serve(lis); err != nil {
-			t.Logf("grpc serve: %v", err)
-		}
-	}()
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	require.NoError(t, err)
-	cleanup := func() {
-		_ = conn.Close()
-		srv.Stop()
-	}
-	return chatv1.NewChatServiceClient(conn), cleanup
+	return testcreate.NewClient(t, svc)
 }
 
 // TestCreateDM_GetDM_NoFriendshipRequired documents PLAN app stack: DM without friendship; only blocks gate.

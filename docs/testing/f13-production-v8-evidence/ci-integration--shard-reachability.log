@@ -1,0 +1,6 @@
+Command: bash scripts/ci/ci-script-tests-reachability_test.sh
+== Windows path-filter restricted-pattern model (not dorny equivalence) ==
+Windows path-filter model cases passed; actual dorny selection is verified by the PR job.
+CI script tests are reachable from Actions.
+
+exit_code=0

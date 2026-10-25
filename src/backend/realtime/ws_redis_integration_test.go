@@ -21,6 +21,10 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	s := miniredis.RunT(t)
 	t.Cleanup(s.Close)
 	addr := s.Addr()
+	// A crashed older instance may leave a registry hint. It must neither be
+	// routing authority nor require new per-connection Redis state.
+	legacyRegistryKey := "voice:rt:prof:p2"
+	s.SAdd(legacyRegistryKey, "dead-instance:dead-connection")
 
 	chName := "voice:rt:test:wsredis:" + uuid.NewString()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -30,32 +34,25 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	hub2 := permitAllTestSubscriptions(newWSHub())
 	rsub1 := redis.NewClient(&redis.Options{Addr: addr})
 	rsub2 := redis.NewClient(&redis.Options{Addr: addr})
-	rchk := redis.NewClient(&redis.Options{Addr: addr})
 	t.Cleanup(func() {
 		_ = rsub1.Close()
 		_ = rsub2.Close()
-		_ = rchk.Close()
 	})
 
 	v := staticTokenValidator{
 		"t1": {UserID: "a", ProfileID: "p1"},
 		"t2": {UserID: "b", ProfileID: "p2"},
 	}
-
-	pfx1 := "voice:rt:test:wsredis1:"
-	pfx2 := "voice:rt:test:wsredis2:"
 	rf1 := newRedisFanout(redisFanoutConfig{
 		Client:        rsub1,
 		Hub:           hub1,
 		InstanceID:    "i1",
-		KeyPrefix:     pfx1,
 		FanoutChannel: chName,
 	})
 	rf2 := newRedisFanout(redisFanoutConfig{
 		Client:        rsub2,
 		Hub:           hub2,
 		InstanceID:    "i2",
-		KeyPrefix:     pfx2,
 		FanoutChannel: chName,
 	})
 	go func() { _ = rf1.runSubscriber(ctx) }()
@@ -87,20 +84,6 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	c2 := dial(srv2, "t2", "p2")
 	t.Cleanup(func() { _ = c2.Close() })
 
-	deadline := time.Now().Add(3 * time.Second)
-	var found bool
-	for time.Now().Before(deadline) {
-		mem, err := rchk.SMembers(context.Background(), pfx1+"p1").Result()
-		if err == nil && len(mem) > 0 && strings.HasPrefix(mem[0], "i1:") {
-			found = true
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if !found {
-		t.Fatal("expected profile registry entry for p1 on instance i1")
-	}
-
 	readOp := func(c *websocket.Conn) wsEnvelope {
 		t.Helper()
 		_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
@@ -120,6 +103,9 @@ func TestWSTypingCrossInstancesViaRedis(t *testing.T) {
 	}
 	if readOp(c2).Op != "hello" {
 		t.Fatal("c2 expected hello")
+	}
+	if keys := s.Keys(); len(keys) != 1 || keys[0] != legacyRegistryKey {
+		t.Fatalf("WS connections must not persist routing hints; keys = %v", keys)
 	}
 
 	sub := map[string]any{"op": "subscribe", "d": map[string]any{"chat_id": chatID}}
@@ -199,21 +185,16 @@ func TestWSMarkReadCrossInstancesViaRedis(t *testing.T) {
 		"mobile":  {UserID: "u1", ProfileID: "prof-same"},
 		"desktop": {UserID: "u1", ProfileID: "prof-same"},
 	}
-
-	pfx1 := "voice:rt:test:wsredis-mr1:"
-	pfx2 := "voice:rt:test:wsredis-mr2:"
 	rf1 := newRedisFanout(redisFanoutConfig{
 		Client:        rsub1,
 		Hub:           hub1,
 		InstanceID:    "mr-i1",
-		KeyPrefix:     pfx1,
 		FanoutChannel: chName,
 	})
 	rf2 := newRedisFanout(redisFanoutConfig{
 		Client:        rsub2,
 		Hub:           hub2,
 		InstanceID:    "mr-i2",
-		KeyPrefix:     pfx2,
 		FanoutChannel: chName,
 	})
 	go func() { _ = rf1.runSubscriber(ctx) }()
@@ -320,21 +301,16 @@ func TestWSProfilePresenceCrossInstancesViaRedis(t *testing.T) {
 		"mobile":  {UserID: "u1", ProfileID: "prof-same"},
 		"desktop": {UserID: "u1", ProfileID: "prof-same"},
 	}
-
-	pfx1 := "voice:rt:test:wsredis-pr1:"
-	pfx2 := "voice:rt:test:wsredis-pr2:"
 	rf1 := newRedisFanout(redisFanoutConfig{
 		Client:        rsub1,
 		Hub:           hub1,
 		InstanceID:    "pr-i1",
-		KeyPrefix:     pfx1,
 		FanoutChannel: chName,
 	})
 	rf2 := newRedisFanout(redisFanoutConfig{
 		Client:        rsub2,
 		Hub:           hub2,
 		InstanceID:    "pr-i2",
-		KeyPrefix:     pfx2,
 		FanoutChannel: chName,
 	})
 	go func() { _ = rf1.runSubscriber(ctx) }()

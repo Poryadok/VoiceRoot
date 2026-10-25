@@ -29,14 +29,15 @@ import (
 )
 
 const (
-	Issuer                = "gameintegration"
-	Audience              = "chat"
-	ProvisionMethod       = "/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat"
-	SyncMembersMethod     = "/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers"
-	ApplyLifecycleMethod  = "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"
-	PurgeSpaceMethod      = "/voice.chat.v1.ChatService/PurgeSpace"
-	PrepareManifestMethod = "/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest"
-	GetManifestPageMethod = "/voice.chat.v1.ChatService/GetSpacePurgeManifestPage"
+	Issuer                         = "gameintegration"
+	Audience                       = "chat"
+	ProvisionMethod                = "/voice.chat.v1.GameIntegrationChatService/ProvisionManagedChat"
+	SyncMembersMethod              = "/voice.chat.v1.GameIntegrationChatService/SyncManagedChatMembers"
+	ApplyLifecycleMethod           = "/voice.chat.v1.ChatService/ApplySpaceLifecycleFence"
+	PurgeSpaceMethod               = "/voice.chat.v1.ChatService/PurgeSpace"
+	PrepareManifestMethod          = "/voice.chat.v1.ChatService/PrepareSpaceDeletionManifest"
+	GetManifestPageMethod          = "/voice.chat.v1.ChatService/GetSpacePurgeManifestPage"
+	ResolveRealtimeLifecycleMethod = "/voice.chat.v1.ChatRealtimeLifecycleService/ResolveChatLifecycle"
 )
 
 func spaceLifecycleMethods() []string {
@@ -44,6 +45,8 @@ func spaceLifecycleMethods() []string {
 }
 
 type Config struct {
+	// DeferInitialJWKS breaks the Bot scope bootstrap cycle; requests still require verified keys.
+	DeferInitialJWKS   bool
 	Issuer             string
 	Audience           string
 	AllowedMethods     []string
@@ -125,6 +128,27 @@ func SearchManifestConfigFromEnv() (Config, string, bool, error) {
 	return cfg, listen, true, nil
 }
 
+// RealtimeLifecycleConfigFromEnv uses an independent listener and trust roots;
+// it grants structural enrollment only, never Space mutation or recipient ACL.
+func RealtimeLifecycleConfigFromEnv() (Config, string, bool, error) {
+	get := func(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+	listen := get("CHAT_REALTIME_LIFECYCLE_GRPC_LISTEN")
+	cfg := Config{Issuer: "realtime", Audience: Audience, AllowedMethods: []string{ResolveRealtimeLifecycleMethod},
+		TLSCertFile: get("CHAT_REALTIME_LIFECYCLE_TLS_CERT_FILE"), TLSKeyFile: get("CHAT_REALTIME_LIFECYCLE_TLS_KEY_FILE"),
+		ClientCAFile: get("CHAT_REALTIME_LIFECYCLE_CLIENT_CA_FILE"), JWKSURL: get("CHAT_REALTIME_PRINCIPAL_JWKS_URL"),
+		JWKSCAFile: get("CHAT_REALTIME_PRINCIPAL_JWKS_CA_FILE"), ReplayAddr: get("CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_ADDR"),
+		ReplayPassword:     os.Getenv("CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD"),
+		JWKSClientCertFile: get("CHAT_REALTIME_PRINCIPAL_JWKS_CLIENT_CERT_FILE"), JWKSClientKeyFile: get("CHAT_REALTIME_PRINCIPAL_JWKS_CLIENT_KEY_FILE")}
+	configured := listen != "" || cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" || cfg.ClientCAFile != "" || cfg.JWKSURL != "" || cfg.JWKSCAFile != "" || cfg.ReplayAddr != "" || cfg.ReplayPassword != "" || cfg.JWKSClientCertFile != "" || cfg.JWKSClientKeyFile != ""
+	if !configured {
+		return Config{}, "", false, nil
+	}
+	if listen == "" || cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" || cfg.ClientCAFile == "" || cfg.JWKSURL == "" || cfg.JWKSCAFile == "" || cfg.ReplayAddr == "" || (cfg.JWKSClientCertFile == "") != (cfg.JWKSClientKeyFile == "") {
+		return Config{}, "", true, errors.New("chat Realtime lifecycle principal configuration is incomplete")
+	}
+	return cfg, listen, true, nil
+}
+
 type Runtime struct {
 	issuer      string
 	audience    string
@@ -156,6 +180,9 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 	}
 	if len(cfg.AllowedMethods) == 0 {
 		cfg.AllowedMethods = []string{ProvisionMethod, SyncMembersMethod}
+	}
+	if cfg.DeferInitialJWKS && (cfg.Issuer != "bot" || cfg.Audience != Audience || len(cfg.AllowedMethods) != 1 || cfg.AllowedMethods[0] != BotScopeAuthorityMethod) {
+		return nil, errors.New("deferred initial JWKS is restricted to Bot scope authority")
 	}
 	if strings.TrimSpace(cfg.Issuer) == "" || strings.TrimSpace(cfg.Audience) == "" {
 		return nil, errors.New("chat principal issuer and audience are required")
@@ -263,10 +290,12 @@ func New(ctx context.Context, cfg Config) (*Runtime, error) {
 		transport.CloseIdleConnections()
 		return nil, errors.New("principal replay Redis unavailable")
 	}
-	if err := resolver.Refresh(startup, cfg.Issuer); err != nil {
-		_ = replay.Close()
-		transport.CloseIdleConnections()
-		return nil, fmt.Errorf("principal JWKS unavailable: %w", err)
+	if !cfg.DeferInitialJWKS {
+		if err := resolver.Refresh(startup, cfg.Issuer); err != nil {
+			_ = replay.Close()
+			transport.CloseIdleConnections()
+			return nil, fmt.Errorf("principal JWKS unavailable: %w", err)
+		}
 	}
 	refreshCtx, stop := context.WithCancel(ctx)
 	runtime.stop = stop
@@ -281,11 +310,18 @@ func configuredMethods(issuer string, allowed []string) (map[string]struct{}, er
 		approved[ProvisionMethod] = struct{}{}
 		approved[SyncMembersMethod] = struct{}{}
 	case "space":
+		approved[ScopeAuthorityMethod] = struct{}{}
 		for _, method := range spaceLifecycleMethods() {
 			approved[method] = struct{}{}
 		}
 	case "search":
 		approved[GetManifestPageMethod] = struct{}{}
+	case "role":
+		approved[ScopeAuthorityMethod] = struct{}{}
+	case "bot":
+		approved[BotScopeAuthorityMethod] = struct{}{}
+	case "realtime":
+		approved[ResolveRealtimeLifecycleMethod] = struct{}{}
 	default:
 		return nil, errors.New("untrusted Chat principal issuer")
 	}
@@ -340,6 +376,15 @@ func (r *Runtime) refresh(ctx context.Context, interval time.Duration) {
 
 func (r *Runtime) ServerOptions() []grpc.ServerOption {
 	return []grpc.ServerOption{grpc.Creds(r.credentials), grpc.ChainUnaryInterceptor(r.allowlist, strictInterceptor{runtime: r}.intercept)}
+}
+
+// Ready observes cached issuer keys and replay availability without fetching
+// keys, consuming a JTI, or contacting an issuer application health endpoint.
+func (r *Runtime) Ready(ctx context.Context) error {
+	if r == nil || !r.resolver.Usable(r.issuer) {
+		return errors.New("chat principal issuer keys unavailable or expired")
+	}
+	return r.replay.Ping(ctx).Err()
 }
 
 func (r *Runtime) allowlist(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

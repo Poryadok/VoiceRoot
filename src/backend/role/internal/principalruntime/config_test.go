@@ -10,10 +10,27 @@ import (
 
 var runtimeEnvNames = []string{
 	"ROLE_AUTHORITY_SOURCE_ENABLED",
+	"ROLE_DELEGATED_USER_ENABLED", "ROLE_BOT_LIFECYCLE_ENABLED",
 	"S2S_JWKS_URLS_JSON", "S2S_JWKS_REFRESH_AFTER", "S2S_JWKS_HARD_EXPIRY",
 	"S2S_UNKNOWN_KID_COOLDOWN", "S2S_JWKS_CA_FILE",
+	"S2S_JWKS_CLIENT_CERT_FILE", "S2S_JWKS_CLIENT_KEY_FILE",
 	"ROLE_PRINCIPAL_REPLAY_REDIS_ADDR", "ROLE_PRINCIPAL_REPLAY_REDIS_PASSWORD",
 	"ROLE_PRINCIPAL_TLS_CERT_FILE", "ROLE_PRINCIPAL_TLS_KEY_FILE", "ROLE_PRINCIPAL_CLIENT_CA_FILE", "ROLE_PRINCIPAL_GRPC_LISTEN",
+}
+
+func TestLoadFromEnvCompleteMediaTrustRequiresActivatedProtocols(t *testing.T) {
+	validRuntimeEnv(t)
+	t.Setenv("S2S_JWKS_URLS_JSON", `{"space":"https://space.internal/jwks","gameintegration":"https://gis.internal/jwks","voice":"https://voice.internal/jwks","gateway":"https://gateway.internal/jwks","bot":"https://bot.internal/jwks","chat":"https://chat.internal/jwks"}`)
+	_, _, err := LoadFromEnv()
+	require.Error(t, err)
+	t.Setenv("ROLE_DELEGATED_USER_ENABLED", "true")
+	_, _, err = LoadFromEnv()
+	require.Error(t, err, "Bot trust requires its receiver activation")
+	t.Setenv("ROLE_BOT_LIFECYCLE_ENABLED", "true")
+	cfg, enabled, err := LoadFromEnv()
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Len(t, cfg.JWKSURLs, 6)
 }
 
 func TestLoadFromEnvAuthoritySourceRequiresExplicitFederationTrust(t *testing.T) {

@@ -1,0 +1,6 @@
+test_every_fixture_bind_source_is_generated (__main__.ComposeTests.test_every_fixture_bind_source_is_generated) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 10.427s
+
+OK

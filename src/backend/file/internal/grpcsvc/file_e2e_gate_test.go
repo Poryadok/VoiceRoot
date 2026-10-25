@@ -257,6 +257,8 @@ func startFileGatePostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000002_premium_upload_limit.up.sql"))
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000003_story_context.up.sql"))
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000006_music_metadata.up.sql"))
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000007_preview_metadata.up.sql"))
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000008_expiry_event_outbox.up.sql"))
 	return pool
 }
 

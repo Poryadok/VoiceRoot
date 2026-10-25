@@ -92,8 +92,9 @@ func TestPurgeBarrierRetiresRoleFirstAndResumesExactRequests(t *testing.T) {
 		commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION.String(),
 		commonv1.ParticipantId_PARTICIPANT_ID_BOT.String(),
 		commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION.String(),
+		commonv1.ParticipantId_PARTICIPANT_ID_REALTIME.String(),
 	}, participants.order)
-	require.Len(t, result.Snapshot().PurgeReceipts, 9)
+	require.Len(t, result.Snapshot().PurgeReceipts, len(spacecore.CanonicalLifecycleParticipants())-1)
 	for id, request := range firstRequests {
 		if id != commonv1.ParticipantId_PARTICIPANT_ID_FILE {
 			require.True(t, proto.Equal(request, participants.requests[id]), "participant %s retry changed its purge request", id)
@@ -273,6 +274,7 @@ func tParticipantPackage(id commonv1.ParticipantId) string {
 		commonv1.ParticipantId_PARTICIPANT_ID_VOICE: "voice.calls.v1", commonv1.ParticipantId_PARTICIPANT_ID_MATCHMAKING: "voice.matchmaking.v1",
 		commonv1.ParticipantId_PARTICIPANT_ID_SEARCH: "voice.search.v1", commonv1.ParticipantId_PARTICIPANT_ID_SUBSCRIPTION: "voice.subscription.v1",
 		commonv1.ParticipantId_PARTICIPANT_ID_BOT: "voice.bot.v1", commonv1.ParticipantId_PARTICIPANT_ID_NOTIFICATION: "voice.notification.v1",
+		commonv1.ParticipantId_PARTICIPANT_ID_REALTIME: "voice.realtime.v1",
 	}[id]
 }
 

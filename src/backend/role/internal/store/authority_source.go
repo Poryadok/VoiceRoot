@@ -7,12 +7,44 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"voice/backend/pkg/authoritysource"
 	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	"voice/backend/role/permissions"
 )
 
 var _ authoritysource.Reader = (*RoleStore)(nil)
+
+// Exact20 is independently qualified by the actual16→20 migrator and native
+// mask-fold tests. It adds two guarded clock inputs, not a new state projection.
+// This read selects a fixed catalog, never authorizes from an unlocked hint:
+// BeginRead repeats the exact version/dirty/catalog proof under schema locks.
+func beginRoleAuthorityReadSchema(ctx context.Context, pool *pgxpool.Pool, schema uint32) (pgx.Tx, error) {
+	if pool == nil {
+		return nil, errors.New("role source pool unavailable")
+	}
+	var version int64
+	if err := pool.QueryRow(ctx, `SELECT version FROM public.schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+		return nil, errors.New("role source schema unavailable")
+	}
+	catalog := roleAuthorityCatalog
+	if schema == authoritysource.QualifiedSchemaVersion {
+		qualified, err := qualifiedRoleCatalog(version)
+		if err != nil {
+			return nil, err
+		}
+		return authoritysource.BeginRead(ctx, pool, qualified)
+	}
+	switch version {
+	case 16, 17:
+	case 20:
+		catalog = roleAuthorityCatalog20
+	default:
+		return nil, errors.New("role source schema version unavailable")
+	}
+	catalog.Version = version
+	return authoritysource.BeginRead(ctx, pool, catalog)
+}
 
 // CheckAuthoritySourceSchema gates registration before the dedicated listener
 // serves. Every subsequent read repeats the guard inside its consistent cut.
@@ -22,7 +54,15 @@ func (s *RoleStore) CheckAuthoritySourceSchema(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
-	tx, err := authoritysource.BeginRead(ctx, s.Pool, roleAuthorityCatalog)
+	var version int64
+	if err := s.Pool.QueryRow(ctx, `SELECT version FROM schema_migrations WHERE NOT dirty`).Scan(&version); err != nil {
+		return err
+	}
+	schema := uint32(authoritysource.SchemaVersion)
+	if version == 21 || version == 25 {
+		schema = authoritysource.QualifiedSchemaVersion
+	}
+	tx, err := beginRoleAuthorityReadSchema(ctx, s.Pool, schema)
 	if err != nil {
 		return err
 	}
@@ -56,7 +96,7 @@ func (s *RoleStore) beginAuthorityRead(ctx context.Context, scope *authorityv1.S
 	if s == nil || s.tx != nil {
 		return nil, errors.New("source read requires owning pool")
 	}
-	return authoritysource.BeginRead(ctx, s.Pool, roleAuthorityCatalog)
+	return beginRoleAuthorityReadSchema(ctx, s.Pool, scope.SchemaVersion)
 }
 
 func (s *RoleStore) ReadAuthorityRevision(ctx context.Context, scope *authorityv1.SourceScope) (uint64, error) {
@@ -79,7 +119,7 @@ func (s *RoleStore) ReadAuthorityRevision(ctx context.Context, scope *authorityv
 	return role + sdk, nil
 }
 
-func readRoleSourceRows(ctx context.Context, tx pgx.Tx, query string, args []any, scan func(pgx.Rows) error) error {
+func readRoleSourceRows(ctx context.Context, tx scopeExecutor, query string, args []any, scan func(pgx.Rows) error) error {
 	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return err
@@ -106,6 +146,15 @@ func (s *RoleStore) ReadAuthoritySnapshot(ctx context.Context, scope *authorityv
 		return authoritysource.State{}, err
 	}
 	defer authoritysource.RollbackRead(ctx, tx)
+	return readRoleAuthoritySnapshot(ctx, tx, scope)
+}
+
+// Qualification uses the same projection after strict candidate preflight.
+// Serving transactions still come only from beginAuthorityRead.
+func readRoleAuthoritySnapshot(ctx context.Context, tx pgx.Tx, scope *authorityv1.SourceScope) (authoritysource.State, error) {
+	if scope.SchemaVersion == authoritysource.QualifiedSchemaVersion {
+		return readQualifiedRoleAuthoritySnapshot(ctx, tx, scope)
+	}
 	role, sdk, err := roleSourceRevisions(ctx, tx, scope.SpaceId)
 	if err != nil {
 		return authoritysource.State{}, err

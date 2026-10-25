@@ -25,7 +25,6 @@ import (
 
 	"voice/backend/file/internal/authctx"
 	"voice/backend/file/internal/fileevents"
-	"voice/backend/file/internal/jobs"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/store"
 
@@ -713,19 +712,10 @@ func (s *FileGRPC) DeleteFile(ctx context.Context, req *filev1.DeleteFileRequest
 	if _, err := s.fileOwnedByUploader(ctx, fileID, profileID); err != nil {
 		return nil, err
 	}
-	row, err := s.files.GetFileByID(ctx, fileID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, status.Error(codes.NotFound, "file not found")
+	if _, err := s.files.DeleteLegacyFile(ctx, fileID, nil, s.deleter); err != nil {
+		if errors.Is(err, store.ErrFileRetained) {
+			return nil, status.Error(codes.FailedPrecondition, "file has surviving references or aliases")
 		}
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if s.deleter != nil {
-		if err := r2file.DeleteKeys(ctx, s.deleter, jobs.FileStorageKeys(row)...); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
-		}
-	}
-	if err := s.files.MarkDeleted(ctx, fileID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "file not found")
 		}

@@ -16,8 +16,7 @@ import (
 
 func TestCreateCommunityBootstrapIsPrivateOwnerBoundAndReplaySafe(t *testing.T) {
 	ctx := context.Background()
-	pool := startSpacePostgresForTest(t, ctx)
-	applySpaceMigration(t, ctx, pool)
+	pool := communityPublicationFixture(t, ctx)
 	ownerProfile := uuid.New()
 	ownerAccount := uuid.New()
 	serviceCtx := authctx.WithVerifiedServiceIdentity(ctx, authctx.ServiceIdentityGameIntegration)

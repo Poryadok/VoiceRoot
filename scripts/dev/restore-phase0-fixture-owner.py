@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restore only Phase0 MatchSquad fixture paths chowned for nonroot services."""
+"""Restore only enumerated Phase0 fixture paths chowned for nonroot services."""
 
 import os
 import subprocess
@@ -39,30 +39,37 @@ def restore(destination: Path) -> None:
     runner_temp = Path(runner_temp_value).resolve(strict=True) if runner_temp_value else None
     if not supported_root(root, runner_temp, declared_root):
         raise RuntimeError("fixture destination is outside the supported disposable paths")
-    matchmaking = root / "matchmaking"
-    if any(path.is_symlink() for path in (root / "tls", root / "ca", matchmaking)):
+    signers = tuple(root / name for name in ("matchmaking", "chat", "space"))
+    if any(path.is_symlink() for path in (root / "tls", root / "ca", *signers)):
         raise RuntimeError("fixture directories must not be symlinks")
-    owned = [matchmaking / "current.pem", matchmaking / "next.pem",
+    owned = [directory / name for directory in signers for name in ("current.pem", "next.pem")]
+    owned += [root / "tls/chat-client.crt", root / "tls/chat-client.key",
+             root / "tls/chat-jwks.crt", root / "tls/chat-jwks.key",
              root / "tls/chat-match-squad-grpc.crt", root / "tls/chat-match-squad-grpc.key",
              root / "tls/voice-match-squad-grpc.crt", root / "tls/voice-match-squad-grpc.key",
              root / "tls/voice-match-squad-member-grpc.crt",
              root / "tls/voice-match-squad-member-grpc.key",
              root / "tls/matchmaking-client.crt", root / "tls/matchmaking-client.key",
+             root / "tls/matchmaking-complete-grpc.crt", root / "tls/matchmaking-complete-grpc.key",
+             root / "tls/matchmaking-jwks.crt", root / "tls/matchmaking-jwks.key",
+             root / "tls/space-lifecycle.crt", root / "tls/space-lifecycle.key",
+             root / "tls/space-client.crt", root / "tls/space-client.key",
              root / "ca/ca.crt"]
-    if matchmaking.is_symlink():
-        raise RuntimeError("fixture ownership path must not be a symlink")
     uid, gid = os.getuid(), os.getgid()
-    if matchmaking.is_dir():
-        if os.geteuid() == 0:
-            os.chown(matchmaking, uid, gid)
-        else:
-            result = subprocess.run(["sudo", "-n", "chown", f"{uid}:{gid}", str(matchmaking)],
-                                    capture_output=True, timeout=30, check=False)
-            if result.returncode:
-                raise RuntimeError("could not restore MatchSquad signer directory ownership")
-    paths = [path for path in owned if path.exists()]
-    if any(path.is_symlink() for path in paths):
+    # Restore traversal before inspecting 0700 service-owned signer children.
+    # Never recurse: only the two generated rotation keys belong to cleanup.
+    for directory in signers:
+        if directory.is_dir():
+            if os.geteuid() == 0:
+                os.chown(directory, uid, gid)
+            else:
+                result = subprocess.run(["sudo", "-n", "chown", f"{uid}:{gid}", str(directory)],
+                                        capture_output=True, timeout=30, check=False)
+                if result.returncode:
+                    raise RuntimeError("could not restore Phase0 signer directory ownership")
+    if any(path.is_symlink() for path in owned):
         raise RuntimeError("fixture ownership path must not be a symlink")
+    paths = [path for path in owned if path.exists()]
     if os.geteuid() == 0:
         for path in paths:
             os.chown(path, uid, gid)
@@ -71,7 +78,7 @@ def restore(destination: Path) -> None:
                                 capture_output=True, timeout=30, check=False)
         if result.returncode:
             raise RuntimeError("could not restore Phase0 fixture ownership")
-    for directory in (root, root / "tls", root / "ca", matchmaking):
+    for directory in (root, root / "tls", root / "ca", *signers):
         if directory.is_dir():
             directory.chmod(0o700)
 

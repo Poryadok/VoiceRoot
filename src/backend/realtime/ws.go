@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	grpcstatus "google.golang.org/grpc/status"
 
 	voicejwt "voice/backend/pkg/jwt"
 )
@@ -24,6 +24,10 @@ type tokenValidator interface {
 
 type presenceUpdater interface {
 	UpdatePresence(ctx context.Context, accountID, profileID, status, customStatus string) error
+}
+
+type presenceFieldsUpdater interface {
+	UpdatePresenceFields(ctx context.Context, accountID, profileID, status string, customStatus *string) error
 }
 
 func newServiceHandler(service string, tv tokenValidator, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, ready readinessDeps) http.Handler {
@@ -178,8 +182,8 @@ type deliveryAckPayload struct {
 }
 
 type presenceUpdateClientPayload struct {
-	Status       string `json:"status"`
-	CustomStatus string `json:"custom_status"`
+	Status       string  `json:"status"`
+	CustomStatus *string `json:"custom_status"`
 }
 
 var (
@@ -219,7 +223,9 @@ func closeFanoutOverflow(c *websocket.Conn, reg *connReg, writeMu *sync.Mutex) {
 
 func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLister, hub *wsHub, rf *redisFanout, instanceID string, presence presenceUpdater, dap deliveryAckPublisher, requestID string, upgradeAt time.Time, policy wsSessionEpochPolicy) {
 	connID := uuid.NewString()
-	observeWSConnectSuccess()
+	// Keep connect, hello and disconnect on the same registry generation.
+	metrics := rtMetrics.Load()
+	metrics.observeWSConnectSuccess()
 	svcLogger.Info("ws connected",
 		slog.String("event", "ws_connect"),
 		slog.String("conn_id", connID),
@@ -232,10 +238,19 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	guard := policy.newConnectionGuard(c, claims, &writeMu)
 	reg.setWriteGuard(func() bool { return guard.authorizeWrite("fanout") })
 	lastTypingStart := make(map[string]time.Time)
-	typingTimers := make(map[string]*time.Timer)
+	type typingExpiry struct {
+		key       string
+		timer     *time.Timer
+		broadcast func()
+	}
+	typingTimers := make(map[string]*typingExpiry)
+	// Timer callbacks only notify the connection loop. That loop owns all
+	// typing state and side effects, including expiry and disconnect cleanup.
+	typingExpired := make(chan *typingExpiry, 32)
+	readerCtx, cancelReader := context.WithCancel(context.Background())
 
 	defer func() {
-		observeWSDisconnect()
+		metrics.observeWSDisconnect()
 		svcLogger.Info("ws disconnected",
 			slog.String("event", "ws_disconnect"),
 			slog.String("conn_id", connID),
@@ -243,32 +258,17 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			slog.String("instance_id", instanceID),
 			slog.String("request_id", requestID),
 		)
-		for _, timer := range typingTimers {
-			timer.Stop()
+		for _, expiry := range typingTimers {
+			expiry.timer.Stop()
 		}
 		hasLocalProfileConn := hub.unregisterConn(reg)
-		if rf != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = rf.Unregister(ctx, claims.ProfileID, connID)
-			cancel()
-		}
 		if !hasLocalProfileConn {
 			updatePresence(context.Background(), presence, claims, "invisible", "")
 		}
 		_ = c.Close()
 	}()
-	readerCtx, cancelReader := context.WithCancel(context.Background())
 	defer cancelReader()
 
-	if rf != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := rf.Register(ctx, claims.ProfileID, connID); err != nil {
-			svcLogger.Warn("ws redis register failed", slog.String("error", err.Error()), slog.String("conn_id", connID))
-		}
-		cancel()
-	}
-
-	var mu sync.Mutex
 	var seq int64
 	write := func(op string, d json.RawMessage) error {
 		writeMu.Lock()
@@ -286,7 +286,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 	if err := write("hello", helloD); err != nil {
 		return
 	}
-	observeWSHelloDuration(upgradeAt)
+	metrics.observeWSHelloDuration(upgradeAt)
 	updatePresence(context.Background(), presence, claims, "online", "")
 
 	if lister != nil {
@@ -300,7 +300,7 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 		authorizedIDs := make([]string, 0, len(ids))
 		for _, id := range ids {
 			if authErr := hub.authorizeAndAddChat(lctx, reg, claims.UserID, claims.ProfileID, id); authErr != nil {
-				if status.Code(authErr) != codes.PermissionDenied {
+				if grpcstatus.Code(authErr) != codes.PermissionDenied {
 					degraded = true
 					svcLogger.Warn("ws chat bootstrap authorization failed", slog.String("error", authErr.Error()), slog.String("conn_id", connID))
 				}
@@ -347,6 +347,15 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 			// the only slow recipient; do not stall or evict healthy peers.
 			closeFanoutOverflow(c, reg, &writeMu)
 			return
+		case expiry := <-typingExpired:
+			// Stop may lose to a callback already in flight. A replaced or
+			// explicitly stopped timer must not erase or expire its successor.
+			if typingTimers[expiry.key] != expiry {
+				continue
+			}
+			delete(lastTypingStart, expiry.key)
+			delete(typingTimers, expiry.key)
+			expiry.broadcast()
 		case env := <-reg.fanout:
 			reg.beforeFanoutWrite()
 			if err := write(env.Op, env.D); err != nil {
@@ -480,35 +489,29 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 						cancel()
 					}
 				}
-				mu.Lock()
-				timer := typingTimers[typingKey]
-				if timer != nil {
-					timer.Stop()
+				if expiry := typingTimers[typingKey]; expiry != nil {
+					expiry.timer.Stop()
 					delete(typingTimers, typingKey)
 				}
-				mu.Unlock()
 				if kind == "stop" {
-					mu.Lock()
 					delete(lastTypingStart, typingKey)
-					mu.Unlock()
 					broadcastTyping("stop", false)
 					continue
 				}
 				now := time.Now()
-				mu.Lock()
 				last, ok := lastTypingStart[typingKey]
 				shouldBroadcast := !ok || now.Sub(last) >= typingThrottle
 				if shouldBroadcast {
 					lastTypingStart[typingKey] = now
 				}
-				typingTimers[typingKey] = time.AfterFunc(typingIdleTimeout, func() {
-					mu.Lock()
-					delete(lastTypingStart, typingKey)
-					delete(typingTimers, typingKey)
-					mu.Unlock()
-					broadcastTyping("stop", true)
+				expiry := &typingExpiry{key: typingKey, broadcast: func() { broadcastTyping("stop", true) }}
+				expiry.timer = time.AfterFunc(typingIdleTimeout, func() {
+					select {
+					case typingExpired <- expiry:
+					case <-readerCtx.Done():
+					}
 				})
-				mu.Unlock()
+				typingTimers[typingKey] = expiry
 				if shouldBroadcast {
 					broadcastTyping("start", false)
 				}
@@ -660,11 +663,35 @@ func runWSConn(c *websocket.Conn, claims voicejwt.Claims, lister chatBootstrapLi
 					}
 					continue
 				}
-				custom := strings.TrimSpace(p.CustomStatus)
+				custom := ""
+				if p.CustomStatus != nil {
+					custom = strings.TrimSpace(*p.CustomStatus)
+				}
 				if len(custom) > 256 {
 					custom = custom[:256]
 				}
-				updatePresence(context.Background(), presence, claims, status, custom)
+				if custom != "" && hub.releasePolicy != nil && !hub.releasePolicy.Allows("paid") {
+					errD, _ := json.Marshal(map[string]string{"code": "capability_unavailable", "message": "capability unavailable"})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
+				var customField *string
+				if p.CustomStatus != nil {
+					customField = &custom
+				}
+				if err := updatePresenceFields(context.Background(), presence, claims, status, customField); err != nil {
+					code := "presence_unavailable"
+					if grpcstatus.Code(err) == codes.FailedPrecondition {
+						code = "capability_unavailable"
+					}
+					errD, _ := json.Marshal(map[string]string{"code": code, "message": "presence update denied"})
+					if err := write("error", errD); err != nil {
+						return
+					}
+					continue
+				}
 				dSelf, _ := json.Marshal(map[string]any{
 					"profile_id":    claims.ProfileID,
 					"status":        status,
@@ -717,6 +744,22 @@ func updatePresence(ctx context.Context, presence presenceUpdater, claims voicej
 			slog.String("error", err.Error()),
 		)
 	}
+}
+
+func updatePresenceFields(ctx context.Context, presence presenceUpdater, claims voicejwt.Claims, state string, custom *string) error {
+	if presence == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if fields, ok := presence.(presenceFieldsUpdater); ok {
+		return fields.UpdatePresenceFields(ctx, claims.UserID, claims.ProfileID, state, custom)
+	}
+	value := ""
+	if custom != nil {
+		value = *custom
+	}
+	return presence.UpdatePresence(ctx, claims.UserID, claims.ProfileID, state, value)
 }
 
 func canonicalPresenceStatus(status string) bool {

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -17,6 +17,7 @@
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
@@ -29,8 +30,28 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>voice_frontend</title>
+  <title>Voice</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    /* Critical startup UI needs no Flutter, web font or stylesheet download. */
+    #voice-startup { position: fixed; inset: 0; z-index: 2147483647; display: flex;
+      flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+      padding: 24px; box-sizing: border-box; background: #fff; color: #1a1a1a;
+      font: 16px/1.5 system-ui, sans-serif; text-align: center; }
+    #voice-startup img { width: 96px; height: 96px; border-radius: 24px; }
+    #voice-startup-progress { width: 28px; height: 28px; border: 3px solid #e0e0e0;
+      border-top-color: #168acb; border-radius: 50%; animation: voice-spin 1s linear infinite; }
+    #voice-startup [hidden] { display: none; }
+    #voice-startup-status { margin: 0; max-width: 28em; }
+    #voice-startup-retry { border: 1px solid currentColor; border-radius: 8px; padding: 12px 24px;
+      background: transparent; color: inherit; font: inherit; cursor: pointer; }
+    #voice-startup-retry:focus-visible { outline: 3px solid #7ec8e3; outline-offset: 4px; }
+    @keyframes voice-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #voice-startup-progress { animation: none; } }
+    @media (prefers-color-scheme: dark) {
+      #voice-startup { background: #1e1e1e; color: #f0f0f0; }
+    }
+  </style>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -40,6 +61,67 @@
   </script>
 </head>
 <body>
+  <div id="voice-startup">
+    <img src="assets/assets/app_icons/voice_sky.png" alt="Voice" width="96" height="96">
+    <span id="voice-startup-progress" aria-hidden="true"></span>
+    <p id="voice-startup-status" role="status" aria-live="polite">Loading Voice…</p>
+    <button id="voice-startup-retry" type="button" hidden>Retry loading</button>
+    <noscript>Enable JavaScript and reload to start Voice. Для запуска Voice включите JavaScript и обновите страницу.</noscript>
+  </div>
+  <script id="voice-startup-controller">
+    (() => {
+      const panel = document.getElementById('voice-startup');
+      const status = document.getElementById('voice-startup-status');
+      const retry = document.getElementById('voice-startup-retry');
+      const progress = document.getElementById('voice-startup-progress');
+      const ru = (navigator.language || 'en').toLowerCase().startsWith('ru');
+      const copy = ru ? {
+        loading: 'Загружаем Voice…', preparing: 'Подготавливаем Voice…', starting: 'Запускаем Voice…',
+        error: 'Не удалось запустить Voice. Проверьте подключение и повторите загрузку.',
+        slow: 'Запуск Voice занимает больше времени, чем обычно. Можно подождать или повторить загрузку.',
+        retry: 'Повторить загрузку'
+      } : {
+        loading: 'Loading Voice…', preparing: 'Preparing Voice…', starting: 'Starting Voice…',
+        error: 'Voice could not start. Check your connection and retry loading.',
+        slow: 'Voice is taking longer than usual to start. You can wait or retry loading.',
+        retry: 'Retry loading'
+      };
+      document.documentElement.lang = ru ? 'ru' : 'en';
+      status.textContent = copy.loading;
+      retry.textContent = copy.retry;
+      let ready = false;
+      let failed = false;
+      const mark = name => performance.mark(`voice-startup:${name}`);
+      mark('html');
+      const fail = () => {
+        if (ready || failed) return;
+        failed = true;
+        mark('error');
+        status.textContent = copy.error;
+        progress.hidden = true;
+        retry.hidden = false;
+      };
+      // A stalled network or async Dart startup must also offer a way out.
+      // This is a UI deadline, not a claim that the network request has failed.
+      const timeout = setTimeout(() => {
+        fail();
+        if (!ready) status.textContent = copy.slow;
+      }, 90000);
+      retry.addEventListener('click', () => window.location.reload());
+      window.addEventListener('flutter-first-frame', () => {
+        if (ready) return;
+        ready = true;
+        clearTimeout(timeout);
+        mark('first-frame');
+        panel.remove();
+      }, { once: true });
+      window.voiceStartup = Object.freeze({ fail, stage(name) {
+        if (ready) return;
+        mark(name);
+        if (!failed) status.textContent = name === 'entrypoint' ? copy.preparing : copy.starting;
+      } });
+    })();
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -58,6 +140,6 @@
     });
     globalThis.voiceMusicReady.catch(() => {});
   </script>
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="flutter_bootstrap.js" async onerror="window.voiceStartup.fail()"></script>
 </body>
 </html>

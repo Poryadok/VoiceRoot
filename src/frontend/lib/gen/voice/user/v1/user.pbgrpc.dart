@@ -16,7 +16,8 @@ import 'dart:core' as $core;
 import 'package:grpc/service_api.dart' as $grpc;
 import 'package:protobuf/protobuf.dart' as $pb;
 
-import 'user.pb.dart' as $0;
+import 'space_account_capture.pb.dart' as $0;
+import 'user.pb.dart' as $1;
 
 export 'user.pb.dart';
 
@@ -33,19 +34,29 @@ class UserServiceClient extends $grpc.Client {
 
   UserServiceClient(super.channel, {super.options, super.interceptors});
 
+  /// Space-only protected capture. Not registered on the ordinary User listener.
+  $grpc.ResponseFuture<$0.CaptureSpaceMemberAccountBindingsResponse>
+      captureSpaceMemberAccountBindings(
+    $0.CaptureSpaceMemberAccountBindingsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$captureSpaceMemberAccountBindings, request,
+        options: options);
+  }
+
   /// S2S bootstrap from Auth: ensure one primary profile per account before JWT is issued.
   /// Target: called only from trusted Auth; not exposed via public Gateway REST in v1 DM scope.
-  $grpc.ResponseFuture<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
-    $0.EnsurePrimaryProfileRequest request, {
+  $grpc.ResponseFuture<$1.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
+    $1.EnsurePrimaryProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$ensurePrimaryProfile, request, options: options);
   }
 
   /// S2S internal: profile ids for account-level social actions (block cascade, …).
-  $grpc.ResponseFuture<$0.ListProfileIDsForAccountResponse>
+  $grpc.ResponseFuture<$1.ListProfileIDsForAccountResponse>
       listProfileIDsForAccount(
-    $0.ListProfileIDsForAccountRequest request, {
+    $1.ListProfileIDsForAccountRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$listProfileIDsForAccount, request,
@@ -54,9 +65,9 @@ class UserServiceClient extends $grpc.Client {
 
   /// S2S internal: resolve the owning account for Messaging DM lifecycle checks.
   /// This returns the owner even when the profile is soft-deleted and is not a public visibility lookup.
-  $grpc.ResponseFuture<$0.ResolveAccountIDForProfileResponse>
+  $grpc.ResponseFuture<$1.ResolveAccountIDForProfileResponse>
       resolveAccountIDForProfile(
-    $0.ResolveAccountIDForProfileRequest request, {
+    $1.ResolveAccountIDForProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$resolveAccountIDForProfile, request,
@@ -64,8 +75,8 @@ class UserServiceClient extends $grpc.Client {
   }
 
   /// S2S internal: title-only projection for DM peer profile IDs from authorized Chat memberships.
-  $grpc.ResponseFuture<$0.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames(
-    $0.GetDMPeerDisplayNamesRequest request, {
+  $grpc.ResponseFuture<$1.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames(
+    $1.GetDMPeerDisplayNamesRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getDMPeerDisplayNames, request, options: options);
@@ -73,9 +84,9 @@ class UserServiceClient extends $grpc.Client {
 
   /// S2S internal: resolve existing, non-deleted primary profiles for Auth-owned account ids.
   /// Missing accounts and accounts without a usable primary profile are omitted; this never provisions profiles.
-  $grpc.ResponseFuture<$0.ResolvePrimaryProfileIDsResponse>
+  $grpc.ResponseFuture<$1.ResolvePrimaryProfileIDsResponse>
       resolvePrimaryProfileIDs(
-    $0.ResolvePrimaryProfileIDsRequest request, {
+    $1.ResolvePrimaryProfileIDsRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$resolvePrimaryProfileIDs, request,
@@ -84,77 +95,88 @@ class UserServiceClient extends $grpc.Client {
 
   /// S2S internal: after Auth converts a guest account, clear the guest marker on its User-owned profiles.
   /// Idempotent: an already-regular or unknown account succeeds unchanged.
-  $grpc.ResponseFuture<$0.MarkAccountRegularResponse> markAccountRegular(
-    $0.MarkAccountRegularRequest request, {
+  $grpc.ResponseFuture<$1.MarkAccountRegularResponse> markAccountRegular(
+    $1.MarkAccountRegularRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$markAccountRegular, request, options: options);
   }
 
   /// Auth-only protected listener: exact read-only SDK target profile snapshot.
-  $grpc.ResponseFuture<$0.GetSdkProfileEligibilityResponse>
+  $grpc.ResponseFuture<$1.GetSdkProfileEligibilityResponse>
       getSdkProfileEligibility(
-    $0.GetSdkProfileEligibilityRequest request, {
+    $1.GetSdkProfileEligibilityRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getSdkProfileEligibility, request,
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:auth
+  /// Dedicated admission listener only; no SDK consent or target conversion authority.
+  $grpc.ResponseFuture<$1.GetSpaceAdmissionProfileEligibilityResponse>
+      getSpaceAdmissionProfileEligibility(
+    $1.GetSpaceAdmissionProfileEligibilityRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getSpaceAdmissionProfileEligibility, request,
+        options: options);
+  }
+
   /// Auth-only protected listener: immutable historical SDK actor tombstone receipt.
-  $grpc.ResponseFuture<$0.RecordSdkAuthorTombstoneResponse>
+  $grpc.ResponseFuture<$1.RecordSdkAuthorTombstoneResponse>
       recordSdkAuthorTombstone(
-    $0.RecordSdkAuthorTombstoneRequest request, {
+    $1.RecordSdkAuthorTombstoneRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$recordSdkAuthorTombstone, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetProfileResponse> getProfile(
-    $0.GetProfileRequest request, {
+  $grpc.ResponseFuture<$1.GetProfileResponse> getProfile(
+    $1.GetProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getProfile, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetProfilesResponse> getProfiles(
-    $0.GetProfilesRequest request, {
+  $grpc.ResponseFuture<$1.GetProfilesResponse> getProfiles(
+    $1.GetProfilesRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getProfiles, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.UpdateProfileResponse> updateProfile(
-    $0.UpdateProfileRequest request, {
+  $grpc.ResponseFuture<$1.UpdateProfileResponse> updateProfile(
+    $1.UpdateProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$updateProfile, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.CreateProfileResponse> createProfile(
-    $0.CreateProfileRequest request, {
+  $grpc.ResponseFuture<$1.CreateProfileResponse> createProfile(
+    $1.CreateProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$createProfile, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.DeleteProfileResponse> deleteProfile(
-    $0.DeleteProfileRequest request, {
+  $grpc.ResponseFuture<$1.DeleteProfileResponse> deleteProfile(
+    $1.DeleteProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$deleteProfile, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.SwitchProfileResponse> switchProfile(
-    $0.SwitchProfileRequest request, {
+  $grpc.ResponseFuture<$1.SwitchProfileResponse> switchProfile(
+    $1.SwitchProfileRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$switchProfile, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.ListMyProfilesResponse> listMyProfiles(
-    $0.ListMyProfilesRequest request, {
+  $grpc.ResponseFuture<$1.ListMyProfilesResponse> listMyProfiles(
+    $1.ListMyProfilesRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$listMyProfiles, request, options: options);
@@ -162,43 +184,43 @@ class UserServiceClient extends $grpc.Client {
 
   /// Discover profiles by query (username / display_name) for friend requests and DM addressing.
   /// Friend/DM profile discovery — user_db; privacy + blocks enforced. Global search: docs/features/search.md.
-  $grpc.ResponseFuture<$0.SearchProfilesResponse> searchProfiles(
-    $0.SearchProfilesRequest request, {
+  $grpc.ResponseFuture<$1.SearchProfilesResponse> searchProfiles(
+    $1.SearchProfilesRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$searchProfiles, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetPrivacySettingsResponse> getPrivacySettings(
-    $0.GetPrivacySettingsRequest request, {
+  $grpc.ResponseFuture<$1.GetPrivacySettingsResponse> getPrivacySettings(
+    $1.GetPrivacySettingsRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getPrivacySettings, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.UpdatePrivacySettingsResponse> updatePrivacySettings(
-    $0.UpdatePrivacySettingsRequest request, {
+  $grpc.ResponseFuture<$1.UpdatePrivacySettingsResponse> updatePrivacySettings(
+    $1.UpdatePrivacySettingsRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$updatePrivacySettings, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.UpdatePresenceResponse> updatePresence(
-    $0.UpdatePresenceRequest request, {
+  $grpc.ResponseFuture<$1.UpdatePresenceResponse> updatePresence(
+    $1.UpdatePresenceRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$updatePresence, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetPresenceResponse> getPresence(
-    $0.GetPresenceRequest request, {
+  $grpc.ResponseFuture<$1.GetPresenceResponse> getPresence(
+    $1.GetPresenceRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getPresence, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetBulkPresenceResponse> getBulkPresence(
-    $0.GetBulkPresenceRequest request, {
+  $grpc.ResponseFuture<$1.GetBulkPresenceResponse> getBulkPresence(
+    $1.GetBulkPresenceRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getBulkPresence, request, options: options);
@@ -206,9 +228,9 @@ class UserServiceClient extends $grpc.Client {
 
   /// Internal Notification routing signal. This method is exposed only on the
   /// dedicated authenticated Notification principal listener.
-  $grpc.ResponseFuture<$0.GetNotificationRoutingPresenceResponse>
+  $grpc.ResponseFuture<$1.GetNotificationRoutingPresenceResponse>
       getNotificationRoutingPresence(
-    $0.GetNotificationRoutingPresenceRequest request, {
+    $1.GetNotificationRoutingPresenceRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getNotificationRoutingPresence, request,
@@ -217,62 +239,62 @@ class UserServiceClient extends $grpc.Client {
 
   /// Internal Messaging decision for an owned scheduled dispatch.
   /// Exposed only on the dedicated authenticated Messaging principal listener.
-  $grpc.ResponseFuture<$0.GetScheduledMessageDispatchPresenceResponse>
+  $grpc.ResponseFuture<$1.GetScheduledMessageDispatchPresenceResponse>
       getScheduledMessageDispatchPresence(
-    $0.GetScheduledMessageDispatchPresenceRequest request, {
+    $1.GetScheduledMessageDispatchPresenceRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getScheduledMessageDispatchPresence, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetSettingsResponse> getSettings(
-    $0.GetSettingsRequest request, {
+  $grpc.ResponseFuture<$1.GetSettingsResponse> getSettings(
+    $1.GetSettingsRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getSettings, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.UpdateSettingsResponse> updateSettings(
-    $0.UpdateSettingsRequest request, {
+  $grpc.ResponseFuture<$1.UpdateSettingsResponse> updateSettings(
+    $1.UpdateSettingsRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$updateSettings, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetOnboardingStateResponse> getOnboardingState(
-    $0.GetOnboardingStateRequest request, {
+  $grpc.ResponseFuture<$1.GetOnboardingStateResponse> getOnboardingState(
+    $1.GetOnboardingStateRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getOnboardingState, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.CompleteOnboardingStepResponse>
+  $grpc.ResponseFuture<$1.CompleteOnboardingStepResponse>
       completeOnboardingStep(
-    $0.CompleteOnboardingStepRequest request, {
+    $1.CompleteOnboardingStepRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$completeOnboardingStep, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetVerificationStatusResponse> getVerificationStatus(
-    $0.GetVerificationStatusRequest request, {
+  $grpc.ResponseFuture<$1.GetVerificationStatusResponse> getVerificationStatus(
+    $1.GetVerificationStatusRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getVerificationStatus, request, options: options);
   }
 
   /// S2S from Auth after OAuth identity checks (verification.md).
-  $grpc.ResponseFuture<$0.SetVerificationResponse> setVerification(
-    $0.SetVerificationRequest request, {
+  $grpc.ResponseFuture<$1.SetVerificationResponse> setVerification(
+    $1.SetVerificationRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$setVerification, request, options: options);
   }
 
-  $grpc.ResponseFuture<$0.ClearVerificationResponse> clearVerification(
-    $0.ClearVerificationRequest request, {
+  $grpc.ResponseFuture<$1.ClearVerificationResponse> clearVerification(
+    $1.ClearVerificationRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$clearVerification, request, options: options);
@@ -280,36 +302,36 @@ class UserServiceClient extends $grpc.Client {
 
   /// S2S from Auth. Applies one monotonic Twitch/YouTube source state and resolves
   /// the profile's effective visible verification without exposing source rows publicly.
-  $grpc.ResponseFuture<$0.ApplyVerificationSourceStateResponse>
+  $grpc.ResponseFuture<$1.ApplyVerificationSourceStateResponse>
       applyVerificationSourceState(
-    $0.ApplyVerificationSourceStateRequest request, {
+    $1.ApplyVerificationSourceStateRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$applyVerificationSourceState, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.StartOrganizationVerificationResponse>
+  $grpc.ResponseFuture<$1.StartOrganizationVerificationResponse>
       startOrganizationVerification(
-    $0.StartOrganizationVerificationRequest request, {
+    $1.StartOrganizationVerificationRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$startOrganizationVerification, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.CheckOrganizationVerificationResponse>
+  $grpc.ResponseFuture<$1.CheckOrganizationVerificationResponse>
       checkOrganizationVerification(
-    $0.CheckOrganizationVerificationRequest request, {
+    $1.CheckOrganizationVerificationRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$checkOrganizationVerification, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.ApplyDowngradeProfilesResponse>
+  $grpc.ResponseFuture<$1.ApplyDowngradeProfilesResponse>
       applyDowngradeProfiles(
-    $0.ApplyDowngradeProfilesRequest request, {
+    $1.ApplyDowngradeProfilesRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$applyDowngradeProfiles, request,
@@ -317,9 +339,9 @@ class UserServiceClient extends $grpc.Client {
   }
 
   /// Presigned PUT to Cloudflare R2 for static profile avatar (docs/features/user-profile.md).
-  $grpc.ResponseFuture<$0.CreateAvatarPresignedUploadResponse>
+  $grpc.ResponseFuture<$1.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload(
-    $0.CreateAvatarPresignedUploadRequest request, {
+    $1.CreateAvatarPresignedUploadRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$createAvatarPresignedUpload, request,
@@ -328,36 +350,36 @@ class UserServiceClient extends $grpc.Client {
 
   /// Search-only protected listener. These are intentionally unimplemented on
   /// ordinary User gRPC and require the request-bound service:search principal.
-  $grpc.ResponseFuture<$0.BeginSearchProfileSnapshotResponse>
+  $grpc.ResponseFuture<$1.BeginSearchProfileSnapshotResponse>
       beginSearchProfileSnapshot(
-    $0.BeginSearchProfileSnapshotRequest request, {
+    $1.BeginSearchProfileSnapshotRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$beginSearchProfileSnapshot, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.ListSearchProfileSnapshotResponse>
+  $grpc.ResponseFuture<$1.ListSearchProfileSnapshotResponse>
       listSearchProfileSnapshot(
-    $0.ListSearchProfileSnapshotRequest request, {
+    $1.ListSearchProfileSnapshotRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$listSearchProfileSnapshot, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.ListSearchProfileJournalResponse>
+  $grpc.ResponseFuture<$1.ListSearchProfileJournalResponse>
       listSearchProfileJournal(
-    $0.ListSearchProfileJournalRequest request, {
+    $1.ListSearchProfileJournalRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$listSearchProfileJournal, request,
         options: options);
   }
 
-  $grpc.ResponseFuture<$0.GetSearchProfileCheckpointResponse>
+  $grpc.ResponseFuture<$1.GetSearchProfileCheckpointResponse>
       getSearchProfileCheckpoint(
-    $0.GetSearchProfileCheckpointRequest request, {
+    $1.GetSearchProfileCheckpointRequest request, {
     $grpc.CallOptions? options,
   }) {
     return $createUnaryCall(_$getSearchProfileCheckpoint, request,
@@ -366,217 +388,231 @@ class UserServiceClient extends $grpc.Client {
 
   // method descriptors
 
-  static final _$ensurePrimaryProfile = $grpc.ClientMethod<
-          $0.EnsurePrimaryProfileRequest, $0.EnsurePrimaryProfileResponse>(
-      '/voice.user.v1.UserService/EnsurePrimaryProfile',
-      ($0.EnsurePrimaryProfileRequest value) => value.writeToBuffer(),
-      $0.EnsurePrimaryProfileResponse.fromBuffer);
-  static final _$listProfileIDsForAccount = $grpc.ClientMethod<
-          $0.ListProfileIDsForAccountRequest,
-          $0.ListProfileIDsForAccountResponse>(
-      '/voice.user.v1.UserService/ListProfileIDsForAccount',
-      ($0.ListProfileIDsForAccountRequest value) => value.writeToBuffer(),
-      $0.ListProfileIDsForAccountResponse.fromBuffer);
-  static final _$resolveAccountIDForProfile = $grpc.ClientMethod<
-          $0.ResolveAccountIDForProfileRequest,
-          $0.ResolveAccountIDForProfileResponse>(
-      '/voice.user.v1.UserService/ResolveAccountIDForProfile',
-      ($0.ResolveAccountIDForProfileRequest value) => value.writeToBuffer(),
-      $0.ResolveAccountIDForProfileResponse.fromBuffer);
-  static final _$getDMPeerDisplayNames = $grpc.ClientMethod<
-          $0.GetDMPeerDisplayNamesRequest, $0.GetDMPeerDisplayNamesResponse>(
-      '/voice.user.v1.UserService/GetDMPeerDisplayNames',
-      ($0.GetDMPeerDisplayNamesRequest value) => value.writeToBuffer(),
-      $0.GetDMPeerDisplayNamesResponse.fromBuffer);
-  static final _$resolvePrimaryProfileIDs = $grpc.ClientMethod<
-          $0.ResolvePrimaryProfileIDsRequest,
-          $0.ResolvePrimaryProfileIDsResponse>(
-      '/voice.user.v1.UserService/ResolvePrimaryProfileIDs',
-      ($0.ResolvePrimaryProfileIDsRequest value) => value.writeToBuffer(),
-      $0.ResolvePrimaryProfileIDsResponse.fromBuffer);
-  static final _$markAccountRegular = $grpc.ClientMethod<
-          $0.MarkAccountRegularRequest, $0.MarkAccountRegularResponse>(
-      '/voice.user.v1.UserService/MarkAccountRegular',
-      ($0.MarkAccountRegularRequest value) => value.writeToBuffer(),
-      $0.MarkAccountRegularResponse.fromBuffer);
-  static final _$getSdkProfileEligibility = $grpc.ClientMethod<
-          $0.GetSdkProfileEligibilityRequest,
-          $0.GetSdkProfileEligibilityResponse>(
-      '/voice.user.v1.UserService/GetSdkProfileEligibility',
-      ($0.GetSdkProfileEligibilityRequest value) => value.writeToBuffer(),
-      $0.GetSdkProfileEligibilityResponse.fromBuffer);
-  static final _$recordSdkAuthorTombstone = $grpc.ClientMethod<
-          $0.RecordSdkAuthorTombstoneRequest,
-          $0.RecordSdkAuthorTombstoneResponse>(
-      '/voice.user.v1.UserService/RecordSdkAuthorTombstone',
-      ($0.RecordSdkAuthorTombstoneRequest value) => value.writeToBuffer(),
-      $0.RecordSdkAuthorTombstoneResponse.fromBuffer);
-  static final _$getProfile =
-      $grpc.ClientMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
-          '/voice.user.v1.UserService/GetProfile',
-          ($0.GetProfileRequest value) => value.writeToBuffer(),
-          $0.GetProfileResponse.fromBuffer);
-  static final _$getProfiles =
-      $grpc.ClientMethod<$0.GetProfilesRequest, $0.GetProfilesResponse>(
-          '/voice.user.v1.UserService/GetProfiles',
-          ($0.GetProfilesRequest value) => value.writeToBuffer(),
-          $0.GetProfilesResponse.fromBuffer);
-  static final _$updateProfile =
-      $grpc.ClientMethod<$0.UpdateProfileRequest, $0.UpdateProfileResponse>(
-          '/voice.user.v1.UserService/UpdateProfile',
-          ($0.UpdateProfileRequest value) => value.writeToBuffer(),
-          $0.UpdateProfileResponse.fromBuffer);
-  static final _$createProfile =
-      $grpc.ClientMethod<$0.CreateProfileRequest, $0.CreateProfileResponse>(
-          '/voice.user.v1.UserService/CreateProfile',
-          ($0.CreateProfileRequest value) => value.writeToBuffer(),
-          $0.CreateProfileResponse.fromBuffer);
-  static final _$deleteProfile =
-      $grpc.ClientMethod<$0.DeleteProfileRequest, $0.DeleteProfileResponse>(
-          '/voice.user.v1.UserService/DeleteProfile',
-          ($0.DeleteProfileRequest value) => value.writeToBuffer(),
-          $0.DeleteProfileResponse.fromBuffer);
-  static final _$switchProfile =
-      $grpc.ClientMethod<$0.SwitchProfileRequest, $0.SwitchProfileResponse>(
-          '/voice.user.v1.UserService/SwitchProfile',
-          ($0.SwitchProfileRequest value) => value.writeToBuffer(),
-          $0.SwitchProfileResponse.fromBuffer);
-  static final _$listMyProfiles =
-      $grpc.ClientMethod<$0.ListMyProfilesRequest, $0.ListMyProfilesResponse>(
-          '/voice.user.v1.UserService/ListMyProfiles',
-          ($0.ListMyProfilesRequest value) => value.writeToBuffer(),
-          $0.ListMyProfilesResponse.fromBuffer);
-  static final _$searchProfiles =
-      $grpc.ClientMethod<$0.SearchProfilesRequest, $0.SearchProfilesResponse>(
-          '/voice.user.v1.UserService/SearchProfiles',
-          ($0.SearchProfilesRequest value) => value.writeToBuffer(),
-          $0.SearchProfilesResponse.fromBuffer);
-  static final _$getPrivacySettings = $grpc.ClientMethod<
-          $0.GetPrivacySettingsRequest, $0.GetPrivacySettingsResponse>(
-      '/voice.user.v1.UserService/GetPrivacySettings',
-      ($0.GetPrivacySettingsRequest value) => value.writeToBuffer(),
-      $0.GetPrivacySettingsResponse.fromBuffer);
-  static final _$updatePrivacySettings = $grpc.ClientMethod<
-          $0.UpdatePrivacySettingsRequest, $0.UpdatePrivacySettingsResponse>(
-      '/voice.user.v1.UserService/UpdatePrivacySettings',
-      ($0.UpdatePrivacySettingsRequest value) => value.writeToBuffer(),
-      $0.UpdatePrivacySettingsResponse.fromBuffer);
-  static final _$updatePresence =
-      $grpc.ClientMethod<$0.UpdatePresenceRequest, $0.UpdatePresenceResponse>(
-          '/voice.user.v1.UserService/UpdatePresence',
-          ($0.UpdatePresenceRequest value) => value.writeToBuffer(),
-          $0.UpdatePresenceResponse.fromBuffer);
-  static final _$getPresence =
-      $grpc.ClientMethod<$0.GetPresenceRequest, $0.GetPresenceResponse>(
-          '/voice.user.v1.UserService/GetPresence',
-          ($0.GetPresenceRequest value) => value.writeToBuffer(),
-          $0.GetPresenceResponse.fromBuffer);
-  static final _$getBulkPresence =
-      $grpc.ClientMethod<$0.GetBulkPresenceRequest, $0.GetBulkPresenceResponse>(
-          '/voice.user.v1.UserService/GetBulkPresence',
-          ($0.GetBulkPresenceRequest value) => value.writeToBuffer(),
-          $0.GetBulkPresenceResponse.fromBuffer);
-  static final _$getNotificationRoutingPresence = $grpc.ClientMethod<
-          $0.GetNotificationRoutingPresenceRequest,
-          $0.GetNotificationRoutingPresenceResponse>(
-      '/voice.user.v1.UserService/GetNotificationRoutingPresence',
-      ($0.GetNotificationRoutingPresenceRequest value) => value.writeToBuffer(),
-      $0.GetNotificationRoutingPresenceResponse.fromBuffer);
-  static final _$getScheduledMessageDispatchPresence = $grpc.ClientMethod<
-          $0.GetScheduledMessageDispatchPresenceRequest,
-          $0.GetScheduledMessageDispatchPresenceResponse>(
-      '/voice.user.v1.UserService/GetScheduledMessageDispatchPresence',
-      ($0.GetScheduledMessageDispatchPresenceRequest value) =>
+  static final _$captureSpaceMemberAccountBindings = $grpc.ClientMethod<
+          $0.CaptureSpaceMemberAccountBindingsRequest,
+          $0.CaptureSpaceMemberAccountBindingsResponse>(
+      '/voice.user.v1.UserService/CaptureSpaceMemberAccountBindings',
+      ($0.CaptureSpaceMemberAccountBindingsRequest value) =>
           value.writeToBuffer(),
-      $0.GetScheduledMessageDispatchPresenceResponse.fromBuffer);
+      $0.CaptureSpaceMemberAccountBindingsResponse.fromBuffer);
+  static final _$ensurePrimaryProfile = $grpc.ClientMethod<
+          $1.EnsurePrimaryProfileRequest, $1.EnsurePrimaryProfileResponse>(
+      '/voice.user.v1.UserService/EnsurePrimaryProfile',
+      ($1.EnsurePrimaryProfileRequest value) => value.writeToBuffer(),
+      $1.EnsurePrimaryProfileResponse.fromBuffer);
+  static final _$listProfileIDsForAccount = $grpc.ClientMethod<
+          $1.ListProfileIDsForAccountRequest,
+          $1.ListProfileIDsForAccountResponse>(
+      '/voice.user.v1.UserService/ListProfileIDsForAccount',
+      ($1.ListProfileIDsForAccountRequest value) => value.writeToBuffer(),
+      $1.ListProfileIDsForAccountResponse.fromBuffer);
+  static final _$resolveAccountIDForProfile = $grpc.ClientMethod<
+          $1.ResolveAccountIDForProfileRequest,
+          $1.ResolveAccountIDForProfileResponse>(
+      '/voice.user.v1.UserService/ResolveAccountIDForProfile',
+      ($1.ResolveAccountIDForProfileRequest value) => value.writeToBuffer(),
+      $1.ResolveAccountIDForProfileResponse.fromBuffer);
+  static final _$getDMPeerDisplayNames = $grpc.ClientMethod<
+          $1.GetDMPeerDisplayNamesRequest, $1.GetDMPeerDisplayNamesResponse>(
+      '/voice.user.v1.UserService/GetDMPeerDisplayNames',
+      ($1.GetDMPeerDisplayNamesRequest value) => value.writeToBuffer(),
+      $1.GetDMPeerDisplayNamesResponse.fromBuffer);
+  static final _$resolvePrimaryProfileIDs = $grpc.ClientMethod<
+          $1.ResolvePrimaryProfileIDsRequest,
+          $1.ResolvePrimaryProfileIDsResponse>(
+      '/voice.user.v1.UserService/ResolvePrimaryProfileIDs',
+      ($1.ResolvePrimaryProfileIDsRequest value) => value.writeToBuffer(),
+      $1.ResolvePrimaryProfileIDsResponse.fromBuffer);
+  static final _$markAccountRegular = $grpc.ClientMethod<
+          $1.MarkAccountRegularRequest, $1.MarkAccountRegularResponse>(
+      '/voice.user.v1.UserService/MarkAccountRegular',
+      ($1.MarkAccountRegularRequest value) => value.writeToBuffer(),
+      $1.MarkAccountRegularResponse.fromBuffer);
+  static final _$getSdkProfileEligibility = $grpc.ClientMethod<
+          $1.GetSdkProfileEligibilityRequest,
+          $1.GetSdkProfileEligibilityResponse>(
+      '/voice.user.v1.UserService/GetSdkProfileEligibility',
+      ($1.GetSdkProfileEligibilityRequest value) => value.writeToBuffer(),
+      $1.GetSdkProfileEligibilityResponse.fromBuffer);
+  static final _$getSpaceAdmissionProfileEligibility = $grpc.ClientMethod<
+          $1.GetSpaceAdmissionProfileEligibilityRequest,
+          $1.GetSpaceAdmissionProfileEligibilityResponse>(
+      '/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility',
+      ($1.GetSpaceAdmissionProfileEligibilityRequest value) =>
+          value.writeToBuffer(),
+      $1.GetSpaceAdmissionProfileEligibilityResponse.fromBuffer);
+  static final _$recordSdkAuthorTombstone = $grpc.ClientMethod<
+          $1.RecordSdkAuthorTombstoneRequest,
+          $1.RecordSdkAuthorTombstoneResponse>(
+      '/voice.user.v1.UserService/RecordSdkAuthorTombstone',
+      ($1.RecordSdkAuthorTombstoneRequest value) => value.writeToBuffer(),
+      $1.RecordSdkAuthorTombstoneResponse.fromBuffer);
+  static final _$getProfile =
+      $grpc.ClientMethod<$1.GetProfileRequest, $1.GetProfileResponse>(
+          '/voice.user.v1.UserService/GetProfile',
+          ($1.GetProfileRequest value) => value.writeToBuffer(),
+          $1.GetProfileResponse.fromBuffer);
+  static final _$getProfiles =
+      $grpc.ClientMethod<$1.GetProfilesRequest, $1.GetProfilesResponse>(
+          '/voice.user.v1.UserService/GetProfiles',
+          ($1.GetProfilesRequest value) => value.writeToBuffer(),
+          $1.GetProfilesResponse.fromBuffer);
+  static final _$updateProfile =
+      $grpc.ClientMethod<$1.UpdateProfileRequest, $1.UpdateProfileResponse>(
+          '/voice.user.v1.UserService/UpdateProfile',
+          ($1.UpdateProfileRequest value) => value.writeToBuffer(),
+          $1.UpdateProfileResponse.fromBuffer);
+  static final _$createProfile =
+      $grpc.ClientMethod<$1.CreateProfileRequest, $1.CreateProfileResponse>(
+          '/voice.user.v1.UserService/CreateProfile',
+          ($1.CreateProfileRequest value) => value.writeToBuffer(),
+          $1.CreateProfileResponse.fromBuffer);
+  static final _$deleteProfile =
+      $grpc.ClientMethod<$1.DeleteProfileRequest, $1.DeleteProfileResponse>(
+          '/voice.user.v1.UserService/DeleteProfile',
+          ($1.DeleteProfileRequest value) => value.writeToBuffer(),
+          $1.DeleteProfileResponse.fromBuffer);
+  static final _$switchProfile =
+      $grpc.ClientMethod<$1.SwitchProfileRequest, $1.SwitchProfileResponse>(
+          '/voice.user.v1.UserService/SwitchProfile',
+          ($1.SwitchProfileRequest value) => value.writeToBuffer(),
+          $1.SwitchProfileResponse.fromBuffer);
+  static final _$listMyProfiles =
+      $grpc.ClientMethod<$1.ListMyProfilesRequest, $1.ListMyProfilesResponse>(
+          '/voice.user.v1.UserService/ListMyProfiles',
+          ($1.ListMyProfilesRequest value) => value.writeToBuffer(),
+          $1.ListMyProfilesResponse.fromBuffer);
+  static final _$searchProfiles =
+      $grpc.ClientMethod<$1.SearchProfilesRequest, $1.SearchProfilesResponse>(
+          '/voice.user.v1.UserService/SearchProfiles',
+          ($1.SearchProfilesRequest value) => value.writeToBuffer(),
+          $1.SearchProfilesResponse.fromBuffer);
+  static final _$getPrivacySettings = $grpc.ClientMethod<
+          $1.GetPrivacySettingsRequest, $1.GetPrivacySettingsResponse>(
+      '/voice.user.v1.UserService/GetPrivacySettings',
+      ($1.GetPrivacySettingsRequest value) => value.writeToBuffer(),
+      $1.GetPrivacySettingsResponse.fromBuffer);
+  static final _$updatePrivacySettings = $grpc.ClientMethod<
+          $1.UpdatePrivacySettingsRequest, $1.UpdatePrivacySettingsResponse>(
+      '/voice.user.v1.UserService/UpdatePrivacySettings',
+      ($1.UpdatePrivacySettingsRequest value) => value.writeToBuffer(),
+      $1.UpdatePrivacySettingsResponse.fromBuffer);
+  static final _$updatePresence =
+      $grpc.ClientMethod<$1.UpdatePresenceRequest, $1.UpdatePresenceResponse>(
+          '/voice.user.v1.UserService/UpdatePresence',
+          ($1.UpdatePresenceRequest value) => value.writeToBuffer(),
+          $1.UpdatePresenceResponse.fromBuffer);
+  static final _$getPresence =
+      $grpc.ClientMethod<$1.GetPresenceRequest, $1.GetPresenceResponse>(
+          '/voice.user.v1.UserService/GetPresence',
+          ($1.GetPresenceRequest value) => value.writeToBuffer(),
+          $1.GetPresenceResponse.fromBuffer);
+  static final _$getBulkPresence =
+      $grpc.ClientMethod<$1.GetBulkPresenceRequest, $1.GetBulkPresenceResponse>(
+          '/voice.user.v1.UserService/GetBulkPresence',
+          ($1.GetBulkPresenceRequest value) => value.writeToBuffer(),
+          $1.GetBulkPresenceResponse.fromBuffer);
+  static final _$getNotificationRoutingPresence = $grpc.ClientMethod<
+          $1.GetNotificationRoutingPresenceRequest,
+          $1.GetNotificationRoutingPresenceResponse>(
+      '/voice.user.v1.UserService/GetNotificationRoutingPresence',
+      ($1.GetNotificationRoutingPresenceRequest value) => value.writeToBuffer(),
+      $1.GetNotificationRoutingPresenceResponse.fromBuffer);
+  static final _$getScheduledMessageDispatchPresence = $grpc.ClientMethod<
+          $1.GetScheduledMessageDispatchPresenceRequest,
+          $1.GetScheduledMessageDispatchPresenceResponse>(
+      '/voice.user.v1.UserService/GetScheduledMessageDispatchPresence',
+      ($1.GetScheduledMessageDispatchPresenceRequest value) =>
+          value.writeToBuffer(),
+      $1.GetScheduledMessageDispatchPresenceResponse.fromBuffer);
   static final _$getSettings =
-      $grpc.ClientMethod<$0.GetSettingsRequest, $0.GetSettingsResponse>(
+      $grpc.ClientMethod<$1.GetSettingsRequest, $1.GetSettingsResponse>(
           '/voice.user.v1.UserService/GetSettings',
-          ($0.GetSettingsRequest value) => value.writeToBuffer(),
-          $0.GetSettingsResponse.fromBuffer);
+          ($1.GetSettingsRequest value) => value.writeToBuffer(),
+          $1.GetSettingsResponse.fromBuffer);
   static final _$updateSettings =
-      $grpc.ClientMethod<$0.UpdateSettingsRequest, $0.UpdateSettingsResponse>(
+      $grpc.ClientMethod<$1.UpdateSettingsRequest, $1.UpdateSettingsResponse>(
           '/voice.user.v1.UserService/UpdateSettings',
-          ($0.UpdateSettingsRequest value) => value.writeToBuffer(),
-          $0.UpdateSettingsResponse.fromBuffer);
+          ($1.UpdateSettingsRequest value) => value.writeToBuffer(),
+          $1.UpdateSettingsResponse.fromBuffer);
   static final _$getOnboardingState = $grpc.ClientMethod<
-          $0.GetOnboardingStateRequest, $0.GetOnboardingStateResponse>(
+          $1.GetOnboardingStateRequest, $1.GetOnboardingStateResponse>(
       '/voice.user.v1.UserService/GetOnboardingState',
-      ($0.GetOnboardingStateRequest value) => value.writeToBuffer(),
-      $0.GetOnboardingStateResponse.fromBuffer);
+      ($1.GetOnboardingStateRequest value) => value.writeToBuffer(),
+      $1.GetOnboardingStateResponse.fromBuffer);
   static final _$completeOnboardingStep = $grpc.ClientMethod<
-          $0.CompleteOnboardingStepRequest, $0.CompleteOnboardingStepResponse>(
+          $1.CompleteOnboardingStepRequest, $1.CompleteOnboardingStepResponse>(
       '/voice.user.v1.UserService/CompleteOnboardingStep',
-      ($0.CompleteOnboardingStepRequest value) => value.writeToBuffer(),
-      $0.CompleteOnboardingStepResponse.fromBuffer);
+      ($1.CompleteOnboardingStepRequest value) => value.writeToBuffer(),
+      $1.CompleteOnboardingStepResponse.fromBuffer);
   static final _$getVerificationStatus = $grpc.ClientMethod<
-          $0.GetVerificationStatusRequest, $0.GetVerificationStatusResponse>(
+          $1.GetVerificationStatusRequest, $1.GetVerificationStatusResponse>(
       '/voice.user.v1.UserService/GetVerificationStatus',
-      ($0.GetVerificationStatusRequest value) => value.writeToBuffer(),
-      $0.GetVerificationStatusResponse.fromBuffer);
+      ($1.GetVerificationStatusRequest value) => value.writeToBuffer(),
+      $1.GetVerificationStatusResponse.fromBuffer);
   static final _$setVerification =
-      $grpc.ClientMethod<$0.SetVerificationRequest, $0.SetVerificationResponse>(
+      $grpc.ClientMethod<$1.SetVerificationRequest, $1.SetVerificationResponse>(
           '/voice.user.v1.UserService/SetVerification',
-          ($0.SetVerificationRequest value) => value.writeToBuffer(),
-          $0.SetVerificationResponse.fromBuffer);
+          ($1.SetVerificationRequest value) => value.writeToBuffer(),
+          $1.SetVerificationResponse.fromBuffer);
   static final _$clearVerification = $grpc.ClientMethod<
-          $0.ClearVerificationRequest, $0.ClearVerificationResponse>(
+          $1.ClearVerificationRequest, $1.ClearVerificationResponse>(
       '/voice.user.v1.UserService/ClearVerification',
-      ($0.ClearVerificationRequest value) => value.writeToBuffer(),
-      $0.ClearVerificationResponse.fromBuffer);
+      ($1.ClearVerificationRequest value) => value.writeToBuffer(),
+      $1.ClearVerificationResponse.fromBuffer);
   static final _$applyVerificationSourceState = $grpc.ClientMethod<
-          $0.ApplyVerificationSourceStateRequest,
-          $0.ApplyVerificationSourceStateResponse>(
+          $1.ApplyVerificationSourceStateRequest,
+          $1.ApplyVerificationSourceStateResponse>(
       '/voice.user.v1.UserService/ApplyVerificationSourceState',
-      ($0.ApplyVerificationSourceStateRequest value) => value.writeToBuffer(),
-      $0.ApplyVerificationSourceStateResponse.fromBuffer);
+      ($1.ApplyVerificationSourceStateRequest value) => value.writeToBuffer(),
+      $1.ApplyVerificationSourceStateResponse.fromBuffer);
   static final _$startOrganizationVerification = $grpc.ClientMethod<
-          $0.StartOrganizationVerificationRequest,
-          $0.StartOrganizationVerificationResponse>(
+          $1.StartOrganizationVerificationRequest,
+          $1.StartOrganizationVerificationResponse>(
       '/voice.user.v1.UserService/StartOrganizationVerification',
-      ($0.StartOrganizationVerificationRequest value) => value.writeToBuffer(),
-      $0.StartOrganizationVerificationResponse.fromBuffer);
+      ($1.StartOrganizationVerificationRequest value) => value.writeToBuffer(),
+      $1.StartOrganizationVerificationResponse.fromBuffer);
   static final _$checkOrganizationVerification = $grpc.ClientMethod<
-          $0.CheckOrganizationVerificationRequest,
-          $0.CheckOrganizationVerificationResponse>(
+          $1.CheckOrganizationVerificationRequest,
+          $1.CheckOrganizationVerificationResponse>(
       '/voice.user.v1.UserService/CheckOrganizationVerification',
-      ($0.CheckOrganizationVerificationRequest value) => value.writeToBuffer(),
-      $0.CheckOrganizationVerificationResponse.fromBuffer);
+      ($1.CheckOrganizationVerificationRequest value) => value.writeToBuffer(),
+      $1.CheckOrganizationVerificationResponse.fromBuffer);
   static final _$applyDowngradeProfiles = $grpc.ClientMethod<
-          $0.ApplyDowngradeProfilesRequest, $0.ApplyDowngradeProfilesResponse>(
+          $1.ApplyDowngradeProfilesRequest, $1.ApplyDowngradeProfilesResponse>(
       '/voice.user.v1.UserService/ApplyDowngradeProfiles',
-      ($0.ApplyDowngradeProfilesRequest value) => value.writeToBuffer(),
-      $0.ApplyDowngradeProfilesResponse.fromBuffer);
+      ($1.ApplyDowngradeProfilesRequest value) => value.writeToBuffer(),
+      $1.ApplyDowngradeProfilesResponse.fromBuffer);
   static final _$createAvatarPresignedUpload = $grpc.ClientMethod<
-          $0.CreateAvatarPresignedUploadRequest,
-          $0.CreateAvatarPresignedUploadResponse>(
+          $1.CreateAvatarPresignedUploadRequest,
+          $1.CreateAvatarPresignedUploadResponse>(
       '/voice.user.v1.UserService/CreateAvatarPresignedUpload',
-      ($0.CreateAvatarPresignedUploadRequest value) => value.writeToBuffer(),
-      $0.CreateAvatarPresignedUploadResponse.fromBuffer);
+      ($1.CreateAvatarPresignedUploadRequest value) => value.writeToBuffer(),
+      $1.CreateAvatarPresignedUploadResponse.fromBuffer);
   static final _$beginSearchProfileSnapshot = $grpc.ClientMethod<
-          $0.BeginSearchProfileSnapshotRequest,
-          $0.BeginSearchProfileSnapshotResponse>(
+          $1.BeginSearchProfileSnapshotRequest,
+          $1.BeginSearchProfileSnapshotResponse>(
       '/voice.user.v1.UserService/BeginSearchProfileSnapshot',
-      ($0.BeginSearchProfileSnapshotRequest value) => value.writeToBuffer(),
-      $0.BeginSearchProfileSnapshotResponse.fromBuffer);
+      ($1.BeginSearchProfileSnapshotRequest value) => value.writeToBuffer(),
+      $1.BeginSearchProfileSnapshotResponse.fromBuffer);
   static final _$listSearchProfileSnapshot = $grpc.ClientMethod<
-          $0.ListSearchProfileSnapshotRequest,
-          $0.ListSearchProfileSnapshotResponse>(
+          $1.ListSearchProfileSnapshotRequest,
+          $1.ListSearchProfileSnapshotResponse>(
       '/voice.user.v1.UserService/ListSearchProfileSnapshot',
-      ($0.ListSearchProfileSnapshotRequest value) => value.writeToBuffer(),
-      $0.ListSearchProfileSnapshotResponse.fromBuffer);
+      ($1.ListSearchProfileSnapshotRequest value) => value.writeToBuffer(),
+      $1.ListSearchProfileSnapshotResponse.fromBuffer);
   static final _$listSearchProfileJournal = $grpc.ClientMethod<
-          $0.ListSearchProfileJournalRequest,
-          $0.ListSearchProfileJournalResponse>(
+          $1.ListSearchProfileJournalRequest,
+          $1.ListSearchProfileJournalResponse>(
       '/voice.user.v1.UserService/ListSearchProfileJournal',
-      ($0.ListSearchProfileJournalRequest value) => value.writeToBuffer(),
-      $0.ListSearchProfileJournalResponse.fromBuffer);
+      ($1.ListSearchProfileJournalRequest value) => value.writeToBuffer(),
+      $1.ListSearchProfileJournalResponse.fromBuffer);
   static final _$getSearchProfileCheckpoint = $grpc.ClientMethod<
-          $0.GetSearchProfileCheckpointRequest,
-          $0.GetSearchProfileCheckpointResponse>(
+          $1.GetSearchProfileCheckpointRequest,
+          $1.GetSearchProfileCheckpointResponse>(
       '/voice.user.v1.UserService/GetSearchProfileCheckpoint',
-      ($0.GetSearchProfileCheckpointRequest value) => value.writeToBuffer(),
-      $0.GetSearchProfileCheckpointResponse.fromBuffer);
+      ($1.GetSearchProfileCheckpointRequest value) => value.writeToBuffer(),
+      $1.GetSearchProfileCheckpointResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.user.v1.UserService')
@@ -584,730 +620,775 @@ abstract class UserServiceBase extends $grpc.Service {
   $core.String get $name => 'voice.user.v1.UserService';
 
   UserServiceBase() {
-    $addMethod($grpc.ServiceMethod<$0.EnsurePrimaryProfileRequest,
-            $0.EnsurePrimaryProfileResponse>(
+    $addMethod($grpc.ServiceMethod<$0.CaptureSpaceMemberAccountBindingsRequest,
+            $0.CaptureSpaceMemberAccountBindingsResponse>(
+        'CaptureSpaceMemberAccountBindings',
+        captureSpaceMemberAccountBindings_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.CaptureSpaceMemberAccountBindingsRequest.fromBuffer(value),
+        ($0.CaptureSpaceMemberAccountBindingsResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.EnsurePrimaryProfileRequest,
+            $1.EnsurePrimaryProfileResponse>(
         'EnsurePrimaryProfile',
         ensurePrimaryProfile_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.EnsurePrimaryProfileRequest.fromBuffer(value),
-        ($0.EnsurePrimaryProfileResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ListProfileIDsForAccountRequest,
-            $0.ListProfileIDsForAccountResponse>(
+            $1.EnsurePrimaryProfileRequest.fromBuffer(value),
+        ($1.EnsurePrimaryProfileResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ListProfileIDsForAccountRequest,
+            $1.ListProfileIDsForAccountResponse>(
         'ListProfileIDsForAccount',
         listProfileIDsForAccount_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ListProfileIDsForAccountRequest.fromBuffer(value),
-        ($0.ListProfileIDsForAccountResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ResolveAccountIDForProfileRequest,
-            $0.ResolveAccountIDForProfileResponse>(
+            $1.ListProfileIDsForAccountRequest.fromBuffer(value),
+        ($1.ListProfileIDsForAccountResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ResolveAccountIDForProfileRequest,
+            $1.ResolveAccountIDForProfileResponse>(
         'ResolveAccountIDForProfile',
         resolveAccountIDForProfile_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ResolveAccountIDForProfileRequest.fromBuffer(value),
-        ($0.ResolveAccountIDForProfileResponse value) =>
+            $1.ResolveAccountIDForProfileRequest.fromBuffer(value),
+        ($1.ResolveAccountIDForProfileResponse value) =>
             value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetDMPeerDisplayNamesRequest,
-            $0.GetDMPeerDisplayNamesResponse>(
+    $addMethod($grpc.ServiceMethod<$1.GetDMPeerDisplayNamesRequest,
+            $1.GetDMPeerDisplayNamesResponse>(
         'GetDMPeerDisplayNames',
         getDMPeerDisplayNames_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetDMPeerDisplayNamesRequest.fromBuffer(value),
-        ($0.GetDMPeerDisplayNamesResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ResolvePrimaryProfileIDsRequest,
-            $0.ResolvePrimaryProfileIDsResponse>(
+            $1.GetDMPeerDisplayNamesRequest.fromBuffer(value),
+        ($1.GetDMPeerDisplayNamesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ResolvePrimaryProfileIDsRequest,
+            $1.ResolvePrimaryProfileIDsResponse>(
         'ResolvePrimaryProfileIDs',
         resolvePrimaryProfileIDs_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ResolvePrimaryProfileIDsRequest.fromBuffer(value),
-        ($0.ResolvePrimaryProfileIDsResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.MarkAccountRegularRequest,
-            $0.MarkAccountRegularResponse>(
+            $1.ResolvePrimaryProfileIDsRequest.fromBuffer(value),
+        ($1.ResolvePrimaryProfileIDsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.MarkAccountRegularRequest,
+            $1.MarkAccountRegularResponse>(
         'MarkAccountRegular',
         markAccountRegular_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.MarkAccountRegularRequest.fromBuffer(value),
-        ($0.MarkAccountRegularResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetSdkProfileEligibilityRequest,
-            $0.GetSdkProfileEligibilityResponse>(
+            $1.MarkAccountRegularRequest.fromBuffer(value),
+        ($1.MarkAccountRegularResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetSdkProfileEligibilityRequest,
+            $1.GetSdkProfileEligibilityResponse>(
         'GetSdkProfileEligibility',
         getSdkProfileEligibility_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetSdkProfileEligibilityRequest.fromBuffer(value),
-        ($0.GetSdkProfileEligibilityResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.RecordSdkAuthorTombstoneRequest,
-            $0.RecordSdkAuthorTombstoneResponse>(
+            $1.GetSdkProfileEligibilityRequest.fromBuffer(value),
+        ($1.GetSdkProfileEligibilityResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<
+            $1.GetSpaceAdmissionProfileEligibilityRequest,
+            $1.GetSpaceAdmissionProfileEligibilityResponse>(
+        'GetSpaceAdmissionProfileEligibility',
+        getSpaceAdmissionProfileEligibility_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.GetSpaceAdmissionProfileEligibilityRequest.fromBuffer(value),
+        ($1.GetSpaceAdmissionProfileEligibilityResponse value) =>
+            value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.RecordSdkAuthorTombstoneRequest,
+            $1.RecordSdkAuthorTombstoneResponse>(
         'RecordSdkAuthorTombstone',
         recordSdkAuthorTombstone_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.RecordSdkAuthorTombstoneRequest.fromBuffer(value),
-        ($0.RecordSdkAuthorTombstoneResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetProfileRequest, $0.GetProfileResponse>(
+            $1.RecordSdkAuthorTombstoneRequest.fromBuffer(value),
+        ($1.RecordSdkAuthorTombstoneResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetProfileRequest, $1.GetProfileResponse>(
         'GetProfile',
         getProfile_Pre,
         false,
         false,
-        ($core.List<$core.int> value) => $0.GetProfileRequest.fromBuffer(value),
-        ($0.GetProfileResponse value) => value.writeToBuffer()));
+        ($core.List<$core.int> value) => $1.GetProfileRequest.fromBuffer(value),
+        ($1.GetProfileResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.GetProfilesRequest, $0.GetProfilesResponse>(
+        $grpc.ServiceMethod<$1.GetProfilesRequest, $1.GetProfilesResponse>(
             'GetProfiles',
             getProfiles_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.GetProfilesRequest.fromBuffer(value),
-            ($0.GetProfilesResponse value) => value.writeToBuffer()));
+                $1.GetProfilesRequest.fromBuffer(value),
+            ($1.GetProfilesResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.UpdateProfileRequest, $0.UpdateProfileResponse>(
+        $grpc.ServiceMethod<$1.UpdateProfileRequest, $1.UpdateProfileResponse>(
             'UpdateProfile',
             updateProfile_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.UpdateProfileRequest.fromBuffer(value),
-            ($0.UpdateProfileResponse value) => value.writeToBuffer()));
+                $1.UpdateProfileRequest.fromBuffer(value),
+            ($1.UpdateProfileResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.CreateProfileRequest, $0.CreateProfileResponse>(
+        $grpc.ServiceMethod<$1.CreateProfileRequest, $1.CreateProfileResponse>(
             'CreateProfile',
             createProfile_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.CreateProfileRequest.fromBuffer(value),
-            ($0.CreateProfileResponse value) => value.writeToBuffer()));
+                $1.CreateProfileRequest.fromBuffer(value),
+            ($1.CreateProfileResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.DeleteProfileRequest, $0.DeleteProfileResponse>(
+        $grpc.ServiceMethod<$1.DeleteProfileRequest, $1.DeleteProfileResponse>(
             'DeleteProfile',
             deleteProfile_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.DeleteProfileRequest.fromBuffer(value),
-            ($0.DeleteProfileResponse value) => value.writeToBuffer()));
+                $1.DeleteProfileRequest.fromBuffer(value),
+            ($1.DeleteProfileResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.SwitchProfileRequest, $0.SwitchProfileResponse>(
+        $grpc.ServiceMethod<$1.SwitchProfileRequest, $1.SwitchProfileResponse>(
             'SwitchProfile',
             switchProfile_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.SwitchProfileRequest.fromBuffer(value),
-            ($0.SwitchProfileResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ListMyProfilesRequest,
-            $0.ListMyProfilesResponse>(
+                $1.SwitchProfileRequest.fromBuffer(value),
+            ($1.SwitchProfileResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ListMyProfilesRequest,
+            $1.ListMyProfilesResponse>(
         'ListMyProfiles',
         listMyProfiles_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ListMyProfilesRequest.fromBuffer(value),
-        ($0.ListMyProfilesResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.SearchProfilesRequest,
-            $0.SearchProfilesResponse>(
+            $1.ListMyProfilesRequest.fromBuffer(value),
+        ($1.ListMyProfilesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.SearchProfilesRequest,
+            $1.SearchProfilesResponse>(
         'SearchProfiles',
         searchProfiles_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.SearchProfilesRequest.fromBuffer(value),
-        ($0.SearchProfilesResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetPrivacySettingsRequest,
-            $0.GetPrivacySettingsResponse>(
+            $1.SearchProfilesRequest.fromBuffer(value),
+        ($1.SearchProfilesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetPrivacySettingsRequest,
+            $1.GetPrivacySettingsResponse>(
         'GetPrivacySettings',
         getPrivacySettings_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetPrivacySettingsRequest.fromBuffer(value),
-        ($0.GetPrivacySettingsResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.UpdatePrivacySettingsRequest,
-            $0.UpdatePrivacySettingsResponse>(
+            $1.GetPrivacySettingsRequest.fromBuffer(value),
+        ($1.GetPrivacySettingsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.UpdatePrivacySettingsRequest,
+            $1.UpdatePrivacySettingsResponse>(
         'UpdatePrivacySettings',
         updatePrivacySettings_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.UpdatePrivacySettingsRequest.fromBuffer(value),
-        ($0.UpdatePrivacySettingsResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.UpdatePresenceRequest,
-            $0.UpdatePresenceResponse>(
+            $1.UpdatePrivacySettingsRequest.fromBuffer(value),
+        ($1.UpdatePrivacySettingsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.UpdatePresenceRequest,
+            $1.UpdatePresenceResponse>(
         'UpdatePresence',
         updatePresence_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.UpdatePresenceRequest.fromBuffer(value),
-        ($0.UpdatePresenceResponse value) => value.writeToBuffer()));
+            $1.UpdatePresenceRequest.fromBuffer(value),
+        ($1.UpdatePresenceResponse value) => value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.GetPresenceRequest, $0.GetPresenceResponse>(
+        $grpc.ServiceMethod<$1.GetPresenceRequest, $1.GetPresenceResponse>(
             'GetPresence',
             getPresence_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.GetPresenceRequest.fromBuffer(value),
-            ($0.GetPresenceResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetBulkPresenceRequest,
-            $0.GetBulkPresenceResponse>(
+                $1.GetPresenceRequest.fromBuffer(value),
+            ($1.GetPresenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetBulkPresenceRequest,
+            $1.GetBulkPresenceResponse>(
         'GetBulkPresence',
         getBulkPresence_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetBulkPresenceRequest.fromBuffer(value),
-        ($0.GetBulkPresenceResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetNotificationRoutingPresenceRequest,
-            $0.GetNotificationRoutingPresenceResponse>(
+            $1.GetBulkPresenceRequest.fromBuffer(value),
+        ($1.GetBulkPresenceResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetNotificationRoutingPresenceRequest,
+            $1.GetNotificationRoutingPresenceResponse>(
         'GetNotificationRoutingPresence',
         getNotificationRoutingPresence_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetNotificationRoutingPresenceRequest.fromBuffer(value),
-        ($0.GetNotificationRoutingPresenceResponse value) =>
+            $1.GetNotificationRoutingPresenceRequest.fromBuffer(value),
+        ($1.GetNotificationRoutingPresenceResponse value) =>
             value.writeToBuffer()));
     $addMethod($grpc.ServiceMethod<
-            $0.GetScheduledMessageDispatchPresenceRequest,
-            $0.GetScheduledMessageDispatchPresenceResponse>(
+            $1.GetScheduledMessageDispatchPresenceRequest,
+            $1.GetScheduledMessageDispatchPresenceResponse>(
         'GetScheduledMessageDispatchPresence',
         getScheduledMessageDispatchPresence_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetScheduledMessageDispatchPresenceRequest.fromBuffer(value),
-        ($0.GetScheduledMessageDispatchPresenceResponse value) =>
+            $1.GetScheduledMessageDispatchPresenceRequest.fromBuffer(value),
+        ($1.GetScheduledMessageDispatchPresenceResponse value) =>
             value.writeToBuffer()));
     $addMethod(
-        $grpc.ServiceMethod<$0.GetSettingsRequest, $0.GetSettingsResponse>(
+        $grpc.ServiceMethod<$1.GetSettingsRequest, $1.GetSettingsResponse>(
             'GetSettings',
             getSettings_Pre,
             false,
             false,
             ($core.List<$core.int> value) =>
-                $0.GetSettingsRequest.fromBuffer(value),
-            ($0.GetSettingsResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.UpdateSettingsRequest,
-            $0.UpdateSettingsResponse>(
+                $1.GetSettingsRequest.fromBuffer(value),
+            ($1.GetSettingsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.UpdateSettingsRequest,
+            $1.UpdateSettingsResponse>(
         'UpdateSettings',
         updateSettings_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.UpdateSettingsRequest.fromBuffer(value),
-        ($0.UpdateSettingsResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetOnboardingStateRequest,
-            $0.GetOnboardingStateResponse>(
+            $1.UpdateSettingsRequest.fromBuffer(value),
+        ($1.UpdateSettingsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetOnboardingStateRequest,
+            $1.GetOnboardingStateResponse>(
         'GetOnboardingState',
         getOnboardingState_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetOnboardingStateRequest.fromBuffer(value),
-        ($0.GetOnboardingStateResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.CompleteOnboardingStepRequest,
-            $0.CompleteOnboardingStepResponse>(
+            $1.GetOnboardingStateRequest.fromBuffer(value),
+        ($1.GetOnboardingStateResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.CompleteOnboardingStepRequest,
+            $1.CompleteOnboardingStepResponse>(
         'CompleteOnboardingStep',
         completeOnboardingStep_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.CompleteOnboardingStepRequest.fromBuffer(value),
-        ($0.CompleteOnboardingStepResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetVerificationStatusRequest,
-            $0.GetVerificationStatusResponse>(
+            $1.CompleteOnboardingStepRequest.fromBuffer(value),
+        ($1.CompleteOnboardingStepResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetVerificationStatusRequest,
+            $1.GetVerificationStatusResponse>(
         'GetVerificationStatus',
         getVerificationStatus_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetVerificationStatusRequest.fromBuffer(value),
-        ($0.GetVerificationStatusResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.SetVerificationRequest,
-            $0.SetVerificationResponse>(
+            $1.GetVerificationStatusRequest.fromBuffer(value),
+        ($1.GetVerificationStatusResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.SetVerificationRequest,
+            $1.SetVerificationResponse>(
         'SetVerification',
         setVerification_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.SetVerificationRequest.fromBuffer(value),
-        ($0.SetVerificationResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ClearVerificationRequest,
-            $0.ClearVerificationResponse>(
+            $1.SetVerificationRequest.fromBuffer(value),
+        ($1.SetVerificationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ClearVerificationRequest,
+            $1.ClearVerificationResponse>(
         'ClearVerification',
         clearVerification_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ClearVerificationRequest.fromBuffer(value),
-        ($0.ClearVerificationResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ApplyVerificationSourceStateRequest,
-            $0.ApplyVerificationSourceStateResponse>(
+            $1.ClearVerificationRequest.fromBuffer(value),
+        ($1.ClearVerificationResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ApplyVerificationSourceStateRequest,
+            $1.ApplyVerificationSourceStateResponse>(
         'ApplyVerificationSourceState',
         applyVerificationSourceState_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ApplyVerificationSourceStateRequest.fromBuffer(value),
-        ($0.ApplyVerificationSourceStateResponse value) =>
+            $1.ApplyVerificationSourceStateRequest.fromBuffer(value),
+        ($1.ApplyVerificationSourceStateResponse value) =>
             value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.StartOrganizationVerificationRequest,
-            $0.StartOrganizationVerificationResponse>(
+    $addMethod($grpc.ServiceMethod<$1.StartOrganizationVerificationRequest,
+            $1.StartOrganizationVerificationResponse>(
         'StartOrganizationVerification',
         startOrganizationVerification_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.StartOrganizationVerificationRequest.fromBuffer(value),
-        ($0.StartOrganizationVerificationResponse value) =>
+            $1.StartOrganizationVerificationRequest.fromBuffer(value),
+        ($1.StartOrganizationVerificationResponse value) =>
             value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.CheckOrganizationVerificationRequest,
-            $0.CheckOrganizationVerificationResponse>(
+    $addMethod($grpc.ServiceMethod<$1.CheckOrganizationVerificationRequest,
+            $1.CheckOrganizationVerificationResponse>(
         'CheckOrganizationVerification',
         checkOrganizationVerification_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.CheckOrganizationVerificationRequest.fromBuffer(value),
-        ($0.CheckOrganizationVerificationResponse value) =>
+            $1.CheckOrganizationVerificationRequest.fromBuffer(value),
+        ($1.CheckOrganizationVerificationResponse value) =>
             value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ApplyDowngradeProfilesRequest,
-            $0.ApplyDowngradeProfilesResponse>(
+    $addMethod($grpc.ServiceMethod<$1.ApplyDowngradeProfilesRequest,
+            $1.ApplyDowngradeProfilesResponse>(
         'ApplyDowngradeProfiles',
         applyDowngradeProfiles_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ApplyDowngradeProfilesRequest.fromBuffer(value),
-        ($0.ApplyDowngradeProfilesResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.CreateAvatarPresignedUploadRequest,
-            $0.CreateAvatarPresignedUploadResponse>(
+            $1.ApplyDowngradeProfilesRequest.fromBuffer(value),
+        ($1.ApplyDowngradeProfilesResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.CreateAvatarPresignedUploadRequest,
+            $1.CreateAvatarPresignedUploadResponse>(
         'CreateAvatarPresignedUpload',
         createAvatarPresignedUpload_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.CreateAvatarPresignedUploadRequest.fromBuffer(value),
-        ($0.CreateAvatarPresignedUploadResponse value) =>
+            $1.CreateAvatarPresignedUploadRequest.fromBuffer(value),
+        ($1.CreateAvatarPresignedUploadResponse value) =>
             value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.BeginSearchProfileSnapshotRequest,
-            $0.BeginSearchProfileSnapshotResponse>(
+    $addMethod($grpc.ServiceMethod<$1.BeginSearchProfileSnapshotRequest,
+            $1.BeginSearchProfileSnapshotResponse>(
         'BeginSearchProfileSnapshot',
         beginSearchProfileSnapshot_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.BeginSearchProfileSnapshotRequest.fromBuffer(value),
-        ($0.BeginSearchProfileSnapshotResponse value) =>
+            $1.BeginSearchProfileSnapshotRequest.fromBuffer(value),
+        ($1.BeginSearchProfileSnapshotResponse value) =>
             value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ListSearchProfileSnapshotRequest,
-            $0.ListSearchProfileSnapshotResponse>(
+    $addMethod($grpc.ServiceMethod<$1.ListSearchProfileSnapshotRequest,
+            $1.ListSearchProfileSnapshotResponse>(
         'ListSearchProfileSnapshot',
         listSearchProfileSnapshot_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ListSearchProfileSnapshotRequest.fromBuffer(value),
-        ($0.ListSearchProfileSnapshotResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.ListSearchProfileJournalRequest,
-            $0.ListSearchProfileJournalResponse>(
+            $1.ListSearchProfileSnapshotRequest.fromBuffer(value),
+        ($1.ListSearchProfileSnapshotResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.ListSearchProfileJournalRequest,
+            $1.ListSearchProfileJournalResponse>(
         'ListSearchProfileJournal',
         listSearchProfileJournal_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.ListSearchProfileJournalRequest.fromBuffer(value),
-        ($0.ListSearchProfileJournalResponse value) => value.writeToBuffer()));
-    $addMethod($grpc.ServiceMethod<$0.GetSearchProfileCheckpointRequest,
-            $0.GetSearchProfileCheckpointResponse>(
+            $1.ListSearchProfileJournalRequest.fromBuffer(value),
+        ($1.ListSearchProfileJournalResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetSearchProfileCheckpointRequest,
+            $1.GetSearchProfileCheckpointResponse>(
         'GetSearchProfileCheckpoint',
         getSearchProfileCheckpoint_Pre,
         false,
         false,
         ($core.List<$core.int> value) =>
-            $0.GetSearchProfileCheckpointRequest.fromBuffer(value),
-        ($0.GetSearchProfileCheckpointResponse value) =>
+            $1.GetSearchProfileCheckpointRequest.fromBuffer(value),
+        ($1.GetSearchProfileCheckpointResponse value) =>
             value.writeToBuffer()));
   }
 
-  $async.Future<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile_Pre(
+  $async.Future<$0.CaptureSpaceMemberAccountBindingsResponse>
+      captureSpaceMemberAccountBindings_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$0.CaptureSpaceMemberAccountBindingsRequest>
+              $request) async {
+    return captureSpaceMemberAccountBindings($call, await $request);
+  }
+
+  $async.Future<$0.CaptureSpaceMemberAccountBindingsResponse>
+      captureSpaceMemberAccountBindings($grpc.ServiceCall call,
+          $0.CaptureSpaceMemberAccountBindingsRequest request);
+
+  $async.Future<$1.EnsurePrimaryProfileResponse> ensurePrimaryProfile_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.EnsurePrimaryProfileRequest> $request) async {
+      $async.Future<$1.EnsurePrimaryProfileRequest> $request) async {
     return ensurePrimaryProfile($call, await $request);
   }
 
-  $async.Future<$0.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
-      $grpc.ServiceCall call, $0.EnsurePrimaryProfileRequest request);
+  $async.Future<$1.EnsurePrimaryProfileResponse> ensurePrimaryProfile(
+      $grpc.ServiceCall call, $1.EnsurePrimaryProfileRequest request);
 
-  $async.Future<$0.ListProfileIDsForAccountResponse>
+  $async.Future<$1.ListProfileIDsForAccountResponse>
       listProfileIDsForAccount_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.ListProfileIDsForAccountRequest> $request) async {
+          $async.Future<$1.ListProfileIDsForAccountRequest> $request) async {
     return listProfileIDsForAccount($call, await $request);
   }
 
-  $async.Future<$0.ListProfileIDsForAccountResponse> listProfileIDsForAccount(
-      $grpc.ServiceCall call, $0.ListProfileIDsForAccountRequest request);
+  $async.Future<$1.ListProfileIDsForAccountResponse> listProfileIDsForAccount(
+      $grpc.ServiceCall call, $1.ListProfileIDsForAccountRequest request);
 
-  $async.Future<$0.ResolveAccountIDForProfileResponse>
+  $async.Future<$1.ResolveAccountIDForProfileResponse>
       resolveAccountIDForProfile_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.ResolveAccountIDForProfileRequest> $request) async {
+          $async.Future<$1.ResolveAccountIDForProfileRequest> $request) async {
     return resolveAccountIDForProfile($call, await $request);
   }
 
-  $async.Future<$0.ResolveAccountIDForProfileResponse>
+  $async.Future<$1.ResolveAccountIDForProfileResponse>
       resolveAccountIDForProfile(
-          $grpc.ServiceCall call, $0.ResolveAccountIDForProfileRequest request);
+          $grpc.ServiceCall call, $1.ResolveAccountIDForProfileRequest request);
 
-  $async.Future<$0.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames_Pre(
+  $async.Future<$1.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.GetDMPeerDisplayNamesRequest> $request) async {
+      $async.Future<$1.GetDMPeerDisplayNamesRequest> $request) async {
     return getDMPeerDisplayNames($call, await $request);
   }
 
-  $async.Future<$0.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames(
-      $grpc.ServiceCall call, $0.GetDMPeerDisplayNamesRequest request);
+  $async.Future<$1.GetDMPeerDisplayNamesResponse> getDMPeerDisplayNames(
+      $grpc.ServiceCall call, $1.GetDMPeerDisplayNamesRequest request);
 
-  $async.Future<$0.ResolvePrimaryProfileIDsResponse>
+  $async.Future<$1.ResolvePrimaryProfileIDsResponse>
       resolvePrimaryProfileIDs_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.ResolvePrimaryProfileIDsRequest> $request) async {
+          $async.Future<$1.ResolvePrimaryProfileIDsRequest> $request) async {
     return resolvePrimaryProfileIDs($call, await $request);
   }
 
-  $async.Future<$0.ResolvePrimaryProfileIDsResponse> resolvePrimaryProfileIDs(
-      $grpc.ServiceCall call, $0.ResolvePrimaryProfileIDsRequest request);
+  $async.Future<$1.ResolvePrimaryProfileIDsResponse> resolvePrimaryProfileIDs(
+      $grpc.ServiceCall call, $1.ResolvePrimaryProfileIDsRequest request);
 
-  $async.Future<$0.MarkAccountRegularResponse> markAccountRegular_Pre(
+  $async.Future<$1.MarkAccountRegularResponse> markAccountRegular_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.MarkAccountRegularRequest> $request) async {
+      $async.Future<$1.MarkAccountRegularRequest> $request) async {
     return markAccountRegular($call, await $request);
   }
 
-  $async.Future<$0.MarkAccountRegularResponse> markAccountRegular(
-      $grpc.ServiceCall call, $0.MarkAccountRegularRequest request);
+  $async.Future<$1.MarkAccountRegularResponse> markAccountRegular(
+      $grpc.ServiceCall call, $1.MarkAccountRegularRequest request);
 
-  $async.Future<$0.GetSdkProfileEligibilityResponse>
+  $async.Future<$1.GetSdkProfileEligibilityResponse>
       getSdkProfileEligibility_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.GetSdkProfileEligibilityRequest> $request) async {
+          $async.Future<$1.GetSdkProfileEligibilityRequest> $request) async {
     return getSdkProfileEligibility($call, await $request);
   }
 
-  $async.Future<$0.GetSdkProfileEligibilityResponse> getSdkProfileEligibility(
-      $grpc.ServiceCall call, $0.GetSdkProfileEligibilityRequest request);
+  $async.Future<$1.GetSdkProfileEligibilityResponse> getSdkProfileEligibility(
+      $grpc.ServiceCall call, $1.GetSdkProfileEligibilityRequest request);
 
-  $async.Future<$0.RecordSdkAuthorTombstoneResponse>
+  $async.Future<$1.GetSpaceAdmissionProfileEligibilityResponse>
+      getSpaceAdmissionProfileEligibility_Pre(
+          $grpc.ServiceCall $call,
+          $async.Future<$1.GetSpaceAdmissionProfileEligibilityRequest>
+              $request) async {
+    return getSpaceAdmissionProfileEligibility($call, await $request);
+  }
+
+  $async.Future<$1.GetSpaceAdmissionProfileEligibilityResponse>
+      getSpaceAdmissionProfileEligibility($grpc.ServiceCall call,
+          $1.GetSpaceAdmissionProfileEligibilityRequest request);
+
+  $async.Future<$1.RecordSdkAuthorTombstoneResponse>
       recordSdkAuthorTombstone_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.RecordSdkAuthorTombstoneRequest> $request) async {
+          $async.Future<$1.RecordSdkAuthorTombstoneRequest> $request) async {
     return recordSdkAuthorTombstone($call, await $request);
   }
 
-  $async.Future<$0.RecordSdkAuthorTombstoneResponse> recordSdkAuthorTombstone(
-      $grpc.ServiceCall call, $0.RecordSdkAuthorTombstoneRequest request);
+  $async.Future<$1.RecordSdkAuthorTombstoneResponse> recordSdkAuthorTombstone(
+      $grpc.ServiceCall call, $1.RecordSdkAuthorTombstoneRequest request);
 
-  $async.Future<$0.GetProfileResponse> getProfile_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.GetProfileRequest> $request) async {
+  $async.Future<$1.GetProfileResponse> getProfile_Pre($grpc.ServiceCall $call,
+      $async.Future<$1.GetProfileRequest> $request) async {
     return getProfile($call, await $request);
   }
 
-  $async.Future<$0.GetProfileResponse> getProfile(
-      $grpc.ServiceCall call, $0.GetProfileRequest request);
+  $async.Future<$1.GetProfileResponse> getProfile(
+      $grpc.ServiceCall call, $1.GetProfileRequest request);
 
-  $async.Future<$0.GetProfilesResponse> getProfiles_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.GetProfilesRequest> $request) async {
+  $async.Future<$1.GetProfilesResponse> getProfiles_Pre($grpc.ServiceCall $call,
+      $async.Future<$1.GetProfilesRequest> $request) async {
     return getProfiles($call, await $request);
   }
 
-  $async.Future<$0.GetProfilesResponse> getProfiles(
-      $grpc.ServiceCall call, $0.GetProfilesRequest request);
+  $async.Future<$1.GetProfilesResponse> getProfiles(
+      $grpc.ServiceCall call, $1.GetProfilesRequest request);
 
-  $async.Future<$0.UpdateProfileResponse> updateProfile_Pre(
+  $async.Future<$1.UpdateProfileResponse> updateProfile_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.UpdateProfileRequest> $request) async {
+      $async.Future<$1.UpdateProfileRequest> $request) async {
     return updateProfile($call, await $request);
   }
 
-  $async.Future<$0.UpdateProfileResponse> updateProfile(
-      $grpc.ServiceCall call, $0.UpdateProfileRequest request);
+  $async.Future<$1.UpdateProfileResponse> updateProfile(
+      $grpc.ServiceCall call, $1.UpdateProfileRequest request);
 
-  $async.Future<$0.CreateProfileResponse> createProfile_Pre(
+  $async.Future<$1.CreateProfileResponse> createProfile_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.CreateProfileRequest> $request) async {
+      $async.Future<$1.CreateProfileRequest> $request) async {
     return createProfile($call, await $request);
   }
 
-  $async.Future<$0.CreateProfileResponse> createProfile(
-      $grpc.ServiceCall call, $0.CreateProfileRequest request);
+  $async.Future<$1.CreateProfileResponse> createProfile(
+      $grpc.ServiceCall call, $1.CreateProfileRequest request);
 
-  $async.Future<$0.DeleteProfileResponse> deleteProfile_Pre(
+  $async.Future<$1.DeleteProfileResponse> deleteProfile_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.DeleteProfileRequest> $request) async {
+      $async.Future<$1.DeleteProfileRequest> $request) async {
     return deleteProfile($call, await $request);
   }
 
-  $async.Future<$0.DeleteProfileResponse> deleteProfile(
-      $grpc.ServiceCall call, $0.DeleteProfileRequest request);
+  $async.Future<$1.DeleteProfileResponse> deleteProfile(
+      $grpc.ServiceCall call, $1.DeleteProfileRequest request);
 
-  $async.Future<$0.SwitchProfileResponse> switchProfile_Pre(
+  $async.Future<$1.SwitchProfileResponse> switchProfile_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.SwitchProfileRequest> $request) async {
+      $async.Future<$1.SwitchProfileRequest> $request) async {
     return switchProfile($call, await $request);
   }
 
-  $async.Future<$0.SwitchProfileResponse> switchProfile(
-      $grpc.ServiceCall call, $0.SwitchProfileRequest request);
+  $async.Future<$1.SwitchProfileResponse> switchProfile(
+      $grpc.ServiceCall call, $1.SwitchProfileRequest request);
 
-  $async.Future<$0.ListMyProfilesResponse> listMyProfiles_Pre(
+  $async.Future<$1.ListMyProfilesResponse> listMyProfiles_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.ListMyProfilesRequest> $request) async {
+      $async.Future<$1.ListMyProfilesRequest> $request) async {
     return listMyProfiles($call, await $request);
   }
 
-  $async.Future<$0.ListMyProfilesResponse> listMyProfiles(
-      $grpc.ServiceCall call, $0.ListMyProfilesRequest request);
+  $async.Future<$1.ListMyProfilesResponse> listMyProfiles(
+      $grpc.ServiceCall call, $1.ListMyProfilesRequest request);
 
-  $async.Future<$0.SearchProfilesResponse> searchProfiles_Pre(
+  $async.Future<$1.SearchProfilesResponse> searchProfiles_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.SearchProfilesRequest> $request) async {
+      $async.Future<$1.SearchProfilesRequest> $request) async {
     return searchProfiles($call, await $request);
   }
 
-  $async.Future<$0.SearchProfilesResponse> searchProfiles(
-      $grpc.ServiceCall call, $0.SearchProfilesRequest request);
+  $async.Future<$1.SearchProfilesResponse> searchProfiles(
+      $grpc.ServiceCall call, $1.SearchProfilesRequest request);
 
-  $async.Future<$0.GetPrivacySettingsResponse> getPrivacySettings_Pre(
+  $async.Future<$1.GetPrivacySettingsResponse> getPrivacySettings_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.GetPrivacySettingsRequest> $request) async {
+      $async.Future<$1.GetPrivacySettingsRequest> $request) async {
     return getPrivacySettings($call, await $request);
   }
 
-  $async.Future<$0.GetPrivacySettingsResponse> getPrivacySettings(
-      $grpc.ServiceCall call, $0.GetPrivacySettingsRequest request);
+  $async.Future<$1.GetPrivacySettingsResponse> getPrivacySettings(
+      $grpc.ServiceCall call, $1.GetPrivacySettingsRequest request);
 
-  $async.Future<$0.UpdatePrivacySettingsResponse> updatePrivacySettings_Pre(
+  $async.Future<$1.UpdatePrivacySettingsResponse> updatePrivacySettings_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.UpdatePrivacySettingsRequest> $request) async {
+      $async.Future<$1.UpdatePrivacySettingsRequest> $request) async {
     return updatePrivacySettings($call, await $request);
   }
 
-  $async.Future<$0.UpdatePrivacySettingsResponse> updatePrivacySettings(
-      $grpc.ServiceCall call, $0.UpdatePrivacySettingsRequest request);
+  $async.Future<$1.UpdatePrivacySettingsResponse> updatePrivacySettings(
+      $grpc.ServiceCall call, $1.UpdatePrivacySettingsRequest request);
 
-  $async.Future<$0.UpdatePresenceResponse> updatePresence_Pre(
+  $async.Future<$1.UpdatePresenceResponse> updatePresence_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.UpdatePresenceRequest> $request) async {
+      $async.Future<$1.UpdatePresenceRequest> $request) async {
     return updatePresence($call, await $request);
   }
 
-  $async.Future<$0.UpdatePresenceResponse> updatePresence(
-      $grpc.ServiceCall call, $0.UpdatePresenceRequest request);
+  $async.Future<$1.UpdatePresenceResponse> updatePresence(
+      $grpc.ServiceCall call, $1.UpdatePresenceRequest request);
 
-  $async.Future<$0.GetPresenceResponse> getPresence_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.GetPresenceRequest> $request) async {
+  $async.Future<$1.GetPresenceResponse> getPresence_Pre($grpc.ServiceCall $call,
+      $async.Future<$1.GetPresenceRequest> $request) async {
     return getPresence($call, await $request);
   }
 
-  $async.Future<$0.GetPresenceResponse> getPresence(
-      $grpc.ServiceCall call, $0.GetPresenceRequest request);
+  $async.Future<$1.GetPresenceResponse> getPresence(
+      $grpc.ServiceCall call, $1.GetPresenceRequest request);
 
-  $async.Future<$0.GetBulkPresenceResponse> getBulkPresence_Pre(
+  $async.Future<$1.GetBulkPresenceResponse> getBulkPresence_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.GetBulkPresenceRequest> $request) async {
+      $async.Future<$1.GetBulkPresenceRequest> $request) async {
     return getBulkPresence($call, await $request);
   }
 
-  $async.Future<$0.GetBulkPresenceResponse> getBulkPresence(
-      $grpc.ServiceCall call, $0.GetBulkPresenceRequest request);
+  $async.Future<$1.GetBulkPresenceResponse> getBulkPresence(
+      $grpc.ServiceCall call, $1.GetBulkPresenceRequest request);
 
-  $async.Future<$0.GetNotificationRoutingPresenceResponse>
+  $async.Future<$1.GetNotificationRoutingPresenceResponse>
       getNotificationRoutingPresence_Pre(
           $grpc.ServiceCall $call,
-          $async.Future<$0.GetNotificationRoutingPresenceRequest>
+          $async.Future<$1.GetNotificationRoutingPresenceRequest>
               $request) async {
     return getNotificationRoutingPresence($call, await $request);
   }
 
-  $async.Future<$0.GetNotificationRoutingPresenceResponse>
+  $async.Future<$1.GetNotificationRoutingPresenceResponse>
       getNotificationRoutingPresence($grpc.ServiceCall call,
-          $0.GetNotificationRoutingPresenceRequest request);
+          $1.GetNotificationRoutingPresenceRequest request);
 
-  $async.Future<$0.GetScheduledMessageDispatchPresenceResponse>
+  $async.Future<$1.GetScheduledMessageDispatchPresenceResponse>
       getScheduledMessageDispatchPresence_Pre(
           $grpc.ServiceCall $call,
-          $async.Future<$0.GetScheduledMessageDispatchPresenceRequest>
+          $async.Future<$1.GetScheduledMessageDispatchPresenceRequest>
               $request) async {
     return getScheduledMessageDispatchPresence($call, await $request);
   }
 
-  $async.Future<$0.GetScheduledMessageDispatchPresenceResponse>
+  $async.Future<$1.GetScheduledMessageDispatchPresenceResponse>
       getScheduledMessageDispatchPresence($grpc.ServiceCall call,
-          $0.GetScheduledMessageDispatchPresenceRequest request);
+          $1.GetScheduledMessageDispatchPresenceRequest request);
 
-  $async.Future<$0.GetSettingsResponse> getSettings_Pre($grpc.ServiceCall $call,
-      $async.Future<$0.GetSettingsRequest> $request) async {
+  $async.Future<$1.GetSettingsResponse> getSettings_Pre($grpc.ServiceCall $call,
+      $async.Future<$1.GetSettingsRequest> $request) async {
     return getSettings($call, await $request);
   }
 
-  $async.Future<$0.GetSettingsResponse> getSettings(
-      $grpc.ServiceCall call, $0.GetSettingsRequest request);
+  $async.Future<$1.GetSettingsResponse> getSettings(
+      $grpc.ServiceCall call, $1.GetSettingsRequest request);
 
-  $async.Future<$0.UpdateSettingsResponse> updateSettings_Pre(
+  $async.Future<$1.UpdateSettingsResponse> updateSettings_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.UpdateSettingsRequest> $request) async {
+      $async.Future<$1.UpdateSettingsRequest> $request) async {
     return updateSettings($call, await $request);
   }
 
-  $async.Future<$0.UpdateSettingsResponse> updateSettings(
-      $grpc.ServiceCall call, $0.UpdateSettingsRequest request);
+  $async.Future<$1.UpdateSettingsResponse> updateSettings(
+      $grpc.ServiceCall call, $1.UpdateSettingsRequest request);
 
-  $async.Future<$0.GetOnboardingStateResponse> getOnboardingState_Pre(
+  $async.Future<$1.GetOnboardingStateResponse> getOnboardingState_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.GetOnboardingStateRequest> $request) async {
+      $async.Future<$1.GetOnboardingStateRequest> $request) async {
     return getOnboardingState($call, await $request);
   }
 
-  $async.Future<$0.GetOnboardingStateResponse> getOnboardingState(
-      $grpc.ServiceCall call, $0.GetOnboardingStateRequest request);
+  $async.Future<$1.GetOnboardingStateResponse> getOnboardingState(
+      $grpc.ServiceCall call, $1.GetOnboardingStateRequest request);
 
-  $async.Future<$0.CompleteOnboardingStepResponse> completeOnboardingStep_Pre(
+  $async.Future<$1.CompleteOnboardingStepResponse> completeOnboardingStep_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.CompleteOnboardingStepRequest> $request) async {
+      $async.Future<$1.CompleteOnboardingStepRequest> $request) async {
     return completeOnboardingStep($call, await $request);
   }
 
-  $async.Future<$0.CompleteOnboardingStepResponse> completeOnboardingStep(
-      $grpc.ServiceCall call, $0.CompleteOnboardingStepRequest request);
+  $async.Future<$1.CompleteOnboardingStepResponse> completeOnboardingStep(
+      $grpc.ServiceCall call, $1.CompleteOnboardingStepRequest request);
 
-  $async.Future<$0.GetVerificationStatusResponse> getVerificationStatus_Pre(
+  $async.Future<$1.GetVerificationStatusResponse> getVerificationStatus_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.GetVerificationStatusRequest> $request) async {
+      $async.Future<$1.GetVerificationStatusRequest> $request) async {
     return getVerificationStatus($call, await $request);
   }
 
-  $async.Future<$0.GetVerificationStatusResponse> getVerificationStatus(
-      $grpc.ServiceCall call, $0.GetVerificationStatusRequest request);
+  $async.Future<$1.GetVerificationStatusResponse> getVerificationStatus(
+      $grpc.ServiceCall call, $1.GetVerificationStatusRequest request);
 
-  $async.Future<$0.SetVerificationResponse> setVerification_Pre(
+  $async.Future<$1.SetVerificationResponse> setVerification_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.SetVerificationRequest> $request) async {
+      $async.Future<$1.SetVerificationRequest> $request) async {
     return setVerification($call, await $request);
   }
 
-  $async.Future<$0.SetVerificationResponse> setVerification(
-      $grpc.ServiceCall call, $0.SetVerificationRequest request);
+  $async.Future<$1.SetVerificationResponse> setVerification(
+      $grpc.ServiceCall call, $1.SetVerificationRequest request);
 
-  $async.Future<$0.ClearVerificationResponse> clearVerification_Pre(
+  $async.Future<$1.ClearVerificationResponse> clearVerification_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.ClearVerificationRequest> $request) async {
+      $async.Future<$1.ClearVerificationRequest> $request) async {
     return clearVerification($call, await $request);
   }
 
-  $async.Future<$0.ClearVerificationResponse> clearVerification(
-      $grpc.ServiceCall call, $0.ClearVerificationRequest request);
+  $async.Future<$1.ClearVerificationResponse> clearVerification(
+      $grpc.ServiceCall call, $1.ClearVerificationRequest request);
 
-  $async.Future<$0.ApplyVerificationSourceStateResponse>
+  $async.Future<$1.ApplyVerificationSourceStateResponse>
       applyVerificationSourceState_Pre(
           $grpc.ServiceCall $call,
-          $async.Future<$0.ApplyVerificationSourceStateRequest>
+          $async.Future<$1.ApplyVerificationSourceStateRequest>
               $request) async {
     return applyVerificationSourceState($call, await $request);
   }
 
-  $async.Future<$0.ApplyVerificationSourceStateResponse>
+  $async.Future<$1.ApplyVerificationSourceStateResponse>
       applyVerificationSourceState($grpc.ServiceCall call,
-          $0.ApplyVerificationSourceStateRequest request);
+          $1.ApplyVerificationSourceStateRequest request);
 
-  $async.Future<$0.StartOrganizationVerificationResponse>
+  $async.Future<$1.StartOrganizationVerificationResponse>
       startOrganizationVerification_Pre(
           $grpc.ServiceCall $call,
-          $async.Future<$0.StartOrganizationVerificationRequest>
+          $async.Future<$1.StartOrganizationVerificationRequest>
               $request) async {
     return startOrganizationVerification($call, await $request);
   }
 
-  $async.Future<$0.StartOrganizationVerificationResponse>
+  $async.Future<$1.StartOrganizationVerificationResponse>
       startOrganizationVerification($grpc.ServiceCall call,
-          $0.StartOrganizationVerificationRequest request);
+          $1.StartOrganizationVerificationRequest request);
 
-  $async.Future<$0.CheckOrganizationVerificationResponse>
+  $async.Future<$1.CheckOrganizationVerificationResponse>
       checkOrganizationVerification_Pre(
           $grpc.ServiceCall $call,
-          $async.Future<$0.CheckOrganizationVerificationRequest>
+          $async.Future<$1.CheckOrganizationVerificationRequest>
               $request) async {
     return checkOrganizationVerification($call, await $request);
   }
 
-  $async.Future<$0.CheckOrganizationVerificationResponse>
+  $async.Future<$1.CheckOrganizationVerificationResponse>
       checkOrganizationVerification($grpc.ServiceCall call,
-          $0.CheckOrganizationVerificationRequest request);
+          $1.CheckOrganizationVerificationRequest request);
 
-  $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles_Pre(
+  $async.Future<$1.ApplyDowngradeProfilesResponse> applyDowngradeProfiles_Pre(
       $grpc.ServiceCall $call,
-      $async.Future<$0.ApplyDowngradeProfilesRequest> $request) async {
+      $async.Future<$1.ApplyDowngradeProfilesRequest> $request) async {
     return applyDowngradeProfiles($call, await $request);
   }
 
-  $async.Future<$0.ApplyDowngradeProfilesResponse> applyDowngradeProfiles(
-      $grpc.ServiceCall call, $0.ApplyDowngradeProfilesRequest request);
+  $async.Future<$1.ApplyDowngradeProfilesResponse> applyDowngradeProfiles(
+      $grpc.ServiceCall call, $1.ApplyDowngradeProfilesRequest request);
 
-  $async.Future<$0.CreateAvatarPresignedUploadResponse>
+  $async.Future<$1.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.CreateAvatarPresignedUploadRequest> $request) async {
+          $async.Future<$1.CreateAvatarPresignedUploadRequest> $request) async {
     return createAvatarPresignedUpload($call, await $request);
   }
 
-  $async.Future<$0.CreateAvatarPresignedUploadResponse>
+  $async.Future<$1.CreateAvatarPresignedUploadResponse>
       createAvatarPresignedUpload($grpc.ServiceCall call,
-          $0.CreateAvatarPresignedUploadRequest request);
+          $1.CreateAvatarPresignedUploadRequest request);
 
-  $async.Future<$0.BeginSearchProfileSnapshotResponse>
+  $async.Future<$1.BeginSearchProfileSnapshotResponse>
       beginSearchProfileSnapshot_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.BeginSearchProfileSnapshotRequest> $request) async {
+          $async.Future<$1.BeginSearchProfileSnapshotRequest> $request) async {
     return beginSearchProfileSnapshot($call, await $request);
   }
 
-  $async.Future<$0.BeginSearchProfileSnapshotResponse>
+  $async.Future<$1.BeginSearchProfileSnapshotResponse>
       beginSearchProfileSnapshot(
-          $grpc.ServiceCall call, $0.BeginSearchProfileSnapshotRequest request);
+          $grpc.ServiceCall call, $1.BeginSearchProfileSnapshotRequest request);
 
-  $async.Future<$0.ListSearchProfileSnapshotResponse>
+  $async.Future<$1.ListSearchProfileSnapshotResponse>
       listSearchProfileSnapshot_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.ListSearchProfileSnapshotRequest> $request) async {
+          $async.Future<$1.ListSearchProfileSnapshotRequest> $request) async {
     return listSearchProfileSnapshot($call, await $request);
   }
 
-  $async.Future<$0.ListSearchProfileSnapshotResponse> listSearchProfileSnapshot(
-      $grpc.ServiceCall call, $0.ListSearchProfileSnapshotRequest request);
+  $async.Future<$1.ListSearchProfileSnapshotResponse> listSearchProfileSnapshot(
+      $grpc.ServiceCall call, $1.ListSearchProfileSnapshotRequest request);
 
-  $async.Future<$0.ListSearchProfileJournalResponse>
+  $async.Future<$1.ListSearchProfileJournalResponse>
       listSearchProfileJournal_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.ListSearchProfileJournalRequest> $request) async {
+          $async.Future<$1.ListSearchProfileJournalRequest> $request) async {
     return listSearchProfileJournal($call, await $request);
   }
 
-  $async.Future<$0.ListSearchProfileJournalResponse> listSearchProfileJournal(
-      $grpc.ServiceCall call, $0.ListSearchProfileJournalRequest request);
+  $async.Future<$1.ListSearchProfileJournalResponse> listSearchProfileJournal(
+      $grpc.ServiceCall call, $1.ListSearchProfileJournalRequest request);
 
-  $async.Future<$0.GetSearchProfileCheckpointResponse>
+  $async.Future<$1.GetSearchProfileCheckpointResponse>
       getSearchProfileCheckpoint_Pre($grpc.ServiceCall $call,
-          $async.Future<$0.GetSearchProfileCheckpointRequest> $request) async {
+          $async.Future<$1.GetSearchProfileCheckpointRequest> $request) async {
     return getSearchProfileCheckpoint($call, await $request);
   }
 
-  $async.Future<$0.GetSearchProfileCheckpointResponse>
+  $async.Future<$1.GetSearchProfileCheckpointResponse>
       getSearchProfileCheckpoint(
-          $grpc.ServiceCall call, $0.GetSearchProfileCheckpointRequest request);
+          $grpc.ServiceCall call, $1.GetSearchProfileCheckpointRequest request);
 }

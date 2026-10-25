@@ -1,8 +1,10 @@
 """Fixed Bot004 forward constraint prerequisite; no row changes or repair."""
 class PrerequisiteError(ValueError):pass
 
-# Empty strings are deliberately included: the canonical unique index excludes
-# NULL only, and the historical polling writer uses the empty string.
+# Bot004 includes empty strings, so pre-Bot007 schemas must veto those collisions.
+# Bot007 excludes legacy empty message tokens; nonempty interaction identities
+# remain unique under every supported schema.
+# Bot008 adds membership evidence tables without changing this token index.
 SQL="""BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '30s';
 SELECT json_build_object('database',current_database(),
@@ -10,7 +12,9 @@ SELECT json_build_object('database',current_database(),
  'dirty',(SELECT dirty FROM schema_migrations),
  'duplicate_token_groups',(SELECT count(*) FROM
    (SELECT bot_id,interaction_token FROM bot_event_log
-    WHERE interaction_token IS NOT NULL GROUP BY bot_id,interaction_token
+    WHERE interaction_token IS NOT NULL
+      AND ((SELECT version FROM schema_migrations) < 7 OR interaction_token <> '')
+    GROUP BY bot_id,interaction_token
     HAVING count(*)>1) AS conflicts));
 ROLLBACK;
 """
@@ -22,7 +26,7 @@ def required(plan):
 def verify(row):
     keys={'database','version','dirty','duplicate_token_groups'}
     if (not isinstance(row,dict) or set(row)!=keys or row['database']!='bot_db'
-        or type(row['version']) is not int or not 1<=row['version']<=6
+        or type(row['version']) is not int or not 1<=row['version']<=8
         or row['dirty'] is not False or type(row['duplicate_token_groups']) is not int
         or row['duplicate_token_groups']!=0):
         raise PrerequisiteError('bot_forward_constraint_prerequisite_failed')

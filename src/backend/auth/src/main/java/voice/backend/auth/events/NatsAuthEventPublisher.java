@@ -17,10 +17,19 @@ import voice.events.v1.JetstreamEvents.UserStreamEvent;
 
 /** Publishes Auth events to NATS JetStream subject user.guest_converted. */
 public class NatsAuthEventPublisher
-    implements AuthEventPublisher, GuestConversionEventPublisher, AccountDeletionEventPublisher {
+    implements AuthEventPublisher, GuestConversionEventPublisher, AccountDeletionEventPublisher, AutoCloseable {
   private static final Logger log = LoggerFactory.getLogger(NatsAuthEventPublisher.class);
 
   private final Connection connection;
+
+  NatsAuthEventPublisher(Connection connection) {
+    this.connection = java.util.Objects.requireNonNull(connection);
+  }
+
+  @Override
+  public void close() throws InterruptedException {
+    connection.close();
+  }
 
   public NatsAuthEventPublisher(String natsUrl, String credentialsFile) {
     try {
@@ -86,6 +95,15 @@ public class NatsAuthEventPublisher
     } catch (Exception failure) {
       throw new IllegalStateException("create JetStream account deletion publisher", failure);
     }
+  }
+
+  /** Called exclusively by the observation worker; never waits on an Auth request thread. */
+  public boolean publishObservation(String subject, byte[] bytes, String eventId) throws Exception {
+    var headers = new io.nats.client.impl.Headers();
+    headers.put("Nats-Msg-Id", eventId);
+    var options = io.nats.client.JetStreamOptions.builder().requestTimeout(Duration.ofSeconds(1)).build();
+    var ack = connection.jetStream(options).publish(subject, headers, bytes);
+    return ack != null && "user_events".equals(ack.getStream()) && ack.getSeqno() > 0;
   }
 
   private void publish(String subject, UUID accountId) {

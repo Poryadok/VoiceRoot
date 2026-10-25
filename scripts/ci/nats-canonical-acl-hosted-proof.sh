@@ -314,7 +314,7 @@ func denied(nc *nats.Conn, errors <-chan error, subject string, subscribe bool) 
 func main() {
   chat, chatErrors := connect("chat", "_INBOX.voice.chat")
   defer chat.Close()
-  auth, _ := connect("auth", "_INBOX.voice.auth.requests")
+  auth, authErrors := connect("auth", "_INBOX.voice.auth.requests")
   defer auth.Close()
   js, err := chat.JetStream()
   if err != nil { panic(err) }
@@ -327,12 +327,22 @@ func main() {
   msg, err := sub.NextMsg(5*time.Second)
   if err != nil { panic(err) }
   if err := msg.AckSync(nats.AckWait(2*time.Second)); err != nil { panic(err) }
+  authJS, err := auth.JetStream()
+  if err != nil { panic(err) }
+  for _, subject := range []string{"user.registered", "user.logged_in", "user.logged_out", "user.2fa_enabled"} {
+    ack, err := authJS.Publish(subject, []byte("canonical-auth-observation-proof"), nats.AckWait(time.Second))
+    if err != nil { panic(err) }
+    if ack == nil || ack.Stream != "user_events" || ack.Sequence == 0 { panic("Auth observation missing user_events PubAck") }
+  }
+  denied(auth, authErrors, "user.unreviewed", false)
+  denied(auth, authErrors, "$JS.API.STREAM.UPDATE.user_events", false)
+  denied(auth, authErrors, "_INBOX.voice.chat.foreign", true)
   denied(chat, chatErrors, "user.account_deleted", false)
   denied(chat, chatErrors, "$JS.API.CONSUMER.CREATE.user_events.unreviewed", false)
   denied(chat, chatErrors, "$JS.API.CONSUMER.INFO.user_events.user-account-deletion-v1", false)
   denied(chat, chatErrors, "$JS.ACK.user_events.user-account-deletion-v1.1.1.1.1.1", false)
   denied(chat, chatErrors, "_INBOX.voice.messaging.foreign", true)
-  fmt.Println("canonical JWT ACL positive delivery/ACK and neighboring denials passed")
+  fmt.Println("canonical JWT ACL positive delivery/ACK, four Auth observation PubAcks and neighboring denials passed")
   os.Exit(0)
 }
 EOF

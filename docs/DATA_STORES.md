@@ -12,15 +12,15 @@
 |----------------------|-------------------|---------------------------|----------------------------------|
 | API Gateway          | —                 | rate limit, JWT blacklist; session-epoch floor | —                  |
 | Auth Service         | `auth_db`         | blacklist, session-epoch floor, principal replay, limits, OTP | —            |
-| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay | — |
+| User Service         | `user_db` (profiles and immutable SDK author tombstones) | presence cache; Social and Auth principal replay; profile-mutation quotas | — |
 | Social Service       | `social_db`       | —                         | `friend_accept_outbox` retries accepted-friend events; `friend_request_outbox` durably publishes friend invitations |
 | Chat Service         | `chat_db`         | MatchSquad operation/receipt evidence (full request/receipt bytes retained until aggregate teardown completion can be proven); protected RPC replay guard in `chat:match-squad:principal:replay:<hex(SHA-256(issuer || NUL || JTI))>` | NATS JetStream (publish); transactional `chat.deleted` outbox |
-| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
-| Realtime Service     | —                 | Pub/Sub, WS registry; session-epoch floor read/check | NATS (не БД)          |
-| Space Service        | `space_db`        | Social principal replay   | —                                |
+| Messaging Service    | `messaging_db`    | —                         | `message_event_outbox` persists enabled message events; `message_send_receipts` binds private exact immediate-send retries to their message and RPC; `messaging_music_file_snapshots` retains the latest File metadata revision and tombstone across late message inserts |
+| Realtime Service     | `realtime_db` (P3 metadata only; migration `000001_admission`) | Pub/Sub; session-epoch floor; protected Space principal replay; WS connections/subscriptions remain instance-local memory | NATS; no message payload or recipient history |
+| Space Service        | `space_db`        | Social principal replay; shared signed Voice/Messaging communication-decision replay | — |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
-| Voice Service        | `voice_db`        | active-call compatibility projection + lifecycle admission/receipt mirror; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
-| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации       |
+| Voice Service        | `voice_db`, including `voice_space_media_admission_owners` workflow token/epoch/DB lease and exact dispatch-fence acknowledgement | active-call compatibility projection + lifecycle admission/receipt mirror; per-admission dispatch nonce/epoch gate; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
+| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации; `files.preview_metadata_revision` and `file_preview_event_outbox` atomically retain redacted generic preview facts independently of Music; `file_expiry_event_outbox` retains exact logical-expiry envelopes until acknowledged, independently of byte GC |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
 | Matchmaking Service  | `matchmaking_db`  | очереди, locks            | —                                |
@@ -69,6 +69,7 @@ services.
 | Переменная | Назначение |
 |------------|------------|
 | `CLICKHOUSE_DSN` | DSN для `clickhouse-go` (например `clickhouse://default@clickhouse:9000/voice`) |
+| `ANALYTICS_REQUIRE_PERSISTENCE` | Staging/prod: `true`, обязательные DSN и HMAC key. Допустимы `true/false`, `1/0`, `yes/no` (без учёта регистра); пустое значение — локальный режим, неизвестное значение останавливает запуск. |
 | `NATS_URL` | JetStream consumers (domain streams + `analytics_events`) |
 | `ANALYTICS_ID_HASH_KEY` | HMAC-соль для `account_id` / `profile_id` (не коммитить) |
 | `ANALYTICS_BATCH_MAX_EVENTS` | Размер батча (default 1000) |
@@ -76,7 +77,32 @@ services.
 
 Для локального compose задайте `ANALYTICS_ID_HASH_KEY` в `.env` или используйте dev default из `docker-compose.yml`.
 
+Staging/prod manifests требуют оба ключа Secret: `CLICKHOUSE_DSN` и
+`ANALYTICS_ID_HASH_KEY`. При обязательной persistence пустой DSN, отсутствующий
+HMAC key или dev default останавливают процесс до открытия listeners. Настроенный
+DSN должен пройти parse и ClickHouse Ping; ошибка подключения также прерывает
+запуск. Локальный режим без DSN оставляет только HTTP health/metrics и не запускает
+gRPC ingest/query или NATS consumer; это не доказательство работающей persistence.
+
 Для `API Gateway` канонично **нет service-owned PostgreSQL**. Политика версий клиента (`/api/v1/version`) может храниться либо в managed config store, либо в отдельной control-plane БД/таблице (`client_versions`) под владением Gateway как edge-политики; это не означает появление отдельной доменной БД Gateway в inventory.
+
+The accepted external audit replay design adds a Space-owned global ID registry
+with local-origin fences or versioned external fingerprints. Its transaction
+includes audit insertion and the existing same-ID outbox. Compact receipts do not
+expire with ordinary 365-day payload retention or cascade from audit/outbox;
+authorized P3 minimization must explicitly include them and fence late imports.
+See [Space audit replay codec](microservices/space-service.md#durable-external-replay-codec-v1)
+and [external details codec](microservices/space-service.md#external-audit-details-codec-v1).
+BE-130 implements the ingestion store and migration `000027_audit_ingestion`;
+real PostgreSQL proof and normal delivery gates remain required. No deployment
+follows from this source description. Rollback refuses any nonempty receipt
+registry, so it cannot silently erase reservations retained after payload cleanup.
+Migration `000029_audit_receipt_minimization` separately erases full external
+fingerprints at aggregate `PURGED + 30 days`, verified against the permanent
+Space fence and database clock. ID/Space/origin markers remain; ordinary
+365-day cleanup never starts this deadline. The immutable trigger permits only
+that due erasure and refuses marker/key changes or deletion. BE-005's cleanup
+integration and real PostgreSQL proof remain required; this does not activate P3.
 
 ### BE-116 Space audit durable ownership (accepted target; not implemented)
 
@@ -112,12 +138,18 @@ proof receipts. Runtime configuration is documented in
 
 ### `chat_db` (Chat Service)
 
+Standalone chat management uses `chats.member_additions_enabled` (default true)
+and `chat_members.post_as_chat` (default false). The latter belongs to one
+membership and disappears with its row; rejoin receives no restored grant.
+No cross-database FK or writable copy of Space/Role grants is introduced.
+
 Инвентарь ядра + backlog — [chat-service.md](microservices/chat-service.md) § «Модель данных»; scope matrix — [DATA_SCOPE_V1.md](DATA_SCOPE_V1.md) §4.4 / §8.
 
 | Таблица | Примечание |
 |---------|------------|
 | `chats`, `chat_members` | Shipped — DM/group/channel, `is_archived`, `inbox_bucket` |
 | `chat_create_requests` | Migration `000022`; authenticated creator + request UUID, canonical request hash and saved create-result snapshot committed with the chat |
+| `chat_scope_authority_heads` | Migration `000025`; permanent per-chat positive revision and attachment incarnation head, retained across delete/recreate. Source/lifecycle/managed ownership changes maintain it transactionally; no TTL, truncate, revision reset or safe DOWN. `chats.scope_incarnation` is the current native attachment UUID. |
 | `folders`, `folder_chats` | **Shipped** — migrations `000008`/`000009`; folder CRUD and membership handlers are implemented |
 | `quick_access_chats` | **Shipped** — migration `000010` (Batch 17) |
 | `sticker_packs` | Catalog metadata (`is_system`, `is_premium`, `creator_profile_id`) — **0 code** |
@@ -139,6 +171,19 @@ Sticker/GIF bytes live in **`file_db`** (`files`); send payloads in **`messaging
 
 ---
 
+### `messaging_db` (Messaging Service): File preview projection
+
+BE-080 adds private per-slot `messages.file_preview_bindings` established by the
+protected exact MESSAGE-reference resolver. `messaging_file_preview_snapshots`
+retains canonical highest revisions and terminal floors without a broker-retention
+TTL; `messaging_file_preview_pending` durably retains destination work through
+freeze/retry. `messaging_file_preview_reconciliation` records bounded owner-row
+discovery passes and `messaging_file_preview_errors` records per-row retry gaps.
+These are owner projections and repair evidence, never viewer capabilities or
+cross-database foreign keys. Snapshot/outbox payloads contain no URL or R2 key.
+Music retains its independent existing state. See the [implementation plan](testing/be080-file-preview-exec-plan.md)
+for current verification and activation obligations.
+
 ### `messaging_db` (Messaging Service): ListThreads successor (accepted target)
 
 The bounded `ListThreads` successor keeps all projection state in `messaging_db` and has **no cross-database foreign keys**. Chat remains the membership authority and delivers durable membership events through an outbox; Messaging records consumed events idempotently.
@@ -153,6 +198,20 @@ The bounded `ListThreads` successor keeps all projection state in `messaging_db`
 
 The build worker retains journal entries through the minimum `BUILDING` baseline watermark. Cursor/node GC after 15 minutes preserves nodes reachable from READY heads or unexpired cursor states. This accepted target is not yet migrated or activated; execution details live in [listthreads-versioned-readmodel-exec-plan.md](testing/listthreads-versioned-readmodel-exec-plan.md).
 ### `voice_db` (Voice Service)
+
+The opt-in ordinary DM/group SDK runtime uses migration `000012_ordinary_calls`:
+`voice_ordinary_rooms` is the native operation/membership/effect aggregate and
+private CAS/roster counters; `voice_ordinary_memberships` is a same-transaction
+lookup index, not another account-exclusivity authority;
+`voice_ordinary_outbox` stores immutable protobuf bytes, IDs, recipients/order and
+delivery leases. Account ownership stays in the shared
+`voice_account_voice_fences`, with exact operation/generation and nonexpiring
+pending ordinary ownership. Conversion receipts keep an immutable native-source
+snapshot; NULL historical pending provenance is unknown and cannot imply absence.
+Terminal native rows/retired media identities persist for stale-bearer and late
+effect reconciliation. DOWN refuses journal or native snapshot evidence; JWT
+expiry alone never authorizes removing tombstones. Runtime/cutover boundaries:
+[Voice service ordinary lifecycle](microservices/voice-service.md#ordinary-dmgroup-sdk-lifecycle-opt-in-runtime-rollout-unverified).
 
 Voice owns `voice_room_instances`, `voice_room_memberships`,
 `voice_lifecycle_operations`, `voice_lifecycle_effects`,
@@ -172,6 +231,14 @@ there is no cross-service foreign key. A `GAME_SESSION` room cannot have an
 owner, while `MATCH_SQUAD` still requires one.
 Redis is a rebuildable, non-authoritative mirror; Voice stores no cross-service
 foreign keys to profile/account owners.
+
+BE-273 accepted Space moderator-mute target extends Voice-owned PostgreSQL
+Space admission persistence with per-logical-room/profile desired flag/version,
+operation receipts/pending effects, issued source vectors and exact retired
+media identities. These are durable authority/evidence, not Redis TTL state;
+normal room empty/reopen does not remove a restriction. The schema is not yet
+migrated or activated. See [ownership](DATA_MODEL.md#space-moderator-mute-ownership-be-273-accepted-target)
+and [implementation plan](testing/space-moderator-mute-exec-plan.md).
 
 ### MatchSquad provider state
 
@@ -211,6 +278,18 @@ the old deferred-runtime description is superseded.
 
 ---
 
+## User profile-mutation quotas
+
+User owns ephemeral anti-abuse keys
+`user:profile-mutations:v1:{account_uuid}:create` and `:delete` (sorted sets),
+with a `:sequence` counter for each operation. One atomic Lua admission uses
+Redis TIME and admits up to 10 authenticated attempts per rolling hour per
+account per operation. Keys contain timestamps and sequence values, no profile
+payload. Both keys expire one hour after the last admission; denials do not
+renew retention. All User replicas use the existing `USER_REDIS_ADDR`.
+Quota state is separate from durable profile ownership/archival. Redis loss
+fails closed for these mutations; there is no instance-local fallback.
+
 ## Redis: один кластер или несколько
 
 В документации зоны использования разные (Gateway, Auth, User presence, Realtime, Voice, Notification, Matchmaking). На старте обычно **один Redis** с разделением по ключам/префиксам; при росте — вынести Realtime / Matchmaking в отдельные инстансы по нагрузке.
@@ -248,6 +327,15 @@ cache fails closed; this ephemeral replay key is not File-reference authority.
 
 ### Role ownership principal replay
 
+The separate BE-065 Role override-target listeners use receiver-owned Redis
+prefixes `chat:role-override:principal:replay:` and
+`space:role-override:principal:replay:`. The suffix is SHA-256 of
+`issuer + NUL + jti`; atomic `SET NX` uses the signed credential's remaining
+lifetime rounded up to milliseconds. Redis failure fails closed before owner
+store reads. These short-lived replay keys are not resource authority or cached
+positive validation. Configuration is in the
+[Role service contract](microservices/role-service.md#be-065-runtime-configuration).
+
 Social privacy consumers also use shared Redis configured by
 `USER_PRINCIPAL_REPLAY_REDIS_ADDR` and `SPACE_PRINCIPAL_REPLAY_REDIS_ADDR`.
 Keys are `user:principal:replay:<sha256(issuer + NUL + jti)>` and
@@ -267,6 +355,19 @@ Role ownership operation receipts remain durable in `role_db` and implement
 business idempotency independently of per-attempt JWT replay rejection.
 
 ## P3 Space lifecycle storage inventory (accepted target)
+
+Composite Space Chat creation stores a no-domain-FK
+`space_chat_creation_fences` row separately from private protobuf outcome bytes
+in `space_chat_creation_evidence`. The former permanently reserves operation,
+Chat, node and audit IDs and contains only the nonpersonal allowlist in
+[DATA_MODEL.md](DATA_MODEL.md#p3-space-deletion-ownership-and-file-references-accepted-target).
+`space_permanent_purge_fences` keeps the Space/deletion-operation/generation/time
+boundary after owner tombstone expiry. It is not the purpose-specific account
+HMAC tombstone and needs no new HMAC family. Live evidence has no ordinary TTL;
+terminal Space purge atomically fixes its deadline to aggregate PURGED+30d.
+Chat's own private evidence uses its own local purge completion+30d. Database
+time enforces the cutoff even if physical cleanup is delayed. Cleanup removes
+all full bytes/personal indexes/digests without removing compact fences.
 
 | Store owner | Additive durable data |
 |---|---|

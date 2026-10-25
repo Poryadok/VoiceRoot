@@ -15,10 +15,12 @@ func TestSpaceChatCreationUsesCanonicalSpaceMutationLock(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
 	}
+	setupCtx, setupCancel := context.WithTimeout(context.Background(), time.Minute)
+	defer setupCancel()
+	pool := startChatDBForStoreTest(t, setupCtx)
+	applyChatMigrationsForStoreTest(t, setupCtx, pool)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	pool := startChatDBForStoreTest(t, ctx)
-	applyChatMigrationsForStoreTest(t, ctx, pool)
 	spaceID := uuid.New()
 	assertWaitsForSpaceLock := func(name string, lockedSpaceID uuid.UUID, run func() error) {
 		t.Helper()

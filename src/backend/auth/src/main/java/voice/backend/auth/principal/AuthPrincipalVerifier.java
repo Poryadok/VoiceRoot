@@ -25,12 +25,31 @@ public final class AuthPrincipalVerifier {
       .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private final KeyResolver keys;
+  private boolean identityAuthority;
+  /** Closed identity authority; never reuses delegated-user or legacy method grants. */
+  public static AuthPrincipalVerifier identityAuthority(KeyResolver keys, ReplayGuard replay, Clock clock) {
+    var result = new AuthPrincipalVerifier(keys,
+        account -> { throw new IllegalStateException("identity authority has no user epoch capability"); }, replay, clock);
+    result.identityAuthority = true;
+    return result;
+  }
+  private final KeyResolver botFloorKeys;
   private final EpochLookup epochs;
   private final ReplayGuard replay;
   private final Clock clock;
+  private static final Set<String> BOT_FLOOR_CLAIMS = Set.of("iss", "sub", "principal_type", "aud", "rpc",
+      "request_id", "request_hash", "jti", "iat", "nbf", "exp");
+
+  private static final Set<String> CHAT_FLOOR_CLAIMS = Set.of("iss", "sub", "principal_type", "aud", "rpc",
+      "request_id", "request_hash", "jti", "iat", "nbf", "exp");
 
   public AuthPrincipalVerifier(KeyResolver keys, EpochLookup epochs, ReplayGuard replay, Clock clock) {
+    this(keys, epochs, replay, clock, keys);
+  }
+
+  public AuthPrincipalVerifier(KeyResolver keys, EpochLookup epochs, ReplayGuard replay, Clock clock, KeyResolver botFloorKeys) {
     this.keys = Objects.requireNonNull(keys);
+    this.botFloorKeys = Objects.requireNonNull(botFloorKeys);
     this.epochs = Objects.requireNonNull(epochs);
     this.replay = Objects.requireNonNull(replay);
     this.clock = Objects.requireNonNull(clock);
@@ -43,6 +62,10 @@ public final class AuthPrincipalVerifier {
     try {
       if (token == null || token.length() > 32768 || requestId == null || requestId.isBlank()
           || requestHash == null || !requestHash.matches("sha256:[0-9a-f]{64}")) throw invalid();
+      if (AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc)) {
+        UUID id = uuid(requestId);
+        if (id.getMostSignificantBits() == 0 && id.getLeastSignificantBits() == 0) throw invalid();
+      }
       String[] parts = token.split("\\.", -1);
       if (parts.length != 3) throw invalid();
       var decoder = Base64.getUrlDecoder();
@@ -52,8 +75,8 @@ public final class AuthPrincipalVerifier {
       if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw invalid();
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
-      if (!Set.of("gateway", "space", "voice").contains(issuer)) throw invalid();
-      RSAPublicKey key = keys.resolve(issuer, kid);
+      if (!(identityAuthority ? Set.of("role", "user") : Set.of("gateway", "space", "voice", "role", "bot", "chat")).contains(issuer)) throw invalid();
+      RSAPublicKey key = (AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc) ? botFloorKeys : keys).resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
       signature.initVerify(key);
@@ -72,11 +95,24 @@ public final class AuthPrincipalVerifier {
       jti = string(claims, "jti");
       String kind = string(claims, "principal_type");
       String subject = string(claims, "sub");
+      if ((AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
+          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc))
+          && !VerifiedPrincipal.SERVICE.equals(kind)) throw invalid();
       if (VerifiedPrincipal.SERVICE.equals(kind)) {
         if (!subject.equals("service:" + issuer)) throw invalid();
+        if (AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)) {
+          var names = claims.fieldNames();
+          while (names.hasNext()) if (!BOT_FLOOR_CLAIMS.contains(names.next())) throw invalid();
+        }
+        if (AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc)) {
+          var names = claims.fieldNames();
+          while (names.hasNext()) if (!CHAT_FLOOR_CLAIMS.contains(names.next())) throw invalid();
+        }
+        if ((identityAuthority || AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc))
+            && (claims.has("account_id") || claims.has("profile_id") || claims.has("session_epoch"))) throw invalid();
         principal = new VerifiedPrincipal(kind, issuer, null, null, 0);
       } else if (VerifiedPrincipal.DELEGATED_USER.equals(kind)) {
-        if (!"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
+        if (identityAuthority || !"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
         UUID account = uuid(subject);
         UUID profile = uuid(string(claims, "profile_id"));
         long epoch = integer(claims, "session_epoch");
@@ -87,11 +123,26 @@ public final class AuthPrincipalVerifier {
         throw invalid();
       }
     } catch (Exception ex) {
+      if ((AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
+          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc))
+          && ex instanceof PrincipalDependencyUnavailableException) {
+        throw Status.UNAVAILABLE.withDescription("principal authority unavailable").asRuntimeException();
+      }
       // Do not expose credentials, identities, network endpoints or parser details.
       throw Status.UNAUTHENTICATED.withDescription("invalid principal").asRuntimeException();
     }
-    boolean allowed = AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
+    boolean allowed = AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("chat")
+        : AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("bot")
+        : AuthPrincipalServerInterceptor.SPACE_ADMISSION_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space")
+        : AuthPrincipalServerInterceptor.VOICE_SESSION_FLOOR_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("voice")
+        : AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("space")
+        : AuthPrincipalServerInterceptor.ROLE_SESSION_FLOOR_RPC.equals(rpc)
+        ? principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("role")
         : AuthPrincipalServerInterceptor.ISSUE_RPC.equals(rpc)
         ? principal.kind().equals(VerifiedPrincipal.DELEGATED_USER) && principal.issuer().equals("gateway")
         : (AuthPrincipalServerInterceptor.CONSUME_RPC.equals(rpc) || AuthPrincipalServerInterceptor.LOOKUP_RPC.equals(rpc))
@@ -102,12 +153,25 @@ public final class AuthPrincipalVerifier {
         AuthPrincipalServerInterceptor.SPACE_DELETE_ACK_RPC).contains(rpc)
         && principal.kind().equals(VerifiedPrincipal.SERVICE)
         && principal.issuer().equals("space"));
+    if (identityAuthority) {
+      allowed = principal.kind().equals(VerifiedPrincipal.SERVICE)
+          && ((principal.issuer().equals("role")
+              && rpc.equals("/voice.identityerasure.v1.AuthRoleIdentityAuthorityService/ObserveAccounts"))
+              || (principal.issuer().equals("user") && Set.of(
+                  "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ResolveAccountHandle",
+                  "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ObserveAccountHandles").contains(rpc)));
+    }
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
       if (!expires.isAfter(clock.instant())) throw invalid();
       replay.record(principal.issuer(), jti, expires);
       if (!expires.isAfter(clock.instant())) throw invalid();
     } catch (Exception ex) {
+      if ((AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
+          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc))
+          && ex instanceof PrincipalDependencyUnavailableException) {
+        throw Status.UNAVAILABLE.withDescription("principal authority unavailable").asRuntimeException();
+      }
       throw Status.UNAUTHENTICATED.withDescription("invalid principal").asRuntimeException();
     }
     return principal;

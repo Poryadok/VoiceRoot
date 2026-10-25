@@ -72,6 +72,25 @@ NATS message.sent/edited/deleted ──► Search Service ──► Update index
 - Удаление → remove from index
 - E2E сообщения → skip
 
+### Ordinary Space refresh (accepted target, not implemented)
+
+`BE038-ORDINARY-v1` consumes `space.created`, `space.updated`,
+`space.member_joined`, `space.member_left` and `space.member_banned` from the
+shared `chat_events` stream using `search-indexer-chat-v1`. Events are unordered
+invalidation hints: refresh current Space authority for every update key,
+including empty legacy/unknown keys, and hydrate member count rather than apply
+event arithmetic. Serialize a Space's fetch-through-commit across replicas;
+transient/permission failures retry, only authoritative NotFound removes an
+obsolete row. ACK follows durable projection commit or a valid no-op.
+
+Keep the canonical catalog visibility predicate and caller checks; remove the
+public projection on public-to-private transitions. The projection transaction
+checks P3 FROZEN/PURGED fences so delayed facts cannot resurrect a Space. Use a
+supported Space service API, never forged user metadata or another service's
+database. Invite codes and ban identities never enter the public projection.
+Exact failure/recovery and T1–T12 acceptance rules are in the
+[ordinary event delivery plan](../testing/space-ordinary-events-exec-plan.md).
+
 ## Публикуемые события (→ NATS)
 
 Отдельного доменного stream **`search.events`** нет: события ниже — **продуктовая телеметрия** для аналитики; публикация в subject'ы вида **`analytics.search.*`** (см. раздел «Аналитика» в [MICROSERVICES.md](../MICROSERVICES.md)).

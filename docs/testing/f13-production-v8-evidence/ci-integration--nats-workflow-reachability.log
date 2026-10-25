@@ -1,0 +1,4 @@
+Command: bash scripts/ci/nats-search-jetstream-workflow-contract_test.sh
+staging NATS diagnostic workflow contract passed
+
+exit_code=0

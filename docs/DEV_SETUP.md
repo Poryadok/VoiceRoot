@@ -76,6 +76,26 @@ node scripts\git\selftest-history-rewrite.js
 
 ## 4. Окружение и Docker Compose
 
+Compose использует PostgreSQL 18 и Redis 8 согласно целевому стеку
+[`MICROSERVICES.md`](MICROSERVICES.md). Это версии локального Compose;
+манифесты существующих DEV/STAGING/production и их фактические версии проверяются
+отдельно перед защищённым rollout.
+
+Перед обновлением существующего Compose остановите приложения и сохраните
+проверенный logical backup всех БД PostgreSQL 16. Замена image не обновляет
+формат данных: PostgreSQL 18 откажется запускать старый `voice_pgdata`.
+`PGDATA=/var/lib/postgresql/data` задан явно, чтобы PostgreSQL 18 не создал
+другой пустой cluster в новом стандартном каталоге. Старый volume не удаляйте
+и не запускайте `down -v` для обновления. Восстановление выполняйте в отдельный
+Compose project с новыми volumes на PostgreSQL 18; проверьте migration state,
+количество/целостность данных и приложение до переключения. Для возврата
+сохраните старый PostgreSQL 16 volume и совместимый checkout; PostgreSQL 16
+не открывает PostgreSQL 18 data directory. Redis AOF также требует backup и
+отдельной проверки восстановления перед обновлением существующих данных.
+
+Официальный образ PostgreSQL 18 изменил стандартный `PGDATA`; здесь оставлен
+явный совместимый mount layout: [описание образа](https://hub.docker.com/_/postgres).
+
 ```powershell
 copy .env.example .env
 # при необходимости отредактировать порты — см. README

@@ -9,6 +9,7 @@ import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/bots_client.dart';
+import 'package:voice_frontend/gen/voice/bot/v1/bot.pb.dart' as bot_pb;
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
@@ -27,6 +28,16 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  test('installed bot status stays unknown when the wire field is absent', () {
+    final status = InstalledBotInfo.fromProto(
+      bot_pb.InstalledBot(
+        bot: bot_pb.Bot(id: 'bot-unknown', name: 'UnknownBot'),
+      ),
+    );
+
+    expect(status.online, isNull);
+  });
+
   testWidgets('chat bot list uses the canonical skeleton while loading', (
     tester,
   ) async {
@@ -97,6 +108,323 @@ void main() {
     );
   }
 
+  testWidgets(
+    'per-chat bot rows show only authoritative offline status and retain toggles across layouts',
+    (tester) async {
+      const bots = [
+        ChatBotSettings(
+          bot: VoiceBotSummary(
+            id: 'bot-offline',
+            name: 'OfflineBot',
+            description: 'offline',
+            scopesJson: '[]',
+          ),
+          enabled: true,
+          whitelisted: true,
+        ),
+        ChatBotSettings(
+          bot: VoiceBotSummary(
+            id: 'bot-online',
+            name: 'OnlineBot',
+            description: 'online',
+            scopesJson: '[]',
+          ),
+          enabled: true,
+          whitelisted: true,
+        ),
+        ChatBotSettings(
+          bot: VoiceBotSummary(
+            id: 'bot-unknown',
+            name: 'UnknownBot',
+            description: 'unknown',
+            scopesJson: '[]',
+          ),
+          enabled: false,
+          whitelisted: true,
+        ),
+      ];
+      const installed = [
+        InstalledBotInfo(
+          bot: VoiceBotSummary(
+            id: 'bot-offline',
+            name: 'OfflineBot',
+            description: 'offline',
+            scopesJson: '[]',
+          ),
+          installationId: 'install-offline',
+          allowedChatIds: ['chat-1'],
+          online: false,
+        ),
+        InstalledBotInfo(
+          bot: VoiceBotSummary(
+            id: 'bot-online',
+            name: 'OnlineBot',
+            description: 'online',
+            scopesJson: '[]',
+          ),
+          installationId: 'install-online',
+          allowedChatIds: ['chat-1'],
+          online: true,
+        ),
+        InstalledBotInfo(
+          bot: VoiceBotSummary(
+            id: 'bot-unknown',
+            name: 'UnknownBot',
+            description: 'unknown',
+            scopesJson: '[]',
+          ),
+          installationId: 'install-unknown',
+          allowedChatIds: ['chat-1'],
+          online: null,
+        ),
+      ];
+      final requests = <http.Request>[];
+
+      tester.view
+        ..physicalSize = const Size(360, 800)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        testApp(
+          home: const ChatBotsSettingsSection(
+            chatId: 'chat-1',
+            spaceId: 'space-1',
+          ),
+          client: MockClient((request) async {
+            requests.add(request);
+            return http.Response('', 204);
+          }),
+          extraOverrides: [
+            spacePermissionProvider((
+              spaceId: 'space-1',
+              permission: 'SPACE_MANAGE_BOTS',
+              chatId: null,
+              voiceRoomId: null,
+            )).overrideWith((ref) async => true),
+            botsInChatProvider((
+              chatId: 'chat-1',
+              spaceId: 'space-1',
+            )).overrideWith((ref) async => bots),
+            installedBotsProvider(
+              'space-1',
+            ).overrideWith((ref) async => installed),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('chat_bot_offline_indicator_bot-offline')),
+        findsOneWidget,
+        reason: 'online:false from the installed-bot DTO must be visible',
+      );
+      expect(
+        find.byKey(const Key('chat_bot_offline_indicator_bot-online')),
+        findsNothing,
+        reason: 'online:true must not be rendered as offline',
+      );
+      expect(
+        find.byKey(const Key('chat_bot_offline_indicator_bot-unknown')),
+        findsNothing,
+        reason: 'missing online presence must remain unknown, not offline',
+      );
+      final toggle = tester.widget<SwitchListTile>(
+        find.byKey(const Key('chat_bot_toggle_bot-offline')),
+      );
+      expect(toggle.value, isTrue);
+      expect(toggle.onChanged, isNotNull);
+      expect(tester.takeException(), isNull);
+
+      tester.view.physicalSize = const Size(960, 720);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('chat_bot_offline_indicator_bot-offline')),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const Key('chat_bot_toggle_bot-offline')),
+            )
+            .onChanged,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+      expect(requests, isEmpty, reason: 'rendering status must be read-only');
+    },
+  );
+
+  testWidgets('per-chat bot status stays unknown while presence is loading', (
+    tester,
+  ) async {
+    final pending = Completer<List<InstalledBotInfo>>();
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatBotsSettingsSection(
+          chatId: 'chat-1',
+          spaceId: 'space-1',
+        ),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          spacePermissionProvider((
+            spaceId: 'space-1',
+            permission: 'SPACE_MANAGE_BOTS',
+            chatId: null,
+            voiceRoomId: null,
+          )).overrideWith((ref) async => true),
+          botsInChatProvider((
+            chatId: 'chat-1',
+            spaceId: 'space-1',
+          )).overrideWith(
+            (ref) async => const [
+              ChatBotSettings(
+                bot: VoiceBotSummary(
+                  id: 'bot-pending',
+                  name: 'PendingBot',
+                  description: '',
+                  scopesJson: '[]',
+                ),
+                enabled: false,
+                whitelisted: true,
+              ),
+            ],
+          ),
+          installedBotsProvider(
+            'space-1',
+          ).overrideWith((ref) => pending.future),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('chat_bot_offline_indicator_bot-pending')),
+      findsNothing,
+      reason: 'pending presence is unknown, not offline',
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.byKey(const Key('chat_bot_toggle_bot-pending')),
+          )
+          .value,
+      isFalse,
+    );
+    pending.complete(const []);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('chat_bot_offline_indicator_bot-pending')),
+      findsNothing,
+      reason: 'a bot missing from the installed response remains unknown',
+    );
+  });
+
+  testWidgets('per-chat bot presence error retries without inventing offline', (
+    tester,
+  ) async {
+    const offlineBot = InstalledBotInfo(
+      bot: VoiceBotSummary(
+        id: 'bot-recovered',
+        name: 'RecoveredBot',
+        description: '',
+        scopesJson: '[]',
+      ),
+      installationId: 'install-recovered',
+      allowedChatIds: ['chat-1'],
+      online: false,
+    );
+    var calls = 0;
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatBotsSettingsSection(
+          chatId: 'chat-1',
+          spaceId: 'space-1',
+        ),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          spacePermissionProvider((
+            spaceId: 'space-1',
+            permission: 'SPACE_MANAGE_BOTS',
+            chatId: null,
+            voiceRoomId: null,
+          )).overrideWith((ref) async => true),
+          botsInChatProvider((
+            chatId: 'chat-1',
+            spaceId: 'space-1',
+          )).overrideWith(
+            (ref) async => const [
+              ChatBotSettings(
+                bot: VoiceBotSummary(
+                  id: 'bot-recovered',
+                  name: 'RecoveredBot',
+                  description: '',
+                  scopesJson: '[]',
+                ),
+                enabled: true,
+                whitelisted: true,
+              ),
+            ],
+          ),
+          installedBotsProvider('space-1').overrideWith((ref) async {
+            calls++;
+            if (calls == 1) throw StateError('raw presence failure');
+            return const [offlineBot];
+          }),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('chat_bot_offline_indicator_bot-recovered')),
+      findsNothing,
+      reason: 'a failed status lookup must not be treated as offline',
+    );
+    expect(find.text('raw presence failure'), findsNothing);
+    expect(find.byKey(const Key('chat_bot_status_retry')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('chat_bot_status_retry')));
+    await tester.pumpAndSettle();
+
+    expect(calls, 2);
+    expect(
+      find.byKey(const Key('chat_bot_offline_indicator_bot-recovered')),
+      findsOneWidget,
+      reason: 'retry uses the recovered authoritative online:false value',
+    );
+  });
+
+  testWidgets('hidden per-chat bot controls do not fetch presence', (
+    tester,
+  ) async {
+    var statusCalls = 0;
+    await tester.pumpWidget(
+      testApp(
+        home: const ChatBotsSettingsSection(
+          chatId: 'chat-1',
+          spaceId: 'space-1',
+        ),
+        client: MockClient((_) async => http.Response('{}', 404)),
+        extraOverrides: [
+          spacePermissionProvider((
+            spaceId: 'space-1',
+            permission: 'SPACE_MANAGE_BOTS',
+            chatId: null,
+            voiceRoomId: null,
+          )).overrideWith((ref) async => false),
+          installedBotsProvider('space-1').overrideWith((ref) async {
+            statusCalls++;
+            return const [];
+          }),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatBotsSettingsSection.sectionKey), findsNothing);
+    expect(statusCalls, 0);
+  });
+
   Map<String, Object?> channelListResponse(String chatId, {String? spaceId}) =>
       {
         'chat_list': {
@@ -112,6 +440,38 @@ void main() {
           ],
         },
       };
+
+  testWidgets('group Chat Info without a space does not request bot status', (
+    tester,
+  ) async {
+    final botRequests = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        home: const SizedBox(
+          width: 420,
+          height: 900,
+          child: ChatInfoPanel(chatId: 'standalone-group', isGroup: true),
+        ),
+        client: MockClient((request) async {
+          if (request.method == 'GET' && request.url.path == '/api/v1/chats') {
+            return http.Response(
+              jsonEncode(channelListResponse('standalone-group')),
+              200,
+            );
+          }
+          if (request.url.path.startsWith('/api/v1/bots/')) {
+            botRequests.add(request.url.path);
+          }
+          return http.Response('{}', 404);
+        }),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(ChatBotsSettingsSection.sectionKey), findsNothing);
+    expect(botRequests, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('DM Chat Info offers the documented create-group action', (
     tester,

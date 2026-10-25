@@ -1,0 +1,2246 @@
+{
+  "activation_authority": false,
+  "closure": {
+    "compiled_paths": [
+      "src/backend/chat/pb/voice/chat/go.mod",
+      "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "src/backend/federation/go.mod",
+      "src/backend/federation/mediaauthority/boot_directory.go",
+      "src/backend/federation/mediaauthority/boot_directory_test.go",
+      "src/backend/federation/mediaauthority/boot_test.go",
+      "src/backend/federation/mediaauthority/directory.go",
+      "src/backend/federation/mediaauthority/exchange.go",
+      "src/backend/federation/mediaauthority/exchange_test.go",
+      "src/backend/federation/mediaauthority/grant.go",
+      "src/backend/federation/mediaauthority/grant_test.go",
+      "src/backend/federation/mediaauthority/registry.go",
+      "src/backend/federation/mediaauthority/registry_test.go",
+      "src/backend/federation/mediaauthority/request.go",
+      "src/backend/federation/nodecache/cache.go",
+      "src/backend/federation/nodecache/cache_test.go",
+      "src/backend/federation/nodecache/media_watchdog.go",
+      "src/backend/federation/nodecache/media_watchdog_test.go",
+      "src/backend/federation/protocol/boot_test.go",
+      "src/backend/federation/protocol/protocol.go",
+      "src/backend/federation/protocol/scoped_permission_test.go",
+      "src/backend/file/pb/voice/file/go.mod",
+      "src/backend/file/pb/voice/file/v1/file.pb.go",
+      "src/backend/file/pb/voice/file/v1/file_grpc.pb.go",
+      "src/backend/messaging/pb/voice/events/go.mod",
+      "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+      "src/backend/pkg/authoritysource/auth_state.go",
+      "src/backend/pkg/authoritysource/auth_state_test.go",
+      "src/backend/pkg/authoritysource/postgres.go",
+      "src/backend/pkg/authoritysource/postgres_integration_test.go",
+      "src/backend/pkg/authoritysource/qualified_scope_test.go",
+      "src/backend/pkg/authoritysource/role_state.go",
+      "src/backend/pkg/authoritysource/role_state_test.go",
+      "src/backend/pkg/authoritysource/role_state_v2.go",
+      "src/backend/pkg/authoritysource/role_state_v2_test.go",
+      "src/backend/pkg/authoritysource/runtime.go",
+      "src/backend/pkg/authoritysource/runtime_config.go",
+      "src/backend/pkg/authoritysource/runtime_test.go",
+      "src/backend/pkg/authoritysource/server.go",
+      "src/backend/pkg/authoritysource/server_test.go",
+      "src/backend/pkg/authoritysource/space_state.go",
+      "src/backend/pkg/authoritysource/space_state_test.go",
+      "src/backend/pkg/authoritysource/user_state.go",
+      "src/backend/pkg/authoritysource/user_state_test.go",
+      "src/backend/pkg/correlation/correlation.go",
+      "src/backend/pkg/correlation/correlation_test.go",
+      "src/backend/pkg/gisowner/rejection.go",
+      "src/backend/pkg/gisowner/rejection_test.go",
+      "src/backend/pkg/go.mod",
+      "src/backend/pkg/grpcclient/breaker.go",
+      "src/backend/pkg/grpcclient/breaker_test.go",
+      "src/backend/pkg/grpcclient/dial.go",
+      "src/backend/pkg/grpcclient/dial_test.go",
+      "src/backend/pkg/grpcclient/wait.go",
+      "src/backend/pkg/grpcclient/wait_test.go",
+      "src/backend/pkg/grpcmw/interceptor.go",
+      "src/backend/pkg/grpcmw/interceptor_test.go",
+      "src/backend/pkg/grpcmw/metrics.go",
+      "src/backend/pkg/grpcmw/metrics_test.go",
+      "src/backend/pkg/guestguard/guestguard.go",
+      "src/backend/pkg/guestguard/guestguard_test.go",
+      "src/backend/pkg/guestprofile/placeholder.go",
+      "src/backend/pkg/guestprofile/placeholder_test.go",
+      "src/backend/pkg/httpserver/httpserver.go",
+      "src/backend/pkg/httpserver/timeouts.go",
+      "src/backend/pkg/integrationtest/authority_migrator.go",
+      "src/backend/pkg/integrationtest/authority_source.go",
+      "src/backend/pkg/integrationtest/docker.go",
+      "src/backend/pkg/integrationtest/docker_test.go",
+      "src/backend/pkg/integrationtest/migrations.go",
+      "src/backend/pkg/integrationtest/migrations_test.go",
+      "src/backend/pkg/integrationtest/postgres.go",
+      "src/backend/pkg/integrationtest/postgres_test.go",
+      "src/backend/pkg/integrationtest/preview_rollback_test.go",
+      "src/backend/pkg/integrationtest/user_migrations.go",
+      "src/backend/pkg/integrationtest/user_migrations_test.go",
+      "src/backend/pkg/logging/slog.go",
+      "src/backend/pkg/logging/slog_test.go",
+      "src/backend/pkg/memberadmission/membership.go",
+      "src/backend/pkg/memberadmission/membership_test.go",
+      "src/backend/pkg/memberadmission/receipt.go",
+      "src/backend/pkg/memberadmission/receipt_test.go",
+      "src/backend/pkg/middleware/accesslog.go",
+      "src/backend/pkg/middleware/accesslog_test.go",
+      "src/backend/pkg/middleware/middleware_test.go",
+      "src/backend/pkg/middleware/requestid.go",
+      "src/backend/pkg/natslog/natslog.go",
+      "src/backend/pkg/natslog/natslog_test.go",
+      "src/backend/pkg/pb/voice/authority/v1/authority.pb.go",
+      "src/backend/pkg/pb/voice/authority/v1/authority_grpc.pb.go",
+      "src/backend/pkg/postgres/pool.go",
+      "src/backend/pkg/postgres/pool_test.go",
+      "src/backend/pkg/principal/bot_actor.go",
+      "src/backend/pkg/principal/bot_actor_test.go",
+      "src/backend/pkg/principal/issuer.go",
+      "src/backend/pkg/principal/jwks.go",
+      "src/backend/pkg/principal/jwks_http.go",
+      "src/backend/pkg/principal/jwks_http_test.go",
+      "src/backend/pkg/principal/jwks_readiness_test.go",
+      "src/backend/pkg/principal/jwks_test.go",
+      "src/backend/pkg/principal/metadata.go",
+      "src/backend/pkg/principal/metadata_test.go",
+      "src/backend/pkg/principal/principal_test.go",
+      "src/backend/pkg/principal/request_hash.go",
+      "src/backend/pkg/principal/request_hash_test.go",
+      "src/backend/pkg/principal/social_privacy_rollout_red_test.go",
+      "src/backend/pkg/principal/user_identity.go",
+      "src/backend/pkg/principal/user_identity_test.go",
+      "src/backend/pkg/principal/verifier.go",
+      "src/backend/pkg/privacy/audience.go",
+      "src/backend/pkg/privacy/audience_test.go",
+      "src/backend/pkg/privacy/enforce.go",
+      "src/backend/pkg/privacy/enforce_test.go",
+      "src/backend/pkg/privacy/errors.go",
+      "src/backend/pkg/privacy/matcher.go",
+      "src/backend/pkg/privacy/matcher_test.go",
+      "src/backend/pkg/privacy/presets.go",
+      "src/backend/pkg/promhttp/metrics.go",
+      "src/backend/pkg/promhttp/metrics_test.go",
+      "src/backend/pkg/runtimeconfig/duration.go",
+      "src/backend/pkg/runtimeconfig/duration_test.go",
+      "src/backend/pkg/socialprincipal/auth_sdk_test.go",
+      "src/backend/pkg/socialprincipal/communication_runtime_test.go",
+      "src/backend/pkg/socialprincipal/communication_test.go",
+      "src/backend/pkg/socialprincipal/config.go",
+      "src/backend/pkg/socialprincipal/config_test.go",
+      "src/backend/pkg/socialprincipal/diagnostic_test.go",
+      "src/backend/pkg/socialprincipal/interceptor.go",
+      "src/backend/pkg/socialprincipal/interceptor_test.go",
+      "src/backend/pkg/socialprincipal/listener_ca_test.go",
+      "src/backend/pkg/socialprincipal/listener_test.go",
+      "src/backend/pkg/socialprincipal/runtime.go",
+      "src/backend/pkg/socialprincipal/runtime_allowlist_test.go",
+      "src/backend/pkg/socialprincipal/runtime_integration_test.go",
+      "src/backend/pkg/socialprincipal/runtime_test.go",
+      "src/backend/pkg/spacecommunication/client.go",
+      "src/backend/pkg/spacecommunication/client_test.go",
+      "src/backend/pkg/spacecommunication/snapshot.go",
+      "src/backend/pkg/spacecommunication/snapshot_test.go",
+      "src/backend/role/pb/voice/role/go.mod",
+      "src/backend/role/pb/voice/role/v1/member_admission.pb.go",
+      "src/backend/role/pb/voice/role/v1/role.pb.go",
+      "src/backend/role/pb/voice/role/v1/role_grpc.pb.go",
+      "src/backend/role/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "src/backend/role/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "src/backend/user/pb/voice/common/go.mod",
+      "src/backend/user/pb/voice/common/v1/bot_message.pb.go",
+      "src/backend/user/pb/voice/common/v1/common.pb.go",
+      "src/backend/user/pb/voice/common/v1/space_lifecycle.pb.go",
+      "src/backend/user/pb/voice/gameintegration/go.mod",
+      "src/backend/user/pb/voice/gameintegration/v1/game_event.pb.go",
+      "src/backend/user/pb/voice/social/go.mod",
+      "src/backend/user/pb/voice/social/v1/social.pb.go",
+      "src/backend/user/pb/voice/social/v1/social_grpc.pb.go",
+      "src/backend/user/pb/voice/user/go.mod",
+      "src/backend/user/pb/voice/user/v1/space_account_capture.pb.go",
+      "src/backend/user/pb/voice/user/v1/user.pb.go",
+      "src/backend/user/pb/voice/user/v1/user_grpc.pb.go",
+      "src/backend/voice/database.go",
+      "src/backend/voice/database_test.go",
+      "src/backend/voice/go.mod",
+      "src/backend/voice/health.go",
+      "src/backend/voice/health_test.go",
+      "src/backend/voice/internal/admissionlock/identity.go",
+      "src/backend/voice/internal/admissionlock/identity_test.go",
+      "src/backend/voice/internal/authctx/authctx.go",
+      "src/backend/voice/internal/authctx/authctx_test.go",
+      "src/backend/voice/internal/federationmedia/client.go",
+      "src/backend/voice/internal/federationmedia/client_test.go",
+      "src/backend/voice/internal/federationmedia/runtime.go",
+      "src/backend/voice/internal/gameprincipal/config.go",
+      "src/backend/voice/internal/gameprincipal/interceptor.go",
+      "src/backend/voice/internal/gameprincipal/interceptor_test.go",
+      "src/backend/voice/internal/gameprincipal/runtime.go",
+      "src/backend/voice/internal/gameprincipal/tls_test.go",
+      "src/backend/voice/internal/gameprovision/account_voice_fence.go",
+      "src/backend/voice/internal/gameprovision/account_voice_fence_integration_test.go",
+      "src/backend/voice/internal/gameprovision/livekit_fencer.go",
+      "src/backend/voice/internal/gameprovision/ordinary_conversion.go",
+      "src/backend/voice/internal/gameprovision/sdk_conversion_fence.go",
+      "src/backend/voice/internal/gameprovision/store_integration_test.go",
+      "src/backend/voice/internal/gameprovision/store_postgres.go",
+      "src/backend/voice/internal/grpcsvc/account_voice_admission.go",
+      "src/backend/voice/internal/grpcsvc/account_voice_admission_test.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy_degradation_test.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy_integration_test.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy_test.go",
+      "src/backend/voice/internal/grpcsvc/chat_guard.go",
+      "src/backend/voice/internal/grpcsvc/communication_timeout_test.go",
+      "src/backend/voice/internal/grpcsvc/federation_media_test.go",
+      "src/backend/voice/internal/grpcsvc/game_session_admission_integration_test.go",
+      "src/backend/voice/internal/grpcsvc/game_session_contract_test.go",
+      "src/backend/voice/internal/grpcsvc/game_session_provisioning.go",
+      "src/backend/voice/internal/grpcsvc/game_session_rejection_test.go",
+      "src/backend/voice/internal/grpcsvc/matchsquad_member.go",
+      "src/backend/voice/internal/grpcsvc/matchsquad_member_test.go",
+      "src/backend/voice/internal/grpcsvc/matchsquad_voice.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_calls.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_calls_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_control.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_events.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_events_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_identity.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_identity_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_projection.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_projection_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_read.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_stale_leave_test.go",
+      "src/backend/voice/internal/grpcsvc/publish_log.go",
+      "src/backend/voice/internal/grpcsvc/publish_log_test.go",
+      "src/backend/voice/internal/grpcsvc/role_guard.go",
+      "src/backend/voice/internal/grpcsvc/screen_share.go",
+      "src/backend/voice/internal/grpcsvc/screen_share_degradation_test.go",
+      "src/backend/voice/internal/grpcsvc/screen_share_test.go",
+      "src/backend/voice/internal/grpcsvc/sdk_conversion_fence_test.go",
+      "src/backend/voice/internal/grpcsvc/space_lifecycle.go",
+      "src/backend/voice/internal/grpcsvc/space_media_join.go",
+      "src/backend/voice/internal/grpcsvc/space_media_join_test.go",
+      "src/backend/voice/internal/grpcsvc/space_media_session_floor_test.go",
+      "src/backend/voice/internal/grpcsvc/space_member_degradation_test.go",
+      "src/backend/voice/internal/grpcsvc/subscription_voice_limits_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_commander.go",
+      "src/backend/voice/internal/grpcsvc/voice_commander_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_grpc.go",
+      "src/backend/voice/internal/grpcsvc/voice_grpc_group_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_grpc_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_access.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_integration_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_move_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_session_binding_test.go",
+      "src/backend/voice/internal/livekit/room_lifecycle.go",
+      "src/backend/voice/internal/livekit/room_lifecycle_test.go",
+      "src/backend/voice/internal/livekit/space_token.go",
+      "src/backend/voice/internal/livekit/space_token_test.go",
+      "src/backend/voice/internal/livekit/token.go",
+      "src/backend/voice/internal/livekit/token_test.go",
+      "src/backend/voice/internal/matchsquad/compaction.go",
+      "src/backend/voice/internal/matchsquad/member.go",
+      "src/backend/voice/internal/matchsquad/member_repair.go",
+      "src/backend/voice/internal/matchsquad/member_test.go",
+      "src/backend/voice/internal/matchsquad/postgres_integration_test.go",
+      "src/backend/voice/internal/matchsquad/service.go",
+      "src/backend/voice/internal/matchsquad/service_test.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/config.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/config_test.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/interceptor.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/interceptor_test.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/runtime.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/runtime_test.go",
+      "src/backend/voice/internal/matchsquadprincipal/config.go",
+      "src/backend/voice/internal/matchsquadprincipal/config_test.go",
+      "src/backend/voice/internal/matchsquadprincipal/interceptor.go",
+      "src/backend/voice/internal/matchsquadprincipal/interceptor_test.go",
+      "src/backend/voice/internal/matchsquadprincipal/runtime.go",
+      "src/backend/voice/internal/ordinarycall/conversion.go",
+      "src/backend/voice/internal/ordinarycall/coordinator.go",
+      "src/backend/voice/internal/ordinarycall/coordinator_test.go",
+      "src/backend/voice/internal/ordinarycall/down_retention_test.go",
+      "src/backend/voice/internal/ordinarycall/lookup.go",
+      "src/backend/voice/internal/ordinarycall/media_authorization.go",
+      "src/backend/voice/internal/ordinarycall/model.go",
+      "src/backend/voice/internal/ordinarycall/model_test.go",
+      "src/backend/voice/internal/ordinarycall/outbox.go",
+      "src/backend/voice/internal/ordinarycall/outbox_test.go",
+      "src/backend/voice/internal/ordinarycall/party_loss.go",
+      "src/backend/voice/internal/ordinarycall/party_outbox_test.go",
+      "src/backend/voice/internal/ordinarycall/postgres.go",
+      "src/backend/voice/internal/ordinarycall/postgres_test.go",
+      "src/backend/voice/internal/ordinarycall/recovery.go",
+      "src/backend/voice/internal/ordinarycall/validation.go",
+      "src/backend/voice/internal/principalgrpc/dependency.go",
+      "src/backend/voice/internal/principalgrpc/dependency_test.go",
+      "src/backend/voice/internal/principalgrpc/interceptor.go",
+      "src/backend/voice/internal/principalgrpc/interceptor_test.go",
+      "src/backend/voice/internal/principaljwks/config.go",
+      "src/backend/voice/internal/principaljwks/config_test.go",
+      "src/backend/voice/internal/principaljwks/publisher.go",
+      "src/backend/voice/internal/principaljwks/publisher_test.go",
+      "src/backend/voice/internal/rolegrant/client.go",
+      "src/backend/voice/internal/rolegrant/client_test.go",
+      "src/backend/voice/internal/rolegrant/permissions.go",
+      "src/backend/voice/internal/rolegrant/permissions_test.go",
+      "src/backend/voice/internal/roomlifecycle/authority.go",
+      "src/backend/voice/internal/roomlifecycle/authority_test.go",
+      "src/backend/voice/internal/roomlifecycle/binding.go",
+      "src/backend/voice/internal/roomlifecycle/binding_test.go",
+      "src/backend/voice/internal/roomlifecycle/crash_harness_test.go",
+      "src/backend/voice/internal/roomlifecycle/ledger.go",
+      "src/backend/voice/internal/roomlifecycle/ledger_test.go",
+      "src/backend/voice/internal/roomlifecycle/lifecycle_store.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_concurrency_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_legacy_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_migration_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_store_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_test.go",
+      "src/backend/voice/internal/roomlifecycle/memory_ledger.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_concurrency_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_decision.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_delivery.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_migration_down_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_migration_integrity_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_migration_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_source_review_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_store.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_store_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_test_helpers_test.go",
+      "src/backend/voice/internal/roomlifecycle/r22_proto_contract_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_bridge.go",
+      "src/backend/voice/internal/roomlifecycle/redis_divergence.go",
+      "src/backend/voice/internal/roomlifecycle/redis_divergence_migration_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_divergence_store_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_ledger.go",
+      "src/backend/voice/internal/roomlifecycle/redis_ledger_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_mirror.go",
+      "src/backend/voice/internal/roomlifecycle/redis_mirror_d2d3_red_test.go",
+      "src/backend/voice/internal/rosteroutbox/delivery.go",
+      "src/backend/voice/internal/rosteroutbox/event.go",
+      "src/backend/voice/internal/s2s/chat_membership.go",
+      "src/backend/voice/internal/s2s/forward_meta.go",
+      "src/backend/voice/internal/s2s/privacy.go",
+      "src/backend/voice/internal/s2s/profile_account.go",
+      "src/backend/voice/internal/s2s/profile_account_test.go",
+      "src/backend/voice/internal/s2s/role_permissions.go",
+      "src/backend/voice/internal/s2s/role_permissions_test.go",
+      "src/backend/voice/internal/s2s/role_voice_room_grants.go",
+      "src/backend/voice/internal/s2s/space_membership.go",
+      "src/backend/voice/internal/s2s/space_pro.go",
+      "src/backend/voice/internal/s2s/voice_room_access.go",
+      "src/backend/voice/internal/s2s/voice_room_access_test.go",
+      "src/backend/voice/internal/sessionfloor/client.go",
+      "src/backend/voice/internal/sessionfloor/client_test.go",
+      "src/backend/voice/internal/spacebarrier/barrier.go",
+      "src/backend/voice/internal/spacebarrier/identity.go",
+      "src/backend/voice/internal/spacegatetest/gates.go",
+      "src/backend/voice/internal/spacegatetest/postgres.go",
+      "src/backend/voice/internal/spacelifecycle/capture.go",
+      "src/backend/voice/internal/spacelifecycle/effects.go",
+      "src/backend/voice/internal/spacelifecycle/effects_test.go",
+      "src/backend/voice/internal/spacelifecycle/postgres.go",
+      "src/backend/voice/internal/spacelifecycle/postgres_store_test.go",
+      "src/backend/voice/internal/spacelifecycle/provider_retirement_test.go",
+      "src/backend/voice/internal/spacelifecycle/recovery_publication_test.go",
+      "src/backend/voice/internal/spacelifecycle/service.go",
+      "src/backend/voice/internal/spacelifecycle/store.go",
+      "src/backend/voice/internal/spacelifecycle/store_test.go",
+      "src/backend/voice/internal/spacemedia/admission_dispatch.go",
+      "src/backend/voice/internal/spacemedia/admission_ownership.go",
+      "src/backend/voice/internal/spacemedia/admission_ownership_down_integration_test.go",
+      "src/backend/voice/internal/spacemedia/admission_ownership_integration_test.go",
+      "src/backend/voice/internal/spacemedia/admission_revocation.go",
+      "src/backend/voice/internal/spacemedia/captured_drain.go",
+      "src/backend/voice/internal/spacemedia/communication_timeout_test.go",
+      "src/backend/voice/internal/spacemedia/consumer.go",
+      "src/backend/voice/internal/spacemedia/consumer_test.go",
+      "src/backend/voice/internal/spacemedia/coordinator.go",
+      "src/backend/voice/internal/spacemedia/coordinator_floor_test.go",
+      "src/backend/voice/internal/spacemedia/coordinator_test.go",
+      "src/backend/voice/internal/spacemedia/grants.go",
+      "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+      "src/backend/voice/internal/spacemedia/outbox.go",
+      "src/backend/voice/internal/spacemedia/outbox_test.go",
+      "src/backend/voice/internal/spacemedia/p3_barrier.go",
+      "src/backend/voice/internal/spacemedia/p3_barrier_integration_test.go",
+      "src/backend/voice/internal/spacemedia/p3_composition_test.go",
+      "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+      "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+      "src/backend/voice/internal/spacemedia/party_loss.go",
+      "src/backend/voice/internal/spacemedia/party_room_close.go",
+      "src/backend/voice/internal/spacemedia/party_roster_integration_test.go",
+      "src/backend/voice/internal/spacemedia/postgres_admission.go",
+      "src/backend/voice/internal/spacemedia/postgres_admission_diagnostics_test.go",
+      "src/backend/voice/internal/spacemedia/postgres_admission_integration_test.go",
+      "src/backend/voice/internal/spacemedia/projection_authority.go",
+      "src/backend/voice/internal/spacemedia/role_wire_compatibility_test.go",
+      "src/backend/voice/internal/spaceprincipalruntime/config.go",
+      "src/backend/voice/internal/spaceprincipalruntime/config_test.go",
+      "src/backend/voice/internal/spaceprincipalruntime/runtime.go",
+      "src/backend/voice/internal/spaceprincipalruntime/runtime_test.go",
+      "src/backend/voice/internal/store/call_store.go",
+      "src/backend/voice/internal/store/call_store_test.go",
+      "src/backend/voice/internal/store/ordinary_cutover.go",
+      "src/backend/voice/internal/store/ordinary_projection.go",
+      "src/backend/voice/internal/store/ordinary_projection_integration_test.go",
+      "src/backend/voice/internal/store/ordinary_projection_test.go",
+      "src/backend/voice/internal/store/redis_store.go",
+      "src/backend/voice/internal/store/redis_store_test.go",
+      "src/backend/voice/internal/store/screen_share_store_test.go",
+      "src/backend/voice/internal/store/space_admission_dispatch_test.go",
+      "src/backend/voice/internal/store/space_admission_ownership.go",
+      "src/backend/voice/internal/store/space_gate_incarnation_test.go",
+      "src/backend/voice/internal/store/space_lifecycle.go",
+      "src/backend/voice/internal/voiceevents/jetstream.go",
+      "src/backend/voice/internal/voiceevents/jetstream_contract_test.go",
+      "src/backend/voice/internal/voiceevents/jetstream_inbox_test.go",
+      "src/backend/voice/internal/voiceevents/ordinary.go",
+      "src/backend/voice/internal/voiceevents/ordinary_test.go",
+      "src/backend/voice/internal/voiceevents/participant.go",
+      "src/backend/voice/internal/voiceevents/participant_test.go",
+      "src/backend/voice/internal/voiceevents/publisher.go",
+      "src/backend/voice/internal/voiceevents/roster_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/bootstrap_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/config.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/config_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/diagnostics_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/interceptor_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/runtime.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/runtime_test.go",
+      "src/backend/voice/jwks_recovery_test.go",
+      "src/backend/voice/jwks_startup_order_test.go",
+      "src/backend/voice/logger.go",
+      "src/backend/voice/logger_test.go",
+      "src/backend/voice/main.go",
+      "src/backend/voice/metrics_test.go",
+      "src/backend/voice/ordinary_runtime.go",
+      "src/backend/voice/ordinary_runtime_test.go",
+      "src/backend/voice/party_outbox_runtime.go",
+      "src/backend/voice/party_outbox_runtime_test.go",
+      "src/backend/voice/pb/voice/analytics/v1/analytics.pb.go",
+      "src/backend/voice/pb/voice/analytics/v1/analytics_grpc.pb.go",
+      "src/backend/voice/pb/voice/auth/go.mod",
+      "src/backend/voice/pb/voice/auth/v1/auth.pb.go",
+      "src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go",
+      "src/backend/voice/pb/voice/calls/go.mod",
+      "src/backend/voice/pb/voice/calls/v1/calls.pb.go",
+      "src/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "src/backend/voice/pb/voice/common/v1/bot_message.pb.go",
+      "src/backend/voice/pb/voice/common/v1/common.pb.go",
+      "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+      "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go",
+      "src/backend/voice/pb/voice/file/v1/file.pb.go",
+      "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go",
+      "src/backend/voice/pb/voice/messaging/v1/messaging.pb.go",
+      "src/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go",
+      "src/backend/voice/pb/voice/role/v1/member_admission.pb.go",
+      "src/backend/voice/pb/voice/role/v1/role.pb.go",
+      "src/backend/voice/pb/voice/role/v1/role_grpc.pb.go",
+      "src/backend/voice/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "src/backend/voice/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/federation_management.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/federation_management_grpc.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/s2s.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/s2s_grpc.pb.go",
+      "src/backend/voice/pb/voice/social/v1/social.pb.go",
+      "src/backend/voice/pb/voice/social/v1/social_grpc.pb.go",
+      "src/backend/voice/pb/voice/space/go.mod",
+      "src/backend/voice/pb/voice/space/v1/member_admission.pb.go",
+      "src/backend/voice/pb/voice/space/v1/space.pb.go",
+      "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/go.mod",
+      "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_actor.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_consent.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/v1/story.pb.go",
+      "src/backend/voice/pb/voice/story/v1/story_grpc.pb.go",
+      "src/backend/voice/pb/voice/subscription/go.mod",
+      "src/backend/voice/pb/voice/subscription/v1/subscription.pb.go",
+      "src/backend/voice/pb/voice/subscription/v1/subscription_grpc.pb.go",
+      "src/backend/voice/pb/voice/user/v1/space_account_capture.pb.go",
+      "src/backend/voice/pb/voice/user/v1/user.pb.go",
+      "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go",
+      "src/backend/voice/space_media_runtime.go",
+      "src/backend/voice/space_media_runtime_test.go"
+    ],
+    "context_paths": [
+      ".golangci.yml",
+      "Makefile",
+      "buf.gen.yaml",
+      "deploy/nats/README.md",
+      "deploy/nats/acl-intent.yaml",
+      "deploy/nats/jetstream-publisher-streams.yaml",
+      "deploy/nats/leaf-sidecar.template.yaml",
+      "deploy/nats/secret-contract.example.yaml",
+      "docs/ARCHITECTURE_REQUIREMENTS.md",
+      "docs/DATA_MODEL.md",
+      "docs/testing/nats-v5-authority-exec-plan.md",
+      "protos/buf.yaml",
+      "protos/voice/file/v1/file.proto",
+      "src/backend/chat/pb/voice/chat/go.mod",
+      "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "src/backend/chat/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "src/backend/federation/go.mod",
+      "src/backend/federation/go.sum",
+      "src/backend/federation/mediaauthority/boot_directory.go",
+      "src/backend/federation/mediaauthority/boot_directory_test.go",
+      "src/backend/federation/mediaauthority/boot_test.go",
+      "src/backend/federation/mediaauthority/directory.go",
+      "src/backend/federation/mediaauthority/exchange.go",
+      "src/backend/federation/mediaauthority/exchange_test.go",
+      "src/backend/federation/mediaauthority/grant.go",
+      "src/backend/federation/mediaauthority/grant_test.go",
+      "src/backend/federation/mediaauthority/registry.go",
+      "src/backend/federation/mediaauthority/registry_test.go",
+      "src/backend/federation/mediaauthority/request.go",
+      "src/backend/federation/nodecache/cache.go",
+      "src/backend/federation/nodecache/cache_test.go",
+      "src/backend/federation/nodecache/media_watchdog.go",
+      "src/backend/federation/nodecache/media_watchdog_test.go",
+      "src/backend/federation/protocol/boot_test.go",
+      "src/backend/federation/protocol/protocol.go",
+      "src/backend/federation/protocol/scoped_permission_test.go",
+      "src/backend/file/pb/voice/file/go.mod",
+      "src/backend/file/pb/voice/file/v1/file.pb.go",
+      "src/backend/file/pb/voice/file/v1/file_grpc.pb.go",
+      "src/backend/messaging/pb/voice/events/go.mod",
+      "src/backend/migrations/voice_db/000001_room_lifecycle.down.sql",
+      "src/backend/migrations/voice_db/000001_room_lifecycle.up.sql",
+      "src/backend/migrations/voice_db/000002_redis_divergence.down.sql",
+      "src/backend/migrations/voice_db/000002_redis_divergence.up.sql",
+      "src/backend/migrations/voice_db/000003_matchmaking_membership.down.sql",
+      "src/backend/migrations/voice_db/000003_matchmaking_membership.up.sql",
+      "src/backend/migrations/voice_db/000004_game_session_rooms.down.sql",
+      "src/backend/migrations/voice_db/000004_game_session_rooms.up.sql",
+      "src/backend/migrations/voice_db/000005_game_session_close.down.sql",
+      "src/backend/migrations/voice_db/000005_game_session_close.up.sql",
+      "src/backend/migrations/voice_db/000006_game_session_roster_lease.down.sql",
+      "src/backend/migrations/voice_db/000006_game_session_roster_lease.up.sql",
+      "src/backend/migrations/voice_db/000007_t17_sdk_conversion_fence.down.sql",
+      "src/backend/migrations/voice_db/000007_t17_sdk_conversion_fence.up.sql",
+      "src/backend/migrations/voice_db/000008_account_voice_fence.down.sql",
+      "src/backend/migrations/voice_db/000008_account_voice_fence.up.sql",
+      "src/backend/migrations/voice_db/000009_space_lifecycle.down.sql",
+      "src/backend/migrations/voice_db/000009_space_lifecycle.up.sql",
+      "src/backend/migrations/voice_db/000010_space_media_admission.down.sql",
+      "src/backend/migrations/voice_db/000010_space_media_admission.up.sql",
+      "src/backend/migrations/voice_db/000011_match_squad_operations.down.sql",
+      "src/backend/migrations/voice_db/000011_match_squad_operations.up.sql",
+      "src/backend/migrations/voice_db/000012_ordinary_calls.down.sql",
+      "src/backend/migrations/voice_db/000012_ordinary_calls.up.sql",
+      "src/backend/pkg/authoritysource/auth_state.go",
+      "src/backend/pkg/authoritysource/auth_state_test.go",
+      "src/backend/pkg/authoritysource/postgres.go",
+      "src/backend/pkg/authoritysource/postgres_integration_test.go",
+      "src/backend/pkg/authoritysource/qualified_scope_test.go",
+      "src/backend/pkg/authoritysource/role_state.go",
+      "src/backend/pkg/authoritysource/role_state_test.go",
+      "src/backend/pkg/authoritysource/role_state_v2.go",
+      "src/backend/pkg/authoritysource/role_state_v2_test.go",
+      "src/backend/pkg/authoritysource/runtime.go",
+      "src/backend/pkg/authoritysource/runtime_config.go",
+      "src/backend/pkg/authoritysource/runtime_test.go",
+      "src/backend/pkg/authoritysource/server.go",
+      "src/backend/pkg/authoritysource/server_test.go",
+      "src/backend/pkg/authoritysource/space_state.go",
+      "src/backend/pkg/authoritysource/space_state_test.go",
+      "src/backend/pkg/authoritysource/user_state.go",
+      "src/backend/pkg/authoritysource/user_state_test.go",
+      "src/backend/pkg/correlation/correlation.go",
+      "src/backend/pkg/correlation/correlation_test.go",
+      "src/backend/pkg/gisowner/rejection.go",
+      "src/backend/pkg/gisowner/rejection_test.go",
+      "src/backend/pkg/go.mod",
+      "src/backend/pkg/go.sum",
+      "src/backend/pkg/grpcclient/README.md",
+      "src/backend/pkg/grpcclient/breaker.go",
+      "src/backend/pkg/grpcclient/breaker_test.go",
+      "src/backend/pkg/grpcclient/dial.go",
+      "src/backend/pkg/grpcclient/dial_test.go",
+      "src/backend/pkg/grpcclient/wait.go",
+      "src/backend/pkg/grpcclient/wait_test.go",
+      "src/backend/pkg/grpcmw/interceptor.go",
+      "src/backend/pkg/grpcmw/interceptor_test.go",
+      "src/backend/pkg/grpcmw/metrics.go",
+      "src/backend/pkg/grpcmw/metrics_test.go",
+      "src/backend/pkg/guestguard/guestguard.go",
+      "src/backend/pkg/guestguard/guestguard_test.go",
+      "src/backend/pkg/guestprofile/placeholder.go",
+      "src/backend/pkg/guestprofile/placeholder_test.go",
+      "src/backend/pkg/httpserver/httpserver.go",
+      "src/backend/pkg/httpserver/timeouts.go",
+      "src/backend/pkg/integrationtest/authority_migrator.go",
+      "src/backend/pkg/integrationtest/authority_source.go",
+      "src/backend/pkg/integrationtest/docker.go",
+      "src/backend/pkg/integrationtest/docker_test.go",
+      "src/backend/pkg/integrationtest/migrations.go",
+      "src/backend/pkg/integrationtest/migrations_test.go",
+      "src/backend/pkg/integrationtest/postgres.go",
+      "src/backend/pkg/integrationtest/postgres_test.go",
+      "src/backend/pkg/integrationtest/preview_rollback_test.go",
+      "src/backend/pkg/integrationtest/user_migrations.go",
+      "src/backend/pkg/integrationtest/user_migrations_test.go",
+      "src/backend/pkg/logging/slog.go",
+      "src/backend/pkg/logging/slog_test.go",
+      "src/backend/pkg/memberadmission/membership.go",
+      "src/backend/pkg/memberadmission/membership_test.go",
+      "src/backend/pkg/memberadmission/receipt.go",
+      "src/backend/pkg/memberadmission/receipt_test.go",
+      "src/backend/pkg/middleware/accesslog.go",
+      "src/backend/pkg/middleware/accesslog_test.go",
+      "src/backend/pkg/middleware/middleware_test.go",
+      "src/backend/pkg/middleware/requestid.go",
+      "src/backend/pkg/natslog/natslog.go",
+      "src/backend/pkg/natslog/natslog_test.go",
+      "src/backend/pkg/pb/voice/authority/v1/authority.pb.go",
+      "src/backend/pkg/pb/voice/authority/v1/authority_grpc.pb.go",
+      "src/backend/pkg/postgres/pool.go",
+      "src/backend/pkg/postgres/pool_test.go",
+      "src/backend/pkg/principal/bot_actor.go",
+      "src/backend/pkg/principal/bot_actor_test.go",
+      "src/backend/pkg/principal/issuer.go",
+      "src/backend/pkg/principal/jwks.go",
+      "src/backend/pkg/principal/jwks_http.go",
+      "src/backend/pkg/principal/jwks_http_test.go",
+      "src/backend/pkg/principal/jwks_readiness_test.go",
+      "src/backend/pkg/principal/jwks_test.go",
+      "src/backend/pkg/principal/metadata.go",
+      "src/backend/pkg/principal/metadata_test.go",
+      "src/backend/pkg/principal/principal_test.go",
+      "src/backend/pkg/principal/request_hash.go",
+      "src/backend/pkg/principal/request_hash_test.go",
+      "src/backend/pkg/principal/social_privacy_rollout_red_test.go",
+      "src/backend/pkg/principal/user_identity.go",
+      "src/backend/pkg/principal/user_identity_test.go",
+      "src/backend/pkg/principal/verifier.go",
+      "src/backend/pkg/privacy/audience.go",
+      "src/backend/pkg/privacy/audience_test.go",
+      "src/backend/pkg/privacy/enforce.go",
+      "src/backend/pkg/privacy/enforce_test.go",
+      "src/backend/pkg/privacy/errors.go",
+      "src/backend/pkg/privacy/matcher.go",
+      "src/backend/pkg/privacy/matcher_test.go",
+      "src/backend/pkg/privacy/presets.go",
+      "src/backend/pkg/promhttp/metrics.go",
+      "src/backend/pkg/promhttp/metrics_test.go",
+      "src/backend/pkg/runtimeconfig/duration.go",
+      "src/backend/pkg/runtimeconfig/duration_test.go",
+      "src/backend/pkg/socialprincipal/auth_sdk_test.go",
+      "src/backend/pkg/socialprincipal/communication_runtime_test.go",
+      "src/backend/pkg/socialprincipal/communication_test.go",
+      "src/backend/pkg/socialprincipal/config.go",
+      "src/backend/pkg/socialprincipal/config_test.go",
+      "src/backend/pkg/socialprincipal/diagnostic_test.go",
+      "src/backend/pkg/socialprincipal/interceptor.go",
+      "src/backend/pkg/socialprincipal/interceptor_test.go",
+      "src/backend/pkg/socialprincipal/listener_ca_test.go",
+      "src/backend/pkg/socialprincipal/listener_test.go",
+      "src/backend/pkg/socialprincipal/runtime.go",
+      "src/backend/pkg/socialprincipal/runtime_allowlist_test.go",
+      "src/backend/pkg/socialprincipal/runtime_integration_test.go",
+      "src/backend/pkg/socialprincipal/runtime_test.go",
+      "src/backend/pkg/spacecommunication/client.go",
+      "src/backend/pkg/spacecommunication/client_test.go",
+      "src/backend/pkg/spacecommunication/snapshot.go",
+      "src/backend/pkg/spacecommunication/snapshot_test.go",
+      "src/backend/role/pb/voice/role/go.mod",
+      "src/backend/role/pb/voice/role/v1/member_admission.pb.go",
+      "src/backend/role/pb/voice/role/v1/role.pb.go",
+      "src/backend/role/pb/voice/role/v1/role_grpc.pb.go",
+      "src/backend/role/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "src/backend/role/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "src/backend/user/pb/voice/common/go.mod",
+      "src/backend/user/pb/voice/common/go.sum",
+      "src/backend/user/pb/voice/common/v1/bot_message.pb.go",
+      "src/backend/user/pb/voice/common/v1/common.pb.go",
+      "src/backend/user/pb/voice/common/v1/space_lifecycle.pb.go",
+      "src/backend/user/pb/voice/gameintegration/go.mod",
+      "src/backend/user/pb/voice/gameintegration/go.sum",
+      "src/backend/user/pb/voice/gameintegration/v1/game_event.pb.go",
+      "src/backend/user/pb/voice/social/go.mod",
+      "src/backend/user/pb/voice/social/v1/social.pb.go",
+      "src/backend/user/pb/voice/social/v1/social_grpc.pb.go",
+      "src/backend/user/pb/voice/user/go.mod",
+      "src/backend/user/pb/voice/user/go.sum",
+      "src/backend/user/pb/voice/user/v1/space_account_capture.pb.go",
+      "src/backend/user/pb/voice/user/v1/user.pb.go",
+      "src/backend/user/pb/voice/user/v1/user_grpc.pb.go",
+      "src/backend/voice/$prof",
+      "src/backend/voice/Dockerfile",
+      "src/backend/voice/README.md",
+      "src/backend/voice/coverage",
+      "src/backend/voice/database.go",
+      "src/backend/voice/database_test.go",
+      "src/backend/voice/go.mod",
+      "src/backend/voice/go.sum",
+      "src/backend/voice/health.go",
+      "src/backend/voice/health_test.go",
+      "src/backend/voice/internal/admissionlock/identity.go",
+      "src/backend/voice/internal/admissionlock/identity_test.go",
+      "src/backend/voice/internal/authctx/authctx.go",
+      "src/backend/voice/internal/authctx/authctx_test.go",
+      "src/backend/voice/internal/federationmedia/client.go",
+      "src/backend/voice/internal/federationmedia/client_test.go",
+      "src/backend/voice/internal/federationmedia/runtime.go",
+      "src/backend/voice/internal/gameprincipal/config.go",
+      "src/backend/voice/internal/gameprincipal/interceptor.go",
+      "src/backend/voice/internal/gameprincipal/interceptor_test.go",
+      "src/backend/voice/internal/gameprincipal/runtime.go",
+      "src/backend/voice/internal/gameprincipal/tls_test.go",
+      "src/backend/voice/internal/gameprovision/account_voice_fence.go",
+      "src/backend/voice/internal/gameprovision/account_voice_fence_integration_test.go",
+      "src/backend/voice/internal/gameprovision/livekit_fencer.go",
+      "src/backend/voice/internal/gameprovision/ordinary_conversion.go",
+      "src/backend/voice/internal/gameprovision/sdk_conversion_fence.go",
+      "src/backend/voice/internal/gameprovision/store_integration_test.go",
+      "src/backend/voice/internal/gameprovision/store_postgres.go",
+      "src/backend/voice/internal/grpcsvc/account_voice_admission.go",
+      "src/backend/voice/internal/grpcsvc/account_voice_admission_test.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy_degradation_test.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy_integration_test.go",
+      "src/backend/voice/internal/grpcsvc/call_privacy_test.go",
+      "src/backend/voice/internal/grpcsvc/chat_guard.go",
+      "src/backend/voice/internal/grpcsvc/communication_timeout_test.go",
+      "src/backend/voice/internal/grpcsvc/federation_media_test.go",
+      "src/backend/voice/internal/grpcsvc/game_session_admission_integration_test.go",
+      "src/backend/voice/internal/grpcsvc/game_session_contract_test.go",
+      "src/backend/voice/internal/grpcsvc/game_session_provisioning.go",
+      "src/backend/voice/internal/grpcsvc/game_session_rejection_test.go",
+      "src/backend/voice/internal/grpcsvc/matchsquad_member.go",
+      "src/backend/voice/internal/grpcsvc/matchsquad_member_test.go",
+      "src/backend/voice/internal/grpcsvc/matchsquad_voice.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_calls.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_calls_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_events.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_events_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_identity.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_identity_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_projection.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_projection_test.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_read.go",
+      "src/backend/voice/internal/grpcsvc/publish_log.go",
+      "src/backend/voice/internal/grpcsvc/publish_log_test.go",
+      "src/backend/voice/internal/grpcsvc/role_guard.go",
+      "src/backend/voice/internal/grpcsvc/screen_share.go",
+      "src/backend/voice/internal/grpcsvc/screen_share_degradation_test.go",
+      "src/backend/voice/internal/grpcsvc/sdk_conversion_fence_test.go",
+      "src/backend/voice/internal/grpcsvc/space_lifecycle.go",
+      "src/backend/voice/internal/grpcsvc/space_media_session_floor_test.go",
+      "src/backend/voice/internal/grpcsvc/space_member_degradation_test.go",
+      "src/backend/voice/internal/grpcsvc/subscription_voice_limits_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_commander.go",
+      "src/backend/voice/internal/grpcsvc/voice_commander_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_grpc_group_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_access.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_integration_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room_move_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_session_binding_test.go",
+      "src/backend/voice/internal/livekit/room_lifecycle_test.go",
+      "src/backend/voice/internal/livekit/space_token_test.go",
+      "src/backend/voice/internal/livekit/token.go",
+      "src/backend/voice/internal/livekit/token_test.go",
+      "src/backend/voice/internal/matchsquad/compaction.go",
+      "src/backend/voice/internal/matchsquad/member.go",
+      "src/backend/voice/internal/matchsquad/member_repair.go",
+      "src/backend/voice/internal/matchsquad/member_test.go",
+      "src/backend/voice/internal/matchsquad/postgres_integration_test.go",
+      "src/backend/voice/internal/matchsquad/service.go",
+      "src/backend/voice/internal/matchsquad/service_test.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/config.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/config_test.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/interceptor.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/interceptor_test.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/runtime.go",
+      "src/backend/voice/internal/matchsquadmemberprincipal/runtime_test.go",
+      "src/backend/voice/internal/matchsquadprincipal/config.go",
+      "src/backend/voice/internal/matchsquadprincipal/config_test.go",
+      "src/backend/voice/internal/matchsquadprincipal/interceptor.go",
+      "src/backend/voice/internal/matchsquadprincipal/interceptor_test.go",
+      "src/backend/voice/internal/matchsquadprincipal/runtime.go",
+      "src/backend/voice/internal/ordinarycall/conversion.go",
+      "src/backend/voice/internal/ordinarycall/coordinator.go",
+      "src/backend/voice/internal/ordinarycall/coordinator_test.go",
+      "src/backend/voice/internal/ordinarycall/lookup.go",
+      "src/backend/voice/internal/ordinarycall/media_authorization.go",
+      "src/backend/voice/internal/ordinarycall/model.go",
+      "src/backend/voice/internal/ordinarycall/model_test.go",
+      "src/backend/voice/internal/ordinarycall/outbox.go",
+      "src/backend/voice/internal/ordinarycall/outbox_test.go",
+      "src/backend/voice/internal/ordinarycall/recovery.go",
+      "src/backend/voice/internal/ordinarycall/validation.go",
+      "src/backend/voice/internal/principalgrpc/dependency.go",
+      "src/backend/voice/internal/principalgrpc/dependency_test.go",
+      "src/backend/voice/internal/principalgrpc/interceptor.go",
+      "src/backend/voice/internal/principalgrpc/interceptor_test.go",
+      "src/backend/voice/internal/principaljwks/config.go",
+      "src/backend/voice/internal/principaljwks/config_test.go",
+      "src/backend/voice/internal/rolegrant/client.go",
+      "src/backend/voice/internal/rolegrant/client_test.go",
+      "src/backend/voice/internal/roomlifecycle/authority.go",
+      "src/backend/voice/internal/roomlifecycle/authority_test.go",
+      "src/backend/voice/internal/roomlifecycle/binding.go",
+      "src/backend/voice/internal/roomlifecycle/binding_test.go",
+      "src/backend/voice/internal/roomlifecycle/crash_harness_test.go",
+      "src/backend/voice/internal/roomlifecycle/ledger.go",
+      "src/backend/voice/internal/roomlifecycle/ledger_test.go",
+      "src/backend/voice/internal/roomlifecycle/lifecycle_store.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_concurrency_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_legacy_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_migration_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_store_test.go",
+      "src/backend/voice/internal/roomlifecycle/matchmaking_membership_test.go",
+      "src/backend/voice/internal/roomlifecycle/memory_ledger.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_concurrency_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_decision.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_delivery.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_migration_down_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_migration_integrity_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_migration_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_source_review_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_store.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_store_test.go",
+      "src/backend/voice/internal/roomlifecycle/postgres_test_helpers_test.go",
+      "src/backend/voice/internal/roomlifecycle/r22_proto_contract_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_bridge.go",
+      "src/backend/voice/internal/roomlifecycle/redis_divergence.go",
+      "src/backend/voice/internal/roomlifecycle/redis_divergence_migration_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_divergence_store_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_ledger.go",
+      "src/backend/voice/internal/roomlifecycle/redis_ledger_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_mirror.go",
+      "src/backend/voice/internal/roomlifecycle/redis_mirror_d2d3_red_test.go",
+      "src/backend/voice/internal/roomlifecycle/redis_mirror_real_d2d3_red_test.go",
+      "src/backend/voice/internal/s2s/chat_membership.go",
+      "src/backend/voice/internal/s2s/forward_meta.go",
+      "src/backend/voice/internal/s2s/privacy.go",
+      "src/backend/voice/internal/s2s/profile_account.go",
+      "src/backend/voice/internal/s2s/profile_account_test.go",
+      "src/backend/voice/internal/s2s/role_permissions.go",
+      "src/backend/voice/internal/s2s/role_permissions_test.go",
+      "src/backend/voice/internal/s2s/role_voice_room_grants.go",
+      "src/backend/voice/internal/s2s/space_membership.go",
+      "src/backend/voice/internal/s2s/space_pro.go",
+      "src/backend/voice/internal/s2s/voice_room_access.go",
+      "src/backend/voice/internal/s2s/voice_room_access_test.go",
+      "src/backend/voice/internal/sessionfloor/client.go",
+      "src/backend/voice/internal/sessionfloor/client_test.go",
+      "src/backend/voice/internal/spacelifecycle/effects_test.go",
+      "src/backend/voice/internal/spacelifecycle/store_test.go",
+      "src/backend/voice/internal/spacemedia/consumer.go",
+      "src/backend/voice/internal/spacemedia/outbox.go",
+      "src/backend/voice/internal/spacemedia/outbox_test.go",
+      "src/backend/voice/internal/spacemedia/postgres_admission_diagnostics_test.go",
+      "src/backend/voice/internal/spaceprincipalruntime/config.go",
+      "src/backend/voice/internal/spaceprincipalruntime/config_test.go",
+      "src/backend/voice/internal/spaceprincipalruntime/runtime.go",
+      "src/backend/voice/internal/spaceprincipalruntime/runtime_test.go",
+      "src/backend/voice/internal/store/call_store_test.go",
+      "src/backend/voice/internal/store/ordinary_cutover.go",
+      "src/backend/voice/internal/store/ordinary_projection.go",
+      "src/backend/voice/internal/store/ordinary_projection_integration_test.go",
+      "src/backend/voice/internal/store/ordinary_projection_test.go",
+      "src/backend/voice/internal/store/screen_share_store_test.go",
+      "src/backend/voice/internal/voiceevents/jetstream_contract_test.go",
+      "src/backend/voice/internal/voiceevents/jetstream_inbox_test.go",
+      "src/backend/voice/internal/voiceevents/ordinary.go",
+      "src/backend/voice/internal/voiceevents/ordinary_test.go",
+      "src/backend/voice/internal/voiceevents/participant.go",
+      "src/backend/voice/internal/voiceevents/participant_test.go",
+      "src/backend/voice/internal/voiceevents/publisher.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/bootstrap_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/config.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/config_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/diagnostics_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/interceptor_test.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/runtime.go",
+      "src/backend/voice/internal/voiceuserprincipalruntime/runtime_test.go",
+      "src/backend/voice/logger.go",
+      "src/backend/voice/logger_test.go",
+      "src/backend/voice/metrics_test.go",
+      "src/backend/voice/ordinary_runtime.go",
+      "src/backend/voice/ordinary_runtime_test.go",
+      "src/backend/voice/pb/voice/analytics/v1/analytics.pb.go",
+      "src/backend/voice/pb/voice/analytics/v1/analytics_grpc.pb.go",
+      "src/backend/voice/pb/voice/auth/go.mod",
+      "src/backend/voice/pb/voice/auth/v1/auth.pb.go",
+      "src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go",
+      "src/backend/voice/pb/voice/bot/go.mod",
+      "src/backend/voice/pb/voice/bot/go.sum",
+      "src/backend/voice/pb/voice/bot/v1/bot.pb.go",
+      "src/backend/voice/pb/voice/bot/v1/bot_grpc.pb.go",
+      "src/backend/voice/pb/voice/calls/v1/calls.pb.go",
+      "src/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "src/backend/voice/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "src/backend/voice/pb/voice/common/v1/bot_message.pb.go",
+      "src/backend/voice/pb/voice/common/v1/common.pb.go",
+      "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go",
+      "src/backend/voice/pb/voice/file/v1/file.pb.go",
+      "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go",
+      "src/backend/voice/pb/voice/gameintegration/go.mod",
+      "src/backend/voice/pb/voice/gameintegration/v1/game_event.pb.go",
+      "src/backend/voice/pb/voice/matchmaking/go.mod",
+      "src/backend/voice/pb/voice/matchmaking/v1/matchmaking.pb.go",
+      "src/backend/voice/pb/voice/matchmaking/v1/matchmaking_grpc.pb.go",
+      "src/backend/voice/pb/voice/messaging/v1/messaging.pb.go",
+      "src/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go",
+      "src/backend/voice/pb/voice/moderation/go.mod",
+      "src/backend/voice/pb/voice/moderation/go.sum",
+      "src/backend/voice/pb/voice/moderation/v1/moderation.pb.go",
+      "src/backend/voice/pb/voice/moderation/v1/moderation_grpc.pb.go",
+      "src/backend/voice/pb/voice/notification/go.mod",
+      "src/backend/voice/pb/voice/notification/go.sum",
+      "src/backend/voice/pb/voice/notification/v1/notification.pb.go",
+      "src/backend/voice/pb/voice/notification/v1/notification_grpc.pb.go",
+      "src/backend/voice/pb/voice/role/v1/member_admission.pb.go",
+      "src/backend/voice/pb/voice/role/v1/role.pb.go",
+      "src/backend/voice/pb/voice/role/v1/role_grpc.pb.go",
+      "src/backend/voice/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "src/backend/voice/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/federation_management.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/federation_management_grpc.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/s2s.pb.go",
+      "src/backend/voice/pb/voice/s2s/v1/s2s_grpc.pb.go",
+      "src/backend/voice/pb/voice/search/go.mod",
+      "src/backend/voice/pb/voice/search/v1/search.pb.go",
+      "src/backend/voice/pb/voice/search/v1/search_grpc.pb.go",
+      "src/backend/voice/pb/voice/social/v1/social.pb.go",
+      "src/backend/voice/pb/voice/social/v1/social_grpc.pb.go",
+      "src/backend/voice/pb/voice/space/v1/member_admission.pb.go",
+      "src/backend/voice/pb/voice/space/v1/space.pb.go",
+      "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/go.mod",
+      "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_actor.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_consent.pb.go",
+      "src/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go",
+      "src/backend/voice/pb/voice/story/v1/story.pb.go",
+      "src/backend/voice/pb/voice/story/v1/story_grpc.pb.go",
+      "src/backend/voice/pb/voice/subscription/go.sum",
+      "src/backend/voice/pb/voice/subscription/v1/subscription.pb.go",
+      "src/backend/voice/pb/voice/subscription/v1/subscription_grpc.pb.go",
+      "src/backend/voice/pb/voice/user/v1/space_account_capture.pb.go",
+      "src/backend/voice/pb/voice/user/v1/user.pb.go",
+      "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
+    ],
+    "directory_inventories": [
+      {
+        "directory": "src/backend/chat/pb/voice/chat",
+        "entries": {
+          "src/backend/chat/pb/voice/chat/go.mod": "100644 blob 7e2764fca269a35c28b652146421dfd083385aa5\tsrc/backend/chat/pb/voice/chat/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/chat/pb/voice/chat/v1",
+        "entries": {
+          "src/backend/chat/pb/voice/chat/v1/chat.pb.go": "100644 blob 5808085283660a1ae4fb7c9630a848779efbfcb8\tsrc/backend/chat/pb/voice/chat/v1/chat.pb.go",
+          "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go": "100644 blob 0db4d24d9d4c3f4aa0b9adada64433e76fff306e\tsrc/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go",
+          "src/backend/chat/pb/voice/chat/v1/chat_lifecycle.pb.go": "100644 blob 2e3d47150856f044205cd9c9b48c448e0e253909\tsrc/backend/chat/pb/voice/chat/v1/chat_lifecycle.pb.go",
+          "src/backend/chat/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go": "100644 blob 2b8f08b99d3411fc8eb0ccc97a616ff279554c18\tsrc/backend/chat/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+          "src/backend/chat/pb/voice/chat/v1/chat_scope_authority.pb.go": "100644 blob 2cd8f6f40e534f1ff218cbc48d0b3d63aa1a2ca4\tsrc/backend/chat/pb/voice/chat/v1/chat_scope_authority.pb.go",
+          "src/backend/chat/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go": "100644 blob 54aa1046c6dd62a3193744605219b99a3f73b3f0\tsrc/backend/chat/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/federation",
+        "entries": {
+          "src/backend/federation/Dockerfile": "100644 blob 692377a09db55fc5ac127c38d71e91b93e455627\tsrc/backend/federation/Dockerfile",
+          "src/backend/federation/README.md": "100644 blob 173e098c0461483062d1a13d8c2f6205e4c29718\tsrc/backend/federation/README.md",
+          "src/backend/federation/api.go": "100644 blob b7f55ac40bbfc9bff2d6d523f61126b528e8a994\tsrc/backend/federation/api.go",
+          "src/backend/federation/authority.go": "100644 blob eebea4dce26102c9a29c9877812fd7231586d45d\tsrc/backend/federation/authority.go",
+          "src/backend/federation/authority_test.go": "100644 blob 20cd9cbae12c23f3349671e0db0feb579f0640b5\tsrc/backend/federation/authority_test.go",
+          "src/backend/federation/go.mod": "100644 blob 91931d8e2c9ce33d0e48ad2f49c5b68e19d8a5b4\tsrc/backend/federation/go.mod",
+          "src/backend/federation/go.sum": "100644 blob 9b35ff8fb544ea87125cbfe1c5d5b6d144e74bbf\tsrc/backend/federation/go.sum",
+          "src/backend/federation/health.go": "100644 blob a537bc1efec80bcc70aedba9981b1d10e577227c\tsrc/backend/federation/health.go",
+          "src/backend/federation/health_test.go": "100644 blob 49c95f7626ccb8e8d953567f38684c8cf48dbc6b\tsrc/backend/federation/health_test.go",
+          "src/backend/federation/main.go": "100644 blob 174a50b90a8e8948db9da83c959d9e08b95d350c\tsrc/backend/federation/main.go",
+          "src/backend/federation/media_grant.go": "100644 blob e2c011ad7b1071c23a32c6271fbb091dda02422a\tsrc/backend/federation/media_grant.go",
+          "src/backend/federation/media_grant_test.go": "100644 blob 7ac6f6f03129e9da2826ade0b2acedfd0837b68d\tsrc/backend/federation/media_grant_test.go",
+          "src/backend/federation/metrics_test.go": "100644 blob 56cec67d54d51cd2cdd063bf4eb4b3d31cffc0e8\tsrc/backend/federation/metrics_test.go",
+          "src/backend/federation/node_publisher_integration_test.go": "100644 blob 42983fef70500c35c955d1185c82affe03963b80\tsrc/backend/federation/node_publisher_integration_test.go",
+          "src/backend/federation/q11_acceptance_test.go": "100644 blob 05423324d059c239e81ee7c5ed309f37672d17ae\tsrc/backend/federation/q11_acceptance_test.go",
+          "src/backend/federation/resource_mapping.go": "100644 blob 2540c6b88a5d69deb36b4c71c44481c834fe4bdb\tsrc/backend/federation/resource_mapping.go",
+          "src/backend/federation/resource_mapping_migration_test.go": "100644 blob 12f926ce432b9f6b6b382f56391531b2e832e916\tsrc/backend/federation/resource_mapping_migration_test.go",
+          "src/backend/federation/resource_mapping_test.go": "100644 blob f11633834d51636dbc308c13e1fe2de190784c81\tsrc/backend/federation/resource_mapping_test.go",
+          "src/backend/federation/resource_policy.go": "100644 blob 8a89051a827f9e88c18837fa022b82dd5aa8e70c\tsrc/backend/federation/resource_policy.go",
+          "src/backend/federation/resource_retirement_test.go": "100644 blob 60892e2ccf1571c9e1ee6e3094cb7685a371e5ac\tsrc/backend/federation/resource_retirement_test.go",
+          "src/backend/federation/runtime.go": "100644 blob f3b7bd930db5771ed6193c8b2f1a8aadeb3b1220\tsrc/backend/federation/runtime.go",
+          "src/backend/federation/runtime_test.go": "100644 blob 0ee05aef03e42fb73dace84c4e62e91798295eeb\tsrc/backend/federation/runtime_test.go",
+          "src/backend/federation/store.go": "100644 blob 9628839c4130b39b4f4adab4eaf5c5bf57758512\tsrc/backend/federation/store.go",
+          "src/backend/federation/store_integration_test.go": "100644 blob 819f8ac3ec319b32a14fe53ee8810f64f3c1f9ee\tsrc/backend/federation/store_integration_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/federation/mediaauthority",
+        "entries": {
+          "src/backend/federation/mediaauthority/boot_directory.go": "100644 blob 0920db0a5a8b0435612cec91e680f5552b67088f\tsrc/backend/federation/mediaauthority/boot_directory.go",
+          "src/backend/federation/mediaauthority/boot_directory_test.go": "100644 blob a24c5efa29962a30c8f27d99bfda702e69d6174d\tsrc/backend/federation/mediaauthority/boot_directory_test.go",
+          "src/backend/federation/mediaauthority/boot_test.go": "100644 blob 728f2ba29cde66f74aaab22957717cae1f35bf41\tsrc/backend/federation/mediaauthority/boot_test.go",
+          "src/backend/federation/mediaauthority/directory.go": "100644 blob e5c9dedcfc72110d5139316005e93be4c5c0f7aa\tsrc/backend/federation/mediaauthority/directory.go",
+          "src/backend/federation/mediaauthority/exchange.go": "100644 blob 65b8a92844bd1ab3414a9687d1c3cdb18380d07b\tsrc/backend/federation/mediaauthority/exchange.go",
+          "src/backend/federation/mediaauthority/exchange_test.go": "100644 blob 769c457b4ecbfccc31b76533b23a49c83595c500\tsrc/backend/federation/mediaauthority/exchange_test.go",
+          "src/backend/federation/mediaauthority/grant.go": "100644 blob 20d76a8d5852328bc168315f4adae41ae2819b6d\tsrc/backend/federation/mediaauthority/grant.go",
+          "src/backend/federation/mediaauthority/grant_test.go": "100644 blob 531a193d0aa08f4dc8bf6bb6d4bb9576486a453e\tsrc/backend/federation/mediaauthority/grant_test.go",
+          "src/backend/federation/mediaauthority/registry.go": "100644 blob ef2559fe52d33a928433a490f7f23b32b200c67e\tsrc/backend/federation/mediaauthority/registry.go",
+          "src/backend/federation/mediaauthority/registry_test.go": "100644 blob 571bba7d6c1ac0e3cb346ea2dd3477550cfebf93\tsrc/backend/federation/mediaauthority/registry_test.go",
+          "src/backend/federation/mediaauthority/request.go": "100644 blob a25ee32fbc6a0abe8e3297c44ddeb01c1c359574\tsrc/backend/federation/mediaauthority/request.go"
+        }
+      },
+      {
+        "directory": "src/backend/federation/nodecache",
+        "entries": {
+          "src/backend/federation/nodecache/cache.go": "100644 blob e06d27279dd3723c1b351a147ce8379b7409c80d\tsrc/backend/federation/nodecache/cache.go",
+          "src/backend/federation/nodecache/cache_test.go": "100644 blob 7dfa9f33bfdfeecf2a46f1d316245374c18804c7\tsrc/backend/federation/nodecache/cache_test.go",
+          "src/backend/federation/nodecache/media_watchdog.go": "100644 blob 95c914c6d32130e6163305ddcbf75bb80660ba79\tsrc/backend/federation/nodecache/media_watchdog.go",
+          "src/backend/federation/nodecache/media_watchdog_test.go": "100644 blob e5479bfff127c80750df0748ec89acea4b5d5ae5\tsrc/backend/federation/nodecache/media_watchdog_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/federation/protocol",
+        "entries": {
+          "src/backend/federation/protocol/boot_test.go": "100644 blob 21c948cf51a61d156535a77ecbd09eea261f034d\tsrc/backend/federation/protocol/boot_test.go",
+          "src/backend/federation/protocol/protocol.go": "100644 blob 406732c49e6ee889450409d5673e68dac9e1adbf\tsrc/backend/federation/protocol/protocol.go",
+          "src/backend/federation/protocol/scoped_permission_test.go": "100644 blob 2b233efda25d46f3a20d6726190b9d3f8f82b515\tsrc/backend/federation/protocol/scoped_permission_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/file/pb/voice/file",
+        "entries": {
+          "src/backend/file/pb/voice/file/go.mod": "100644 blob d2eccf8c88c66aa43ef3f2d5ddca51f9511ff9fc\tsrc/backend/file/pb/voice/file/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/file/pb/voice/file/v1",
+        "entries": {
+          "src/backend/file/pb/voice/file/v1/file.pb.go": "100644 blob 3f56314c1e8eedd0e2cb73bde475b60e31927dab\tsrc/backend/file/pb/voice/file/v1/file.pb.go",
+          "src/backend/file/pb/voice/file/v1/file_grpc.pb.go": "100644 blob 569b8b5ac9f12e6e3d94f0cfe05116feecfcb1b6\tsrc/backend/file/pb/voice/file/v1/file_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/messaging/pb/voice/events",
+        "entries": {
+          "src/backend/messaging/pb/voice/events/go.mod": "100644 blob 55147001a4c21a94cb2cceded6c4a9c195f32cd7\tsrc/backend/messaging/pb/voice/events/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/messaging/pb/voice/events/v1",
+        "entries": {
+          "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go": "100644 blob f96ceb897e0c371615817b060c241bcdc45ae020\tsrc/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg",
+        "entries": {
+          "src/backend/pkg/$prof": "100644 blob 5ae6323f50fdff02d094613aa7c85f90103815e3\tsrc/backend/pkg/$prof",
+          "src/backend/pkg/coverage": "100644 blob 4c3a0fa0ab4e6eebe849f96ca84ba353d922156f\tsrc/backend/pkg/coverage",
+          "src/backend/pkg/go.mod": "100644 blob 17f6b7c5dae7f9e92d8f0888ce4b343e261ee2f1\tsrc/backend/pkg/go.mod",
+          "src/backend/pkg/go.sum": "100644 blob bc33569c007bd66e44702f859e43be94a9f6c8ff\tsrc/backend/pkg/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/authoritysource",
+        "entries": {
+          "src/backend/pkg/authoritysource/auth_state.go": "100644 blob 175e2747f69a744cdb4dedb764b13b2875de8c6d\tsrc/backend/pkg/authoritysource/auth_state.go",
+          "src/backend/pkg/authoritysource/auth_state_test.go": "100644 blob e13daf83c46cc4313c3343a2857cd4f9b10dea25\tsrc/backend/pkg/authoritysource/auth_state_test.go",
+          "src/backend/pkg/authoritysource/postgres.go": "100644 blob 6a55b91475379c29a3cbd4fc62218d9233f2db66\tsrc/backend/pkg/authoritysource/postgres.go",
+          "src/backend/pkg/authoritysource/postgres_integration_test.go": "100644 blob fc1a557a3911962f20f6e72e61bbf875dcdef57c\tsrc/backend/pkg/authoritysource/postgres_integration_test.go",
+          "src/backend/pkg/authoritysource/qualified_scope_test.go": "100644 blob 35c6f00e96c117e32e6d5a2cdd10635eb84b5639\tsrc/backend/pkg/authoritysource/qualified_scope_test.go",
+          "src/backend/pkg/authoritysource/role_state.go": "100644 blob 1bd18ca59fabb9c614ab1266af3f67c8d3a6ffbb\tsrc/backend/pkg/authoritysource/role_state.go",
+          "src/backend/pkg/authoritysource/role_state_test.go": "100644 blob 7adc29fadda2fb5bbce81eb7f3d4a3d00255872b\tsrc/backend/pkg/authoritysource/role_state_test.go",
+          "src/backend/pkg/authoritysource/role_state_v2.go": "100644 blob 576e91c672c44524d3b28e202d529f1831b404be\tsrc/backend/pkg/authoritysource/role_state_v2.go",
+          "src/backend/pkg/authoritysource/role_state_v2_test.go": "100644 blob 6f858298e44e41f142231dc29510f4186a8731f9\tsrc/backend/pkg/authoritysource/role_state_v2_test.go",
+          "src/backend/pkg/authoritysource/runtime.go": "100644 blob b24fa7650c44f46f5cf3da47fffdeedf18d2d198\tsrc/backend/pkg/authoritysource/runtime.go",
+          "src/backend/pkg/authoritysource/runtime_config.go": "100644 blob a5875903ac59fb5a55757d23126fa436d50e5d53\tsrc/backend/pkg/authoritysource/runtime_config.go",
+          "src/backend/pkg/authoritysource/runtime_test.go": "100644 blob d401cbff20405e5025cd20d2f7c59832d58ddc2b\tsrc/backend/pkg/authoritysource/runtime_test.go",
+          "src/backend/pkg/authoritysource/server.go": "100644 blob 935a35be35fff369c54b2b407375746dfac0887c\tsrc/backend/pkg/authoritysource/server.go",
+          "src/backend/pkg/authoritysource/server_test.go": "100644 blob ce7e363d969fdc968d643d759ef122d073a8880f\tsrc/backend/pkg/authoritysource/server_test.go",
+          "src/backend/pkg/authoritysource/space_state.go": "100644 blob 5717e154c7e2217ebc575d4d1e28e28bf81b7335\tsrc/backend/pkg/authoritysource/space_state.go",
+          "src/backend/pkg/authoritysource/space_state_test.go": "100644 blob 17b605fe8f8fb37473edeae82a307f0b0c1f209d\tsrc/backend/pkg/authoritysource/space_state_test.go",
+          "src/backend/pkg/authoritysource/user_state.go": "100644 blob c3f1ab10386dd3ca0790170b8f1533f4f461a20b\tsrc/backend/pkg/authoritysource/user_state.go",
+          "src/backend/pkg/authoritysource/user_state_test.go": "100644 blob e7682f065e7a8565e6f1445ac4091fe3375a10ff\tsrc/backend/pkg/authoritysource/user_state_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/correlation",
+        "entries": {
+          "src/backend/pkg/correlation/correlation.go": "100644 blob f760650a670d8e6d606d25366f66f0bf2c9cb3f4\tsrc/backend/pkg/correlation/correlation.go",
+          "src/backend/pkg/correlation/correlation_test.go": "100644 blob c77a9cc5fa5bcc6c4c98f771b53da433201870b5\tsrc/backend/pkg/correlation/correlation_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/gisowner",
+        "entries": {
+          "src/backend/pkg/gisowner/rejection.go": "100644 blob b2ea91b4ffbdef69db66d9417e268bad5dafc377\tsrc/backend/pkg/gisowner/rejection.go",
+          "src/backend/pkg/gisowner/rejection_test.go": "100644 blob e139c221718c65dfb04bf1d7a71f62b3bdf77e3b\tsrc/backend/pkg/gisowner/rejection_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/grpcclient",
+        "entries": {
+          "src/backend/pkg/grpcclient/README.md": "100644 blob 507f764f50df22f8a1dda501f37f1fac7923e07a\tsrc/backend/pkg/grpcclient/README.md",
+          "src/backend/pkg/grpcclient/breaker.go": "100644 blob ffb91f32d39f35437da37b83d65d9c46d0d1c708\tsrc/backend/pkg/grpcclient/breaker.go",
+          "src/backend/pkg/grpcclient/breaker_test.go": "100644 blob 5bd8824d9966ae4db21b6ec03e54425c353a6351\tsrc/backend/pkg/grpcclient/breaker_test.go",
+          "src/backend/pkg/grpcclient/dial.go": "100644 blob 86076b0944b4ae9b848e572999161c04fcd4c123\tsrc/backend/pkg/grpcclient/dial.go",
+          "src/backend/pkg/grpcclient/dial_test.go": "100644 blob 0d72deed23d53258c6e3278e6c84f97f500bd5cd\tsrc/backend/pkg/grpcclient/dial_test.go",
+          "src/backend/pkg/grpcclient/wait.go": "100644 blob fb89ec9fd50d8fc269112cd0bd5bbfdeae80a383\tsrc/backend/pkg/grpcclient/wait.go",
+          "src/backend/pkg/grpcclient/wait_test.go": "100644 blob 066bdd66e801e81d2a55de1e776f4c98d1e779c0\tsrc/backend/pkg/grpcclient/wait_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/grpcmw",
+        "entries": {
+          "src/backend/pkg/grpcmw/interceptor.go": "100644 blob 5aacea3a9545dcdcc95a229163c758265ec73bae\tsrc/backend/pkg/grpcmw/interceptor.go",
+          "src/backend/pkg/grpcmw/interceptor_test.go": "100644 blob dd0f332392573751f3e16abd59fa8a9a5f987e28\tsrc/backend/pkg/grpcmw/interceptor_test.go",
+          "src/backend/pkg/grpcmw/metrics.go": "100644 blob 2eeae6496217562769b05d1603ceefe8b1786041\tsrc/backend/pkg/grpcmw/metrics.go",
+          "src/backend/pkg/grpcmw/metrics_test.go": "100644 blob e904db1e13c246c6422fe81ba67039c5b57a4362\tsrc/backend/pkg/grpcmw/metrics_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/guestguard",
+        "entries": {
+          "src/backend/pkg/guestguard/guestguard.go": "100644 blob 57405f352bb7718de9dda626d18641638e9df59b\tsrc/backend/pkg/guestguard/guestguard.go",
+          "src/backend/pkg/guestguard/guestguard_test.go": "100644 blob bb620515fba88e5414cb6af656ed33392c6695d0\tsrc/backend/pkg/guestguard/guestguard_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/guestprofile",
+        "entries": {
+          "src/backend/pkg/guestprofile/placeholder.go": "100644 blob 7602b67c8bc071ff825e0f92c79d118eee7e301e\tsrc/backend/pkg/guestprofile/placeholder.go",
+          "src/backend/pkg/guestprofile/placeholder_test.go": "100644 blob 5e7f2511bcb8c8921af696d57308e7cd539f89ce\tsrc/backend/pkg/guestprofile/placeholder_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/httpserver",
+        "entries": {
+          "src/backend/pkg/httpserver/httpserver.go": "100644 blob e56be7a3ef6277d21da6b3bf0f287f6bc5657413\tsrc/backend/pkg/httpserver/httpserver.go",
+          "src/backend/pkg/httpserver/timeouts.go": "100644 blob 1acce3fa328738bbca5d2146c6e848829b8f5f2c\tsrc/backend/pkg/httpserver/timeouts.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/integrationtest",
+        "entries": {
+          "src/backend/pkg/integrationtest/authority_migrator.go": "100644 blob 69da62cf16975e4c4a111f443e28241652f2f8af\tsrc/backend/pkg/integrationtest/authority_migrator.go",
+          "src/backend/pkg/integrationtest/authority_source.go": "100644 blob bd574472e1e0d8f93f4acbb4e8374067fbad4980\tsrc/backend/pkg/integrationtest/authority_source.go",
+          "src/backend/pkg/integrationtest/docker.go": "100644 blob 00dcc5c9aefd44a0352c87ab8a442dc1f54e2bb9\tsrc/backend/pkg/integrationtest/docker.go",
+          "src/backend/pkg/integrationtest/docker_test.go": "100644 blob 130d09b3286c0f4655b8613b73d000bd0225f7a0\tsrc/backend/pkg/integrationtest/docker_test.go",
+          "src/backend/pkg/integrationtest/migrations.go": "100644 blob 3d5352419c29fd3d118aec3a75e70535752c9716\tsrc/backend/pkg/integrationtest/migrations.go",
+          "src/backend/pkg/integrationtest/migrations_test.go": "100644 blob 45d2136fb9d66560a24ca8ec3f137a9acc22fcde\tsrc/backend/pkg/integrationtest/migrations_test.go",
+          "src/backend/pkg/integrationtest/postgres.go": "100644 blob a17e120c6746a9d356fc9ab3c2a4cbdad9936977\tsrc/backend/pkg/integrationtest/postgres.go",
+          "src/backend/pkg/integrationtest/postgres_test.go": "100644 blob 6e580910aa9cfe1db4a3d748663c7115a5ba1ce0\tsrc/backend/pkg/integrationtest/postgres_test.go",
+          "src/backend/pkg/integrationtest/preview_rollback_test.go": "100644 blob 56dfb6d7fa47183813b7b1afc7ca489eb7624b93\tsrc/backend/pkg/integrationtest/preview_rollback_test.go",
+          "src/backend/pkg/integrationtest/user_migrations.go": "100644 blob 898c39b6482a427be01549535ce19ee7ce29216f\tsrc/backend/pkg/integrationtest/user_migrations.go",
+          "src/backend/pkg/integrationtest/user_migrations_test.go": "100644 blob 1e00baeb31c09185fe7abbb530b4d70bbeab45b5\tsrc/backend/pkg/integrationtest/user_migrations_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/logging",
+        "entries": {
+          "src/backend/pkg/logging/slog.go": "100644 blob 735e25a9f8ce503ae8396c18f834b321db6689b3\tsrc/backend/pkg/logging/slog.go",
+          "src/backend/pkg/logging/slog_test.go": "100644 blob 09d5d2613f608dcb1cf169a8abdd8f342ef58dfc\tsrc/backend/pkg/logging/slog_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/memberadmission",
+        "entries": {
+          "src/backend/pkg/memberadmission/membership.go": "100644 blob ed45c2f995acbb43e75f6535e0aa916112d395c2\tsrc/backend/pkg/memberadmission/membership.go",
+          "src/backend/pkg/memberadmission/membership_test.go": "100644 blob 2596054b60ea46ca1704d459a6a2f30e966edc21\tsrc/backend/pkg/memberadmission/membership_test.go",
+          "src/backend/pkg/memberadmission/receipt.go": "100644 blob a4289341510655cfa3bbf0fd4bd4d9ce37f05974\tsrc/backend/pkg/memberadmission/receipt.go",
+          "src/backend/pkg/memberadmission/receipt_test.go": "100644 blob d0ae37a2f9b00ebaa3f8a0abf33233a9ab650b1a\tsrc/backend/pkg/memberadmission/receipt_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/middleware",
+        "entries": {
+          "src/backend/pkg/middleware/accesslog.go": "100644 blob b290c46baf22e3f52e835202c45c9347627851db\tsrc/backend/pkg/middleware/accesslog.go",
+          "src/backend/pkg/middleware/accesslog_test.go": "100644 blob d5212b34de2ab8104151c1eacb36abe34ca06031\tsrc/backend/pkg/middleware/accesslog_test.go",
+          "src/backend/pkg/middleware/middleware_test.go": "100644 blob f6be4dfe2bff5b0d2a603ac449e35898c63a8f94\tsrc/backend/pkg/middleware/middleware_test.go",
+          "src/backend/pkg/middleware/requestid.go": "100644 blob ae9a4079870372b64d159e13e10f3be8cd03604d\tsrc/backend/pkg/middleware/requestid.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/natslog",
+        "entries": {
+          "src/backend/pkg/natslog/natslog.go": "100644 blob 4fceb9fa31df5b1c66d3ce81087f2a2e53ebd827\tsrc/backend/pkg/natslog/natslog.go",
+          "src/backend/pkg/natslog/natslog_test.go": "100644 blob 181fbb5feaf35031fb73044a568e9122c57a0158\tsrc/backend/pkg/natslog/natslog_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/pb/voice/authority/v1",
+        "entries": {
+          "src/backend/pkg/pb/voice/authority/v1/authority.pb.go": "100644 blob 5a01e5f3bc60cec4ef3af321876d374dcfb019c0\tsrc/backend/pkg/pb/voice/authority/v1/authority.pb.go",
+          "src/backend/pkg/pb/voice/authority/v1/authority_grpc.pb.go": "100644 blob a4794ce87530ed0fb3a8b1e80382ec1f64109b4e\tsrc/backend/pkg/pb/voice/authority/v1/authority_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/postgres",
+        "entries": {
+          "src/backend/pkg/postgres/pool.go": "100644 blob 5a8169b78f32f57814f596257e9e6ec4093912ca\tsrc/backend/pkg/postgres/pool.go",
+          "src/backend/pkg/postgres/pool_test.go": "100644 blob 4c3a1366b8de60061433ffe4c64dfce83795afcb\tsrc/backend/pkg/postgres/pool_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/principal",
+        "entries": {
+          "src/backend/pkg/principal/bot_actor.go": "100644 blob 246fba4d767eeca3e8536bf81b481bf8aaae6d2c\tsrc/backend/pkg/principal/bot_actor.go",
+          "src/backend/pkg/principal/bot_actor_test.go": "100644 blob a9e5ded63b52ed3b2240f91cd685eeda0eac1eda\tsrc/backend/pkg/principal/bot_actor_test.go",
+          "src/backend/pkg/principal/issuer.go": "100644 blob 1476a29218c73deda1d94c9113a2b844f0dba1c3\tsrc/backend/pkg/principal/issuer.go",
+          "src/backend/pkg/principal/jwks.go": "100644 blob e8ecbd78a1d124c5e2a22f3f7d86b81f19ed7c6c\tsrc/backend/pkg/principal/jwks.go",
+          "src/backend/pkg/principal/jwks_http.go": "100644 blob 5cfa3d0efac7a2465dc0a9e55bb4b8465d842d80\tsrc/backend/pkg/principal/jwks_http.go",
+          "src/backend/pkg/principal/jwks_http_test.go": "100644 blob 671745395f8c77768d2fc433364ac9c3a777eaf8\tsrc/backend/pkg/principal/jwks_http_test.go",
+          "src/backend/pkg/principal/jwks_readiness_test.go": "100644 blob c2a25835624fcfec8afe5c386913da956ea771c8\tsrc/backend/pkg/principal/jwks_readiness_test.go",
+          "src/backend/pkg/principal/jwks_test.go": "100644 blob 4d0af18c2e4a9fcdc2c4504a039fac4815485562\tsrc/backend/pkg/principal/jwks_test.go",
+          "src/backend/pkg/principal/metadata.go": "100644 blob a722a5067e7435c2acaca179bf174fb562799c0f\tsrc/backend/pkg/principal/metadata.go",
+          "src/backend/pkg/principal/metadata_test.go": "100644 blob 377a01ec9129e9711a4483bf957672ec74a3df31\tsrc/backend/pkg/principal/metadata_test.go",
+          "src/backend/pkg/principal/principal_test.go": "100644 blob f22060cc0593f0f50e3e0d5273a2c768f61bc10f\tsrc/backend/pkg/principal/principal_test.go",
+          "src/backend/pkg/principal/request_hash.go": "100644 blob 5d58886e2eeec315cd1120988cb53ebb30e965f0\tsrc/backend/pkg/principal/request_hash.go",
+          "src/backend/pkg/principal/request_hash_test.go": "100644 blob 80171a2caa6afaaf9d0f867466715d024784192f\tsrc/backend/pkg/principal/request_hash_test.go",
+          "src/backend/pkg/principal/social_privacy_rollout_red_test.go": "100644 blob fb2f54beb15bfc0a6bf428b6b5f8ae047450ae35\tsrc/backend/pkg/principal/social_privacy_rollout_red_test.go",
+          "src/backend/pkg/principal/user_identity.go": "100644 blob 68daa3a03533f7410e8dcc527d2efa427f36ed2a\tsrc/backend/pkg/principal/user_identity.go",
+          "src/backend/pkg/principal/user_identity_test.go": "100644 blob 73610ccb065c86e16347e8f58f75cc1b65d329d5\tsrc/backend/pkg/principal/user_identity_test.go",
+          "src/backend/pkg/principal/verifier.go": "100644 blob 2246134b1cf172c4fd4c5b8bec9dd7a827fce581\tsrc/backend/pkg/principal/verifier.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/privacy",
+        "entries": {
+          "src/backend/pkg/privacy/audience.go": "100644 blob ce1aef680080236c7db94f247d38965998029750\tsrc/backend/pkg/privacy/audience.go",
+          "src/backend/pkg/privacy/audience_test.go": "100644 blob fe4e7fe6600a0c40f56680815028513652ed8483\tsrc/backend/pkg/privacy/audience_test.go",
+          "src/backend/pkg/privacy/enforce.go": "100644 blob 45f3c89e4edb3673cbfdc57ae4774bc85c327030\tsrc/backend/pkg/privacy/enforce.go",
+          "src/backend/pkg/privacy/enforce_test.go": "100644 blob 7fb674742655f34a0aa4e951139357eb97bd0a41\tsrc/backend/pkg/privacy/enforce_test.go",
+          "src/backend/pkg/privacy/errors.go": "100644 blob 063cc5e87995cac7feff5912a39cec770ff8c0da\tsrc/backend/pkg/privacy/errors.go",
+          "src/backend/pkg/privacy/matcher.go": "100644 blob 16a72eb5463e144cc968a57c6ff556c7504082bc\tsrc/backend/pkg/privacy/matcher.go",
+          "src/backend/pkg/privacy/matcher_test.go": "100644 blob 7c101c283c0c01345296ffab2848b9c8bfc01855\tsrc/backend/pkg/privacy/matcher_test.go",
+          "src/backend/pkg/privacy/presets.go": "100644 blob 151cedf290fe24cb1fc8bebc3b431a3788257b79\tsrc/backend/pkg/privacy/presets.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/promhttp",
+        "entries": {
+          "src/backend/pkg/promhttp/metrics.go": "100644 blob 96cc1260136bf9cbdfffdf4c3cb329955344b7ae\tsrc/backend/pkg/promhttp/metrics.go",
+          "src/backend/pkg/promhttp/metrics_test.go": "100644 blob 460f303d3f3290e7f7978e4f3a168e7d52fa6f39\tsrc/backend/pkg/promhttp/metrics_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/runtimeconfig",
+        "entries": {
+          "src/backend/pkg/runtimeconfig/duration.go": "100644 blob b516db8e9b4d005dab20f97bc91d56d7318d29c4\tsrc/backend/pkg/runtimeconfig/duration.go",
+          "src/backend/pkg/runtimeconfig/duration_test.go": "100644 blob a48592c981382a71cfdb49fd4ec20b95aedf519a\tsrc/backend/pkg/runtimeconfig/duration_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/socialprincipal",
+        "entries": {
+          "src/backend/pkg/socialprincipal/auth_sdk_test.go": "100644 blob 8d3d0b6d7ccd0beb4bca9c9bf38a8a59f06a6652\tsrc/backend/pkg/socialprincipal/auth_sdk_test.go",
+          "src/backend/pkg/socialprincipal/communication_runtime_test.go": "100644 blob ab646031b3c35a7e6c4aa686aac6681d13b44f8b\tsrc/backend/pkg/socialprincipal/communication_runtime_test.go",
+          "src/backend/pkg/socialprincipal/communication_test.go": "100644 blob 84f3d58cb60c4028f445730488a505fbd5be0e77\tsrc/backend/pkg/socialprincipal/communication_test.go",
+          "src/backend/pkg/socialprincipal/config.go": "100644 blob 879501f19c820540ad5d1972c5a67fdfcffacb9c\tsrc/backend/pkg/socialprincipal/config.go",
+          "src/backend/pkg/socialprincipal/config_test.go": "100644 blob f6d1c4fcdb73ce52a313f500f824222e45f715c8\tsrc/backend/pkg/socialprincipal/config_test.go",
+          "src/backend/pkg/socialprincipal/diagnostic_test.go": "100644 blob abc4c9e8107d2d40037d4116171945527c92f8fc\tsrc/backend/pkg/socialprincipal/diagnostic_test.go",
+          "src/backend/pkg/socialprincipal/interceptor.go": "100644 blob f41c8431189a94d75608094afaf7c725e1cc1a25\tsrc/backend/pkg/socialprincipal/interceptor.go",
+          "src/backend/pkg/socialprincipal/interceptor_test.go": "100644 blob 2dce3cbb0b209942ada17148a982e17dfac7d958\tsrc/backend/pkg/socialprincipal/interceptor_test.go",
+          "src/backend/pkg/socialprincipal/listener_ca_test.go": "100644 blob f0c7cd091adbde6c4683c58f63ae4aee1606be77\tsrc/backend/pkg/socialprincipal/listener_ca_test.go",
+          "src/backend/pkg/socialprincipal/listener_test.go": "100644 blob 292594006557ae5608cee76c9a85dbf76abc8fcd\tsrc/backend/pkg/socialprincipal/listener_test.go",
+          "src/backend/pkg/socialprincipal/runtime.go": "100644 blob a3a257396c37dad8e155df32a6d8189231d040ee\tsrc/backend/pkg/socialprincipal/runtime.go",
+          "src/backend/pkg/socialprincipal/runtime_allowlist_test.go": "100644 blob 5d9866b3fd3a5a37038037398cfaab667195ec46\tsrc/backend/pkg/socialprincipal/runtime_allowlist_test.go",
+          "src/backend/pkg/socialprincipal/runtime_integration_test.go": "100644 blob d9c53f3aa63e1b0185883b5a217c6695c5a96ded\tsrc/backend/pkg/socialprincipal/runtime_integration_test.go",
+          "src/backend/pkg/socialprincipal/runtime_test.go": "100644 blob 2a1054a20a091a0e62b819dced8db36e7221111a\tsrc/backend/pkg/socialprincipal/runtime_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/pkg/spacecommunication",
+        "entries": {
+          "src/backend/pkg/spacecommunication/client.go": "100644 blob 9c865a67d2802558666da8d8fc62020494ca5392\tsrc/backend/pkg/spacecommunication/client.go",
+          "src/backend/pkg/spacecommunication/client_test.go": "100644 blob ae115c7ad8191633d3e088559a1360fa311577c7\tsrc/backend/pkg/spacecommunication/client_test.go",
+          "src/backend/pkg/spacecommunication/snapshot.go": "100644 blob 8867e25c7f2ffd8d343ca46e36924810ff06bbb9\tsrc/backend/pkg/spacecommunication/snapshot.go",
+          "src/backend/pkg/spacecommunication/snapshot_test.go": "100644 blob b062210d4e9a2e4df9ce6e68b85775a4ef91f57e\tsrc/backend/pkg/spacecommunication/snapshot_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/role/pb/voice/role",
+        "entries": {
+          "src/backend/role/pb/voice/role/go.mod": "100644 blob 20fa7175f4b222f40957f0fcb92daf42d7f84b02\tsrc/backend/role/pb/voice/role/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/role/pb/voice/role/v1",
+        "entries": {
+          "src/backend/role/pb/voice/role/v1/member_admission.pb.go": "100644 blob 45e694b07216fe4d89d0c8eecd5d42edf46b26a4\tsrc/backend/role/pb/voice/role/v1/member_admission.pb.go",
+          "src/backend/role/pb/voice/role/v1/role.pb.go": "100644 blob 100f81de5fbbb4acaba75b4c6257fe270df1cf79\tsrc/backend/role/pb/voice/role/v1/role.pb.go",
+          "src/backend/role/pb/voice/role/v1/role_grpc.pb.go": "100644 blob 80a6658eced7fee9fc7c87f71a8af85a3a1c43db\tsrc/backend/role/pb/voice/role/v1/role_grpc.pb.go",
+          "src/backend/role/pb/voice/role/v1/space_chat_permissions.pb.go": "100644 blob 1cf87a794d855a3481e4c7e502b61f34ff7b122e\tsrc/backend/role/pb/voice/role/v1/space_chat_permissions.pb.go",
+          "src/backend/role/pb/voice/role/v1/space_chat_permissions_grpc.pb.go": "100644 blob 9eb3a0c16a6e2fc81d958e8285395e059c32140d\tsrc/backend/role/pb/voice/role/v1/space_chat_permissions_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/common",
+        "entries": {
+          "src/backend/user/pb/voice/common/go.mod": "100644 blob 581e4ebd2981c4471b8ef869d0a3fa0b973bf9aa\tsrc/backend/user/pb/voice/common/go.mod",
+          "src/backend/user/pb/voice/common/go.sum": "100644 blob 980e15bcbe469250837130b5abfa31fd14e231c4\tsrc/backend/user/pb/voice/common/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/common/v1",
+        "entries": {
+          "src/backend/user/pb/voice/common/v1/bot_message.pb.go": "100644 blob bf725278387c62ec4c8c0ead92fad2a0e2a9b561\tsrc/backend/user/pb/voice/common/v1/bot_message.pb.go",
+          "src/backend/user/pb/voice/common/v1/common.pb.go": "100644 blob 17224a2f39fd5f2df4f7122ce64d1ae58dbffeaf\tsrc/backend/user/pb/voice/common/v1/common.pb.go",
+          "src/backend/user/pb/voice/common/v1/space_lifecycle.pb.go": "100644 blob 4d476867354b8da634a4524f75b901f7e4f598c2\tsrc/backend/user/pb/voice/common/v1/space_lifecycle.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/gameintegration",
+        "entries": {
+          "src/backend/user/pb/voice/gameintegration/go.mod": "100644 blob ff529d4955d9304c8fac3e64c47c2fd6bec7233e\tsrc/backend/user/pb/voice/gameintegration/go.mod",
+          "src/backend/user/pb/voice/gameintegration/go.sum": "100644 blob b91f33177510eb32e57d07183f745666d37c01f0\tsrc/backend/user/pb/voice/gameintegration/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/gameintegration/v1",
+        "entries": {
+          "src/backend/user/pb/voice/gameintegration/v1/game_event.pb.go": "100644 blob 7cd9a5571d80817f97a80d982ddbb95f420f80b0\tsrc/backend/user/pb/voice/gameintegration/v1/game_event.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/social",
+        "entries": {
+          "src/backend/user/pb/voice/social/go.mod": "100644 blob 76be43ae364ae27042c66412ac22117cc49a1eca\tsrc/backend/user/pb/voice/social/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/social/v1",
+        "entries": {
+          "src/backend/user/pb/voice/social/v1/social.pb.go": "100644 blob 9ae7e1ea6ad6451b4c97662cf34ca450f1aec0c6\tsrc/backend/user/pb/voice/social/v1/social.pb.go",
+          "src/backend/user/pb/voice/social/v1/social_grpc.pb.go": "100644 blob 4872fc77b23bad5f9cc19058ff70adffeae503d9\tsrc/backend/user/pb/voice/social/v1/social_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/user",
+        "entries": {
+          "src/backend/user/pb/voice/user/go.mod": "100644 blob ddf45ac00d117071e4f8f5a3c4f147bd8efa8826\tsrc/backend/user/pb/voice/user/go.mod",
+          "src/backend/user/pb/voice/user/go.sum": "100644 blob fb2a0582d0e778f87f18c03abb1f33c190849ad5\tsrc/backend/user/pb/voice/user/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/user/pb/voice/user/v1",
+        "entries": {
+          "src/backend/user/pb/voice/user/v1/space_account_capture.pb.go": "100644 blob cbc7cb3f5d1ba214270d6cfb8fa31f0d8470e225\tsrc/backend/user/pb/voice/user/v1/space_account_capture.pb.go",
+          "src/backend/user/pb/voice/user/v1/user.pb.go": "100644 blob f2ad85e0f564da504024d9254bfe81867b874544\tsrc/backend/user/pb/voice/user/v1/user.pb.go",
+          "src/backend/user/pb/voice/user/v1/user_grpc.pb.go": "100644 blob af3ac2ea624a6cb4174e8358815fee29ab43a50b\tsrc/backend/user/pb/voice/user/v1/user_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice",
+        "entries": {
+          "src/backend/voice/$prof": "100644 blob 8396509f4f08067e9e22259ab80fa0a1e54040c6\tsrc/backend/voice/$prof",
+          "src/backend/voice/Dockerfile": "100644 blob 03e931004f83bcd12a1a4f65f1ac8d928a8ae797\tsrc/backend/voice/Dockerfile",
+          "src/backend/voice/README.md": "100644 blob 12214f46f3c67000283819b5b703db55d5c2064c\tsrc/backend/voice/README.md",
+          "src/backend/voice/coverage": "100644 blob b0fc65f7610932a47e645544052a17bda8594404\tsrc/backend/voice/coverage",
+          "src/backend/voice/database.go": "100644 blob 141029253f3327994e0956478d0c56bc4f7bfbd5\tsrc/backend/voice/database.go",
+          "src/backend/voice/database_test.go": "100644 blob b1f843a48d8f14ee2833b74560b338c710eda580\tsrc/backend/voice/database_test.go",
+          "src/backend/voice/go.mod": "100644 blob 4234ee41b4ea080e84c82beb8f3e2537240f822f\tsrc/backend/voice/go.mod",
+          "src/backend/voice/go.sum": "100644 blob 1151714bf63c7b954921658abf54d4a2d0d3888d\tsrc/backend/voice/go.sum",
+          "src/backend/voice/health.go": "100644 blob 5c83067b069d50b0f1061af32f55c20f9581ddde\tsrc/backend/voice/health.go",
+          "src/backend/voice/health_test.go": "100644 blob acbe9f3015165178210e8b13d87c0ecc94000ccd\tsrc/backend/voice/health_test.go",
+          "src/backend/voice/jwks_recovery_test.go": "100644 blob 54c87f1450650038b561dd109c034bbc78b7b6ba\tsrc/backend/voice/jwks_recovery_test.go",
+          "src/backend/voice/jwks_startup_order_test.go": "100644 blob e197505cf8cdf44a88635b3b3c596b53acc9e4d0\tsrc/backend/voice/jwks_startup_order_test.go",
+          "src/backend/voice/logger.go": "100644 blob 44ff46d26c9e4f9d7b067e84d4e7771a797290f3\tsrc/backend/voice/logger.go",
+          "src/backend/voice/logger_test.go": "100644 blob b1d99e247933172595d7b23f2d8a7b901846152e\tsrc/backend/voice/logger_test.go",
+          "src/backend/voice/main.go": "100644 blob 540a91513cfd19d1499183302b3880a578951d56\tsrc/backend/voice/main.go",
+          "src/backend/voice/metrics_test.go": "100644 blob ef06daae6839ae250c7b7839a5bc06d5ffa9af3e\tsrc/backend/voice/metrics_test.go",
+          "src/backend/voice/ordinary_runtime.go": "100644 blob b51436bec28c17c8ecb93cad68176564026802e3\tsrc/backend/voice/ordinary_runtime.go",
+          "src/backend/voice/ordinary_runtime_test.go": "100644 blob 35d8892bd870ab6dba1237576380ea1dabf6149a\tsrc/backend/voice/ordinary_runtime_test.go",
+          "src/backend/voice/party_outbox_runtime.go": "100644 blob e7c5eab30a054008d7d16862f622f5d92f5351f6\tsrc/backend/voice/party_outbox_runtime.go",
+          "src/backend/voice/party_outbox_runtime_test.go": "100644 blob e6c286935c56516ec861d12634fc74eb7122d1bd\tsrc/backend/voice/party_outbox_runtime_test.go",
+          "src/backend/voice/space_media_runtime.go": "100644 blob beff70aecd2d4dd42cbc21ba88691193caf4ac56\tsrc/backend/voice/space_media_runtime.go",
+          "src/backend/voice/space_media_runtime_test.go": "100644 blob c7400b16f82518fc81f156511577411c16a4fd20\tsrc/backend/voice/space_media_runtime_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/admissionlock",
+        "entries": {
+          "src/backend/voice/internal/admissionlock/identity.go": "100644 blob 90129b1637dce25c6800fb7c32bd52c87e008013\tsrc/backend/voice/internal/admissionlock/identity.go",
+          "src/backend/voice/internal/admissionlock/identity_test.go": "100644 blob 8edbaf030d2a5eb455e825afbdf142775260db31\tsrc/backend/voice/internal/admissionlock/identity_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/authctx",
+        "entries": {
+          "src/backend/voice/internal/authctx/authctx.go": "100644 blob 7c2d34a085e920d56a8bacb84b4fc96293f86152\tsrc/backend/voice/internal/authctx/authctx.go",
+          "src/backend/voice/internal/authctx/authctx_test.go": "100644 blob 5cc70ca9a2b6e1ae1b02a88a1c828a3eb35c6668\tsrc/backend/voice/internal/authctx/authctx_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/federationmedia",
+        "entries": {
+          "src/backend/voice/internal/federationmedia/client.go": "100644 blob e44af56d7b2b080e8831b28d447b3a4600e8e408\tsrc/backend/voice/internal/federationmedia/client.go",
+          "src/backend/voice/internal/federationmedia/client_test.go": "100644 blob d6e74a3f3e3f48183538dde91105ce83122f93c3\tsrc/backend/voice/internal/federationmedia/client_test.go",
+          "src/backend/voice/internal/federationmedia/runtime.go": "100644 blob b41f034d9cf614c1748840b83d71762b3201d2c6\tsrc/backend/voice/internal/federationmedia/runtime.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/gameprincipal",
+        "entries": {
+          "src/backend/voice/internal/gameprincipal/config.go": "100644 blob 90ab7a32a5679e47951e1037c22c36ce7d742db2\tsrc/backend/voice/internal/gameprincipal/config.go",
+          "src/backend/voice/internal/gameprincipal/interceptor.go": "100644 blob 28b6ac267bad4f2bdfa51d963ddb14bea70fc064\tsrc/backend/voice/internal/gameprincipal/interceptor.go",
+          "src/backend/voice/internal/gameprincipal/interceptor_test.go": "100644 blob f07ba92193082f774f05c1c047763b523f2f876f\tsrc/backend/voice/internal/gameprincipal/interceptor_test.go",
+          "src/backend/voice/internal/gameprincipal/runtime.go": "100644 blob bdef0256191247acb293c157a1d9a3c0109d995b\tsrc/backend/voice/internal/gameprincipal/runtime.go",
+          "src/backend/voice/internal/gameprincipal/tls_test.go": "100644 blob 1082b46569f6a7959e32711af40f62311d8a07c0\tsrc/backend/voice/internal/gameprincipal/tls_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/gameprovision",
+        "entries": {
+          "src/backend/voice/internal/gameprovision/account_voice_fence.go": "100644 blob 901fb1952369f1093fa23baed913c7648cdf11c8\tsrc/backend/voice/internal/gameprovision/account_voice_fence.go",
+          "src/backend/voice/internal/gameprovision/account_voice_fence_integration_test.go": "100644 blob ae3278c807701f850a2e3a2f1acb772bbd614b61\tsrc/backend/voice/internal/gameprovision/account_voice_fence_integration_test.go",
+          "src/backend/voice/internal/gameprovision/livekit_fencer.go": "100644 blob c12ca86e4f63b3124357113dc1f8557875f0b3e2\tsrc/backend/voice/internal/gameprovision/livekit_fencer.go",
+          "src/backend/voice/internal/gameprovision/ordinary_conversion.go": "100644 blob 887a4e7cc0079308f57fa6391ff7797679d6dcfb\tsrc/backend/voice/internal/gameprovision/ordinary_conversion.go",
+          "src/backend/voice/internal/gameprovision/sdk_conversion_fence.go": "100644 blob 6bd43fb55a20b9ae4ad629aa7e2871c3f2fb1d18\tsrc/backend/voice/internal/gameprovision/sdk_conversion_fence.go",
+          "src/backend/voice/internal/gameprovision/store_integration_test.go": "100644 blob c5ff1f993622ce488debd49b066cc9ce0e771dc5\tsrc/backend/voice/internal/gameprovision/store_integration_test.go",
+          "src/backend/voice/internal/gameprovision/store_postgres.go": "100644 blob b7964283d40d03a7b4e25b8bdf342b760e7004bf\tsrc/backend/voice/internal/gameprovision/store_postgres.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/grpcsvc",
+        "entries": {
+          "src/backend/voice/internal/grpcsvc/account_voice_admission.go": "100644 blob bd21d3028e8a4fd801c4ede228827b3bb9410dd9\tsrc/backend/voice/internal/grpcsvc/account_voice_admission.go",
+          "src/backend/voice/internal/grpcsvc/account_voice_admission_test.go": "100644 blob cc90be7f24e4811f4d87af733a895efccdb6ec5e\tsrc/backend/voice/internal/grpcsvc/account_voice_admission_test.go",
+          "src/backend/voice/internal/grpcsvc/call_privacy.go": "100644 blob 896f4d8a596b9d3e3510869acca6830f8b0703ad\tsrc/backend/voice/internal/grpcsvc/call_privacy.go",
+          "src/backend/voice/internal/grpcsvc/call_privacy_degradation_test.go": "100644 blob d0eca38d625193e23e569290762a17e1644eee70\tsrc/backend/voice/internal/grpcsvc/call_privacy_degradation_test.go",
+          "src/backend/voice/internal/grpcsvc/call_privacy_integration_test.go": "100644 blob 7881c067a7e3b9761790e3f59a2b68e0c5b10fe3\tsrc/backend/voice/internal/grpcsvc/call_privacy_integration_test.go",
+          "src/backend/voice/internal/grpcsvc/call_privacy_test.go": "100644 blob 1557ae8626799f00489db19b312468c3b292d4e0\tsrc/backend/voice/internal/grpcsvc/call_privacy_test.go",
+          "src/backend/voice/internal/grpcsvc/chat_guard.go": "100644 blob be08bd01f5f874ab64c6faa46b55ce06fcb7409c\tsrc/backend/voice/internal/grpcsvc/chat_guard.go",
+          "src/backend/voice/internal/grpcsvc/communication_timeout_test.go": "100644 blob 7b293dfef32a05401fca88f193da79e463cb7f70\tsrc/backend/voice/internal/grpcsvc/communication_timeout_test.go",
+          "src/backend/voice/internal/grpcsvc/federation_media_test.go": "100644 blob 731a0ddaee76ab1c9104b16c17e40430e7350332\tsrc/backend/voice/internal/grpcsvc/federation_media_test.go",
+          "src/backend/voice/internal/grpcsvc/game_session_admission_integration_test.go": "100644 blob 170addc525f2c292b82900fe095c9dd401e9efca\tsrc/backend/voice/internal/grpcsvc/game_session_admission_integration_test.go",
+          "src/backend/voice/internal/grpcsvc/game_session_contract_test.go": "100644 blob c446ed1d36b8332c55041a204124cd7782d5fc1a\tsrc/backend/voice/internal/grpcsvc/game_session_contract_test.go",
+          "src/backend/voice/internal/grpcsvc/game_session_provisioning.go": "100644 blob fefdd17f88caf93ad113db344024fd13160b2143\tsrc/backend/voice/internal/grpcsvc/game_session_provisioning.go",
+          "src/backend/voice/internal/grpcsvc/game_session_rejection_test.go": "100644 blob 5b611c5f7826e416303a576c6f72ff8675e6953c\tsrc/backend/voice/internal/grpcsvc/game_session_rejection_test.go",
+          "src/backend/voice/internal/grpcsvc/matchsquad_member.go": "100644 blob 210a155f69b0ed8a4dee174b82d65c2bc97efc51\tsrc/backend/voice/internal/grpcsvc/matchsquad_member.go",
+          "src/backend/voice/internal/grpcsvc/matchsquad_member_test.go": "100644 blob 6b69dcf23c9c3fb0fc60881256d3b620b7c497e7\tsrc/backend/voice/internal/grpcsvc/matchsquad_member_test.go",
+          "src/backend/voice/internal/grpcsvc/matchsquad_voice.go": "100644 blob 25eae9f156da9e75bb548b69a163f75c807bfe39\tsrc/backend/voice/internal/grpcsvc/matchsquad_voice.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_calls.go": "100644 blob 2f0e76f755855c76bb46297fc9cd304679e88a4d\tsrc/backend/voice/internal/grpcsvc/ordinary_calls.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_calls_test.go": "100644 blob 92ea8c06459e86b73d63478dde5ebb12d6832ce0\tsrc/backend/voice/internal/grpcsvc/ordinary_calls_test.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_control.go": "100644 blob 43869bc24716c2ed1bfd71a87c7fb1b483c71da8\tsrc/backend/voice/internal/grpcsvc/ordinary_control.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_events.go": "100644 blob b74b0b4694a78ae1de591250529bb888363c7a81\tsrc/backend/voice/internal/grpcsvc/ordinary_events.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_events_test.go": "100644 blob 3c98d93d44952801ad9297a7d2495b2666226578\tsrc/backend/voice/internal/grpcsvc/ordinary_events_test.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_identity.go": "100644 blob c9eec2034c639e7bf730a928a350bedc040b8e8a\tsrc/backend/voice/internal/grpcsvc/ordinary_identity.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_identity_test.go": "100644 blob e8c8d9c867c35ba7931c1321e5d6ef23f566fbe2\tsrc/backend/voice/internal/grpcsvc/ordinary_identity_test.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_projection.go": "100644 blob 6c4a4672dc35c80d2ab97528a1859db21ee0444c\tsrc/backend/voice/internal/grpcsvc/ordinary_projection.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_projection_test.go": "100644 blob 1afa87ebfb4b0b6f636581d6f715e18a8676de1e\tsrc/backend/voice/internal/grpcsvc/ordinary_projection_test.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_read.go": "100644 blob 562e3b1569176f8c10be8b02b6551893b4bda9f9\tsrc/backend/voice/internal/grpcsvc/ordinary_read.go",
+          "src/backend/voice/internal/grpcsvc/ordinary_stale_leave_test.go": "100644 blob 165124b11924813ce81c5064a4440b221cf67774\tsrc/backend/voice/internal/grpcsvc/ordinary_stale_leave_test.go",
+          "src/backend/voice/internal/grpcsvc/publish_log.go": "100644 blob 7d97c59dc5a8d5dbc1dc354de732d0448d19489f\tsrc/backend/voice/internal/grpcsvc/publish_log.go",
+          "src/backend/voice/internal/grpcsvc/publish_log_test.go": "100644 blob 3b4aeeca8ad7028fbc677f5a382ba3b0bba6d609\tsrc/backend/voice/internal/grpcsvc/publish_log_test.go",
+          "src/backend/voice/internal/grpcsvc/role_guard.go": "100644 blob 9cf7a0d6cfd5e118cd0c9050e60e47716cdd9d3d\tsrc/backend/voice/internal/grpcsvc/role_guard.go",
+          "src/backend/voice/internal/grpcsvc/screen_share.go": "100644 blob 26e0c627f297ff4bb2b8253a45500ebebce8cb01\tsrc/backend/voice/internal/grpcsvc/screen_share.go",
+          "src/backend/voice/internal/grpcsvc/screen_share_degradation_test.go": "100644 blob 979f77f651f39124b1a9ff195d544993f8a94349\tsrc/backend/voice/internal/grpcsvc/screen_share_degradation_test.go",
+          "src/backend/voice/internal/grpcsvc/screen_share_test.go": "100644 blob 05ac3aa6bd4b8a38bb9e19130f0a898f5d4aec84\tsrc/backend/voice/internal/grpcsvc/screen_share_test.go",
+          "src/backend/voice/internal/grpcsvc/sdk_conversion_fence_test.go": "100644 blob 30fa25eac746abb7431cebd5fe309a2ace2b43e4\tsrc/backend/voice/internal/grpcsvc/sdk_conversion_fence_test.go",
+          "src/backend/voice/internal/grpcsvc/space_lifecycle.go": "100644 blob e77be6b98ef68e641f5d7df1a4c98331dddd078c\tsrc/backend/voice/internal/grpcsvc/space_lifecycle.go",
+          "src/backend/voice/internal/grpcsvc/space_media_join.go": "100644 blob db94e8a8b0719600a4de9209ad0b3adce12afd0e\tsrc/backend/voice/internal/grpcsvc/space_media_join.go",
+          "src/backend/voice/internal/grpcsvc/space_media_join_test.go": "100644 blob 3c0733fb786547f15e7052393139f6b313cece02\tsrc/backend/voice/internal/grpcsvc/space_media_join_test.go",
+          "src/backend/voice/internal/grpcsvc/space_media_session_floor_test.go": "100644 blob 6ae6b04c8c7d5bbebc445cf6262d43dbec10900b\tsrc/backend/voice/internal/grpcsvc/space_media_session_floor_test.go",
+          "src/backend/voice/internal/grpcsvc/space_member_degradation_test.go": "100644 blob 23dad5a1d65b8b63063bef0b00286b4fbf27b96f\tsrc/backend/voice/internal/grpcsvc/space_member_degradation_test.go",
+          "src/backend/voice/internal/grpcsvc/subscription_voice_limits_test.go": "100644 blob b4dc4a023b7d69be8d5435e574cb05ba2cfec56f\tsrc/backend/voice/internal/grpcsvc/subscription_voice_limits_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_commander.go": "100644 blob b4489491c9b138bbac1fd99abd4bf2f37e8da8a1\tsrc/backend/voice/internal/grpcsvc/voice_commander.go",
+          "src/backend/voice/internal/grpcsvc/voice_commander_test.go": "100644 blob a5793336eaea104861c24755846f900840b4f54e\tsrc/backend/voice/internal/grpcsvc/voice_commander_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_grpc.go": "100644 blob dc47f6b335d39e21944aee408f03efdd6057e781\tsrc/backend/voice/internal/grpcsvc/voice_grpc.go",
+          "src/backend/voice/internal/grpcsvc/voice_grpc_group_test.go": "100644 blob 49ed85cbacb17cd7f1ffefc3e421c9e9be2797b5\tsrc/backend/voice/internal/grpcsvc/voice_grpc_group_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_grpc_test.go": "100644 blob 123064bf046368d8ffd788c254aed8a5ab3c9144\tsrc/backend/voice/internal/grpcsvc/voice_grpc_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_room.go": "100644 blob a6a52dfc85168d7cac3b28cfc74ab0113306df66\tsrc/backend/voice/internal/grpcsvc/voice_room.go",
+          "src/backend/voice/internal/grpcsvc/voice_room_access.go": "100644 blob 87789044e7630fca6fbe4f82287bb98ebbbc3790\tsrc/backend/voice/internal/grpcsvc/voice_room_access.go",
+          "src/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go": "100644 blob f3ca5c83b77620a3f779ed6ebd8adc91a8671a9a\tsrc/backend/voice/internal/grpcsvc/voice_room_access_canonical_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_room_integration_test.go": "100644 blob 9cbeaae34df455a895c3a72546e414a0c4deb7dc\tsrc/backend/voice/internal/grpcsvc/voice_room_integration_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_room_move_test.go": "100644 blob 441912801ae9cc50e1e7e30af67e4d4ade4cef84\tsrc/backend/voice/internal/grpcsvc/voice_room_move_test.go",
+          "src/backend/voice/internal/grpcsvc/voice_session_binding_test.go": "100644 blob 225ce91a0012446ad1889fe119577cfe0709e6d7\tsrc/backend/voice/internal/grpcsvc/voice_session_binding_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/livekit",
+        "entries": {
+          "src/backend/voice/internal/livekit/room_lifecycle.go": "100644 blob cce65c1a6a9563767d8f80b592212a284ab04990\tsrc/backend/voice/internal/livekit/room_lifecycle.go",
+          "src/backend/voice/internal/livekit/room_lifecycle_test.go": "100644 blob 80045c923976cdc9b782c94b787aced264466a30\tsrc/backend/voice/internal/livekit/room_lifecycle_test.go",
+          "src/backend/voice/internal/livekit/space_token.go": "100644 blob 34d07ec372c57650aa3db538f3540b630a37585f\tsrc/backend/voice/internal/livekit/space_token.go",
+          "src/backend/voice/internal/livekit/space_token_test.go": "100644 blob ef16dbd21e20ee55e120ecf282e806993fccf129\tsrc/backend/voice/internal/livekit/space_token_test.go",
+          "src/backend/voice/internal/livekit/token.go": "100644 blob 8e09a19fc5496f4ebbdaf0af45b3625d8a070b34\tsrc/backend/voice/internal/livekit/token.go",
+          "src/backend/voice/internal/livekit/token_test.go": "100644 blob c239e96d14e51bdfed8c3aea5e1bdbe4a187e9fa\tsrc/backend/voice/internal/livekit/token_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/matchsquad",
+        "entries": {
+          "src/backend/voice/internal/matchsquad/compaction.go": "100644 blob 276ef17a8d3bf768ac0d2dd9f79440ffbab45f49\tsrc/backend/voice/internal/matchsquad/compaction.go",
+          "src/backend/voice/internal/matchsquad/member.go": "100644 blob 54dac2a046c6d411fd276e75a72c32f8e3d6df6a\tsrc/backend/voice/internal/matchsquad/member.go",
+          "src/backend/voice/internal/matchsquad/member_repair.go": "100644 blob a52d7a6e26d51fd0a5367c206ef872cb9360384e\tsrc/backend/voice/internal/matchsquad/member_repair.go",
+          "src/backend/voice/internal/matchsquad/member_test.go": "100644 blob a9071c48a38090c931275d9fd07fd723e6c56b9d\tsrc/backend/voice/internal/matchsquad/member_test.go",
+          "src/backend/voice/internal/matchsquad/postgres_integration_test.go": "100644 blob cc96e05622a3e6825621359cb22409a2454bcc15\tsrc/backend/voice/internal/matchsquad/postgres_integration_test.go",
+          "src/backend/voice/internal/matchsquad/service.go": "100644 blob 8731d5982bbc46e6562508f8330681fd315194e2\tsrc/backend/voice/internal/matchsquad/service.go",
+          "src/backend/voice/internal/matchsquad/service_test.go": "100644 blob 30611158cdf911c8d60595b3f2ecfff275fc3967\tsrc/backend/voice/internal/matchsquad/service_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/matchsquadmemberprincipal",
+        "entries": {
+          "src/backend/voice/internal/matchsquadmemberprincipal/config.go": "100644 blob fe1e3aa15a68157914cafbb3b2df4321301e1023\tsrc/backend/voice/internal/matchsquadmemberprincipal/config.go",
+          "src/backend/voice/internal/matchsquadmemberprincipal/config_test.go": "100644 blob 42a98bc88b76d148af2589cc4aef271e773199d3\tsrc/backend/voice/internal/matchsquadmemberprincipal/config_test.go",
+          "src/backend/voice/internal/matchsquadmemberprincipal/interceptor.go": "100644 blob 27add503c32a4c6f387c9504ef8d673723b26f8f\tsrc/backend/voice/internal/matchsquadmemberprincipal/interceptor.go",
+          "src/backend/voice/internal/matchsquadmemberprincipal/interceptor_test.go": "100644 blob 925ca8e114ae39a56a8b472525989614272b264d\tsrc/backend/voice/internal/matchsquadmemberprincipal/interceptor_test.go",
+          "src/backend/voice/internal/matchsquadmemberprincipal/runtime.go": "100644 blob 4c05054efb749cc64defebd1e0062cf30f72258b\tsrc/backend/voice/internal/matchsquadmemberprincipal/runtime.go",
+          "src/backend/voice/internal/matchsquadmemberprincipal/runtime_test.go": "100644 blob c1c6c57f2ae875bbaef9127a4835a29e93f96b54\tsrc/backend/voice/internal/matchsquadmemberprincipal/runtime_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/matchsquadprincipal",
+        "entries": {
+          "src/backend/voice/internal/matchsquadprincipal/config.go": "100644 blob 7ed63cb5ab09c23a6451f63e4f47f443495059c9\tsrc/backend/voice/internal/matchsquadprincipal/config.go",
+          "src/backend/voice/internal/matchsquadprincipal/config_test.go": "100644 blob e805c0f85fd1a7882b5fbce2186e5db42a02dad3\tsrc/backend/voice/internal/matchsquadprincipal/config_test.go",
+          "src/backend/voice/internal/matchsquadprincipal/interceptor.go": "100644 blob 4bea2de6c04599dc3a4c45828d4ab50893131e64\tsrc/backend/voice/internal/matchsquadprincipal/interceptor.go",
+          "src/backend/voice/internal/matchsquadprincipal/interceptor_test.go": "100644 blob b26077b6cf87347acc914813b8b0ceadbae1069e\tsrc/backend/voice/internal/matchsquadprincipal/interceptor_test.go",
+          "src/backend/voice/internal/matchsquadprincipal/runtime.go": "100644 blob 2c128cba6eb55bbbe9e7eb424123cd22cb24489b\tsrc/backend/voice/internal/matchsquadprincipal/runtime.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/ordinarycall",
+        "entries": {
+          "src/backend/voice/internal/ordinarycall/conversion.go": "100644 blob 9d720337a45739aa4b7e5ae69d21bdf7827a5d12\tsrc/backend/voice/internal/ordinarycall/conversion.go",
+          "src/backend/voice/internal/ordinarycall/coordinator.go": "100644 blob 4b4a3edc19d9538b2e4043e81db900aa059a30c4\tsrc/backend/voice/internal/ordinarycall/coordinator.go",
+          "src/backend/voice/internal/ordinarycall/coordinator_test.go": "100644 blob fd32eb293dde4325af4a82a11c30e36bc4144293\tsrc/backend/voice/internal/ordinarycall/coordinator_test.go",
+          "src/backend/voice/internal/ordinarycall/down_retention_test.go": "100644 blob 037fea4bdf75aaae53734debdb56c136ca0eb527\tsrc/backend/voice/internal/ordinarycall/down_retention_test.go",
+          "src/backend/voice/internal/ordinarycall/lookup.go": "100644 blob f6142e171db5dee994ccddc652b1a24f77f3fbee\tsrc/backend/voice/internal/ordinarycall/lookup.go",
+          "src/backend/voice/internal/ordinarycall/media_authorization.go": "100644 blob 48dfcbd161cf00e496175eb37ce99eb681a399ad\tsrc/backend/voice/internal/ordinarycall/media_authorization.go",
+          "src/backend/voice/internal/ordinarycall/model.go": "100644 blob b2c95844a52108e852bde053a215aec47aa59af7\tsrc/backend/voice/internal/ordinarycall/model.go",
+          "src/backend/voice/internal/ordinarycall/model_test.go": "100644 blob f9fe0c339b17417b6558979b2a71a19e993203e1\tsrc/backend/voice/internal/ordinarycall/model_test.go",
+          "src/backend/voice/internal/ordinarycall/outbox.go": "100644 blob b152bbec98041f3560314ef422e3c70ac50bddad\tsrc/backend/voice/internal/ordinarycall/outbox.go",
+          "src/backend/voice/internal/ordinarycall/outbox_test.go": "100644 blob 64cbd343d5775e243101c4800ae74bf23f7c79a6\tsrc/backend/voice/internal/ordinarycall/outbox_test.go",
+          "src/backend/voice/internal/ordinarycall/party_loss.go": "100644 blob 7962b93b71bc5b7497f042cb1b3c5f63ef8f5171\tsrc/backend/voice/internal/ordinarycall/party_loss.go",
+          "src/backend/voice/internal/ordinarycall/party_outbox_test.go": "100644 blob 5109d229001491e6ba2b9ac1ba26acd07a6df69c\tsrc/backend/voice/internal/ordinarycall/party_outbox_test.go",
+          "src/backend/voice/internal/ordinarycall/postgres.go": "100644 blob 86ad6d9ba5ef95a9dce45305a1bad29219a2b808\tsrc/backend/voice/internal/ordinarycall/postgres.go",
+          "src/backend/voice/internal/ordinarycall/postgres_test.go": "100644 blob 9647d38d47d90c01f3064742b02780236694c8ce\tsrc/backend/voice/internal/ordinarycall/postgres_test.go",
+          "src/backend/voice/internal/ordinarycall/recovery.go": "100644 blob dda20ec0505d19920b7e9ec232fd167ce147b665\tsrc/backend/voice/internal/ordinarycall/recovery.go",
+          "src/backend/voice/internal/ordinarycall/validation.go": "100644 blob 60a70f01cf1f03ac7fe0c03091dee832a7f99227\tsrc/backend/voice/internal/ordinarycall/validation.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/principalgrpc",
+        "entries": {
+          "src/backend/voice/internal/principalgrpc/dependency.go": "100644 blob 559ea091adcd91216beff00ce5d636917ef242d7\tsrc/backend/voice/internal/principalgrpc/dependency.go",
+          "src/backend/voice/internal/principalgrpc/dependency_test.go": "100644 blob 60b1d1f9fc824695ba888b3d519983b6341519b6\tsrc/backend/voice/internal/principalgrpc/dependency_test.go",
+          "src/backend/voice/internal/principalgrpc/interceptor.go": "100644 blob 36340dbc32e2d8ef39a2d261d72eb81ad9aa5636\tsrc/backend/voice/internal/principalgrpc/interceptor.go",
+          "src/backend/voice/internal/principalgrpc/interceptor_test.go": "100644 blob 899540d413798cb6ebf2df3caff4043fdca6fa0d\tsrc/backend/voice/internal/principalgrpc/interceptor_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/principaljwks",
+        "entries": {
+          "src/backend/voice/internal/principaljwks/config.go": "100644 blob e8683fb6355dc59844c3b65ef110d5d51d208e0b\tsrc/backend/voice/internal/principaljwks/config.go",
+          "src/backend/voice/internal/principaljwks/config_test.go": "100644 blob 07492bce7a14a29f5b1ea1610d78b71246f436fa\tsrc/backend/voice/internal/principaljwks/config_test.go",
+          "src/backend/voice/internal/principaljwks/publisher.go": "100644 blob 086f9040e285313ab07b3637b923a6fb276e55de\tsrc/backend/voice/internal/principaljwks/publisher.go",
+          "src/backend/voice/internal/principaljwks/publisher_test.go": "100644 blob 19982c59814fec3bcfb7bc1e517dc3934dd91197\tsrc/backend/voice/internal/principaljwks/publisher_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/rolegrant",
+        "entries": {
+          "src/backend/voice/internal/rolegrant/client.go": "100644 blob f34c178d0515ecb92df91c9f31156008f06d3d01\tsrc/backend/voice/internal/rolegrant/client.go",
+          "src/backend/voice/internal/rolegrant/client_test.go": "100644 blob 1fc5d4041bc733b40f2ea92aa12bb5feadb435c5\tsrc/backend/voice/internal/rolegrant/client_test.go",
+          "src/backend/voice/internal/rolegrant/permissions.go": "100644 blob 2ab53d049ffa03a1d2c0c984bbc420bb4af9d752\tsrc/backend/voice/internal/rolegrant/permissions.go",
+          "src/backend/voice/internal/rolegrant/permissions_test.go": "100644 blob f6813949e1235d34ef6d800c27ab311af60cf096\tsrc/backend/voice/internal/rolegrant/permissions_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/roomlifecycle",
+        "entries": {
+          "src/backend/voice/internal/roomlifecycle/authority.go": "100644 blob 135a61c83137df9b8a3cb6b893a6530251b7caa4\tsrc/backend/voice/internal/roomlifecycle/authority.go",
+          "src/backend/voice/internal/roomlifecycle/authority_test.go": "100644 blob ad7a71f60e0b4e0692b08f381afc385d3fb00719\tsrc/backend/voice/internal/roomlifecycle/authority_test.go",
+          "src/backend/voice/internal/roomlifecycle/binding.go": "100644 blob d51bb5085cf89f8feaa3e0d34c0497da62520363\tsrc/backend/voice/internal/roomlifecycle/binding.go",
+          "src/backend/voice/internal/roomlifecycle/binding_test.go": "100644 blob 7af716c47f0b7dd1f53a8ee3e07f6556fe56755f\tsrc/backend/voice/internal/roomlifecycle/binding_test.go",
+          "src/backend/voice/internal/roomlifecycle/crash_harness_test.go": "100644 blob 8db182f9bd7ccfd33ea7a45607bf8eaf1ba18c2e\tsrc/backend/voice/internal/roomlifecycle/crash_harness_test.go",
+          "src/backend/voice/internal/roomlifecycle/ledger.go": "100644 blob 102eec292ef41d7e5677563c1ea7a2463d8bdeb9\tsrc/backend/voice/internal/roomlifecycle/ledger.go",
+          "src/backend/voice/internal/roomlifecycle/ledger_test.go": "100644 blob 5f241815dc988c71128a961af08f3db62a966ff3\tsrc/backend/voice/internal/roomlifecycle/ledger_test.go",
+          "src/backend/voice/internal/roomlifecycle/lifecycle_store.go": "100644 blob 21bb1b2294a0f1238a53af115bf17762799da38d\tsrc/backend/voice/internal/roomlifecycle/lifecycle_store.go",
+          "src/backend/voice/internal/roomlifecycle/matchmaking_membership.go": "100644 blob 266d4217c15017d0e77bb3fe9a9756ac45bd45fe\tsrc/backend/voice/internal/roomlifecycle/matchmaking_membership.go",
+          "src/backend/voice/internal/roomlifecycle/matchmaking_membership_concurrency_test.go": "100644 blob 9ab20bbe164894c9b19cfbc90cec3a23bbb53203\tsrc/backend/voice/internal/roomlifecycle/matchmaking_membership_concurrency_test.go",
+          "src/backend/voice/internal/roomlifecycle/matchmaking_membership_legacy_test.go": "100644 blob 0b928fdc23a58053d361cbaa0db65e0f2558a36d\tsrc/backend/voice/internal/roomlifecycle/matchmaking_membership_legacy_test.go",
+          "src/backend/voice/internal/roomlifecycle/matchmaking_membership_migration_test.go": "100644 blob 99eab775d7f1f898ad33a7ec1fe3d4407e9c76c9\tsrc/backend/voice/internal/roomlifecycle/matchmaking_membership_migration_test.go",
+          "src/backend/voice/internal/roomlifecycle/matchmaking_membership_store_test.go": "100644 blob 2d1c0e97d63b75cd5f251db42868399d5f546de7\tsrc/backend/voice/internal/roomlifecycle/matchmaking_membership_store_test.go",
+          "src/backend/voice/internal/roomlifecycle/matchmaking_membership_test.go": "100644 blob 3663e9e11b9182676826a9d09350cbbcfe7bdd13\tsrc/backend/voice/internal/roomlifecycle/matchmaking_membership_test.go",
+          "src/backend/voice/internal/roomlifecycle/memory_ledger.go": "100644 blob 1cfa9f713a6d6b9295c56af04c9888b8528cdb6b\tsrc/backend/voice/internal/roomlifecycle/memory_ledger.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_concurrency_test.go": "100644 blob 6b64f6042579d1801084a913a1a552873b86ad5a\tsrc/backend/voice/internal/roomlifecycle/postgres_concurrency_test.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_decision.go": "100644 blob 95d6cf2f2aaa9d889c82e38c24089237d4a643a7\tsrc/backend/voice/internal/roomlifecycle/postgres_decision.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_delivery.go": "100644 blob b4cbc43d5e8a04eae24b113684ec6491e0409890\tsrc/backend/voice/internal/roomlifecycle/postgres_delivery.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_migration_down_test.go": "100644 blob 79539ebb95aaf7877c781ad4eb6eec666a4a21ed\tsrc/backend/voice/internal/roomlifecycle/postgres_migration_down_test.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_migration_integrity_test.go": "100644 blob 43b165ec2a1d8a197d7f9ababcd36a6be0228583\tsrc/backend/voice/internal/roomlifecycle/postgres_migration_integrity_test.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_migration_test.go": "100644 blob b399d648c8fe715f4f037c0a8456c46fcf20555e\tsrc/backend/voice/internal/roomlifecycle/postgres_migration_test.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_source_review_test.go": "100644 blob cdc3c32599e17cf178035b6c4062976d8169a2bb\tsrc/backend/voice/internal/roomlifecycle/postgres_source_review_test.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_store.go": "100644 blob 3760d64ef8ce9c0cdbcf913b7d8fcf71ffddeafe\tsrc/backend/voice/internal/roomlifecycle/postgres_store.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_store_test.go": "100644 blob 8d3280205d7ec6a219382c60ad795178dbda77c0\tsrc/backend/voice/internal/roomlifecycle/postgres_store_test.go",
+          "src/backend/voice/internal/roomlifecycle/postgres_test_helpers_test.go": "100644 blob dbeebcc0de9b301a1afcd3d96edd9de160a0cc56\tsrc/backend/voice/internal/roomlifecycle/postgres_test_helpers_test.go",
+          "src/backend/voice/internal/roomlifecycle/r22_proto_contract_test.go": "100644 blob d122f4c32ce04aa52197e30a8833252179dbf781\tsrc/backend/voice/internal/roomlifecycle/r22_proto_contract_test.go",
+          "src/backend/voice/internal/roomlifecycle/redis_bridge.go": "100644 blob 671e46f0568696019c7d761626f9b3d8c0344f7a\tsrc/backend/voice/internal/roomlifecycle/redis_bridge.go",
+          "src/backend/voice/internal/roomlifecycle/redis_divergence.go": "100644 blob 1ce35d35f5b5817644826d312149384ab3ad189a\tsrc/backend/voice/internal/roomlifecycle/redis_divergence.go",
+          "src/backend/voice/internal/roomlifecycle/redis_divergence_migration_test.go": "100644 blob 5dfb68e64d4821672137a71d571fd4dcf0ee97b9\tsrc/backend/voice/internal/roomlifecycle/redis_divergence_migration_test.go",
+          "src/backend/voice/internal/roomlifecycle/redis_divergence_store_test.go": "100644 blob df87c8c239b86760239a939ae954e83384df0be5\tsrc/backend/voice/internal/roomlifecycle/redis_divergence_store_test.go",
+          "src/backend/voice/internal/roomlifecycle/redis_ledger.go": "100644 blob 9939f3df7506dd156bb2972838ce4b8a93480323\tsrc/backend/voice/internal/roomlifecycle/redis_ledger.go",
+          "src/backend/voice/internal/roomlifecycle/redis_ledger_test.go": "100644 blob 52379fabeb61d1f505596b59c4ae73c131d81f1a\tsrc/backend/voice/internal/roomlifecycle/redis_ledger_test.go",
+          "src/backend/voice/internal/roomlifecycle/redis_mirror.go": "100644 blob fa7f5d9c7f2a65a3d89c3de832e13ae15c6b1aec\tsrc/backend/voice/internal/roomlifecycle/redis_mirror.go",
+          "src/backend/voice/internal/roomlifecycle/redis_mirror_d2d3_red_test.go": "100644 blob 7459d4a9539f056140215813c795fc0bad54b44a\tsrc/backend/voice/internal/roomlifecycle/redis_mirror_d2d3_red_test.go",
+          "src/backend/voice/internal/roomlifecycle/redis_mirror_real_d2d3_red_test.go": "100644 blob cd8353fd581cfdb3fc270c9b935e69dd394d65f1\tsrc/backend/voice/internal/roomlifecycle/redis_mirror_real_d2d3_red_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/rosteroutbox",
+        "entries": {
+          "src/backend/voice/internal/rosteroutbox/delivery.go": "100644 blob 7e69b7b638cca71645706a94308c96a3372215aa\tsrc/backend/voice/internal/rosteroutbox/delivery.go",
+          "src/backend/voice/internal/rosteroutbox/event.go": "100644 blob 3016be1c5ad3a8024d5670253337d3ddddbaca8f\tsrc/backend/voice/internal/rosteroutbox/event.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/s2s",
+        "entries": {
+          "src/backend/voice/internal/s2s/chat_membership.go": "100644 blob 30ac4f48dce96e8a12889ef1c27ede778cf38c3e\tsrc/backend/voice/internal/s2s/chat_membership.go",
+          "src/backend/voice/internal/s2s/forward_meta.go": "100644 blob 5663d280989848f01a3950b67dac41bbbd5e2fa1\tsrc/backend/voice/internal/s2s/forward_meta.go",
+          "src/backend/voice/internal/s2s/privacy.go": "100644 blob d707b99ec135913c6adb2e7352c8ef165d73c494\tsrc/backend/voice/internal/s2s/privacy.go",
+          "src/backend/voice/internal/s2s/profile_account.go": "100644 blob b3aa088e31ccdbc3cdff6303fe416cde53cf63a7\tsrc/backend/voice/internal/s2s/profile_account.go",
+          "src/backend/voice/internal/s2s/profile_account_test.go": "100644 blob 3e2f580e93c76868ba36c3d4a74ffed7daab75a1\tsrc/backend/voice/internal/s2s/profile_account_test.go",
+          "src/backend/voice/internal/s2s/role_permissions.go": "100644 blob ecfeeb3940dffe2138b37b44ffeb7cef16346a55\tsrc/backend/voice/internal/s2s/role_permissions.go",
+          "src/backend/voice/internal/s2s/role_permissions_test.go": "100644 blob d244ea2d4b1e9487d828c347f520b1920bb1fd07\tsrc/backend/voice/internal/s2s/role_permissions_test.go",
+          "src/backend/voice/internal/s2s/role_voice_room_grants.go": "100644 blob accb01a24db7297085ae31398314cad8878faa1c\tsrc/backend/voice/internal/s2s/role_voice_room_grants.go",
+          "src/backend/voice/internal/s2s/space_membership.go": "100644 blob 2e256fa13639593742b97c0eb3da7ad2a6580e69\tsrc/backend/voice/internal/s2s/space_membership.go",
+          "src/backend/voice/internal/s2s/space_pro.go": "100644 blob 079adf5b90943744e97092344594e2756f1ca763\tsrc/backend/voice/internal/s2s/space_pro.go",
+          "src/backend/voice/internal/s2s/voice_room_access.go": "100644 blob 38b4467838476f7595a72fbdfd476ddef5f6c988\tsrc/backend/voice/internal/s2s/voice_room_access.go",
+          "src/backend/voice/internal/s2s/voice_room_access_test.go": "100644 blob d013f995219481c7c828fc9129233fce195a35a2\tsrc/backend/voice/internal/s2s/voice_room_access_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/sessionfloor",
+        "entries": {
+          "src/backend/voice/internal/sessionfloor/client.go": "100644 blob 53d031d9e9b1b6c7d8c4a98897dcc3446ee5a5eb\tsrc/backend/voice/internal/sessionfloor/client.go",
+          "src/backend/voice/internal/sessionfloor/client_test.go": "100644 blob 073885b856b7fc0d2dc6fb67bad339708a44d648\tsrc/backend/voice/internal/sessionfloor/client_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/spacebarrier",
+        "entries": {
+          "src/backend/voice/internal/spacebarrier/barrier.go": "100644 blob 6d787b1e3d9929bcff57d678846a9cfc840bb502\tsrc/backend/voice/internal/spacebarrier/barrier.go",
+          "src/backend/voice/internal/spacebarrier/identity.go": "100644 blob 064826902a6047026be4fd7a614f5ac0416592ff\tsrc/backend/voice/internal/spacebarrier/identity.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/spacegatetest",
+        "entries": {
+          "src/backend/voice/internal/spacegatetest/gates.go": "100644 blob 575579c76f7e4f5bdc66b8192cae374cb77a9b74\tsrc/backend/voice/internal/spacegatetest/gates.go",
+          "src/backend/voice/internal/spacegatetest/postgres.go": "100644 blob 21995aa5584d90429ebf67d5bcd755b4694b982f\tsrc/backend/voice/internal/spacegatetest/postgres.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/spacelifecycle",
+        "entries": {
+          "src/backend/voice/internal/spacelifecycle/capture.go": "100644 blob b3ab397e5c415068b2724d4093f6b5312e2d49c0\tsrc/backend/voice/internal/spacelifecycle/capture.go",
+          "src/backend/voice/internal/spacelifecycle/effects.go": "100644 blob 33761d6cb090755ebba7b85ec2a43cb229829deb\tsrc/backend/voice/internal/spacelifecycle/effects.go",
+          "src/backend/voice/internal/spacelifecycle/effects_test.go": "100644 blob 5e7eef76f3e4d665ad345f27d91c1be19d4a3e4e\tsrc/backend/voice/internal/spacelifecycle/effects_test.go",
+          "src/backend/voice/internal/spacelifecycle/postgres.go": "100644 blob 0b46ecb0f84afe4a57e8da06b77beab62cf84bc4\tsrc/backend/voice/internal/spacelifecycle/postgres.go",
+          "src/backend/voice/internal/spacelifecycle/postgres_store_test.go": "100644 blob 5b949947a9196de809b2c82dac969823149a2eb0\tsrc/backend/voice/internal/spacelifecycle/postgres_store_test.go",
+          "src/backend/voice/internal/spacelifecycle/provider_retirement_test.go": "100644 blob 7165433a062be36ac6dd53b4dd3c718975f42673\tsrc/backend/voice/internal/spacelifecycle/provider_retirement_test.go",
+          "src/backend/voice/internal/spacelifecycle/recovery_publication_test.go": "100644 blob d945e5e75de9dceda69eac8424cef4004b35655c\tsrc/backend/voice/internal/spacelifecycle/recovery_publication_test.go",
+          "src/backend/voice/internal/spacelifecycle/service.go": "100644 blob 45afb942be29f3b02a80b01f9ee195ff141e16d4\tsrc/backend/voice/internal/spacelifecycle/service.go",
+          "src/backend/voice/internal/spacelifecycle/store.go": "100644 blob 67e2a25efd8297aacc46ba5445aab1610c4d8911\tsrc/backend/voice/internal/spacelifecycle/store.go",
+          "src/backend/voice/internal/spacelifecycle/store_test.go": "100644 blob cb587a858d0103dc5f869abb4272e5f34958e654\tsrc/backend/voice/internal/spacelifecycle/store_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/spacemedia",
+        "entries": {
+          "src/backend/voice/internal/spacemedia/admission_dispatch.go": "100644 blob 83045696d2c00af5b1aa3cd1423f7603f39757e5\tsrc/backend/voice/internal/spacemedia/admission_dispatch.go",
+          "src/backend/voice/internal/spacemedia/admission_ownership.go": "100644 blob a04cef76fad665fe92ef274afc8e0e0c21e9c85a\tsrc/backend/voice/internal/spacemedia/admission_ownership.go",
+          "src/backend/voice/internal/spacemedia/admission_ownership_down_integration_test.go": "100644 blob f3706ffb15349e7fbafabb617be5f0d492ecf390\tsrc/backend/voice/internal/spacemedia/admission_ownership_down_integration_test.go",
+          "src/backend/voice/internal/spacemedia/admission_ownership_integration_test.go": "100644 blob c6ce637203e814ad1afeceab206451f6e16ca579\tsrc/backend/voice/internal/spacemedia/admission_ownership_integration_test.go",
+          "src/backend/voice/internal/spacemedia/admission_revocation.go": "100644 blob 66fca14ec4984384b9b709ea7b4c5669cbf0ca07\tsrc/backend/voice/internal/spacemedia/admission_revocation.go",
+          "src/backend/voice/internal/spacemedia/captured_drain.go": "100644 blob 451b3a80e38758f95ae5df76da5818384134cc16\tsrc/backend/voice/internal/spacemedia/captured_drain.go",
+          "src/backend/voice/internal/spacemedia/communication_timeout_test.go": "100644 blob 2cbaf4d23418d7ca936e6c1a4942f2e2001fedd0\tsrc/backend/voice/internal/spacemedia/communication_timeout_test.go",
+          "src/backend/voice/internal/spacemedia/consumer.go": "100644 blob c5eca4ff2eb85274c466f67820064804f90dae03\tsrc/backend/voice/internal/spacemedia/consumer.go",
+          "src/backend/voice/internal/spacemedia/consumer_test.go": "100644 blob 4e8b112d504ab9bbc742c0c462eba6babe26616f\tsrc/backend/voice/internal/spacemedia/consumer_test.go",
+          "src/backend/voice/internal/spacemedia/coordinator.go": "100644 blob 93454778dbf31c5aaeca6c3923d8bdf5020cd14f\tsrc/backend/voice/internal/spacemedia/coordinator.go",
+          "src/backend/voice/internal/spacemedia/coordinator_floor_test.go": "100644 blob 7cf293c162a3a5ff230d581024b4c93eda73c44b\tsrc/backend/voice/internal/spacemedia/coordinator_floor_test.go",
+          "src/backend/voice/internal/spacemedia/coordinator_test.go": "100644 blob 1898ee9d93803247b3b139e8c78d795942d2f52a\tsrc/backend/voice/internal/spacemedia/coordinator_test.go",
+          "src/backend/voice/internal/spacemedia/grants.go": "100644 blob 31f9a524aebb60a025355e4395d2f22c8ea6da6e\tsrc/backend/voice/internal/spacemedia/grants.go",
+          "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go": "100644 blob 84533faa062705bb3293e90079e614e7b485ea2e\tsrc/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+          "src/backend/voice/internal/spacemedia/outbox.go": "100644 blob 4305db380e1af4086097cebc3864234ecf1eeb23\tsrc/backend/voice/internal/spacemedia/outbox.go",
+          "src/backend/voice/internal/spacemedia/outbox_test.go": "100644 blob df033fc39274ac364df126f851aba940f3bbdbf4\tsrc/backend/voice/internal/spacemedia/outbox_test.go",
+          "src/backend/voice/internal/spacemedia/p3_barrier.go": "100644 blob 15a20530b2e4787f7eda017a2a90a9614ee5f3d8\tsrc/backend/voice/internal/spacemedia/p3_barrier.go",
+          "src/backend/voice/internal/spacemedia/p3_barrier_integration_test.go": "100644 blob 04744b6833d4e523358b3528a71007c54c005329\tsrc/backend/voice/internal/spacemedia/p3_barrier_integration_test.go",
+          "src/backend/voice/internal/spacemedia/p3_composition_test.go": "100644 blob 794e9e9b32b6d3a07a78870a13fa4f5e5cf17497\tsrc/backend/voice/internal/spacemedia/p3_composition_test.go",
+          "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go": "100644 blob 81c5110138346168ff14deca78c9010621cb0621\tsrc/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+          "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go": "100644 blob b57b5133cf73949bdf769d268a6276b536ece7da\tsrc/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+          "src/backend/voice/internal/spacemedia/party_loss.go": "100644 blob d1a48f01f4715c805c3db930e073637f8dc8167d\tsrc/backend/voice/internal/spacemedia/party_loss.go",
+          "src/backend/voice/internal/spacemedia/party_room_close.go": "100644 blob c9d1fe78d9f68149745a75dce1f896a7b7e42bf7\tsrc/backend/voice/internal/spacemedia/party_room_close.go",
+          "src/backend/voice/internal/spacemedia/party_roster_integration_test.go": "100644 blob 32eb23ee68f97b585fc887af2e212b2d64fc726e\tsrc/backend/voice/internal/spacemedia/party_roster_integration_test.go",
+          "src/backend/voice/internal/spacemedia/postgres_admission.go": "100644 blob 4ebac4b08044ee918b287040231e8b340f748185\tsrc/backend/voice/internal/spacemedia/postgres_admission.go",
+          "src/backend/voice/internal/spacemedia/postgres_admission_diagnostics_test.go": "100644 blob 11e6e1dddca6a4e1c009526b26e2abe893ce9695\tsrc/backend/voice/internal/spacemedia/postgres_admission_diagnostics_test.go",
+          "src/backend/voice/internal/spacemedia/postgres_admission_integration_test.go": "100644 blob 266ae736561c75b830c6e34071e3697223bcf2ec\tsrc/backend/voice/internal/spacemedia/postgres_admission_integration_test.go",
+          "src/backend/voice/internal/spacemedia/projection_authority.go": "100644 blob d24d2d7fbd4137f887d4e2496396ffdb07e8548f\tsrc/backend/voice/internal/spacemedia/projection_authority.go",
+          "src/backend/voice/internal/spacemedia/role_wire_compatibility_test.go": "100644 blob dd2051a98230a71f4e8a05bfabefb77f18e1b444\tsrc/backend/voice/internal/spacemedia/role_wire_compatibility_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/spaceprincipalruntime",
+        "entries": {
+          "src/backend/voice/internal/spaceprincipalruntime/config.go": "100644 blob 2f7bb025a98942212f366a543bcb78e57cb7579b\tsrc/backend/voice/internal/spaceprincipalruntime/config.go",
+          "src/backend/voice/internal/spaceprincipalruntime/config_test.go": "100644 blob b545202bf1a2a6d2f42b0950ad6293156326bee2\tsrc/backend/voice/internal/spaceprincipalruntime/config_test.go",
+          "src/backend/voice/internal/spaceprincipalruntime/runtime.go": "100644 blob 7fbee5cef1605556b2eb4a7fe0dbedbee1918921\tsrc/backend/voice/internal/spaceprincipalruntime/runtime.go",
+          "src/backend/voice/internal/spaceprincipalruntime/runtime_test.go": "100644 blob cb4f8fb40876b2c290b4c4195a1603425bba950e\tsrc/backend/voice/internal/spaceprincipalruntime/runtime_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/store",
+        "entries": {
+          "src/backend/voice/internal/store/call_store.go": "100644 blob 16d691b13e16861b5ab5bf7ad56785dab7fe9fd6\tsrc/backend/voice/internal/store/call_store.go",
+          "src/backend/voice/internal/store/call_store_test.go": "100644 blob d87f58c373e6d0fee7a87618522e7c73684ae3ab\tsrc/backend/voice/internal/store/call_store_test.go",
+          "src/backend/voice/internal/store/ordinary_cutover.go": "100644 blob e417196ba0bc0fdcbd24ced8ba13062b64a47a3e\tsrc/backend/voice/internal/store/ordinary_cutover.go",
+          "src/backend/voice/internal/store/ordinary_projection.go": "100644 blob b22492a6c1cbb56935a96d7341365550144618a1\tsrc/backend/voice/internal/store/ordinary_projection.go",
+          "src/backend/voice/internal/store/ordinary_projection_integration_test.go": "100644 blob 740fb73374ee295e02d2e2bbb8eb738205fd28d3\tsrc/backend/voice/internal/store/ordinary_projection_integration_test.go",
+          "src/backend/voice/internal/store/ordinary_projection_test.go": "100644 blob cc610e53812811cc107c225e558b57b5fe1fe802\tsrc/backend/voice/internal/store/ordinary_projection_test.go",
+          "src/backend/voice/internal/store/redis_store.go": "100644 blob 906b69408f7b08bdb227836ba99a87f25de0dc89\tsrc/backend/voice/internal/store/redis_store.go",
+          "src/backend/voice/internal/store/redis_store_test.go": "100644 blob 6ff65cefba8aedae7d348484f0b23b159d13e3d5\tsrc/backend/voice/internal/store/redis_store_test.go",
+          "src/backend/voice/internal/store/screen_share_store_test.go": "100644 blob 41d0763c4e564fdf9aae12d3703ede2a35f4c28b\tsrc/backend/voice/internal/store/screen_share_store_test.go",
+          "src/backend/voice/internal/store/space_admission_dispatch_test.go": "100644 blob 375199bcbf5c62a0a196ddef2c3226c7d796d6a4\tsrc/backend/voice/internal/store/space_admission_dispatch_test.go",
+          "src/backend/voice/internal/store/space_admission_ownership.go": "100644 blob 3fdcc797284eb44ff69f1e554403da3fe4bf1cce\tsrc/backend/voice/internal/store/space_admission_ownership.go",
+          "src/backend/voice/internal/store/space_gate_incarnation_test.go": "100644 blob 9f648a193f9ac2670b7feb49a71d4b2bec1e07d2\tsrc/backend/voice/internal/store/space_gate_incarnation_test.go",
+          "src/backend/voice/internal/store/space_lifecycle.go": "100644 blob 06b10b13f105347cf894c23629036f01a9c0558c\tsrc/backend/voice/internal/store/space_lifecycle.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/voiceevents",
+        "entries": {
+          "src/backend/voice/internal/voiceevents/jetstream.go": "100644 blob 7b4fbd181f1455e2c438abd0b7dff1ebd7e1d022\tsrc/backend/voice/internal/voiceevents/jetstream.go",
+          "src/backend/voice/internal/voiceevents/jetstream_contract_test.go": "100644 blob f3985d48647d070956cfb6522cd9c4235c788f70\tsrc/backend/voice/internal/voiceevents/jetstream_contract_test.go",
+          "src/backend/voice/internal/voiceevents/jetstream_inbox_test.go": "100644 blob 72687171fd1384f1fe6edfe854894a221ffc31c7\tsrc/backend/voice/internal/voiceevents/jetstream_inbox_test.go",
+          "src/backend/voice/internal/voiceevents/ordinary.go": "100644 blob 4f1ef415b00dceee266eff99a1d8328e0f6b76cc\tsrc/backend/voice/internal/voiceevents/ordinary.go",
+          "src/backend/voice/internal/voiceevents/ordinary_test.go": "100644 blob a3ab714f113247ed39c0049019fea33312dac0e5\tsrc/backend/voice/internal/voiceevents/ordinary_test.go",
+          "src/backend/voice/internal/voiceevents/participant.go": "100644 blob 283235df93119cf6a95a363e4ded91d5431dc706\tsrc/backend/voice/internal/voiceevents/participant.go",
+          "src/backend/voice/internal/voiceevents/participant_test.go": "100644 blob 8e2f8f88da1b213984b1b5a95cbb9ceac3edfae9\tsrc/backend/voice/internal/voiceevents/participant_test.go",
+          "src/backend/voice/internal/voiceevents/publisher.go": "100644 blob dfd483220c79d38b7b69d15038c2364a565d9ed0\tsrc/backend/voice/internal/voiceevents/publisher.go",
+          "src/backend/voice/internal/voiceevents/roster_test.go": "100644 blob 59258c3874c4b348941a44f01d67c05130fca09d\tsrc/backend/voice/internal/voiceevents/roster_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/internal/voiceuserprincipalruntime",
+        "entries": {
+          "src/backend/voice/internal/voiceuserprincipalruntime/bootstrap_test.go": "100644 blob 0fb3fad10a0ab3168d812619c6ab94b18af5021e\tsrc/backend/voice/internal/voiceuserprincipalruntime/bootstrap_test.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/config.go": "100644 blob 61cab344bfe2cd5ea12220f1283b6e11760bb302\tsrc/backend/voice/internal/voiceuserprincipalruntime/config.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/config_test.go": "100644 blob 1576ba10bf355b4ba56a2636d64f4618c3a5a8a8\tsrc/backend/voice/internal/voiceuserprincipalruntime/config_test.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/diagnostics_test.go": "100644 blob f2c493792847315f1fddeaf8231d528b466f5f9c\tsrc/backend/voice/internal/voiceuserprincipalruntime/diagnostics_test.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/interceptor.go": "100644 blob a5ec7602b4eaeeaa00c5729b9ce884aa4438a562\tsrc/backend/voice/internal/voiceuserprincipalruntime/interceptor.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/interceptor_test.go": "100644 blob 4e081c52a2dc5141991b75133484b0a750e30778\tsrc/backend/voice/internal/voiceuserprincipalruntime/interceptor_test.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/runtime.go": "100644 blob b1fcb80d7b56185f3e80b06d74d947e2d04a7e38\tsrc/backend/voice/internal/voiceuserprincipalruntime/runtime.go",
+          "src/backend/voice/internal/voiceuserprincipalruntime/runtime_test.go": "100644 blob cbfae396aed8a7e2cf3f4e0d23fbf381a64b8848\tsrc/backend/voice/internal/voiceuserprincipalruntime/runtime_test.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/analytics/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/analytics/v1/analytics.pb.go": "100644 blob 70714e67e54474b3658360aa0fc0bf4f94550923\tsrc/backend/voice/pb/voice/analytics/v1/analytics.pb.go",
+          "src/backend/voice/pb/voice/analytics/v1/analytics_grpc.pb.go": "100644 blob 791d11d0428581ff3ccbb3373fa2352a2ccdfad5\tsrc/backend/voice/pb/voice/analytics/v1/analytics_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/auth",
+        "entries": {
+          "src/backend/voice/pb/voice/auth/go.mod": "100644 blob deeb1a897fb0c97b4f6038cef29278259e53fe94\tsrc/backend/voice/pb/voice/auth/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/auth/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/auth/v1/auth.pb.go": "100644 blob fb6ff755a258d420c41c3fd74730bcc731d44f2b\tsrc/backend/voice/pb/voice/auth/v1/auth.pb.go",
+          "src/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go": "100644 blob 25584bc6e674698fc57635f4dc05756757fe9f86\tsrc/backend/voice/pb/voice/auth/v1/auth_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/calls",
+        "entries": {
+          "src/backend/voice/pb/voice/calls/go.mod": "100644 blob 812d411d7983e2d4201220cd50456ba577a2fae5\tsrc/backend/voice/pb/voice/calls/go.mod",
+          "src/backend/voice/pb/voice/calls/go.sum": "100644 blob d6896092dab04eb8ff812a736fa0e1695ce843d7\tsrc/backend/voice/pb/voice/calls/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/calls/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/calls/v1/calls.pb.go": "100644 blob 6dca3634d1ebf3d7447db9bcc8c47f8000311f41\tsrc/backend/voice/pb/voice/calls/v1/calls.pb.go",
+          "src/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go": "100644 blob 08d7ffa5b1dbdde4ac12daf8d043f1172a767190\tsrc/backend/voice/pb/voice/calls/v1/calls_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/chat/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/chat/v1/chat.pb.go": "100644 blob 5808085283660a1ae4fb7c9630a848779efbfcb8\tsrc/backend/voice/pb/voice/chat/v1/chat.pb.go",
+          "src/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go": "100644 blob 0db4d24d9d4c3f4aa0b9adada64433e76fff306e\tsrc/backend/voice/pb/voice/chat/v1/chat_grpc.pb.go",
+          "src/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go": "100644 blob 2e3d47150856f044205cd9c9b48c448e0e253909\tsrc/backend/voice/pb/voice/chat/v1/chat_lifecycle.pb.go",
+          "src/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go": "100644 blob 2b8f08b99d3411fc8eb0ccc97a616ff279554c18\tsrc/backend/voice/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+          "src/backend/voice/pb/voice/chat/v1/chat_scope_authority.pb.go": "100644 blob 2cd8f6f40e534f1ff218cbc48d0b3d63aa1a2ca4\tsrc/backend/voice/pb/voice/chat/v1/chat_scope_authority.pb.go",
+          "src/backend/voice/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go": "100644 blob 54aa1046c6dd62a3193744605219b99a3f73b3f0\tsrc/backend/voice/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/common/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/common/v1/bot_message.pb.go": "100644 blob bf725278387c62ec4c8c0ead92fad2a0e2a9b561\tsrc/backend/voice/pb/voice/common/v1/bot_message.pb.go",
+          "src/backend/voice/pb/voice/common/v1/common.pb.go": "100644 blob 17224a2f39fd5f2df4f7122ce64d1ae58dbffeaf\tsrc/backend/voice/pb/voice/common/v1/common.pb.go",
+          "src/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go": "100644 blob 4d476867354b8da634a4524f75b901f7e4f598c2\tsrc/backend/voice/pb/voice/common/v1/space_lifecycle.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/events/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go": "100644 blob f96ceb897e0c371615817b060c241bcdc45ae020\tsrc/backend/voice/pb/voice/events/v1/jetstream_events.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/file/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/file/v1/file.pb.go": "100644 blob 3f56314c1e8eedd0e2cb73bde475b60e31927dab\tsrc/backend/voice/pb/voice/file/v1/file.pb.go",
+          "src/backend/voice/pb/voice/file/v1/file_grpc.pb.go": "100644 blob 569b8b5ac9f12e6e3d94f0cfe05116feecfcb1b6\tsrc/backend/voice/pb/voice/file/v1/file_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/messaging/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/messaging/v1/messaging.pb.go": "100644 blob 768a99de8e9de65ed3b090eb318a34d01fcb430e\tsrc/backend/voice/pb/voice/messaging/v1/messaging.pb.go",
+          "src/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go": "100644 blob f3e2434335d1cc28b50b00256f32ff40c0edc100\tsrc/backend/voice/pb/voice/messaging/v1/messaging_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/role/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/role/v1/member_admission.pb.go": "100644 blob 45e694b07216fe4d89d0c8eecd5d42edf46b26a4\tsrc/backend/voice/pb/voice/role/v1/member_admission.pb.go",
+          "src/backend/voice/pb/voice/role/v1/role.pb.go": "100644 blob 100f81de5fbbb4acaba75b4c6257fe270df1cf79\tsrc/backend/voice/pb/voice/role/v1/role.pb.go",
+          "src/backend/voice/pb/voice/role/v1/role_grpc.pb.go": "100644 blob 80a6658eced7fee9fc7c87f71a8af85a3a1c43db\tsrc/backend/voice/pb/voice/role/v1/role_grpc.pb.go",
+          "src/backend/voice/pb/voice/role/v1/space_chat_permissions.pb.go": "100644 blob 1cf87a794d855a3481e4c7e502b61f34ff7b122e\tsrc/backend/voice/pb/voice/role/v1/space_chat_permissions.pb.go",
+          "src/backend/voice/pb/voice/role/v1/space_chat_permissions_grpc.pb.go": "100644 blob 9eb3a0c16a6e2fc81d958e8285395e059c32140d\tsrc/backend/voice/pb/voice/role/v1/space_chat_permissions_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/s2s/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/s2s/v1/federation_management.pb.go": "100644 blob 43d12f92fdab166fcbf679c942a418362f726b01\tsrc/backend/voice/pb/voice/s2s/v1/federation_management.pb.go",
+          "src/backend/voice/pb/voice/s2s/v1/federation_management_grpc.pb.go": "100644 blob ab3c384fd210e126f05ed022249c148070ac52c3\tsrc/backend/voice/pb/voice/s2s/v1/federation_management_grpc.pb.go",
+          "src/backend/voice/pb/voice/s2s/v1/s2s.pb.go": "100644 blob a3390cdf9f12d7d292b21f8f6fda8487377703b0\tsrc/backend/voice/pb/voice/s2s/v1/s2s.pb.go",
+          "src/backend/voice/pb/voice/s2s/v1/s2s_grpc.pb.go": "100644 blob 0f3c825513887197d5af1f2002493de57d847daf\tsrc/backend/voice/pb/voice/s2s/v1/s2s_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/social/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/social/v1/social.pb.go": "100644 blob 9ae7e1ea6ad6451b4c97662cf34ca450f1aec0c6\tsrc/backend/voice/pb/voice/social/v1/social.pb.go",
+          "src/backend/voice/pb/voice/social/v1/social_grpc.pb.go": "100644 blob 4872fc77b23bad5f9cc19058ff70adffeae503d9\tsrc/backend/voice/pb/voice/social/v1/social_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/space",
+        "entries": {
+          "src/backend/voice/pb/voice/space/go.mod": "100644 blob ccd57e3b778c7e1a8ba5bb795158639be0cbfc3c\tsrc/backend/voice/pb/voice/space/go.mod",
+          "src/backend/voice/pb/voice/space/go.sum": "100644 blob d6896092dab04eb8ff812a736fa0e1695ce843d7\tsrc/backend/voice/pb/voice/space/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/space/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/space/v1/member_admission.pb.go": "100644 blob bf99987e057ed311e2e4d70231538792a311d77e\tsrc/backend/voice/pb/voice/space/v1/member_admission.pb.go",
+          "src/backend/voice/pb/voice/space/v1/space.pb.go": "100644 blob 1c64df7b7db5a6b5bdc6c0ae0b346c26ce5c71a3\tsrc/backend/voice/pb/voice/space/v1/space.pb.go",
+          "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go": "100644 blob c88e5c7f0469fc4cc8149ad87f894c5b38caf12c\tsrc/backend/voice/pb/voice/space/v1/space_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/story",
+        "entries": {
+          "src/backend/voice/pb/voice/story/go.mod": "100644 blob 09b47d1625b7988999a268a5bb1c5d6ec125f900\tsrc/backend/voice/pb/voice/story/go.mod"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/story/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go": "100644 blob 35b789b664525c92098fa376345f4a9def8873fc\tsrc/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
+          "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go": "100644 blob 8a54b6cebb22b7528797d3d2a02528b63008f053\tsrc/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
+          "src/backend/voice/pb/voice/story/v1/lfp_actor.pb.go": "100644 blob f151810616924e5d87a5a5af2275e8829500239c\tsrc/backend/voice/pb/voice/story/v1/lfp_actor.pb.go",
+          "src/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go": "100644 blob 5d926ba134192f92dc9174f1b8a3935cd57c0950\tsrc/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go",
+          "src/backend/voice/pb/voice/story/v1/lfp_consent.pb.go": "100644 blob c792fe03aacbf7c078d73b8fdd500d82eee38ce9\tsrc/backend/voice/pb/voice/story/v1/lfp_consent.pb.go",
+          "src/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go": "100644 blob e862db2eea48e61a18030419ff755af8d59801cb\tsrc/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go",
+          "src/backend/voice/pb/voice/story/v1/story.pb.go": "100644 blob b68730d1edad25b22e10c946a2554d5f7f884939\tsrc/backend/voice/pb/voice/story/v1/story.pb.go",
+          "src/backend/voice/pb/voice/story/v1/story_grpc.pb.go": "100644 blob a3a46861b7b300d5a1415bb9387ada00d85b2bf2\tsrc/backend/voice/pb/voice/story/v1/story_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/subscription",
+        "entries": {
+          "src/backend/voice/pb/voice/subscription/go.mod": "100644 blob 267c4f07616eb8ed266e15cd28df4b73405ca892\tsrc/backend/voice/pb/voice/subscription/go.mod",
+          "src/backend/voice/pb/voice/subscription/go.sum": "100644 blob fb2a0582d0e778f87f18c03abb1f33c190849ad5\tsrc/backend/voice/pb/voice/subscription/go.sum"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/subscription/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/subscription/v1/subscription.pb.go": "100644 blob 97ee386cb448f57196bee62fd8e7b6fbdaa4b55e\tsrc/backend/voice/pb/voice/subscription/v1/subscription.pb.go",
+          "src/backend/voice/pb/voice/subscription/v1/subscription_grpc.pb.go": "100644 blob 94779669c3356a5365a76de59869752616fc13b5\tsrc/backend/voice/pb/voice/subscription/v1/subscription_grpc.pb.go"
+        }
+      },
+      {
+        "directory": "src/backend/voice/pb/voice/user/v1",
+        "entries": {
+          "src/backend/voice/pb/voice/user/v1/space_account_capture.pb.go": "100644 blob cbc7cb3f5d1ba214270d6cfb8fa31f0d8470e225\tsrc/backend/voice/pb/voice/user/v1/space_account_capture.pb.go",
+          "src/backend/voice/pb/voice/user/v1/user.pb.go": "100644 blob f2ad85e0f564da504024d9254bfe81867b874544\tsrc/backend/voice/pb/voice/user/v1/user.pb.go",
+          "src/backend/voice/pb/voice/user/v1/user_grpc.pb.go": "100644 blob af3ac2ea624a6cb4174e8358815fee29ab43a50b\tsrc/backend/voice/pb/voice/user/v1/user_grpc.pb.go"
+        }
+      }
+    ],
+    "projection_paths": [
+      ".agent/execplans/be012-roster-outbox-reset.md",
+      ".agent/execplans/be265-native-p3.md",
+      ".agent/execplans/space-admission-recovery-ownership.md",
+      ".agent/execplans/voice-dormant-roster-relay.md",
+      "docs/DATA_STORES.md",
+      "docs/microservices/space-service.md",
+      "docs/microservices/voice-service.md",
+      "protos/voice/events/v1/jetstream_events.proto",
+      "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+      "src/backend/migrations/voice_db/000013_a3_roster_outbox.down.sql",
+      "src/backend/migrations/voice_db/000013_a3_roster_outbox.up.sql",
+      "src/backend/migrations/voice_db/000014_space_media_p3.down.sql",
+      "src/backend/migrations/voice_db/000014_space_media_p3.up.sql",
+      "src/backend/migrations/voice_db/000015_space_admission_ownership.down.sql",
+      "src/backend/migrations/voice_db/000015_space_admission_ownership.up.sql",
+      "src/backend/user/pb/voice/events/v1/jetstream_events.pb.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_control.go",
+      "src/backend/voice/internal/grpcsvc/ordinary_stale_leave_test.go",
+      "src/backend/voice/internal/grpcsvc/screen_share_test.go",
+      "src/backend/voice/internal/grpcsvc/space_media_join.go",
+      "src/backend/voice/internal/grpcsvc/space_media_join_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_grpc.go",
+      "src/backend/voice/internal/grpcsvc/voice_grpc_test.go",
+      "src/backend/voice/internal/grpcsvc/voice_room.go",
+      "src/backend/voice/internal/livekit/room_lifecycle.go",
+      "src/backend/voice/internal/livekit/space_token.go",
+      "src/backend/voice/internal/ordinarycall/down_retention_test.go",
+      "src/backend/voice/internal/ordinarycall/party_loss.go",
+      "src/backend/voice/internal/ordinarycall/party_outbox_test.go",
+      "src/backend/voice/internal/ordinarycall/postgres.go",
+      "src/backend/voice/internal/ordinarycall/postgres_test.go",
+      "src/backend/voice/internal/principaljwks/publisher.go",
+      "src/backend/voice/internal/principaljwks/publisher_test.go",
+      "src/backend/voice/internal/rolegrant/permissions.go",
+      "src/backend/voice/internal/rolegrant/permissions_test.go",
+      "src/backend/voice/internal/rosteroutbox/delivery.go",
+      "src/backend/voice/internal/rosteroutbox/event.go",
+      "src/backend/voice/internal/spacebarrier/barrier.go",
+      "src/backend/voice/internal/spacebarrier/identity.go",
+      "src/backend/voice/internal/spacegatetest/gates.go",
+      "src/backend/voice/internal/spacegatetest/postgres.go",
+      "src/backend/voice/internal/spacelifecycle/capture.go",
+      "src/backend/voice/internal/spacelifecycle/effects.go",
+      "src/backend/voice/internal/spacelifecycle/postgres.go",
+      "src/backend/voice/internal/spacelifecycle/postgres_store_test.go",
+      "src/backend/voice/internal/spacelifecycle/provider_retirement_test.go",
+      "src/backend/voice/internal/spacelifecycle/recovery_publication_test.go",
+      "src/backend/voice/internal/spacelifecycle/service.go",
+      "src/backend/voice/internal/spacelifecycle/store.go",
+      "src/backend/voice/internal/spacemedia/admission_dispatch.go",
+      "src/backend/voice/internal/spacemedia/admission_ownership.go",
+      "src/backend/voice/internal/spacemedia/admission_ownership_down_integration_test.go",
+      "src/backend/voice/internal/spacemedia/admission_ownership_integration_test.go",
+      "src/backend/voice/internal/spacemedia/admission_revocation.go",
+      "src/backend/voice/internal/spacemedia/captured_drain.go",
+      "src/backend/voice/internal/spacemedia/communication_timeout_test.go",
+      "src/backend/voice/internal/spacemedia/consumer_test.go",
+      "src/backend/voice/internal/spacemedia/coordinator.go",
+      "src/backend/voice/internal/spacemedia/coordinator_floor_test.go",
+      "src/backend/voice/internal/spacemedia/coordinator_test.go",
+      "src/backend/voice/internal/spacemedia/grants.go",
+      "src/backend/voice/internal/spacemedia/native_down_snapshot_integration_test.go",
+      "src/backend/voice/internal/spacemedia/p3_barrier.go",
+      "src/backend/voice/internal/spacemedia/p3_barrier_integration_test.go",
+      "src/backend/voice/internal/spacemedia/p3_composition_test.go",
+      "src/backend/voice/internal/spacemedia/p3_down_retention_integration_test.go",
+      "src/backend/voice/internal/spacemedia/p3_gate_integration_test.go",
+      "src/backend/voice/internal/spacemedia/party_loss.go",
+      "src/backend/voice/internal/spacemedia/party_room_close.go",
+      "src/backend/voice/internal/spacemedia/party_roster_integration_test.go",
+      "src/backend/voice/internal/spacemedia/postgres_admission.go",
+      "src/backend/voice/internal/spacemedia/postgres_admission_integration_test.go",
+      "src/backend/voice/internal/spacemedia/projection_authority.go",
+      "src/backend/voice/internal/spacemedia/role_wire_compatibility_test.go",
+      "src/backend/voice/internal/store/call_store.go",
+      "src/backend/voice/internal/store/redis_store.go",
+      "src/backend/voice/internal/store/redis_store_test.go",
+      "src/backend/voice/internal/store/space_admission_dispatch_test.go",
+      "src/backend/voice/internal/store/space_admission_ownership.go",
+      "src/backend/voice/internal/store/space_gate_incarnation_test.go",
+      "src/backend/voice/internal/store/space_lifecycle.go",
+      "src/backend/voice/internal/voiceevents/jetstream.go",
+      "src/backend/voice/internal/voiceevents/roster_test.go",
+      "src/backend/voice/jwks_recovery_test.go",
+      "src/backend/voice/jwks_startup_order_test.go",
+      "src/backend/voice/main.go",
+      "src/backend/voice/party_outbox_runtime.go",
+      "src/backend/voice/party_outbox_runtime_test.go",
+      "src/backend/voice/pb/voice/calls/go.mod",
+      "src/backend/voice/pb/voice/calls/go.sum",
+      "src/backend/voice/pb/voice/events/v1/jetstream_events.pb.go",
+      "src/backend/voice/pb/voice/space/go.mod",
+      "src/backend/voice/pb/voice/space/go.sum",
+      "src/backend/voice/pb/voice/subscription/go.mod",
+      "src/backend/voice/space_media_runtime.go",
+      "src/backend/voice/space_media_runtime_test.go",
+      "src/frontend/lib/gen/voice/events/v1/jetstream_events.pb.dart",
+      "src/frontend/lib/gen/voice/events/v1/jetstream_events.pbenum.dart",
+      "src/frontend/lib/gen/voice/events/v1/jetstream_events.pbjson.dart"
+    ]
+  },
+  "context_change": {
+    "after": {
+      "bytes": 21930,
+      "entry": {
+        "mode": "100644",
+        "oid": "a611a91b479fc51b5600ec293bc1dce6bff58f1f",
+        "type": "blob"
+      },
+      "sha256": "3a461f577654391b6957c6ec5470e5c706dcc4e721f29a7d80751ee117c8a7ec"
+    },
+    "before": {
+      "bytes": 21086,
+      "entry": {
+        "mode": "100644",
+        "oid": "686039d87ce15b835db99608c8921378bc271af8",
+        "type": "blob"
+      },
+      "sha256": "219afd734b2d767485b04709092b37ec99127f6c87d156e37fc31b50fc999a79"
+    },
+    "path": "Makefile"
+  },
+  "current_or_future_path_authority": false,
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--a1-attachment-reachability.log",
+      "sha256": "d8a297f39ddf6e3dd7e05c45453a0813255e7c14605eb54408746bf0ada57d17"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--a1-flutter-reachability.log",
+      "sha256": "8fcb3807112e5ac1c8a779c7e7e7d81d2aa84c3eb6bb5c5357177ca9f688973e"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--acceptance-policy.log",
+      "sha256": "1804b78657b74094e3b14e0368451c038ef6df1c837c2223890a0a2a6b6285a5"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--auth-proto-reachability.log",
+      "sha256": "757f077fb5ab4ed00fbc65dfa9d4ad708b6bb7f3703ee29559035168164da756"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--auth-testcontainers-reachability.log",
+      "sha256": "4488a6474a8dbadc8f3305409c693e4095a71d1dfce0c5e6abed05f18abd1b3c"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--bot-membership-source.log",
+      "sha256": "b0b4f56000324a0435d839db31251b7a245545e267a7dd0dd7459da156a5acbb"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff-final.log",
+      "sha256": "26a343630c8f1391bfd62f84dcdbb18300c5144fd3dfce5e672fcce0d6030b0f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff-hashes.txt",
+      "sha256": "895f113dadd1c7a336093ef5d7b418bc8107a0e55c0ba694194fe2e308f5a6ee"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--current-diff.log",
+      "sha256": "deeacba1266e381396b530548471b980cb2589f5dc7776ee7bfb8b92edc7c077"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--fast-gate-routing.log",
+      "sha256": "0e2517bfee86451538bf0e654a619407fc36f5d6691a8c7d8e0fcad9189c79e9"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--gate-latency.log",
+      "sha256": "e53b859c363dd3f04b01aea71d73cbec1037479a3c07f92ca5a8dc8b8805ee60"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--make-inventory.log",
+      "sha256": "02199f00f96dfe1674c157883cf0dac8523e0b664b93f66144d7ef9e1ddc402f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--nats-workflow-reachability.log",
+      "sha256": "fac1cdb4fdd5604229c7714ad480699314075fb472ee880d19bc7d1728ccd142"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-final.log",
+      "sha256": "45d200a207bf5882efb45e679c0f8294bde77ed60f273aabc73e731d122cc5a0"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-fixture.log",
+      "sha256": "6e1e97073797900e3e355de1c7c34cb13349a0ef642340982e29b95486eb0789"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--phase0-retry.log",
+      "sha256": "9053c987f2b2b5d9017a33b43f75cebcaa7382fe2095e95cb1aafde8dbb19290"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--receipt-final.json",
+      "sha256": "913d473a4dcb3021fd9d82771b301cef2055ba538fcf69e84a9297563a7f8729"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--release-policy.log",
+      "sha256": "1d7fa5032f4a6b6931a9070e53bc1fad42b77382cab74e93c1e49b94291716c0"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--required-jobs.log",
+      "sha256": "7575cd80c442c9e5d02996769b8a8888401ad99d4fbc134ec8b50aed262e8998"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--run.log",
+      "sha256": "62afc11445151142a616c833d49081a8ba1cfd1bd8d90f8b9058d97e1e9b0556"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/ci-integration--shard-reachability.log",
+      "sha256": "b2f0a7af05f0dc3a901ed30e961ea21913ac486e69a92644155aaffa1bca5383"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/current-diff-nine-review.md",
+      "sha256": "bb668d8f58f0f97d08a710de5a19bbd455bd3db489e0a71345c372c9f2458fe4"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/independent-makefile-base-review.md",
+      "sha256": "3a11003c5f27d9013558df7ab9787bd033dd29cb4fe8b1ae26e7d7ca9eb40a9c"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/independent-r23-source-taint-review.md",
+      "sha256": "92871698f7bc3ba755672752d14ca72c63955bee47eba441759ba5ce566acea8"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/independent-source-review.md",
+      "sha256": "e2db7d91cd245d734b8d9a41841ec64c6929c6102388e68b6838a7956455c93d"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-final-source-manifest.txt",
+      "sha256": "57c2d2f164316ddbd50598c7881f029c89082f956afd3a2f0c614a8226a798ac"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--author-receipt.md",
+      "sha256": "f6475249d8c4aa97f17c60601cd20e464fb8b83dd4c6bdad4a94ec3b268aa2a6"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19-attempt2.log",
+      "sha256": "e354e394fded3a8357edaead44d25ba4db76d73dcc0ff34d1bea7dbac947dcef"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19-attempt3.log",
+      "sha256": "2baa003e35c419e5ad6d8dcff95900147618bbea64518d55034d0fdb2f60599b"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--baseline-h3a2b8e19.log",
+      "sha256": "a10f6cf4e49416903ee3e836dd5a3d39b4236633a93448f90cfaebad1436b5e2"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--candidate-manifest-h3a2b8e19.txt",
+      "sha256": "f80155f55897f79d700bcba85f74ab90d7f7881379e4b51d7b487232af4a9e5d"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-candidate-h3a2b8e19.log",
+      "sha256": "a961df6c59b0f7a83188e0e52fae87e88f9fb3c4530d34c9cd16e23f01b0238a"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-compiler-localcopy.log",
+      "sha256": "f7fb279b79dc76a076a2a16e1da8a956da552b7acc6cc521fda2c6d26d23e86b"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--focused-final.log",
+      "sha256": "a3abb11cd2f317dc21cfd8fcc5cd147b9bf101b9520047c166f176b27f97ca0f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-gate-fixes--full949-final.log",
+      "sha256": "fe6d706a132681c2212b98631e98c291f2f12b6b435f95bc4bd8225b018aac11"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--config-author-evidence.md",
+      "sha256": "83a65a2666b46063c6812cbc240ebca3b6f1f9c2b539d49b654d2949a603a0d2"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-compiler-stub-addendum.md",
+      "sha256": "1b372a67a187b9a7117f088d6318dbd5c42b85dde7e13753f59f0ac2cb9b248f"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-config-review.md",
+      "sha256": "73d10f10beba1f4be335df2002eebf794ce11367538c7fc201df5bddbedfa139"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review-addendum.md",
+      "sha256": "bcd81b82bdea9f15166c76202100a679995989521ea6a753a7059002c780d051"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-helper-review.md",
+      "sha256": "4e110561c4eb7d853649f5f20b25e839112ea589955a329b16cda3cda8330033"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--independent-nonhelper-review.md",
+      "sha256": "2beaee9ca6b0ec82def3b12213cf3a0b74372b9e0d8c7fb87f2aa86b5c78d6e2"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-green.log",
+      "sha256": "05733e1bc533248678f5e872f83e33291d069c20994eece50be617ac7cbc6627"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-red-snapshot.log",
+      "sha256": "b5f2f168179063544f8a5955c2e567b0ad8f3a7bd2d52c50d1865616fb5c0048"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/staging-media--media-red.log",
+      "sha256": "b74dff5be0e05046b1eddc0cda199e6479753f2a2ad5bfc9e4bb9b9b85510fbe"
+    },
+    {
+      "path": "docs/testing/f13-production-v8-evidence/transport-manifest.json",
+      "sha256": "be4daa700b7b949969e8b5c7e94d9745b239a3b1bab73ae4c7ec4238ffe1c100"
+    }
+  ],
+  "predecessor": {
+    "path": "docs/testing/native-p3-source-v3.json",
+    "record": "f87ee933aa1f599284e1932e44bf32b4e2af48ba",
+    "sha256": "4ed3acd7cecfef97d03724115e57bf418600bd8e3210d992fd7ed1a325de8a67",
+    "source": "e409cd05c40e857b61109513eb2154f968970c02",
+    "version": "NATIVE-P3-SOURCE-v3"
+  },
+  "runtime_pass": false,
+  "source": "ef3dd7f3888bbe2792a9dcec836b2773c4e77962",
+  "source_tree": "8c2e625484e18d015e5ff3f353367cfda87bf975",
+  "status": "SOURCE_APPLICABILITY_CLEAR",
+  "version": "NATIVE-P3-SOURCE-v4"
+}

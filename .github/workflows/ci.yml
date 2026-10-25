@@ -227,7 +227,7 @@ jobs:
             prom/prometheus:v2.54.1 test rules /tests/chat-list-enrichment-alert-test.yml
       - name: Verify PostgreSQL TCP readiness healthcheck
         run: |
-          docker pull postgres:16-alpine
+          docker pull postgres:18-alpine
           docker pull ghcr.io/jqlang/jq:1.7
           bash scripts/ci/compose-postgres-tcp-readiness_test.sh
       - name: Require NATS JetStream service in compose
@@ -509,6 +509,24 @@ jobs:
           cd ../..
           node scripts/ci/settings-help-browser-handoff.mjs \
             src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
+      - name: Web startup lifecycle and real browser retry (H/V)
+        id: web_startup_browser
+        timeout-minutes: 5
+        env:
+          CHROME_BIN: google-chrome
+          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --test scripts/ci/web-startup.test.mjs
+          node scripts/ci/web-startup-browser.mjs \
+            src/frontend/build/help-launcher-web "$RUNNER_TEMP/web-startup-browser"
+      - name: Upload Web startup browser evidence
+        if: always() && steps.web_startup_browser.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-startup-browser-${{ github.run_id }}
+          path: ${{ runner.temp }}/web-startup-browser
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload Help real browser handoff evidence
         if: always() && steps.help_browser_handoff.outcome != 'skipped'
         uses: actions/upload-artifact@v6
@@ -969,6 +987,13 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go test -short ./...
+      - name: Role native membership authority and invite decisions
+        if: matrix.service == 'role'
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: "0"
+          ROLE_NATIVE_SPACE_SOURCE_ROOT: ${{ github.workspace }}
+        run: go test -tags role_space_native -run '^TestMemberAdmissionRole25ProtectedReceipt$' -count=1 -timeout=10m .
       - name: Gateway race detector
         if: matrix.service == 'gateway'
         working-directory: src/backend/gateway
@@ -1182,6 +1207,12 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
+      - name: Set up Node for Auth disposable mail transport fixture
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Verify disposable mail delivery states
+        run: node --test docker/verification-stub/server.test.mjs
       - name: Maven test and Testcontainers report gate (auth)
         run: make auth-test-ci
       - uses: docker/setup-buildx-action@v4
@@ -1220,6 +1251,8 @@ jobs:
           push: false
           load: true
           tags: voice-auth:ci
+          build-args: |
+            VOICE_SOURCE_SHA=${{ github.sha }}
           cache-from: type=gha,scope=backend-auth
           cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
       - name: Auth container smoke
@@ -1277,7 +1310,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: src/developer-portal/package-lock.json
-      - name: npm ci, lint, test, build
+      - name: npm ci, lint, test
         working-directory: src/developer-portal
         env:
           VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
@@ -1287,7 +1320,18 @@ jobs:
           npm ci
           npm run lint
           npm test
-          npm run build
+      # PR verification and selected master publication already compile in Docker.
+      - name: Build developer-portal without Docker
+        if: >-
+          github.event_name != 'pull_request' &&
+          (github.event_name != 'push' || github.ref != 'refs/heads/master' ||
+           needs.changes.outputs.run_developer_portal != 'true')
+        working-directory: src/developer-portal
+        env:
+          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
+          VITE_OAUTH_CLIENT_ID: voice-developer-portal
+          VITE_OAUTH_DISABLED: "false"
+        run: npm run build
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
@@ -1534,7 +1578,7 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: src/admin/package-lock.json
-      - name: npm ci, lint, test, build
+      - name: npm ci, lint, test
         working-directory: src/admin
         env:
           VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
@@ -1544,7 +1588,18 @@ jobs:
           npm ci
           npm run lint
           npm test
-          npm run build
+      # PR verification and selected master publication already compile in Docker.
+      - name: Build admin without Docker
+        if: >-
+          github.event_name != 'pull_request' &&
+          (github.event_name != 'push' || github.ref != 'refs/heads/master' ||
+           needs.changes.outputs.run_admin != 'true')
+        working-directory: src/admin
+        env:
+          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
+          VITE_OAUTH_CLIENT_ID: voice-admin
+          VITE_OAUTH_DISABLED: "false"
+        run: npm run build
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
         if: >-
@@ -2051,6 +2106,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status "$startup_status" \
             --service voice \
+            --include-space-startup \
             --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
             cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
             exit "$startup_status"
@@ -2067,6 +2123,7 @@ jobs:
             --output "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json" \
             --startup-status 1 \
             --service voice \
+            --include-space-startup \
             --compose docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app || true
           cat "$RUNNER_TEMP/voice-compose-e2e-startup-diagnostics.json"
           exit 1
@@ -2089,6 +2146,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: Compose E2E smoke (all features)
         id: compose_e2e_smoke
         env:
@@ -2177,6 +2239,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: A1 multi-account compose proof
         env:
           VOICE_A1_MULTI_ACCOUNT_CLEANUP: "true"
@@ -2230,6 +2297,11 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: T055/T106/T107 Flutter A1 live proof
         env:
           VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP: "true"
@@ -2300,6 +2372,11 @@ jobs:
           docker run --rm --entrypoint /bin/sh voice-minio-mc:ci -c 'command -v mc && command -v sleep && mc --version'
           docker build -f docker/minio/minio.Dockerfile -t voice-minio:ci .
           docker run --rm --entrypoint /bin/sh voice-minio:ci -c 'command -v minio && command -v curl && command -v sleep && minio --version'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install E2E manifest parser dependency
+        run: python3 -m pip install -r scripts/ci/requirements-e2e.txt
       - name: File attachment restart proof
         env:
           VOICE_FILE_ATTACHMENT_RESTART_CLEANUP: "true"

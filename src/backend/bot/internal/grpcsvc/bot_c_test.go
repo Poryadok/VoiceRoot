@@ -223,7 +223,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 		if deps.msg != nil {
 			ml := bufconn.Listen(1024)
 			ms := grpc.NewServer()
-			messagingv1.RegisterMessagingServiceServer(ms, deps.msg)
+			messagingv1.RegisterMessagingServiceServer(ms, protectedMessagingFixture(t, svc, deps.msg))
 			go func() { _ = ms.Serve(ml) }()
 			mconn, err := grpc.NewClient("passthrough:///bufnet",
 				grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return ml.Dial() }),
@@ -231,6 +231,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 			)
 			require.NoError(t, err)
 			svc.Messaging = messagingv1.NewMessagingServiceClient(mconn)
+			svc.ProtectedMessaging = svc.Messaging
 		}
 		if deps.chat != nil {
 			cl := bufconn.Listen(1024)
@@ -309,7 +310,7 @@ func setupBotCCommandBot(
 	chatID := uuid.New()
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
-	_, err = st.InstallInSpace(ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
+	_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	require.NoError(t, st.TouchPresence(ctx, botUUID))
 	return ctx, botID, botToken, chatID, spaceID
@@ -377,7 +378,7 @@ func TestListSlashCommandsForChat_onlineAfterTouchPresence(t *testing.T) {
 	require.True(t, list.GetCommands()[0].GetOnline(), "bot must be online after TouchPresence (BOT-C)")
 }
 
-func TestInstallBotInSpace_rejectsPrivilegedScopeWithoutAcknowledge(t *testing.T) {
+func TestRawInstallRejectedBeforePrivilegedScopeCheck(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -409,8 +410,8 @@ func TestInstallBotInSpace_rejectsPrivilegedScopeWithoutAcknowledge(t *testing.T
 
 	_, err = client.InstallBotInSpace(ctx, req)
 	require.Error(t, err)
-	require.Equal(t, codes.FailedPrecondition, status.Code(err),
-		"TEXT_CHAT_READ_HISTORY install must require acknowledge_privileged_scopes (BOT-C)")
+	require.Equal(t, codes.Unauthenticated, status.Code(err),
+		"raw metadata must not reach privileged-scope evaluation")
 }
 
 func TestAssignBotRole_deniedWithoutMemberAssignRolesScope(t *testing.T) {
@@ -491,7 +492,7 @@ func TestCreateBotChat_deniedWithoutTextChatCreateInSpaceScope(t *testing.T) {
 		"CreateBotChat must require TEXT_CHAT_CREATE_IN_SPACE scope (BOT-C)")
 }
 
-func TestInstallBotInSpace_channelSkipsChatAddMembersWhenSpaceAddBotMember(t *testing.T) {
+func TestRawInstallDoesNotAddChannelMembers(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
 	}
@@ -518,10 +519,10 @@ func TestInstallBotInSpace_channelSkipsChatAddMembersWhenSpaceAddBotMember(t *te
 			{Id: chatID.String(), Type: &chatType},
 		},
 	})
-	require.NoError(t, err)
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
 
 	require.Equal(t, 0, chatFake.addMembersCalls,
-		"channel install must skip Chat.AddMembers when Space.AddBotMember handles membership (BOT-C)")
+		"raw installation request must not reach Chat.AddMembers")
 }
 
 func TestPollEvents_marksEventDeliveredAfterStream(t *testing.T) {

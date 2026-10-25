@@ -19,6 +19,17 @@ class AuthApplicationTest {
   @Autowired
   private MockMvc mockMvc;
 
+  @Autowired private voice.backend.auth.releasepolicy.ReleasePolicy releasePolicy;
+  @Autowired private voice.backend.auth.service.AuthService authService;
+  @Autowired private voice.backend.auth.service.OtpService otpService;
+
+  @Test
+  void ownerGuardsUseExactlyTheBootstrapPolicy() {
+    org.assertj.core.api.Assertions.assertThat(authService.releasePolicy()).isSameAs(releasePolicy);
+    org.assertj.core.api.Assertions.assertThat(otpService.releasePolicy()).isSameAs(releasePolicy);
+    org.assertj.core.api.Assertions.assertThat(releasePolicy.profile()).isEqualTo("development");
+  }
+
   @Test
   void healthReturnsOk() throws Exception {
     mockMvc.perform(get("/health"))

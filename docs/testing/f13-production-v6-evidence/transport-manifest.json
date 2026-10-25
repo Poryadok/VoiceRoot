@@ -1,0 +1,108 @@
+{
+  "files": [
+    {
+      "bytes": 535,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-artifact-122-data/failure.json",
+      "path": "docs/testing/f13-production-v6-evidence/actual-artifact-mismatch.json",
+      "sha256": "1a436ebc7c9b46691f9e2be3052dc1b7588ea0e0635b723de274fdbc62524b96"
+    },
+    {
+      "bytes": 5798,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/producer-actual-122bcedd/producer.stdout.log",
+      "path": "docs/testing/f13-production-v6-evidence/actual-producer-red.log",
+      "sha256": "49d095f9a5f2c97f31bed2cfc1ca8f097a946d98f35412c577671f139cf60f0e"
+    },
+    {
+      "bytes": 1552,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-artifact-122-data/actual.bin",
+      "path": "docs/testing/f13-production-v6-evidence/actual-ten-digit.diff",
+      "sha256": "60b876b7e549fde158eacdcfe77295754f9ec80122169746efb504b18acbb6a8"
+    },
+    {
+      "bytes": 881,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/bot-receivers/j-remaining/historical-composition-green.log",
+      "path": "docs/testing/f13-production-v6-evidence/component-green.log",
+      "sha256": "73d0b0f9e5fb24c574e98b11a0f29b61a87614bb2445b0be50dd142aada25a3b"
+    },
+    {
+      "bytes": 1662,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/bot-receivers/j-remaining/historical-composition-receipt.json",
+      "path": "docs/testing/f13-production-v6-evidence/component-receipt.json",
+      "sha256": "9962a8514831f4991f466c89eddcf6214d36b304220586d87f21049877c6c612"
+    },
+    {
+      "bytes": 2905,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/bot-receivers/j-remaining/historical-composition-red.log",
+      "path": "docs/testing/f13-production-v6-evidence/component-red.log",
+      "sha256": "6afb340179f24b03fd2f7c2c5be20254d5240828e8997186b48f0da85add6861"
+    },
+    {
+      "bytes": 1550,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-artifact-122-abbrev9.diff",
+      "path": "docs/testing/f13-production-v6-evidence/exact-nine-digit.diff",
+      "sha256": "c68990f4fcd07ed5b1f3be4b6746667015650781e49beeac57ee8d64321010b2"
+    },
+    {
+      "bytes": 2,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-core10.exit",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core10.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "bytes": 711,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-core10.log",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core10.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "bytes": 2,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-core40.exit",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core40.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "bytes": 711,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-core40.log",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core40.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "bytes": 2,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-core7.exit",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core7.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "bytes": 711,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-core7.log",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-core7.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "bytes": 2,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-default.exit",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-default.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "bytes": 711,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/historical-abbrev9-default.log",
+      "path": "docs/testing/f13-production-v6-evidence/historical-abbrev9-default.log",
+      "sha256": "bab23f3fa418f2c1b6e0b12e0fb9db062eb24829c94663345299818d9447be5f"
+    },
+    {
+      "bytes": 534,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/provenance.txt",
+      "path": "docs/testing/f13-production-v6-evidence/provenance.txt",
+      "sha256": "f261fb996f184b1c4365ec491fee0669f94cb25b2cc730b93f86a2a7b7635e99"
+    },
+    {
+      "bytes": 4778,
+      "original_path": "D:/Git/Voice/tmp/pr875-repair/f13-current-producer-122bcedd/historical-abbrev9-candidate/qualification-receipt.json",
+      "path": "docs/testing/f13-production-v6-evidence/qualification-receipt.json",
+      "sha256": "958011458d9b245f6380222540582ee1f609f55724e3aad618d04847722216ac"
+    }
+  ],
+  "schema": "F13-v6-evidence-transport-v1",
+  "scope": "Exact raw failure and successful component/fixture qualification. No full producer or runtime authority."
+}

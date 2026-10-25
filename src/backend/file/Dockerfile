@@ -10,6 +10,7 @@ COPY file/pb/voice/file/go.mod ./file/pb/voice/file/
 COPY chat/pb/voice/chat/go.mod ./chat/pb/voice/chat/
 COPY voice/pb/voice/story/go.mod ./voice/pb/voice/story/
 COPY voice/pb/voice/space/go.mod ./voice/pb/voice/space/
+COPY role/pb/voice/role/go.mod ./role/pb/voice/role/
 COPY voice/pb/voice/subscription/go.mod ./voice/pb/voice/subscription/
 COPY user/pb/voice/common/go.mod ./user/pb/voice/common/
 COPY user/pb/voice/user/go.mod ./user/pb/voice/user/
@@ -25,6 +26,7 @@ COPY file ./file
 COPY chat/pb ./chat/pb
 COPY voice/pb/voice/story ./voice/pb/voice/story
 COPY voice/pb/voice/space ./voice/pb/voice/space
+COPY role/pb/voice/role ./role/pb/voice/role
 COPY voice/pb/voice/subscription ./voice/pb/voice/subscription
 COPY user/pb ./user/pb
 WORKDIR /src/file

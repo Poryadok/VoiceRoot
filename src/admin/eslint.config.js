@@ -21,4 +21,14 @@ export default tseslint.config(
   {
     ignores: ["dist/**"],
   },
+  {
+    files: ["browser/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly", Buffer: "readonly", WebSocket: "readonly",
+        URL: "readonly", URLSearchParams: "readonly", console: "readonly", fetch: "readonly",
+        setTimeout: "readonly", clearTimeout: "readonly",
+      },
+    },
+  },
 );

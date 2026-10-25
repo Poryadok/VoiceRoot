@@ -1,0 +1,72 @@
+{
+  "source": "84a354f191b19cb5a95d17a8831fc4885a2713de",
+  "old_source": "e5ece697cefc00c708635539efb3d9e6c629517e",
+  "entries": [
+    {
+      "path": "docs/microservices/role-service.md",
+      "old": "2a76645fd5e55f220bfa6cf683237f14fee0d758",
+      "current": "e2321af0ff0e5442fc8004e649cc19cf98d9411e",
+      "sha256": "527d2275e0ee2e4f3915ab2f01d8a54293e2c083b9320c5269dbae6b3b2db36a"
+    },
+    {
+      "path": "src/backend/role/go.mod",
+      "old": "5bfdf899c774ff1ae5bba3b5b64be8f4f36ad294",
+      "current": "ca9cac8323f15bdf0b1a187744e40fbabe5174fc",
+      "sha256": "3ece8002eb2c2aae39640c6eb14cf370580a8d34cbe3efc3f6e80611c9e805ec"
+    },
+    {
+      "path": "src/backend/role/go.sum",
+      "old": "081b3dcbdfd4fcdf0b75cee76b29311fe1089cc5",
+      "current": "081b3dcbdfd4fcdf0b75cee76b29311fe1089cc5",
+      "sha256": "b167c9a3864b104dbefba58dc58262db27e09b0f069b65a2c2e39867ab97340f"
+    },
+    {
+      "path": "src/backend/role/internal/grpcsvc/ordinary_scope.go",
+      "old": "a105dde579079eecbd025b117b6c74826de1c774",
+      "current": "d47197501a955b3cef3ec28433b37bb2f7df3ad4",
+      "sha256": "cd11a2cddc98e732014a13598e3ad98c886f0ab8afdc5b5b2d66a7bcc26dce57"
+    },
+    {
+      "path": "src/backend/role/internal/principalgrpc/creation_decision.go",
+      "old": "7de92b3770cc40711ed3f4d2fc88dbbfb0b4336c",
+      "current": "7de92b3770cc40711ed3f4d2fc88dbbfb0b4336c",
+      "sha256": "08893cded8630f95a718db0b50552fc9171b73bb4d0c750c414b5b7f76c0f3ae"
+    },
+    {
+      "path": "src/backend/role/internal/principalgrpc/interceptor.go",
+      "old": "205127fcb6fdf046add7e7447091ca046b1794bc",
+      "current": "a0cf49c60f004068338d9b10cfd2298d3b6d0b7f",
+      "sha256": "cfbec9f12162674b05880f175505b9cc1a2d6f414387a03ec381e2d72f6170f6"
+    },
+    {
+      "path": "src/backend/role/internal/principalgrpc/nickname.go",
+      "old": "b34d569abe94ecdf0cb45f84400514e317df1d3f",
+      "current": "b34d569abe94ecdf0cb45f84400514e317df1d3f",
+      "sha256": "36e01213bc080a5a22236e96791cd7fe0b199754b5d8e92487529f027c2ffadd"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/creation_listener_test.go",
+      "old": "9d9d17e337e3bf24e875ef6c4b032b50519345d9",
+      "current": "3b71aa563570477675708784637025b63a3bcccd",
+      "sha256": "5638f3644e5fd5315c5413f2333ffe46d235479b51f6b41a95de2b81b926b7fb"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/listener.go",
+      "old": "5ee133bf6246ab5112207b38dbdf0471387bc3f3",
+      "current": "2d24db11768ffb1b8ad5ae3577ffe6c8c146c917",
+      "sha256": "954122425c0379d2d3128ef1b3c94b38cb35f625e45a1b9f3b8e3f2923d6d6df"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/nickname_listener_test.go",
+      "old": "6318edbc4de71859a2f51bdc2074d0a401f659f3",
+      "current": "0efa2cfc9510007874c73340e2fc1488284d77e7",
+      "sha256": "5ee2dc3cbf0f32ba33bd0096224dd97735abce33acef0c1d74a0187e23368c33"
+    },
+    {
+      "path": "src/backend/role/internal/principalruntime/runtime.go",
+      "old": "1a0a7bbdf5fc8ca0cd990a1fd98908e1e35a8786",
+      "current": "2bc7208ecaba6b1aa2b8df269afbce29cec19139",
+      "sha256": "b9a36e56e8166ba62d5ea5f3153f8a9df2cf627ec652f42fab2a4340e6f79e70"
+    }
+  ]
+}

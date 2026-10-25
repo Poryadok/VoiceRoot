@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package voice.story.v1;
+
+option go_package = "voice.app/voice/story/v1;storyv1";
+
+// PRIVATE authority material. UUIDs are nonzero 16 raw bytes, hashes 32 raw
+// bytes. No account/epoch/private bytes may enter public events or responses.
+// All fields are required by protocol 1. Deterministic protobuf bytes only;
+// unknown/duplicate/noncanonical fields are rejected before owner mutation.
+// Receipt SHA256 domain: "voice.story.lfp-consent-receipt.v1\x00".
+message LfpConsentMaterial {
+  uint64 protocol_version = 1;
+  bytes consent_id = 2;
+  bytes response_operation_id = 3;
+  bytes story_id = 4;
+  bytes story_incarnation = 5;
+  uint64 offer_revision = 6;
+  bytes author_profile_id = 7;
+  bytes responder_account_id = 8;
+  bytes responder_profile_id = 9;
+  int64 responder_session_epoch = 10;
+  LfpConsentResponseType response_type = 11;
+  bytes criteria_sha256 = 12;
+  bytes offer_payload_sha256 = 13;
+  int64 created_at_unix_millis = 14;
+  int64 offer_expires_at_unix_millis = 15;
+  bytes principal_request_sha256 = 16;
+}
+
+enum LfpConsentResponseType {
+  LFP_CONSENT_RESPONSE_TYPE_UNSPECIFIED = 0;
+  LFP_CONSENT_RESPONSE_TYPE_JOIN = 1;
+  LFP_CONSENT_RESPONSE_TYPE_INVITE = 2;
+}
+
+// Implemented only by protected Matchmaking. Exact signed service:story,
+// aud=matchmaking, full method/body hash/request_id/fresh JTI, TLS and replay
+// continuity required. A bare receipt hash or public event is no authority.
+service LfpConsentRegistryService {
+  rpc RegisterLfpConsent(RegisterLfpConsentRequest) returns (RegisterLfpConsentResponse);
+  rpc ReadLfpConsentRegistration(ReadLfpConsentRegistrationRequest) returns (ReadLfpConsentRegistrationResponse);
+}
+
+message RegisterLfpConsentResponse {
+  LfpConsentRegistration registration = 1;
+}
+
+message ReadLfpConsentRegistrationResponse {
+  LfpConsentRegistration registration = 1;
+}
+
+message RegisterLfpConsentRequest {
+  uint64 protocol_version = 1;
+  // Same immutable operation on every attempt, including recovery/lost ACK.
+  bytes registration_operation_id = 2;
+  bytes canonical_consent = 3;
+  bytes consent_sha256 = 4;
+}
+
+message ReadLfpConsentRegistrationRequest {
+  uint64 protocol_version = 1;
+  bytes registration_operation_id = 2;
+  bytes consent_id = 3;
+  bytes consent_sha256 = 4;
+}
+
+// Immutable original registration; consumed/declined status is read separately
+// by MM and cannot rewrite this receipt or recapture a newer search intent.
+message LfpConsentRegistration {
+  uint64 protocol_version = 1;
+  bytes registration_operation_id = 2;
+  bytes consent_id = 3;
+  bytes consent_sha256 = 4;
+  bytes registration_id = 5;
+  uint64 registration_generation = 6;
+  // Hash of MM's original exact replacement/search-intent witness including
+  // explicit NONE; its private bytes remain owned by MM, not sent to Story.
+  bytes captured_search_intent_sha256 = 7;
+  // SHA256("voice.mm.lfp-consent-registration.v1\x00" || deterministic fields1-7).
+  // Field8 is omitted from the hash input. Unknown fields deny.
+  bytes registration_sha256 = 8;
+}
+
+// Implemented only by protected Story. Exact signed service:matchmaking,
+// aud=story, full method/body hash/request_id/fresh JTI, TLS and replay required.
+service LfpConsentOfferService {
+  rpc ValidateLfpConsentOffer(ValidateLfpConsentOfferRequest) returns (ValidateLfpConsentOfferResponse);
+}
+
+message ValidateLfpConsentOfferRequest {
+  uint64 protocol_version = 1;
+  bytes consent_id = 2;
+  bytes consent_sha256 = 3;
+  bytes story_id = 4;
+  bytes story_incarnation = 5;
+  uint64 offer_revision = 6;
+  bytes offer_payload_sha256 = 7;
+  bytes criteria_sha256 = 8;
+}
+
+// Success is a fresh exact Story-owned observation, not a permanent permit or
+// distributed transaction. Stale/expired/retracted/hidden denies; outage is
+// unavailable. MM must independently apply fresh Auth floors/all-member bans.
+message ValidateLfpConsentOfferResponse {
+  uint64 protocol_version = 1;
+  bytes consent_id = 2;
+  bytes consent_sha256 = 3;
+  bytes story_id = 4;
+  bytes story_incarnation = 5;
+  uint64 offer_revision = 6;
+  bytes offer_payload_sha256 = 7;
+  bytes criteria_sha256 = 8;
+  int64 offer_expires_at_unix_millis = 9;
+}

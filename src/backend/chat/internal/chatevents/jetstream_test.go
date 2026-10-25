@@ -173,6 +173,35 @@ func TestJetStreamPublisher_ChatDeletedPublishesPersistedEnvelopeAndDedupID(t *t
 	require.Error(t, validateChatDeletedEnvelope(bad))
 }
 
+func TestCompositeChatCreatedPreservesDurableBytesAndPubAckDedup(t *testing.T) {
+	ctx := context.Background()
+	srv := startJSTestServer(t)
+	pub, err := NewJetStreamPublisher(srv.ClientURL())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	env := &eventsv1.ChatStreamEvent{EventId: "11111111-1111-1111-1111-111111111111", OccurredAt: timestamppb.New(time.Date(2026, 10, 21, 0, 0, 0, 123, time.UTC)),
+		Payload: &eventsv1.ChatStreamEvent_ChatCreated{ChatCreated: &eventsv1.ChatCreated{ChatId: "22222222-2222-2222-2222-222222222222", Type: "group"}}}
+	wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(env)
+	require.NoError(t, err)
+	for range 2 {
+		require.NoError(t, pub.PublishChatCreatedBytes(ctx, env.EventId, wire))
+	}
+	js, err := pub.nc.JetStream()
+	require.NoError(t, err)
+	info, err := js.StreamInfo(streamName)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, info.State.Msgs)
+	stored, err := js.GetMsg(streamName, 1)
+	require.NoError(t, err)
+	require.Equal(t, wire, stored.Data)
+	require.Equal(t, env.EventId, stored.Header.Get(nats.MsgIdHdr))
+	bad := proto.Clone(env).(*eventsv1.ChatStreamEvent)
+	bad.GetChatCreated().ProtoReflect().SetUnknown([]byte{0xf8, 0x07, 0x01})
+	badWire, err := proto.Marshal(bad)
+	require.NoError(t, err)
+	require.Error(t, pub.PublishChatCreatedBytes(ctx, env.EventId, badWire))
+}
+
 func TestJetStreamPublisher_ChatMemberChangedRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	srv := startJSTestServer(t)

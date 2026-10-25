@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"voice/backend/pkg/guestguard"
 	"voice/backend/role/permissions"
 	"voice/backend/space/internal/authctx"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
 	spacev1 "voice.app/voice/space/v1"
@@ -79,6 +81,14 @@ func mapInviteStoreErr(err error) error {
 }
 
 func (s *SpaceGRPC) CreateInvite(ctx context.Context, req *spacev1.CreateInviteRequest) (*spacev1.CreateInviteResponse, error) {
+	call, err := lifecycleprincipal.RequireInviteCreate(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	actor, err := call.ActorFor(req)
+	if err != nil {
+		return nil, err
+	}
 	if s == nil || s.Store == nil {
 		return nil, status.Error(codes.FailedPrecondition, "space persistence not configured")
 	}
@@ -86,17 +96,27 @@ func (s *SpaceGRPC) CreateInvite(ctx context.Context, req *spacev1.CreateInviteR
 	if err != nil {
 		return nil, err
 	}
+	if spaceID.String() != req.SpaceId {
+		return nil, status.Error(codes.InvalidArgument, "canonical space_id required")
+	}
+	if req.MaxUses != nil && *req.MaxUses < 1 {
+		return nil, status.Error(codes.InvalidArgument, "max_uses must be at least 1")
+	}
+	if req.ExpiresAt != nil && req.ExpiresAt.CheckValid() != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid expiry")
+	}
+	caller := uuid.MustParse(actor.ProfileID)
+	// Role observes Space authority: complete that RPC before any Space fence.
+	if err := s.requireInvitePermission(ctx, spaceID, caller); err != nil {
+		return nil, err
+	}
 	release, err := s.lockSpaceMutation(ctx, spaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
-	if err := s.requireSpacePermission(ctx, spaceID, permissions.SpaceManageInvites); err != nil {
+	if _, err := call.ActorFor(req); err != nil {
 		return nil, err
-	}
-	caller, ok := authctx.ProfileID(ctx)
-	if !ok {
-		return nil, status.Error(codes.Unauthenticated, "missing profile")
 	}
 	var maxUses *int32
 	if req.MaxUses != nil {
@@ -112,8 +132,12 @@ func (s *SpaceGRPC) CreateInvite(ctx context.Context, req *spacev1.CreateInviteR
 		CreatorProfileID: caller,
 		MaxUses:          maxUses,
 		ExpiresAt:        expiresAt,
+		BeforeWrite:      func(context.Context) error { _, err := call.ActorFor(req); return err },
 	})
 	if err != nil {
+		if status.Code(err) != codes.Unknown {
+			return nil, err
+		}
 		if strings.Contains(err.Error(), "max_uses") {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}

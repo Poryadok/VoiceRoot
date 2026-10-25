@@ -2,8 +2,8 @@
 # Local/CI only. Separate volumes keep Social signing keys out of consumers.
 set -eu
 umask 077
-signing_directories="/signing /file-signing /search-signing /space-signing /story-signing /messaging-signing"
-services="social user space file search story messaging matchmaking"
+signing_directories="/signing /file-signing /search-signing /space-signing /story-signing /messaging-signing /realtime-signing"
+services="social user space file search story messaging matchmaking realtime chat principal-jwks"
 if [ -f /ca/ready ]; then
   test -s /ca/ca.crt || { echo "Incomplete principal CA volume" >&2; exit 1; }
   for directory in $signing_directories; do
@@ -16,11 +16,12 @@ if [ -f /ca/ready ]; then
       test -s "/$service/tls.$extension" || { echo "Incomplete principal TLS identity: $service" >&2; exit 1; }
     done
   done
+  python3 /export-jwks.py --check
   exit 0
 fi
 # Never overwrite a partial bootstrap: stop the isolated Compose project and
 # recreate only its principal volumes after inspecting the failed initializer.
-for directory in /ca $signing_directories $services; do
+for directory in /ca /jwks-public $signing_directories $services; do
   case "$directory" in /*) ;; *) directory="/$directory" ;; esac
   test -z "$(ls -A "$directory")" || { echo "Partial principal bootstrap in $directory" >&2; exit 1; }
 done
@@ -29,6 +30,7 @@ for directory in $signing_directories; do
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$directory/$key.pem" 2>/dev/null
   done
 done
+python3 /export-jwks.py
 openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/ca.key -out /ca/ca.crt -days 30 -subj /CN=Voice-Compose-Principal-CA -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
 for service in $services; do
   openssl req -new -newkey rsa:2048 -nodes -keyout "/$service/tls.key" -out "/tmp/$service.csr" -subj "/CN=$service" 2>/dev/null

@@ -388,7 +388,8 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		profile, _ := authProfile(ctx)
 
 		destinationDM := uuid.New()
-		require.NoError(t, st.SetChatEnabled(ctx, botUUID, destinationDM, spaceID, profile, true))
+		_, err = installSendFixture(t, st, ctx, botUUID, spaceID, profile, []uuid.UUID{originalDM, destinationDM})
+		require.NoError(t, err)
 		msg.expectedChatID = originalDM.String()
 
 		token := "deferred-dm-a-" + uuid.NewString()

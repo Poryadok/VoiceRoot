@@ -5,9 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend/voice_client.dart';
 import '../../backend/livekit_room.dart';
+import '../../backend/space_permissions.dart';
+import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
+import '../../state/space_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../api_error_messages.dart';
+import '../core/voice_compact_banner.dart';
+import '../core/voice_disabled_action.dart';
 
 /// Organizer controls: raised hands, grant/revoke floor, commander broadcast.
 class VoiceOrganizerPanel extends ConsumerStatefulWidget {
@@ -29,6 +35,8 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
   var _handRaised = false;
   var _isCommander = false;
   var _isBroadcasting = false;
+  VoiceApiFailure? _actionFailure;
+  String? _failedPermission;
 
   @override
   void initState() {
@@ -41,7 +49,12 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
     final session = call.session;
     final authHeader = ref.read(authorizationHeaderProvider);
     final selfId = ref.read(authControllerProvider).activeProfileId;
-    if (session == null || authHeader == null || authHeader.isEmpty) return;
+    if (session == null ||
+        authHeader == null ||
+        authHeader.isEmpty ||
+        !_callerOwnsBinding(call, selfId)) {
+      return;
+    }
     final room = ref.read(callControllerProvider.notifier).liveKitRoom;
 
     setState(() => _loading = true);
@@ -74,8 +87,10 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
     String? profileId,
     VoiceLiveKitRoom? room,
   ) {
-    final current = ref.read(callControllerProvider).session;
+    final currentCall = ref.read(callControllerProvider);
+    final current = currentCall.session;
     return mounted &&
+        _callerOwnsBinding(currentCall, profileId) &&
         identical(
           ref.read(callControllerProvider.notifier).liveKitRoom,
           room,
@@ -83,8 +98,29 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
         ref.read(authorizationHeaderProvider) == authorization &&
         ref.read(authControllerProvider).activeProfileId == profileId &&
         current?.roomId == session.roomId &&
+        current?.sessionKind == session.sessionKind &&
+        current?.spaceId == session.spaceId &&
+        current?.voiceRoomId == session.voiceRoomId &&
         current?.matchId == session.matchId &&
         current?.mediaEpoch == session.mediaEpoch;
+  }
+
+  bool _callerOwnsBinding(CallState call, String? profileId) =>
+      profileId != null &&
+      (call.voiceBindingProfileId == null ||
+          call.voiceBindingProfileId == profileId);
+
+  void _resetBinding() {
+    setState(() {
+      _participants = const [];
+      _loading = false;
+      _handRaised = false;
+      _isCommander = false;
+      _isBroadcasting = false;
+      _actionFailure = null;
+      _failedPermission = null;
+    });
+    unawaited(_refresh());
   }
 
   Future<void> _applyDucking({
@@ -110,18 +146,86 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
   }
 
   Future<void> _run(
-    Future<VoiceApiResult<void>> Function(String auth, String roomId) action,
-  ) async {
+    Future<VoiceApiResult<void>> Function(String auth, String roomId) action, {
+    String? permission,
+  }) async {
     final call = ref.read(callControllerProvider);
     final session = call.session;
     final authHeader = ref.read(authorizationHeaderProvider);
-    if (session == null || authHeader == null || authHeader.isEmpty) return;
-    await action(authHeader, session.roomId);
+    final selfId = ref.read(authControllerProvider).activeProfileId;
+    final room = ref.read(callControllerProvider.notifier).liveKitRoom;
+    if (session == null ||
+        authHeader == null ||
+        authHeader.isEmpty ||
+        !_callerOwnsBinding(call, selfId)) {
+      return;
+    }
+    setState(() {
+      _actionFailure = null;
+      _failedPermission = null;
+    });
+    final result = await action(authHeader, session.roomId);
+    if (!_isCurrentBinding(session, authHeader, selfId, room)) return;
+    if (result is VoiceApiFailure) {
+      setState(() {
+        _actionFailure = result;
+        _failedPermission = permission;
+      });
+    }
     await _refresh();
+  }
+
+  ({bool allowed, String? reason}) _permission(
+    VoiceCallSession session,
+    String permission,
+    AppLocalizations l10n,
+  ) {
+    if (session.sessionKind != VoiceSessionKind.voiceRoom) {
+      return (allowed: true, reason: null);
+    }
+    final spaceId = session.spaceId;
+    final voiceRoomId = session.voiceRoomId;
+    if (spaceId == null ||
+        spaceId.isEmpty ||
+        voiceRoomId == null ||
+        voiceRoomId.isEmpty) {
+      return (
+        allowed: false,
+        reason: spacePermissionDeniedReason(l10n, permission),
+      );
+    }
+    final result = ref.watch(
+      spacePermissionProvider((
+        spaceId: spaceId,
+        permission: permission,
+        chatId: null,
+        voiceRoomId: voiceRoomId,
+      )),
+    );
+    if (result.isLoading) {
+      return (allowed: false, reason: l10n.spacePermissionChecking);
+    }
+    final allowed = !result.hasError && result.valueOrNull == true;
+    return (
+      allowed: allowed,
+      reason: allowed ? null : spacePermissionDeniedReason(l10n, permission),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(
+      callControllerProvider.select(
+        (call) => (call.session, call.voiceBindingProfileId),
+      ),
+      (_, _) => _resetBinding(),
+    );
+    ref.listen(
+      authControllerProvider.select(
+        (auth) => (auth.session?.accessToken, auth.activeProfileId),
+      ),
+      (_, _) => _resetBinding(),
+    );
     ref.listen<int>(
       callControllerProvider.select((call) => call.mediaTracksVersion),
       (_, _) {
@@ -135,6 +239,35 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
       return const SizedBox.shrink();
     }
     final voice = VoiceColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    final callerOwnsBinding = _callerOwnsBinding(
+      call,
+      ref.watch(authControllerProvider).activeProfileId,
+    );
+    final moderator = _permission(
+      call.session!,
+      SpacePermissions.voiceMuteOthers,
+      l10n,
+    );
+    final speaker = _permission(
+      call.session!,
+      SpacePermissions.voiceSpeak,
+      l10n,
+    );
+    final canModerate = callerOwnsBinding && moderator.allowed;
+    final canStartBroadcast = canModerate && speaker.allowed;
+    final failure = _actionFailure;
+    final reasons = <String>{
+      if (!callerOwnsBinding) l10n.commonActionFailed,
+      if (moderator.reason != null) moderator.reason!,
+      if (_isCommander && !_isBroadcasting && speaker.reason != null)
+        speaker.reason!,
+      if (failure != null)
+        if (failure.statusCode == 403 && _failedPermission != null)
+          spacePermissionDeniedReason(l10n, _failedPermission!)
+        else
+          commonActionErrorMessage(l10n, statusCode: failure.statusCode),
+    };
     final raised = _participants.where((p) => p.handRaised).toList();
     final withFloor = _participants.where((p) => p.hasFloor).toList();
 
@@ -147,6 +280,8 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            for (final reason in reasons)
+              VoiceCompactBanner(message: reason, icon: Icons.lock_outline),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -155,26 +290,37 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   key: VoiceOrganizerPanel.raiseHandKey,
                   label: Text(_handRaised ? 'Lower hand' : 'Raise hand'),
                   selected: _handRaised,
-                  onSelected: (_) => _run((auth, roomId) {
-                    final client = ref.read(voiceCallsClientProvider);
-                    return _handRaised
-                        ? client.lowerHand(authorization: auth, roomId: roomId)
-                        : client.raiseHand(authorization: auth, roomId: roomId);
-                  }),
+                  onSelected: !callerOwnsBinding
+                      ? null
+                      : (_) => _run((auth, roomId) {
+                          final client = ref.read(voiceCallsClientProvider);
+                          return _handRaised
+                              ? client.lowerHand(
+                                  authorization: auth,
+                                  roomId: roomId,
+                                )
+                              : client.raiseHand(
+                                  authorization: auth,
+                                  roomId: roomId,
+                                );
+                        }),
                 ),
                 FilterChip(
                   key: VoiceOrganizerPanel.commanderKey,
                   label: Text(_isCommander ? 'Commander on' : 'Commander'),
                   selected: _isCommander,
-                  onSelected: (v) => _run((auth, roomId) {
-                    return ref
-                        .read(voiceCallsClientProvider)
-                        .setCommanderMode(
-                          authorization: auth,
-                          roomId: roomId,
-                          enabled: v,
-                        );
-                  }),
+                  onSelected:
+                      !callerOwnsBinding || (!_isCommander && !canModerate)
+                      ? null
+                      : (v) => _run((auth, roomId) {
+                          return ref
+                              .read(voiceCallsClientProvider)
+                              .setCommanderMode(
+                                authorization: auth,
+                                roomId: roomId,
+                                enabled: v,
+                              );
+                        }, permission: SpacePermissions.voiceMuteOthers),
                 ),
                 if (_isCommander)
                   FilterChip(
@@ -183,15 +329,24 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                       _isBroadcasting ? 'Stop broadcast' : 'Start broadcast',
                     ),
                     selected: _isBroadcasting,
-                    onSelected: (v) => _run((auth, roomId) {
-                      return ref
-                          .read(voiceCallsClientProvider)
-                          .setBroadcasting(
-                            authorization: auth,
-                            roomId: roomId,
-                            enabled: v,
-                          );
-                    }),
+                    onSelected:
+                        !callerOwnsBinding ||
+                            (!_isBroadcasting && !canStartBroadcast)
+                        ? null
+                        : (v) => _run(
+                            (auth, roomId) {
+                              return ref
+                                  .read(voiceCallsClientProvider)
+                                  .setBroadcasting(
+                                    authorization: auth,
+                                    roomId: roomId,
+                                    enabled: v,
+                                  );
+                            },
+                            permission: moderator.allowed
+                                ? SpacePermissions.voiceSpeak
+                                : SpacePermissions.voiceMuteOthers,
+                          ),
                   ),
                 IconButton(
                   tooltip: 'Refresh',
@@ -219,15 +374,17 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   title: Text(p.profileId),
                   trailing: TextButton(
                     key: Key('voice_organizer_grant_${p.profileId}'),
-                    onPressed: () => _run((auth, roomId) {
-                      return ref
-                          .read(voiceCallsClientProvider)
-                          .grantFloor(
-                            authorization: auth,
-                            roomId: roomId,
-                            profileId: p.profileId,
-                          );
-                    }),
+                    onPressed: !canModerate
+                        ? null
+                        : () => _run((auth, roomId) {
+                            return ref
+                                .read(voiceCallsClientProvider)
+                                .grantFloor(
+                                  authorization: auth,
+                                  roomId: roomId,
+                                  profileId: p.profileId,
+                                );
+                          }, permission: SpacePermissions.voiceMuteOthers),
                     child: const Text('Grant floor'),
                   ),
                 ),
@@ -242,15 +399,17 @@ class _VoiceOrganizerPanelState extends ConsumerState<VoiceOrganizerPanel> {
                   title: Text(p.profileId),
                   trailing: TextButton(
                     key: Key('voice_organizer_revoke_${p.profileId}'),
-                    onPressed: () => _run((auth, roomId) {
-                      return ref
-                          .read(voiceCallsClientProvider)
-                          .revokeFloor(
-                            authorization: auth,
-                            roomId: roomId,
-                            profileId: p.profileId,
-                          );
-                    }),
+                    onPressed: !canModerate
+                        ? null
+                        : () => _run((auth, roomId) {
+                            return ref
+                                .read(voiceCallsClientProvider)
+                                .revokeFloor(
+                                  authorization: auth,
+                                  roomId: roomId,
+                                  profileId: p.profileId,
+                                );
+                          }, permission: SpacePermissions.voiceMuteOthers),
                     child: const Text('Revoke'),
                   ),
                 ),

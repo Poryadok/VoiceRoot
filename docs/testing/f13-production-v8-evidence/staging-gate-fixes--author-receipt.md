@@ -1,0 +1,12 @@
+# Staging gate repair author receipt
+
+- Author: messaging_role_client, WT35, baseline `3a2b8e19b0f8fe7a6104b753340f62864e039326`.
+- Published commit: `90239eeea29089871c116781e220c18399444d7f`, branch `codex/pr875-staging-gate-fixes`.
+- Scope: exactly 15 files in scripts/staging/nats-rollout-preservation. Root media configuration commit `a8d5c2c04c4e8707d4cec6c3b06cce7ed68acb2b` supplied four additional files for combined verification; those four are excluded from author commit.
+- Fixes: explicit validated release-policy transport, exact source-named JWKS publisher enrollment and observed image pin, restricted reviewed nginx public route, immutable public-map binding, guarded publisher readiness before applications; Bot migration8 prerequisite support; historical Story4 witness fixtures and current-schema rejection; exact85 public bundle inventory.
+- Baseline: exact H3a Linux949 tests reproduced6 failures and6 errors. Baseline log SHA256 `2baa003e35c419e5ad6d8dcff95900147618bbea64518d55034d0fdb2f60599b`.
+- Final: full wrapper956 tests OK90.358s plus44 follow-on tests OK0.879s, exit0. Immutable19-file candidate snapshot, container-local Linux source; final log `full949-final.log`, SHA256 `fe6d706a132681c2212b98631e98c291f2f12b6b435f95bc4bd8225b018aac11`.
+- Intermediate attempts remain separately recorded: initial107 test candidate exposed stale module stub (fixed); direct NTFS bind-mounted108 tests had3 bounded-read errors; exact2 affected methods passed on local Linux copy before complete full GREEN. No bounded-read safety checks changed.
+- Reviews: independent non-helper review SHA256 `2beaee9ca6b0ec82def3b12213cf3a0b74372b9e0d8c7fb87f2aa86b5c78d6e2`; independent helper review SHA256 `4e110561c4eb7d853649f5f20b25e839112ea589955a329b16cda3cda8330033`. Original helper review predates final narrow compiler test stub; final `compiler_test.py` SHA256 `bfeb61874b05b44ee87c2adf4e6e0a9178851333619ba0dfdf967de6677f1f82` receives separate review addendum. Production reviewed hashes unchanged.
+- Graphify update completed exit0; git diff --check clean. No deployment, full Compose, runtime credentials, or actual JWKS retrieval validation performed or claimed.
+- Final compiler test stub review CLEAR at published90239ee: addendum `../staging-media/independent-compiler-stub-addendum.md`, SHA256 `1b372a67a187b9a7117f088d6318dbd5c42b85dde7e13753f59f0ac2cb9b248f`. Original review artifacts preserved.

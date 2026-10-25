@@ -57,7 +57,7 @@ func (s *MessagingGRPC) enrichMusicAttachment(ctx context.Context, raw, contentT
 	if json.Unmarshal([]byte(raw), &rows) != nil || len(rows) != 1 || s.Files == nil {
 		return "", nil, status.Error(codes.FailedPrecondition, "music metadata unavailable")
 	}
-	response, err := s.Files.GetBulkMetadata(ctx, &filev1.GetBulkMetadataRequest{FileIds: []string{rows[0].FileID}})
+	response, err := s.Files.GetBulkMetadata(ctx, fileMetadataRequest(ctx, []string{rows[0].FileID}))
 	if err != nil {
 		return "", nil, status.Error(codes.Unavailable, "music metadata unavailable")
 	}

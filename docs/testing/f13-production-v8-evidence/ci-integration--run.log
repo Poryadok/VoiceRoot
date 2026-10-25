@@ -1,0 +1,1746 @@
+/staged.patch:125: trailing whitespace.
+{
+/staged.patch:126: trailing whitespace.
+  "rows": [
+/staged.patch:127: trailing whitespace.
+    {
+/staged.patch:128: trailing whitespace.
+      "pr": 875,
+/staged.patch:129: trailing whitespace.
+      "id": 40068145398,
+warning: squelched 862 whitespace errors
+warning: 867 lines add whitespace errors.
+.github/ci/gate-baseline.json:1: trailing whitespace.
++{
+.github/ci/gate-baseline.json:2: trailing whitespace.
++  "rows": [
+.github/ci/gate-baseline.json:3: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:4: trailing whitespace.
++      "pr": 875,
+.github/ci/gate-baseline.json:5: trailing whitespace.
++      "id": 40068145398,
+.github/ci/gate-baseline.json:6: trailing whitespace.
++      "sha": "e981f8749aa7b9c67a1582d66bdac402bae4cec9",
+.github/ci/gate-baseline.json:7: trailing whitespace.
++      "class": "CI/global+Flutter+Admin+Backend+DEV scripts",
+.github/ci/gate-baseline.json:8: trailing whitespace.
++      "status": "in_progress",
+.github/ci/gate-baseline.json:9: trailing whitespace.
++      "conclusion": null,
+.github/ci/gate-baseline.json:10: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:11: trailing whitespace.
++      "created": "2026-10-24T05:55:20Z",
+.github/ci/gate-baseline.json:12: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398",
+.github/ci/gate-baseline.json:13: trailing whitespace.
++      "initial_queue_s": 37.0,
+.github/ci/gate-baseline.json:14: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:15: trailing whitespace.
++      "workflow_wall_s": null,
+.github/ci/gate-baseline.json:16: trailing whitespace.
++      "gate_wall_s": null,
+.github/ci/gate-baseline.json:17: trailing whitespace.
++      "gate_execution_s": null,
+.github/ci/gate-baseline.json:18: trailing whitespace.
++      "gate_conclusion": null,
+.github/ci/gate-baseline.json:19: trailing whitespace.
++      "last_job": "flutter-windows",
+.github/ci/gate-baseline.json:20: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398/job/120799663713",
+.github/ci/gate-baseline.json:21: trailing whitespace.
++      "longest_job": "flutter",
+.github/ci/gate-baseline.json:22: trailing whitespace.
++      "longest_job_s": 1160.0,
+.github/ci/gate-baseline.json:23: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398/job/120795793199",
+.github/ci/gate-baseline.json:24: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:25: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:26: trailing whitespace.
++          "name": "Flutter analyze and test",
+.github/ci/gate-baseline.json:27: trailing whitespace.
++          "seconds": 814.0
+.github/ci/gate-baseline.json:28: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:29: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:30: trailing whitespace.
++          "name": "Install buf CLI",
+.github/ci/gate-baseline.json:31: trailing whitespace.
++          "seconds": 68.0
+.github/ci/gate-baseline.json:32: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:33: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:34: trailing whitespace.
++          "name": "Help real Chrome external handoff (H/V)",
+.github/ci/gate-baseline.json:35: trailing whitespace.
++          "seconds": 66.0
+.github/ci/gate-baseline.json:36: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:37: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:38: trailing whitespace.
++      "max_job_queue_s": 462.0
+.github/ci/gate-baseline.json:39: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:40: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:41: trailing whitespace.
++      "pr": 875,
+.github/ci/gate-baseline.json:42: trailing whitespace.
++      "id": 39971713562,
+.github/ci/gate-baseline.json:43: trailing whitespace.
++      "sha": "b0291d839a2876265bf98fce3d5cb50fced0af07",
+.github/ci/gate-baseline.json:44: trailing whitespace.
++      "class": "CI/global+Flutter+Admin+Backend+DEV scripts",
+.github/ci/gate-baseline.json:45: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:46: trailing whitespace.
++      "conclusion": "failure",
+.github/ci/gate-baseline.json:47: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:48: trailing whitespace.
++      "created": "2026-10-23T14:40:59Z",
+.github/ci/gate-baseline.json:49: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562",
+.github/ci/gate-baseline.json:50: trailing whitespace.
++      "initial_queue_s": 85.0,
+.github/ci/gate-baseline.json:51: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:52: trailing whitespace.
++      "workflow_wall_s": 3926.0,
+.github/ci/gate-baseline.json:53: trailing whitespace.
++      "gate_wall_s": 3926.0,
+.github/ci/gate-baseline.json:54: trailing whitespace.
++      "gate_execution_s": 3841.0,
+.github/ci/gate-baseline.json:55: trailing whitespace.
++      "gate_conclusion": "failure",
+.github/ci/gate-baseline.json:56: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:57: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562/job/120508332365",
+.github/ci/gate-baseline.json:58: trailing whitespace.
++      "longest_job": "ci-script-tests",
+.github/ci/gate-baseline.json:59: trailing whitespace.
++      "longest_job_s": 3806.0,
+.github/ci/gate-baseline.json:60: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562/job/120476690820",
+.github/ci/gate-baseline.json:61: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:62: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:63: trailing whitespace.
++          "name": "CI script regression tests",
+.github/ci/gate-baseline.json:64: trailing whitespace.
++          "seconds": 3795.0
+.github/ci/gate-baseline.json:65: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:66: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:67: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:68: trailing whitespace.
++          "seconds": 6.0
+.github/ci/gate-baseline.json:69: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:70: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:71: trailing whitespace.
++          "name": "Run python3 -m pip install PyYAML==6.0.3",
+.github/ci/gate-baseline.json:72: trailing whitespace.
++          "seconds": 2.0
+.github/ci/gate-baseline.json:73: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:74: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:75: trailing whitespace.
++      "max_job_queue_s": 473.0
+.github/ci/gate-baseline.json:76: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:77: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:78: trailing whitespace.
++      "pr": 879,
+.github/ci/gate-baseline.json:79: trailing whitespace.
++      "id": 39834373671,
+.github/ci/gate-baseline.json:80: trailing whitespace.
++      "sha": "a6a8834c265f0c80300c12ed8de8385197e8c6fe",
+.github/ci/gate-baseline.json:81: trailing whitespace.
++      "class": "DEV scripts",
+.github/ci/gate-baseline.json:82: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:83: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:84: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:85: trailing whitespace.
++      "created": "2026-10-22T18:46:55Z",
+.github/ci/gate-baseline.json:86: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671",
+.github/ci/gate-baseline.json:87: trailing whitespace.
++      "initial_queue_s": 4.0,
+.github/ci/gate-baseline.json:88: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:89: trailing whitespace.
++      "workflow_wall_s": 26.0,
+.github/ci/gate-baseline.json:90: trailing whitespace.
++      "gate_wall_s": 26.0,
+.github/ci/gate-baseline.json:91: trailing whitespace.
++      "gate_execution_s": 22.0,
+.github/ci/gate-baseline.json:92: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:93: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:94: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671/job/120018796660",
+.github/ci/gate-baseline.json:95: trailing whitespace.
++      "longest_job": "changes",
+.github/ci/gate-baseline.json:96: trailing whitespace.
++      "longest_job_s": 11.0,
+.github/ci/gate-baseline.json:97: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671/job/120018669911",
+.github/ci/gate-baseline.json:98: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:99: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:100: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:101: trailing whitespace.
++          "seconds": 5.0
+.github/ci/gate-baseline.json:102: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:103: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:104: trailing whitespace.
++          "name": "Set up job",
+.github/ci/gate-baseline.json:105: trailing whitespace.
++          "seconds": 2.0
+.github/ci/gate-baseline.json:106: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:107: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:108: trailing whitespace.
++          "name": "Run dorny/paths-filter@v4",
+.github/ci/gate-baseline.json:109: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:110: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:111: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:112: trailing whitespace.
++      "max_job_queue_s": 3.0
+.github/ci/gate-baseline.json:113: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:114: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:115: trailing whitespace.
++      "pr": 878,
+.github/ci/gate-baseline.json:116: trailing whitespace.
++      "id": 39570230609,
+.github/ci/gate-baseline.json:117: trailing whitespace.
++      "sha": "5fbf6c53206fa465f71a221503c796ae4e079172",
+.github/ci/gate-baseline.json:118: trailing whitespace.
++      "class": "DEV scripts",
+.github/ci/gate-baseline.json:119: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:120: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:121: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:122: trailing whitespace.
++      "created": "2026-10-21T08:33:56Z",
+.github/ci/gate-baseline.json:123: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609",
+.github/ci/gate-baseline.json:124: trailing whitespace.
++      "initial_queue_s": 4.0,
+.github/ci/gate-baseline.json:125: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:126: trailing whitespace.
++      "workflow_wall_s": 27.0,
+.github/ci/gate-baseline.json:127: trailing whitespace.
++      "gate_wall_s": 26.0,
+.github/ci/gate-baseline.json:128: trailing whitespace.
++      "gate_execution_s": 22.0,
+.github/ci/gate-baseline.json:129: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:130: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:131: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609/job/119122361595",
+.github/ci/gate-baseline.json:132: trailing whitespace.
++      "longest_job": "changes",
+.github/ci/gate-baseline.json:133: trailing whitespace.
++      "longest_job_s": 11.0,
+.github/ci/gate-baseline.json:134: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609/job/119122263581",
+.github/ci/gate-baseline.json:135: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:136: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:137: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:138: trailing whitespace.
++          "seconds": 5.0
+.github/ci/gate-baseline.json:139: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:140: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:141: trailing whitespace.
++          "name": "Set up job",
+.github/ci/gate-baseline.json:142: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:143: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:144: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:145: trailing whitespace.
++          "name": "Resolve Go service matrix",
+.github/ci/gate-baseline.json:146: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:147: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:148: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:149: trailing whitespace.
++      "max_job_queue_s": 3.0
+.github/ci/gate-baseline.json:150: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:151: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:152: trailing whitespace.
++      "pr": 877,
+.github/ci/gate-baseline.json:153: trailing whitespace.
++      "id": 39385343073,
+.github/ci/gate-baseline.json:154: trailing whitespace.
++      "sha": "62a42fbb3f98239df038697a992cc6d4a546d698",
+.github/ci/gate-baseline.json:155: trailing whitespace.
++      "class": "CI/global",
+.github/ci/gate-baseline.json:156: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:157: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:158: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:159: trailing whitespace.
++      "created": "2026-10-20T07:15:35Z",
+.github/ci/gate-baseline.json:160: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073",
+.github/ci/gate-baseline.json:161: trailing whitespace.
++      "initial_queue_s": 3.0,
+.github/ci/gate-baseline.json:162: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:163: trailing whitespace.
++      "workflow_wall_s": 1115.0,
+.github/ci/gate-baseline.json:164: trailing whitespace.
++      "gate_wall_s": 1115.0,
+.github/ci/gate-baseline.json:165: trailing whitespace.
++      "gate_execution_s": 1112.0,
+.github/ci/gate-baseline.json:166: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:167: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:168: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073/job/118510252426",
+.github/ci/gate-baseline.json:169: trailing whitespace.
++      "longest_job": "flutter",
+.github/ci/gate-baseline.json:170: trailing whitespace.
++      "longest_job_s": 1091.0,
+.github/ci/gate-baseline.json:171: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073/job/118503785035",
+.github/ci/gate-baseline.json:172: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:173: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:174: trailing whitespace.
++          "name": "Flutter analyze and test",
+.github/ci/gate-baseline.json:175: trailing whitespace.
++          "seconds": 808.0
+.github/ci/gate-baseline.json:176: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:177: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:178: trailing whitespace.
++          "name": "Install buf CLI",
+.github/ci/gate-baseline.json:179: trailing whitespace.
++          "seconds": 66.0
+.github/ci/gate-baseline.json:180: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:181: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:182: trailing whitespace.
++          "name": "Help real Chrome external handoff (H/V)",
+.github/ci/gate-baseline.json:183: trailing whitespace.
++          "seconds": 66.0
+.github/ci/gate-baseline.json:184: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:185: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:186: trailing whitespace.
++      "max_job_queue_s": 141.0
+.github/ci/gate-baseline.json:187: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:188: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:189: trailing whitespace.
++      "pr": 876,
+.github/ci/gate-baseline.json:190: trailing whitespace.
++      "id": 39296896416,
+.github/ci/gate-baseline.json:191: trailing whitespace.
++      "sha": "1c5a1f1145481616f96fcb6f0518b77515f67196",
+.github/ci/gate-baseline.json:192: trailing whitespace.
++      "class": "DEV scripts",
+.github/ci/gate-baseline.json:193: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:194: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:195: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:196: trailing whitespace.
++      "created": "2026-10-19T17:45:47Z",
+.github/ci/gate-baseline.json:197: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416",
+.github/ci/gate-baseline.json:198: trailing whitespace.
++      "initial_queue_s": 3.0,
+.github/ci/gate-baseline.json:199: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:200: trailing whitespace.
++      "workflow_wall_s": 28.0,
+.github/ci/gate-baseline.json:201: trailing whitespace.
++      "gate_wall_s": 27.0,
+.github/ci/gate-baseline.json:202: trailing whitespace.
++      "gate_execution_s": 24.0,
+.github/ci/gate-baseline.json:203: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:204: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:205: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416/job/118211741509",
+.github/ci/gate-baseline.json:206: trailing whitespace.
++      "longest_job": "changes",
+.github/ci/gate-baseline.json:207: trailing whitespace.
++      "longest_job_s": 11.0,
+.github/ci/gate-baseline.json:208: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416/job/118211630553",
+.github/ci/gate-baseline.json:209: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:210: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:211: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:212: trailing whitespace.
++          "seconds": 5.0
+.github/ci/gate-baseline.json:213: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:214: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:215: trailing whitespace.
++          "name": "Set up job",
+.github/ci/gate-baseline.json:216: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:217: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:218: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:219: trailing whitespace.
++          "name": "Run dorny/paths-filter@v4",
+.github/ci/gate-baseline.json:220: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:221: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:222: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:223: trailing whitespace.
++      "max_job_queue_s": 3.0
+.github/ci/gate-baseline.json:224: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:225: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:226: trailing whitespace.
++      "pr": 873,
+.github/ci/gate-baseline.json:227: trailing whitespace.
++      "id": 39134424678,
+.github/ci/gate-baseline.json:228: trailing whitespace.
++      "sha": "3301b4d9eda2bb04f9334eb6db380456514fd713",
+.github/ci/gate-baseline.json:229: trailing whitespace.
++      "class": "Backend",
+.github/ci/gate-baseline.json:230: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:231: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:232: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:233: trailing whitespace.
++      "created": "2026-10-18T14:05:28Z",
+.github/ci/gate-baseline.json:234: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678",
+.github/ci/gate-baseline.json:235: trailing whitespace.
++      "initial_queue_s": 210.0,
+.github/ci/gate-baseline.json:236: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:237: trailing whitespace.
++      "workflow_wall_s": 579.0,
+.github/ci/gate-baseline.json:238: trailing whitespace.
++      "gate_wall_s": 579.0,
+.github/ci/gate-baseline.json:239: trailing whitespace.
++      "gate_execution_s": 369.0,
+.github/ci/gate-baseline.json:240: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:241: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:242: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678/job/117697920689",
+.github/ci/gate-baseline.json:243: trailing whitespace.
++      "longest_job": "golangci",
+.github/ci/gate-baseline.json:244: trailing whitespace.
++      "longest_job_s": 182.0,
+.github/ci/gate-baseline.json:245: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678/job/117696722355",
+.github/ci/gate-baseline.json:246: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:247: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:248: trailing whitespace.
++          "name": "Lint affected Go modules",
+.github/ci/gate-baseline.json:249: trailing whitespace.
++          "seconds": 103.0
+.github/ci/gate-baseline.json:250: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:251: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:252: trailing whitespace.
++          "name": "Install golangci-lint",
+.github/ci/gate-baseline.json:253: trailing whitespace.
++          "seconds": 61.0
+.github/ci/gate-baseline.json:254: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:255: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:256: trailing whitespace.
++          "name": "Go mod tidy (affected modules)",
+.github/ci/gate-baseline.json:257: trailing whitespace.
++          "seconds": 8.0
+.github/ci/gate-baseline.json:258: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:259: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:260: trailing whitespace.
++      "max_job_queue_s": 145.0
+.github/ci/gate-baseline.json:261: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:262: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:263: trailing whitespace.
++      "pr": 874,
+.github/ci/gate-baseline.json:264: trailing whitespace.
++      "id": 39134304804,
+.github/ci/gate-baseline.json:265: trailing whitespace.
++      "sha": "54be418ac0acb58792b70280fb192f79d85d1810",
+.github/ci/gate-baseline.json:266: trailing whitespace.
++      "class": "Backend",
+.github/ci/gate-baseline.json:267: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:268: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:269: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:270: trailing whitespace.
++      "created": "2026-10-18T14:03:52Z",
+.github/ci/gate-baseline.json:271: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804",
+.github/ci/gate-baseline.json:272: trailing whitespace.
++      "initial_queue_s": 82.0,
+.github/ci/gate-baseline.json:273: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:274: trailing whitespace.
++      "workflow_wall_s": 797.0,
+.github/ci/gate-baseline.json:275: trailing whitespace.
++      "gate_wall_s": 796.0,
+.github/ci/gate-baseline.json:276: trailing whitespace.
++      "gate_execution_s": 714.0,
+.github/ci/gate-baseline.json:277: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:278: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:279: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804/job/117698319831",
+.github/ci/gate-baseline.json:280: trailing whitespace.
++      "longest_job": "a1-attachment-restart-proof",
+.github/ci/gate-baseline.json:281: trailing whitespace.
++      "longest_job_s": 535.0,
+.github/ci/gate-baseline.json:282: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804/job/117695920531",
+.github/ci/gate-baseline.json:283: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:284: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:285: trailing whitespace.
++          "name": "File attachment restart proof",
+.github/ci/gate-baseline.json:286: trailing whitespace.
++          "seconds": 509.0
+.github/ci/gate-baseline.json:287: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:288: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:289: trailing whitespace.
++          "name": "Build and validate official MinIO mc runtime",
+.github/ci/gate-baseline.json:290: trailing whitespace.
++          "seconds": 14.0
+.github/ci/gate-baseline.json:291: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:292: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:293: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:294: trailing whitespace.
++          "seconds": 4.0
+.github/ci/gate-baseline.json:295: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:296: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:297: trailing whitespace.
++      "max_job_queue_s": 299.0
+.github/ci/gate-baseline.json:298: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:299: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:300: trailing whitespace.
++      "pr": 872,
+.github/ci/gate-baseline.json:301: trailing whitespace.
++      "id": 39134271064,
+.github/ci/gate-baseline.json:302: trailing whitespace.
++      "sha": "4213d861b4d89a1019c07d74072576f96c448471",
+.github/ci/gate-baseline.json:303: trailing whitespace.
++      "class": "CI/global+Backend",
+.github/ci/gate-baseline.json:304: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:305: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:306: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:307: trailing whitespace.
++      "created": "2026-10-18T14:03:24Z",
+.github/ci/gate-baseline.json:308: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064",
+.github/ci/gate-baseline.json:309: trailing whitespace.
++      "initial_queue_s": 100.0,
+.github/ci/gate-baseline.json:310: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:311: trailing whitespace.
++      "workflow_wall_s": 1414.0,
+.github/ci/gate-baseline.json:312: trailing whitespace.
++      "gate_wall_s": 1414.0,
+.github/ci/gate-baseline.json:313: trailing whitespace.
++      "gate_execution_s": 1314.0,
+.github/ci/gate-baseline.json:314: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:315: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:316: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064/job/117700575064",
+.github/ci/gate-baseline.json:317: trailing whitespace.
++      "longest_job": "flutter",
+.github/ci/gate-baseline.json:318: trailing whitespace.
++      "longest_job_s": 1000.0,
+.github/ci/gate-baseline.json:319: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064/job/117695887239",
+.github/ci/gate-baseline.json:320: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:321: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:322: trailing whitespace.
++          "name": "Flutter analyze and test",
+.github/ci/gate-baseline.json:323: trailing whitespace.
++          "seconds": 731.0
+.github/ci/gate-baseline.json:324: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:325: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:326: trailing whitespace.
++          "name": "Help real Chrome external handoff (H/V)",
+.github/ci/gate-baseline.json:327: trailing whitespace.
++          "seconds": 62.0
+.github/ci/gate-baseline.json:328: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:329: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:330: trailing whitespace.
++          "name": "Install buf CLI",
+.github/ci/gate-baseline.json:331: trailing whitespace.
++          "seconds": 61.0
+.github/ci/gate-baseline.json:332: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:333: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:334: trailing whitespace.
++      "max_job_queue_s": 403.0
+.github/ci/gate-baseline.json:335: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:336: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:337: trailing whitespace.
++      "pr": 866,
+.github/ci/gate-baseline.json:338: trailing whitespace.
++      "id": 39134160821,
+.github/ci/gate-baseline.json:339: trailing whitespace.
++      "sha": "cb3efbca4bd32a0c76c7bfa236d6781f76056204",
+.github/ci/gate-baseline.json:340: trailing whitespace.
++      "class": "Backend",
+.github/ci/gate-baseline.json:341: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:342: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:343: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:344: trailing whitespace.
++      "created": "2026-10-18T14:01:57Z",
+.github/ci/gate-baseline.json:345: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821",
+.github/ci/gate-baseline.json:346: trailing whitespace.
++      "initial_queue_s": 117.0,
+.github/ci/gate-baseline.json:347: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:348: trailing whitespace.
++      "workflow_wall_s": 721.0,
+.github/ci/gate-baseline.json:349: trailing whitespace.
++      "gate_wall_s": 720.0,
+.github/ci/gate-baseline.json:350: trailing whitespace.
++      "gate_execution_s": 603.0,
+.github/ci/gate-baseline.json:351: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:352: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:353: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821/job/117697543578",
+.github/ci/gate-baseline.json:354: trailing whitespace.
++      "longest_job": "backend-go-integration-pr (role)",
+.github/ci/gate-baseline.json:355: trailing whitespace.
++      "longest_job_s": 308.0,
+.github/ci/gate-baseline.json:356: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821/job/117696114992",
+.github/ci/gate-baseline.json:357: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:358: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:359: trailing whitespace.
++          "name": "Go integration test (role)",
+.github/ci/gate-baseline.json:360: trailing whitespace.
++          "seconds": 295.0
+.github/ci/gate-baseline.json:361: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:362: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:363: trailing whitespace.
++          "name": "Go mod tidy (role)",
+.github/ci/gate-baseline.json:364: trailing whitespace.
++          "seconds": 5.0
+.github/ci/gate-baseline.json:365: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:366: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:367: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:368: trailing whitespace.
++          "seconds": 4.0
+.github/ci/gate-baseline.json:369: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:370: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:371: trailing whitespace.
++      "max_job_queue_s": 134.0
+.github/ci/gate-baseline.json:372: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:373: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:374: trailing whitespace.
++      "pr": 871,
+.github/ci/gate-baseline.json:375: trailing whitespace.
++      "id": 39134124788,
+.github/ci/gate-baseline.json:376: trailing whitespace.
++      "sha": "6b568d3cc5469a8a597e11f8e4acbcc6ad1d9df0",
+.github/ci/gate-baseline.json:377: trailing whitespace.
++      "class": "Flutter",
+.github/ci/gate-baseline.json:378: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:379: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:380: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:381: trailing whitespace.
++      "created": "2026-10-18T14:01:26Z",
+.github/ci/gate-baseline.json:382: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788",
+.github/ci/gate-baseline.json:383: trailing whitespace.
++      "initial_queue_s": 40.0,
+.github/ci/gate-baseline.json:384: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:385: trailing whitespace.
++      "workflow_wall_s": 1131.0,
+.github/ci/gate-baseline.json:386: trailing whitespace.
++      "gate_wall_s": 1131.0,
+.github/ci/gate-baseline.json:387: trailing whitespace.
++      "gate_execution_s": 1091.0,
+.github/ci/gate-baseline.json:388: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:389: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:390: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788/job/117699119022",
+.github/ci/gate-baseline.json:391: trailing whitespace.
++      "longest_job": "flutter",
+.github/ci/gate-baseline.json:392: trailing whitespace.
++      "longest_job_s": 1030.0,
+.github/ci/gate-baseline.json:393: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788/job/117695233809",
+.github/ci/gate-baseline.json:394: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:395: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:396: trailing whitespace.
++          "name": "Flutter analyze and test",
+.github/ci/gate-baseline.json:397: trailing whitespace.
++          "seconds": 776.0
+.github/ci/gate-baseline.json:398: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:399: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:400: trailing whitespace.
++          "name": "Help real Chrome external handoff (H/V)",
+.github/ci/gate-baseline.json:401: trailing whitespace.
++          "seconds": 56.0
+.github/ci/gate-baseline.json:402: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:403: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:404: trailing whitespace.
++          "name": "Install buf CLI",
+.github/ci/gate-baseline.json:405: trailing whitespace.
++          "seconds": 52.0
+.github/ci/gate-baseline.json:406: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:407: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:408: trailing whitespace.
++      "max_job_queue_s": 191.0
+.github/ci/gate-baseline.json:409: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:410: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:411: trailing whitespace.
++      "pr": 870,
+.github/ci/gate-baseline.json:412: trailing whitespace.
++      "id": 39134015670,
+.github/ci/gate-baseline.json:413: trailing whitespace.
++      "sha": "f82af7d4c134c867b35bca9956b7d01e07a0e1e8",
+.github/ci/gate-baseline.json:414: trailing whitespace.
++      "class": "Backend",
+.github/ci/gate-baseline.json:415: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:416: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:417: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:418: trailing whitespace.
++      "created": "2026-10-18T14:00:08Z",
+.github/ci/gate-baseline.json:419: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670",
+.github/ci/gate-baseline.json:420: trailing whitespace.
++      "initial_queue_s": 73.0,
+.github/ci/gate-baseline.json:421: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:422: trailing whitespace.
++      "workflow_wall_s": 766.0,
+.github/ci/gate-baseline.json:423: trailing whitespace.
++      "gate_wall_s": 766.0,
+.github/ci/gate-baseline.json:424: trailing whitespace.
++      "gate_execution_s": 693.0,
+.github/ci/gate-baseline.json:425: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:426: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:427: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670/job/117697341093",
+.github/ci/gate-baseline.json:428: trailing whitespace.
++      "longest_job": "a1-attachment-restart-proof",
+.github/ci/gate-baseline.json:429: trailing whitespace.
++      "longest_job_s": 578.0,
+.github/ci/gate-baseline.json:430: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670/job/117695078605",
+.github/ci/gate-baseline.json:431: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:432: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:433: trailing whitespace.
++          "name": "File attachment restart proof",
+.github/ci/gate-baseline.json:434: trailing whitespace.
++          "seconds": 556.0
+.github/ci/gate-baseline.json:435: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:436: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:437: trailing whitespace.
++          "name": "Build and validate official MinIO mc runtime",
+.github/ci/gate-baseline.json:438: trailing whitespace.
++          "seconds": 13.0
+.github/ci/gate-baseline.json:439: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:440: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:441: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:442: trailing whitespace.
++          "seconds": 4.0
+.github/ci/gate-baseline.json:443: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:444: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:445: trailing whitespace.
++      "max_job_queue_s": 88.0
+.github/ci/gate-baseline.json:446: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:447: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:448: trailing whitespace.
++      "pr": 867,
+.github/ci/gate-baseline.json:449: trailing whitespace.
++      "id": 39133970729,
+.github/ci/gate-baseline.json:450: trailing whitespace.
++      "sha": "ee13069f60e15559b269515df0a66e4eb802e159",
+.github/ci/gate-baseline.json:451: trailing whitespace.
++      "class": "docs",
+.github/ci/gate-baseline.json:452: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:453: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:454: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:455: trailing whitespace.
++      "created": "2026-10-18T13:59:34Z",
+.github/ci/gate-baseline.json:456: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729",
+.github/ci/gate-baseline.json:457: trailing whitespace.
++      "initial_queue_s": 13.0,
+.github/ci/gate-baseline.json:458: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:459: trailing whitespace.
++      "workflow_wall_s": 34.0,
+.github/ci/gate-baseline.json:460: trailing whitespace.
++      "gate_wall_s": 33.0,
+.github/ci/gate-baseline.json:461: trailing whitespace.
++      "gate_execution_s": 20.0,
+.github/ci/gate-baseline.json:462: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:463: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:464: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729/job/117694706651",
+.github/ci/gate-baseline.json:465: trailing whitespace.
++      "longest_job": "changes",
+.github/ci/gate-baseline.json:466: trailing whitespace.
++      "longest_job_s": 8.0,
+.github/ci/gate-baseline.json:467: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729/job/117694633308",
+.github/ci/gate-baseline.json:468: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:469: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:470: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:471: trailing whitespace.
++          "seconds": 3.0
+.github/ci/gate-baseline.json:472: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:473: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:474: trailing whitespace.
++          "name": "Set up job",
+.github/ci/gate-baseline.json:475: trailing whitespace.
++          "seconds": 2.0
+.github/ci/gate-baseline.json:476: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:477: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:478: trailing whitespace.
++          "name": "Run dorny/paths-filter@v4",
+.github/ci/gate-baseline.json:479: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:480: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:481: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:482: trailing whitespace.
++      "max_job_queue_s": 13.0
+.github/ci/gate-baseline.json:483: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:484: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:485: trailing whitespace.
++      "pr": 869,
+.github/ci/gate-baseline.json:486: trailing whitespace.
++      "id": 39133911729,
+.github/ci/gate-baseline.json:487: trailing whitespace.
++      "sha": "e1795bd58c3efa2c47b9110e4fbaaf16c1d24353",
+.github/ci/gate-baseline.json:488: trailing whitespace.
++      "class": "Admin",
+.github/ci/gate-baseline.json:489: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:490: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:491: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:492: trailing whitespace.
++      "created": "2026-10-18T13:58:42Z",
+.github/ci/gate-baseline.json:493: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729",
+.github/ci/gate-baseline.json:494: trailing whitespace.
++      "initial_queue_s": 56.0,
+.github/ci/gate-baseline.json:495: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:496: trailing whitespace.
++      "workflow_wall_s": 229.0,
+.github/ci/gate-baseline.json:497: trailing whitespace.
++      "gate_wall_s": 228.0,
+.github/ci/gate-baseline.json:498: trailing whitespace.
++      "gate_execution_s": 172.0,
+.github/ci/gate-baseline.json:499: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:500: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:501: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729/job/117695108741",
+.github/ci/gate-baseline.json:502: trailing whitespace.
++      "longest_job": "admin",
+.github/ci/gate-baseline.json:503: trailing whitespace.
++      "longest_job_s": 91.0,
+.github/ci/gate-baseline.json:504: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729/job/117694675125",
+.github/ci/gate-baseline.json:505: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:506: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:507: trailing whitespace.
++          "name": "Build admin image (PR verify)",
+.github/ci/gate-baseline.json:508: trailing whitespace.
++          "seconds": 44.0
+.github/ci/gate-baseline.json:509: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:510: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:511: trailing whitespace.
++          "name": "npm ci, lint, test, build",
+.github/ci/gate-baseline.json:512: trailing whitespace.
++          "seconds": 22.0
+.github/ci/gate-baseline.json:513: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:514: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:515: trailing whitespace.
++          "name": "Run docker/setup-buildx-action@v4",
+.github/ci/gate-baseline.json:516: trailing whitespace.
++          "seconds": 8.0
+.github/ci/gate-baseline.json:517: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:518: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:519: trailing whitespace.
++      "max_job_queue_s": 55.0
+.github/ci/gate-baseline.json:520: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:521: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:522: trailing whitespace.
++      "pr": 861,
+.github/ci/gate-baseline.json:523: trailing whitespace.
++      "id": 39133782837,
+.github/ci/gate-baseline.json:524: trailing whitespace.
++      "sha": "a72ec0b1f526ee452a4d4f957dee9bb5f7a7f490",
+.github/ci/gate-baseline.json:525: trailing whitespace.
++      "class": "CI/global+Flutter",
+.github/ci/gate-baseline.json:526: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:527: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:528: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:529: trailing whitespace.
++      "created": "2026-10-18T13:56:51Z",
+.github/ci/gate-baseline.json:530: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837",
+.github/ci/gate-baseline.json:531: trailing whitespace.
++      "initial_queue_s": 3.0,
+.github/ci/gate-baseline.json:532: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:533: trailing whitespace.
++      "workflow_wall_s": 1107.0,
+.github/ci/gate-baseline.json:534: trailing whitespace.
++      "gate_wall_s": 1107.0,
+.github/ci/gate-baseline.json:535: trailing whitespace.
++      "gate_execution_s": 1104.0,
+.github/ci/gate-baseline.json:536: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:537: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:538: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837/job/117697947030",
+.github/ci/gate-baseline.json:539: trailing whitespace.
++      "longest_job": "flutter",
+.github/ci/gate-baseline.json:540: trailing whitespace.
++      "longest_job_s": 1059.0,
+.github/ci/gate-baseline.json:541: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837/job/117694108557",
+.github/ci/gate-baseline.json:542: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:543: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:544: trailing whitespace.
++          "name": "Flutter analyze and test",
+.github/ci/gate-baseline.json:545: trailing whitespace.
++          "seconds": 778.0
+.github/ci/gate-baseline.json:546: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:547: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:548: trailing whitespace.
++          "name": "Install buf CLI",
+.github/ci/gate-baseline.json:549: trailing whitespace.
++          "seconds": 64.0
+.github/ci/gate-baseline.json:550: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:551: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:552: trailing whitespace.
++          "name": "Help real Chrome external handoff (H/V)",
+.github/ci/gate-baseline.json:553: trailing whitespace.
++          "seconds": 64.0
+.github/ci/gate-baseline.json:554: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:555: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:556: trailing whitespace.
++      "max_job_queue_s": 347.0
+.github/ci/gate-baseline.json:557: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:558: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:559: trailing whitespace.
++      "pr": 868,
+.github/ci/gate-baseline.json:560: trailing whitespace.
++      "id": 39133703787,
+.github/ci/gate-baseline.json:561: trailing whitespace.
++      "sha": "d551d82f0a9f226117d634e2405e22de0430ee10",
+.github/ci/gate-baseline.json:562: trailing whitespace.
++      "class": "Backend",
+.github/ci/gate-baseline.json:563: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:564: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:565: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:566: trailing whitespace.
++      "created": "2026-10-18T13:55:46Z",
+.github/ci/gate-baseline.json:567: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787",
+.github/ci/gate-baseline.json:568: trailing whitespace.
++      "initial_queue_s": 3.0,
+.github/ci/gate-baseline.json:569: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:570: trailing whitespace.
++      "workflow_wall_s": 572.0,
+.github/ci/gate-baseline.json:571: trailing whitespace.
++      "gate_wall_s": 571.0,
+.github/ci/gate-baseline.json:572: trailing whitespace.
++      "gate_execution_s": 568.0,
+.github/ci/gate-baseline.json:573: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:574: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:575: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787/job/117695584704",
+.github/ci/gate-baseline.json:576: trailing whitespace.
++      "longest_job": "backend-go-integration-pr (voice)",
+.github/ci/gate-baseline.json:577: trailing whitespace.
++      "longest_job_s": 382.0,
+.github/ci/gate-baseline.json:578: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787/job/117694135838",
+.github/ci/gate-baseline.json:579: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:580: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:581: trailing whitespace.
++          "name": "Go integration test (voice)",
+.github/ci/gate-baseline.json:582: trailing whitespace.
++          "seconds": 365.0
+.github/ci/gate-baseline.json:583: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:584: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:585: trailing whitespace.
++          "name": "Go mod tidy (voice)",
+.github/ci/gate-baseline.json:586: trailing whitespace.
++          "seconds": 8.0
+.github/ci/gate-baseline.json:587: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:588: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:589: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:590: trailing whitespace.
++          "seconds": 3.0
+.github/ci/gate-baseline.json:591: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:592: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:593: trailing whitespace.
++      "max_job_queue_s": 77.0
+.github/ci/gate-baseline.json:594: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:595: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:596: trailing whitespace.
++      "pr": 865,
+.github/ci/gate-baseline.json:597: trailing whitespace.
++      "id": 39132998503,
+.github/ci/gate-baseline.json:598: trailing whitespace.
++      "sha": "86c7e3e701662ed68d2b070dc8ff22a6060490fe",
+.github/ci/gate-baseline.json:599: trailing whitespace.
++      "class": "docs",
+.github/ci/gate-baseline.json:600: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:601: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:602: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:603: trailing whitespace.
++      "created": "2026-10-18T13:46:12Z",
+.github/ci/gate-baseline.json:604: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503",
+.github/ci/gate-baseline.json:605: trailing whitespace.
++      "initial_queue_s": 3.0,
+.github/ci/gate-baseline.json:606: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:607: trailing whitespace.
++      "workflow_wall_s": 24.0,
+.github/ci/gate-baseline.json:608: trailing whitespace.
++      "gate_wall_s": 23.0,
+.github/ci/gate-baseline.json:609: trailing whitespace.
++      "gate_execution_s": 20.0,
+.github/ci/gate-baseline.json:610: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:611: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:612: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503/job/117691848782",
+.github/ci/gate-baseline.json:613: trailing whitespace.
++      "longest_job": "changes",
+.github/ci/gate-baseline.json:614: trailing whitespace.
++      "longest_job_s": 10.0,
+.github/ci/gate-baseline.json:615: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503/job/117691801258",
+.github/ci/gate-baseline.json:616: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:617: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:618: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:619: trailing whitespace.
++          "seconds": 4.0
+.github/ci/gate-baseline.json:620: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:621: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:622: trailing whitespace.
++          "name": "Set up job",
+.github/ci/gate-baseline.json:623: trailing whitespace.
++          "seconds": 3.0
+.github/ci/gate-baseline.json:624: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:625: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:626: trailing whitespace.
++          "name": "Run dorny/paths-filter@v4",
+.github/ci/gate-baseline.json:627: trailing whitespace.
++          "seconds": 1.0
+.github/ci/gate-baseline.json:628: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:629: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:630: trailing whitespace.
++      "max_job_queue_s": 3.0
+.github/ci/gate-baseline.json:631: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:632: trailing whitespace.
++    {
+.github/ci/gate-baseline.json:633: trailing whitespace.
++      "pr": 864,
+.github/ci/gate-baseline.json:634: trailing whitespace.
++      "id": 39132371588,
+.github/ci/gate-baseline.json:635: trailing whitespace.
++      "sha": "91101968496a746a40a2cfdf9efbb1222a44af0a",
+.github/ci/gate-baseline.json:636: trailing whitespace.
++      "class": "docs",
+.github/ci/gate-baseline.json:637: trailing whitespace.
++      "status": "completed",
+.github/ci/gate-baseline.json:638: trailing whitespace.
++      "conclusion": "success",
+.github/ci/gate-baseline.json:639: trailing whitespace.
++      "attempt": 1,
+.github/ci/gate-baseline.json:640: trailing whitespace.
++      "created": "2026-10-18T13:37:38Z",
+.github/ci/gate-baseline.json:641: trailing whitespace.
++      "url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588",
+.github/ci/gate-baseline.json:642: trailing whitespace.
++      "initial_queue_s": 111.0,
+.github/ci/gate-baseline.json:643: trailing whitespace.
++      "run_api_start_queue_s": 0.0,
+.github/ci/gate-baseline.json:644: trailing whitespace.
++      "workflow_wall_s": 239.0,
+.github/ci/gate-baseline.json:645: trailing whitespace.
++      "gate_wall_s": 238.0,
+.github/ci/gate-baseline.json:646: trailing whitespace.
++      "gate_execution_s": 127.0,
+.github/ci/gate-baseline.json:647: trailing whitespace.
++      "gate_conclusion": "success",
+.github/ci/gate-baseline.json:648: trailing whitespace.
++      "last_job": "ci-gate",
+.github/ci/gate-baseline.json:649: trailing whitespace.
++      "last_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588/job/117690398354",
+.github/ci/gate-baseline.json:650: trailing whitespace.
++      "longest_job": "changes",
+.github/ci/gate-baseline.json:651: trailing whitespace.
++      "longest_job_s": 9.0,
+.github/ci/gate-baseline.json:652: trailing whitespace.
++      "longest_job_url": "https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588/job/117689976977",
+.github/ci/gate-baseline.json:653: trailing whitespace.
++      "slowest_steps": [
+.github/ci/gate-baseline.json:654: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:655: trailing whitespace.
++          "name": "Run actions/checkout@v5",
+.github/ci/gate-baseline.json:656: trailing whitespace.
++          "seconds": 4.0
+.github/ci/gate-baseline.json:657: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:658: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:659: trailing whitespace.
++          "name": "Set up job",
+.github/ci/gate-baseline.json:660: trailing whitespace.
++          "seconds": 2.0
+.github/ci/gate-baseline.json:661: trailing whitespace.
++        },
+.github/ci/gate-baseline.json:662: trailing whitespace.
++        {
+.github/ci/gate-baseline.json:663: trailing whitespace.
++          "name": "Run dorny/paths-filter@v4",
+.github/ci/gate-baseline.json:664: trailing whitespace.
++          "seconds": 0.0
+.github/ci/gate-baseline.json:665: trailing whitespace.
++        }
+.github/ci/gate-baseline.json:666: trailing whitespace.
++      ],
+.github/ci/gate-baseline.json:667: trailing whitespace.
++      "max_job_queue_s": 112.0
+.github/ci/gate-baseline.json:668: trailing whitespace.
++    }
+.github/ci/gate-baseline.json:669: trailing whitespace.
++  ],
+.github/ci/gate-baseline.json:670: trailing whitespace.
++  "groups": {
+.github/ci/gate-baseline.json:671: trailing whitespace.
++    "all_terminal": {
+.github/ci/gate-baseline.json:672: trailing whitespace.
++      "gate_wall": {
+.github/ci/gate-baseline.json:673: trailing whitespace.
++        "n": 17,
+.github/ci/gate-baseline.json:674: trailing whitespace.
++        "mean_s": 748.5882352941177,
+.github/ci/gate-baseline.json:675: trailing whitespace.
++        "p95_nearest_rank_s": 3926.0,
+.github/ci/gate-baseline.json:676: trailing whitespace.
++        "min_s": 23.0,
+.github/ci/gate-baseline.json:677: trailing whitespace.
++        "max_s": 3926.0
+.github/ci/gate-baseline.json:678: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:679: trailing whitespace.
++      "execution_envelope": {
+.github/ci/gate-baseline.json:680: trailing whitespace.
++        "n": 17,
+.github/ci/gate-baseline.json:681: trailing whitespace.
++        "mean_s": 695.0588235294117,
+.github/ci/gate-baseline.json:682: trailing whitespace.
++        "p95_nearest_rank_s": 3841.0,
+.github/ci/gate-baseline.json:683: trailing whitespace.
++        "min_s": 20.0,
+.github/ci/gate-baseline.json:684: trailing whitespace.
++        "max_s": 3841.0
+.github/ci/gate-baseline.json:685: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:686: trailing whitespace.
++      "workflow_wall": {
+.github/ci/gate-baseline.json:687: trailing whitespace.
++        "n": 17,
+.github/ci/gate-baseline.json:688: trailing whitespace.
++        "mean_s": 749.1176470588235,
+.github/ci/gate-baseline.json:689: trailing whitespace.
++        "p95_nearest_rank_s": 3926.0,
+.github/ci/gate-baseline.json:690: trailing whitespace.
++        "min_s": 24.0,
+.github/ci/gate-baseline.json:691: trailing whitespace.
++        "max_s": 3926.0
+.github/ci/gate-baseline.json:692: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:693: trailing whitespace.
++      "initial_queue": {
+.github/ci/gate-baseline.json:694: trailing whitespace.
++        "n": 17,
+.github/ci/gate-baseline.json:695: trailing whitespace.
++        "mean_s": 53.529411764705884,
+.github/ci/gate-baseline.json:696: trailing whitespace.
++        "p95_nearest_rank_s": 210.0,
+.github/ci/gate-baseline.json:697: trailing whitespace.
++        "min_s": 3.0,
+.github/ci/gate-baseline.json:698: trailing whitespace.
++        "max_s": 210.0
+.github/ci/gate-baseline.json:699: trailing whitespace.
++      }
+.github/ci/gate-baseline.json:700: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:701: trailing whitespace.
++    "successful": {
+.github/ci/gate-baseline.json:702: trailing whitespace.
++      "gate_wall": {
+.github/ci/gate-baseline.json:703: trailing whitespace.
++        "n": 16,
+.github/ci/gate-baseline.json:704: trailing whitespace.
++        "mean_s": 550.0,
+.github/ci/gate-baseline.json:705: trailing whitespace.
++        "p95_nearest_rank_s": 1414.0,
+.github/ci/gate-baseline.json:706: trailing whitespace.
++        "min_s": 23.0,
+.github/ci/gate-baseline.json:707: trailing whitespace.
++        "max_s": 1414.0
+.github/ci/gate-baseline.json:708: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:709: trailing whitespace.
++      "execution_envelope": {
+.github/ci/gate-baseline.json:710: trailing whitespace.
++        "n": 16,
+.github/ci/gate-baseline.json:711: trailing whitespace.
++        "mean_s": 498.4375,
+.github/ci/gate-baseline.json:712: trailing whitespace.
++        "p95_nearest_rank_s": 1314.0,
+.github/ci/gate-baseline.json:713: trailing whitespace.
++        "min_s": 20.0,
+.github/ci/gate-baseline.json:714: trailing whitespace.
++        "max_s": 1314.0
+.github/ci/gate-baseline.json:715: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:716: trailing whitespace.
++      "workflow_wall": {
+.github/ci/gate-baseline.json:717: trailing whitespace.
++        "n": 16,
+.github/ci/gate-baseline.json:718: trailing whitespace.
++        "mean_s": 550.5625,
+.github/ci/gate-baseline.json:719: trailing whitespace.
++        "p95_nearest_rank_s": 1414.0,
+.github/ci/gate-baseline.json:720: trailing whitespace.
++        "min_s": 24.0,
+.github/ci/gate-baseline.json:721: trailing whitespace.
++        "max_s": 1414.0
+.github/ci/gate-baseline.json:722: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:723: trailing whitespace.
++      "initial_queue": {
+.github/ci/gate-baseline.json:724: trailing whitespace.
++        "n": 16,
+.github/ci/gate-baseline.json:725: trailing whitespace.
++        "mean_s": 51.5625,
+.github/ci/gate-baseline.json:726: trailing whitespace.
++        "p95_nearest_rank_s": 210.0,
+.github/ci/gate-baseline.json:727: trailing whitespace.
++        "min_s": 3.0,
+.github/ci/gate-baseline.json:728: trailing whitespace.
++        "max_s": 210.0
+.github/ci/gate-baseline.json:729: trailing whitespace.
++      }
+.github/ci/gate-baseline.json:730: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:731: trailing whitespace.
++    "CI_global_successful": {
+.github/ci/gate-baseline.json:732: trailing whitespace.
++      "gate_wall": {
+.github/ci/gate-baseline.json:733: trailing whitespace.
++        "n": 3,
+.github/ci/gate-baseline.json:734: trailing whitespace.
++        "mean_s": 1212.0,
+.github/ci/gate-baseline.json:735: trailing whitespace.
++        "p95_nearest_rank_s": 1414.0,
+.github/ci/gate-baseline.json:736: trailing whitespace.
++        "min_s": 1107.0,
+.github/ci/gate-baseline.json:737: trailing whitespace.
++        "max_s": 1414.0
+.github/ci/gate-baseline.json:738: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:739: trailing whitespace.
++      "execution_envelope": {
+.github/ci/gate-baseline.json:740: trailing whitespace.
++        "n": 3,
+.github/ci/gate-baseline.json:741: trailing whitespace.
++        "mean_s": 1176.6666666666667,
+.github/ci/gate-baseline.json:742: trailing whitespace.
++        "p95_nearest_rank_s": 1314.0,
+.github/ci/gate-baseline.json:743: trailing whitespace.
++        "min_s": 1104.0,
+.github/ci/gate-baseline.json:744: trailing whitespace.
++        "max_s": 1314.0
+.github/ci/gate-baseline.json:745: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:746: trailing whitespace.
++      "workflow_wall": {
+.github/ci/gate-baseline.json:747: trailing whitespace.
++        "n": 3,
+.github/ci/gate-baseline.json:748: trailing whitespace.
++        "mean_s": 1212.0,
+.github/ci/gate-baseline.json:749: trailing whitespace.
++        "p95_nearest_rank_s": 1414.0,
+.github/ci/gate-baseline.json:750: trailing whitespace.
++        "min_s": 1107.0,
+.github/ci/gate-baseline.json:751: trailing whitespace.
++        "max_s": 1414.0
+.github/ci/gate-baseline.json:752: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:753: trailing whitespace.
++      "initial_queue": {
+.github/ci/gate-baseline.json:754: trailing whitespace.
++        "n": 3,
+.github/ci/gate-baseline.json:755: trailing whitespace.
++        "mean_s": 35.333333333333336,
+.github/ci/gate-baseline.json:756: trailing whitespace.
++        "p95_nearest_rank_s": 100.0,
+.github/ci/gate-baseline.json:757: trailing whitespace.
++        "min_s": 3.0,
+.github/ci/gate-baseline.json:758: trailing whitespace.
++        "max_s": 100.0
+.github/ci/gate-baseline.json:759: trailing whitespace.
++      }
+.github/ci/gate-baseline.json:760: trailing whitespace.
++    },
+.github/ci/gate-baseline.json:761: trailing whitespace.
++    "non_global_successful": {
+.github/ci/gate-baseline.json:762: trailing whitespace.
++      "gate_wall": {
+.github/ci/gate-baseline.json:763: trailing whitespace.
++        "n": 13,
+.github/ci/gate-baseline.json:764: trailing whitespace.
++        "mean_s": 397.2307692307692,
+.github/ci/gate-baseline.json:765: trailing whitespace.
++        "p95_nearest_rank_s": 1131.0,
+.github/ci/gate-baseline.json:766: trailing whitespace.
++        "min_s": 23.0,
+.github/ci/gate-baseline.json:767: trailing whitespace.
++        "max_s": 1131.0
+.github/ci/gate-baseline.json:768: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:769: trailing whitespace.
++      "execution_envelope": {
+.github/ci/gate-baseline.json:770: trailing whitespace.
++        "n": 13,
+.github/ci/gate-baseline.json:771: trailing whitespace.
++        "mean_s": 341.9230769230769,
+.github/ci/gate-baseline.json:772: trailing whitespace.
++        "p95_nearest_rank_s": 1091.0,
+.github/ci/gate-baseline.json:773: trailing whitespace.
++        "min_s": 20.0,
+.github/ci/gate-baseline.json:774: trailing whitespace.
++        "max_s": 1091.0
+.github/ci/gate-baseline.json:775: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:776: trailing whitespace.
++      "workflow_wall": {
+.github/ci/gate-baseline.json:777: trailing whitespace.
++        "n": 13,
+.github/ci/gate-baseline.json:778: trailing whitespace.
++        "mean_s": 397.9230769230769,
+.github/ci/gate-baseline.json:779: trailing whitespace.
++        "p95_nearest_rank_s": 1131.0,
+.github/ci/gate-baseline.json:780: trailing whitespace.
++        "min_s": 24.0,
+.github/ci/gate-baseline.json:781: trailing whitespace.
++        "max_s": 1131.0
+.github/ci/gate-baseline.json:782: trailing whitespace.
++      },
+.github/ci/gate-baseline.json:783: trailing whitespace.
++      "initial_queue": {
+.github/ci/gate-baseline.json:784: trailing whitespace.
++        "n": 13,
+.github/ci/gate-baseline.json:785: trailing whitespace.
++        "mean_s": 55.30769230769231,
+.github/ci/gate-baseline.json:786: trailing whitespace.
++        "p95_nearest_rank_s": 210.0,
+.github/ci/gate-baseline.json:787: trailing whitespace.
++        "min_s": 3.0,
+.github/ci/gate-baseline.json:788: trailing whitespace.
++        "max_s": 210.0
+.github/ci/gate-baseline.json:789: trailing whitespace.
++      }
+.github/ci/gate-baseline.json:790: trailing whitespace.
++    }
+.github/ci/gate-baseline.json:791: trailing whitespace.
++  },
+.github/ci/gate-baseline.json:792: trailing whitespace.
++  "history_conclusions": {
+.github/ci/gate-baseline.json:793: trailing whitespace.
++    "incomplete": 1,
+.github/ci/gate-baseline.json:794: trailing whitespace.
++    "cancelled": 190,
+.github/ci/gate-baseline.json:795: trailing whitespace.
++    "failure": 38,
+.github/ci/gate-baseline.json:796: trailing whitespace.
++    "success": 71
+.github/ci/gate-baseline.json:797: trailing whitespace.
++  },
+.github/ci/gate-baseline.json:798: trailing whitespace.
++  "history_attempts": {
+.github/ci/gate-baseline.json:799: trailing whitespace.
++    "1": 299,
+.github/ci/gate-baseline.json:800: trailing whitespace.
++    "2": 1
+.github/ci/gate-baseline.json:801: trailing whitespace.
++  }
+.github/ci/gate-baseline.md:1: trailing whitespace.
++# CI-GATE-10M observed baseline
+.github/ci/gate-baseline.md:2: trailing whitespace.
++
+.github/ci/gate-baseline.md:3: trailing whitespace.
++Source: GitHub REST Actions run/job/step metadata and PR changed paths. Collection: 2026-10-24T08:23:17.634417+00:00
+.github/ci/gate-baseline.md:4: trailing whitespace.
++
+.github/ci/gate-baseline.md:5: trailing whitespace.
++Sample: latest run for 17 distinct branches in the latest 300 CI pull_request runs (Oct 18–24), plus latest completed PR #875 failure. This deliberately reduces repeated-head cancellation bias; not a random or volume-weighted population estimate. Includes 16 successful runs, one failure and one incomplete run. Path classification uses the matching branch PR changed paths; historical heads may predate the final PR diff. Head SHAs and original timestamps are retained in raw JSON.
+.github/ci/gate-baseline.md:6: trailing whitespace.
++
+.github/ci/gate-baseline.md:7: trailing whitespace.
++Timing: gate wall = ci-gate.completed_at − workflow.created_at; initial queue = first non-skipped job.started_at − workflow.created_at; execution envelope = ci-gate completion − first job start. Workflow wall uses workflow.updated_at and can include post-gate activity. Per-job queue uses job.created_at → started_at; runner/dependency wait cannot be attributed more precisely without event telemetry. Step times exclude metadata gaps. p95 uses nearest rank ceil(0.95*n), so small groups often return their maximum. Incomplete run excluded from aggregate latency; failures are not passes. No workflows were rerun/cancelled and no logs downloaded.
+.github/ci/gate-baseline.md:8: trailing whitespace.
++
+.github/ci/gate-baseline.md:9: trailing whitespace.
++Latest-300 history: {'incomplete': 1, 'cancelled': 190, 'failure': 38, 'success': 71}; run_attempt distribution {1: 299, 2: 1}. Same-branch new-head retries remain visible in history; run_attempt is GitHub rerun count, not code-fix attempts.
+.github/ci/gate-baseline.md:10: trailing whitespace.
++
+.github/ci/gate-baseline.md:11: trailing whitespace.
++|PR|Run / exact head|Scope|Result|Attempt|Initial queue s|Gate min|Workflow min|Longest job min|
+.github/ci/gate-baseline.md:12: trailing whitespace.
++|---|---|---|---|---:|---:|---:|---:|---|
+.github/ci/gate-baseline.md:13: trailing whitespace.
++|#875|[40068145398](https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398) `e981f8749aa7`|CI/global+Flutter+Admin+Backend+DEV scripts|in_progress|1|37|incomplete|incomplete|[flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398/job/120795793199) 19.33|
+.github/ci/gate-baseline.md:14: trailing whitespace.
++|#875|[39971713562](https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562) `b0291d839a28`|CI/global+Flutter+Admin+Backend+DEV scripts|failure|1|85|65.43|65.43|[ci-script-tests](https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562/job/120476690820) 63.43|
+.github/ci/gate-baseline.md:15: trailing whitespace.
++|#879|[39834373671](https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671) `a6a8834c265f`|DEV scripts|success|1|4|0.43|0.43|[changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671/job/120018669911) 0.18|
+.github/ci/gate-baseline.md:16: trailing whitespace.
++|#878|[39570230609](https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609) `5fbf6c53206f`|DEV scripts|success|1|4|0.43|0.45|[changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609/job/119122263581) 0.18|
+.github/ci/gate-baseline.md:17: trailing whitespace.
++|#877|[39385343073](https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073) `62a42fbb3f98`|CI/global|success|1|3|18.58|18.58|[flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073/job/118503785035) 18.18|
+.github/ci/gate-baseline.md:18: trailing whitespace.
++|#876|[39296896416](https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416) `1c5a1f114548`|DEV scripts|success|1|3|0.45|0.47|[changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416/job/118211630553) 0.18|
+.github/ci/gate-baseline.md:19: trailing whitespace.
++|#873|[39134424678](https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678) `3301b4d9eda2`|Backend|success|1|210|9.65|9.65|[golangci](https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678/job/117696722355) 3.03|
+.github/ci/gate-baseline.md:20: trailing whitespace.
++|#874|[39134304804](https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804) `54be418ac0ac`|Backend|success|1|82|13.27|13.28|[a1-attachment-restart-proof](https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804/job/117695920531) 8.92|
+.github/ci/gate-baseline.md:21: trailing whitespace.
++|#872|[39134271064](https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064) `4213d861b4d8`|CI/global+Backend|success|1|100|23.57|23.57|[flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064/job/117695887239) 16.67|
+.github/ci/gate-baseline.md:22: trailing whitespace.
++|#866|[39134160821](https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821) `cb3efbca4bd3`|Backend|success|1|117|12.00|12.02|[backend-go-integration-pr (role)](https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821/job/117696114992) 5.13|
+.github/ci/gate-baseline.md:23: trailing whitespace.
++|#871|[39134124788](https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788) `6b568d3cc546`|Flutter|success|1|40|18.85|18.85|[flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788/job/117695233809) 17.17|
+.github/ci/gate-baseline.md:24: trailing whitespace.
++|#870|[39134015670](https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670) `f82af7d4c134`|Backend|success|1|73|12.77|12.77|[a1-attachment-restart-proof](https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670/job/117695078605) 9.63|
+.github/ci/gate-baseline.md:25: trailing whitespace.
++|#867|[39133970729](https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729) `ee13069f60e1`|docs|success|1|13|0.55|0.57|[changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729/job/117694633308) 0.13|
+.github/ci/gate-baseline.md:26: trailing whitespace.
++|#869|[39133911729](https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729) `e1795bd58c3e`|Admin|success|1|56|3.80|3.82|[admin](https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729/job/117694675125) 1.52|
+.github/ci/gate-baseline.md:27: trailing whitespace.
++|#861|[39133782837](https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837) `a72ec0b1f526`|CI/global+Flutter|success|1|3|18.45|18.45|[flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837/job/117694108557) 17.65|
+.github/ci/gate-baseline.md:28: trailing whitespace.
++|#868|[39133703787](https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787) `d551d82f0a9f`|Backend|success|1|3|9.52|9.53|[backend-go-integration-pr (voice)](https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787/job/117694135838) 6.37|
+.github/ci/gate-baseline.md:29: trailing whitespace.
++|#865|[39132998503](https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503) `86c7e3e70166`|docs|success|1|3|0.38|0.40|[changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503/job/117691801258) 0.17|
+.github/ci/gate-baseline.md:30: trailing whitespace.
++|#864|[39132371588](https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588) `91101968496a`|docs|success|1|111|3.97|3.98|[changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588/job/117689976977) 0.15|
+.github/ci/gate-baseline.md:31: trailing whitespace.
++
+.github/ci/gate-baseline.md:32: trailing whitespace.
++|Group|N gate|Mean gate min|p95 gate min|Mean initial queue s|
+.github/ci/gate-baseline.md:33: trailing whitespace.
++|---|---:|---:|---:|---:|
+.github/ci/gate-baseline.md:34: trailing whitespace.
++|all_terminal|17|12.48|65.43|53.5|
+.github/ci/gate-baseline.md:35: trailing whitespace.
++|successful|16|9.17|23.57|51.6|
+.github/ci/gate-baseline.md:36: trailing whitespace.
++|CI_global_successful|3|20.20|23.57|35.3|
+.github/ci/gate-baseline.md:37: trailing whitespace.
++|non_global_successful|13|6.62|18.85|55.3|
+.github/ci/gate-baseline.md:38: trailing whitespace.
++
+.github/ci/gate-baseline.md:39: trailing whitespace.
++## Job/step evidence
+.github/ci/gate-baseline.md:40: trailing whitespace.
++
+.github/ci/gate-baseline.md:41: trailing whitespace.
++- Run [40068145398](https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398): [flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/40068145398/job/120795793199) 19.33 min; Flutter analyze and test 814s, Install buf CLI 68s, Help real Chrome external handoff (H/V) 66s; last completed job flutter-windows; max observed per-job queue 462s.
+.github/ci/gate-baseline.md:42: trailing whitespace.
++- Run [39971713562](https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562): [ci-script-tests](https://github.com/Poryadok/VoiceRoot/actions/runs/39971713562/job/120476690820) 63.43 min; CI script regression tests 3795s, Run actions/checkout@v5 6s, Run python3 -m pip install PyYAML==6.0.3 2s; last completed job ci-gate; max observed per-job queue 473s.
+.github/ci/gate-baseline.md:43: trailing whitespace.
++- Run [39834373671](https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671): [changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39834373671/job/120018669911) 0.18 min; Run actions/checkout@v5 5s, Set up job 2s, Run dorny/paths-filter@v4 1s; last completed job ci-gate; max observed per-job queue 3s.
+.github/ci/gate-baseline.md:44: trailing whitespace.
++- Run [39570230609](https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609): [changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39570230609/job/119122263581) 0.18 min; Run actions/checkout@v5 5s, Set up job 1s, Resolve Go service matrix 1s; last completed job ci-gate; max observed per-job queue 3s.
+.github/ci/gate-baseline.md:45: trailing whitespace.
++- Run [39385343073](https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073): [flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39385343073/job/118503785035) 18.18 min; Flutter analyze and test 808s, Install buf CLI 66s, Help real Chrome external handoff (H/V) 66s; last completed job ci-gate; max observed per-job queue 141s.
+.github/ci/gate-baseline.md:46: trailing whitespace.
++- Run [39296896416](https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416): [changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39296896416/job/118211630553) 0.18 min; Run actions/checkout@v5 5s, Set up job 1s, Run dorny/paths-filter@v4 1s; last completed job ci-gate; max observed per-job queue 3s.
+.github/ci/gate-baseline.md:47: trailing whitespace.
++- Run [39134424678](https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678): [golangci](https://github.com/Poryadok/VoiceRoot/actions/runs/39134424678/job/117696722355) 3.03 min; Lint affected Go modules 103s, Install golangci-lint 61s, Go mod tidy (affected modules) 8s; last completed job ci-gate; max observed per-job queue 145s.
+.github/ci/gate-baseline.md:48: trailing whitespace.
++- Run [39134304804](https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804): [a1-attachment-restart-proof](https://github.com/Poryadok/VoiceRoot/actions/runs/39134304804/job/117695920531) 8.92 min; File attachment restart proof 509s, Build and validate official MinIO mc runtime 14s, Run actions/checkout@v5 4s; last completed job ci-gate; max observed per-job queue 299s.
+.github/ci/gate-baseline.md:49: trailing whitespace.
++- Run [39134271064](https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064): [flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39134271064/job/117695887239) 16.67 min; Flutter analyze and test 731s, Help real Chrome external handoff (H/V) 62s, Install buf CLI 61s; last completed job ci-gate; max observed per-job queue 403s.
+.github/ci/gate-baseline.md:50: trailing whitespace.
++- Run [39134160821](https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821): [backend-go-integration-pr (role)](https://github.com/Poryadok/VoiceRoot/actions/runs/39134160821/job/117696114992) 5.13 min; Go integration test (role) 295s, Go mod tidy (role) 5s, Run actions/checkout@v5 4s; last completed job ci-gate; max observed per-job queue 134s.
+.github/ci/gate-baseline.md:51: trailing whitespace.
++- Run [39134124788](https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788): [flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39134124788/job/117695233809) 17.17 min; Flutter analyze and test 776s, Help real Chrome external handoff (H/V) 56s, Install buf CLI 52s; last completed job ci-gate; max observed per-job queue 191s.
+.github/ci/gate-baseline.md:52: trailing whitespace.
++- Run [39134015670](https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670): [a1-attachment-restart-proof](https://github.com/Poryadok/VoiceRoot/actions/runs/39134015670/job/117695078605) 9.63 min; File attachment restart proof 556s, Build and validate official MinIO mc runtime 13s, Run actions/checkout@v5 4s; last completed job ci-gate; max observed per-job queue 88s.
+.github/ci/gate-baseline.md:53: trailing whitespace.
++- Run [39133970729](https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729): [changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39133970729/job/117694633308) 0.13 min; Run actions/checkout@v5 3s, Set up job 2s, Run dorny/paths-filter@v4 1s; last completed job ci-gate; max observed per-job queue 13s.
+.github/ci/gate-baseline.md:54: trailing whitespace.
++- Run [39133911729](https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729): [admin](https://github.com/Poryadok/VoiceRoot/actions/runs/39133911729/job/117694675125) 1.52 min; Build admin image (PR verify) 44s, npm ci, lint, test, build 22s, Run docker/setup-buildx-action@v4 8s; last completed job ci-gate; max observed per-job queue 55s.
+.github/ci/gate-baseline.md:55: trailing whitespace.
++- Run [39133782837](https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837): [flutter](https://github.com/Poryadok/VoiceRoot/actions/runs/39133782837/job/117694108557) 17.65 min; Flutter analyze and test 778s, Install buf CLI 64s, Help real Chrome external handoff (H/V) 64s; last completed job ci-gate; max observed per-job queue 347s.
+.github/ci/gate-baseline.md:56: trailing whitespace.
++- Run [39133703787](https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787): [backend-go-integration-pr (voice)](https://github.com/Poryadok/VoiceRoot/actions/runs/39133703787/job/117694135838) 6.37 min; Go integration test (voice) 365s, Go mod tidy (voice) 8s, Run actions/checkout@v5 3s; last completed job ci-gate; max observed per-job queue 77s.
+.github/ci/gate-baseline.md:57: trailing whitespace.
++- Run [39132998503](https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503): [changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39132998503/job/117691801258) 0.17 min; Run actions/checkout@v5 4s, Set up job 3s, Run dorny/paths-filter@v4 1s; last completed job ci-gate; max observed per-job queue 3s.
+.github/ci/gate-baseline.md:58: trailing whitespace.
++- Run [39132371588](https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588): [changes](https://github.com/Poryadok/VoiceRoot/actions/runs/39132371588/job/117689976977) 0.15 min; Run actions/checkout@v5 4s, Set up job 2s, Run dorny/paths-filter@v4 0s; last completed job ci-gate; max observed per-job queue 112s.
+.github/ci/gate-baseline.md:59: trailing whitespace.
++
+.github/ci/gate-baseline.md:60: trailing whitespace.
++## Actionable interpretation
+.github/ci/gate-baseline.md:61: trailing whitespace.
++
+.github/ci/gate-baseline.md:62: trailing whitespace.
++A global successful gate already takes ~19 minutes. Flutter analyze/test alone is >13 minutes on both wide run #877 and current #875. Splitting only browser proof steps will not achieve a ten-minute gate: test workload needs balanced parallel groups while preserving all selected acceptance. Compose stack startup plus all-feature smoke is another serial >13-minute path. Current #875 also has Space full integration >13 minutes. CI script regressions are currently unbounded in the incomplete run and were the one-hour bottleneck in the latest completed failure; inspect that step separately and do not infer its cause from duration alone. Exact key step timings and job links for wide #877/current #875 are in critical-step-timings.json.
+.github/ci/gate-baseline.md:63: trailing whitespace.
++
+.github/ci/gate-baseline.md:64: trailing whitespace.
++PR #875 run40068145398 remained in_progress/null on a final read-only status recheck after collection finished at 08:23:17Z; created_at was05:55:20Z. Its latency is therefore censored at >=147m57s, despite unchanged updated_at06:15:45Z. Do not interpret updated_at as completion or infer a green gate. The ci-script-tests regression step remained in_progress in the captured jobs. Latest completed failure39971713562 spent3795s inside the same named regression step.
+.github/ci/gate-baseline.md:65: trailing whitespace.
++
+.github/ci/gate-baseline.md:66: trailing whitespace.
++Limitations: representative by distinct branch/scope rather than production frequency; short date window, only one all-wide successful manifest run, no cache hit/miss telemetry, no test-case-level timing, no historical exact-diff reconstruction, no adjusted cold-run experiment. New-head retries/cancellations and incomplete current #875 prevent claiming an optimized gate or green integration. Mean/p95 are observational baselines, not an achieved SLO.

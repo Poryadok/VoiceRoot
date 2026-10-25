@@ -7,11 +7,13 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	analyticsv1 "voice.app/voice/analytics/v1"
 	eventsv1 "voice.app/voice/events/v1"
 	idhash "voice/backend/analytics/internal/hash"
+	"voice/backend/pkg/roleeventwire"
 )
 
 // Mapper converts domain IDs to hashed analytics fields.
@@ -249,23 +251,27 @@ func (m Mapper) FromFile(ev *eventsv1.FileStreamEvent) *analyticsv1.AnalyticsEve
 }
 
 func (m Mapper) FromRoleSubject(subject string, data []byte) *analyticsv1.AnalyticsEvent {
-	subject = strings.TrimSpace(subject)
-	if !strings.HasPrefix(subject, "role.") {
+	event, err := roleeventwire.Decode(subject, data)
+	if err != nil {
 		return nil
 	}
-	var payload struct {
-		SpaceID   string `json:"space_id"`
-		RoleID    string `json:"role_id"`
-		ProfileID string `json:"profile_id"`
-	}
-	if err := json.Unmarshal(data, &payload); err != nil {
+	return m.FromRoleEvent(event)
+}
+
+// FromRoleEvent maps a decoded ordinary notification without turning its
+// recipient hints or changed-field list into raw analytics properties.
+func (m Mapper) FromRoleEvent(event roleeventwire.Event) *analyticsv1.AnalyticsEvent {
+	if event.Mutation == nil {
 		return nil
 	}
-	eventType := strings.TrimPrefix(subject, "role.")
-	return m.event("role_"+strings.ReplaceAll(eventType, ".", "_"), "role", timestamppb.New(time.Now().UTC()), "", payload.ProfileID, map[string]any{
-		"space_id": payload.SpaceID,
-		"role_id":  payload.RoleID,
+	mapped := m.event("role_"+strings.TrimPrefix(event.Subject, "role."), "role", event.OccurredAt, "", event.Mutation.GetProfileId(), map[string]any{
+		"space_id": event.Mutation.GetSpaceId(),
+		"role_id":  event.Mutation.GetRoleId(),
 	})
+	if !event.Legacy {
+		mapped.EventId = event.EventID
+	}
+	return mapped
 }
 
 func (m Mapper) FromBot(ev *eventsv1.BotStreamEvent) *analyticsv1.AnalyticsEvent {
@@ -289,6 +295,9 @@ func (m Mapper) FromAnalyticsSubject(subject string, data []byte) *analyticsv1.A
 	}
 	var ev analyticsv1.AnalyticsEvent
 	if err := protojson.Unmarshal(data, &ev); err == nil && ev.GetEventId() != "" {
+		return &ev
+	}
+	if err := proto.Unmarshal(data, &ev); err == nil && ev.GetEventId() != "" {
 		return &ev
 	}
 	parts := strings.Split(subject, ".")

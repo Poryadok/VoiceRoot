@@ -12,6 +12,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Voice';
 
   @override
+  String get spaceLeaveTitle => 'Leave Space?';
+
+  @override
+  String get spaceLeaveAction => 'Leave Space';
+
+  @override
+  String get spaceLeaveMessage =>
+      'You will lose access to this Space and its chats. Your active voice connection in this Space will end.';
+
+  @override
+  String get spaceLeaveOwnerHint =>
+      'Transfer ownership to another member before leaving.';
+
+  @override
+  String get spaceLeaveUncertain =>
+      'Could not confirm whether you left. Refresh your Spaces before trying again.';
+
+  @override
   String get sdkAuthorizationTitle => 'Connect a game';
 
   @override
@@ -1944,6 +1962,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatGroupAddMembers => 'Add members';
 
   @override
+  String get chatGroupMemberAdditionsPermission =>
+      'Allow members to add people';
+
+  @override
+  String get chatGroupPostAsChatPermission => 'Allow publishing as this chat';
+
+  @override
   String get chatGroupMembersLimitReached =>
       'This group has reached its 500-member limit. Create a Space for a larger community.';
 
@@ -3223,6 +3248,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get matchHistoryAddFriend => 'Add friend';
+
+  @override
+  String get matchHistoryFindPlayers => 'Find players';
+
+  @override
+  String get matchHistoryRatePlayer => 'Rate';
 
   @override
   String get e2eEnableTitle => 'Enable end-to-end encryption';

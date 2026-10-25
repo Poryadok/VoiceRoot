@@ -1,0 +1,67 @@
+Command: python3 scripts/ci/phase0-fixture_test.py
+test_a1_consumes_the_complete_phase0_overlay_after_media (__main__.A1InvocationTests.test_a1_consumes_the_complete_phase0_overlay_after_media) ... ok
+setUpClass (__main__.ComposeTests) ... ERROR
+setUpClass (__main__.FixtureTests) ... ERROR
+test_compose_host_cache_preserves_fresh_builds_and_test_execution (__main__.HostGoCacheTests.test_compose_host_cache_preserves_fresh_builds_and_test_execution) ... ok
+test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) ... 
+  test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) (prefix='voice-a1-flutter-profile-handoff.') ... FAIL
+  test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) (prefix='voice-a1-multi-account-proof.') ... FAIL
+  test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) (prefix='voice-file-restart-proof.') ... FAIL
+test_owner_restorer_accepts_only_declared_generated_fixture_locations (__main__.RestorerPathTests.test_owner_restorer_accepts_only_declared_generated_fixture_locations) ... ok
+
+======================================================================
+ERROR: setUpClass (__main__.ComposeTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 647, in setUpClass
+    require_binary("docker")
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 76, in require_binary
+    raise AssertionError(f"required offline test prerequisite missing: {name}")
+AssertionError: required offline test prerequisite missing: docker
+
+======================================================================
+ERROR: setUpClass (__main__.FixtureTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 100, in setUpClass
+    require_binary(binary)
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 76, in require_binary
+    raise AssertionError(f"required offline test prerequisite missing: {name}")
+AssertionError: required offline test prerequisite missing: keytool
+
+======================================================================
+FAIL: test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) (prefix='voice-a1-flutter-profile-handoff.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 2392, in test_cleanup_restores_service_owned_fixture_for_real_caller_uid
+    require_success(run(sys.executable, GENERATOR, dest, env=env))
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 54, in require_success
+    raise AssertionError(f"command failed with exit code {result.returncode}")
+AssertionError: command failed with exit code 1
+
+======================================================================
+FAIL: test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) (prefix='voice-a1-multi-account-proof.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 2392, in test_cleanup_restores_service_owned_fixture_for_real_caller_uid
+    require_success(run(sys.executable, GENERATOR, dest, env=env))
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 54, in require_success
+    raise AssertionError(f"command failed with exit code {result.returncode}")
+AssertionError: command failed with exit code 1
+
+======================================================================
+FAIL: test_cleanup_restores_service_owned_fixture_for_real_caller_uid (__main__.RestorerPathTests.test_cleanup_restores_service_owned_fixture_for_real_caller_uid) (prefix='voice-file-restart-proof.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 2392, in test_cleanup_restores_service_owned_fixture_for_real_caller_uid
+    require_success(run(sys.executable, GENERATOR, dest, env=env))
+  File "/snapshot/current/scripts/ci/phase0-fixture_test.py", line 54, in require_success
+    raise AssertionError(f"command failed with exit code {result.returncode}")
+AssertionError: command failed with exit code 1
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.217s
+
+FAILED (failures=3, errors=2)
+
+exit_code=1

@@ -64,6 +64,7 @@ fan-out.
 | Загрузка файлов       | 10 загрузок / час на пользователя           | —                            |
 | Создание спейсов      | 5 спейсов / день на аккаунт                 | —                            |
 | Создание текстовых чатов в спейсе | 20 чатов (`group` \| `channel`) / день на аккаунт | —            |
+| Notification ordinary chat push | 60 logical messages / rolling 60 seconds per recipient; shared variants/devices/retries, decisions retained192h | push suppressed; in-app unchanged |
 | Регистрация ботов     | 5 ботов / день на аккаунт                   | —                            |
 | Bot API (slash / webhook через Gateway) | 5000 запросов / 1 мин на ключ лимита (см. [microservices/api-gateway.md](microservices/api-gateway.md)) | —                            |
 
@@ -208,6 +209,22 @@ request binding или authorization. Нельзя добавить второй
   headers и downstream не принимает их как authority. S2S callers, которым нужен
   subject для decision/read, передают его как data только после проверки собственной
   service principal.
+- The BE-131 initiating user cutover additionally carries the explicit verified
+  `account_type` in its delegated credential. Its Role/Chat/Bot-admin consumers
+  apply their current guest/account eligibility rules and never infer `regular`
+  from a missing field. Existing unmigrated delegated transports may omit the
+  additive claim; that compatibility does not apply to the new audit-producing
+  mutation slice. The shared codec accepts only empty/`regular`/`guest`/
+  `sdk-account`; the exact receiving surface still owns eligibility.
+- Bot interactive capabilities use the separate signed `bot_actor` kind, not
+  a service JWT or fabricated human session. The issuer is `bot`, subject is
+  `bot:<bot_id>`, with exact audience/RPC/request binding and explicit
+  `actor_profile_id`, `bot_id`, `space_id`, `installation_id`, `bot_scope` plus
+  the same bounded temporal and single-use JTI checks. The closed Role and Chat
+  caller/scope matrix is defined in their owning service contracts. Receivers
+  reject mixed human/service authority, and still enforce current installation,
+  membership, permission, hierarchy and resource scope. A signed capability is
+  not an independent grant to mutate Owner/system roles.
 - Migration идёт сначала через dual-read verifier и audit-only telemetry для legacy
   metadata, затем per-caller cutover, allow-list enforcement и removal legacy path.
   Legacy metadata допустимы исключительно как временный migration input после
@@ -290,7 +307,7 @@ Space↔Voice bearer; его нельзя расширять или исполь
 
 | Сигнал             | Порядок величины / условие                                                                       | Типичный следующий шаг                                                                                 |
 |--------------------|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
-| Объём событий      | устойчиво **~1M+ событий/день**                                                                  | Тюнинг батчей, параллелизма ingest, лимитов Redis-буфера; мониторинг lag                               |
+| Объём событий      | устойчиво **~1M+ событий/день**                                                                  | Тюнинг размера in-memory батчей, flush-интервала и параллелизма ingest; мониторинг lag                |
 | Объём событий      | **~10M+ событий/день** или буфер регулярно под давлением                                         | Партиционирование/шардирование в ClickHouse, выделение ingest, горизонтальное масштабирование воркеров |
 | Задержка пайплайна | p95 времени от события в NATS до **доступности в ClickHouse** **> 60 s** при нормальной нагрузке | Разбор узкого места (буфер, CH insert, диск); масштабирование до укладывания в целевой SLO             |
 | Запросы к CH       | Тяжёлые отчёты мешают ingest или дают p95 **> согласованного** порога для admin API              | Реплики для чтения, отдельные витрины/materialized views, ограничение ad-hoc                           |

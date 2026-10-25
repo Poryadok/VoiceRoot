@@ -1,0 +1,21 @@
+Command: bash .github/ci/verify-required-jobs_test.sh
+== docs-only PR skips gate ==
+== non-PR event skips gate ==
+== global change requires full tier-1 including Go jobs ==
+== global with skipped ci-script-tests fails (regression guard) ==
+== MatchSquad overlay path requires its focused Linux regression job ==
+== global with skipped golangci fails (regression guard) ==
+== selected Flutter job abandoned result fails ==
+== selected Flutter device-driver abandoned result fails ==
+== selected Windows desktop build requires literal success ==
+== unselected Windows desktop build may be skipped ==
+== broad Go CI with empty PR integration matrix permits skipped integration job ==
+== changed-service integration matrix requires its PR job ==
+== package rollout with skipped renderer image fails ==
+== GLOBAL without RUN_GO still requires Go jobs (defense in depth) ==
+== messaging-only requires backend-go, not admin ==
+== auth filter requires backend-auth ==
+== compose filter requires compose-config ==
+All verify-required-jobs tests passed.
+
+exit_code=0

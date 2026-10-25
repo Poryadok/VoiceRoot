@@ -15,7 +15,7 @@ import (
 
 func TestHTTPVoIPSender_Success(t *testing.T) {
 	client := &stubAPNSClient{resp: &apns2.Response{StatusCode: 200}}
-	sender := apns.NewHTTPVoIPSenderForTest(client, "com.voice.app")
+	sender := apns.NewHTTPVoIPSenderForTest(client, "com.voice.app.voip")
 
 	err := sender.Send(context.Background(), uuid.New(), store.DeviceToken{
 		Token:       "voip-tok",
@@ -39,7 +39,7 @@ func TestHTTPVoIPSender_RejectedNonInvalidToken(t *testing.T) {
 	client := &stubAPNSClient{
 		resp: &apns2.Response{StatusCode: 400, Reason: apns2.ReasonBadTopic},
 	}
-	sender := apns.NewHTTPVoIPSenderForTest(client, "com.voice.app")
+	sender := apns.NewHTTPVoIPSenderForTest(client, "com.voice.app.voip")
 	err := sender.Send(context.Background(), uuid.New(), store.DeviceToken{Token: "tok"}, push.Payload{
 		Data: map[string]string{"type": "incoming_call"},
 	})
@@ -51,7 +51,7 @@ func TestHTTPVoIPSender_InvalidToken(t *testing.T) {
 	client := &stubAPNSClient{
 		resp: &apns2.Response{StatusCode: 410, Reason: apns2.ReasonUnregistered},
 	}
-	sender := apns.NewHTTPVoIPSenderForTest(client, "com.voice.app")
+	sender := apns.NewHTTPVoIPSenderForTest(client, "com.voice.app.voip")
 	err := sender.Send(context.Background(), uuid.New(), store.DeviceToken{Token: "bad"}, push.Payload{
 		Data: map[string]string{"type": "incoming_call"},
 	})

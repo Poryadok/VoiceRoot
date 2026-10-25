@@ -136,10 +136,17 @@ Future<void> clearLiveAuthRateLimit() async {
   if (root == null) {
     return;
   }
-  const patterns = [
+  final project = Platform.environment['COMPOSE_PROJECT_NAME'] ?? '';
+  final isolatedA1 = RegExp(
+    r'^voice-a1-(multi|flutter-handoff)-[a-z0-9][a-z0-9_-]*$',
+  ).hasMatch(project);
+  final patterns = [
     'ratelimit:AuthLogin:*',
     'ratelimit:AuthRegister:*',
     'ratelimit:Auth:*',
+    // OTP fixture resets belong only to an explicitly isolated A1 project.
+    if (isolatedA1) 'ratelimit:OTP:*',
+    if (isolatedA1) 'auth:otp:*',
     'ratelimit:FileUpload:*',
   ];
   for (final pattern in patterns) {

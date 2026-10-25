@@ -179,6 +179,7 @@ message SendBulkNotificationRequest {
 
 // Internal / federation: target is Auth account UUID (same as JWT claim user_id).
 message RelayNotificationRequest {
+  reserved "user_id";
   string account_id = 1;
   string payload_json = 2;
 }

@@ -1,0 +1,5 @@
+old_commands=83 new_commands=86
+old_unique=83 old_duplicate_command_lines=0
+missing_or_underrepresented_old_command_lines=0
+overrepresented_old_command_lines=0
+PASS: every old ci-script-tests command line appears exactly as many times in the new aggregate/prerequisite dry run

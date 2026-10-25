@@ -9,7 +9,7 @@ import tarfile
 KNOWN=('root_main.py','controller.py','commands.py','docker_runtime.py','stage_runtime.py','scenario.py','deployed-contract.json')
 ROLLOUT=('apply.py','bridge.py','bridge_client.py','bridge_root.py','compiler.py','encrypted_cut.py','errors.py','github_custody.py','gis_first_install.py','gis_prerequisite.py','guard.py','installer.py','migrations.py','native_store.py','normalize.py','nonnats_plan.py','nonnats_runtime.py','source_authority.py','source_plan.py','rollout_census.py','preserve.py','root_cli.py','runner.py','runtime_stage.py','transaction.py','workflow_entry.py')
 ROLLOUT+=('bootstrap_auth.py','bootstrap_enrollment.py','bootstrap_renewal.py','bootstrap_root.py','bootstrap_selection.py',
-    'nats_active_contract.py','nats_contract_actor.py','nats_contract_plan.py','nats_contract_custody.py','nats_migration.py','nats_root_plan.py')
+    'nats_active_contract.py','nats_contract_actor.py','nats_contract_plan.py','nats_contract_custody.py','nats_migration.py','nats_root_plan.py','nats_deliver_all.py')
 ROLLOUT+=('actor_auth.py','actor_root.py','actor_verification.py','actor_permissions.py','prebuild_disposition.py',
     'space_authority.py','space_backup.py','space_migration.py','space_restore.py','space_safeguards.py')
 ROLLOUT+=('renderer_transition.py','renderer_execution.py','renderer_root.py','bot_migration.py')
@@ -23,6 +23,7 @@ ROLLOUT+=('closed_archive.py','closed_durable.py','closed-seal-source-policies.j
 ROLLOUT+=('operator_reset.py',)
 ROLLOUT+=('deployment_report.py',)
 ROLLOUT+=('provisional.py',)
+ROLLOUT+=('release_policy_wiring.py',)
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

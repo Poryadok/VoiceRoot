@@ -1,0 +1,62 @@
+[
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/auth-user-space-wire-review.md",
+    "input_sha256": "7eb5ea90cdcc3fa568722b250d7b7d1999014f281ebcb2d0860bbaac247f446a",
+    "archived_sha256": "7eb5ea90cdcc3fa568722b250d7b7d1999014f281ebcb2d0860bbaac247f446a",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/bot-messaging-wire-review.md",
+    "input_sha256": "39e3696b9bd5bff0c8708eb6237ec0598a8e8ff5c67eb985f327af13e0f621c7",
+    "archived_sha256": "39e3696b9bd5bff0c8708eb6237ec0598a8e8ff5c67eb985f327af13e0f621c7",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/docs-makefile-review.md",
+    "input_sha256": "f776f7949201caf04f1f3b8c78f3a9803a2cf63e081b2f50fb3594b4e1b51b2f",
+    "archived_sha256": "f776f7949201caf04f1f3b8c78f3a9803a2cf63e081b2f50fb3594b4e1b51b2f",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/fresh-test-bindings.json",
+    "input_sha256": "b671f5f9133db5c7ad6d56dc191b74eb4d41407867f9ff0bc4102d986617217d",
+    "archived_sha256": "454a7d2c877ef29baffe52d7f4ef4fc662ca30aabf96f12898aa3d5b9851475e",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/historical-proof-bindings.json",
+    "input_sha256": "0d0b9e0fbf3f63cc29913d3b80924e268363288865e6ac038af5a285ccb96ee6",
+    "archived_sha256": "54e5ca4e80701d2018c92d30c8c8b4c58de88e95952c0230acda8a5732e1ca45",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/independent-source-review.md",
+    "input_sha256": "466067829fc1b8f12e3b04743e7fe96389c9fe92d1b521cac381663d064f7cc5",
+    "archived_sha256": "466067829fc1b8f12e3b04743e7fe96389c9fe92d1b521cac381663d064f7cc5",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/role-space-contribution-review.md",
+    "input_sha256": "dba2ce9d9dc6dcf8841aa169cf672bd7743360d43e162401378e3c68096d2df8",
+    "archived_sha256": "dba2ce9d9dc6dcf8841aa169cf672bd7743360d43e162401378e3c68096d2df8",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/role-space-review.md",
+    "input_sha256": "42634b60e52f32aa78dda60120a01023270716b6e26d46a3891c61bbdf564cc7",
+    "archived_sha256": "42634b60e52f32aa78dda60120a01023270716b6e26d46a3891c61bbdf564cc7",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/source-extension.json",
+    "input_sha256": "4800a2665dac682887fade15f3b1cbe52c814b5d22f125c93d81bcba3e8437bf",
+    "archived_sha256": "bb38c5264987150903f3cad9d5f1b89469cf3b4cc88a80c11a32e11710fb94ae",
+    "transform": "CRLF to LF only"
+  },
+  {
+    "path": "docs/testing/native-p3-source-v2-evidence/voice-source-review.md",
+    "input_sha256": "2d751a651251e0963aa5bddc6ec947d94faaf11149f6c1f43512e10c182efb11",
+    "archived_sha256": "cef4d4124d5893c67ff68d53917295c9b1ae8a926fc0efbbb95901f9f073ac14",
+    "transform": "CRLF to LF only"
+  }
+]

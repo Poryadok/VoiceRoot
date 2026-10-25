@@ -1,0 +1,190 @@
+{
+  "activation_authority": false,
+  "change_summary": "Reviewed Flutter empty-body invite fix and protected Gateway/Space voice-room creation. Backend changes retain original contribution gates. Native participation changes only one documentation entry.",
+  "current_inputs": {
+    "path": "docs/testing/f13-production-current-inputs-v3.json",
+    "sha256": "6be64557ba3457c82ed94a5ae0fbd8545a11ba4875eeafc8ad201dd2128ca420"
+  },
+  "current_or_future_path_authority": false,
+  "event_base": "288e6a4fb963b3d5775f885e14ecfda1b603a4ff",
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-v3-evidence/actual3071-consumer-replay.json",
+      "sha256": "c07bcd249fff5a937a21ecc60e2c80462cd6f2e00f1a04cdaf6e022a8189ebe5"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/analyze.log",
+      "sha256": "a4de1fbc005396e12bb5a54954f1082271508a7d6ff8098e37782e446e35939d"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/capture.py",
+      "sha256": "e578012908d78f9c659b46dc046fa85782caf2422f27e16997358612d7177c24"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/combined-v3-independent-review.md",
+      "sha256": "65ab3dff414578c436e62cad2272b660867ea2c7b3193cad88bdd0fa02ba110b"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/derive_manual_supplement.py",
+      "sha256": "78f2756a94cbd6ea51661194eff5285f11d6683727f1c8bc608d294acade337f"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/f4db556-review.md",
+      "sha256": "f7aa419f437a885456c40a08d4334fbb1345a70e4a12592a44f4344034ed69f5"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/f4db556-source-evidence.json",
+      "sha256": "a437fd795d373fa37a160d1dbe12bbf244c786cea10ff527eaec9510b7c12190"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/fixed3071-manual-derivation.json",
+      "sha256": "a897b6f2182133084fd2f4c5affbac27b752086315cbae7834bf5bdffa0692e0"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/fixed3071-manual-v1.zip",
+      "sha256": "33942d6fb7a00ad600c68f6f86c6d34d1cabf4fc292109f752daa0c4c6cac07d"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/frontend-independent-review.md",
+      "sha256": "0a22904674f4b5bc82a9fe140a37510aa5bb2536df41705ccea2cb9ca4f82794"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/gateway-golangci-v3.log",
+      "sha256": "e9e5430fc0fb198d1e5ed3cf3a0201dc6d199c70f8221e6aee815a5c55edc087"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/gateway-green-short-final.log",
+      "sha256": "ff32be1765d4f7b58ca60e0add8bb5923dc43b66ce9805715b1cb25903d07d93"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/gateway-green-short-missing-root.log",
+      "sha256": "a280c0419d5c9db1e738f5d2822a2b952310e1f2ea4fc0694cc699ae54d4a6e1"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/gateway-green-short-v2.log",
+      "sha256": "2e7d1f07ee85a794f487f26e83c8b63e27dc2bab2b2a101475e58fcf6402be43"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/gateway-green-short.log",
+      "sha256": "35a6e53acbe4986f7fcf371ac304b7480f74fe4b58d4f2945bb9de5600b324ec"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/gateway-red.log",
+      "sha256": "9d627e3cd056f5f8e7a290be6bc77ee9d969a787107867b25cbf4fecfeb62042"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/golangci-v2.6.1-ci-command.log",
+      "sha256": "d3bd323394475a5f9520ab86682d51e246b68faba59759ea98e0163a1c4ad7c2"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/golangci-v2.6.1-provenance.log",
+      "sha256": "c330e236d3741423c663e5fc1f366533372881d6ff0707db954f16f14933a782"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/green.log",
+      "sha256": "46262ead368d3e0610ccfc4d5934a8f2b51c177ddd4c79733eb652fc0ab1be36"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/principalruntime-green.log",
+      "sha256": "66af17ec5af7e541784dd6d09d526786ad58888bc6f164184ca234e364d723ae"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/receipt.json",
+      "sha256": "d705b9fe69292bed1deaea8cadaf298fc0cab9a9b4bf3515b7482d2b46a36a21"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/red.log",
+      "sha256": "ad06f8af7a25cd2d2929967c0b3fbd54d9b8e903364d209606d310f2a27a549e"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/replay_actual_manual_consumer.py",
+      "sha256": "fef6a962a33ca7e10dd765e49ec67283fc185d9c8feec61338e5a974db211675"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-golangci-v3.log",
+      "sha256": "e9e5430fc0fb198d1e5ed3cf3a0201dc6d199c70f8221e6aee815a5c55edc087"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-green-short-final.log",
+      "sha256": "acf69bc1e265c7d237dda2b0fcac68052f5329fd94b3b8c45045c34e0fc3df54"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-green-short-v2.log",
+      "sha256": "4920380a2bc8d8ecc07807a87dfd209e12652ea661a0e4a07a79f5b19ca0f8b4"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-green-short.log",
+      "sha256": "fe50ec0bc05204d508b45658c085daf22cc785153fed1e0611f705e30659691b"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-native51-pg-crlf.log",
+      "sha256": "19e3fe7d5735ba5353d293e87048266b7d05ed248d081a2ad07f221dd554c9f8"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-native51-pg.log",
+      "sha256": "57953545e07b558f5254d0946e27cf452fff8cb5bc8868ec440f94628d211c20"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/space-red.log",
+      "sha256": "778189194f00a8559145cbdd473c52c2057d62656ab251e2bce222f0f774cb52"
+    },
+    {
+      "path": "docs/testing/f13-production-v3-evidence/voice-access-native-pg-rerun.log",
+      "sha256": "9788d24db4aceba18632f48bdde8a8b9ebb2ef3a99ea391f91c6749c3dff5187"
+    }
+  ],
+  "historical_scope": {
+    "allow_direct_followup": "true",
+    "base": "698d4f064f032ea74abf3ede2017100b26c8ee69",
+    "partition_source_history": "false",
+    "target": "53f75f74523735ac594e21582bea659f567a7288"
+  },
+  "manual_derivation": {
+    "path": "docs/testing/f13-production-v3-evidence/fixed3071-manual-derivation.json",
+    "sha256": "a897b6f2182133084fd2f4c5affbac27b752086315cbae7834bf5bdffa0692e0"
+  },
+  "manual_supplement": {
+    "path": "docs/testing/f13-production-v3-evidence/fixed3071-manual-v1.zip",
+    "sha256": "33942d6fb7a00ad600c68f6f86c6d34d1cabf4fc292109f752daa0c4c6cac07d"
+  },
+  "native_content_base": "8191a36ca3bea7d053df0dd25963ca5133284b41",
+  "native_record": {
+    "path": "docs/testing/native-p3-source-v3.json",
+    "scope": "SAME_RECORD_COMMIT",
+    "sha256": "4ed3acd7cecfef97d03724115e57bf418600bd8e3210d992fd7ed1a325de8a67"
+  },
+  "predecessor": {
+    "carrier": "3b53b0a9c761f340d20d23ed36f64a0ad18af33f",
+    "carrier_tree": "68a981771081167efc3897fff68c5acfe31a1c58",
+    "path": "docs/testing/f13-production-source-v1.json",
+    "record": "0aaed85d16f94d75bb70481ab660ea5b63f55e62",
+    "sha256": "bde38ddd6495b5bf309f89638adb5471c906fb0f35a60d01c653cf27334fe16e"
+  },
+  "reference": "d6ac6d2f4b85eb691a00f729eb2192e63ae0091f",
+  "review": [
+    "docs/testing/f13-production-v3-evidence/combined-v3-independent-review.md",
+    "docs/testing/f13-production-v3-evidence/f4db556-review.md",
+    "docs/testing/f13-production-v3-evidence/frontend-independent-review.md"
+  ],
+  "runtime_pass": false,
+  "source": "e409cd05c40e857b61109513eb2154f968970c02",
+  "source_edges": [
+    {
+      "commit": "73531c1e48d63fb100ab279930c98f67c9e97241",
+      "parent": "3b53b0a9c761f340d20d23ed36f64a0ad18af33f",
+      "raw_diff_sha256": "37f243c9443252d7996304245a90036c01655fc769bd528f261c2343c8410b62"
+    },
+    {
+      "commit": "e409cd05c40e857b61109513eb2154f968970c02",
+      "parent": "73531c1e48d63fb100ab279930c98f67c9e97241",
+      "raw_diff_sha256": "e83d5a33b0ea027c84195c35dc12502f5700be1e30013b1b0b2d30fb2896eee6"
+    }
+  ],
+  "source_tree": "4df56af27e84e811af10319379ab3f26f0dcddb3",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "successor_closure": {
+    "path": "docs/testing/f13-production-successor-closure-v3.json",
+    "sha256": "5b5db564795fba0f57fb28a129987fe4131d5a876a326bbafe8529ac777cba15"
+  },
+  "version": "F13-PRODUCTION-SOURCE-v3"
+}

@@ -1,0 +1,67 @@
+{
+  "objective": "Bounded Social JetStream readiness-flush verification against immutable baseline and isolated candidate test overlay",
+  "environment": {
+    "image": "golang:1.26.9-bookworm",
+    "go": "go1.26.9 linux/amd64",
+    "cpu_limit": 1,
+    "memory_limit": "3g",
+    "docker_socket_mounted": false
+  },
+  "baseline": {
+    "commit": "88856ee15a403e436b5f1d7f6d67e58d223e027b",
+    "snapshot": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-88856-src-backend.tar",
+    "snapshot_sha256": "a12e2e839c6e359d2c3d6d9574e2f720b049004b84c68fdd6ebd103a06d01311",
+    "target_test_source_sha256": "090974c2b3a1a0e09686d23e40bad93f7e830cbcd5a8e44b3d32f59d06800e3a",
+    "pkg_go_mod_sha256": "815de8ba56144a53e9bd9535f6a42ebf2ce86900f31667aefa7358eb450394c9",
+    "command": "go test -short ./internal/socialevents -run \"^TestJetStreamPublisher_FriendRequestRetryUsesStableMessageID$\" -count=100 -cpu=1,2 -failfast",
+    "result": "passed 100 iterations in 5.672s; local failure not reproduced",
+    "log": {
+      "path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-baseline.log",
+      "sha256": "695ee8f37ce6b139641283dfd1802a24b8a8cf9918b2f8344bdaf02a904bc62b"
+    }
+  },
+  "candidate": {
+    "only_overlay": "src/backend/social/internal/socialevents/jetstream_test.go",
+    "candidate_source_sha256": "3a6877f3fd60c93a0737424f9760df5ca836f76b8d44d5d40a1c34424d3c6e89",
+    "candidate_go_mod_sha256": "815de8ba56144a53e9bd9535f6a42ebf2ce86900f31667aefa7358eb450394c9",
+    "gofmt": "clean",
+    "gofmt_log_sha256": "e68281e0a45db3d391966b90b024aec2e718fd8c8f26f3d36cd3fe8ef97de508",
+    "checks": [
+      {
+        "command": "go test -short ./internal/socialevents -run \"^TestJetStreamPublisher_FriendRequestRetryUsesStableMessageID$\" -count=100 -cpu=1,2 -failfast",
+        "result": "passed in 5.681s",
+        "log": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-target-100.log",
+        "sha256": "caabd3c69f63f7ff17edc6fabf065fc4173447866f7d489cc28ac1d0b81e93d4"
+      },
+      {
+        "command": "go test -short ./internal/socialevents -count=20 -cpu=1,2",
+        "result": "passed in 2.275s",
+        "log": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-package-20.log",
+        "sha256": "8777c6ced57bbf01e257f462104505a4522bdc4a6b064c2abda5e8739aec0b56"
+      },
+      {
+        "command": "go test -race -short ./internal/socialevents -run \"^TestJetStreamPublisher_FriendRequestRetryUsesStableMessageID$\" -count=10 -cpu=1,2",
+        "result": "passed in 1.727s",
+        "log": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-race-10.log",
+        "sha256": "27c8e09df3620084483beda3c82da4b8f7ad16bf079def9a43624ee00b06f97b"
+      }
+    ],
+    "environment_log": {
+      "path": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-green-env.log",
+      "sha256": "a6474b73f90b1498137616ef0e4d9d031395210e83a683a38c386c6f4f20dcee"
+    }
+  },
+  "runner_attempt_notes": [
+    {
+      "detail": "An initial container command used bash -lc, which reset PATH and could not find Go; it did not execute tests.",
+      "log": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-baseline-shell-failure.log",
+      "sha256": "94f22754cb44f049703cca9c32ec29b12cbc55179c9840f7b418ab2aa9b823fb"
+    },
+    {
+      "detail": "The first baseline command had an over-escaped regex and reported no tests; the corrected command was verified with go test -list and ran 100 iterations.",
+      "log": "D:/Git/Voice/tmp/pr875-repair/social-nats/social-baseline-no-tests.log",
+      "sha256": "dbc29a8efd8c9edad07868936063444812887ea43ec73959d402cdbb0bad1586"
+    }
+  ],
+  "scope": "No source edits; candidate test was overlaid into a private extraction of commit 88856. No Docker socket, Compose services, or production services were used."
+}
