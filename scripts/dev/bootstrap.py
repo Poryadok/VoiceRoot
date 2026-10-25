@@ -398,7 +398,8 @@ def start():
     if dynamic:
         reset_bootstrap.verify_fresh(json.loads(run('kubectl', 'get', 'namespace', dev.NS, '-o', 'json').stdout),
             get('pvc'), json.loads(run('kubectl', 'get', 'pv', '-o', 'json').stdout)['items'],
-            old_namespace_uid=dynamic['old_namespace_uid'], retained=dynamic['retained'])
+            old_namespace_uid=dynamic['old_namespace_uid'], retained=dynamic['retained'],
+            provider_contract=dynamic['provider_contract'])
     ordered_jobs = sorted([copy.deepcopy(o) for o in rendered if o['kind'] == 'Job'],
                           key=lambda o: NATS_JOBS.index(o['metadata']['name']) if o['metadata']['name'] in NATS_JOBS else 10)
     for job in ordered_jobs:
