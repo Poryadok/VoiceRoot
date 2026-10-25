@@ -60,7 +60,7 @@ func Convert(ctx context.Context, raw []byte) (Output, error) {
 	if err != nil {
 		return Output{}, fmt.Errorf("GIF temp directory: %w", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	if err = writeFrames(ctx, dir, decoded); err != nil {
 		return Output{}, err
 	}
@@ -358,7 +358,7 @@ func readCapped(path string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("GIF output open: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	b, err := io.ReadAll(io.LimitReader(f, maxOutputBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("GIF output read: %w", err)
