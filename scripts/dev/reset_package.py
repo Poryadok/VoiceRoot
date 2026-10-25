@@ -21,6 +21,9 @@ STAGING = 'voice-staging'
 REGISTRY = 'ghcr.io/poryadok/voiceroot'
 FRONTENDS = ('web', 'admin', 'developer-portal')
 JOBS = ('realtime', 'notification', 'analytics-chat', 'search')
+OVERLAY_PATHS = tuple('deploy/dev/match-squad-trust-overlay/' + name for name in (
+    'voice-matchmaking.service.patch.yaml', 'voice-chat.service.patch.yaml', 'voice-voice.service.patch.yaml',
+    'voice-matchmaking.runtime.patch.yaml', 'voice-chat.runtime.patch.yaml', 'voice-voice.runtime.patch.yaml', 'voice-gateway.patch.yaml'))
 SOURCE_PATHS = tuple('deploy/staging/' + name + '.yaml' for name in (
     'infra', 'minio', 'configmap-app', 'services', 'gateway-deployment',
     'flutter-web', 'admin', 'developer-portal')) + tuple(
@@ -62,7 +65,8 @@ def _source(root, source_sha, source_manifest):
     auth_sql = tuple(p.relative_to(root).as_posix() for p in sorted((root / 'src/backend/auth/src/main/resources/db/migration').glob('*.sql')))
     postgres_sql = tuple(p.relative_to(root).as_posix() for p in sorted((root / 'docker/postgres').rglob('*.sql')))
     templates = tuple(p.relative_to(root).as_posix() for p in sorted((root / 'deploy/templates').glob('*.yaml')))
-    required = set(SOURCE_PATHS + AUTHORITY_PATHS + policies + migrations + sql + native + auth_sql + postgres_sql + templates)
+    required = set(SOURCE_PATHS + AUTHORITY_PATHS + policies + migrations + sql + native + auth_sql + postgres_sql + templates
+        + OVERLAY_PATHS + ('deploy/dev/match-squad-trust-overlay/README.md',))
     if (root / '.git').exists():
         def git(*args):
             try:
@@ -215,6 +219,40 @@ def _validate_tokens(obj):
         _fail('unresolved_token')
 
 
+def _overlay_merge(base, patch, field=''):
+    """Strategic merge for the fixed canonical overlay's named Kubernetes lists."""
+    if isinstance(patch, dict):
+        result = copy.deepcopy(base) if isinstance(base, dict) else {}
+        for key, value in patch.items():
+            if key.startswith('$'):
+                _fail('unsupported_overlay_directive')
+            result[key] = _overlay_merge(result.get(key), value, key)
+        return result
+    if isinstance(patch, list):
+        if field == 'items':
+            return copy.deepcopy(patch)
+        identity = {'containers': 'name', 'env': 'name', 'volumes': 'name',
+                    'volumeMounts': 'mountPath', 'ports': 'containerPort'}.get(field)
+        if not identity:
+            _fail('unsupported_overlay_list:' + field)
+        # ServicePort uses port; ContainerPort uses containerPort.
+        if field == 'ports' and patch and 'port' in patch[0]:
+            identity = 'port'
+        result = copy.deepcopy(base) if isinstance(base, list) else []
+        if len({row.get(identity) for row in result}) != len(result):
+            _fail('ambiguous_overlay_base')
+        for row in patch:
+            if not isinstance(row, dict) or identity not in row:
+                _fail('overlay_list_identity')
+            indices = [i for i, old in enumerate(result) if old.get(identity) == row[identity]]
+            if indices:
+                result[indices[0]] = _overlay_merge(result[indices[0]], row)
+            else:
+                result.append(copy.deepcopy(row))
+        return result
+    return copy.deepcopy(patch)
+
+
 def _validate(result):
     if not isinstance(result, dict) or set(result) != {'prepared', 'secrets', 'foundation', 'receipt'}:
         _fail('package_shape')
@@ -344,6 +382,18 @@ def render(root, source_sha, secret_objects, image_pins, release_policy, decoder
                 selected.append(obj)
     prepared = dev.render(selected, node) + network
     wiring.check_documents(selected, release_policy, source_sha, STAGING)
+    for path in OVERLAY_PATHS:
+        patches = decoder(raw[path])
+        if not isinstance(patches, list) or len(patches) != 1:
+            _fail('overlay_document')
+        patch = patches[0]
+        if patch.get('metadata', {}).get('namespace') != dev.NS:
+            _fail('overlay_namespace')
+        targets = [i for i, obj in enumerate(prepared) if (obj['kind'], obj['metadata']['name']) ==
+                   (patch.get('kind'), patch['metadata'].get('name'))]
+        if len(targets) != 1:
+            _fail('overlay_target')
+        prepared[targets[0]] = _overlay_merge(prepared[targets[0]], patch)
     public = [o for o in material if o['kind'] == 'ConfigMap']
     needed_public = {part[field]['name'] for obj in prepared for part in dev.walk(obj)
         for field in ('configMap', 'configMapKeyRef', 'configMapRef') if field in part}
@@ -406,6 +456,7 @@ def render(root, source_sha, secret_objects, image_pins, release_policy, decoder
     result = {'prepared': prepared, 'secrets': secrets,
         'foundation': [o for o in dev.foundation(node) if o['kind'] != 'PersistentVolume'],
         'receipt': {'schema': 'voice-dev-reset-package-v1', 'source_sha': source_sha, 'node': node,
+            'overlay_sources': {path: hashlib.sha256(raw[path]).hexdigest() for path in OVERLAY_PATHS},
             'sources': manifest, 'images': bindings, 'tool_images': copy.deepcopy(image_pins['tools']),
             'frontends': copy.deepcopy(image_pins['frontends']), 'storage_class': 'local-path',
             'renderer_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

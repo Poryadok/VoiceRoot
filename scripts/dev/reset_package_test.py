@@ -22,6 +22,9 @@ PATHS = tuple('deploy/staging/' + p + '.yaml' for p in (
     'flutter-web', 'admin', 'developer-portal')) + tuple(
     'deploy/templates/nats-' + role + '-bootstrap.yaml'
     for role in ('realtime', 'notification', 'analytics-chat', 'search'))
+OVERLAY_PATHS = tuple('deploy/dev/match-squad-trust-overlay/' + name for name in (
+    'voice-matchmaking.service.patch.yaml', 'voice-chat.service.patch.yaml', 'voice-voice.service.patch.yaml',
+    'voice-matchmaking.runtime.patch.yaml', 'voice-chat.runtime.patch.yaml', 'voice-voice.runtime.patch.yaml', 'voice-gateway.patch.yaml'))
 
 
 def decode(raw):
@@ -48,7 +51,7 @@ def fixture():
     """Reference-complete synthetic material, never an issued trust claim."""
     secrets, public = {}, {}
     images = {}
-    for path in PATHS:
+    for path in PATHS + OVERLAY_PATHS:
         text = (ROOT / path).read_text(encoding='utf-8')
         text = re.sub(r'__NATS_(?:APP|SYS)_RESOLVER_PRELOAD__', '', text)
         text = re.sub(r'__[A-Z0-9_]+__', 'fixture', text)
@@ -204,6 +207,22 @@ class PackageTests(unittest.TestCase):
                 config['data']['nats.conf'] += '__UNKNOWN_RENDER_TOKEN__'
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 package._validate(bad)
+
+    def test_final_dev_overlay_is_source_bound_and_keeps_directional_trust(self):
+        result = self.render()
+        self.assertEqual(set(result['receipt']['overlay_sources']), set(OVERLAY_PATHS))
+        by_name = {(o['kind'], o['metadata']['name']): o for o in result['prepared']}
+        mm = by_name['Deployment', 'voice-matchmaking']['spec']['template']['spec']
+        env = {e['name']: e for e in next(c for c in mm['containers'] if c['name'] == 'matchmaking')['env']}
+        self.assertEqual(env['MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD'], {'name': 'MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'value': ''})
+        self.assertEqual(json.loads(env['S2S_JWKS_URLS_JSON']['value']), {'gateway': 'https://api-dev.comrade.click/.well-known/voice-principal-jwks.json'})
+        volumes = {v['name']: v for v in mm['volumes']}
+        self.assertEqual(volumes['matchmaking-complete-client-ca']['configMap']['name'], 'voice-matchmaking-complete-client-ca')
+        self.assertEqual(volumes['match-squad-ca']['configMap']['name'], 'voice-match-squad-ca')
+        gateway = by_name['Deployment', 'voice-gateway']['spec']['template']['spec']
+        gateway_env = {e['name']: e for e in next(c for c in gateway['containers'] if c['name'] == 'gateway')['env']}
+        self.assertEqual(gateway_env['GATEWAY_MATCH_SQUAD_MEMBER_TLS_CA_FILE']['value'], '/etc/voice/match-squad/ca/ca.crt')
+        self.assertEqual(gateway_env['GATEWAY_MATCHMAKING_COMPLETE_TLS_SERVER_NAME']['value'], 'voice-matchmaking.voice-dev.svc')
 
     def test_mutable_unmapped_and_wrong_dev_frontend_inputs_rejected(self):
         for name, key, value in [('web', 'api_base_url', 'https://voice.comrade.click'),
