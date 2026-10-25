@@ -69,6 +69,9 @@ func (a Authenticator) UnaryInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 		if err != nil {
+			if status.Code(err) == codes.Unavailable {
+				return nil, status.Error(codes.Unavailable, "catalog verifier unavailable")
+			}
 			return nil, status.Error(codes.Unauthenticated, "invalid catalog principal")
 		}
 		// A private capability prevents another listener's generic verified principal
