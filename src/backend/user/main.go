@@ -99,6 +99,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("user Messaging scheduled presence principal config: %v", err)
 	}
+	catalogConfig, catalogEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "catalog", "USER_CATALOG_PRINCIPAL_", ":9098")
+	if err != nil {
+		log.Fatalf("user catalog actor principal config: %v", err)
+	}
+	var catalogRuntime *socialprincipal.Runtime
+	if catalogEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user catalog actor principal requires DATABASE_URL")
+		}
+		catalogRuntime, err = socialprincipal.New(context.Background(), catalogConfig)
+		if err != nil {
+			log.Fatalf("user catalog actor principal: %v", err)
+		}
+		defer func() { _ = catalogRuntime.Close() }()
+	}
 	searchProjectionCursorKey, err := searchprojection.CursorKeyFromEnv(searchPrincipalEnabled, os.Getenv)
 	if err != nil {
 		log.Fatalf("user search projection cursor config: %v", err)
@@ -517,6 +532,22 @@ func main() {
 			go func() {
 				if err := notificationPresenceServer.Serve(notificationPresenceListener); err != nil {
 					log.Fatalf("user Notification presence principal serve: %v", err)
+				}
+			}()
+		}
+		if catalogRuntime != nil {
+			listener, err := net.Listen("tcp", catalogConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user catalog actor principal listen: %v", err)
+			}
+			options := append([]grpc.ServerOption{}, sharedOptions...)
+			options = append(options, catalogRuntime.ServerOptions()...)
+			server := grpc.NewServer(options...)
+			grpcsvc.RegisterCatalogActorServer(server, userSvc.Profiles)
+			defer server.Stop()
+			go func() {
+				if err := server.Serve(listener); err != nil {
+					log.Fatalf("user catalog actor principal serve: %v", err)
 				}
 			}()
 		}
