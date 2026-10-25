@@ -176,6 +176,45 @@ void main() {
     },
   );
 
+  testWidgets(
+    'token rotation during thread load restarts the current profile request',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      var loads = 0;
+      final client = MockClient((request) async {
+        loads++;
+        if (loads == 1) return pending.future;
+        return http.Response(
+          '{"message_list":{"messages":[{"id":"fresh","chat":{"id":"chat-thread"},"content":"Fresh reply"}]}}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      await tester.pumpWidget(threadTestApp(client: client));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadSidePanel)),
+      );
+      final session = container.read(authControllerProvider).session!;
+      container.read(authControllerProvider.notifier).state = AuthState(
+        session: AuthSession(
+          accessToken: 'rotated-token',
+          refreshToken: session.refreshToken,
+          accountId: session.accountId,
+          activeProfileId: session.activeProfileId,
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(loads, 2);
+      expectMessagePlainText(tester, 'Fresh reply');
+      pending.complete(threadRepliesResponse());
+      await tester.pumpAndSettle();
+      expectMessagePlainText(tester, 'Fresh reply');
+      expect(richPlainText(tester), isNot(contains('Recovered reply')));
+    },
+  );
+
   testWidgets('thread load failure uses safe localized copy', (tester) async {
     final client = MockClient((_) async {
       return http.Response(

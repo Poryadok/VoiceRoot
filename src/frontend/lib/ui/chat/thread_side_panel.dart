@@ -181,7 +181,8 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
     final profileId = ref.watch(authControllerProvider).activeProfileId;
     ref.listen<AuthState>(authControllerProvider, (previous, next) {
       if (previous?.activeProfileId != next.activeProfileId ||
-          previous?.session?.accountId != next.session?.accountId) {
+          previous?.session?.accountId != next.session?.accountId ||
+          previous?.session?.accessToken != next.session?.accessToken) {
         _loadGeneration++;
         setState(() {
           _historyProfileId = null;
