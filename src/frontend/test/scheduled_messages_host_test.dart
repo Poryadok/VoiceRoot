@@ -57,6 +57,7 @@ void main() {
             cancelStarted.complete();
             return cancelResponse.future;
           }
+          if (cancelCalls == 2) return http.Response('{}', 503);
           return http.Response('', 204);
         }
         if (request.method == 'PATCH') {
@@ -186,12 +187,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('scheduled_retry_one')), findsOneWidget);
       expect(find.byKey(const ValueKey('scheduled_retry_two')), findsNothing);
+      final obsoleteCancelRetry = tester
+          .widget<TextButton>(find.byKey(const ValueKey('scheduled_retry_one')))
+          .onPressed!;
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('scheduled_edit_one')),
+      );
+      await tester.tap(find.byKey(const ValueKey('scheduled_edit_one')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('scheduled_retry_one')), findsNothing);
+      obsoleteCancelRetry();
+      await tester.pumpAndSettle();
+      expect(cancelCalls, 1);
+      expect(composer().text, 'Edited scheduled draft');
+      await tester.tap(find.byKey(const Key('scheduled_edit_cancel')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('scheduled_cancel_one')),
+      );
+      await tester.tap(find.byKey(const ValueKey('scheduled_cancel_one')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(
         find.byKey(const ValueKey('scheduled_retry_one')),
       );
       await tester.tap(find.byKey(const ValueKey('scheduled_retry_one')));
       await tester.pumpAndSettle();
-      expect(cancelCalls, 2);
+      expect(cancelCalls, 3);
       expect(
         requests.map((r) => r.url.path),
         everyElement('/api/v1/messages/scheduled/one'),

@@ -2202,6 +2202,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     setState(() {
       _scheduledEdit = item.deepCopy();
+      // Entering edit supersedes a failed cancel/send-now intent for this row.
+      // Retries created later by this active PATCH remain available.
+      _scheduledActionRetries.remove(item.id);
       _scheduledEditComposer.text = item.payload.content;
       _scheduledEditAt = protoTimestampToDateTime(
         item.hasScheduledAt() ? item.scheduledAt : null,
