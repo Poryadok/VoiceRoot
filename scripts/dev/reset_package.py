@@ -54,6 +54,17 @@ def _read(root, path):
     return target.read_bytes()
 
 
+def _inventory_path(path):
+    """Select every input in the existing source scope from pinned authority."""
+    name = PurePosixPath(path)
+    return (path.startswith('src/backend/migrations/')
+        or path.startswith('src/backend/') and path.endswith('.go') and not path.endswith('_test.go')
+        or name.parent == PurePosixPath('docker/clickhouse/init') and name.suffix == '.sql'
+        or name.parent == PurePosixPath('src/backend/auth/src/main/resources/db/migration') and name.suffix == '.sql'
+        or path.startswith('docker/postgres/') and name.suffix == '.sql'
+        or name.parent == PurePosixPath('deploy/templates') and name.suffix == '.yaml')
+
+
 def _source(root, source_sha, source_manifest):
     if not isinstance(source_sha, str) or not re.fullmatch(r'[a-f0-9]{40}', source_sha) or source_sha == '0' * 40:
         _fail('source_revision')
@@ -65,6 +76,8 @@ def _source(root, source_sha, source_manifest):
     auth_sql = tuple(p.relative_to(root).as_posix() for p in sorted((root / 'src/backend/auth/src/main/resources/db/migration').glob('*.sql')))
     postgres_sql = tuple(p.relative_to(root).as_posix() for p in sorted((root / 'docker/postgres').rglob('*.sql')))
     templates = tuple(p.relative_to(root).as_posix() for p in sorted((root / 'deploy/templates').glob('*.yaml')))
+    # The disk census also rejects extra untracked inputs that downstream
+    # migration/installer helpers would otherwise consume.
     required = set(SOURCE_PATHS + AUTHORITY_PATHS + policies + migrations + sql + native + auth_sql + postgres_sql + templates
         + OVERLAY_PATHS + ('deploy/dev/match-squad-trust-overlay/README.md',))
     if (root / '.git').exists():
@@ -80,6 +93,8 @@ def _source(root, source_sha, source_manifest):
             if row:
                 meta, path = row.split(b'\t', 1)
                 mode, kind, digest = meta.decode().split()
+                if _inventory_path(path.decode()) and (mode not in ('100644', '100755') or kind != 'blob'):
+                    _fail('source_file_invalid:' + path.decode())
                 if mode in ('100644', '100755') and kind == 'blob':
                     entries[path.decode()] = digest
         expected = entries
@@ -95,6 +110,13 @@ def _source(root, source_sha, source_manifest):
         required.update(expected)
     else:
         _fail('archive_manifest_required')
+    # Never let a deleted tracked input disappear from both validation and the
+    # receipt: inventory authority is the pinned tree (or trusted export).
+    required.update(path for path in expected if _inventory_path(path))
+    policies = tuple(sorted(path for path in required
+        if PurePosixPath(path).parent == PurePosixPath('deploy/templates')
+        and PurePosixPath(path).match('network-policy-*.yaml')
+        and PurePosixPath(path).name != 'network-policy-nats-live-acl-proof.yaml'))
     raw, manifest = {}, []
     for path in sorted(required):
         data = _read(root, path)

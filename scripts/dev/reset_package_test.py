@@ -102,6 +102,46 @@ def fixture():
     return objects, {'images': images, 'tools': tools, 'frontends': frontends}
 
 
+class SourceInventoryTests(unittest.TestCase):
+    def test_deleted_tracked_scoped_inputs_cannot_disappear_from_receipt(self):
+        scoped = ('src/backend/migrations/example/001.up.sql',
+            'src/backend/example/main.go', 'docker/clickhouse/init/001.sql',
+            'src/backend/auth/src/main/resources/db/migration/V1__fixture.sql',
+            'docker/postgres/fixture.sql', 'deploy/templates/network-policy-fixture.yaml',
+            'deploy/templates/extra-fixture.yaml')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            paths = set(package.SOURCE_PATHS + package.AUTHORITY_PATHS + package.OVERLAY_PATHS + scoped
+                + ('deploy/dev/match-squad-trust-overlay/README.md',))
+            for path in paths:
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_bytes(b'synthetic source\n')
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.DEVNULL, timeout=10)
+            git('init', '-q')
+            git('add', '.')
+            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test',
+                'commit', '-q', '-m', 'Synthetic source inventory')
+            sha = git('rev-parse', 'HEAD').decode().strip()
+            _, receipt, policies = package._source(root, sha, None)
+            self.assertTrue(set(scoped) <= {row['path'] for row in receipt})
+            self.assertIn('deploy/templates/network-policy-fixture.yaml', policies)
+            for path in scoped:
+                with self.subTest(path=path):
+                    target = root / path
+                    data = target.read_bytes()
+                    target.unlink()
+                    try:
+                        with self.assertRaisesRegex(ValueError, 'source_file_invalid:' + re.escape(path)):
+                            package._source(root, sha, None)
+                    finally:
+                        target.write_bytes(data)
+            extra = root / 'src/backend/migrations/example/002.up.sql'
+            extra.write_bytes(b'synthetic extra SQL\n')
+            with self.assertRaisesRegex(ValueError, 'source_content_mismatch:.*002.up.sql'):
+                package._source(root, sha, None)
+
+
 class PackageTests(unittest.TestCase):
     def setUp(self):
         self.material, self.pins = fixture()
