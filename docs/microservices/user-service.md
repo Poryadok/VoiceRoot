@@ -487,39 +487,3 @@ Auth publish access to the exact `user.account_deleted` subject and User only
 subscribe/consumer access; the staging and production User migration job has
 applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
 enabling the consumer. No Compose manifest enables this consumer in PR A.
-
-### Catalog actor ownership/deletion snapshot
-
-Chat and File use the separate internal `voice.catalogactor.v1.CatalogActorAuthorityService/GetCatalogActorStates`
-service on the dedicated `USER_CATALOG_PRINCIPAL_` mTLS listener (default `:9098`).
-It is absent from ordinary User registration and has no Gateway route. The existing
-Messaging-only `GetProfileDeletionStates` API and listener remain unchanged.
-
-Protocol version 1 accepts 1..100 exact `(account_id, profile_id)` pairs of canonical
-lowercase nonnil UUIDs, with distinct profile IDs. Unknown protobuf fields, unsupported
-versions and invalid/duplicate/oversized batches reject the entire request. The reply
-has version 1 and exactly one ordered tuple echo per input. An exact ownership match
-returns `NOT_DELETED` or `SOFT_DELETED` based only on User `profiles.deleted_at`;
-frozen/account overlay state does not imply deletion. Missing profiles and wrong owners
-return `UNKNOWN` without disclosing the actual owner. Storage failures fail the whole
-request as unavailable. Clients reject unspecified/unrecognized enums, wrong version,
-missing/extra/duplicate tuples and any unknown response fields.
-
-Only pure `service:chat` and `service:file` principals are admitted: exact issuer,
-audience `user`, full RPC, deterministic protobuf request SHA-256 binding, fresh
-canonical UUID `x-request-id` and JTI replay protection are required. Caller-supplied
-raw identity headers and delegated account/profile authority are forbidden. Activation
-requires the complete prefix-owned `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`,
-`REPLAY_REDIS_ADDR`, `JWKS_CLIENT_CERT_FILE` and `JWKS_CLIENT_KEY_FILE` settings,
-plus both HTTPS chat/file entries in `S2S_JWKS_URLS_JSON`. Optional prefix-owned
-`GRPC_LISTEN`, `REPLAY_REDIS_PASSWORD` and `JWKS_CA_FILE` follow the shared strict
-listener rules; partial configuration fails startup. JWKS outbound identity is separate
-from the listener certificate. Shared S2S settings alone never activate this listener.
-
-Consumer outbound prefixes are `CHAT_CATALOG_ASSET_USER_` and `FILE_CATALOG_ASSET_USER_`
-with `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `TLS_CLIENT_CERT_FILE` and
-`TLS_CLIENT_KEY_FILE`; each consumer uses its own service signer. This read is a
-snapshot, not an atomic permit, Auth account-eligibility proof, generation lease or
-zero-lag cross-service deletion barrier. Consumers must combine fresh authority with
-their own durable generation gates. UNKNOWN denies admission and never authorizes
-permanent purge or restore. No profile-deleted event is introduced.
