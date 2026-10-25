@@ -692,9 +692,9 @@ client is required for profile-deletion convergence. Calls use only a fresh
 request-bound Messaging service credential and mTLS to User's protected
 Messaging listener (`:9096` by default); no public/marker fallback exists.
 
-### Stickers and GIF (wire contract — not yet in code)
+### Stickers and GIF (cross-service wire contract)
 
-Normative product scope: [text-chat.md](../features/text-chat.md) § Медиа и § Attach menu, [PLAN.md](../PLAN.md). **Zero implementation** today. Composer surface: **😊 panel** (Emoji \| Stickers \| GIFs) — **not** 📎 attach menu.
+Normative product scope: [text-chat.md](../features/text-chat.md) § Медиа и § Attach menu, [PLAN.md](../PLAN.md). Chat pack-catalog RPC/store and Gateway catalog routes are implemented; this does not establish complete client picker UX or File/Messaging behavior. Composer surface: **😊 panel** (Emoji \| Stickers \| GIFs) — **not** 📎 attach menu.
 
 #### Service ownership
 
