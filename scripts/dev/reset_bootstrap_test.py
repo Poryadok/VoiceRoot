@@ -290,6 +290,96 @@ class ProviderQualificationTest(unittest.TestCase):
 
 
 class NamespaceExecutionTest(unittest.TestCase):
+    def writer_fixture(self, count=2):
+        namespace, _, _ = storage_fixture()
+        writers = [{'kind': 'Deployment', 'metadata': {'name': 'voice-app-' + str(i),
+            'namespace': dev.NS, 'uid': 'writer-' + str(i), 'resourceVersion': '1'},
+            'spec': {'replicas': 1}} for i in range(count)]
+        class Fake:
+            def __init__(self):
+                self.writers = copy.deepcopy(writers)
+                self.patches = []
+                self.pods = []
+            def get(self, *args):
+                return namespace
+            def objects(self, kind):
+                return self.writers if kind == reset.WRITERS else self.pods if kind == 'pods' else []
+            def pause(self, obj):
+                self.patches.append(obj['metadata']['uid'])
+                obj['spec']['replicas'] = 0
+        return Fake(), {'namespace_uid': 'old-ns', 'writers': writers}
+
+    def test_authority_drift_between_patches_prevents_second_write(self):
+        kube, expected = self.writer_fixture()
+        def guard():
+            if kube.patches:
+                raise ValueError('provider authority drift')
+        with tempfile.TemporaryDirectory() as tmp:
+            journal = reset.Journal(tmp, {'operation': 'x'})
+            with self.assertRaisesRegex(ValueError, 'provider authority drift'):
+                reset.stop_writers(kube, expected, journal, check_window=guard)
+            self.assertEqual(kube.patches, ['writer-0'])
+            self.assertEqual(journal.state['steps']['stop-writers'], {'status': 'started'})
+
+    def test_patch_duration_consumes_original_stop_budget(self):
+        kube, expected = self.writer_fixture()
+        clock = [10.0]
+        pause = kube.pause
+        def slow_pause(obj):
+            pause(obj)
+            clock[0] += 4
+        kube.pause = slow_pause
+        with tempfile.TemporaryDirectory() as tmp, patch.object(reset.time, 'monotonic', side_effect=lambda: clock[0]):
+            journal = reset.Journal(tmp, {'operation': 'x'})
+            with self.assertRaisesRegex(ValueError, 'deadline'):
+                reset.stop_writers(kube, expected, journal, check_window=lambda: None, timeout=3)
+            self.assertEqual(kube.patches, ['writer-0'])
+            self.assertEqual(journal.state['steps']['stop-writers'], {'status': 'started'})
+
+    def test_original_operation_budget_bounds_transport_even_with_long_stop_timeout(self):
+        kube, expected = self.writer_fixture(count=1)
+        calls = []
+        clock = [10.0]
+        def run(args, **kwargs):
+            calls.append(kwargs['timeout'])
+            clock[0] += 2
+            return SimpleNamespace(stdout=b'{}')
+        transport = reset.Kube(runner=run)
+        kube.pause = transport.pause
+        with tempfile.TemporaryDirectory() as tmp, patch.object(reset.time, 'monotonic', side_effect=lambda: clock[0]):
+            journal = reset.Journal(tmp, {'operation': 'x'})
+            # Use the real transport's command while retaining a synthetic inventory.
+            transport.get, transport.objects = kube.get, kube.objects
+            with self.assertRaisesRegex(ValueError, 'deadline'):
+                reset.stop_writers(transport, expected, journal, check_window=lambda: None, deadline=11, timeout=300)
+        self.assertEqual(calls, [1])
+
+    def test_authority_is_rechecked_while_waiting_for_pods(self):
+        kube, expected = self.writer_fixture(count=1)
+        kube.pods = [{'metadata': {'namespace': dev.NS}, 'status': {'phase': 'Running'}}]
+        clock = [10.0]
+        def guard():
+            if clock[0] > 10:
+                raise ValueError('renewal became active')
+        with tempfile.TemporaryDirectory() as tmp, patch.object(reset.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(reset.time, 'sleep', side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+            journal = reset.Journal(tmp, {'operation': 'x'})
+            with self.assertRaisesRegex(ValueError, 'renewal became active'):
+                reset.stop_writers(kube, expected, journal, check_window=guard, timeout=3)
+            self.assertEqual(journal.state['steps']['stop-writers'], {'status': 'started'})
+
+    def test_observer_latency_cannot_authorize_first_patch_after_original_deadline(self):
+        kube, expected = self.writer_fixture()
+        clock = [10.0]
+        def slow_guard():
+            clock[0] = 12.0
+        with tempfile.TemporaryDirectory() as tmp, patch.object(reset.time, 'monotonic', side_effect=lambda: clock[0]):
+            journal = reset.Journal(tmp, {'operation': 'x'})
+            with self.assertRaisesRegex(ValueError, 'deadline'):
+                reset.stop_writers(kube, expected, journal, check_window=slow_guard, deadline=11)
+            self.assertEqual(kube.patches, [])
+            self.assertNotEqual(journal.state['steps'].get('stop-writers', {}).get('status'), 'complete')
+
     def test_namespace_drift_refuses_all_mutations(self):
         ns, _, volumes = storage_fixture()
         class Fake:
@@ -339,7 +429,7 @@ class NamespaceExecutionTest(unittest.TestCase):
             reset.stop_writers(fake, expected, journal, check_window=lambda: checks.append('check'))
             reset.delete_namespace(fake, expected, journal, check_window=lambda: checks.append('check'))
             self.assertEqual(journal.state['steps']['delete-namespace']['status'], 'complete')
-            self.assertEqual(checks, ['check', 'check'])
+            self.assertGreater(len(checks), 2)
             self.assertEqual([c for c in fake.calls if c[0] == 'delete'], [('delete', ('Namespace', 'voice-dev', 'old-ns', '1'))])
 
 

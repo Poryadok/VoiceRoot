@@ -278,10 +278,31 @@ def quiet_window(observed, original, *, now, remaining_seconds):
     return deadline.isoformat()
 
 
-def observe_host():
+def remaining_timeout(deadline, maximum):
+    if deadline is None:
+        return maximum
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ValueError('original operation/stop deadline exhausted; preserve interrupted state')
+    return min(maximum, remaining)
+
+
+@contextmanager
+def command_budget(kube, deadline):
+    previous = getattr(kube, 'deadline', None)
+    kube.deadline = min(previous, deadline) if previous is not None else deadline
+    try:
+        yield
+    finally:
+        kube.deadline = previous
+
+
+def observe_host(*, deadline=None):
     """Read only the concrete installed DEV timer/process control plane."""
     def command(*args):
-        return subprocess.check_output(args, env=dict(os.environ, LC_ALL='C'), timeout=15).decode()
+        result = subprocess.check_output(args, env=dict(os.environ, LC_ALL='C'), timeout=remaining_timeout(deadline, 15))
+        remaining_timeout(deadline, 15)
+        return result.decode()
     def properties(unit, names):
         raw = command('systemctl', 'show', unit, '--property=' + ','.join(names))
         return dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
@@ -315,10 +336,12 @@ class Kube:
     """Explicit Kubernetes transport; never shell-interpolate resource names."""
     def __init__(self, *, prefix=('kubectl',), runner=subprocess.run):
         self.prefix, self.runner = list(prefix), runner
+        self.deadline = None
 
     def command(self, args, body=None):
         result = self.runner(self.prefix + args, input=None if body is None else json.dumps(body).encode(),
-                             capture_output=True, timeout=330, check=True)
+                             capture_output=True, timeout=remaining_timeout(self.deadline, 330), check=True)
+        remaining_timeout(self.deadline, 330)
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     def get(self, kind, name):
@@ -390,8 +413,16 @@ def active_pods(pods):
     return active
 
 
-def stop_writers(kube, expected, journal, *, check_window, timeout=300):
+def stop_writers(kube, expected, journal, *, check_window, timeout=300, deadline=None):
     """Fence known controllers with UID/RV patches and await actual Pod exit."""
+    stop_deadline = time.monotonic() + timeout
+    if deadline is not None:
+        stop_deadline = min(stop_deadline, deadline)
+    with command_budget(kube, stop_deadline):
+        _stop_writers(kube, expected, journal, check_window=check_window)
+
+
+def _stop_writers(kube, expected, journal, *, check_window):
     namespace = kube.get('namespace', dev.NS)
     dev.validate_target(namespace)
     if namespace['metadata']['uid'] != expected['namespace_uid']:
@@ -409,21 +440,35 @@ def stop_writers(kube, expected, journal, *, check_window, timeout=300):
     # Autoscalers and extension controllers require an explicit known stop route.
     if kube.objects('hpa'):
         raise ValueError('active autoscaler requires explicit existing stop route')
-    check_window()
+    def guard():
+        check_window()
+        remaining_timeout(kube.deadline, 330)
+        observed = kube.get('namespace', dev.NS)
+        dev.validate_target(observed)
+        if observed['metadata']['uid'] != expected['namespace_uid']:
+            raise ValueError('DEV namespace identity changed during stop')
+        if kube.objects('hpa'):
+            raise ValueError('active autoscaler requires explicit existing stop route')
+        remaining_timeout(kube.deadline, 330)
+    guard()
     if not resuming:
         journal.begin('stop-writers')
     for obj in current:
         if not writers_paused([obj]):
+            guard()
             kube.pause(obj)
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if not writers_paused(kube.objects(WRITERS)):
+    while True:
+        guard()
+        observed = kube.objects(WRITERS)
+        if {row[:3] for row in identity(observed)} != {row[:3] for row in identity(current)}:
+            raise ValueError('DEV writer identity changed during stop')
+        if not writers_paused(observed):
             raise ValueError('DEV writer resumed during stop')
         if not active_pods(kube.objects('pods')):
+            guard()
             journal.complete('stop-writers', {'namespace_uid': expected['namespace_uid'], 'pods_absent': True})
             return
-        time.sleep(1)
-    raise ValueError('DEV Pods remain; no force deletion permitted')
+        time.sleep(remaining_timeout(kube.deadline, 1))
 
 
 def delete_namespace(kube, expected, journal, *, check_window, timeout=600):
@@ -676,7 +721,11 @@ def staging_storage(kube):
 def execute_plan(kube, directory, root, *, actor, claim):
     private_directory(directory)
     with operator_lock(directory):
-        return execute_locked(kube, directory, root, actor=actor, claim=claim)
+        plan = json.loads(private_read(directory / 'reset-plan.json'))
+        remaining = (datetime.fromisoformat(plan['deadline']) - datetime.now(timezone.utc)).total_seconds()
+        with command_budget(kube, time.monotonic() + remaining):
+            remaining_timeout(kube.deadline, 330)
+            return execute_locked(kube, directory, root, actor=actor, claim=claim)
 
 
 def submitted_work(kube):
@@ -765,7 +814,7 @@ def execute_locked(kube, directory, root, *, actor, claim):
         remaining = int((datetime.fromisoformat(plan['deadline']) - now).total_seconds())
         if remaining <= 0:
             raise ValueError('original operation deadline exhausted; preserve interrupted state')
-        quiet_window(observe_host(), plan['host'], now=now, remaining_seconds=remaining)
+        quiet_window(observe_host(deadline=getattr(kube, 'deadline', None)), plan['host'], now=now, remaining_seconds=remaining)
         if digest(staging_storage(kube)) != digest(plan['staging_storage']):
             raise ValueError('STAGING storage/identity changed')
         current_sc = kube.command(['get', 'storageclass', 'local-path', '-o', 'json'])
