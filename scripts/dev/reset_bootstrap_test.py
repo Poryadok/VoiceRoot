@@ -134,21 +134,27 @@ class FreshStorageTest(unittest.TestCase):
         fresh = []
         for name, claim in reset.CLAIMS.items():
             uid = 'new-' + name
-            fresh.append({'metadata': {'name': claim, 'namespace': dev.NS, 'uid': uid},
+            fresh.append({'metadata': {'name': claim, 'namespace': dev.NS, 'uid': uid,
+                                       'annotations': {'volume.kubernetes.io/selected-node': 'pmdebook'}},
                           'spec': {'storageClassName': 'local-path', 'volumeName': 'pvc-' + uid},
                           'status': {'phase': 'Bound'}})
-            volumes.append({'metadata': {'name': 'pvc-' + uid, 'uid': 'new-volume-' + name},
+            volumes.append({'metadata': {'name': 'pvc-' + uid, 'uid': 'new-volume-' + name,
+                                         'annotations': {'pv.kubernetes.io/provisioned-by': 'rancher.io/local-path'}},
                             'spec': {'claimRef': {'namespace': dev.NS, 'name': claim, 'uid': uid},
                                      'storageClassName': 'local-path', 'persistentVolumeReclaimPolicy': 'Delete',
-                                     'local': {'path': '/var/lib/rancher/k3s/storage/pvc-' + uid + '_' + dev.NS + '_' + claim}}})
-        reset.verify_fresh(ns, fresh, volumes, old_namespace_uid='old-ns', retained=retained)
+                                     'nodeAffinity': reset.PROVIDER_AFFINITY,
+                                     'local': {'path': '/var/lib/rancher/k3s/storage/pvc-' + uid + '_' + dev.NS + '_' + claim}},
+                            'status': {'phase': 'Bound'}})
+        reset.verify_fresh(ns, fresh, volumes, old_namespace_uid='old-ns', retained=retained,
+                           provider_contract='local-path-local-uid-v1')
         for change in (lambda: fresh[0]['spec'].update(volumeName='voice-dev-postgres'),
                        lambda: fresh[0]['spec'].update(dataSource={'name': 'old-snapshot'}),
                        lambda: volumes[0]['spec'].update(claimRef={})):
             before_claims, before_volumes = copy.deepcopy(fresh), copy.deepcopy(volumes)
             change()
             with self.assertRaises(ValueError):
-                reset.verify_fresh(ns, fresh, volumes, old_namespace_uid='old-ns', retained=retained)
+                reset.verify_fresh(ns, fresh, volumes, old_namespace_uid='old-ns', retained=retained,
+                                   provider_contract='local-path-local-uid-v1')
             fresh, volumes = before_claims, before_volumes
 
     def test_delete_policy_wrong_namespace_or_uid_fail_before_reset(self):
@@ -162,7 +168,8 @@ class FreshStorageTest(unittest.TestCase):
                 reset.old_storage(ns, claims, volumes, namespace_uid='old-ns')
 
     def test_existing_class_and_capacity_are_explicit(self):
-        sc = {'metadata': {'name': 'local-path', 'uid': 'class', 'resourceVersion': '1'},
+        sc = {'metadata': {'name': 'local-path', 'uid': 'class', 'resourceVersion': '1',
+                          'annotations': {'defaultVolumeType': 'local'}},
               'provisioner': 'rancher.io/local-path', 'reclaimPolicy': 'Delete',
               'volumeBindingMode': 'WaitForFirstConsumer'}
         self.assertEqual(reset.storage_class_pin(sc, available_bytes=100 * 1024 ** 3)['uid'], 'class')
@@ -171,6 +178,115 @@ class FreshStorageTest(unittest.TestCase):
         sc['provisioner'] = 'foreign'
         with self.assertRaises(ValueError):
             reset.storage_class_pin(sc, available_bytes=100 * 1024 ** 3)
+
+    def test_provider_backend_mismatch_is_rejected_at_admission(self):
+        sc = {'metadata': {'name': 'local-path', 'uid': 'class', 'resourceVersion': '1',
+                          'annotations': {'defaultVolumeType': 'hostPath'}},
+              'provisioner': 'rancher.io/local-path', 'reclaimPolicy': 'Delete',
+              'volumeBindingMode': 'WaitForFirstConsumer'}
+        with self.assertRaisesRegex(ValueError, 'local-path'):
+            reset.storage_class_pin(sc, available_bytes=100 * 1024 ** 3)
+
+
+class ProviderQualificationTest(unittest.TestCase):
+    def fixture(self):
+        namespace = {'metadata': {'name': 'voice-dev-provider-probe-fixture', 'uid': 'probe-ns',
+                                 'labels': {'voice.dev/provider-probe': 'true'}}}
+        claim = {'metadata': {'namespace': namespace['metadata']['name'], 'name': 'probe', 'uid': 'probe-claim',
+                             'annotations': {'volume.kubernetes.io/selected-node': 'pmdebook'}},
+                 'spec': {'storageClassName': 'local-path', 'volumeName': 'pvc-probe-claim'},
+                 'status': {'phase': 'Bound'}}
+        volume = {'metadata': {'name': 'pvc-probe-claim', 'uid': 'probe-pv',
+                               'annotations': {'pv.kubernetes.io/provisioned-by': 'rancher.io/local-path'}},
+                  'spec': {'storageClassName': 'local-path', 'persistentVolumeReclaimPolicy': 'Delete',
+                           'claimRef': {k: claim['metadata'][k] for k in ('namespace', 'name', 'uid')},
+                           'local': {'path': '/var/lib/rancher/k3s/storage/pvc-probe-claim_' + namespace['metadata']['name'] + '_probe'},
+                           'nodeAffinity': {'required': {'nodeSelectorTerms': [{'matchExpressions': [
+                               {'key': 'kubernetes.io/hostname', 'operator': 'In', 'values': ['pmdebook']}]}]}}},
+                  'status': {'phase': 'Bound'}}
+        provider, storage_class = {'config_uid': 'provider'}, {'uid': 'class'}
+        receipt = {'schema': 'voice-dev-provider-qualification-v1', 'contract': 'local-path-local-uid-v1',
+                   'provider': provider, 'storage_class': storage_class,
+                   'namespace': {k: namespace['metadata'][k] for k in ('name', 'uid')},
+                   'claim': {k: claim['metadata'][k] for k in ('name', 'uid')},
+                   'volume': {k: volume['metadata'][k] for k in ('name', 'uid')}}
+        class Fake:
+            volumes = [volume]
+            def command(self, args):
+                if 'namespace' in args:
+                    return namespace
+                if 'pvc' in args:
+                    return claim
+                if 'pv' in args:
+                    return {'items': self.volumes}
+                raise AssertionError(args)
+        return Fake(), receipt, provider, storage_class, namespace, claim, volume
+
+    def test_live_supported_output_is_bound_to_actual_provider(self):
+        kube, receipt, provider, sc, _, _, volume = self.fixture()
+        pin = reset.provider_qualification(kube, receipt, provider=provider, storage_class=sc)
+        self.assertEqual(pin['contract'], 'local-path-local-uid-v1')
+        self.assertEqual(pin['volume_spec_sha256'], reset.digest(volume['spec']))
+        self.assertEqual(pin['receipt'], receipt)
+
+    def test_backend_claim_node_path_and_provider_drift_fail(self):
+        changes = [lambda r, n, c, v: r['provider'].update(config_uid='different'),
+                   lambda r, n, c, v: r['storage_class'].update(uid='different'),
+                   lambda r, n, c, v: n['metadata'].update(uid='replacement'),
+                   lambda r, n, c, v: c['metadata'].update(uid='replacement'),
+                   lambda r, n, c, v: c['metadata']['annotations'].update({'volume.kubernetes.io/selected-node': 'elsewhere'}),
+                   lambda r, n, c, v: v['spec']['claimRef'].update(uid='foreign'),
+                   lambda r, n, c, v: v['spec'].update(hostPath=v['spec'].pop('local')),
+                   lambda r, n, c, v: v['spec']['nodeAffinity']['required']['nodeSelectorTerms'].append({}),
+                   lambda r, n, c, v: v['spec']['local'].update(path='/var/lib/rancher/k3s/storage/reused')]
+        for change in changes:
+            kube, receipt, provider, sc, namespace, claim, volume = self.fixture()
+            provider = copy.deepcopy(provider)
+            sc = copy.deepcopy(sc)
+            change(receipt, namespace, claim, volume)
+            with self.subTest(change=changes.index(change)), self.assertRaises(ValueError):
+                reset.provider_qualification(kube, receipt, provider=provider, storage_class=sc)
+        kube, receipt, provider, sc, _, _, volume = self.fixture()
+        kube.volumes = [volume, {'metadata': {'name': 'protected', 'uid': 'protected'},
+                                'spec': {'local': {'path': '/var/lib/rancher/k3s/storage'}}}]
+        with self.assertRaises(ValueError):
+            reset.provider_qualification(kube, receipt, provider=provider, storage_class=sc)
+        for suffix in ('', '/child', '/..', '//child'):
+            kube, receipt, provider, sc, _, _, volume = self.fixture()
+            kube.volumes = [volume, {'metadata': {'name': 'protected', 'uid': 'protected'},
+                                    'spec': {'hostPath': {'path': volume['spec']['local']['path'] + suffix}}}]
+            with self.subTest(overlap=suffix), self.assertRaises(ValueError):
+                reset.provider_qualification(kube, receipt, provider=provider, storage_class=sc)
+
+    def test_missing_qualification_holds_plan_before_any_cluster_submission(self):
+        class NoSubmission:
+            def command(self, *args, **kwargs):
+                raise AssertionError('missing qualification must not submit')
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, 'provider qualification'):
+                reset.prepare_plan(NoSubmission(), Path(tmp), Path(tmp), namespace_uid='old', staging_uid='stg',
+                    actor='operator', claim='claim', budget_seconds=7200, budget_evidence='reviewed fixture budget evidence for provider admission')
+            self.assertFalse((Path(tmp) / 'reset-plan.json').exists())
+
+    def test_provider_pin_requires_ready_current_generation_and_node_hostname(self):
+        config = {'metadata': {'uid': 'config', 'resourceVersion': '1'}, 'data': {'config.json': json.dumps(
+            {'nodePathMap': [{'node': 'DEFAULT_PATH_FOR_NON_LISTED_NODES', 'paths': ['/var/lib/rancher/k3s/storage']}]})}}
+        deployment = {'metadata': {'uid': 'deployment', 'generation': 2}, 'spec': {'replicas': 1},
+                      'status': {'observedGeneration': 2, 'availableReplicas': 1, 'readyReplicas': 1,
+                                 'updatedReplicas': 1, 'replicas': 1}}
+        node = {'metadata': {'name': 'pmdebook', 'uid': 'node', 'labels': {'kubernetes.io/hostname': 'pmdebook'}},
+                'status': {'conditions': [{'type': 'Ready', 'status': 'True'}]}}
+        class Fake:
+            def command(self, args):
+                return config if 'configmap' in args else deployment if 'deployment' in args else node
+        self.assertEqual(reset.provider_pin(Fake())['node_uid'], 'node')
+        deployment['status']['observedGeneration'] = 1
+        with self.assertRaises(ValueError):
+            reset.provider_pin(Fake())
+        deployment['status']['observedGeneration'] = 2
+        node['metadata']['labels']['kubernetes.io/hostname'] = 'different'
+        with self.assertRaises(ValueError):
+            reset.provider_pin(Fake())
 
 
 class NamespaceExecutionTest(unittest.TestCase):
@@ -255,13 +371,16 @@ class TlsPreservationTest(unittest.TestCase):
 
 
 class ForwardExecutionTest(unittest.TestCase):
+    def test_provider_backend_drift_prevents_writer_stop_and_namespace_delete(self):
+        self.interrupted_bootstrap_case(provider_drift=True)
+
     def test_interrupted_bootstrap_resumes_without_redeleting_or_mutating_package(self):
         self.interrupted_bootstrap_case()
 
     def test_started_bootstrap_without_interruption_receipt_holds_after_supervisor_loss(self):
         self.interrupted_bootstrap_case(lost_supervisor=True)
 
-    def interrupted_bootstrap_case(self, *, lost_supervisor=False):
+    def interrupted_bootstrap_case(self, *, lost_supervisor=False, provider_drift=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / 'source'
             directory = Path(tmp) / 'private'
@@ -304,8 +423,16 @@ class ForwardExecutionTest(unittest.TestCase):
             (directory / 'prepared.json').write_text(json.dumps({'items': objects}))
             ns, claims, volumes = storage_fixture()
             ns['metadata']['resourceVersion'] = '1'
-            sc = {'metadata': {'name': 'local-path', 'uid': 'class', 'resourceVersion': '1'},
+            sc = {'metadata': {'name': 'local-path', 'uid': 'class', 'resourceVersion': '1',
+                              'annotations': {'defaultVolumeType': 'local'}},
                   'provisioner': 'rancher.io/local-path', 'reclaimPolicy': 'Delete', 'volumeBindingMode': 'WaitForFirstConsumer'}
+            probe, qualification, _, _, _, _, probe_volume = ProviderQualificationTest().fixture()
+            provider = {'node_uid': 'fixture-node', 'config_uid': 'fixture-provider'}
+            qualification['provider'] = provider
+            qualification['storage_class'] = reset.storage_class_pin(sc, available_bytes=100 * 1024 ** 3)
+            qualification_path = directory / 'provider-qualification.json'
+            reset.write_private(qualification_path, qualification)
+            volumes.append(probe_volume)
             class Fake:
                 current = ns
                 deletes = 0
@@ -314,6 +441,8 @@ class ForwardExecutionTest(unittest.TestCase):
                 def objects(self, kinds):
                     return claims if kinds == 'pvc' else []
                 def command(self, args, body=None):
+                    if 'voice-dev-provider-probe-fixture' in args:
+                        return probe.command(args)
                     if 'voice-staging' in args and 'namespace' in args:
                         return {'metadata': {'uid': 'staging'}}
                     if 'voice-staging' in args:
@@ -327,12 +456,22 @@ class ForwardExecutionTest(unittest.TestCase):
             kube = Fake()
             host = {'fixture': 'quiet-window tested separately'}
             with patch.object(reset, 'observe_host', return_value=host), \
-                    patch.object(reset, 'provider_pin', return_value={'node_uid': 'fixture-node', 'config_uid': 'fixture-provider'}), \
+                    patch.object(reset, 'provider_pin', return_value=provider), \
                     patch.object(reset, 'quiet_window', return_value='deadline'), \
                     patch.object(reset, 'shutil_disk_free', return_value=100 * 1024 ** 3), \
                     patch.object(reset, 'tls_identity', side_effect=lambda obj, directory: obj):
                 reset.prepare_plan(kube, directory, root, namespace_uid='old-ns', staging_uid='staging', actor='actual-operator',
-                    claim='actual-claim', budget_seconds=7200, budget_evidence='Fixture observes bounded phase ordering; this is not a live timing claim.')
+                    claim='actual-claim', budget_seconds=7200, budget_evidence='Fixture observes bounded phase ordering; this is not a live timing claim.',
+                    qualification=qualification_path)
+                if provider_drift:
+                    probe_volume['spec']['hostPath'] = probe_volume['spec'].pop('local')
+                    with patch.object(reset, 'run_bootstrap') as run:
+                        with self.assertRaisesRegex(ValueError, 'supported local-path'):
+                            reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
+                        run.assert_not_called()
+                    self.assertEqual(kube.deletes, 0)
+                    self.assertEqual(json.loads((directory / 'reset-state.json').read_text())['steps'], {})
+                    return
                 before = (directory / 'secrets.json').read_bytes()
                 def bootstrap(args, **kwargs):
                     # Runtime mutation is legitimate; immutable source bundle remains unchanged.

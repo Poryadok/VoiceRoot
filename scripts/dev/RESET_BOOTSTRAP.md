@@ -49,6 +49,50 @@ image availability and recovery margin. The CLI rejects less than thirty
 minutes and requires an explanation; this lower bound is not an estimate of
 the live operation. Do not substitute an optimistic fixed five-minute budget.
 
+Before admission, the selected operator needs a separately reviewed disposable
+provider qualification packet. The sole supported profile is
+`local-path-local-uid-v1`: existing `local-path` StorageClass annotation
+`defaultVolumeType=local`, `spec.local.path` under
+`/var/lib/rancher/k3s/storage`, generated PV name `pvc-<PVC UID>` and path
+`pvc-<PVC UID>_<namespace>_<claim>`, selected node and exact node affinity
+`pmdebook`. `hostPath` output is rejected; a ready provisioner alone is insufficient.
+Current read-only metadata or older static DEV PVs are not disposable
+qualification evidence.
+
+That separate packet provisions an ordinary new PVC and consumer on the selected
+node through the unchanged StorageClass. It records actual output and checks
+the mounted fresh root before any DEV destruction. It must use a dedicated
+`voice-dev-provider-probe-<unique>` namespace labelled
+`voice.dev/provider-probe=true`, with no old DEV or STAGING mounts. Pin provider
+and StorageClass authority before provisioning and verify the same authority
+after the output is observed. No provider probe is created by this adapter.
+No shared-environment permission is inferred from these instructions.
+
+The operator writes a caller-owned mode0600 JSON qualification receipt with:
+
+```json
+{
+  "schema": "voice-dev-provider-qualification-v1",
+  "contract": "local-path-local-uid-v1",
+  "provider": {"...": "exact provider_pin(Kube()) result from qualification"},
+  "storage_class": {"...": "exact storage_class_pin result from qualification"},
+  "namespace": {"name": "voice-dev-provider-probe-<unique>", "uid": "<actual>"},
+  "claim": {"name": "<actual>", "uid": "<actual>"},
+  "volume": {"name": "pvc-<actual PVC UID>", "uid": "<actual PV UID>"}
+}
+```
+
+The example's placeholders are not valid evidence. `plan` rereads the actual
+namespace, PVC and cluster-wide PV inventory, verifies exact UID/claimRef joins,
+Bound status, backend/path, provisioner annotation and node selection, and rejects
+path equality or ancestor/descendant overlap with every other local/hostPath PV.
+These are API metadata checks; they do not resolve host symlink/bind aliases or
+replace the operator's mounted-root qualification. The plan binds actual PVC/PV
+spec hashes and the receipt. Keep the qualification namespace/PVC/PV unchanged
+and present through reset completion: each destructive/outer supervision guard
+rereads them and rejects provider, class, identity or output drift. Dispose of
+the qualification resources only through the separate reviewed operator packet.
+
 On the actual Linux DEV host, with its authorized Kubernetes context:
 
 ```text
@@ -56,13 +100,14 @@ python3 scripts/dev/reset_bootstrap.py plan --work-dir <private-package> \
   --source-root <immutable-product-source-export> \
   --actor <actual-operator> --resource-claim <actual-claim> \
   --namespace-uid <observed-old-DEV-UID> --staging-uid <observed-STAGING-UID> \
+  --provider-qualification <private-actual-qualification.json> \
   --budget-seconds <reviewed-budget-with-margin> \
   --budget-evidence '<measured/derived budget and rehearsal receipt reference>'
 ```
 
 `plan` performs read-only cluster observations and strict client manifest
 validation, verifies old retained bindings, existing local-path class/capacity,
-the current timer/process window and compatible DEV TLS, and writes a private
+live qualified provider output, the current timer/process window and compatible DEV TLS, and writes a private
 operation plan. The original package files are immutable through retries.
 
 The concrete daily renewal timer is checked fresh, including pending systemd
