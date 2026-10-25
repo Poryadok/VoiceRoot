@@ -610,6 +610,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatSchedulePickerTitle => 'Schedule message';
 
   @override
+  String chatScheduledCount(int count) {
+    return 'Scheduled · $count';
+  }
+
+  @override
+  String get chatScheduledCollapse => 'Collapse scheduled messages';
+
+  @override
+  String get chatScheduledExpand => 'Expand scheduled messages';
+
+  @override
+  String get chatScheduledDismiss => 'Dismiss';
+
+  @override
+  String get chatScheduledEncrypted => 'Encrypted message';
+
+  @override
+  String get chatScheduledContentInvalid =>
+      'Enter a message of 1–4000 characters.';
+
+  @override
   String get chatSchedulePending => 'Pending';
 
   @override
