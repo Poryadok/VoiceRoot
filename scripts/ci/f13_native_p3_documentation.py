@@ -33,6 +33,15 @@ def tree_entries(repo,revision):
     return {v.split('\t',1)[1]:v for v in legacy.git(repo,'ls-tree','-r','-z',revision).decode().split('\0') if v}
 
 
+def immediate_directory_entries(tree):
+    # Preserve the literal prefix predicate, without rescanning this tree per directory.
+    grouped={}
+    for path,entry in tree.items():
+        directory,separator,_=path.rpartition('/')
+        if separator:grouped.setdefault(directory,{})[path]=entry
+    return grouped
+
+
 def load_record(repo):
     require=legacy.require
     require(PINNED_RECORD_COMMIT is not None and PINNED_RECORD_SHA256 is not None and PINNED_SOURCE is not None,
@@ -74,10 +83,10 @@ def load_record(repo):
         {p:v for p,v in new_tree.items() if p.startswith('src/backend/voice/')},'documentation_complete_voice_tree')
     directories=sorted({str(Path(p).parent).replace('\\','/') for p in old['compiled_closure']})
     inventories=[]
+    old_directories,new_directories=immediate_directory_entries(old_tree),immediate_directory_entries(new_tree)
     for directory in directories:
-        prefix=directory+'/'
-        before={p:v for p,v in old_tree.items() if p.startswith(prefix) and '/' not in p[len(prefix):]}
-        after={p:v for p,v in new_tree.items() if p.startswith(prefix) and '/' not in p[len(prefix):]}
+        before=old_directories.get(directory,{})
+        after=new_directories.get(directory,{})
         require(before==after,'documentation_dependency_directory_drift')
         inventories.append(dict(directory=directory,entries=after))
     require(record['closure']==dict(projection_paths=[r['path'] for r in old['projection']],
@@ -193,11 +202,12 @@ def load_context_record(repo):
     require({p:v for p,v in old_tree.items() if p.startswith('src/backend/voice/')}==
         {p:v for p,v in new_tree.items() if p.startswith('src/backend/voice/')},'context_complete_voice_tree')
     inventories=[]
+    old_directories,new_directories=immediate_directory_entries(old_tree),immediate_directory_entries(new_tree)
     for directory in sorted({str(Path(p).parent).replace('\\','/') for p in old['compiled_closure']}):
-        prefix=directory+'/'
-        select=lambda tree:{p:v for p,v in tree.items() if p.startswith(prefix) and '/' not in p[len(prefix):]}
-        require(select(old_tree)==select(new_tree),'context_dependency_directory_drift')
-        inventories.append(dict(directory=directory,entries=select(new_tree)))
+        directory_before=old_directories.get(directory,{})
+        directory_after=new_directories.get(directory,{})
+        require(directory_before==directory_after,'context_dependency_directory_drift')
+        inventories.append(dict(directory=directory,entries=directory_after))
     require(record['closure']==dict(projection_paths=[r['path'] for r in old['projection']],
         context_paths=[r['path'] for r in old['context']],compiled_paths=old['compiled_closure'],
         directory_inventories=inventories),'context_complete_closure')

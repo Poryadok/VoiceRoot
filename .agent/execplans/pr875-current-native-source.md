@@ -1105,3 +1105,58 @@ SHA256 371a9bf3224f9b2a5f4728b2d89663af22e1c21b7ad6470d2495edf5fd7d21ef.
 Graphify completed with 117543 nodes and 245831 edges. Fresh final-head full
 producer and hosted CI remain required; no saved manual trace was validated
 under substituted carrier identities.
+
+### Reserve: Native immediate-directory grouping
+
+The K12 isolated 120-second profile found 195.1 million str.startswith calls
+(30.447 seconds self time), chiefly in the repeated immediate-directory scans
+inside Native documentation load_record and load_context_record. The earlier
+Path.parent grouping hotspot was absent from the top profile. This interrupted,
+point-in-time diagnostic did not complete validation or alter the live producer.
+Its receipt is main tmp/pr875-repair/f13-k12-profile/receipt.md, SHA256
+aba65a461749a92d95de309c4dff2767fafe0135863af9fb4be4f396378bff4b.
+
+The reserve candidate groups each freshly read old/new tree by the literal final
+slash, only when a slash exists. This is equivalent to the original prefix plus
+immediate-child predicate, including root, empty-directory, repeated/trailing
+slash and literal-backslash cases. Only the two measured loader loops change;
+the sorted directory list, every comparison and rejection label, entry values,
+inventory construction and all authority checks remain. Qualifier loops are
+untouched, and no state persists across calls.
+
+Three differential/work-count tests first failed for the absent helper. They
+then compared all 89 directories across the actual v2/v3/v4 source trees, reduced
+entry visits from 89*N to N, and checked edge cases and fresh mutations. The first
+candidate's broader Native run caught a real local-variable regression: its
+directory variable after shadowed the bound Makefile metadata. Distinct directory
+variables corrected it; the original failing run and withdrawn initial review
+are retained. The corrected helper SHA256 is
+3aab5ea50f4ae08c437ff02644a01b824881e8e09160b872c251394ef8123529;
+test SHA256 e862061c6279e61b2b4ae22d826d5f1b35bd99fb8a309af735bd7d959cd68e41.
+Corrected independent CODE review is main
+tmp/pr875-repair/f13-k12-profile/reserve-independent-review.md, SHA256
+4b8124589c632dc8f657b59cace1f75ee64fcfee9bcf0e095bce6439e37c1cb5.
+
+The corrected focused tests passed 3/3, Native documentation passed 12/12 in
+5.834 seconds, and production source passed 67/67 in 771.627 seconds. These are
+private clean-candidate compatibility results, not a full-producer timing or
+acceptance claim. This candidate is held in reserve without commit or publication
+until an explicit integration decision; the existing K12 runs remain untouched.
+
+Final reserve verification used clean synthetic K
+d560a112c5385dc91592c54861554a1491f14c79, directly on actual K12 merge
+6cb55c9edc5d93bd3042bd56f81f6b9a9e3bb51d, with both candidate entries mode 100644.
+Successor integration passed 20/20 in 4.777 seconds, F54 passed 100/100 in
+248.138 seconds, Python compilation and unchanged shell syntax passed. Receipt:
+main tmp/pr875-repair/f13-k12-profile/immediate-directory-grouping-receipt.md,
+SHA256 b79e5b745cc354bdce8845439a8a2e20512bc4a8e35d46fe74e32c5000757970.
+Graphify completed with 117551 nodes and 245824 edges; diff check passed.
+
+Single paired loader measurements on clean original/candidate worktrees gave
+load_record 0.350705 to 0.248575 seconds and load_context_record 0.666836 to
+0.358732 seconds, with complete canonical output hashes identical. The live
+producer ran concurrently, so these are directional loader measurements only.
+An initial benchmark that mistakenly selected the buggy intermediate helper as
+its baseline was discarded and is retained separately. No saved-trace carrier
+substitution or completed producer validation is claimed. Publication remains
+explicitly on hold; no further tests are required for this reserve handoff.
