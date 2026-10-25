@@ -132,7 +132,7 @@ func (s *MessagesStore) MessageViewProfiles(ctx context.Context, after uuid.UUID
 	return ids, rows.Err()
 }
 
-// A single local statement atomically removes rows and changes derived counts.
+// DeleteProfileMessageViews atomically removes rows and changes derived counts.
 func (s *MessagesStore) DeleteProfileMessageViews(ctx context.Context, ids []uuid.UUID) error {
 	if len(ids) == 0 {
 		return nil
