@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -80,6 +81,29 @@ func TestGIFJobRecoveryFencesStaleAttemptAndPreservesSource(t *testing.T) {
 	require.Equal(t, 2, ready, "processing and ready snapshots must commit once")
 }
 
+func TestGIFConcurrentConfirmationCreatesOneDurableJob(t *testing.T) {
+	ctx := context.Background()
+	pool := startFileGatePostgres(t, ctx)
+	files := store.NewFilesStore(pool)
+	id := uuid.New()
+	_, err := files.InsertPendingFile(ctx, store.FileRow{ID: id, UploaderProfileID: uuid.New(), OriginalName: "source.gif", MimeType: "image/gif", SizeBytes: 42, R2Key: id.String(), Status: "pending_upload", FileType: "image", UploadIntent: "gif", ScanResult: "pending"})
+	require.NoError(t, err)
+	start := make(chan struct{})
+	results := make(chan error, 8)
+	for i := 0; i < 8; i++ {
+		go func() { <-start; _, err := files.ConfirmGIFUpload(ctx, id, strings.Repeat("a", 64)); results <- err }()
+	}
+	close(start)
+	for i := 0; i < 8; i++ {
+		require.NoError(t, <-results)
+	}
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_gif_jobs WHERE file_id=$1`, id).Scan(&count))
+	require.Equal(t, 1, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_preview_event_outbox WHERE file_id=$1`, id).Scan(&count))
+	require.Equal(t, 1, count)
+}
+
 func TestGIFJobCannotResurrectDeletedFile(t *testing.T) {
 	ctx, files, id := gifQueuedFixture(t)
 	job, err := files.ClaimGIFJob(ctx)
@@ -155,6 +179,27 @@ func TestGIFOriginalCleanupRechecksSignedPUTReplay(t *testing.T) {
 	require.NotContains(t, objects.data, job.Row.R2Key)
 	require.NoError(t, files.Pool.QueryRow(ctx, `SELECT completed_at IS NULL FROM file_gif_cleanup WHERE object_key=$1`, job.Row.R2Key).Scan(&pending))
 	require.False(t, pending)
+}
+
+func TestGIFDeletionReconcilesOriginalPUTReplay(t *testing.T) {
+	ctx, files, id := gifQueuedFixture(t)
+	for _, name := range []string{"000004_file_reference_lifecycle.up.sql", "000005_reference_gc_receipts.up.sql"} {
+		applyFileGateSQL(t, ctx, files.Pool, filepath.Join("src", "backend", "migrations", "file_db", name))
+	}
+	row, err := files.GetFileByID(ctx, id)
+	require.NoError(t, err)
+	objects := &gifWorkerObjects{data: map[string][]byte{row.R2Key: []byte("original")}}
+	deleted, err := files.DeleteLegacyFile(ctx, id, nil, objects)
+	require.NoError(t, err)
+	require.True(t, deleted)
+	objects.data[row.R2Key] = []byte("replayed PUT after blob GC_COMPLETE")
+	cleaned, err := files.CleanupGIFOnce(ctx, objects)
+	require.NoError(t, err)
+	require.True(t, cleaned, "terminal GIF must retain original reconciliation authority")
+	require.NotContains(t, objects.data, row.R2Key)
+	var pending bool
+	require.NoError(t, files.Pool.QueryRow(ctx, `SELECT completed_at IS NULL FROM file_gif_cleanup WHERE object_key=$1`, row.R2Key).Scan(&pending))
+	require.True(t, pending)
 }
 
 func TestGIFReadyAndDescriptorRollbackWithPreviewOutboxFailure(t *testing.T) {

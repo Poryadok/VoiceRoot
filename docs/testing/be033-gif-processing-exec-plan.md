@@ -81,7 +81,12 @@ processing, changes to source-based quota or binary dedup activation.
 - [x] Gateway authenticated GIF intent and additive descriptor contract tests.
 - [x] File short suite, File vet, shared preview tests, Messaging scoped short
   suites, protobuf lint/format/breaking and Go/Dart regeneration pass.
-- [ ] Exact-source File runtime image codec qualification and final integration.
+- [x] File runtime image from `2c671887cbc46a93f1310a29b61ef439c0643897`,
+  `sha256:94be374a8515f644bf4b5341f32b76ed9bdb732cdf934e210730ceae06a215e3`,
+  runs all 8 codec tests with zero skips using ffmpeg 6.1.1, nonroot UID 65532,
+  network disabled, read-only root and 384 MiB noexec tmpfs. Exact codec test
+  binary SHA-256: `b8a91b57cf383039d5fb36776ee64775b9a833a5a55c429edb9b0dff39a09ecc`.
+- [x] Race-enabled GIF integration suite and concurrent same-hash confirmation.
 - [ ] Independent review and published exact-head CI.
 
 ## Decisions
@@ -103,6 +108,11 @@ processing, changes to source-based quota or binary dedup activation.
 - Original cleanup reconciles signed PUT replays until source upload URL expiry.
   This hardening was added during implementation review; its dedicated regression
   supplements the earlier red/green cycles.
+- Independent review found terminal deletion could bypass original reconciliation
+  when deletion won before processing. A real PostgreSQL deletion -> PUT replay
+  regression failed on the published head, then passed after moving that cleanup
+  authority into the shared deleted/expired transaction. No reviewer finding is
+  considered resolved until the same reviewer checks the published correction.
 
 ## Risks And Follow-Ups
 

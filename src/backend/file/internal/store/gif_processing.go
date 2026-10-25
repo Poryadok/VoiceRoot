@@ -192,8 +192,7 @@ func (s *FilesStore) FinishGIFJob(ctx context.Context, job *GIFJob, full, thumb 
 	if err != nil {
 		return false, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO file_gif_cleanup(object_key,file_id,recheck_until) VALUES($1,$2,$3) ON CONFLICT(object_key) DO NOTHING`, before.R2Key, before.ID, before.CreatedAt.Add(r2file.DefaultURLTTL+time.Minute))
-	if err != nil {
+	if err = queueGIFOriginalCleanupTx(ctx, tx, before); err != nil {
 		return false, err
 	}
 	after, err := getFileByID(ctx, tx, before.ID, "")
@@ -216,6 +215,16 @@ func validGIFRepresentation(r *Representation, key, mime string) bool {
 		}
 	}
 	return true
+}
+
+// Terminal deletion and successful/failed processing share this authority. A
+// signed PUT remains replayable even when the normal blob GC is already complete.
+func queueGIFOriginalCleanupTx(ctx context.Context, tx pgx.Tx, row FileRow) error {
+	if row.UploadIntent != "gif" {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO file_gif_cleanup(object_key,file_id,recheck_until) VALUES($1,$2,$3) ON CONFLICT(object_key) DO NOTHING`, row.R2Key, row.ID, row.CreatedAt.Add(r2file.DefaultURLTTL+time.Minute))
+	return err
 }
 
 func (s *FilesStore) RetryGIFJob(ctx context.Context, job *GIFJob) error {
