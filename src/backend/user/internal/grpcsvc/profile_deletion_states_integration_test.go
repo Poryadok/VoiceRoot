@@ -41,6 +41,17 @@ func TestProfileDeletionStatesUsesOnlyDeletedAtInPostgres(t *testing.T) {
 	resp, err = svc.GetProfileDeletionStates(deletionStatesContext(t, req), req)
 	require.NoError(t, err)
 	require.Equal(t, userv1.ProfileDeletionState_PROFILE_DELETION_STATE_NOT_DELETED, resp.States[2].State, "restoration is visible immediately")
+	maximum := &userv1.GetProfileDeletionStatesRequest{ProfileIds: make([]string, 500)}
+	for i := range maximum.ProfileIds {
+		maximum.ProfileIds[i] = uuid.NewString()
+	}
+	resp, err = svc.GetProfileDeletionStates(deletionStatesContext(t, maximum), maximum)
+	require.NoError(t, err)
+	require.Len(t, resp.States, 500, "the documented maximum batch is accepted completely")
+	for i, entry := range resp.States {
+		require.Equal(t, maximum.ProfileIds[i], entry.ProfileId)
+		require.Equal(t, userv1.ProfileDeletionState_PROFILE_DELETION_STATE_UNKNOWN, entry.State)
+	}
 	_, err = pool.Exec(ctx, `DROP TABLE profiles CASCADE`)
 	require.NoError(t, err)
 	resp, err = svc.GetProfileDeletionStates(deletionStatesContext(t, req), req)
