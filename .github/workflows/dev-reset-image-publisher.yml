@@ -1,0 +1,159 @@
+name: DEV reset immutable images
+
+on:
+  push:
+    branches: [codex/dev-reset-image-publisher-69cc6054]
+    paths: [.github/workflows/dev-reset-image-publisher.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.event.before == '0000000000000000000000000000000000000000' && github.repository == 'Poryadok/VoiceRoot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SOURCE_REVISION: 69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+      REGISTRY: ghcr.io/poryadok/voiceroot
+    steps:
+      - name: Check out immutable build inputs
+        uses: actions/checkout@v5
+        with:
+          ref: 69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          path: source
+          persist-credentials: false
+      - name: Record clean source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir evidence
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_REVISION"
+          test -z "$(git -C source status --porcelain)"
+          git -C source rev-parse HEAD > evidence/source-revision.txt
+          git -C source ls-tree -r HEAD > evidence/source-tree.txt
+          sha256sum source/src/backend/space/Dockerfile.native-migrate source/src/admin/Dockerfile source/src/developer-portal/Dockerfile > evidence/dockerfiles.sha256
+      - uses: docker/setup-buildx-action@v4
+      - name: Authenticate the repository publisher
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish native installer
+        id: native
+        uses: docker/build-push-action@v6
+        with:
+          context: source
+          file: source/src/backend/space/Dockerfile.native-migrate
+          platforms: linux/amd64
+          push: true
+          provenance: mode=max
+          labels: org.opencontainers.image.revision=69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          tags: ghcr.io/poryadok/voiceroot/dev-space-native-migrate:69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          build-args: SOURCE_REVISION=69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+      - name: Publish DEV Admin
+        id: admin
+        uses: docker/build-push-action@v6
+        with:
+          context: source/src/admin
+          file: source/src/admin/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: mode=max
+          labels: org.opencontainers.image.revision=69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          tags: ghcr.io/poryadok/voiceroot/admin:dev-69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          build-args: |
+            VITE_VOICE_API_BASE=https://api-dev.comrade.click
+            VITE_OAUTH_CLIENT_ID=voice-admin
+            VITE_OAUTH_DISABLED=false
+      - name: Publish DEV Developer Portal
+        id: portal
+        uses: docker/build-push-action@v6
+        with:
+          context: source/src/developer-portal
+          file: source/src/developer-portal/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: mode=max
+          labels: org.opencontainers.image.revision=69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          tags: ghcr.io/poryadok/voiceroot/developer-portal:dev-69cc6054dd82406e1c3f7c925dbc3466d27ea7c5
+          build-args: |
+            VITE_VOICE_API_BASE=https://api-dev.comrade.click
+            VITE_OAUTH_CLIENT_ID=voice-developer-portal
+            VITE_OAUTH_DISABLED=false
+      - name: Verify registry images and record immutable receipts
+        shell: bash
+        env:
+          NATIVE_DIGEST: ${{ steps.native.outputs.digest }}
+          ADMIN_DIGEST: ${{ steps.admin.outputs.digest }}
+          PORTAL_DIGEST: ${{ steps.portal.outputs.digest }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, importlib.util, json, os, pathlib, subprocess
+          root = pathlib.Path('evidence')
+          revision = os.environ['SOURCE_REVISION']
+          def call(*args):
+              return subprocess.check_output(args, text=True)
+          spec = importlib.util.spec_from_file_location('migrations', 'source/scripts/dev/migrations.py')
+          migrations = importlib.util.module_from_spec(spec)
+          import sys
+          sys.modules[spec.name] = migrations
+          spec.loader.exec_module(migrations)
+          source_digest = migrations.space_source_digest(pathlib.Path('source'))
+          images = []
+          for component, package, digest, client in [
+              ('native', 'dev-space-native-migrate', os.environ['NATIVE_DIGEST'], None),
+              ('admin', 'admin', os.environ['ADMIN_DIGEST'], 'voice-admin'),
+              ('portal', 'developer-portal', os.environ['PORTAL_DIGEST'], 'voice-developer-portal'),
+          ]:
+              image = os.environ['REGISTRY'] + '/' + package
+              raw = call('docker', 'buildx', 'imagetools', 'inspect', '--raw', image + '@' + digest)
+              assert digest in {'sha256:' + hashlib.sha256(value.encode()).hexdigest() for value in [raw, raw.removesuffix('\n')]}
+              (root / (component + '-index.json')).write_text(raw)
+              index = json.loads(raw)
+              platform = [m for m in index['manifests'] if m.get('platform') == {'architecture': 'amd64', 'os': 'linux'}]
+              assert len(platform) == 1
+              child = platform[0]['digest']
+              assert any(m.get('annotations', {}).get('vnd.docker.reference.type') == 'attestation-manifest' for m in index['manifests'])
+              ref = image + '@' + child
+              subprocess.run(['docker', 'pull', '--platform', 'linux/amd64', ref], check=True)
+              config = json.loads(call('docker', 'image', 'inspect', ref))[0]
+              assert config['Config']['Labels']['org.opencontainers.image.revision'] == revision
+              folder = root / component
+              folder.mkdir()
+              container = call('docker', 'create', ref).strip()
+              try:
+                  if client:
+                      subprocess.run(['docker', 'cp', container + ':/usr/share/nginx/html/.', str(folder)], check=True)
+                      bundle = '\n'.join(p.read_text(errors='replace') for p in folder.rglob('*') if p.is_file() and p.suffix in {'.js', '.html', '.css', '.json'})
+                      assert 'https://api-dev.comrade.click' in bundle and client in bundle
+                      assert 'https://voice.comrade.click' not in bundle and 'https://api.comrade.click' not in bundle
+                  else:
+                      for filename in ['native-migrate', 'migrate']:
+                          subprocess.run(['docker', 'cp', container + ':/usr/local/bin/' + filename, str(folder / filename)], check=True)
+                      binary = (folder / 'native-migrate').read_bytes()
+                      migrate_sha = hashlib.sha256((folder / 'migrate').read_bytes()).hexdigest()
+                      assert revision.encode() in binary and source_digest.encode() in binary and migrate_sha.encode() in binary
+                      help_result = subprocess.run(['docker', 'run', '--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', ref, '--help'], capture_output=True, text=True)
+                      assert help_result.returncode == 0
+                      (root / 'native-help.txt').write_text(help_result.stdout + help_result.stderr)
+              finally:
+                  subprocess.run(['docker', 'rm', container], check=True)
+              manifest = {str(p.relative_to(folder)): hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.rglob('*') if p.is_file()}
+              (root / (component + '-files.json')).write_text(json.dumps(manifest, indent=2))
+              images.append({'component': component, 'image': image, 'index_digest': digest, 'linux_amd64_manifest_digest': child, 'runtime_ref': ref, 'source': revision, 'oauth_client_id': client, 'dev_api': 'https://api-dev.comrade.click' if client else None, 'source_digest': source_digest if not client else None, 'migrate_sha256': migrate_sha if not client else None, 'published': True})
+          assert not call('git', '-C', 'source', 'status', '--porcelain').strip()
+          (root / 'published-images.json').write_text(json.dumps({'source': revision, 'run_id': os.environ['GITHUB_RUN_ID'], 'workflow_sha': os.environ['GITHUB_SHA'], 'images': images}, indent=2))
+          PY
+      - name: Preserve publisher evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dev-reset-published-images-69cc6054
+          path: evidence
+          retention-days: 14
