@@ -2158,8 +2158,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     Future<String?> Function() action,
   ) async {
     if (_scheduledActionBusyIds.contains(scheduledMessageId) ||
-        !_isCurrentChat(widget.chatId))
+        !_isCurrentChat(widget.chatId)) {
       return;
+    }
     final generation = _scheduledRowGeneration;
     final chatId = widget.chatId;
     final profileId = ref.read(authControllerProvider).activeProfileId;
