@@ -12,6 +12,114 @@ void main() {
   const config = GatewayConfig(baseUrl: 'http://api.test');
   const auth = 'Bearer access-token';
 
+  group('VoiceUsersClient verification routes', () {
+    test(
+      'GET /api/v1/users/me/verification maps the active profile status',
+      () async {
+        final mock = MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/api/v1/users/me/verification');
+          expect(request.headers['Authorization'], auth);
+          return http.Response(
+            jsonEncode({
+              'verification_status': {
+                'profile_id': 'profile-1',
+                'verification_type': 'personal',
+                'badge': 'twitch',
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceUsersClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.getVerificationStatus(authorization: auth);
+
+        expect(result, isA<UsersApiOk<VerificationStatus>>());
+        final status = (result as UsersApiOk<VerificationStatus>).data;
+        expect(status.profileId, 'profile-1');
+        expect(status.verificationType, 'personal');
+        expect(status.badge, 'twitch');
+      },
+    );
+
+    test(
+      'POST organization start sends domain and maps the TXT challenge',
+      () async {
+        final mock = MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(
+            request.url.path,
+            '/api/v1/users/me/verification/organization',
+          );
+          expect(request.headers['Authorization'], auth);
+          expect(jsonDecode(request.body), {'domain': 'riotgames.com'});
+          return http.Response(
+            jsonEncode({
+              'domain': 'riotgames.com',
+              'txt_record': 'voice-verify=challenge-token',
+            }),
+            200,
+          );
+        });
+        final client = VoiceUsersClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.startOrganizationVerification(
+          authorization: auth,
+          domain: 'riotgames.com',
+        );
+
+        expect(result, isA<UsersApiOk<OrganizationVerificationChallenge>>());
+        final challenge =
+            (result as UsersApiOk<OrganizationVerificationChallenge>).data;
+        expect(challenge.domain, 'riotgames.com');
+        expect(challenge.txtRecord, 'voice-verify=challenge-token');
+      },
+    );
+
+    test(
+      'POST organization check sends an empty body and maps status',
+      () async {
+        final mock = MockClient((request) async {
+          expect(request.method, 'POST');
+          expect(
+            request.url.path,
+            '/api/v1/users/me/verification/organization/check',
+          );
+          expect(request.headers['Authorization'], auth);
+          expect(jsonDecode(request.body), isEmpty);
+          return http.Response(
+            jsonEncode({
+              'verification_status': {
+                'profile_id': 'profile-1',
+                'verification_type': 'organization',
+                'badge': 'organization',
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceUsersClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.checkOrganizationVerification(
+          authorization: auth,
+        );
+
+        expect(result, isA<UsersApiOk<VerificationStatus>>());
+        final status = (result as UsersApiOk<VerificationStatus>).data;
+        expect(status.profileId, 'profile-1');
+        expect(status.verificationType, 'organization');
+        expect(status.badge, 'organization');
+      },
+    );
+  });
+
   group('VoiceUsersClient.searchProfiles', () {
     test('GET /api/v1/users/search?q= with Authorization', () async {
       final mock = MockClient((req) async {

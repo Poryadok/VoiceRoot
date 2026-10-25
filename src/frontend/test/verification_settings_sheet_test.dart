@@ -11,9 +11,11 @@ import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
+import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/ui/settings/verification_settings_sheet.dart';
 
 import 'support/test_voice_token_catalog.dart';
@@ -30,6 +32,137 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 }
 
 void main() {
+  testWidgets('verification status destination loads selected profile status', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    var statusAttempts = 0;
+    final mock = MockClient((request) async {
+      requests.add(request);
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/users/me/verification') {
+        statusAttempts++;
+        if (statusAttempts == 1) {
+          return http.Response(
+            jsonEncode({'message': 'private verification diagnostic'}),
+            503,
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'verification_status': {
+              'profile_id': 'profile-selected',
+              'verification_type': 'organization',
+              'badge': 'organization',
+            },
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.path == '/api/v1/auth/linked-accounts') {
+        return http.Response(jsonEncode({'linked_accounts': []}), 200);
+      }
+      return http.Response('not found', 404);
+    });
+    final gateway = GatewayHttpClient(
+      httpClient: mock,
+      config: const GatewayConfig(baseUrl: 'http://api.test'),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          ...voiceThemeTestOverrides(),
+          authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          gatewayHttpClientProvider.overrideWithValue(gateway),
+          voiceAuthClientProvider.overrideWithValue(
+            VoiceAuthClient(gateway: gateway),
+          ),
+          voiceUsersClientProvider.overrideWithValue(
+            VoiceUsersClient(gateway: gateway),
+          ),
+          authControllerProvider.overrideWith((ref) {
+            final controller = AuthController(
+              authClient: ref.watch(voiceAuthClientProvider),
+              storage: ref.watch(authSessionStorageProvider),
+              guestCredentialsStorage: ref.watch(
+                guestCredentialsStorageProvider,
+              ),
+            );
+            controller.state = const AuthState(
+              session: AuthSession(
+                accessToken: 'access-token',
+                refreshToken: 'refresh-token',
+                expiresInSeconds: 900,
+                accountId: 'account-1',
+                activeProfileId: 'profile-selected',
+              ),
+            );
+            return controller;
+          }),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: VerificationSettingsSheet()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.byKey(VerificationSettingsSheet.organizationUnavailableKey),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.tap(
+      find.byKey(VerificationSettingsSheet.verificationStatusKey),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(VerificationSettingsSheet.verificationStatusRetryKey),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('private verification diagnostic'),
+      findsNothing,
+    );
+    await tester.tap(
+      find.byKey(VerificationSettingsSheet.verificationStatusRetryKey),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      requests.where(
+        (request) => request.url.path == '/api/v1/users/me/verification',
+      ),
+      hasLength(2),
+    );
+    expect(
+      requests
+          .firstWhere(
+            (request) => request.url.path == '/api/v1/users/me/verification',
+          )
+          .headers['Authorization'],
+      'Bearer access-token',
+    );
+    expect(
+      find.byKey(VerificationSettingsSheet.verificationStatusViewKey),
+      findsOneWidget,
+    );
+    expect(find.text('Verified'), findsOneWidget);
+    expect(find.text('organization'), findsOneWidget);
+  });
+
   testWidgets('shows and mutates links only for the selected profile', (
     tester,
   ) async {

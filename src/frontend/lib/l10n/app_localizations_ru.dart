@@ -2471,6 +2471,19 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get verificationStatusTitle => 'Статус верификации';
+
+  @override
+  String get verificationVerified => 'Верифицирован';
+
+  @override
+  String get verificationNotVerified => 'Не верифицирован';
+
+  @override
+  String get verificationOrganizationUnavailable =>
+      'Верификация организации недоступна';
+
+  @override
   String get verifiedBadgePersonal => 'Верифицирован';
 
   @override

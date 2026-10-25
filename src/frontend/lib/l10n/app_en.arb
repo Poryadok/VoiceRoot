@@ -1121,6 +1121,10 @@
   "verificationLinkYoutube": "Link YouTube",
   "verificationUnlink": "Unlink",
   "verificationSelectedProfile": "Selected profile: {profileId}",
+  "verificationStatusTitle": "Verification status",
+  "verificationVerified": "Verified",
+  "verificationNotVerified": "Not verified",
+  "verificationOrganizationUnavailable": "Organization verification unavailable",
   "@verificationSelectedProfile": {
     "placeholders": {
       "profileId": {"type": "String"}

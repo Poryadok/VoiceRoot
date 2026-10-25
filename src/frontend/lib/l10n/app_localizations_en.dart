@@ -2448,6 +2448,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get verificationStatusTitle => 'Verification status';
+
+  @override
+  String get verificationVerified => 'Verified';
+
+  @override
+  String get verificationNotVerified => 'Not verified';
+
+  @override
+  String get verificationOrganizationUnavailable =>
+      'Organization verification unavailable';
+
+  @override
   String get verifiedBadgePersonal => 'Verified';
 
   @override

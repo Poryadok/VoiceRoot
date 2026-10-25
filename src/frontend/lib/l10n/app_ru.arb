@@ -1053,6 +1053,10 @@
   "verificationLinkYoutube": "Привязать YouTube",
   "verificationUnlink": "Отвязать",
   "verificationSelectedProfile": "Выбранный профиль: {profileId}",
+  "verificationStatusTitle": "Статус верификации",
+  "verificationVerified": "Верифицирован",
+  "verificationNotVerified": "Не верифицирован",
+  "verificationOrganizationUnavailable": "Верификация организации недоступна",
   "@verificationSelectedProfile": {
     "placeholders": {
       "profileId": {"type": "String"}
