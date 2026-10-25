@@ -124,6 +124,9 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
   the byte transport component only, not a protected import or message delivery.
 - Graphify update is running under the author's command handle; no freshness
   claim until its terminal result is recorded.
+- Independent Anton-97 found query-secret disclosure through Go's default
+  redirect Referer. Real TLS tests reproduced it for both the original and a
+  different permitted host; every redirect now removes Referer.
 
 ## Risks and follow-ups
 

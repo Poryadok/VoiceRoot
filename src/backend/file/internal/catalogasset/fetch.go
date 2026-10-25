@@ -145,6 +145,8 @@ func (f *Fetcher) FetchGIF(ctx context.Context, provider, sourceURL string, maxB
 	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport, Timeout: maxImportTime, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		// Go otherwise forwards the previous full URL, including signed queries.
+		req.Header.Del("Referer")
 		if len(via) > 3 {
 			return ErrSource
 		}

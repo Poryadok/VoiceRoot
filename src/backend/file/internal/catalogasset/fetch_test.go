@@ -2,9 +2,13 @@ package catalogasset
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +22,18 @@ const gifBytes = "GIF89a\x01\x00\x01\x00\x00\x00\x00;"
 
 func testFetcher(t *testing.T, handler http.Handler) (*Fetcher, *int, *[]string) {
 	t.Helper()
-	server := httptest.NewTLSServer(handler)
+	server := httptest.NewUnstartedServer(handler)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificate := &x509.Certificate{SerialNumber: big.NewInt(1), DNSNames: []string{"example.com", "cdn.example.com"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, certificate, certificate, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}}
+	server.StartTLS()
 	t.Cleanup(server.Close)
 	f, err := NewFetcher(map[string][]string{"fixture": {"example.com", "cdn.example.com"}})
 	if err != nil {
@@ -38,6 +53,33 @@ func testFetcher(t *testing.T, handler http.Handler) (*Fetcher, *int, *[]string)
 		return (&net.Dialer{}).DialContext(ctx, network, server.Listener.Addr().String())
 	}
 	return f, &calls, &addresses
+}
+
+func TestFetchPermittedRedirectNeverDisclosesSourceReferer(t *testing.T) {
+	for _, host := range []string{"example.com", "cdn.example.com"} {
+		t.Run(host, func(t *testing.T) {
+			var referer string
+			f, calls, addresses := testFetcher(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/original" {
+					http.Redirect(w, r, "https://"+host+"/asset", http.StatusFound)
+					return
+				}
+				referer = r.Header.Get("Referer")
+				w.Header().Set("Content-Type", "image/gif")
+				_, _ = w.Write([]byte(gifBytes))
+			}))
+			body, err := f.FetchGIF(context.Background(), "fixture", "https://example.com/original?secret=private-provider-token", 1024)
+			if err != nil || string(body) != gifBytes {
+				t.Fatalf("body %q, err %v", body, err)
+			}
+			if referer != "" {
+				t.Fatalf("redirect disclosed Referer %q", referer)
+			}
+			if *calls != 2 || len(*addresses) != 2 {
+				t.Fatalf("redirect DNS %d, dial %v", *calls, *addresses)
+			}
+		})
+	}
 }
 
 func TestFetchPinsValidatedAddressAndKeepsTLSHostname(t *testing.T) {
