@@ -26,7 +26,7 @@ No events, account policy, deployments or acceptance.
 - [x] Agree version1, 1..100 canonical exact pairs, unique profile IDs.
 - [x] Negative principal/batch tests RED before production implementation.
 - [x] Implement snapshot, dedicated registration and fail-closed config.
-- [ ] Run focused tests, affected short suites, proto checks and review.
+- [x] Run focused tests, affected short suites, proto checks and review.
 
 ## Detailed Steps
 
@@ -54,7 +54,10 @@ compile before the new handler. GREEN: 15 focused User tests including actual
 PostgreSQL ownership/deleted_at/nonmutation and real mTLS/JWKS/shared miniredis
 transport passed. User short suite: 311 passed. Principal/catalog package short
 suite: 219 passed. Messaging s2s regression: 90 passed. Affected go vet passed.
-Buf lint passed. Exact final source review remains pending. Miniredis transport
+Buf lint/format/breaking and catalog Go generated parity passed. Reviewer55
+published source CLEAR for b3c10a12/basea479a15d on PR910, comment6404972351;
+this final plan update changes documentation only. Graphify process62064 remains
+pending after AST331/331 and is not counted as completed. Miniredis transport
 tests are not a live Redis or deployed service acceptance claim.
 
 ## Decisions
