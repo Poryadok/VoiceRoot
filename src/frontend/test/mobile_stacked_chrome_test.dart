@@ -13,6 +13,8 @@ import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
+import 'package:voice_frontend/ui/shell/mobile_shell_tab_bar.dart';
+import 'package:voice_frontend/ui/shell/mobile_shell_visibility.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/gateway_test_client.dart';
@@ -54,7 +56,18 @@ void main() {
             child: child!,
           );
         },
-        home: Scaffold(body: ChatRoomPanel(chatId: chatId)),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: ChatRoomPanel(chatId: chatId),
+            bottomNavigationBar:
+                shouldShowMobileShellTabs(
+                  narrow: true,
+                  keyboardInsetBottom: MediaQuery.viewInsetsOf(context).bottom,
+                )
+                ? const MobileShellTabBar()
+                : null,
+          ),
+        ),
       ),
     );
   }
@@ -134,6 +147,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatRoomPanel.pinnedBarKey), findsOneWidget);
+    expect(find.byKey(MobileShellTabBar.barKey), findsOneWidget);
     expect(find.textContaining('pinned messages'), findsOneWidget);
     expect(find.text('Second pin preview should not show'), findsNothing);
     expect(tester.takeException(), isNull);
