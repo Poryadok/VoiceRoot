@@ -2448,7 +2448,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get verificationSettingsHint =>
-      'Привяжите платформы для значка верификации или подтвердите домен организации.';
+      'Привяжите Twitch или YouTube, чтобы проверить право на значок верификации.';
 
   @override
   String get verificationLinkedAccountsTitle => 'Связанные аккаунты';
@@ -2464,6 +2464,24 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get verificationUnlink => 'Отвязать';
+
+  @override
+  String get verificationUnlinkConfirmTitle => 'Отвязать платформу?';
+
+  @override
+  String verificationUnlinkConfirmBody(Object platform) {
+    return 'Отвязать $platform от этого профиля? Источник верификации будет удалён.';
+  }
+
+  @override
+  String get verificationConnected => 'Подключён';
+
+  @override
+  String get verificationStatusUnavailable => 'Статус верификации недоступен';
+
+  @override
+  String get verificationOrganizationUnavailable =>
+      'Верификация организации недоступна';
 
   @override
   String verificationSelectedProfile(String profileId) {

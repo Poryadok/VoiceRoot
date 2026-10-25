@@ -2425,7 +2425,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get verificationSettingsHint =>
-      'Link platforms to earn a verified badge, or verify your organization domain.';
+      'Link Twitch or YouTube to check eligibility for a verified badge.';
 
   @override
   String get verificationLinkedAccountsTitle => 'Linked accounts';
@@ -2441,6 +2441,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get verificationUnlink => 'Unlink';
+
+  @override
+  String get verificationUnlinkConfirmTitle => 'Disconnect platform?';
+
+  @override
+  String verificationUnlinkConfirmBody(Object platform) {
+    return 'Disconnect $platform from this profile? This removes its verification source.';
+  }
+
+  @override
+  String get verificationConnected => 'Connected';
+
+  @override
+  String get verificationStatusUnavailable =>
+      'Verification status is unavailable';
+
+  @override
+  String get verificationOrganizationUnavailable =>
+      'Organization verification is unavailable';
 
   @override
   String verificationSelectedProfile(String profileId) {
