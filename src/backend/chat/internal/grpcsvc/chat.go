@@ -10,6 +10,7 @@ import (
 	chatv1 "voice.app/voice/chat/v1"
 
 	"voice/backend/chat/internal/chatevents"
+	"voice/backend/chat/internal/gifcatalog"
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/privacy"
 
@@ -19,8 +20,10 @@ import (
 // ChatGRPC implements ChatService RPCs backed by chat_db (app stack: DM).
 type ChatGRPC struct {
 	chatv1.UnimplementedChatServiceServer
-	DM                     DMStore
-	StickerPacks           StickerPackStore
+	DM           DMStore
+	StickerPacks StickerPackStore
+	// GIFCatalog is nil until a provider is explicitly enabled. Fakes are test/local-only.
+	GIFCatalog             gifcatalog.Catalog
 	Profiles               UserProfileLookup
 	DMPeerDisplayNames     DMPeerDisplayNameLookup
 	LifecycleOwners        LifecycleOwnerLookup

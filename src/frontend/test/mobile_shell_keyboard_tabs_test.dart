@@ -6,7 +6,6 @@ void main() {
     expect(
       shouldShowMobileShellTabs(
         narrow: true,
-        chatOpen: false,
         keyboardInsetBottom: 0,
       ),
       isTrue,
@@ -14,26 +13,26 @@ void main() {
     expect(
       shouldShowMobileShellTabs(
         narrow: true,
-        chatOpen: false,
         keyboardInsetBottom: 300,
       ),
       isFalse,
     );
   });
 
-  test('shouldShowMobileShellTabs hides tabs when chat is open or wide', () {
+  test('shouldShowMobileShellTabs stays visible when a chat is open', () {
     expect(
       shouldShowMobileShellTabs(
         narrow: true,
-        chatOpen: true,
         keyboardInsetBottom: 0,
       ),
-      isFalse,
+      isTrue,
     );
+  });
+
+  test('shouldShowMobileShellTabs hides tabs when wide', () {
     expect(
       shouldShowMobileShellTabs(
         narrow: false,
-        chatOpen: false,
         keyboardInsetBottom: 0,
       ),
       isFalse,

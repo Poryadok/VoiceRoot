@@ -57,6 +57,8 @@ const (
 	ChatService_GetStickerPack_FullMethodName                 = "/voice.chat.v1.ChatService/GetStickerPack"
 	ChatService_InstallStickerPack_FullMethodName             = "/voice.chat.v1.ChatService/InstallStickerPack"
 	ChatService_UninstallStickerPack_FullMethodName           = "/voice.chat.v1.ChatService/UninstallStickerPack"
+	ChatService_SearchGifs_FullMethodName                     = "/voice.chat.v1.ChatService/SearchGifs"
+	ChatService_GetTrendingGifs_FullMethodName                = "/voice.chat.v1.ChatService/GetTrendingGifs"
 	ChatService_EnableChatE2E_FullMethodName                  = "/voice.chat.v1.ChatService/EnableChatE2E"
 	ChatService_DisableChatE2E_FullMethodName                 = "/voice.chat.v1.ChatService/DisableChatE2E"
 	ChatService_ListDMReceiptVisibilityTargets_FullMethodName = "/voice.chat.v1.ChatService/ListDMReceiptVisibilityTargets"
@@ -119,6 +121,9 @@ type ChatServiceClient interface {
 	GetStickerPack(ctx context.Context, in *GetStickerPackRequest, opts ...grpc.CallOption) (*GetStickerPackResponse, error)
 	InstallStickerPack(ctx context.Context, in *InstallStickerPackRequest, opts ...grpc.CallOption) (*InstallStickerPackResponse, error)
 	UninstallStickerPack(ctx context.Context, in *UninstallStickerPackRequest, opts ...grpc.CallOption) (*UninstallStickerPackResponse, error)
+	// Provider-neutral metadata only; search does not authorize a File reference.
+	SearchGifs(ctx context.Context, in *SearchGifsRequest, opts ...grpc.CallOption) (*SearchGifsResponse, error)
+	GetTrendingGifs(ctx context.Context, in *GetTrendingGifsRequest, opts ...grpc.CallOption) (*GetTrendingGifsResponse, error)
 	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(ctx context.Context, in *EnableChatE2ERequest, opts ...grpc.CallOption) (*EnableChatE2EResponse, error)
 	DisableChatE2E(ctx context.Context, in *DisableChatE2ERequest, opts ...grpc.CallOption) (*DisableChatE2EResponse, error)
@@ -527,6 +532,26 @@ func (c *chatServiceClient) UninstallStickerPack(ctx context.Context, in *Uninst
 	return out, nil
 }
 
+func (c *chatServiceClient) SearchGifs(ctx context.Context, in *SearchGifsRequest, opts ...grpc.CallOption) (*SearchGifsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SearchGifsResponse)
+	err := c.cc.Invoke(ctx, ChatService_SearchGifs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *chatServiceClient) GetTrendingGifs(ctx context.Context, in *GetTrendingGifsRequest, opts ...grpc.CallOption) (*GetTrendingGifsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTrendingGifsResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetTrendingGifs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *chatServiceClient) EnableChatE2E(ctx context.Context, in *EnableChatE2ERequest, opts ...grpc.CallOption) (*EnableChatE2EResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EnableChatE2EResponse)
@@ -659,6 +684,9 @@ type ChatServiceServer interface {
 	GetStickerPack(context.Context, *GetStickerPackRequest) (*GetStickerPackResponse, error)
 	InstallStickerPack(context.Context, *InstallStickerPackRequest) (*InstallStickerPackResponse, error)
 	UninstallStickerPack(context.Context, *UninstallStickerPackRequest) (*UninstallStickerPackResponse, error)
+	// Provider-neutral metadata only; search does not authorize a File reference.
+	SearchGifs(context.Context, *SearchGifsRequest) (*SearchGifsResponse, error)
+	GetTrendingGifs(context.Context, *GetTrendingGifsRequest) (*GetTrendingGifsResponse, error)
 	// DM-only opt-in E2E encryption — docs/features/encryption.md.
 	EnableChatE2E(context.Context, *EnableChatE2ERequest) (*EnableChatE2EResponse, error)
 	DisableChatE2E(context.Context, *DisableChatE2ERequest) (*DisableChatE2EResponse, error)
@@ -800,6 +828,12 @@ func (UnimplementedChatServiceServer) InstallStickerPack(context.Context, *Insta
 }
 func (UnimplementedChatServiceServer) UninstallStickerPack(context.Context, *UninstallStickerPackRequest) (*UninstallStickerPackResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UninstallStickerPack not implemented")
+}
+func (UnimplementedChatServiceServer) SearchGifs(context.Context, *SearchGifsRequest) (*SearchGifsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SearchGifs not implemented")
+}
+func (UnimplementedChatServiceServer) GetTrendingGifs(context.Context, *GetTrendingGifsRequest) (*GetTrendingGifsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTrendingGifs not implemented")
 }
 func (UnimplementedChatServiceServer) EnableChatE2E(context.Context, *EnableChatE2ERequest) (*EnableChatE2EResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method EnableChatE2E not implemented")
@@ -1530,6 +1564,42 @@ func _ChatService_UninstallStickerPack_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_SearchGifs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SearchGifsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).SearchGifs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_SearchGifs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).SearchGifs(ctx, req.(*SearchGifsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ChatService_GetTrendingGifs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTrendingGifsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetTrendingGifs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetTrendingGifs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetTrendingGifs(ctx, req.(*GetTrendingGifsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ChatService_EnableChatE2E_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EnableChatE2ERequest)
 	if err := dec(in); err != nil {
@@ -1832,6 +1902,14 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UninstallStickerPack",
 			Handler:    _ChatService_UninstallStickerPack_Handler,
+		},
+		{
+			MethodName: "SearchGifs",
+			Handler:    _ChatService_SearchGifs_Handler,
+		},
+		{
+			MethodName: "GetTrendingGifs",
+			Handler:    _ChatService_GetTrendingGifs_Handler,
 		},
 		{
 			MethodName: "EnableChatE2E",
