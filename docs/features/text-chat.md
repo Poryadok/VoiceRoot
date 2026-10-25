@@ -218,7 +218,7 @@ Ctx на строке чата — [screen-controls.md](../design/screen-control
 | Правило | Контракт |
 |---------|----------|
 | **Uniqueness** | Один `profile_id` = **не более одного** view на `message_id` (dedup on first qualifying view) |
-| **Qualifying view** | Участник открыл чат и message bubble entered viewport **или** read cursor прошёл сообщение (`MarkRead` / `last_read_message_id` ≥ message). Dedicated `RecordMessageView` RPC — **not yet in proto**; spec sketch — [messaging-service.md](../microservices/messaging-service.md) § View count |
+| **Qualifying view** | Участник открыл чат и message bubble entered viewport **или** read cursor прошёл сообщение (`MarkRead` / `last_read_message_id` ≥ message). `RecordMessageView` / `POST /api/v1/messages/views` сохраняет viewport view; контракт — [messaging-service.md](../microservices/messaging-service.md) § View count |
 | **Visibility** | Виден **всем участникам** чата на bubble (как Telegram); не скрывается privacy last-seen |
 | **Recount after delete** | Удаление сообщения → views удаляются вместе с message row |
 | **Account delete** | Soft-deleted profile excluded from recount; periodic compaction job |

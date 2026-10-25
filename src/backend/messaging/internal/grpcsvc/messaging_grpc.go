@@ -869,6 +869,11 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+	// Restore current durable metadata after the content transaction commits.
+	updated, err = s.Messages.GetMessageByID(ctx, updated.ID)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "message metadata unavailable")
+	}
 	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
 }
 
@@ -2300,7 +2305,11 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 		}
 		event = &created
 	}
-	if err := s.Messages.UpsertReadStateAndOutbox(ctx, chatID, spaceID, profileID, lastRead, publishReceipt, event); err != nil {
+	viewIDs, err := s.qualifyingReadViews(ctx, chatID, profileID, lastRead)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Messages.UpsertReadStateAndOutbox(ctx, chatID, spaceID, profileID, lastRead, publishReceipt, event, viewIDs...); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &messagingv1.MarkReadResponse{}, nil
@@ -2630,6 +2639,10 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 	}
 	if isPinned {
 		out.IsPinned = ptrBool(true)
+	}
+	if (m.ChatType == "group" || m.ChatType == "channel") && m.DeletedAt == nil {
+		count := m.ViewCount
+		out.ViewCount = &count
 	}
 	if m.DisplayChatID != nil {
 		out.DisplayChatId = ptrString(m.DisplayChatID.String())
