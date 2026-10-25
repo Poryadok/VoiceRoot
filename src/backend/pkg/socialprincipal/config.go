@@ -96,8 +96,10 @@ func LoadFromEnvWithAudience(target, capability, prefix, defaultListen string) (
 	if err := json.Unmarshal([]byte(os.Getenv("S2S_JWKS_URLS_JSON")), &allJWKSURLs); err != nil {
 		return Config{}, true, errors.New("invalid principal JWKS configuration")
 	}
-	issuer := expectedIssuer(capability)
-	cfg.JWKSURLs = map[string]string{issuer: allJWKSURLs[issuer]}
+	cfg.JWKSURLs = make(map[string]string)
+	for _, issuer := range capabilityIssuers(capability) {
+		cfg.JWKSURLs[issuer] = allJWKSURLs[issuer]
+	}
 	var err error
 	cfg.RefreshAfter, err = envDuration("S2S_JWKS_REFRESH_AFTER", 30*time.Second)
 	if err != nil {
@@ -146,8 +148,10 @@ func (c Config) validate() error {
 	if _, _, err := net.SplitHostPort(c.ListenAddr); err != nil {
 		return errors.New("invalid principal listener address")
 	}
-	if c.JWKSURLs[expectedIssuer(c.Capability)] == "" {
-		return errors.New("trusted principal JWKS endpoint required")
+	for _, issuer := range capabilityIssuers(c.Capability) {
+		if c.JWKSURLs[issuer] == "" {
+			return errors.New("trusted principal JWKS endpoint required")
+		}
 	}
 	for issuer, endpoint := range c.JWKSURLs {
 		parsed, err := url.Parse(endpoint)
