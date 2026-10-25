@@ -645,9 +645,9 @@ message RecordMessageViewRequest {
 
 **Rules:** idempotent first view per profile; excluded from DM; recount drops on message delete. **Not implemented** — use read cursor as interim UX until RPC lands.
 
-### Stickers and GIF (wire contract — not yet in code)
+### Stickers and GIF (cross-service wire contract)
 
-Normative product scope: [text-chat.md](../features/text-chat.md) § Медиа и § Attach menu, [PLAN.md](../PLAN.md). **Zero implementation** today. Composer surface: **😊 panel** (Emoji \| Stickers \| GIFs) — **not** 📎 attach menu.
+Normative product scope: [text-chat.md](../features/text-chat.md) § Медиа и § Attach menu, [PLAN.md](../PLAN.md). Chat pack-catalog RPC/store and Gateway catalog routes are implemented; this does not establish complete client picker UX or File/Messaging behavior. Composer surface: **😊 panel** (Emoji \| Stickers \| GIFs) — **not** 📎 attach menu.
 
 #### Service ownership
 
