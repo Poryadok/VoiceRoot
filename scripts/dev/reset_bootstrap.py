@@ -692,6 +692,15 @@ def execute_locked(kube, directory, root, *, actor, claim):
             raise ValueError('fresh storage provider changed')
         if provider_pin(kube) != plan['provider']:
             raise ValueError('fresh storage provisioner/node identity changed')
+        if journal.state['steps'].get('delete-namespace', {}).get('status') == 'complete':
+            context = json.loads(private_read(runtime / 'fresh-storage.json'))
+            namespace = kube.get('namespace', dev.NS)
+            if context.get('new_namespace_uid'):
+                if (namespace is None or namespace['metadata']['uid'] != context['new_namespace_uid']
+                        or namespace['metadata'].get('annotations', {}).get('voice.dev/reset-operation') != plan['operation']):
+                    raise ValueError('fresh namespace identity changed during bootstrap')
+            elif namespace is not None and namespace['metadata'].get('annotations', {}).get('voice.dev/reset-operation') != plan['operation']:
+                raise ValueError('unowned namespace appeared during bootstrap')
     runtime = directory / 'runtime'
     runtime_binding = {'operation': plan['operation'], 'package_files': plan['package_files']}
     if not runtime.exists():
@@ -726,12 +735,10 @@ def execute_locked(kube, directory, root, *, actor, claim):
     if journal.state['steps'].get('delete-namespace', {}).get('status') != 'complete':
         raise ValueError('interrupted namespace deletion needs observed reconciliation')
     if journal.state['steps'].get('bootstrap', {}).get('status') != 'complete':
-        check_window()
         interruptions = sorted(runtime.glob('bootstrap-interrupted-*.json'))
         if interruptions:
-            previous = json.loads(private_read(interruptions[-1]))
-            if not previous.get('observed') or previous['work'] != json.loads(json.dumps(submitted_work(kube))):
-                raise ValueError('accepted Kubernetes work changed or remains unknown; exact operator reconciliation required')
+            raise ValueError('interrupted bootstrap requires explicit operator recovery; remote execution outcomes remain unresolved')
+        check_window()
         if not journal.state['steps'].get('bootstrap'):
             journal.begin('bootstrap')
         # Only forward bootstrap may resume; old namespace deletion never replays.

@@ -89,7 +89,7 @@ actually complete; unexplained finalizers are never stripped.
 
 Bootstrap uses the private runtime directory and fresh dynamic claims. It
 creates a namespace exclusively, records its new UID and operation annotation,
-and accepts only that exact interrupted operation on forward retry. It restores
+and binds all subsequent commands to that exact operation. It restores
 the web image, certificate and canonical HTTP challenge/TLS routes before slow
 infra/migration work. Canonical NATS bootstrap ordering, native Space installer,
 GIS prerequisites and User/Space cycle handling remain in use. All applied tool
@@ -97,21 +97,24 @@ images are pinned. Retained PV identity/spec and fresh claim bindings are checke
 
 A failed/interrupted command retains the private journal, runtime and logs.
 The actual Linux execution host supervises its own bootstrap session, observes
-the window at most every two seconds, bounds observer waits, and terminates its
+the window with a two-second polling interval and bounded observer waits, and terminates its
 own process group on unsafe observations or the fixed original deadline. The
 reviewed budget reserves fifteen seconds for observer and TERM/KILL cleanup.
 Each command also checks the fresh namespace UID/operation and quiet window.
 Normal wrapper exit cannot leave a descendant writing in the background.
 Accepted Kubernetes Jobs, rollouts and remote exec work are not cancelled by
 client termination. An interruption records their exact controller/Job UID and
-specification snapshot. Resume re-observes that snapshot; unknown or changed
-server-side work requires actual operator reconciliation. It never grants a
+specification snapshot plus private command start/return boundaries. Every
+interrupted bootstrap stays on HOLD, even if the snapshot is unchanged: remote
+exec outcomes can remain unknown after local termination. Actual operator
+recovery must resolve that concrete phase before any further submissions; the
+adapter does not automatically replay bootstrap. It never grants a
 safe resource release or a new deadline merely because a client was killed.
-Re-run the same command only with the same package, actor and live claim. Resume
+Pre-bootstrap continuation uses the same package, actor and live claim. Resume
 re-observes the old namespace/controller identities; it never deletes a newly
 recreated namespace by name. An already absent old namespace can complete its
-recorded pending delete without replay. Bootstrap can resume only its own new
-namespace UID/operation. A different UID, changed input, unknown finalizer or
+recorded pending delete without replay. Separately reconciled forward bootstrap
+must preserve its new namespace UID/operation. A changed input, foreign UID or
 unresolved outcome stays explicit. Do not delete/reset operation receipts or
 automatically roll back to old PVC data.
 

@@ -27,7 +27,7 @@ NATS_JOBS = ['voice-nats-' + role + '-bootstrap' for role in ('realtime', 'notif
 INFRA = {'voice-redis', 'voice-nats-pvc-candidate', 'voice-livekit', 'voice-clamav'}
 
 
-def run(*args, body=None, timeout=600, check=True, env=None):
+def command_guard(timeout=600):
     dynamic = dynamic_storage()
     if dynamic:
         now = reset_bootstrap.datetime.now(reset_bootstrap.timezone.utc)
@@ -42,11 +42,42 @@ def run(*args, body=None, timeout=600, check=True, env=None):
             if (metadata.get('uid') != dynamic['new_namespace_uid']
                     or metadata.get('annotations', {}).get('voice.dev/reset-operation') != dynamic['operation']):
                 raise ValueError('fresh namespace identity changed before command')
+    return timeout
+
+
+def run(*args, body=None, timeout=600, check=True, env=None):
+    timeout = command_guard(timeout)
+    phase = command_started(args)
     result = subprocess.run(args, input=body, capture_output=True, timeout=timeout, env=env)
+    command_guard(timeout)
+    if phase:
+        reset_bootstrap.write_private(phase.with_name(phase.name.replace('-started.', '-returned.')),
+            {'client_returncode': result.returncode, 'accepted_work_quiescent': False})
     if check and result.returncode:
         (WORK / 'last-error.txt').write_bytes(result.stderr + result.stdout)
         raise RuntimeError('dev command failed: ' + args[0])
     return result
+
+
+def command_started(args):
+    if not dynamic_storage():
+        return None
+    phase = WORK / ('command-%020d-%s-started.json' % (time.time_ns(), os.urandom(4).hex()))
+    reset_bootstrap.write_private(phase, {'launcher': Path(args[0]).name,
+        'arguments_sha256': reset_bootstrap.digest(args), 'accepted_work_quiescent': False})
+    return phase
+
+
+class GuardedKube(reset_bootstrap.Kube):
+    def command(self, args, body=None):
+        command_guard()
+        phase = command_started(('kubectl', *args))
+        result = super().command(args, body=body)
+        command_guard()
+        if phase:
+            reset_bootstrap.write_private(phase.with_name(phase.name.replace('-started.', '-returned.')),
+                {'client_returned': True, 'accepted_work_quiescent': False})
+        return result
 
 
 def get(kind, namespace='voice-dev'):
@@ -313,7 +344,7 @@ def start():
     namespace = next(o for o in foundation if o['kind'] == 'Namespace')
     if dynamic:
         namespace['metadata'].setdefault('annotations', {})['voice.dev/reset-operation'] = dynamic['operation']
-        current = reset_bootstrap.Kube().get('namespace', dev.NS)
+        current = GuardedKube().get('namespace', dev.NS)
         if current:
             dev.validate_target(current)
             if (current['metadata']['uid'] == dynamic['old_namespace_uid']
@@ -338,7 +369,7 @@ def start():
     apply([o for o in foundation if o['kind'] != 'Namespace'])
     if dynamic:
         apply([s for s in secrets if s['metadata']['name'] != signal_tls.SECRET])
-        reset_bootstrap.restore_tls(reset_bootstrap.Kube(), tls, WORK)
+        reset_bootstrap.restore_tls(GuardedKube(), tls, WORK)
     else:
         apply(secrets)
     # LiveKit public media is separately scoped; no datastore ingress is exposed.

@@ -341,15 +341,17 @@ class ForwardExecutionTest(unittest.TestCase):
                 self.assertFalse(interrupted['accepted_work_cancelled'])
                 kube.current = {'metadata': {'uid': 'replaced-after-interruption'}}
                 with patch.object(reset, 'run_bootstrap') as run:
-                    with self.assertRaisesRegex(ValueError, 'accepted Kubernetes work changed'):
+                    with self.assertRaisesRegex(ValueError, 'explicit operator recovery'):
                         reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
                     run.assert_not_called()
                 kube.current = {'metadata': {'uid': 'fresh-namespace'}}
-                with patch.object(reset, 'run_bootstrap', return_value=SimpleNamespace(returncode=0, stdout=b'pass', stderr=b'')) as run:
-                    state = reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
-                    self.assertEqual(run.call_count, 1)
+                with patch.object(reset, 'run_bootstrap') as run:
+                    with self.assertRaisesRegex(ValueError, 'explicit operator recovery'):
+                        reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
+                    run.assert_not_called()
                 self.assertEqual(kube.deletes, 1)
-                self.assertEqual(state['steps']['bootstrap']['status'], 'complete')
+                state = json.loads((directory / 'reset-state.json').read_text())
+                self.assertEqual(state['steps']['bootstrap']['status'], 'started')
                 self.assertEqual((directory / 'secrets.json').read_bytes(), before)
 
     @unittest.skipUnless(reset.os.name == 'posix', 'actual executor requires POSIX process groups')
