@@ -17,6 +17,47 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('Retry retains a failed continuation after an empty GIF page', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    var continuationCalls = 0;
+    await _pumpPicker(
+      tester,
+      MockClient((request) async {
+        requests.add(request);
+        if (request.url.queryParameters['cursor'] == 'empty-a') {
+          continuationCalls++;
+          if (continuationCalls == 1) {
+            return http.Response('{"error_code":"unavailable"}', 503);
+          }
+          return http.Response(
+            '{"items":[{"provider":"fixture","provider_id":"recovered"}]}',
+            200,
+          );
+        }
+        return http.Response('{"items":[],"next_cursor":"empty-a"}', 200);
+      }),
+    );
+    await tester.tap(find.text('GIFs'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Load more'));
+    await tester.pumpAndSettle();
+    expect(find.text('GIF search unavailable'), findsOneWidget);
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(
+      requests.map((request) => request.url.queryParameters['cursor']).toList(),
+      [null, 'empty-a', 'empty-a'],
+    );
+    expect(requests.last.url, requests[1].url);
+    expect(
+      find.byKey(const Key('gif_result_fixture_recovered')),
+      findsOneWidget,
+    );
+    expect(find.text('Load more'), findsNothing);
+  });
+
   testWidgets(
     '401 token refresh retry renders the successful catalog without manual retry',
     (tester) async {

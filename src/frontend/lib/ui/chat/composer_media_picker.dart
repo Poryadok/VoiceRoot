@@ -293,7 +293,7 @@ class _ComposerMediaPickerBodyState
                     TextButton(
                       onPressed: _loading
                           ? null
-                          : () => _load(more: _gifs.isNotEmpty),
+                          : () => _load(more: _cursor.isNotEmpty),
                       child: Text(l10n.composerCatalogRetry),
                     ),
                   ],
