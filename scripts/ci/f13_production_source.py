@@ -107,6 +107,15 @@ def entries(repo,revision):
             git(repo,'ls-tree','-r','-z',revision).decode().split('\0') if item}
 
 
+def directory_entries(entries):
+    # Group this freshly read tree once; every inventory comparison remains below.
+    grouped={}
+    for path,entry in entries.items():
+        directory=str(Path(path).parent).replace('\\','/')
+        grouped.setdefault(directory,{})[path]=entry
+    return grouped
+
+
 def fixed_artifact(repo,revision,proof):
     require(isinstance(proof,dict) and set(proof)=={'path','sha256'},'production_artifact_shape')
     name=proof['path'];digest=proof['sha256']
@@ -925,8 +934,9 @@ def load_fixture_fix(repo):
     native_tree=documentation.tree_entries(repo,documentation.CONTEXT_SOURCE)
     for name in set(closure['projection_paths']+closure['context_paths']+closure['compiled_paths']):
         require(name!=FIXTURE_PATH and native_tree.get(name)==after.get(name),'production_fixture_native_entry')
+    directories=directory_entries(after)
     for row in closure['directory_inventories']:
-        require({p:v for p,v in after.items() if str(Path(p).parent).replace('\\','/')==row['directory']}==row['entries'],
+        require(directories.get(row['directory'],{})==row['entries'],
             'production_fixture_native_directory')
     require({p:v for p,v in native_tree.items() if p.startswith('src/backend/voice/')}==
         {p:v for p,v in after.items() if p.startswith('src/backend/voice/')},'production_fixture_voice_tree')
@@ -1029,8 +1039,9 @@ def load_bootstrap_fix(repo):
     native_tree=documentation.tree_entries(repo,documentation.CONTEXT_SOURCE)
     for name in set(closure['projection_paths']+closure['context_paths']+closure['compiled_paths']):
         require(name!=BOOTSTRAP_PATH and native_tree.get(name)==after.get(name),'production_bootstrap_native_entry')
+    directories=directory_entries(after)
     for row in closure['directory_inventories']:
-        require({p:v for p,v in after.items() if str(Path(p).parent).replace('\\','/')==row['directory']}==row['entries'],
+        require(directories.get(row['directory'],{})==row['entries'],
             'production_bootstrap_native_directory')
     require({p:v for p,v in native_tree.items() if p.startswith('src/backend/voice/')}==
         {p:v for p,v in after.items() if p.startswith('src/backend/voice/')},'production_bootstrap_voice_tree')
