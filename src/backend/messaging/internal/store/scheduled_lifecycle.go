@@ -116,12 +116,30 @@ func (s *MessagesStore) ListPendingScheduled(ctx context.Context, chat, owner uu
 	}
 	return out, rows.Err()
 }
-func (s *MessagesStore) UpdateScheduled(ctx context.Context, r ScheduledRecord) (*ScheduledRecord, error) {
-	saved, err := scanScheduled(s.Pool.QueryRow(ctx, `UPDATE scheduled_messages SET payload=$1::jsonb,schedule_kind=$2,scheduled_at=$3,dispatch_message_id=NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$4 AND sender_profile_id=$5 AND status='pending' AND revision=$6 AND (dispatch_lease_expires_at IS NULL OR dispatch_lease_expires_at<=clock_timestamp()) RETURNING `+scheduledColumns, r.PayloadJSON, r.ScheduleKind, r.ScheduledAt, r.ID, r.SenderProfileID, r.Revision))
+func (s *MessagesStore) UpdateScheduled(ctx context.Context, r ScheduledRecord, scope ...*uuid.UUID) (*ScheduledRecord, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	var space *uuid.UUID
+	if len(scope) > 0 {
+		space = scope[0]
+	}
+	if err = lockMessageMutation(ctx, tx, r.ChatID, space, nil); err != nil {
+		return nil, err
+	}
+	saved, err := scanScheduled(tx.QueryRow(ctx, `UPDATE scheduled_messages SET payload=$1::jsonb,schedule_kind=$2,scheduled_at=$3,dispatch_message_id=NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$4 AND sender_profile_id=$5 AND status='pending' AND revision=$6 AND (dispatch_lease_expires_at IS NULL OR dispatch_lease_expires_at<=clock_timestamp()) RETURNING `+scheduledColumns, r.PayloadJSON, r.ScheduleKind, r.ScheduledAt, r.ID, r.SenderProfileID, r.Revision))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrScheduledState
 	}
-	return saved, err
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return saved, nil
 }
 func (s *MessagesStore) CancelScheduled(ctx context.Context, id, owner uuid.UUID) error {
 	tx, err := s.Pool.Begin(ctx)

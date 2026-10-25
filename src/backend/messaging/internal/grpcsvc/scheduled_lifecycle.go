@@ -23,9 +23,10 @@ import (
 )
 
 type scheduleValidationKey struct{}
+type scheduledValidationContinuation func(context.Context) (*messagingv1.SendMessageResponse, error)
 
-func scheduleValidationOnly(ctx context.Context) bool {
-	value, _ := ctx.Value(scheduleValidationKey{}).(bool)
+func scheduleValidationOnly(ctx context.Context) scheduledValidationContinuation {
+	value, _ := ctx.Value(scheduleValidationKey{}).(scheduledValidationContinuation)
 	return value
 }
 
@@ -61,6 +62,8 @@ func scheduledPayloadRequest(chat uuid.UUID, p *messagingv1.ScheduledMessagePayl
 }
 func scheduledRPCError(err error) error {
 	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return status.FromContextError(err).Err()
 	case errors.Is(err, pgx.ErrNoRows):
 		return status.Error(codes.NotFound, "scheduled message not found")
 	case errors.Is(err, store.ErrScheduledState):
@@ -160,12 +163,29 @@ func (s *MessagingGRPC) ListScheduledMessages(ctx context.Context, req *messagin
 	if isNilDependency(s.ChatGuard) {
 		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	}
-	if _, err = s.resolveAuthoritativeChatType(ctx, chat, owner); err != nil {
-		return nil, err
+	if isNilDependency(s.ChatTypeResolver) {
+		return nil, status.Error(codes.Unavailable, "chat type unavailable")
+	}
+	chatType, resolveErr := s.ChatTypeResolver.ResolveChatType(ctx, chat, owner)
+	if resolveErr != nil {
+		switch {
+		case status.Code(resolveErr) == codes.PermissionDenied, errors.Is(resolveErr, store.ErrNotChatMember):
+			return nil, status.Error(codes.PermissionDenied, "not a chat member")
+		case status.Code(resolveErr) == codes.NotFound, errors.Is(resolveErr, pgx.ErrNoRows), errors.Is(resolveErr, store.ErrChatNotFound):
+			return nil, status.Error(codes.NotFound, "chat not found")
+		default:
+			return nil, status.Error(codes.Unavailable, "chat type unavailable")
+		}
+	}
+	if chatType != chatv1.ChatType_CHAT_TYPE_DM && chatType != chatv1.ChatType_CHAT_TYPE_GROUP && chatType != chatv1.ChatType_CHAT_TYPE_CHANNEL {
+		return nil, status.Error(codes.Unavailable, "chat type unavailable")
 	}
 	if err = s.ChatGuard.EnsureMember(ctx, chat, owner); err != nil {
-		if errors.Is(err, store.ErrNotChatMember) {
+		if errors.Is(err, store.ErrNotChatMember) || status.Code(err) == codes.PermissionDenied {
 			return nil, status.Error(codes.PermissionDenied, "not a chat member")
+		}
+		if errors.Is(err, store.ErrChatNotFound) || status.Code(err) == codes.NotFound {
+			return nil, status.Error(codes.NotFound, "chat not found")
 		}
 		return nil, status.Error(codes.Unavailable, "chat membership unavailable")
 	}
@@ -228,36 +248,44 @@ func (s *MessagingGRPC) UpdateScheduledMessage(ctx context.Context, req *messagi
 		stored = req.Payload
 	}
 	validate := scheduledPayloadRequest(row.ChatID, stored)
-	if _, err = s.sendMessage(context.WithValue(ctx, scheduleValidationKey{}, true), validate, nil); err != nil {
+	commit := scheduledValidationContinuation(func(admitted context.Context) (*messagingv1.SendMessageResponse, error) {
+		if req.DeliverySchedule != nil {
+			switch schedule := req.DeliverySchedule.(type) {
+			case *messagingv1.UpdateScheduledMessageRequest_ScheduledAt:
+				validate.DeliverySchedule = &messagingv1.SendMessageRequest_ScheduledAt{ScheduledAt: schedule.ScheduledAt}
+			case *messagingv1.UpdateScheduledMessageRequest_SendWhenOnline:
+				validate.DeliverySchedule = &messagingv1.SendMessageRequest_SendWhenOnline{SendWhenOnline: schedule.SendWhenOnline}
+			}
+			kind, err := s.resolveAuthoritativeChatType(admitted, row.ChatID, row.SenderProfileID)
+			if err != nil {
+				return nil, err
+			}
+			row.ScheduleKind, row.ScheduledAt, err = validateScheduledDelivery(validate, kind, time.Now().UTC())
+			if err != nil {
+				return nil, err
+			}
+		}
+		raw, err := protojson.Marshal(stored)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, "invalid scheduled payload")
+		}
+		row.PayloadJSON = string(raw)
+		policy, err := s.loadMutationChatPolicy(admitted, row.ChatID)
+		if err != nil {
+			return nil, err
+		}
+		updated, err := s.Messages.UpdateScheduled(admitted, *row, policy.SpaceID)
+		if err != nil {
+			return nil, scheduledRPCError(err)
+		}
+		out, err := scheduledToProto(updated)
+		return &messagingv1.SendMessageResponse{ScheduledMessage: out}, err
+	})
+	updated, err := s.sendMessage(context.WithValue(ctx, scheduleValidationKey{}, commit), validate, nil)
+	if err != nil {
 		return nil, err
 	}
-	if req.DeliverySchedule != nil {
-		switch schedule := req.DeliverySchedule.(type) {
-		case *messagingv1.UpdateScheduledMessageRequest_ScheduledAt:
-			validate.DeliverySchedule = &messagingv1.SendMessageRequest_ScheduledAt{ScheduledAt: schedule.ScheduledAt}
-		case *messagingv1.UpdateScheduledMessageRequest_SendWhenOnline:
-			validate.DeliverySchedule = &messagingv1.SendMessageRequest_SendWhenOnline{SendWhenOnline: schedule.SendWhenOnline}
-		}
-		kind, err := s.resolveAuthoritativeChatType(ctx, row.ChatID, row.SenderProfileID)
-		if err != nil {
-			return nil, err
-		}
-		row.ScheduleKind, row.ScheduledAt, err = validateScheduledDelivery(validate, kind, time.Now().UTC())
-		if err != nil {
-			return nil, err
-		}
-	}
-	raw, err := protojson.Marshal(stored)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid scheduled payload")
-	}
-	row.PayloadJSON = string(raw)
-	updated, err := s.Messages.UpdateScheduled(ctx, *row)
-	if err != nil {
-		return nil, scheduledRPCError(err)
-	}
-	out, err := scheduledToProto(updated)
-	return &messagingv1.UpdateScheduledMessageResponse{ScheduledMessage: out}, err
+	return &messagingv1.UpdateScheduledMessageResponse{ScheduledMessage: updated.ScheduledMessage}, nil
 }
 func (s *MessagingGRPC) CancelScheduledMessage(ctx context.Context, req *messagingv1.CancelScheduledMessageRequest) (*messagingv1.CancelScheduledMessageResponse, error) {
 	row, err := s.ownedSchedule(ctx, req.GetScheduledMessageId())

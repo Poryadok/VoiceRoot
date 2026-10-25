@@ -49,6 +49,8 @@ No proto changes are required. Anton-39 retains view/MarkRead/converter/hydratio
 
 UUIDv7 is reserved durably at dispatch rather than schedule creation, preserving message chronology for far-future schedules; a payload/schedule update invalidates an unused reservation. Original create identity remains immutable after updates and terminal transitions. Namespace rows are removed with physical result purge so they do not retain raw sender/chat/client identifiers. The shared integration-test migration helper applies schema 000038 after 000015, ensuring old immediate-send fixtures exercise the common namespace. Schedule timestamps use PostgreSQL microsecond precision; retention tests supply exactly representable timestamps.
 
+Independent review found two corrections: list-specific Chat authority errors must retain NotFound/PermissionDenied, and update must carry the original Space admission through durable commit. Both have discriminating RED-to-GREEN regressions. Update now uses a typed continuation inside the normal admitted send validation and the same chat/Space transaction lock; it never renews its two-second authority budget. A real PostgreSQL held-row test proves expiry leaves the original payload unchanged.
+
 ## Risks And Follow-Ups
 
 Concurrent update/cancel/send-now must never commit a stale validated payload. Original create retry fingerprint stays immutable after update. Schedule creation must publish no event. Send-now must not reuse client_message_id. Shared locks must not starve the connection pool.

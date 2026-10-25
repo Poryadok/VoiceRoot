@@ -360,8 +360,8 @@ func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 		clientID = &parsed
 	}
-	if scheduleValidationOnly(ctx) {
-		return &messagingv1.SendMessageResponse{}, nil
+	if continuation := scheduleValidationOnly(ctx); continuation != nil {
+		return continuation(ctx)
 	}
 	if req.GetDeliverySchedule() != nil {
 		return s.createScheduledMessage(ctx, req, chatID, profileID, chatType, requestRPC, requestHash, clientID)

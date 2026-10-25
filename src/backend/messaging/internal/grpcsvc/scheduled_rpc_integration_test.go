@@ -130,3 +130,47 @@ func TestScheduledRPCOwnerLifecycleAndSendNow(t *testing.T) {
 	_, err = client.ListScheduledMessages(peer, &messagingv1.ListScheduledMessagesRequest{Chat: chatDMRef(chat), Page: &commonv1.CursorPageRequest{Cursor: page.Page.NextCursor}})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
+
+func TestScheduledUpdateRetainsSpaceAdmissionThroughCommit(t *testing.T) {
+	ctx := context.Background()
+	pool := startPostgresForTest(t, ctx)
+	applySQLFile(t, ctx, pool, "src/backend/migrations/chat_db/000001_init.up.sql")
+	applyBaseMessagingMigrations(t, ctx, pool)
+	applyModerationSchemasForMessagingTest(t, ctx, pool)
+	chat, space, profile, peer, account := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedGroupChat(t, ctx, pool, chat, profile, peer)
+	_, err := pool.Exec(ctx, `UPDATE chats SET space_id=$2 WHERE id=$1`, chat, space)
+	require.NoError(t, err)
+	svc := startMessagingDirect(t, pool)
+	svc.RolePermissions = testRolePerms{allowed: true}
+	svc.ChatRolePermissions = testRolePerms{allowed: true}
+	svc.CommunicationStates = &communicationStateStub{state: 1}
+	caller := incomingProfileCtx(ctx, account, profile)
+	created, err := svc.SendMessage(caller, &messagingv1.SendMessageRequest{Chat: chatGroupRef(chat), Content: "before", DeliverySchedule: &messagingv1.SendMessageRequest_ScheduledAt{ScheduledAt: timestamppb.New(time.Now().Add(time.Hour))}})
+	require.NoError(t, err)
+	lock, err := pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = lock.Rollback(context.Background()) }()
+	_, err = lock.Exec(ctx, `SELECT id FROM scheduled_messages WHERE id=$1 FOR UPDATE`, created.ScheduledMessage.Id)
+	require.NoError(t, err)
+	attempt, cancel := context.WithCancel(caller)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() {
+		_, err := svc.UpdateScheduledMessage(attempt, &messagingv1.UpdateScheduledMessageRequest{ScheduledMessageId: created.ScheduledMessage.Id, Payload: &messagingv1.ScheduledMessagePayload{Content: "after"}})
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		require.Equal(t, codes.DeadlineExceeded, status.Code(err))
+	case <-time.After(5 * time.Second):
+		cancel()
+		_ = lock.Rollback(context.Background())
+		<-result
+		t.Fatal("scheduled update outlived its original two-second Space admission")
+	}
+	_ = lock.Rollback(context.Background())
+	var content string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT payload->>'content' FROM scheduled_messages WHERE id=$1`, created.ScheduledMessage.Id).Scan(&content))
+	require.Equal(t, "before", content)
+}
