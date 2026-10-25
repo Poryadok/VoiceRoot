@@ -102,6 +102,8 @@ class _CallMiniBarState extends ConsumerState<CallMiniBar> {
     final connecting = call.phase == CallPhase.connecting;
     final subtitle = connecting
         ? l10n.callConnecting
+        : widget.mobile
+        ? '$elapsed · ${l10n.callMiniParticipants(participants.length)}'
         : '${l10n.callMiniConnected} · $elapsed';
     void expand() =>
         ref.read(callExpandedRoomProvider.notifier).state = session.roomId;
@@ -246,90 +248,96 @@ class _CallMiniBarState extends ConsumerState<CallMiniBar> {
     return Material(
       key: CallMiniBar.panelKey,
       color: voice.surface,
-      child: Container(
-        constraints: BoxConstraints(minHeight: widget.mobile ? 64 : 144),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: voice.borderDefault),
-            bottom: widget.mobile
-                ? BorderSide(color: voice.borderDefault)
-                : BorderSide.none,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: expand,
+        child: Container(
+          constraints: BoxConstraints(minHeight: widget.mobile ? 64 : 144),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: voice.borderDefault),
+              bottom: widget.mobile
+                  ? BorderSide(color: voice.borderDefault)
+                  : BorderSide.none,
+            ),
           ),
-        ),
-        child: FocusTraversalGroup(
-          child: widget.mobile
-              ? Row(
-                  children: [
-                    status,
-                    const SizedBox(width: 8),
-                    avatars,
-                    const SizedBox(width: 8),
-                    copy,
-                    SizedBox(width: 96, child: controls),
-                  ],
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        status,
-                        const SizedBox(width: 8),
-                        copy,
-                        IconButton(
-                          style: IconButton.styleFrom(
-                            minimumSize: const Size(40, 40),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          child: FocusTraversalGroup(
+            child: widget.mobile
+                ? Row(
+                    children: [
+                      status,
+                      const SizedBox(width: 8),
+                      avatars,
+                      const SizedBox(width: 8),
+                      copy,
+                      SizedBox(width: 96, child: controls),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          status,
+                          const SizedBox(width: 8),
+                          copy,
+                          IconButton(
+                            style: IconButton.styleFrom(
+                              minimumSize: const Size(40, 40),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            tooltip: l10n.callMiniReturn,
+                            onPressed: expand,
+                            icon: const Icon(Icons.open_in_full, size: 18),
                           ),
-                          tooltip: l10n.callMiniReturn,
-                          onPressed: expand,
-                          icon: const Icon(Icons.open_in_full, size: 18),
-                        ),
-                      ],
-                    ),
-                    SizedBox(
-                      height: 28,
-                      child: InkWell(
-                        onTap: expand,
-                        child: Row(
-                          children: [
-                            avatars,
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                participants.any((p) => p.isSpeaking)
-                                    ? l10n.callMiniSpeaking(
-                                        participants
-                                                .firstWhere((p) => p.isSpeaking)
-                                                .name
-                                                .isEmpty
-                                            ? l10n.callMiniParticipant
-                                            : participants
+                        ],
+                      ),
+                      SizedBox(
+                        height: 28,
+                        child: InkWell(
+                          onTap: expand,
+                          child: Row(
+                            children: [
+                              avatars,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  participants.any((p) => p.isSpeaking)
+                                      ? l10n.callMiniSpeaking(
+                                          participants
                                                   .firstWhere(
                                                     (p) => p.isSpeaking,
                                                   )
-                                                  .name,
-                                      )
-                                    : l10n.callMiniParticipants(
-                                        participants.length,
-                                      ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: voice.textSecondary,
+                                                  .name
+                                                  .isEmpty
+                                              ? l10n.callMiniParticipant
+                                              : participants
+                                                    .firstWhere(
+                                                      (p) => p.isSpeaking,
+                                                    )
+                                                    .name,
+                                        )
+                                      : l10n.callMiniParticipants(
+                                          participants.length,
+                                        ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: voice.textSecondary,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    controls,
-                  ],
-                ),
+                      const SizedBox(height: 4),
+                      controls,
+                    ],
+                  ),
+          ),
         ),
       ),
     );

@@ -231,6 +231,20 @@ void main() {
     }
   });
 
+  testWidgets(
+    'mobile background returns to call without changing media state',
+    (tester) async {
+      final container = await mount(tester, mobile: true);
+      await tester.tapAt(
+        tester.getTopLeft(find.byKey(CallMiniBar.panelKey)) +
+            const Offset(2, 2),
+      );
+      await tester.pump();
+      expect(container.read(callExpandedRoomProvider), 'room');
+      expect(container.read(callControllerProvider).isActive, isTrue);
+    },
+  );
+
   for (final mobile in [false, true]) {
     for (final connecting in [false, true]) {
       testWidgets(
@@ -247,7 +261,11 @@ void main() {
           expect(tester.getTopLeft(panel).dy, mobile ? 0 : 700);
           expect(
             find.textContaining(
-              connecting ? 'Подключение к звонку…' : 'Подключено',
+              connecting
+                  ? 'Подключение к звонку…'
+                  : mobile
+                  ? 'Участников: 3'
+                  : 'Подключено',
             ),
             findsOneWidget,
           );
