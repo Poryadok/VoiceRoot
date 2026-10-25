@@ -1712,6 +1712,36 @@ abstract class AppLocalizations {
   /// **'Call active'**
   String get callActive;
 
+  /// No description provided for @callMiniConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get callMiniConnected;
+
+  /// No description provided for @callMiniReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to call'**
+  String get callMiniReturn;
+
+  /// No description provided for @callMiniParticipant.
+  ///
+  /// In en, this message translates to:
+  /// **'Participant'**
+  String get callMiniParticipant;
+
+  /// No description provided for @callMiniSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is speaking'**
+  String callMiniSpeaking(String name);
+
+  /// No description provided for @callMiniParticipants.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} participants'**
+  String callMiniParticipants(int count);
+
   /// No description provided for @callTapToEnableAudio.
   ///
   /// In en, this message translates to:

@@ -947,6 +947,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callActive => 'Call active';
 
   @override
+  String get callMiniConnected => 'Connected';
+
+  @override
+  String get callMiniReturn => 'Return to call';
+
+  @override
+  String get callMiniParticipant => 'Participant';
+
+  @override
+  String callMiniSpeaking(String name) {
+    return '$name is speaking';
+  }
+
+  @override
+  String callMiniParticipants(int count) {
+    return '$count participants';
+  }
+
+  @override
   String get callTapToEnableAudio => 'Tap to enable incoming audio';
 
   @override
