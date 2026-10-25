@@ -230,7 +230,7 @@ class Exact132HistoryContract(unittest.TestCase):
                 with self.subTest(field=index),self.assertRaises(m.Rejected):m.composition_132_capability(*changed)
 
     @contextmanager
-    def fold_fixture(self, composition=False):
+    def fold_fixture(self, composition=False, runtime_path=RUNTIME):
         """Private real Git criss-cross; source-unit/outer authority seams mocked.
 
         The literal historical unit has separate real-Git tests. Here actual
@@ -246,7 +246,7 @@ class Exact132HistoryContract(unittest.TestCase):
                 file=repo/path;file.parent.mkdir(parents=True,exist_ok=True);file.write_text(text)
                 git(repo,'add','.');git(repo,'commit','-qm','fixture');return git(repo,'rev-parse','HEAD')
             base=commit('docs/base.md','base\n')
-            left=commit(RUNTIME,'package main\n')
+            left=commit(runtime_path,'package main\n')
             git(repo,'checkout','-q','--detach',base)
             right=commit('docs/right.md','right\n')
             tree=git(repo,'merge-tree','--write-tree',left,right).splitlines()[0]
@@ -269,7 +269,7 @@ class Exact132HistoryContract(unittest.TestCase):
             patches.enter_context(patch.object(m,'production_applicability',return_value=production))
             capability={'fixture':'outer-authority-only'}
             entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',base=base,source=merge,
-                capability=m.raw_binding(m.canonical(capability)),native_binding=m.raw_binding(json.dumps({'paths':[RUNTIME] if composition else []})),context={})
+                capability=m.raw_binding(m.canonical(capability)),native_binding=m.raw_binding(json.dumps({'paths':[runtime_path,'docs/right.md'] if composition else []})),context={})
             patches.enter_context(patch.object(m,'checked_capability_value',return_value=capability))
             patches.enter_context(patch.object(m,'master_context',return_value=entry))
             trace=folder/'trace';mapping=folder/'map';childmap=folder/'child-map'
@@ -299,7 +299,7 @@ class Exact132HistoryContract(unittest.TestCase):
             delta.write_text('\n'.join(paths)+'\n')
             for name in paths:
                 m.append(trace,'path_gate_before',root,op,repo,[name,str(mapping)])
-                if composition and name==RUNTIME:
+                if composition and name==runtime_path:
                     receipt=m.composition_132_capability(repo,merge,base,first,source,name,
                         m.tree_entry(repo,merge,name).rstrip('\0'),base,merge)
                     m.append(trace,'composition_132_capability',root,op,repo,[json.dumps(receipt)])
@@ -335,6 +335,37 @@ class Exact132HistoryContract(unittest.TestCase):
                 f['trace'].write_text(''.join(json.dumps(e,sort_keys=True)+'\n' for e in events))
                 with self.subTest(case=case),self.assertRaises(m.Rejected):
                     m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+
+    def test_native_documentation_keeps_ordinary_checks_and_guarded_receipts(self):
+        # Native documentation is not a guarded merge-composition path.
+        paths=('src/backend/voice/internal/principaljwks/publisher.go',
+               'src/backend/voice/internal/principaljwks/publisher_test.go',
+               'src/backend/voice/jwks_recovery_test.go',
+               'src/backend/voice/jwks_startup_order_test.go',
+               'src/backend/voice/main.go')
+        for name in paths:
+            with self.subTest(path=name),self.fold_fixture(composition=True,runtime_path=name) as f:
+                m=f['m'];original=[json.loads(line) for line in f['trace'].read_text().splitlines()]
+                self.assertEqual(m.guarded_names([name,'docs/right.md']),[name])
+                result=m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+                self.assertIn('docs/right.md',result['ledger'][f['root']]['paths'])
+                for case in ('missing-guarded-receipt','documentation-map-tamper'):
+                    events=copy.deepcopy(original)
+                    if case=='missing-guarded-receipt':
+                        events=[e for e in events if e['kind']!='composition_132_capability']
+                    else:
+                        event=next(e for e in events if e['kind']=='row_before' and
+                            e['frame']==f['root'] and e['payload']['path']=='docs/right.md')
+                        event['payload']['map_before']['sha256']='0'*64
+                    previous='0'*64
+                    for number,event in enumerate(events,1):
+                        event['sequence']=number;event['previous']=previous;event.pop('digest',None)
+                        event['digest']=m.sha(m.canonical(event));previous=event['digest']
+                    f['trace'].write_text(''.join(json.dumps(e,sort_keys=True)+'\n' for e in events))
+                    with self.subTest(case=case),self.assertRaises(m.Rejected) as error:
+                        m.validate_trace(f['repo'],f['trace'],m.sha(f['trace'].read_bytes()))
+                    if case=='missing-guarded-receipt':
+                        self.assertEqual(str(error.exception),'exact132_native_checkpoint_composition_required')
 
     def test_actual_append_fold_requires_child_and_preserves_aggregate(self):
         # The unchanged child_flags OR is isolated by the real-fold oracle

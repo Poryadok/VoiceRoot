@@ -1009,3 +1009,49 @@ binds the same six source hashes and unchanged shell. Graphify update completed
 with 117535 nodes and 245796 edges. These are isolated source/fixture compatibility
 results; fresh final-head full producer and hosted CI acceptance remain required.
 No performance changes were introduced.
+
+### Native documentation in the exact 132 saved prefix
+
+The c1 actual merge ca45299ecbb56bc2e5aa85a42f7a2a32179e6068 failed its
+R23 owner-permission full fold before reaching the pending R23 row. At trace
+sequence 17073, docs/microservices/space-service.md is in the Native projection
+but outside the original f13_path_is_guarded predicate; the Voice service
+documentation has the same distinction at sequence 17076. The collector correctly
+emitted no checkpoint-composition receipts for those documentation rows. The fold
+incorrectly required receipts for every Native path, while all five genuinely
+guarded Voice paths already had their required receipts. The pre-fix c1 and K10
+validate_trace functions have identical ASTs for this behavior.
+
+The correction intersects Native membership with guarded_names, which executes
+the source-extracted original shell predicate. It changes no path policy or
+owner permission. Documentation still undergoes ordinary child, map, row and OR
+conservation; all guarded Native composition receipts remain mandatory. The
+mixed Native/documentation fixture failed in all five guarded-path subcases
+before the correction, then passed. Missing guarded receipts still reject with
+the exact original category, and a changed documentation map still rejects.
+Focused 132/R23 and shared DC0 OR tests and the full 100-test F54 suite passed;
+saved-prefix replay and fresh producer results remain separate evidence.
+
+Saved-prefix validation completed using separate writable, no-alternates c1
+clones and identical restored trace/sidecars. Original archive-backed materialize
+reconstructed 203 input files; all pinned unit/ruling hashes and eleven retained
+overlaps matched. The initial incomplete-restore fixed_unit_file error is setup
+evidence only. Exact trace SHA256
+e2d50fc18950aeb05dee5a6d88ff87dbc954096142ff7d44bb616ede4675ecc4
+then reproduced the intended old rejection in 1503.322 seconds. The reviewed
+candidate reached the pending R23 checkpoint in 1502.827 seconds and constructed
+the real permission, SHA256
+289fe82a14b9be2a52dd99906a6acd861b78d2954d7fe969e39a33aa435d1166.
+The unchanged CLI postfold statements were separately extracted from source and
+executed against that proven fold output and the original incoming row/map/trace;
+all checks and return status zero passed. This reuses the real fold result and
+does not claim a fresh CLI run, map mutation, terminal collector or hosted PASS.
+
+The focused/full100 verification receipt is main
+tmp/pr875-repair/132-native-guarded/receipt.md, SHA256
+85783312e8af245ee171a6165c78549c135cd66cb03e48a2b8a8408cf4ffd30f.
+Independent applied review SHA256
+e1756263f058ee885fbec7de603680ecd97b953d0e066f9e01f437247f2531d8
+binds helper00d53bee and test9b6a1450. Graphify completed with 117536 nodes and
+245798 edges; diff check passed. Existing source/Native records and the integrated
+shell88b468 are unchanged. Fresh final-head producer and hosted CI remain required.
