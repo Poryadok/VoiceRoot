@@ -95,7 +95,8 @@ func TestRealCodecRunningProcessCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	_, err := run(ctx, "ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=100", "-t", "3600", "-f", "null", "-")
+	path := filepath.Join(t.TempDir(), "cancelled.mp4")
+	err := runOutput(ctx, path, maxOutputBytes, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=64x64:rate=100", "-t", "3600", "-c:v", "libx264", "-threads", "1", path)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("running process cancellation: %v", err)
 	}
@@ -118,6 +119,22 @@ func TestOutputByteLimit(t *testing.T) {
 	}
 	if _, err = readCapped(path); !errors.Is(err, ErrTooLarge) {
 		t.Fatalf("oversized derivative: %v", err)
+	}
+}
+
+func TestRealCodecOutputCapIsPermanent(t *testing.T) {
+	codecAvailable(t)
+	path := filepath.Join(t.TempDir(), "capped.mp4")
+	// Exercise the actual output supervisor with a smaller test budget. No fake
+	// binary: ffmpeg creates an ordinary long H264 MP4 and exceeds that budget.
+	err := runOutput(context.Background(), path, 8<<10, "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=256x256:rate=30", "-t", "20", "-an", "-c:v", "libx264", "-threads", "1", "-preset", "veryfast", "-bf", "0", "-movflags", "+faststart", path)
+	if !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("cap must be permanent, not a successful truncated movie or transient duration error: %v", err)
+	}
+	// A genuine codec invocation error below the cap must remain retryable.
+	err = runOutput(context.Background(), filepath.Join(t.TempDir(), "unsupported.mp4"), 5<<20, "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=16x16", "-t", "1", "-c:v", "voice_nonexistent_codec", filepath.Join(t.TempDir(), "bad.mp4"))
+	if err == nil || errors.Is(err, ErrTooLarge) || errors.Is(err, ErrInvalid) {
+		t.Fatalf("codec failure must be retryable: %v", err)
 	}
 }
 

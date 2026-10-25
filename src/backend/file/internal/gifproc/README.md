@@ -19,6 +19,11 @@ safety budgets, not account admission limits. Each output must fit 5 MiB.
 input/output rejections; process, filesystem and context errors remain separate.
 All work has a 90 second deadline, subprocess output is bounded, and temporary
 files are removed on every return. No input URL or network protocol is used.
+The output supervisor checks file size every 10 ms and cancels with a dedicated
+permanent size cause. Temporary disk bytes may overshoot that cap between checks;
+the pixel/frame/deadline budgets also bound this work. A final capped read covers
+fast exits. Caller cancellation remains a context error. ffmpeg `-fs` is avoided
+because it can silently return a shortened MP4 below its requested cap.
 
 Acceptance: real ffprobe verifies codec, pixel format, dimensions, duration and
 absence of audio. Real decoded pixels verify animation and disposal/matte;

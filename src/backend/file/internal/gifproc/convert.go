@@ -68,14 +68,21 @@ func Convert(ctx context.Context, raw []byte) (Output, error) {
 	width := (decoded.Config.Width + 1) &^ 1
 	height := (decoded.Config.Height + 1) &^ 1
 	// CRF controls quality; the output cap is checked independently. A constrained
-	// bitrate budget prevents disk growth before that check. A 10ms terminal frame
+	// bitrate budget and output supervisor limit disk growth. A 10ms terminal frame
 	// in ffconcat supplies the last GIF hold instead of dropping its duration.
 	bitrate := int64(maxOutputBytes-65536) * 8 * 100 / int64(duration+1)
 	// The manifest and relative filenames are generated here, never from input.
 	// concat requires safe=0 for the per-image centisecond framerate option.
-	args := []string{"-nostdin", "-v", "error", "-y", "-threads", "1", "-protocol_whitelist", "file", "-f", "concat", "-safe", "0", "-i", filepath.Join(dir, "frames.txt"), "-map", "0:v:0", "-an", "-sn", "-dn", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black,format=yuv420p", "-c:v", "libx264", "-threads", "1", "-preset", "veryfast", "-crf", "23", "-maxrate", strconv.FormatInt(bitrate, 10), "-bufsize", strconv.FormatInt(bitrate, 10), "-fps_mode", "vfr", "-enc_time_base", "1:100", "-video_track_timescale", "10000", "-movflags", "+faststart", "-map_metadata", "-1", "-fs", strconv.Itoa(maxOutputBytes + 1), fullPath}
-	args = append(args[:len(args)-1], "-bf", "0", fullPath)
-	if _, err = run(ctx, "ffmpeg", args...); err != nil {
+	args := []string{
+		"-nostdin", "-v", "error", "-y", "-threads", "1", "-protocol_whitelist", "file",
+		"-f", "concat", "-safe", "0", "-i", filepath.Join(dir, "frames.txt"),
+		"-map", "0:v:0", "-an", "-sn", "-dn", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2:0:0:black,format=yuv420p",
+		"-c:v", "libx264", "-threads", "1", "-preset", "veryfast", "-crf", "23",
+		"-maxrate", strconv.FormatInt(bitrate, 10), "-bufsize", strconv.FormatInt(bitrate, 10),
+		"-fps_mode", "vfr", "-enc_time_base", "1:100", "-video_track_timescale", "10000",
+		"-movflags", "+faststart", "-map_metadata", "-1", "-bf", "0", fullPath,
+	}
+	if err = runOutput(ctx, fullPath, maxOutputBytes, args...); err != nil {
 		return Output{}, err
 	}
 	full, err := readCapped(fullPath)
@@ -86,7 +93,7 @@ func Convert(ctx context.Context, raw []byte) (Output, error) {
 		return Output{}, err
 	}
 	thumbPath := filepath.Join(dir, "thumbnail.webp")
-	if _, err = run(ctx, "ffmpeg", "-nostdin", "-v", "error", "-y", "-threads", "1", "-protocol_whitelist", "file", "-i", filepath.Join(dir, "000000.png"), "-frames:v", "1", "-vf", "scale='min(320,iw)':'min(320,ih)':force_original_aspect_ratio=decrease", "-c:v", "libwebp", "-quality", "80", "-an", "-map_metadata", "-1", "-fs", strconv.Itoa(maxOutputBytes+1), thumbPath); err != nil {
+	if err = runOutput(ctx, thumbPath, maxOutputBytes, "-nostdin", "-v", "error", "-y", "-threads", "1", "-protocol_whitelist", "file", "-i", filepath.Join(dir, "000000.png"), "-frames:v", "1", "-vf", "scale='min(320,iw)':'min(320,ih)':force_original_aspect_ratio=decrease", "-c:v", "libwebp", "-quality", "80", "-an", "-map_metadata", "-1", thumbPath); err != nil {
 		return Output{}, err
 	}
 	thumb, err := readCapped(thumbPath)
@@ -275,6 +282,50 @@ func background(g *gif.GIF, frame *image.Paletted) color.Color {
 }
 
 type limitedBuffer struct{ bytes.Buffer }
+
+func runOutput(ctx context.Context, path string, maxBytes int, args ...string) error {
+	// Do not use ffmpeg -fs: it can exit successfully with a truncated movie
+	// below the requested cap, making duration validation look retryable forever.
+	child, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	done, watched := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(watched)
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		check := func() bool {
+			info, err := os.Stat(path)
+			if err == nil && info.Size() > int64(maxBytes) {
+				cancel(ErrTooLarge)
+				return true
+			}
+			return false
+		}
+		for {
+			select {
+			case <-done:
+				check()
+				return // Also inspect outputs that finish between ticks.
+			case <-child.Done():
+				return
+			case <-ticker.C:
+				if check() {
+					return
+				}
+			}
+		}
+	}()
+	_, err := run(child, "ffmpeg", args...)
+	close(done)
+	<-watched
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(context.Cause(child), ErrTooLarge) {
+		return ErrTooLarge
+	}
+	return err
+}
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
 	n := len(p)
