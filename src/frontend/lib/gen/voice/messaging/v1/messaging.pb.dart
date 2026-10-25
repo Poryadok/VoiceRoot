@@ -3828,6 +3828,7 @@ class Message extends $pb.GeneratedMessage {
     $core.String? gameCharacterBindingId,
     $core.bool? gameCardActionsEnabled,
     $core.Iterable<GameActionResult>? gameActionResults,
+    $fixnum.Int64? viewCount,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -3862,6 +3863,7 @@ class Message extends $pb.GeneratedMessage {
       result.gameCardActionsEnabled = gameCardActionsEnabled;
     if (gameActionResults != null)
       result.gameActionResults.addAll(gameActionResults);
+    if (viewCount != null) result.viewCount = viewCount;
     return result;
   }
 
@@ -3915,6 +3917,9 @@ class Message extends $pb.GeneratedMessage {
     ..aOB(28, _omitFieldNames ? '' : 'gameCardActionsEnabled')
     ..pPM<GameActionResult>(29, _omitFieldNames ? '' : 'gameActionResults',
         subBuilder: GameActionResult.create)
+    ..a<$fixnum.Int64>(
+        30, _omitFieldNames ? '' : 'viewCount', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -4190,6 +4195,142 @@ class Message extends $pb.GeneratedMessage {
 
   @$pb.TagNumber(29)
   $pb.PbList<GameActionResult> get gameActionResults => $_getList(27);
+
+  /// Group/channel only. Absent for DM and legacy producers.
+  @$pb.TagNumber(30)
+  $fixnum.Int64 get viewCount => $_getI64(28);
+  @$pb.TagNumber(30)
+  set viewCount($fixnum.Int64 value) => $_setInt64(28, value);
+  @$pb.TagNumber(30)
+  $core.bool hasViewCount() => $_has(28);
+  @$pb.TagNumber(30)
+  void clearViewCount() => $_clearField(30);
+}
+
+class RecordMessageViewRequest extends $pb.GeneratedMessage {
+  factory RecordMessageViewRequest({
+    $core.String? chatId,
+    $core.String? messageId,
+  }) {
+    final result = create();
+    if (chatId != null) result.chatId = chatId;
+    if (messageId != null) result.messageId = messageId;
+    return result;
+  }
+
+  RecordMessageViewRequest._();
+
+  factory RecordMessageViewRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RecordMessageViewRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RecordMessageViewRequest',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'chatId')
+    ..aOS(2, _omitFieldNames ? '' : 'messageId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordMessageViewRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordMessageViewRequest copyWith(
+          void Function(RecordMessageViewRequest) updates) =>
+      super.copyWith((message) => updates(message as RecordMessageViewRequest))
+          as RecordMessageViewRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RecordMessageViewRequest create() => RecordMessageViewRequest._();
+  @$core.override
+  RecordMessageViewRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RecordMessageViewRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RecordMessageViewRequest>(create);
+  static RecordMessageViewRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get chatId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set chatId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasChatId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearChatId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get messageId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set messageId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasMessageId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearMessageId() => $_clearField(2);
+}
+
+class RecordMessageViewResponse extends $pb.GeneratedMessage {
+  factory RecordMessageViewResponse({
+    $fixnum.Int64? viewCount,
+  }) {
+    final result = create();
+    if (viewCount != null) result.viewCount = viewCount;
+    return result;
+  }
+
+  RecordMessageViewResponse._();
+
+  factory RecordMessageViewResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory RecordMessageViewResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'RecordMessageViewResponse',
+      package:
+          const $pb.PackageName(_omitMessageNames ? '' : 'voice.messaging.v1'),
+      createEmptyInstance: create)
+    ..a<$fixnum.Int64>(
+        1, _omitFieldNames ? '' : 'viewCount', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordMessageViewResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  RecordMessageViewResponse copyWith(
+          void Function(RecordMessageViewResponse) updates) =>
+      super.copyWith((message) => updates(message as RecordMessageViewResponse))
+          as RecordMessageViewResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static RecordMessageViewResponse create() => RecordMessageViewResponse._();
+  @$core.override
+  RecordMessageViewResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static RecordMessageViewResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<RecordMessageViewResponse>(create);
+  static RecordMessageViewResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $fixnum.Int64 get viewCount => $_getI64(0);
+  @$pb.TagNumber(1)
+  set viewCount($fixnum.Int64 value) => $_setInt64(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasViewCount() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearViewCount() => $_clearField(1);
 }
 
 class GameActionResult extends $pb.GeneratedMessage {

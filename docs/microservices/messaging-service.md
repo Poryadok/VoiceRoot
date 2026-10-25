@@ -509,7 +509,7 @@ read_receipts (extended)
 
 List UI **must** complete the global `ListChats` inbox snapshot after reconnect — not infer ticks from WS alone.
 
-**Shipped scope:** `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` accept **DM/group/channel** refs, scope read/unread metadata to the caller's `profile_id`, and fail closed with gRPC `PERMISSION_DENIED` for non-members. WS `mark_read` never writes `read_receipts`. Group/channel per-message view counters remain a separate future gap; the shipped A1 contract is per-member unread/read state.
+**Shipped scope:** `MarkRead` / `GetReadState` / `GetBulkReadState` / `GetChatListMetadata` accept **DM/group/channel** refs, scope read/unread metadata to the caller's `profile_id`, and fail closed with gRPC `PERMISSION_DENIED` for non-members. WS `mark_read` never writes `read_receipts`. Group/channel per-message view counters are a separate Messaging-owned model (§ View count); the A1 contract remains per-member unread/read state.
 
 После reconnect клиент завершает paginated `ListChats` snapshot для `main` / `requests` / `archive` с Messaging metadata, а не восстанавливает ticks из WS ([ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Reconnect). Полные сообщения остаются `GetMessages` per selected `chat_id`.
 
@@ -630,20 +630,67 @@ enum DeleteScope {
 
 Column `messages.ghost_only` (migration `000010_ghost_only`): when true, message visible **only** to sender in history queries — shadow delivery for moderation. **Not yet** exposed on `SendMessageRequest` proto; set via internal/admin path only until productized.
 
-### View count (`RecordMessageView` — spec, not yet in proto)
+### View count (`RecordMessageView`)
 
 Group/channel view counts ([text-chat.md](../features/text-chat.md) § View count) require deduped per-`(message_id, profile_id)` storage:
 
 ```protobuf
-rpc RecordMessageView(RecordMessageViewRequest) returns (Empty);
+rpc RecordMessageView(RecordMessageViewRequest) returns (RecordMessageViewResponse);
 
 message RecordMessageViewRequest {
   string chat_id = 1;
   string message_id = 2;
 }
+
+message RecordMessageViewResponse {
+  uint64 view_count = 1;
+}
 ```
 
-**Rules:** idempotent first view per profile; excluded from DM; recount drops on message delete. **Not implemented** — use read cursor as interim UX until RPC lands.
+**Storage and wire:** `messaging_db.message_views(message_id, profile_id, viewed_at)`
+has a unique primary key on `(message_id, profile_id)` and a local FK to `messages`
+with `ON DELETE CASCADE`. Migration `000037_message_views` also erases rows in the
+same transaction as message soft deletion. `Message.view_count` is optional
+`uint64` field 30: group/channel history restores the durable count; DM omits it.
+`POST /api/v1/messages/views` transcodes the dedicated RPC through Gateway.
+
+The caller profile comes only from authenticated context. Membership and
+authoritative chat type come from Chat; a viewport write uses the existing
+single-message read entitlement, ghost/hide/block checks and the chat/Space
+mutation fence. A wrong-chat, deleted or invisible message cannot acquire a
+view. DM requests fail with `INVALID_ARGUMENT`; non-members fail with
+`PERMISSION_DENIED`. Repeated views, retries and different devices of one profile
+do not increment the count again. No Chat database writes or view events occur.
+
+`MarkRead` qualifies all visible eligible group/channel messages at or before the
+cursor, including replies, using keyset candidate pages of 200 and the same
+history entitlement/block policy. Qualified IDs commit with the private cursor
+and optional public receipt in the existing transaction. Viewport recording alone
+does not advance either read cursor. Privacy `show_read_receipts` and last-seen
+settings do not suppress group/channel counts. Flutter qualifies positive
+viewport intersection after layout and renders eye/count footers for group and
+channel metadata; DM keeps its delivery ticks.
+
+**Profile compaction:** Messaging's periodic keyset sweep asks User's protected
+`GetProfileDeletionStates` authority for at most 200 profiles per chunk. Only an
+explicit `SOFT_DELETED` state permits removing that profile's views. Frozen or
+otherwise disabled accounts/profiles are not inferred deleted. `UNKNOWN` retains
+views and is reported for the next sweep; malformed/incomplete/outage responses
+cause no deletion for that chunk. Counts derive from remaining rows and change
+atomically with local deletion. This is periodic convergence, not a synchronous
+cross-service snapshot. User owns profile deletion state; Messaging never reads
+or writes User/Chat databases for compaction.
+
+The worker performs an initial sweep on startup and repeats every 15 minutes.
+Its protected client requires all four
+`MESSAGING_USER_DELETION_GRPC_ADDR`, `MESSAGING_USER_DELETION_TLS_CA_FILE`,
+`MESSAGING_USER_DELETION_CLIENT_CERT_FILE` and
+`MESSAGING_USER_DELETION_CLIENT_KEY_FILE` settings, plus the existing Messaging
+signing-key/JWKS runtime. Partial configuration or a missing signer rejects
+startup. With all four absent the deployment has no compactor; configuring this
+client is required for profile-deletion convergence. Calls use only a fresh
+request-bound Messaging service credential and mTLS to User's protected
+Messaging listener (`:9096` by default); no public/marker fallback exists.
 
 ### Stickers and GIF (wire contract — not yet in code)
 

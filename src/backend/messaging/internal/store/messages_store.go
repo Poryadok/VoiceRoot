@@ -63,6 +63,7 @@ type MessageRow struct {
 	GameCardActionsEnabled bool
 	GameActionResults      []GameActionResult
 	CreatedAt              time.Time
+	ViewCount              uint64
 }
 
 type MessagesStore struct {
@@ -686,6 +687,9 @@ FROM messages WHERE id = $1
 	if err := hydrateGameCards(ctx, s.Pool, single); err != nil {
 		return nil, err
 	}
+	if err := s.hydrateMessageViews(ctx, single); err != nil {
+		return nil, err
+	}
 	*row = single[0]
 	return row, nil
 }
@@ -929,6 +933,9 @@ LIMIT $`+itoa(argN+1)+`
 		return nil, err
 	}
 	if err := hydrateGameCards(ctx, s.Pool, out); err != nil {
+		return nil, err
+	}
+	if err := s.hydrateMessageViews(ctx, out); err != nil {
 		return nil, err
 	}
 	return out, nil

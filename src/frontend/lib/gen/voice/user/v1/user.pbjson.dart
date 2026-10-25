@@ -68,6 +68,24 @@ final $typed_data.Uint8List scheduledMessageDispatchModeDescriptor = $convert.ba
     'T0RFX0FUEAESLworU0NIRURVTEVEX01FU1NBR0VfRElTUEFUQ0hfTU9ERV9XSEVOX09OTElORR'
     'AC');
 
+@$core.Deprecated('Use profileDeletionStateDescriptor instead')
+const ProfileDeletionState$json = {
+  '1': 'ProfileDeletionState',
+  '2': [
+    {'1': 'PROFILE_DELETION_STATE_UNSPECIFIED', '2': 0},
+    {'1': 'PROFILE_DELETION_STATE_NOT_DELETED', '2': 1},
+    {'1': 'PROFILE_DELETION_STATE_SOFT_DELETED', '2': 2},
+    {'1': 'PROFILE_DELETION_STATE_UNKNOWN', '2': 3},
+  ],
+};
+
+/// Descriptor for `ProfileDeletionState`. Decode as a `google.protobuf.EnumDescriptorProto`.
+final $typed_data.Uint8List profileDeletionStateDescriptor = $convert.base64Decode(
+    'ChRQcm9maWxlRGVsZXRpb25TdGF0ZRImCiJQUk9GSUxFX0RFTEVUSU9OX1NUQVRFX1VOU1BFQ0'
+    'lGSUVEEAASJgoiUFJPRklMRV9ERUxFVElPTl9TVEFURV9OT1RfREVMRVRFRBABEicKI1BST0ZJ'
+    'TEVfREVMRVRJT05fU1RBVEVfU09GVF9ERUxFVEVEEAISIgoeUFJPRklMRV9ERUxFVElPTl9TVE'
+    'FURV9VTktOT1dOEAM=');
+
 @$core.Deprecated('Use ensurePrimaryProfileRequestDescriptor instead')
 const EnsurePrimaryProfileRequest$json = {
   '1': 'EnsurePrimaryProfileRequest',
@@ -2427,3 +2445,60 @@ final $typed_data.Uint8List
         'b2JzZXJ2YXRpb25fYmluZGluZ19zaGEyNTYYAyABKAxSGG9ic2VydmF0aW9uQmluZGluZ1NoYT'
         'I1NhIpChBwcm9maWxlX3JldmlzaW9uGAQgASgEUg9wcm9maWxlUmV2aXNpb24SGAoHZGVsZXRl'
         'ZBgFIAEoCFIHZGVsZXRlZBIWCgZmcm96ZW4YBiABKAhSBmZyb3plbg==');
+
+@$core.Deprecated('Use getProfileDeletionStatesRequestDescriptor instead')
+const GetProfileDeletionStatesRequest$json = {
+  '1': 'GetProfileDeletionStatesRequest',
+  '2': [
+    {'1': 'profile_ids', '3': 1, '4': 3, '5': 9, '10': 'profileIds'},
+  ],
+};
+
+/// Descriptor for `GetProfileDeletionStatesRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getProfileDeletionStatesRequestDescriptor =
+    $convert.base64Decode(
+        'Ch9HZXRQcm9maWxlRGVsZXRpb25TdGF0ZXNSZXF1ZXN0Eh8KC3Byb2ZpbGVfaWRzGAEgAygJUg'
+        'pwcm9maWxlSWRz');
+
+@$core.Deprecated('Use profileDeletionStateEntryDescriptor instead')
+const ProfileDeletionStateEntry$json = {
+  '1': 'ProfileDeletionStateEntry',
+  '2': [
+    {'1': 'profile_id', '3': 1, '4': 1, '5': 9, '10': 'profileId'},
+    {
+      '1': 'state',
+      '3': 2,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.user.v1.ProfileDeletionState',
+      '10': 'state'
+    },
+  ],
+};
+
+/// Descriptor for `ProfileDeletionStateEntry`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List profileDeletionStateEntryDescriptor = $convert.base64Decode(
+    'ChlQcm9maWxlRGVsZXRpb25TdGF0ZUVudHJ5Eh0KCnByb2ZpbGVfaWQYASABKAlSCXByb2ZpbG'
+    'VJZBI5CgVzdGF0ZRgCIAEoDjIjLnZvaWNlLnVzZXIudjEuUHJvZmlsZURlbGV0aW9uU3RhdGVS'
+    'BXN0YXRl');
+
+@$core.Deprecated('Use getProfileDeletionStatesResponseDescriptor instead')
+const GetProfileDeletionStatesResponse$json = {
+  '1': 'GetProfileDeletionStatesResponse',
+  '2': [
+    {
+      '1': 'states',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.user.v1.ProfileDeletionStateEntry',
+      '10': 'states'
+    },
+  ],
+};
+
+/// Descriptor for `GetProfileDeletionStatesResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getProfileDeletionStatesResponseDescriptor =
+    $convert.base64Decode(
+        'CiBHZXRQcm9maWxlRGVsZXRpb25TdGF0ZXNSZXNwb25zZRJACgZzdGF0ZXMYASADKAsyKC52b2'
+        'ljZS51c2VyLnYxLlByb2ZpbGVEZWxldGlvblN0YXRlRW50cnlSBnN0YXRlcw==');
