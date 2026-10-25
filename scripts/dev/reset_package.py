@@ -35,6 +35,7 @@ REQUIRED_TOOLS = ('space-native-installer', 'migrate/migrate:v4.18.1',
     'flyway/flyway:11.3.0', 'node:24-alpine')
 DIGEST = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9./:_-]*@sha256:[a-f0-9]{64}')
 TOKEN = re.compile(r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER')
+NATS_RUNTIME_TOKENS = ('__NATS_APP_RESOLVER_PRELOAD__', '__NATS_SYS_RESOLVER_PRELOAD__', '__NATS_SYSTEM_ACCOUNT__')
 
 
 def _fail(reason):
@@ -199,6 +200,21 @@ def _references(objects, secrets):
                 _fail('unresolved_claim')
 
 
+def _validate_tokens(obj):
+    checked = copy.deepcopy(obj)
+    if obj.get('kind') == 'ConfigMap' and obj.get('metadata', {}).get('name') == 'voice-nats-hub-config':
+        template = checked.get('data', {}).get('nats.conf')
+        if not isinstance(template, str) or any(template.count(token) != 1 for token in NATS_RUNTIME_TOKENS):
+            _fail('nats_runtime_template')
+        # These exact tokens belong to the source init renderer, not this package
+        # renderer. Keep its template contract and reject every other token.
+        for token in NATS_RUNTIME_TOKENS:
+            template = template.replace(token, '')
+        checked['data']['nats.conf'] = template
+    if TOKEN.search(json.dumps(checked)):
+        _fail('unresolved_token')
+
+
 def _validate(result):
     if not isinstance(result, dict) or set(result) != {'prepared', 'secrets', 'foundation', 'receipt'}:
         _fail('package_shape')
@@ -206,6 +222,9 @@ def _validate(result):
         _fail('prepared_kind')
     if any(o.get('kind') != 'Secret' for o in result['secrets']):
         _fail('secret_kind')
+    node = result['receipt'].get('node')
+    if not isinstance(node, str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]*', node):
+        _fail('node_binding_required')
     for obj in result['prepared'] + result['secrets']:
         if obj.get('metadata', {}).get('namespace') != dev.NS:
             _fail('output_namespace')
@@ -213,8 +232,11 @@ def _validate(result):
             _fail('output_not_paused')
         if obj.get('kind') == 'Job' and obj['spec'].get('suspend') is not True:
             _fail('output_job_not_suspended')
-        if obj in result['prepared'] and TOKEN.search(json.dumps(obj)):
-            _fail('unresolved_token')
+        if obj.get('kind') in ('Deployment', 'StatefulSet', 'Job'):
+            if obj['spec']['template']['spec'].get('nodeSelector', {}).get('kubernetes.io/hostname') != node:
+                _fail('output_node_binding')
+        if obj in result['prepared']:
+            _validate_tokens(obj)
         for part in dev.walk(obj):
             if 'image' in part:
                 _immutable(part['image'])
@@ -256,11 +278,8 @@ def render(root, source_sha, secret_objects, image_pins, release_policy, decoder
         '__WEB_ORIGIN__': 'https://dev.comrade.click', '__S3_SIGNING_ENDPOINT__': 'https://api-dev.comrade.click'}
     # The LiveKit source ConfigMap is replaced by a freshly rendered Secret below.
     replacements.update({'__LIVEKIT_API_KEY__': 'dev-input-placeholder', '__LIVEKIT_API_SECRET__': 'dev-input-placeholder'})
-    for token, key in (('__NATS_APP_RESOLVER_PRELOAD__', 'account'), ('__NATS_SYS_RESOLVER_PRELOAD__', 'system-account')):
-        public = _value(material, 'voice-nats-operator', key + '.public')
-        jwt = _value(material, 'voice-nats-operator', key + '.jwt')
-        replacements[token] = json.dumps(public) + ': ' + json.dumps(jwt) + ','
-    replacements['__NATS_SYSTEM_ACCOUNT__'] = json.dumps(_value(material, 'voice-nats-operator', 'system-account.public'))
+    for key in ('account.public', 'account.jwt', 'system-account.public', 'system-account.jwt'):
+        _value(material, 'voice-nats-operator', key)
     for token, name in (('__VOICE_MINIO_IMAGE__', 'minio'), ('__VOICE_MINIO_MC_IMAGE__', 'minio-mc')):
         replacements[token] = _immutable(image_pins['images'].get(name) or image_pins['tools'].get(name))
     selected, network = [], []
@@ -272,13 +291,17 @@ def render(root, source_sha, secret_objects, image_pins, release_policy, decoder
         for token, value in replacements.items():
             text = text.replace(token, value)
         text = text.replace('IMAGE_PLACEHOLDER', REGISTRY + '/gateway:' + source_sha)
-        if TOKEN.search(text):
+        check_text = text
+        for token in NATS_RUNTIME_TOKENS:
+            check_text = check_text.replace(token, '')
+        if TOKEN.search(check_text):
             _fail('unresolved_source_token:' + path)
         documents = decoder(text.encode())
         if not isinstance(documents, list):
             _fail('decoder_list_required')
         for original in documents:
             obj = copy.deepcopy(original)
+            _validate_tokens(obj)
             if obj.get('metadata', {}).get('namespace') != STAGING:
                 _fail('source_namespace')
             name, kind = obj['metadata']['name'], obj['kind']
@@ -373,9 +396,16 @@ def render(root, source_sha, secret_objects, image_pins, release_policy, decoder
                 'readinessProbe': {'httpGet': {'path': '/health', 'port': 4180}},
                 'resources': {'requests': {'cpu': '20m', 'memory': '32Mi'}, 'limits': {'cpu': '500m', 'memory': '128Mi'}}}],
             'volumes': [{'name': 'script', 'configMap': {'name': 'voice-dev-mail'}}]}}}}]
+    for obj in prepared:
+        if obj['kind'] in ('Deployment', 'StatefulSet', 'Job'):
+            pod = obj['spec']['template']['spec']
+            selector = pod.setdefault('nodeSelector', {})
+            if not isinstance(selector, dict) or 'kubernetes.io/hostname' in selector and selector['kubernetes.io/hostname'] != node:
+                _fail('node_selector_conflict')
+            selector['kubernetes.io/hostname'] = node
     result = {'prepared': prepared, 'secrets': secrets,
         'foundation': [o for o in dev.foundation(node) if o['kind'] != 'PersistentVolume'],
-        'receipt': {'schema': 'voice-dev-reset-package-v1', 'source_sha': source_sha,
+        'receipt': {'schema': 'voice-dev-reset-package-v1', 'source_sha': source_sha, 'node': node,
             'sources': manifest, 'images': bindings, 'tool_images': copy.deepcopy(image_pins['tools']),
             'frontends': copy.deepcopy(image_pins['frontends']), 'storage_class': 'local-path',
             'renderer_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
