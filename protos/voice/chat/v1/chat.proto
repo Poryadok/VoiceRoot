@@ -65,6 +65,10 @@ service ChatService {
   rpc InstallStickerPack(InstallStickerPackRequest) returns (InstallStickerPackResponse);
   rpc UninstallStickerPack(UninstallStickerPackRequest) returns (UninstallStickerPackResponse);
 
+  // Provider-neutral metadata only; search does not authorize a File reference.
+  rpc SearchGifs(SearchGifsRequest) returns (SearchGifsResponse);
+  rpc GetTrendingGifs(GetTrendingGifsRequest) returns (GetTrendingGifsResponse);
+
   // DM-only opt-in E2E encryption — docs/features/encryption.md.
   rpc EnableChatE2E(EnableChatE2ERequest) returns (EnableChatE2EResponse);
   rpc DisableChatE2E(DisableChatE2ERequest) returns (DisableChatE2EResponse);
@@ -770,3 +774,34 @@ message SetChatMemberPostAsChatRequest {
 }
 
 message SetChatMemberPostAsChatResponse {}
+
+message SearchGifsRequest {
+  string query = 1;
+  int32 limit = 2; // Default 20, maximum 50.
+  string cursor = 3; // Opaque, owned by Chat.
+}
+
+message GetTrendingGifsRequest {
+  int32 limit = 1; // Default 20, maximum 50.
+  string cursor = 2;
+}
+
+message GifResult {
+  string provider = 1;
+  string provider_id = 2;
+  string file_id = 3; // Empty until imported; never grants send authority.
+  string preview_url = 4;
+  int32 width = 5;
+  int32 height = 6;
+  float duration_seconds = 7;
+}
+
+message SearchGifsResponse {
+  repeated GifResult items = 1;
+  string next_cursor = 2;
+}
+
+message GetTrendingGifsResponse {
+  repeated GifResult items = 1;
+  string next_cursor = 2;
+}
