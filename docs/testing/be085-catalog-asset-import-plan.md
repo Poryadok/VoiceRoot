@@ -134,6 +134,12 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
   generated clients are additive; existing File proto/processing remains owned
   by PR898. Storage activation still needs the bounded abandoned-import cleanup
   and receipt-deletion integration described there.
+- The File source admission predicate now checks exact source/account/profile/
+  provider/File identity, READY, non-E2E, logical expiry, scan, persisted GIF
+  intent, video category, revision and actual source/delivered digests/limits.
+  Its focused negative matrix is GREEN after missing-API RED; combined native
+  race checks with the principal suite passed (3.012 s and 2.196 s). It does not
+  substitute for an actual database lookup or current destination authority.
 
 ## Risks and follow-ups
 
