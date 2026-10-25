@@ -25,6 +25,31 @@ def workload():
 
 
 class ReferenceTests(unittest.TestCase):
+    def test_final_runtime_binding_requires_fresh_source_render_and_rejects_endpoint_or_mount_drift(self):
+        obj = workload()
+        container = obj['spec']['template']['spec']['containers'][0]
+        container['env'].append({'name': 'TLS_SERVER_NAME', 'value': 'voice-test'})
+        material = [secret('voice-tls', **{'tls.crt': 'fixture'})]
+        inputs = {'root': '.', 'source_sha': '1' * 40, 'secret_objects': material,
+                  'image_pins': {}, 'release_policy': {}, 'decoder': lambda value: []}
+        expected = {'prepared': [obj], 'secrets': material, 'receipt': {'source_sha': '1' * 40, 'renderer_sha256': 'fixture'}}
+        import reset_package
+        with self.assertRaisesRegex(ValueError, 'runtime_source_binding_required'):
+            credentials.verify_runtime_binding([obj], material, None)
+        with mock.patch.object(reset_package, 'render', return_value=expected) as render:
+            credentials.verify_runtime_binding([obj], material, inputs)
+            render.assert_called_once_with(**inputs)
+            changed = copy.deepcopy(obj)
+            changed['spec']['template']['spec']['containers'][0]['env'][-1]['value'] = 'wrong-server'
+            with self.assertRaisesRegex(ValueError, 'runtime_source_mismatch'):
+                credentials.verify_runtime_binding([changed], material, inputs)
+            changed = copy.deepcopy(obj)
+            changed['spec']['template']['spec']['volumes'][0]['secret']['secretName'] = 'existing-other-root'
+            with self.assertRaisesRegex(ValueError, 'runtime_source_mismatch'):
+                credentials.verify_runtime_binding([changed], material, inputs)
+            with self.assertRaisesRegex(ValueError, 'runtime_source_mismatch'):
+                credentials.verify_runtime_binding([obj], [secret('voice-tls', **{'tls.crt': 'different-generation'})], inputs)
+
     def test_private_destination_freshness_symlink_owner_and_mode(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()
@@ -53,6 +78,29 @@ class ReferenceTests(unittest.TestCase):
         container['args'].extend(['--requirepass', 'hidden'])
         with self.assertRaisesRegex(ValueError, 'redis_contract'):
             credentials.verify_replay([redis], replay)
+
+    def test_effective_replay_envfrom_password_and_endpoint_cannot_disagree(self):
+        redis = workload()
+        redis['metadata']['name'] = 'voice-redis'
+        redis['spec']['template']['spec']['containers'][0]['args'] = ['redis-server', '--appendonly', 'yes']
+        chat = workload()
+        container = chat['spec']['template']['spec']['containers'][0]
+        container['env'] = [{'name': 'CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_ADDR', 'value': 'voice-redis:6379'},
+                            {'name': 'CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'value': 'synthetic-wrong-password'}]
+        replay = [secret(name, password='') for name in credentials.REPLAY_NAMES]
+        with self.assertRaisesRegex(ValueError, 'replay_password'):
+            credentials.verify_replay([redis, chat], replay)
+        container['env'][1] = {'name': 'CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD', 'valueFrom': {
+            'secretKeyRef': {'name': 'voice-p3-principal-replay', 'key': 'password'}}}
+        credentials.verify_replay([redis, chat], replay)
+        container['env'][0]['value'] = 'unrelated-redis:6379'
+        with self.assertRaisesRegex(ValueError, 'replay_endpoint'):
+            credentials.verify_replay([redis, chat], replay)
+        container['env'] = []
+        container['envFrom'] = [{'configMapRef': {'name': 'runtime'}}]
+        config = credentials.public_config('runtime', {'CHAT_REALTIME_PRINCIPAL_REPLAY_REDIS_PASSWORD': 'synthetic-wrong-password'})
+        with self.assertRaisesRegex(ValueError, 'replay_password'):
+            credentials.verify_replay([redis, chat, config], replay + [config])
 
     def test_identity_issuer_replaces_connected_families_and_separates_complete_client_root(self):
         material = mock.Mock()
@@ -142,12 +190,52 @@ class ReferenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'missing_object'):
             credentials.references([obj], material[:-1])
 
+    def test_runtime_paths_resolve_keyrefs_and_envfrom_and_reject_projection_duplicates(self):
+        obj = workload()
+        container = obj['spec']['template']['spec']['containers'][0]
+        config = credentials.public_config('runtime', {'TLS_CERT_FILE': '/etc/voice/tls/missing.crt'})
+        material = [secret('voice-tls', **{'tls.crt': 'fixture'})]
+        container['env'] = [{'name': 'TLS_CERT_FILE', 'valueFrom': {'configMapKeyRef': {'name': 'runtime', 'key': 'TLS_CERT_FILE'}}}]
+        with self.assertRaisesRegex(ValueError, 'runtime_file'):
+            credentials.references([obj, config], material)
+        container['env'] = []
+        container['envFrom'] = [{'configMapRef': {'name': 'runtime'}}]
+        with self.assertRaisesRegex(ValueError, 'runtime_file'):
+            credentials.references([obj, config], material)
+        config['data']['TLS_CERT_FILE'] = '/etc/voice/tls/tls.crt'
+        credentials.references([obj, config], material)
+        obj['spec']['template']['spec']['volumes'][0]['secret']['items'] = [
+            {'key': 'tls.crt', 'path': 'tls.crt'}, {'key': 'tls.crt', 'path': 'tls.crt'}]
+        with self.assertRaisesRegex(ValueError, 'projection_collision'):
+            credentials.references([obj, config], material)
+
     def test_duplicate_and_foreign_objects_reject_without_payload_errors(self):
         obj = secret('voice-tls', **{'tls.crt': 'private-sentinel'})
         for material in ([obj, obj], [{**obj, 'metadata': {'name': 'voice-tls', 'namespace': 'voice-staging'}}]):
             with self.assertRaises(ValueError) as error:
                 credentials.references([workload()], material)
             self.assertNotIn('private-sentinel', str(error.exception))
+
+
+class SourceBindingTests(unittest.TestCase):
+    def test_canonical_source_renderer_binds_actual_tls_consumer_settings(self):
+        # Reference-complete fixtures exercise the real renderer, not trust
+        # issuance. Cryptographic qualification is tested independently below.
+        import reset_package
+        import reset_package_test as source
+        material, pins = source.fixture()
+        inputs = dict(root=source.ROOT, source_sha=source.SHA, secret_objects=material,
+                      image_pins=pins, release_policy=source.policy(), decoder=source.decode,
+                      source_manifest=source.MANIFEST)
+        result = reset_package.render(**inputs)
+        credentials.verify_runtime_binding(result['prepared'], result['secrets'], inputs)
+        changed = copy.deepcopy(result['prepared'])
+        realtime = next(o for o in changed if o['kind'] == 'Deployment' and o['metadata']['name'] == 'voice-realtime')
+        env = realtime['spec']['template']['spec']['containers'][0]['env']
+        setting = next(e for e in env if e['name'] == 'REALTIME_CHAT_LIFECYCLE_SERVER_NAME')
+        setting['value'] = 'wrong-server.voice-dev.svc'
+        with self.assertRaisesRegex(ValueError, 'runtime_source_mismatch'):
+            credentials.verify_runtime_binding(changed, result['secrets'], inputs)
 
 
 @unittest.skipUnless(shutil.which('openssl'), 'canonical OpenSSL verifier required')

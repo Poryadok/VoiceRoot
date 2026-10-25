@@ -214,14 +214,18 @@ def verify_replay(prepared, objects):
         obj = index.get(('Secret', name))
         if obj is None or values(obj) != {'password': b''}:
             fail('replay_password')
-    # The final DEV CompleteMatch override must remain explicitly empty.
+    # Inspect effective values, including envFrom and individual key refs.
     for obj in prepared:
         if obj.get('kind') not in ('Deployment', 'StatefulSet', 'Job'):
             continue
-        for container in obj['spec']['template']['spec'].get('containers', []):
-            for env in container.get('env', []):
-                if env.get('name') == 'MATCHMAKING_SPACE_PRINCIPAL_REPLAY_REDIS_PASSWORD' and env.get('value') != '':
+        pod = obj['spec']['template']['spec']
+        for container in pod.get('containers', []) + pod.get('initContainers', []):
+            env = effective_environment(container, index)
+            for name, value in env.items():
+                if (name.endswith('_REPLAY_REDIS_PASSWORD') or name == 'REDIS_PASSWORD') and value != '':
                     fail('replay_password')
+                if (name.endswith('_REPLAY_REDIS_ADDR') or name == 'REDIS_ADDR') and value != 'voice-redis:6379':
+                    fail('replay_endpoint')
 
 
 def verify_identities(objects):
@@ -326,6 +330,56 @@ def values(obj):
     return result
 
 
+def effective_environment(container, index, loader=None):
+    """Resolve Kubernetes envFrom order and explicit env override semantics."""
+    def read(kind, name, keys, reason):
+        if loader:
+            return loader(kind, name, keys, reason)
+        if (kind, name) not in index:
+            fail('missing_object:' + kind + '/' + str(name))
+        result = values(index[kind, name])
+        if keys is not None and not set(keys) <= set(result):
+            fail('missing_keys:' + kind + '/' + str(name))
+        return result
+    def decode(raw):
+        try:
+            return raw.decode('utf-8')
+        except (UnicodeError, AttributeError):
+            fail('environment_encoding')
+    result = {}
+    for source in container.get('envFrom', []):
+        refs = [(field, kind) for field, kind in (('secretRef', 'Secret'), ('configMapRef', 'ConfigMap')) if field in source]
+        if len(refs) != 1:
+            fail('environment_source')
+        field, kind = refs[0]
+        prefix = source.get('prefix', '')
+        for key, raw in read(kind, source[field]['name'], None, 'envFrom').items():
+            result[prefix + key] = decode(raw)
+    seen = set()
+    for env in container.get('env', []):
+        name = env['name']
+        if name in seen:
+            fail('environment_duplicate')
+        seen.add(name)
+        if 'value' in env and 'valueFrom' in env:
+            fail('environment_source')
+        if 'valueFrom' in env:
+            refs = [(field, kind) for field, kind in (('secretKeyRef', 'Secret'), ('configMapKeyRef', 'ConfigMap')) if field in env['valueFrom']]
+            if len(refs) != 1:
+                # Non-identity downward fields cannot resolve a credential setting.
+                result[name] = None
+                continue
+            field, kind = refs[0]
+            ref = env['valueFrom'][field]
+            value = decode(read(kind, ref['name'], [ref['key']], 'env/' + name)[ref['key']])
+        else:
+            value = env.get('value', '')
+        if not isinstance(value, str):
+            fail('environment_shape')
+        result[name] = value
+    return result
+
+
 def complete_application(app):
     """Fill Realtime's omitted DSN and bind Notification to the SAME fresh PG key."""
     objects_by_identity([app])
@@ -375,8 +429,32 @@ def verify_application(objects):
         fail('application_contract')
 
 
-def qualify(prepared, secrets):
-    """Offline checks only. Runtime HTTPS/listeners/migrations remain a gate."""
+def verify_runtime_binding(prepared, secrets, source_inputs):
+    """Bind every final consumer to a fresh canonical source-qualified render.
+
+    Identity graph checks alone cannot qualify final URLs, server names, trust
+    mounts or effective client identities. Reuse the canonical reset renderer's
+    source/archive, image, overlay and policy checks instead of inferring that
+    consumer contract from Secret names. Inputs are exactly render()'s keyword
+    arguments and must retain the original fresh credential union.
+    """
+    required = {'root', 'source_sha', 'secret_objects', 'image_pins', 'release_policy', 'decoder'}
+    if not isinstance(source_inputs, dict) or not required <= set(source_inputs):
+        fail('runtime_source_binding_required')
+    import reset_package
+    expected = reset_package.render(**source_inputs)
+    if prepared != expected['prepared'] or secrets != expected['secrets']:
+        fail('runtime_source_mismatch')
+    return {key: expected['receipt'][key] for key in ('source_sha', 'renderer_sha256')}
+
+
+def qualify(prepared, secrets, *, source_inputs=None):
+    """Offline checks only. Runtime HTTPS/listeners/migrations remain a gate.
+
+    No qualification result is returned without the canonical final source
+    render and identical credentials. This does not qualify live API readback.
+    """
+    source_binding = verify_runtime_binding(prepared, secrets, source_inputs)
     objects = [o for o in prepared if o.get('kind') == 'ConfigMap'] + secrets
     rows = references(prepared, secrets)
     verify_application(objects)
@@ -384,7 +462,7 @@ def qualify(prepared, secrets):
     certificates = verify_identities(objects)
     return {'schema': 'voice-dev-offline-credential-qualification-v1', 'namespace': NS,
             'references': rows, 'certificate_checks': certificates,
-            'runtime_qualified': False, 'old_dataset_restored': False}
+            'source_binding': source_binding, 'runtime_qualified': False}
 
 
 def build_union(fresh, captured, retained_names):
@@ -434,6 +512,8 @@ def references(prepared, secrets):
                 name = ref.get('secretName') or ref.get('name')
                 items = ref.get('items')
                 data = require(kind, name, [i['key'] for i in items] if items is not None else None, consumer, 'volume')
+                if items is not None and len({i['path'] for i in items}) != len(items):
+                    fail('projection_collision')
                 files = {i['path']: (kind, name, i['key']) for i in items} if items is not None else {key: (kind, name, key) for key in data}
                 if any(PurePosixPath(path).is_absolute() or '..' in PurePosixPath(path).parts for path in files):
                     fail('projection_path')
@@ -481,27 +561,22 @@ def references(prepared, secrets):
                 else:
                     for path, identity in files.items():
                         mounted[str(PurePosixPath(mount['mountPath']) / path)] = identity
-            for ref in container.get('envFrom', []):
-                for field, kind in (('secretRef', 'Secret'), ('configMapRef', 'ConfigMap')):
-                    if field in ref:
-                        require(kind, ref[field]['name'], None, actor, 'envFrom')
-            for env in container.get('env', []):
-                for field, kind in (('secretKeyRef', 'Secret'), ('configMapKeyRef', 'ConfigMap')):
-                    ref = env.get('valueFrom', {}).get(field)
-                    if ref:
-                        require(kind, ref['name'], [ref['key']], actor, 'env/' + env['name'])
-                value = env.get('value', '')
-                if not isinstance(value, str):
-                    fail('environment_shape')
+            environment = effective_environment(container, available,
+                lambda kind, name, keys, reason: require(kind, name, keys, actor, reason))
+            for name, value in environment.items():
+                if value is None:
+                    if name.endswith(('_FILE', '_DIR', '_DIRECTORY')):
+                        fail('dynamic_runtime_file')
+                    continue
                 paths = re.findall(r'/etc/voice/[A-Za-z0-9_.\-/]+', value)
                 for path in paths:
-                    is_directory = env['name'].endswith(('_DIR', '_DIRECTORY'))
+                    is_directory = name.endswith(('_DIR', '_DIRECTORY'))
                     resolved = [p for p in mounted if p.startswith(path.rstrip('/') + '/')] if is_directory else [path] if path in mounted else []
                     if not resolved:
-                        fail('runtime_file_unresolved:' + actor + '/' + env['name'])
+                        fail('runtime_file_unresolved:' + actor + '/' + name)
                     for location in resolved:
-                        kind, name, key = mounted[location]
-                        require(kind, name, [key], actor, 'runtime/' + env['name'])
+                        kind, object_name, key = mounted[location]
+                        require(kind, object_name, [key], actor, 'runtime/' + name)
     return [{**row, 'keys': sorted(row['keys']), 'consumers': sorted(row['consumers'])}
             for identity, row in sorted(rows.items())]
 
