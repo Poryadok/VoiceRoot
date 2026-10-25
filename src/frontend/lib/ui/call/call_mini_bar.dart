@@ -52,8 +52,8 @@ class _CallMiniBarState extends ConsumerState<CallMiniBar> {
   Widget build(BuildContext context) {
     final call = ref.watch(callControllerProvider);
     final session = call.session;
-    ref.listen(callExpandedRoomProvider, (previous, next) {
-      if (previous == _roomId && next == null) {
+    ref.listen(callMiniFocusRequestProvider, (previous, next) {
+      if (previous != next && _roomId != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _returnFocus.requestFocus();
         });

@@ -93,7 +93,10 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
           : null,
       showMinimize: widget.shellHosted || (useExpandedMedia && !_minimized),
       onMinimize: widget.shellHosted
-          ? () => ref.read(callExpandedRoomProvider.notifier).state = null
+          ? () {
+              ref.read(callExpandedRoomProvider.notifier).state = null;
+              ref.read(callMiniFocusRequestProvider.notifier).state++;
+            }
           : useExpandedMedia
           ? () => setState(() => _minimized = true)
           : null,

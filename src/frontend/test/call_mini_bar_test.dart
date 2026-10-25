@@ -30,6 +30,7 @@ void main() {
     bool mobile = false,
     bool active = true,
     bool connecting = false,
+    bool navigatedAway = true,
     double textScale = 1,
     Locale locale = const Locale('en'),
   }) async {
@@ -112,6 +113,9 @@ void main() {
         ),
       );
     }
+    if (navigatedAway) {
+      container.read(callExpandedRoomProvider.notifier).state = null;
+    }
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -160,6 +164,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     return container;
   }
+
+  testWidgets(
+    'new call opens active surface and navigation restores dock without ending it',
+    (tester) async {
+      final container = await mount(tester, navigatedAway: false);
+      expect(container.read(callExpandedRoomProvider), 'room');
+      expect(find.byKey(ActiveCallPanel.panelKey), findsOneWidget);
+      container.read(selectedChatIdProvider.notifier).state = 'other-chat';
+      await tester.pump();
+      expect(find.byKey(CallMiniBar.panelKey), findsOneWidget);
+      expect(container.read(callControllerProvider).isActive, isTrue);
+    },
+  );
 
   testWidgets('idle does not occupy a shell slot', (tester) async {
     await mount(tester, active: false);
