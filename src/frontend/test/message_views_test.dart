@@ -8,6 +8,45 @@ import 'package:voice_frontend/gen/voice/messaging/v1/messaging.pb.dart' as pb;
 import 'package:voice_frontend/ui/chat/message_view_count.dart';
 
 void main() {
+  testWidgets(
+    'failed viewport record retries on reentry and stops after success',
+    (tester) async {
+      var calls = 0;
+      final scroll = ScrollController();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ListView(
+            cacheExtent: 2000,
+            controller: scroll,
+            children: [
+              MessageViewportView(
+                onVisible: () async {
+                  calls++;
+                  return calls > 1;
+                },
+                child: const SizedBox(height: 80, child: Text('target')),
+              ),
+              const SizedBox(height: 1200),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(calls, 1);
+      await tester.drag(find.byType(ListView), const Offset(0, -700));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, 700));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      await tester.drag(find.byType(ListView), const Offset(0, -700));
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, 700));
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      await tester.pumpWidget(const SizedBox());
+      scroll.dispose();
+    },
+  );
   test('durable optional views survive protobuf, cache and copy', () {
     final message = voiceMessageFromProto(
       pb.Message(id: 'message', viewCount: Int64(42)),
@@ -44,8 +83,9 @@ void main() {
             children: [
               const SizedBox(height: 1200),
               MessageViewportView(
-                onVisible: () {
+                onVisible: () async {
                   views++;
+                  return true;
                 },
                 child: const SizedBox(height: 60, child: Text('target')),
               ),

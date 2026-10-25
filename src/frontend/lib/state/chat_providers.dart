@@ -3017,7 +3017,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
   final Set<String> _recordedMessageViews = {};
   final Set<String> _pendingMessageViews = {};
 
-  Future<void> recordMessageView(String messageId) async {
+  Future<bool> recordMessageView(String messageId) async {
     final profileId = _activeProfileId();
     final auth = _ref.read(authorizationHeaderProvider);
     if (profileId == null ||
@@ -3025,12 +3025,11 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         state.isOfflineCache ||
         state.historyProfileId != profileId ||
         _ref.read(selectedChatIdProvider) != chatId) {
-      return;
+      return false;
     }
     final key = '$profileId:$messageId';
-    if (_recordedMessageViews.contains(key) || !_pendingMessageViews.add(key)) {
-      return;
-    }
+    if (_recordedMessageViews.contains(key)) return true;
+    if (!_pendingMessageViews.add(key)) return false;
     try {
       final result = await _ref
           .read(voiceMessagesClientProvider)
@@ -3043,7 +3042,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           _activeProfileId() != profileId ||
           _ref.read(authorizationHeaderProvider) != auth ||
           state.historyProfileId != profileId) {
-        return;
+        return false;
       }
       if (result is MessagesApiOk<int>) {
         _recordedMessageViews.add(key);
@@ -3057,7 +3056,9 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           ],
         );
         await _writeCache(state.messages, profileId: profileId);
+        return true;
       }
+      return false;
     } finally {
       _pendingMessageViews.remove(key);
     }

@@ -3241,12 +3241,11 @@ class _MessageListView extends ConsumerWidget {
                   key: ValueKey('view:$activeId:${msg.id}'),
                   onVisible: () {
                     if (showMessageViews) {
-                      unawaited(
-                        ref
-                            .read(chatRoomControllerProvider(chatId).notifier)
-                            .recordMessageView(msg.id),
-                      );
+                      return ref
+                          .read(chatRoomControllerProvider(chatId).notifier)
+                          .recordMessageView(msg.id);
                     }
+                    return Future.value(true);
                   },
                   child: ChatMessageBubbleTile(
                     message: msg,

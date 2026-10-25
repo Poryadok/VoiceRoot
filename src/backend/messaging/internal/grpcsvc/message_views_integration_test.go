@@ -43,6 +43,10 @@ func TestMessageViewsViewportReadCursorAndHistory(t *testing.T) {
 		require.NotNil(t, r.Message.ViewCount)
 		require.EqualValues(t, 1, r.Message.GetViewCount())
 	}
+	edited, err := client.EditMessage(ownerCtx, &messagingv1.EditMessageRequest{MessageId: first.Message.Id, Content: "edited"})
+	require.NoError(t, err)
+	require.NotNil(t, edited.Message.ViewCount)
+	require.EqualValues(t, 1, edited.Message.GetViewCount(), "editing cannot reset durable views")
 	_, err = client.RecordMessageView(withProfileCtx(ctx, uuid.New(), uuid.New()), req)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	_, err = client.RecordMessageView(viewerCtx, &messagingv1.RecordMessageViewRequest{ChatId: uuid.NewString(), MessageId: first.Message.Id})

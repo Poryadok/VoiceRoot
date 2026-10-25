@@ -25,7 +25,7 @@ class MessageViewportView extends StatefulWidget {
     required this.onVisible,
     required this.child,
   });
-  final VoidCallback onVisible;
+  final Future<bool> Function() onVisible;
   final Widget child;
 
   @override
@@ -36,6 +36,14 @@ class _MessageViewportViewState extends State<MessageViewportView> {
   ScrollableState? _scrollable;
   bool _reported = false;
   bool _scheduled = false;
+  bool _wasVisible = false;
+  bool _inFlight = false;
+
+  @override
+  void didUpdateWidget(covariant MessageViewportView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _schedule();
+  }
 
   @override
   void didChangeDependencies() {
@@ -52,7 +60,7 @@ class _MessageViewportViewState extends State<MessageViewportView> {
   void _schedule() {
     if (_reported || _scheduled) return;
     _scheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _scheduled = false;
       if (!mounted || _reported) return;
       final box = context.findRenderObject();
@@ -67,9 +75,23 @@ class _MessageViewportViewState extends State<MessageViewportView> {
       }
       final bounds = box.localToGlobal(Offset.zero) & box.size;
       final visible = viewport.localToGlobal(Offset.zero) & viewport.size;
-      if (bounds.width > 0 && bounds.height > 0 && bounds.overlaps(visible)) {
-        _reported = true;
-        widget.onVisible();
+      final entered =
+          bounds.width > 0 && bounds.height > 0 && bounds.overlaps(visible);
+      if (!entered) {
+        _wasVisible = false;
+        return;
+      }
+      if (_wasVisible || _inFlight) return;
+      _wasVisible = true;
+      _inFlight = true;
+      try {
+        final success = await widget.onVisible();
+        if (mounted) _reported = success;
+      } catch (_) {
+        // A failed attempt remains eligible on a later viewport entry.
+        _reported = false;
+      } finally {
+        _inFlight = false;
       }
     });
   }
