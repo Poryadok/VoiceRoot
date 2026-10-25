@@ -132,8 +132,24 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 - The [concrete protocol](be085-catalog-asset-contract.md) includes the mutually
   agreed Chat/File fields and protected caller matrix. New File schema and
   generated clients are additive; existing File proto/processing remains owned
-  by PR898. Storage activation still needs the bounded abandoned-import cleanup
-  and receipt-deletion integration described there.
+  by PR898. Astra101 supplied bounded abandoned-import cleanup and receipt
+  minimization: actual internal pending File, no raw URL persistence, P30D
+  completed details, purpose-HMAC compact terminal fence. Storage activation
+  still requires its actual executor fencing and account/profile integration.
+- The File source admission predicate now checks exact source/account/profile/
+  provider/File identity, READY, non-E2E, logical expiry, scan, persisted GIF
+  intent, video category, revision and actual source/delivered digests/limits.
+  Its focused negative matrix is GREEN after missing-API RED; combined native
+  race checks with the principal suite passed (3.012 s and 2.196 s). It does not
+  substitute for an actual database lookup or current destination authority.
+- Normal Git merges assembled exact Chat protocol `32260ce` and reviewed GIF
+  processor `708e54d2264f8f05aea3b529a26fd9b653dec154` into the author's branch;
+  source ownership remains with their authors. This is dependency integration,
+  not an assertion that PR898 is merged or that catalog import is implemented.
+- The Chat-only GetCatalogAssetStatus operation/asset selectors close response
+  loss plus CDN rotation without persisting URLs. Its route failed ordinary
+  listener isolation before the allowlist update (RED), then the combined native
+  principal/fetch race suites passed (2.786 s and 3.156 s).
 
 ## Risks and follow-ups
 

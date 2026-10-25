@@ -59,6 +59,15 @@ const ImportCatalogAssetResponse$json = {
     {'1': 'provider_id', '3': 5, '4': 1, '5': 9, '10': 'providerId'},
     {'1': 'file_id', '3': 6, '4': 1, '5': 9, '10': 'fileId'},
     {'1': 'status', '3': 7, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'operation_id', '3': 8, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'destination_chat',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'destinationChat'
+    },
   ],
 };
 
@@ -68,7 +77,9 @@ final $typed_data.Uint8List importCatalogAssetResponseDescriptor = $convert.base
     'lkEigKEGFjdG9yX2FjY291bnRfaWQYAiABKAlSDmFjdG9yQWNjb3VudElkEigKEGFjdG9yX3By'
     'b2ZpbGVfaWQYAyABKAlSDmFjdG9yUHJvZmlsZUlkEhoKCHByb3ZpZGVyGAQgASgJUghwcm92aW'
     'RlchIfCgtwcm92aWRlcl9pZBgFIAEoCVIKcHJvdmlkZXJJZBIXCgdmaWxlX2lkGAYgASgJUgZm'
-    'aWxlSWQSFgoGc3RhdHVzGAcgASgJUgZzdGF0dXM=');
+    'aWxlSWQSFgoGc3RhdHVzGAcgASgJUgZzdGF0dXMSIQoMb3BlcmF0aW9uX2lkGAggASgJUgtvcG'
+    'VyYXRpb25JZBJBChBkZXN0aW5hdGlvbl9jaGF0GAkgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0'
+    'UmVmUg9kZXN0aW5hdGlvbkNoYXQ=');
 
 @$core.Deprecated('Use validateCatalogAssetRequestDescriptor instead')
 const ValidateCatalogAssetRequest$json = {
@@ -195,3 +206,119 @@ final $typed_data.Uint8List lookupCatalogAssetResponseDescriptor =
         'ChpMb29rdXBDYXRhbG9nQXNzZXRSZXNwb25zZRJHCgdjYXRhbG9nGAEgASgLMisudm9pY2UuZm'
         'lsZS52MS5WYWxpZGF0ZUNhdGFsb2dBc3NldFJlc3BvbnNlSABSB2NhdGFsb2cSJQoNb3JkaW5h'
         'cnlfZmlsZRgCIAEoCEgAUgxvcmRpbmFyeUZpbGVCEAoOY2xhc3NpZmljYXRpb24=');
+
+@$core.Deprecated('Use catalogImportOperationSelectorDescriptor instead')
+const CatalogImportOperationSelector$json = {
+  '1': 'CatalogImportOperationSelector',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'provider', '3': 2, '4': 1, '5': 9, '10': 'provider'},
+    {'1': 'provider_id', '3': 3, '4': 1, '5': 9, '10': 'providerId'},
+    {
+      '1': 'destination_chat',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'destinationChat'
+    },
+  ],
+};
+
+/// Descriptor for `CatalogImportOperationSelector`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List catalogImportOperationSelectorDescriptor =
+    $convert.base64Decode(
+        'Ch5DYXRhbG9nSW1wb3J0T3BlcmF0aW9uU2VsZWN0b3ISIQoMb3BlcmF0aW9uX2lkGAEgASgJUg'
+        'tvcGVyYXRpb25JZBIaCghwcm92aWRlchgCIAEoCVIIcHJvdmlkZXISHwoLcHJvdmlkZXJfaWQY'
+        'AyABKAlSCnByb3ZpZGVySWQSQQoQZGVzdGluYXRpb25fY2hhdBgEIAEoCzIWLnZvaWNlLmNoYX'
+        'QudjEuQ2hhdFJlZlIPZGVzdGluYXRpb25DaGF0');
+
+@$core.Deprecated('Use catalogAssetSelectorDescriptor instead')
+const CatalogAssetSelector$json = {
+  '1': 'CatalogAssetSelector',
+  '2': [
+    {'1': 'source_id', '3': 1, '4': 1, '5': 9, '10': 'sourceId'},
+    {'1': 'provider', '3': 2, '4': 1, '5': 9, '10': 'provider'},
+    {'1': 'provider_id', '3': 3, '4': 1, '5': 9, '10': 'providerId'},
+    {'1': 'file_id', '3': 4, '4': 1, '5': 9, '10': 'fileId'},
+  ],
+};
+
+/// Descriptor for `CatalogAssetSelector`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List catalogAssetSelectorDescriptor = $convert.base64Decode(
+    'ChRDYXRhbG9nQXNzZXRTZWxlY3RvchIbCglzb3VyY2VfaWQYASABKAlSCHNvdXJjZUlkEhoKCH'
+    'Byb3ZpZGVyGAIgASgJUghwcm92aWRlchIfCgtwcm92aWRlcl9pZBgDIAEoCVIKcHJvdmlkZXJJ'
+    'ZBIXCgdmaWxlX2lkGAQgASgJUgZmaWxlSWQ=');
+
+@$core.Deprecated('Use getCatalogAssetStatusRequestDescriptor instead')
+const GetCatalogAssetStatusRequest$json = {
+  '1': 'GetCatalogAssetStatusRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'actor_account_id', '3': 2, '4': 1, '5': 9, '10': 'actorAccountId'},
+    {'1': 'actor_profile_id', '3': 3, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {
+      '1': 'operation',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.CatalogImportOperationSelector',
+      '9': 0,
+      '10': 'operation'
+    },
+    {
+      '1': 'asset',
+      '3': 5,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.CatalogAssetSelector',
+      '9': 0,
+      '10': 'asset'
+    },
+  ],
+  '8': [
+    {'1': 'selector'},
+  ],
+};
+
+/// Descriptor for `GetCatalogAssetStatusRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getCatalogAssetStatusRequestDescriptor = $convert.base64Decode(
+    'ChxHZXRDYXRhbG9nQXNzZXRTdGF0dXNSZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb24YASABKA'
+    '1SD3Byb3RvY29sVmVyc2lvbhIoChBhY3Rvcl9hY2NvdW50X2lkGAIgASgJUg5hY3RvckFjY291'
+    'bnRJZBIoChBhY3Rvcl9wcm9maWxlX2lkGAMgASgJUg5hY3RvclByb2ZpbGVJZBJNCglvcGVyYX'
+    'Rpb24YBCABKAsyLS52b2ljZS5maWxlLnYxLkNhdGFsb2dJbXBvcnRPcGVyYXRpb25TZWxlY3Rv'
+    'ckgAUglvcGVyYXRpb24SOwoFYXNzZXQYBSABKAsyIy52b2ljZS5maWxlLnYxLkNhdGFsb2dBc3'
+    'NldFNlbGVjdG9ySABSBWFzc2V0QgoKCHNlbGVjdG9y');
+
+@$core.Deprecated('Use getCatalogAssetStatusResponseDescriptor instead')
+const GetCatalogAssetStatusResponse$json = {
+  '1': 'GetCatalogAssetStatusResponse',
+  '2': [
+    {'1': 'source_id', '3': 1, '4': 1, '5': 9, '10': 'sourceId'},
+    {'1': 'actor_account_id', '3': 2, '4': 1, '5': 9, '10': 'actorAccountId'},
+    {'1': 'actor_profile_id', '3': 3, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {'1': 'provider', '3': 4, '4': 1, '5': 9, '10': 'provider'},
+    {'1': 'provider_id', '3': 5, '4': 1, '5': 9, '10': 'providerId'},
+    {'1': 'file_id', '3': 6, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'status', '3': 7, '4': 1, '5': 9, '10': 'status'},
+    {'1': 'operation_id', '3': 8, '4': 1, '5': 9, '10': 'operationId'},
+    {
+      '1': 'destination_chat',
+      '3': 9,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'destinationChat'
+    },
+  ],
+};
+
+/// Descriptor for `GetCatalogAssetStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getCatalogAssetStatusResponseDescriptor = $convert.base64Decode(
+    'Ch1HZXRDYXRhbG9nQXNzZXRTdGF0dXNSZXNwb25zZRIbCglzb3VyY2VfaWQYASABKAlSCHNvdX'
+    'JjZUlkEigKEGFjdG9yX2FjY291bnRfaWQYAiABKAlSDmFjdG9yQWNjb3VudElkEigKEGFjdG9y'
+    'X3Byb2ZpbGVfaWQYAyABKAlSDmFjdG9yUHJvZmlsZUlkEhoKCHByb3ZpZGVyGAQgASgJUghwcm'
+    '92aWRlchIfCgtwcm92aWRlcl9pZBgFIAEoCVIKcHJvdmlkZXJJZBIXCgdmaWxlX2lkGAYgASgJ'
+    'UgZmaWxlSWQSFgoGc3RhdHVzGAcgASgJUgZzdGF0dXMSIQoMb3BlcmF0aW9uX2lkGAggASgJUg'
+    'tvcGVyYXRpb25JZBJBChBkZXN0aW5hdGlvbl9jaGF0GAkgASgLMhYudm9pY2UuY2hhdC52MS5D'
+    'aGF0UmVmUg9kZXN0aW5hdGlvbkNoYXQ=');

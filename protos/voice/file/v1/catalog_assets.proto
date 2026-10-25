@@ -14,6 +14,8 @@ service CatalogAssetService {
   rpc ValidateCatalogAsset(ValidateCatalogAssetRequest) returns (ValidateCatalogAssetResponse);
   // @voice.security=protected;callers=service:messaging
   rpc LookupCatalogAsset(LookupCatalogAssetRequest) returns (LookupCatalogAssetResponse);
+  // @voice.security=protected;callers=service:chat
+  rpc GetCatalogAssetStatus(GetCatalogAssetStatusRequest) returns (GetCatalogAssetStatusResponse);
 }
 
 // @voice.unknown_fields=reject
@@ -41,6 +43,8 @@ message ImportCatalogAssetResponse {
   string file_id = 6;
   // Existing File lifecycle vocabulary; a reservation alone returns no response.
   string status = 7;
+  string operation_id = 8;
+  voice.chat.v1.ChatRef destination_chat = 9;
 }
 
 // @voice.unknown_fields=reject
@@ -93,4 +97,49 @@ message LookupCatalogAssetResponse {
     // True only after finding a real File with no catalog provenance.
     bool ordinary_file = 2;
   }
+}
+
+// The public selection identity, without a remote URL or derived source UUID.
+// @voice.unknown_fields=reject
+message CatalogImportOperationSelector {
+  string operation_id = 1;
+  string provider = 2;
+  string provider_id = 3;
+  voice.chat.v1.ChatRef destination_chat = 4;
+}
+
+// @voice.unknown_fields=reject
+message CatalogAssetSelector {
+  string source_id = 1;
+  string provider = 2;
+  string provider_id = 3;
+  string file_id = 4;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetCatalogAssetStatusRequest {
+  uint32 protocol_version = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  oneof selector {
+    CatalogImportOperationSelector operation = 4;
+    CatalogAssetSelector asset = 5;
+  }
+}
+
+// Operation lookup precedes resolving a new source, including after response
+// loss and CDN URL rotation. Compacted operations return terminal/unavailable.
+// @voice.unknown_fields=accept_preserve
+message GetCatalogAssetStatusResponse {
+  string source_id = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  string file_id = 6;
+  string status = 7;
+  // Present with the exact destination only for an operation selector.
+  string operation_id = 8;
+  voice.chat.v1.ChatRef destination_chat = 9;
 }

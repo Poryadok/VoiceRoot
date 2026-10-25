@@ -187,6 +187,8 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     $core.String? providerId,
     $core.String? fileId,
     $core.String? status,
+    $core.String? operationId,
+    $1.ChatRef? destinationChat,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -196,6 +198,8 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     if (providerId != null) result.providerId = providerId;
     if (fileId != null) result.fileId = fileId;
     if (status != null) result.status = status;
+    if (operationId != null) result.operationId = operationId;
+    if (destinationChat != null) result.destinationChat = destinationChat;
     return result;
   }
 
@@ -219,6 +223,9 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     ..aOS(5, _omitFieldNames ? '' : 'providerId')
     ..aOS(6, _omitFieldNames ? '' : 'fileId')
     ..aOS(7, _omitFieldNames ? '' : 'status')
+    ..aOS(8, _omitFieldNames ? '' : 'operationId')
+    ..aOM<$1.ChatRef>(9, _omitFieldNames ? '' : 'destinationChat',
+        subBuilder: $1.ChatRef.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -305,6 +312,26 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
   $core.bool hasStatus() => $_has(6);
   @$pb.TagNumber(7)
   void clearStatus() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $core.String get operationId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set operationId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasOperationId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearOperationId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $1.ChatRef get destinationChat => $_getN(8);
+  @$pb.TagNumber(9)
+  set destinationChat($1.ChatRef value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasDestinationChat() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearDestinationChat() => $_clearField(9);
+  @$pb.TagNumber(9)
+  $1.ChatRef ensureDestinationChat() => $_ensure(8);
 }
 
 /// @voice.unknown_fields=reject
@@ -844,6 +871,486 @@ class LookupCatalogAssetResponse extends $pb.GeneratedMessage {
   $core.bool hasOrdinaryFile() => $_has(1);
   @$pb.TagNumber(2)
   void clearOrdinaryFile() => $_clearField(2);
+}
+
+/// The public selection identity, without a remote URL or derived source UUID.
+/// @voice.unknown_fields=reject
+class CatalogImportOperationSelector extends $pb.GeneratedMessage {
+  factory CatalogImportOperationSelector({
+    $core.String? operationId,
+    $core.String? provider,
+    $core.String? providerId,
+    $1.ChatRef? destinationChat,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (provider != null) result.provider = provider;
+    if (providerId != null) result.providerId = providerId;
+    if (destinationChat != null) result.destinationChat = destinationChat;
+    return result;
+  }
+
+  CatalogImportOperationSelector._();
+
+  factory CatalogImportOperationSelector.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CatalogImportOperationSelector.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CatalogImportOperationSelector',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'provider')
+    ..aOS(3, _omitFieldNames ? '' : 'providerId')
+    ..aOM<$1.ChatRef>(4, _omitFieldNames ? '' : 'destinationChat',
+        subBuilder: $1.ChatRef.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CatalogImportOperationSelector clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CatalogImportOperationSelector copyWith(
+          void Function(CatalogImportOperationSelector) updates) =>
+      super.copyWith(
+              (message) => updates(message as CatalogImportOperationSelector))
+          as CatalogImportOperationSelector;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CatalogImportOperationSelector create() =>
+      CatalogImportOperationSelector._();
+  @$core.override
+  CatalogImportOperationSelector createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CatalogImportOperationSelector getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CatalogImportOperationSelector>(create);
+  static CatalogImportOperationSelector? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get provider => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set provider($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProvider() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProvider() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get providerId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set providerId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProviderId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProviderId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $1.ChatRef get destinationChat => $_getN(3);
+  @$pb.TagNumber(4)
+  set destinationChat($1.ChatRef value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDestinationChat() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDestinationChat() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $1.ChatRef ensureDestinationChat() => $_ensure(3);
+}
+
+/// @voice.unknown_fields=reject
+class CatalogAssetSelector extends $pb.GeneratedMessage {
+  factory CatalogAssetSelector({
+    $core.String? sourceId,
+    $core.String? provider,
+    $core.String? providerId,
+    $core.String? fileId,
+  }) {
+    final result = create();
+    if (sourceId != null) result.sourceId = sourceId;
+    if (provider != null) result.provider = provider;
+    if (providerId != null) result.providerId = providerId;
+    if (fileId != null) result.fileId = fileId;
+    return result;
+  }
+
+  CatalogAssetSelector._();
+
+  factory CatalogAssetSelector.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory CatalogAssetSelector.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'CatalogAssetSelector',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'sourceId')
+    ..aOS(2, _omitFieldNames ? '' : 'provider')
+    ..aOS(3, _omitFieldNames ? '' : 'providerId')
+    ..aOS(4, _omitFieldNames ? '' : 'fileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CatalogAssetSelector clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  CatalogAssetSelector copyWith(void Function(CatalogAssetSelector) updates) =>
+      super.copyWith((message) => updates(message as CatalogAssetSelector))
+          as CatalogAssetSelector;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static CatalogAssetSelector create() => CatalogAssetSelector._();
+  @$core.override
+  CatalogAssetSelector createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static CatalogAssetSelector getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<CatalogAssetSelector>(create);
+  static CatalogAssetSelector? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get sourceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set sourceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSourceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSourceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get provider => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set provider($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProvider() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProvider() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get providerId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set providerId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasProviderId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearProviderId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get fileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set fileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasFileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearFileId() => $_clearField(4);
+}
+
+enum GetCatalogAssetStatusRequest_Selector { operation, asset, notSet }
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class GetCatalogAssetStatusRequest extends $pb.GeneratedMessage {
+  factory GetCatalogAssetStatusRequest({
+    $core.int? protocolVersion,
+    $core.String? actorAccountId,
+    $core.String? actorProfileId,
+    CatalogImportOperationSelector? operation,
+    CatalogAssetSelector? asset,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (actorAccountId != null) result.actorAccountId = actorAccountId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (operation != null) result.operation = operation;
+    if (asset != null) result.asset = asset;
+    return result;
+  }
+
+  GetCatalogAssetStatusRequest._();
+
+  factory GetCatalogAssetStatusRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetCatalogAssetStatusRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static const $core.Map<$core.int, GetCatalogAssetStatusRequest_Selector>
+      _GetCatalogAssetStatusRequest_SelectorByTag = {
+    4: GetCatalogAssetStatusRequest_Selector.operation,
+    5: GetCatalogAssetStatusRequest_Selector.asset,
+    0: GetCatalogAssetStatusRequest_Selector.notSet
+  };
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetCatalogAssetStatusRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..oo(0, [4, 5])
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'actorAccountId')
+    ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOM<CatalogImportOperationSelector>(4, _omitFieldNames ? '' : 'operation',
+        subBuilder: CatalogImportOperationSelector.create)
+    ..aOM<CatalogAssetSelector>(5, _omitFieldNames ? '' : 'asset',
+        subBuilder: CatalogAssetSelector.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetCatalogAssetStatusRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetCatalogAssetStatusRequest copyWith(
+          void Function(GetCatalogAssetStatusRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetCatalogAssetStatusRequest))
+          as GetCatalogAssetStatusRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetCatalogAssetStatusRequest create() =>
+      GetCatalogAssetStatusRequest._();
+  @$core.override
+  GetCatalogAssetStatusRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetCatalogAssetStatusRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetCatalogAssetStatusRequest>(create);
+  static GetCatalogAssetStatusRequest? _defaultInstance;
+
+  @$pb.TagNumber(4)
+  @$pb.TagNumber(5)
+  GetCatalogAssetStatusRequest_Selector whichSelector() =>
+      _GetCatalogAssetStatusRequest_SelectorByTag[$_whichOneof(0)]!;
+  @$pb.TagNumber(4)
+  @$pb.TagNumber(5)
+  void clearSelector() => $_clearField($_whichOneof(0));
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get actorAccountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorAccountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get actorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set actorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  CatalogImportOperationSelector get operation => $_getN(3);
+  @$pb.TagNumber(4)
+  set operation(CatalogImportOperationSelector value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasOperation() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearOperation() => $_clearField(4);
+  @$pb.TagNumber(4)
+  CatalogImportOperationSelector ensureOperation() => $_ensure(3);
+
+  @$pb.TagNumber(5)
+  CatalogAssetSelector get asset => $_getN(4);
+  @$pb.TagNumber(5)
+  set asset(CatalogAssetSelector value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasAsset() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearAsset() => $_clearField(5);
+  @$pb.TagNumber(5)
+  CatalogAssetSelector ensureAsset() => $_ensure(4);
+}
+
+/// Operation lookup precedes resolving a new source, including after response
+/// loss and CDN URL rotation. Compacted operations return terminal/unavailable.
+/// @voice.unknown_fields=accept_preserve
+class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
+  factory GetCatalogAssetStatusResponse({
+    $core.String? sourceId,
+    $core.String? actorAccountId,
+    $core.String? actorProfileId,
+    $core.String? provider,
+    $core.String? providerId,
+    $core.String? fileId,
+    $core.String? status,
+    $core.String? operationId,
+    $1.ChatRef? destinationChat,
+  }) {
+    final result = create();
+    if (sourceId != null) result.sourceId = sourceId;
+    if (actorAccountId != null) result.actorAccountId = actorAccountId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (provider != null) result.provider = provider;
+    if (providerId != null) result.providerId = providerId;
+    if (fileId != null) result.fileId = fileId;
+    if (status != null) result.status = status;
+    if (operationId != null) result.operationId = operationId;
+    if (destinationChat != null) result.destinationChat = destinationChat;
+    return result;
+  }
+
+  GetCatalogAssetStatusResponse._();
+
+  factory GetCatalogAssetStatusResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetCatalogAssetStatusResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetCatalogAssetStatusResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'sourceId')
+    ..aOS(2, _omitFieldNames ? '' : 'actorAccountId')
+    ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOS(4, _omitFieldNames ? '' : 'provider')
+    ..aOS(5, _omitFieldNames ? '' : 'providerId')
+    ..aOS(6, _omitFieldNames ? '' : 'fileId')
+    ..aOS(7, _omitFieldNames ? '' : 'status')
+    ..aOS(8, _omitFieldNames ? '' : 'operationId')
+    ..aOM<$1.ChatRef>(9, _omitFieldNames ? '' : 'destinationChat',
+        subBuilder: $1.ChatRef.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetCatalogAssetStatusResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetCatalogAssetStatusResponse copyWith(
+          void Function(GetCatalogAssetStatusResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetCatalogAssetStatusResponse))
+          as GetCatalogAssetStatusResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetCatalogAssetStatusResponse create() =>
+      GetCatalogAssetStatusResponse._();
+  @$core.override
+  GetCatalogAssetStatusResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetCatalogAssetStatusResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetCatalogAssetStatusResponse>(create);
+  static GetCatalogAssetStatusResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get sourceId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set sourceId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasSourceId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearSourceId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get actorAccountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorAccountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get actorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set actorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get provider => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set provider($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasProvider() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearProvider() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get providerId => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set providerId($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProviderId() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProviderId() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get fileId => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set fileId($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasFileId() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearFileId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.String get status => $_getSZ(6);
+  @$pb.TagNumber(7)
+  set status($core.String value) => $_setString(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasStatus() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearStatus() => $_clearField(7);
+
+  /// Present with the exact destination only for an operation selector.
+  @$pb.TagNumber(8)
+  $core.String get operationId => $_getSZ(7);
+  @$pb.TagNumber(8)
+  set operationId($core.String value) => $_setString(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasOperationId() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearOperationId() => $_clearField(8);
+
+  @$pb.TagNumber(9)
+  $1.ChatRef get destinationChat => $_getN(8);
+  @$pb.TagNumber(9)
+  set destinationChat($1.ChatRef value) => $_setField(9, value);
+  @$pb.TagNumber(9)
+  $core.bool hasDestinationChat() => $_has(8);
+  @$pb.TagNumber(9)
+  void clearDestinationChat() => $_clearField(9);
+  @$pb.TagNumber(9)
+  $1.ChatRef ensureDestinationChat() => $_ensure(8);
 }
 
 const $core.bool _omitFieldNames =

@@ -41,6 +41,7 @@ named `CatalogAssetService`. Existing service/proto methods remain unchanged.
 | File `ImportCatalogAsset` | pure `service:chat`, issuer chat, audience file | `protocol_version=1`, `operation_id=2`, `source_id=3`, `provider=4`, `provider_id=5`, `source_url=6`, `actor_account_id=7`, `actor_profile_id=8`, `destination_chat=9` |
 | File `ValidateCatalogAsset` | pure `service:messaging`, issuer messaging, audience file | `protocol_version=1`, `source_id=2`, `provider=3`, `provider_id=4`, `file_id=5`, `actor_account_id=6`, `actor_profile_id=7` |
 | File `LookupCatalogAsset` | pure `service:messaging`, issuer messaging, audience file | `protocol_version=1`, `actor_account_id=2`, `actor_profile_id=3`, `file_id=4` |
+| File `GetCatalogAssetStatus` | pure `service:chat`, issuer chat, audience file | `protocol_version=1`, `actor_account_id=2`, `actor_profile_id=3`, oneof `operation=4` or `asset=5` |
 
 All version fields are uint32 fixed to 1; IDs are canonical nonzero UUID strings;
 ChatRef uses the existing canonical Chat reference. Raw identity metadata,
@@ -59,6 +60,21 @@ status=7`. Both use File's closed status vocabulary: `pending_upload`,
 `processing`, `ready`, `failed`, `deleted`, `expired`. A committed import normally
 first returns `processing`; there is no fake READY result or fabricated file ID.
 Source URL and storage keys never occur in either public response.
+File Import also echoes `operation_id=8, destination_chat=9`.
+
+Get Status's operation selector contains `operation_id=1, provider=2,
+provider_id=3, destination_chat=4`; its asset selector contains `source_id=1,
+provider=2, provider_id=3, file_id=4`. Its response uses File Import's identity,
+status and operation/destination fields; the latter two are present only for
+an operation selector. Operation lookup happens before resolving any source URL
+when Chat has no recorded result. File stores a separate public-selection hash
+(version, operation, provider identity, destination and actor) in addition to
+the full internal import hash. This permits recovery of the original source/File
+after File commit plus Chat response loss even if the CDN URL has rotated.
+Changed retained public selection conflicts. Only unknown operation `NotFound`
+permits a fresh import; compact terminal `FailedPrecondition` never does. Asset
+lookup permits polling an active mapping beyond the completed operation-detail
+window without retaining raw URLs or a second full receipt in Chat.
 
 Gateway owns `POST /api/v1/gifs/resolve`, transporting the Chat Resolve request
 through the protected delegated-principal client. It derives the active actor

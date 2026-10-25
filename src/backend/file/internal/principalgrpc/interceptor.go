@@ -18,6 +18,7 @@ type Verifier interface {
 func IsProtectedMethod(method string) bool {
 	switch method {
 	case filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName,
+		filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName,
 		filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName,
 		filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName,
 		filev1.FileService_ValidateStoryMedia_FullMethodName,
@@ -81,7 +82,8 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 
 func expectedIssuerForMethod(method string) string {
 	switch method {
-	case filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName:
+	case filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName,
+		filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName:
 		return "chat"
 	case filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName,
 		filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName:
