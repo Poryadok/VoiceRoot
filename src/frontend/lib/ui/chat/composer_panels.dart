@@ -15,14 +15,17 @@ Future<void> showComposerEmojiPanel(
   required void Function(String emoji) onSelected,
   List<String> recentEmoji = const [],
   BuildContext? anchorContext,
+  WidgetBuilder? panelBuilder,
   VoidCallback? onDismiss,
 }) async {
   final l10n = AppLocalizations.of(context)!;
-  Widget body(BuildContext routeContext) => ComposerEmojiPanelBody(
-    title: l10n.composerEmojiPanelTitle,
-    recentEmoji: recentEmoji,
-    onSelected: (value) => Navigator.of(routeContext).pop(value),
-  );
+  Widget body(BuildContext routeContext) =>
+      panelBuilder?.call(routeContext) ??
+      ComposerEmojiPanelBody(
+        title: l10n.composerEmojiPanelTitle,
+        recentEmoji: recentEmoji,
+        onSelected: (value) => Navigator.of(routeContext).pop(value),
+      );
   try {
     String? emoji;
     if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
@@ -208,6 +211,7 @@ class ComposerEmojiPanelBody extends StatelessWidget {
     required this.title,
     required this.onSelected,
     this.recentEmoji = const [],
+    this.showTitle = true,
   });
 
   static const panelKey = Key('composer_emoji_panel');
@@ -243,6 +247,7 @@ class ComposerEmojiPanelBody extends StatelessWidget {
   final String title;
   final ValueChanged<String> onSelected;
   final List<String> recentEmoji;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -258,8 +263,10 @@ class ComposerEmojiPanelBody extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
+              if (showTitle) ...[
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+              ],
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(

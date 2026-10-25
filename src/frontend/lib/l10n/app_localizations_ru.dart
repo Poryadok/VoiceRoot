@@ -1262,6 +1262,39 @@ class AppLocalizationsRu extends AppLocalizations {
   String get composerEmojiRecent => 'Недавние';
 
   @override
+  String get composerStickerTab => 'Стикеры';
+
+  @override
+  String get composerGifTab => 'GIF';
+
+  @override
+  String get composerGifSearch => 'Поиск GIF';
+
+  @override
+  String get composerStickerSearch => 'Поиск наборов стикеров';
+
+  @override
+  String get composerMediaSendUnavailable => 'Отправка сейчас недоступна';
+
+  @override
+  String get composerGifUnavailable => 'Поиск GIF недоступен';
+
+  @override
+  String get composerCatalogError => 'Не удалось загрузить каталог';
+
+  @override
+  String get composerCatalogRetry => 'Повторить';
+
+  @override
+  String get composerCatalogMore => 'Загрузить ещё';
+
+  @override
+  String get composerStickerEmpty => 'Наборы стикеров не найдены';
+
+  @override
+  String get composerGifEmpty => 'GIF не найдены';
+
+  @override
   String get composerAttachPhotoOrVideo => 'Фото или видео';
 
   @override

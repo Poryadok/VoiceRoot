@@ -11,6 +11,7 @@ import '../../theme/voice_emoji_style.dart';
 import '../../theme/voice_layout.dart';
 import '../chat/chat_info_panel.dart';
 import '../chat/composer_panels.dart';
+import '../chat/composer_media_picker.dart';
 import '../chat/group_members_sheet.dart';
 import '../space/space_members_sheet.dart';
 
@@ -222,6 +223,12 @@ Future<void> openEmojiPanel(
   return showComposerEmojiPanel(
     context,
     anchorContext: anchorContext,
+    panelBuilder: (routeContext) => ComposerMediaPickerBody(
+      recentEmoji: profileId == null
+          ? const []
+          : ref.read(composerRecentEmojiProvider(profileId)),
+      onEmojiSelected: (emoji) => Navigator.of(routeContext).pop(emoji),
+    ),
     recentEmoji: profileId == null
         ? const []
         : ref.read(composerRecentEmojiProvider(profileId)),
