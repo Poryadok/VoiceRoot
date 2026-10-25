@@ -9,6 +9,51 @@ import f13_native_p3_documentation as documentation
 import f13_production_source_test as fixtures
 
 
+class ImmediateDirectoryGroupingTest(unittest.TestCase):
+    @staticmethod
+    def original(tree,directory):
+        prefix=directory+'/'
+        return {p:v for p,v in tree.items() if p.startswith(prefix) and '/' not in p[len(prefix):]}
+
+    def test_real_trees_match_all_inventories_with_one_entry_pass(self):
+        old=documentation.previous.load_record(fixtures.ROOT)
+        directories=sorted({str(Path(p).parent).replace(chr(92),'/') for p in old['compiled_closure']})
+        self.assertEqual(len(directories),89)
+        class CountedTree(dict):
+            visits=0
+            def items(self):
+                for item in super().items():
+                    self.visits+=1
+                    yield item
+        for revision in (old['source'],documentation.PINNED_SOURCE,documentation.CONTEXT_SOURCE):
+            with self.subTest(revision=revision):
+                tree=CountedTree(documentation.tree_entries(fixtures.ROOT,revision))
+                expected=[self.original(tree,d) for d in directories]
+                self.assertEqual(tree.visits,len(tree)*89)
+                tree.visits=0;grouped=documentation.immediate_directory_entries(tree)
+                self.assertEqual(tree.visits,len(tree))
+                self.assertEqual([grouped.get(d,{}) for d in directories],expected)
+
+    def test_literal_slash_edge_cases_and_duplicate_directories(self):
+        tree={p:str(i) for i,p in enumerate(('root','./file','/file','a/file','a/deep/file',
+            'a//file','a/','a//','/','a'+chr(92)+'file','a'+chr(92)+'/file'))}
+        before=dict(tree);grouped=documentation.immediate_directory_entries(tree)
+        directories=['','.','a','a/deep','a/','/','missing','a', 'a'+chr(92)]
+        self.assertEqual([grouped.get(d,{}) for d in directories],
+            [self.original(tree,d) for d in directories])
+        self.assertEqual(tree,before)
+        self.assertEqual(documentation.immediate_directory_entries({}),{})
+
+    def test_each_call_observes_changed_added_and_deleted_entries(self):
+        tree={'a/keep':'old','a/delete':'removed','b/file':'other'}
+        first=documentation.immediate_directory_entries(tree)
+        tree['a/keep']='changed';tree['a/new']='added';del tree['a/delete']
+        second=documentation.immediate_directory_entries(tree)
+        self.assertEqual(first['a'],{'a/keep':'old','a/delete':'removed'})
+        self.assertEqual(second['a'],self.original(tree,'a'))
+        self.assertNotEqual(first,second)
+
+
 class ContextSourceUnitTest(unittest.TestCase):
     def test_exact_makefile_context_reconstructs_old_unit(self):
         current=documentation.load_context_record(fixtures.ROOT)
