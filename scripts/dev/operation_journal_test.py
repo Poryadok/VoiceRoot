@@ -97,7 +97,8 @@ class JournalTest(unittest.TestCase):
         self.assertIsNone(result['workloads'][0]['images'][0]['immutable_image'])
 
     def test_cli_denies_mutation_and_arbitrary_file_selectors(self):
-        for action in ('--apply', '--unlock', '--recover', '--path=/etc/shadow', '--namespace=voice-staging'):
+        for action in ('--apply', '--unlock', '--recover', '--path=/etc/shadow', '--namespace=voice-staging',
+                       '--path=https://host/object?token=NEVER_DISCLOSE'):
             proc = subprocess.run([sys.executable, str(Path(journal.__file__)), action], capture_output=True)
             self.assertNotEqual(proc.returncode, 0)
             self.assertNotIn(b'NEVER_DISCLOSE', proc.stdout + proc.stderr)

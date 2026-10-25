@@ -191,7 +191,13 @@ def collect():
 
 
 def main():
-    argparse.ArgumentParser(description=__doc__).parse_args()
+    class Parser(argparse.ArgumentParser):
+        def error(self, message):
+            # argparse normally echoes rejected values, including a supplied
+            # token/DSN/path. Reject selectors without reproducing any input.
+            print(json.dumps({'state': 'UNAVAILABLE', 'reason': 'unsupported_arguments'}))
+            raise SystemExit(2)
+    Parser(description=__doc__).parse_args()
     if sys.platform != 'linux' or os.geteuid() == 0:
         print(json.dumps({'state': 'UNAVAILABLE', 'reason': 'ordinary_linux_operator_required'}))
         return 2
