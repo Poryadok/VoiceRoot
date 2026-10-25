@@ -10,6 +10,7 @@ import base64
 import copy
 import json
 import os
+import re
 from pathlib import Path
 import secrets as random_secrets
 import subprocess
@@ -17,6 +18,8 @@ import time
 
 import environment as dev
 import migrations
+import reset_bootstrap
+import signal_tls
 
 ROOT = Path(__file__).resolve().parents[2]
 WORK = Path('/home/voice-dev/bootstrap')
@@ -24,12 +27,57 @@ NATS_JOBS = ['voice-nats-' + role + '-bootstrap' for role in ('realtime', 'notif
 INFRA = {'voice-redis', 'voice-nats-pvc-candidate', 'voice-livekit', 'voice-clamav'}
 
 
-def run(*args, body=None, timeout=600, check=True):
-    result = subprocess.run(args, input=body, capture_output=True, timeout=timeout)
+def command_guard(timeout=600):
+    dynamic = dynamic_storage()
+    if dynamic:
+        now = reset_bootstrap.datetime.now(reset_bootstrap.timezone.utc)
+        remaining = int((reset_bootstrap.datetime.fromisoformat(dynamic['deadline']) - now).total_seconds())
+        if remaining <= 0:
+            raise ValueError('original bootstrap deadline exhausted')
+        reset_bootstrap.quiet_window(reset_bootstrap.observe_host(), dynamic['host'], now=now, remaining_seconds=remaining)
+        timeout = min(timeout, remaining)
+        if dynamic.get('new_namespace_uid'):
+            observed = subprocess.run(['kubectl', 'get', 'namespace', dev.NS, '-o', 'json'], capture_output=True, timeout=min(15, remaining))
+            metadata = json.loads(observed.stdout).get('metadata', {}) if not observed.returncode else {}
+            if (metadata.get('uid') != dynamic['new_namespace_uid']
+                    or metadata.get('annotations', {}).get('voice.dev/reset-operation') != dynamic['operation']):
+                raise ValueError('fresh namespace identity changed before command')
+    return timeout
+
+
+def run(*args, body=None, timeout=600, check=True, env=None):
+    timeout = command_guard(timeout)
+    phase = command_started(args)
+    result = subprocess.run(args, input=body, capture_output=True, timeout=timeout, env=env)
+    command_guard(timeout)
+    if phase:
+        reset_bootstrap.write_private(phase.with_name(phase.name.replace('-started.', '-returned.')),
+            {'client_returncode': result.returncode, 'accepted_work_quiescent': False})
     if check and result.returncode:
         (WORK / 'last-error.txt').write_bytes(result.stderr + result.stdout)
         raise RuntimeError('dev command failed: ' + args[0])
     return result
+
+
+def command_started(args):
+    if not dynamic_storage():
+        return None
+    phase = WORK / ('command-%020d-%s-started.json' % (time.time_ns(), os.urandom(4).hex()))
+    reset_bootstrap.write_private(phase, {'launcher': Path(args[0]).name,
+        'arguments_sha256': reset_bootstrap.digest(args), 'accepted_work_quiescent': False})
+    return phase
+
+
+class GuardedKube(reset_bootstrap.Kube):
+    def command(self, args, body=None):
+        command_guard()
+        phase = command_started(('kubectl', *args))
+        result = super().command(args, body=body)
+        command_guard()
+        if phase:
+            reset_bootstrap.write_private(phase.with_name(phase.name.replace('-started.', '-returned.')),
+                {'client_returned': True, 'accepted_work_quiescent': False})
+        return result
 
 
 def get(kind, namespace='voice-dev'):
@@ -43,6 +91,19 @@ def save(name, objects):
 
 
 def apply(objects):
+    dynamic = dynamic_storage()
+    if dynamic:
+        if any(obj['kind'] in ('PersistentVolume', 'StorageClass') for obj in objects):
+            raise ValueError('dynamic bootstrap preserves all existing PVs/StorageClasses')
+        objects = copy.deepcopy(objects)
+        for obj in objects:
+            for part in dev.walk(obj):
+                if isinstance(part.get('image'), str):
+                    image = part['image']
+                    part['image'] = dynamic['tool_images'].get(image, image)
+                    if (part['image'] not in dynamic['image_references']
+                            or not re.fullmatch(r'[A-Za-z0-9._/:\-]+@sha256:[a-f0-9]{64}', part['image'])):
+                        raise ValueError('fresh Kubernetes bootstrap requires immutable image: ' + image)
     for obj in objects:
         meta, kind = obj['metadata'], obj['kind']
         if kind == 'Namespace':
@@ -222,26 +283,95 @@ def central_bootstrap():
     print('DEV_CENTRAL_STREAMS_BOOTSTRAPPED', flush=True)
 
 
-def create_namespace(namespace):
+def create_namespace(namespace, *, readback=False):
     dev.validate_target(namespace)
-    run('kubectl', 'create', '-f', '-', body=json.dumps(namespace).encode())
+    args = ('kubectl', 'create', '-f', '-', '-o', 'json') if readback else ('kubectl', 'create', '-f', '-')
+    result = run(*args, body=json.dumps(namespace).encode())
+    return json.loads(result.stdout) if readback else None
+
+
+def dynamic_storage():
+    path = WORK / 'fresh-storage.json'
+    if path.is_symlink():
+        raise ValueError('fresh storage receipt symlink forbidden')
+    if not path.exists():
+        return None
+    value = json.loads(path.read_text())
+    if (value.get('schema') != 'voice-dev-fresh-storage-v1' or not value.get('old_namespace_uid')
+            or not value.get('operation') or not value.get('retained') or not value.get('image_references')
+            or not isinstance(value.get('tool_images'), dict)):
+        raise ValueError('fresh storage receipt invalid')
+    return value
+
+
+def configure_work(path):
+    """Explicit operator-owned work directory; never adopt protected old journals."""
+    global WORK
+    path = path.absolute()
+    if path.is_symlink() or path.resolve() != path:
+        raise ValueError('canonical work directory required')
+    path.mkdir(mode=0o700, exist_ok=True)
+    if os.name == 'posix' and (path.stat().st_uid != os.getuid() or path.stat().st_mode & 0o077):
+        raise ValueError('caller-owned mode0700 work directory required')
+    WORK = path
 
 
 def start():
     rendered = json.loads((WORK / 'prepared.json').read_text())['items']
     secrets = json.loads((WORK / 'secrets.json').read_text())['items']
-    for directory in ('postgres', 'minio', 'clickhouse', 'nats'):
-        path = Path('/home/voice-dev/data') / directory
-        if path.exists() and any(path.iterdir()):
-            raise ValueError('fresh bootstrap data directory not empty')
-        path.mkdir(parents=True, exist_ok=True)
-    foundation = dev.foundation('pmdebook') + [o for o in json.loads((WORK / 'foundation.json').read_text())['items'] if o['kind'] == 'StorageClass']
+    dynamic = dynamic_storage()
+    if dynamic:
+        foundation = json.loads((WORK / 'foundation.json').read_text())['items']
+        if any(o['kind'] not in ('Namespace', 'LimitRange', 'ResourceQuota', 'NetworkPolicy') for o in foundation):
+            raise ValueError('dynamic foundation must not create or change PVs/StorageClasses')
+        reset_bootstrap.verify_retained(json.loads(run('kubectl', 'get', 'pv', '-o', 'json').stdout)['items'], dynamic['retained'])
+        for obj in rendered:
+            for part in dev.walk(obj):
+                if 'storageClassName' in part and (part['storageClassName'] != 'local-path'
+                        or any(part.get(k) for k in ('volumeName', 'selector', 'dataSource', 'dataSourceRef'))):
+                    raise ValueError('fresh dynamic claims required')
+        tls = next((s for s in secrets if s['metadata']['name'] == signal_tls.SECRET), None)
+        reset_bootstrap.tls_identity(tls, WORK)
+    else:
+        for directory in ('postgres', 'minio', 'clickhouse', 'nats'):
+            path = Path('/home/voice-dev/data') / directory
+            if path.exists() and any(path.iterdir()):
+                raise ValueError('fresh bootstrap data directory not empty')
+            path.mkdir(parents=True, exist_ok=True)
+        foundation = dev.foundation('pmdebook') + [o for o in json.loads((WORK / 'foundation.json').read_text())['items'] if o['kind'] == 'StorageClass']
     save('foundation.json', foundation)
     # Exclusive creation closes the prepare/start race; never adopt a namespace.
     namespace = next(o for o in foundation if o['kind'] == 'Namespace')
-    create_namespace(namespace)
+    if dynamic:
+        namespace['metadata'].setdefault('annotations', {})['voice.dev/reset-operation'] = dynamic['operation']
+        current = GuardedKube().get('namespace', dev.NS)
+        if current:
+            dev.validate_target(current)
+            if (current['metadata']['uid'] == dynamic['old_namespace_uid']
+                    or current['metadata'].get('annotations', {}).get('voice.dev/reset-operation') != dynamic['operation']
+                    or dynamic.get('new_namespace_uid', current['metadata']['uid']) != current['metadata']['uid']):
+                raise ValueError('existing namespace is not this interrupted fresh bootstrap')
+        else:
+            if dynamic.get('new_namespace_uid'):
+                raise ValueError('fresh namespace disappeared; do not recreate automatically')
+            current = create_namespace(namespace, readback=True)
+        dynamic['new_namespace_uid'] = current['metadata']['uid']
+        receipt = WORK / 'fresh-storage.json'
+        temporary = WORK / 'fresh-storage.next'
+        with temporary.open('x', encoding='utf-8') as stream:
+            json.dump(dynamic, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(0o600)
+        os.replace(temporary, receipt)
+    else:
+        create_namespace(namespace)
     apply([o for o in foundation if o['kind'] != 'Namespace'])
-    apply(secrets)
+    if dynamic:
+        apply([s for s in secrets if s['metadata']['name'] != signal_tls.SECRET])
+        reset_bootstrap.restore_tls(GuardedKube(), tls, WORK)
+    else:
+        apply(secrets)
     # LiveKit public media is separately scoped; no datastore ingress is exposed.
     media_policy = {'apiVersion': 'networking.k8s.io/v1', 'kind': 'NetworkPolicy',
                     'metadata': dev.metadata('dev-livekit-media'), 'spec': {
@@ -250,6 +380,13 @@ def start():
     apply([media_policy])
     apply([o for o in rendered if o['kind'] not in ('Deployment', 'StatefulSet', 'Job', 'Ingress')])
     apply(mail_fixture())
+    if dynamic:
+        # Restore the known TLS renewal surface before slow data migrations.
+        web = next(copy.deepcopy(o) for o in rendered if o['kind'] == 'Deployment' and o['metadata']['name'] == 'voice-web')
+        web['spec']['replicas'] = 1
+        apply([web])
+        run('kubectl', '-n', dev.NS, 'rollout', 'status', 'deployment/voice-web', '--timeout=300s')
+        apply([signal_tls.ingress(secure, host) for host in signal_tls.ROUTES for secure in (False, True)])
     infra = [copy.deepcopy(o) for o in rendered if o['kind'] == 'StatefulSet' or o['kind'] == 'Deployment' and o['metadata']['name'] in INFRA]
     for obj in infra:
         obj['spec']['replicas'] = 1
@@ -258,6 +395,10 @@ def start():
         run('kubectl', '-n', dev.NS, 'rollout', 'status', 'statefulset/' + name, '--timeout=300s')
     for name in ('voice-nats-pvc-candidate', 'voice-redis', 'voice-livekit'):
         run('kubectl', '-n', dev.NS, 'rollout', 'status', 'deployment/' + name, '--timeout=300s')
+    if dynamic:
+        reset_bootstrap.verify_fresh(json.loads(run('kubectl', 'get', 'namespace', dev.NS, '-o', 'json').stdout),
+            get('pvc'), json.loads(run('kubectl', 'get', 'pv', '-o', 'json').stdout)['items'],
+            old_namespace_uid=dynamic['old_namespace_uid'], retained=dynamic['retained'])
     ordered_jobs = sorted([copy.deepcopy(o) for o in rendered if o['kind'] == 'Job'],
                           key=lambda o: NATS_JOBS.index(o['metadata']['name']) if o['metadata']['name'] in NATS_JOBS else 10)
     for job in ordered_jobs:
@@ -288,14 +429,14 @@ def activate():
     dev.validate_target(json.loads(run('kubectl', 'get', 'namespace', dev.NS, '-o', 'json').stdout))
     rendered = json.loads((WORK / 'prepared.json').read_text())['items']
     env = dict(os.environ, VOICE_K8S_NAMESPACE=dev.NS, VOICE_ENABLE_GAME_INTEGRATION_DB='true')
-    initial = subprocess.run(['bash', str(ROOT / 'scripts/staging/init-postgres-databases.sh')], env=env, capture_output=True, timeout=600)
+    initial = run('bash', str(ROOT / 'scripts/staging/init-postgres-databases.sh'), env=env, timeout=600, check=False)
     (WORK / 'init-postgres-databases.sh.log').write_bytes(initial.stdout + initial.stderr)
     if initial.returncode:
         raise RuntimeError('dev database creation failed')
     postgres_image = next(o for o in rendered if o['kind'] == 'StatefulSet' and o['metadata']['name'] == 'voice-postgres')['spec']['template']['spec']['containers'][0]['image']
     migrations.apply_all(ROOT, postgres_image, apply, run, get)
     for script in ('ensure-gateway-schema.sh', 'apply-clickhouse-init.sh'):
-        result = subprocess.run(['bash', str(ROOT / 'scripts/staging' / script)], env=env, capture_output=True, timeout=1800)
+        result = run('bash', str(ROOT / 'scripts/staging' / script), env=env, timeout=1800, check=False)
         (WORK / (script + '.log')).write_bytes(result.stdout + result.stderr)
         if result.returncode:
             raise RuntimeError('dev database initialization failed: ' + script)
@@ -352,13 +493,17 @@ def configure_routes():
 
 
 def main():
+    global ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'start', 'repair-fresh-nats-claim', 'central-bootstrap', 'rotate-postgres', 'activate', 'configure-routes'))
     parser.add_argument('--secrets', type=Path)
     parser.add_argument('--revision')
+    parser.add_argument('--work-dir', type=Path, default=WORK)
+    parser.add_argument('--source-root', type=Path, default=ROOT)
     args = parser.parse_args()
     os.umask(0o077)
-    WORK.mkdir(parents=True, mode=0o700, exist_ok=True)
+    configure_work(args.work_dir)
+    ROOT = args.source_root.resolve(strict=True)
     try:
         if args.action == 'prepare':
             prepare(args.secrets, args.revision)
