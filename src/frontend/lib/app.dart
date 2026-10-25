@@ -374,7 +374,6 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     final shellOverlayActive = ref.watch(mobileShellOverlayDepthProvider) > 0;
     final showMobileTabs = shouldShowMobileShellTabs(
       narrow: narrowShell,
-      chatOpen: chatOpen,
       keyboardInsetBottom: keyboardInsetBottom,
     );
     final showMobileChatStrip = shouldShowMobileChatStrip(
