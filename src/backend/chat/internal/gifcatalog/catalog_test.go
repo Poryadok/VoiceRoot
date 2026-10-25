@@ -6,6 +6,20 @@ import (
 	"testing"
 )
 
+func TestFakeCatalogCursorRejectsChangedSearchAndMethod(t *testing.T) {
+	catalog := NewFakeCatalog(Fixture{Result: Result{ProviderID: "one"}, Tags: []string{"cat", "dog"}}, Fixture{Result: Result{ProviderID: "two"}, Tags: []string{"cat", "dog"}})
+	first, err := catalog.Search(context.Background(), SearchRequest{Query: "cat", Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := catalog.Search(context.Background(), SearchRequest{Query: "dog", Limit: 1, Cursor: first.NextCursor}); !errors.Is(err, ErrInvalidSearchRequest) {
+		t.Fatalf("changed query accepted: %v", err)
+	}
+	if _, err := catalog.Trending(context.Background(), PageRequest{Limit: 1, Cursor: first.NextCursor}); !errors.Is(err, ErrInvalidSearchRequest) {
+		t.Fatalf("search cursor accepted for trending: %v", err)
+	}
+}
+
 func TestFakeCatalogSearchRejectsInvalidRequests(t *testing.T) {
 	catalog := NewFakeCatalog()
 
