@@ -1577,5 +1577,17 @@
   "profileNotInContactsWarning": "Not in contacts · messages may be unsafe",
   "contactProfilePlayingGame": "Playing {title}",
   "matchSquadOpenChat": "Open chat",
-  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
+  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}},
+  "addGameAddMode": "Add mode",
+  "addGameRemoveMode": "Remove mode",
+  "addGameIcon": "Game icon",
+  "addGameUploadIcon": "Upload image",
+  "addGameIconUnavailable": "Image uploads for game requests are not available yet. You can submit without an icon.",
+  "addGameCriteriaUnavailable": "Custom criteria are not available yet. You can submit modes for moderation.",
+  "addGameNumericCriterion": "Numeric criterion",
+  "addGameEnumCriterion": "List criterion",
+  "addGameModerationHint": "Your request will be reviewed before the game appears in the catalog.",
+  "addGameSearchEmpty": "No similar games found",
+  "addGameSlotsInvalid": "Enter a positive whole number.",
+  "addGameModeDuplicate": "Use a different name for each mode."
 }

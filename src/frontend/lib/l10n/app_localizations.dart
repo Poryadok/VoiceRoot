@@ -6709,6 +6709,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open chat'**
   String get matchSquadOpenChat;
+
+  /// No description provided for @addGameAddMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Add mode'**
+  String get addGameAddMode;
+
+  /// No description provided for @addGameRemoveMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove mode'**
+  String get addGameRemoveMode;
+
+  /// No description provided for @addGameIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Game icon'**
+  String get addGameIcon;
+
+  /// No description provided for @addGameUploadIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload image'**
+  String get addGameUploadIcon;
+
+  /// No description provided for @addGameIconUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Image uploads for game requests are not available yet. You can submit without an icon.'**
+  String get addGameIconUnavailable;
+
+  /// No description provided for @addGameCriteriaUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom criteria are not available yet. You can submit modes for moderation.'**
+  String get addGameCriteriaUnavailable;
+
+  /// No description provided for @addGameNumericCriterion.
+  ///
+  /// In en, this message translates to:
+  /// **'Numeric criterion'**
+  String get addGameNumericCriterion;
+
+  /// No description provided for @addGameEnumCriterion.
+  ///
+  /// In en, this message translates to:
+  /// **'List criterion'**
+  String get addGameEnumCriterion;
+
+  /// No description provided for @addGameModerationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your request will be reviewed before the game appears in the catalog.'**
+  String get addGameModerationHint;
+
+  /// No description provided for @addGameSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No similar games found'**
+  String get addGameSearchEmpty;
+
+  /// No description provided for @addGameSlotsInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a positive whole number.'**
+  String get addGameSlotsInvalid;
+
+  /// No description provided for @addGameModeDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a different name for each mode.'**
+  String get addGameModeDuplicate;
 }
 
 class _AppLocalizationsDelegate

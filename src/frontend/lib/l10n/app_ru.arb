@@ -1479,5 +1479,17 @@
   "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны",
   "contactProfilePlayingGame": "Играет в {title}",
   "matchSquadOpenChat": "Открыть чат",
-  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
+  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}},
+  "addGameAddMode": "Добавить режим",
+  "addGameRemoveMode": "Удалить режим",
+  "addGameIcon": "Иконка игры",
+  "addGameUploadIcon": "Загрузить изображение",
+  "addGameIconUnavailable": "Загрузка иконок для заявок пока недоступна. Можно отправить заявку без иконки.",
+  "addGameCriteriaUnavailable": "Произвольные критерии пока недоступны. Можно отправить режимы на модерацию.",
+  "addGameNumericCriterion": "Числовой критерий",
+  "addGameEnumCriterion": "Критерий из списка",
+  "addGameModerationHint": "Игра появится в каталоге после проверки заявки модератором.",
+  "addGameSearchEmpty": "Похожие игры не найдены",
+  "addGameSlotsInvalid": "Введите положительное целое число.",
+  "addGameModeDuplicate": "У каждого режима должно быть своё название."
 }

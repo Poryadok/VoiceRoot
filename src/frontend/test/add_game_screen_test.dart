@@ -1,6 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -18,6 +23,267 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  setUpAll(() async {
+    if (const bool.fromEnvironment('VOICE_CAPTURE_ADD_GAME')) {
+      final text = FontLoader('Noto Sans')
+        ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
+      final icons = FontLoader('MaterialIcons')
+        ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
+      await text.load();
+      await icons.load();
+    }
+  });
+  testWidgets('similar search ignores a stale result after name is cleared', (
+    tester,
+  ) async {
+    final pending = Completer<http.Response>();
+    await _pumpEditor(tester, MockClient((_) => pending.future));
+    await tester.enterText(find.byKey(AddGameScreen.nameFieldKey), 'Finals');
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    await tester.enterText(find.byKey(AddGameScreen.nameFieldKey), 'F');
+    pending.complete(
+      http.Response(
+        '{"game_list":{"games":[{"id":"g1","name":"Stale Finals","config_json":"{}"}]}}',
+        200,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Stale Finals'), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('similar search recovers with retry without changing the draft', (
+    tester,
+  ) async {
+    int searches = 0;
+    await _pumpEditor(
+      tester,
+      MockClient((_) async {
+        searches++;
+        return searches == 1
+            ? http.Response('{}', 503)
+            : http.Response('{"game_list":{"games":[]}}', 200);
+      }),
+    );
+    await tester.enterText(find.byKey(AddGameScreen.nameFieldKey), 'Finals');
+    await tester.pumpAndSettle();
+    expect(find.text('Could not load game catalog'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('No similar games found'), findsOneWidget);
+    expect(searches, 2);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(AddGameScreen.nameFieldKey))
+          .controller!
+          .text,
+      'Finals',
+    );
+  });
+
+  testWidgets('submission freezes the draft and prevents duplicate requests', (
+    tester,
+  ) async {
+    final pending = Completer<http.Response>();
+    int submissions = 0;
+    await _pumpEditor(
+      tester,
+      MockClient((request) async {
+        if (request.method == 'POST') {
+          submissions++;
+          return pending.future;
+        }
+        return http.Response('{"game_list":{"games":[]}}', 200);
+      }),
+    );
+    await tester.enterText(find.byKey(AddGameScreen.nameFieldKey), 'Finals');
+    await tester.enterText(find.byKey(AddGameScreen.modeFieldKey), 'Ranked');
+    await tester.scrollUntilVisible(
+      find.byKey(AddGameScreen.submitKey),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(AddGameScreen.submitKey));
+    await tester.pump();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(AddGameScreen.submitKey))
+          .onPressed,
+      isNull,
+    );
+    expect(tester.widget<PopScope>(find.byType(PopScope)).canPop, isFalse);
+    expect(submissions, 1);
+    pending.complete(http.Response('{}', 503));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(AddGameScreen.submitKey))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  for (final size in [const Size(1120, 800), const Size(390, 844)]) {
+    testWidgets('AddGame accessible layout at ${size.width}', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final semantics = tester.ensureSemantics();
+      await _pumpEditor(
+        tester,
+        MockClient(
+          (_) async => http.Response('{"game_list":{"games":[]}}', 200),
+        ),
+      );
+      await tester.enterText(
+        find.byKey(AddGameScreen.nameFieldKey),
+        'The Finals',
+      );
+      await tester.enterText(find.byKey(AddGameScreen.modeFieldKey), 'Ranked');
+      await tester.enterText(find.byKey(AddGameScreen.slotsFieldKey), '3');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(AddGameScreen.nameFieldKey));
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(tester.takeException(), isNull);
+      expect(find.bySemanticsLabel(RegExp('Game name')), findsOneWidget);
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      semantics.dispose();
+      if (const bool.fromEnvironment('VOICE_CAPTURE_ADD_GAME')) {
+        await tester.runAsync(() async {
+          final boundary = tester.renderObject<RenderRepaintBoundary>(
+            find.byKey(const Key('add_game_capture')),
+          );
+          final image = await boundary.toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          final output = File(
+            '../../tmp/anton59-addgame/addgame-${size.width.toInt()}.png',
+          );
+          await output.parent.create(recursive: true);
+          await output.writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
+      }
+    });
+  }
+
+  testWidgets('incomplete request cannot be submitted', (tester) async {
+    await _pumpEditor(
+      tester,
+      MockClient((_) async => http.Response('{}', 200)),
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(AddGameScreen.submitKey))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('invalid slots and duplicate mode names show recovery guidance', (
+    tester,
+  ) async {
+    await _pumpEditor(
+      tester,
+      MockClient((_) async => http.Response('{"game_list":{"games":[]}}', 200)),
+    );
+    await tester.enterText(find.byKey(AddGameScreen.nameFieldKey), 'Finals');
+    await tester.enterText(find.byKey(AddGameScreen.modeFieldKey), 'Ranked');
+    await tester.enterText(find.byKey(AddGameScreen.slotsFieldKey), '1.5');
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a positive whole number.'), findsOneWidget);
+    await tester.enterText(find.byKey(AddGameScreen.slotsFieldKey), '3');
+    await tester.ensureVisible(find.byKey(const Key('add_game_add_mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add_game_add_mode')));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('add_game_mode_1')), 'Ranked');
+    await tester.pumpAndSettle();
+    expect(find.text('Use a different name for each mode.'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.byKey(AddGameScreen.submitKey),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(AddGameScreen.submitKey))
+          .onPressed,
+      isNull,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('add_game_remove_mode_1')),
+      -250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const Key('add_game_remove_mode_1')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(AddGameScreen.submitKey),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(AddGameScreen.submitKey))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('multiple modes are preserved in the pending request', (
+    tester,
+  ) async {
+    Map<String, dynamic>? sent;
+    final client = MockClient((request) async {
+      if (request.method == 'POST') {
+        sent = jsonDecode(request.body) as Map<String, dynamic>;
+        return http.Response('{"error":"temporarily_unavailable"}', 503);
+      }
+      return http.Response('{"game_list":{"games":[]}}', 200);
+    });
+    await _pumpEditor(tester, client);
+    await tester.enterText(
+      find.byKey(AddGameScreen.nameFieldKey),
+      'The Finals',
+    );
+    await tester.enterText(find.byKey(AddGameScreen.modeFieldKey), 'Ranked');
+    await tester.enterText(find.byKey(AddGameScreen.slotsFieldKey), '3');
+    await tester.tap(find.byKey(const Key('add_game_add_mode')));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('add_game_mode_1')), 'Casual');
+    await tester.enterText(find.byKey(const Key('add_game_slots_1')), '6');
+    await tester.scrollUntilVisible(
+      find.byKey(AddGameScreen.submitKey),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(AddGameScreen.submitKey));
+    await tester.pumpAndSettle();
+    final config =
+        jsonDecode(sent!['config_json'] as String) as Map<String, dynamic>;
+    expect((config['modes'] as List).map((m) => m['name']), [
+      'Ranked',
+      'Casual',
+    ]);
+    expect((config['modes'] as List).map((m) => m['slots']), [3, 6]);
+    expect(find.byKey(AddGameScreen.screenKey), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(AddGameScreen.nameFieldKey),
+      -250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(AddGameScreen.nameFieldKey))
+          .controller!
+          .text,
+      'The Finals',
+    );
+  });
+
   testWidgets('catalog shows add game action', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -87,7 +353,10 @@ void main() {
           theme: voiceTestTheme(),
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: const AddGameScreen(),
+          home: const RepaintBoundary(
+            key: Key('add_game_capture'),
+            child: AddGameScreen(),
+          ),
         ),
       ),
     );
@@ -99,6 +368,12 @@ void main() {
     );
     await tester.enterText(find.byKey(AddGameScreen.modeFieldKey), 'Duos');
     await tester.enterText(find.byKey(AddGameScreen.slotsFieldKey), '2');
+    await tester.scrollUntilVisible(
+      find.byKey(AddGameScreen.submitKey),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
     await tester.tap(find.byKey(AddGameScreen.submitKey));
     await tester.pumpAndSettle();
 
@@ -108,4 +383,35 @@ void main() {
     expect(body['name'], 'Apex Legends');
     expect(body['config_json'], contains('Duos'));
   });
+}
+
+Future<void> _pumpEditor(WidgetTester tester, http.Client client) async {
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        ...voiceAppTestOverrides(client: client),
+        voiceMatchmakingClientProvider.overrideWith(
+          (ref) => VoiceMatchmakingClient(
+            gateway: GatewayHttpClient(
+              config: const GatewayConfig(baseUrl: 'http://localhost:9999'),
+              httpClient: client,
+            ),
+          ),
+        ),
+      ],
+      child: MaterialApp(
+        theme: voiceTestTheme().copyWith(
+          textTheme: voiceTestTheme().textTheme.apply(fontFamily: 'Noto Sans'),
+        ),
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const RepaintBoundary(
+          key: Key('add_game_capture'),
+          child: AddGameScreen(),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }
