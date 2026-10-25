@@ -7458,7 +7458,9 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             if op in capabilities_132:
                 completed_132_child(op)
                 native_paths=json.loads(master_entry['native_binding']['raw'])['paths']
-                if v['path'] in native_paths:
+                # Match the original collector's checkpoint-composition gate;
+                # Native documentation still follows ordinary row conservation.
+                if v['path'] in native_paths and guarded_names([v['path']]):
                     require(v['path'] in compositions_132.get(op,{}),'exact132_native_checkpoint_composition_required')
             require(op not in J_capabilities or op in J_ready,'fixed3071_unqualified_ledger_cannot_begin_mutation')
             map_before(frame,v)
