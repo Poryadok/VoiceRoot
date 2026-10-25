@@ -35,6 +35,20 @@ const ImportCatalogAssetRequest$json = {
       '6': '.voice.chat.v1.ChatRef',
       '10': 'destinationChat'
     },
+    {
+      '1': 'chat_account_generation',
+      '3': 10,
+      '4': 1,
+      '5': 9,
+      '10': 'chatAccountGeneration'
+    },
+    {
+      '1': 'chat_profile_generation',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '10': 'chatProfileGeneration'
+    },
   ],
 };
 
@@ -46,7 +60,9 @@ final $typed_data.Uint8List importCatalogAssetRequestDescriptor = $convert.base6
     'Byb3ZpZGVyX2lkGAUgASgJUgpwcm92aWRlcklkEh0KCnNvdXJjZV91cmwYBiABKAlSCXNvdXJj'
     'ZVVybBIoChBhY3Rvcl9hY2NvdW50X2lkGAcgASgJUg5hY3RvckFjY291bnRJZBIoChBhY3Rvcl'
     '9wcm9maWxlX2lkGAggASgJUg5hY3RvclByb2ZpbGVJZBJBChBkZXN0aW5hdGlvbl9jaGF0GAkg'
-    'ASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmUg9kZXN0aW5hdGlvbkNoYXQ=');
+    'ASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmUg9kZXN0aW5hdGlvbkNoYXQSNgoXY2hhdF9hY2'
+    'NvdW50X2dlbmVyYXRpb24YCiABKAlSFWNoYXRBY2NvdW50R2VuZXJhdGlvbhI2ChdjaGF0X3By'
+    'b2ZpbGVfZ2VuZXJhdGlvbhgLIAEoCVIVY2hhdFByb2ZpbGVHZW5lcmF0aW9u');
 
 @$core.Deprecated('Use importCatalogAssetResponseDescriptor instead')
 const ImportCatalogAssetResponse$json = {
@@ -68,6 +84,20 @@ const ImportCatalogAssetResponse$json = {
       '6': '.voice.chat.v1.ChatRef',
       '10': 'destinationChat'
     },
+    {
+      '1': 'chat_account_generation',
+      '3': 10,
+      '4': 1,
+      '5': 9,
+      '10': 'chatAccountGeneration'
+    },
+    {
+      '1': 'chat_profile_generation',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '10': 'chatProfileGeneration'
+    },
   ],
 };
 
@@ -79,7 +109,9 @@ final $typed_data.Uint8List importCatalogAssetResponseDescriptor = $convert.base
     'RlchIfCgtwcm92aWRlcl9pZBgFIAEoCVIKcHJvdmlkZXJJZBIXCgdmaWxlX2lkGAYgASgJUgZm'
     'aWxlSWQSFgoGc3RhdHVzGAcgASgJUgZzdGF0dXMSIQoMb3BlcmF0aW9uX2lkGAggASgJUgtvcG'
     'VyYXRpb25JZBJBChBkZXN0aW5hdGlvbl9jaGF0GAkgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0'
-    'UmVmUg9kZXN0aW5hdGlvbkNoYXQ=');
+    'UmVmUg9kZXN0aW5hdGlvbkNoYXQSNgoXY2hhdF9hY2NvdW50X2dlbmVyYXRpb24YCiABKAlSFW'
+    'NoYXRBY2NvdW50R2VuZXJhdGlvbhI2ChdjaGF0X3Byb2ZpbGVfZ2VuZXJhdGlvbhgLIAEoCVIV'
+    'Y2hhdFByb2ZpbGVHZW5lcmF0aW9u');
 
 @$core.Deprecated('Use validateCatalogAssetRequestDescriptor instead')
 const ValidateCatalogAssetRequest$json = {
@@ -310,6 +342,20 @@ const GetCatalogAssetStatusResponse$json = {
       '6': '.voice.chat.v1.ChatRef',
       '10': 'destinationChat'
     },
+    {
+      '1': 'chat_account_generation',
+      '3': 10,
+      '4': 1,
+      '5': 9,
+      '10': 'chatAccountGeneration'
+    },
+    {
+      '1': 'chat_profile_generation',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '10': 'chatProfileGeneration'
+    },
   ],
 };
 
@@ -321,4 +367,6 @@ final $typed_data.Uint8List getCatalogAssetStatusResponseDescriptor = $convert.b
     '92aWRlchIfCgtwcm92aWRlcl9pZBgFIAEoCVIKcHJvdmlkZXJJZBIXCgdmaWxlX2lkGAYgASgJ'
     'UgZmaWxlSWQSFgoGc3RhdHVzGAcgASgJUgZzdGF0dXMSIQoMb3BlcmF0aW9uX2lkGAggASgJUg'
     'tvcGVyYXRpb25JZBJBChBkZXN0aW5hdGlvbl9jaGF0GAkgASgLMhYudm9pY2UuY2hhdC52MS5D'
-    'aGF0UmVmUg9kZXN0aW5hdGlvbkNoYXQ=');
+    'aGF0UmVmUg9kZXN0aW5hdGlvbkNoYXQSNgoXY2hhdF9hY2NvdW50X2dlbmVyYXRpb24YCiABKA'
+    'lSFWNoYXRBY2NvdW50R2VuZXJhdGlvbhI2ChdjaGF0X3Byb2ZpbGVfZ2VuZXJhdGlvbhgLIAEo'
+    'CVIVY2hhdFByb2ZpbGVHZW5lcmF0aW9u');

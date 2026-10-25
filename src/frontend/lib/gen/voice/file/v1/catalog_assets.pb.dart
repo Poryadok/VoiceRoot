@@ -32,6 +32,8 @@ class ImportCatalogAssetRequest extends $pb.GeneratedMessage {
     $core.String? actorAccountId,
     $core.String? actorProfileId,
     $1.ChatRef? destinationChat,
+    $core.String? chatAccountGeneration,
+    $core.String? chatProfileGeneration,
   }) {
     final result = create();
     if (protocolVersion != null) result.protocolVersion = protocolVersion;
@@ -43,6 +45,10 @@ class ImportCatalogAssetRequest extends $pb.GeneratedMessage {
     if (actorAccountId != null) result.actorAccountId = actorAccountId;
     if (actorProfileId != null) result.actorProfileId = actorProfileId;
     if (destinationChat != null) result.destinationChat = destinationChat;
+    if (chatAccountGeneration != null)
+      result.chatAccountGeneration = chatAccountGeneration;
+    if (chatProfileGeneration != null)
+      result.chatProfileGeneration = chatProfileGeneration;
     return result;
   }
 
@@ -70,6 +76,8 @@ class ImportCatalogAssetRequest extends $pb.GeneratedMessage {
     ..aOS(8, _omitFieldNames ? '' : 'actorProfileId')
     ..aOM<$1.ChatRef>(9, _omitFieldNames ? '' : 'destinationChat',
         subBuilder: $1.ChatRef.create)
+    ..aOS(10, _omitFieldNames ? '' : 'chatAccountGeneration')
+    ..aOS(11, _omitFieldNames ? '' : 'chatProfileGeneration')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -175,6 +183,25 @@ class ImportCatalogAssetRequest extends $pb.GeneratedMessage {
   void clearDestinationChat() => $_clearField(9);
   @$pb.TagNumber(9)
   $1.ChatRef ensureDestinationChat() => $_ensure(8);
+
+  /// Opaque Chat-local captures. File also enforces its own actor generations.
+  @$pb.TagNumber(10)
+  $core.String get chatAccountGeneration => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set chatAccountGeneration($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasChatAccountGeneration() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearChatAccountGeneration() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get chatProfileGeneration => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set chatProfileGeneration($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasChatProfileGeneration() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearChatProfileGeneration() => $_clearField(11);
 }
 
 /// @voice.unknown_fields=accept_preserve
@@ -189,6 +216,8 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     $core.String? status,
     $core.String? operationId,
     $1.ChatRef? destinationChat,
+    $core.String? chatAccountGeneration,
+    $core.String? chatProfileGeneration,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -200,6 +229,10 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     if (status != null) result.status = status;
     if (operationId != null) result.operationId = operationId;
     if (destinationChat != null) result.destinationChat = destinationChat;
+    if (chatAccountGeneration != null)
+      result.chatAccountGeneration = chatAccountGeneration;
+    if (chatProfileGeneration != null)
+      result.chatProfileGeneration = chatProfileGeneration;
     return result;
   }
 
@@ -226,6 +259,8 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     ..aOS(8, _omitFieldNames ? '' : 'operationId')
     ..aOM<$1.ChatRef>(9, _omitFieldNames ? '' : 'destinationChat',
         subBuilder: $1.ChatRef.create)
+    ..aOS(10, _omitFieldNames ? '' : 'chatAccountGeneration')
+    ..aOS(11, _omitFieldNames ? '' : 'chatProfileGeneration')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -332,6 +367,24 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
   void clearDestinationChat() => $_clearField(9);
   @$pb.TagNumber(9)
   $1.ChatRef ensureDestinationChat() => $_ensure(8);
+
+  @$pb.TagNumber(10)
+  $core.String get chatAccountGeneration => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set chatAccountGeneration($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasChatAccountGeneration() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearChatAccountGeneration() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get chatProfileGeneration => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set chatProfileGeneration($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasChatProfileGeneration() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearChatProfileGeneration() => $_clearField(11);
 }
 
 /// @voice.unknown_fields=reject
@@ -1207,6 +1260,8 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     $core.String? status,
     $core.String? operationId,
     $1.ChatRef? destinationChat,
+    $core.String? chatAccountGeneration,
+    $core.String? chatProfileGeneration,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -1218,6 +1273,10 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     if (status != null) result.status = status;
     if (operationId != null) result.operationId = operationId;
     if (destinationChat != null) result.destinationChat = destinationChat;
+    if (chatAccountGeneration != null)
+      result.chatAccountGeneration = chatAccountGeneration;
+    if (chatProfileGeneration != null)
+      result.chatProfileGeneration = chatProfileGeneration;
     return result;
   }
 
@@ -1244,6 +1303,8 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     ..aOS(8, _omitFieldNames ? '' : 'operationId')
     ..aOM<$1.ChatRef>(9, _omitFieldNames ? '' : 'destinationChat',
         subBuilder: $1.ChatRef.create)
+    ..aOS(10, _omitFieldNames ? '' : 'chatAccountGeneration')
+    ..aOS(11, _omitFieldNames ? '' : 'chatProfileGeneration')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1351,6 +1412,24 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
   void clearDestinationChat() => $_clearField(9);
   @$pb.TagNumber(9)
   $1.ChatRef ensureDestinationChat() => $_ensure(8);
+
+  @$pb.TagNumber(10)
+  $core.String get chatAccountGeneration => $_getSZ(9);
+  @$pb.TagNumber(10)
+  set chatAccountGeneration($core.String value) => $_setString(9, value);
+  @$pb.TagNumber(10)
+  $core.bool hasChatAccountGeneration() => $_has(9);
+  @$pb.TagNumber(10)
+  void clearChatAccountGeneration() => $_clearField(10);
+
+  @$pb.TagNumber(11)
+  $core.String get chatProfileGeneration => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set chatProfileGeneration($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasChatProfileGeneration() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearChatProfileGeneration() => $_clearField(11);
 }
 
 const $core.bool _omitFieldNames =

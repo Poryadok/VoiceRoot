@@ -61,6 +61,15 @@ status=7`. Both use File's closed status vocabulary: `pending_upload`,
 first returns `processing`; there is no fake READY result or fabricated file ID.
 Source URL and storage keys never occur in either public response.
 File Import also echoes `operation_id=8, destination_chat=9`.
+Import request and Import/Get Status responses additionally carry opaque UUID
+`chat_account_generation=10, chat_profile_generation=11`. Chat captures these
+LIVE local actor generations before File calls, persists them with the binding
+under ordered actor locks, and rejects recovered operations from an older
+generation. They enter the internal import hash, not the public-selection hash.
+They are opaque captured data; File independently enforces its own local actor
+fences and cannot treat Chat's generations as File authority. Save never opens
+or restores a closed actor gate. A verified restore needs a new generation and
+operation and never revives an old receipt.
 
 Get Status's operation selector contains `operation_id=1, provider=2,
 provider_id=3, destination_chat=4`; its asset selector contains `source_id=1,
