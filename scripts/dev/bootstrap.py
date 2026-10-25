@@ -56,7 +56,8 @@ def apply(objects):
                 if isinstance(part.get('image'), str):
                     image = part['image']
                     part['image'] = dynamic['tool_images'].get(image, image)
-                    if not re.fullmatch(r'[A-Za-z0-9._/:\-]+@sha256:[a-f0-9]{64}', part['image']):
+                    if (part['image'] not in dynamic['image_references']
+                            or not re.fullmatch(r'[A-Za-z0-9._/:\-]+@sha256:[a-f0-9]{64}', part['image'])):
                         raise ValueError('fresh Kubernetes bootstrap requires immutable image: ' + image)
     for obj in objects:
         meta, kind = obj['metadata'], obj['kind']
@@ -252,7 +253,8 @@ def dynamic_storage():
         return None
     value = json.loads(path.read_text())
     if (value.get('schema') != 'voice-dev-fresh-storage-v1' or not value.get('old_namespace_uid')
-            or not value.get('operation') or not value.get('retained') or not isinstance(value.get('tool_images'), dict)):
+            or not value.get('operation') or not value.get('retained') or not value.get('image_references')
+            or not isinstance(value.get('tool_images'), dict)):
         raise ValueError('fresh storage receipt invalid')
     return value
 

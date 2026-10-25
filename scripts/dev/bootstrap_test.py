@@ -13,13 +13,13 @@ class FreshNamespaceTests(unittest.TestCase):
         obj = {'apiVersion': 'apps/v1', 'kind': 'Deployment', 'metadata': dev.metadata('voice-dev-mail'),
                'spec': {'template': {'spec': {'containers': [{'image': 'node:24-alpine'}]}}}}
         immutable = 'node@sha256:' + 'a' * 64
-        with patch.object(bootstrap, 'dynamic_storage', return_value={'tool_images': {'node:24-alpine': immutable}}), \
+        with patch.object(bootstrap, 'dynamic_storage', return_value={'tool_images': {'node:24-alpine': immutable}, 'image_references': [immutable]}), \
                 patch.object(bootstrap, 'run') as run:
             bootstrap.apply([obj])
             submitted = json.loads(run.call_args.kwargs['body'])
             self.assertEqual(submitted['items'][0]['spec']['template']['spec']['containers'][0]['image'], immutable)
             self.assertEqual(obj['spec']['template']['spec']['containers'][0]['image'], 'node:24-alpine')
-        with patch.object(bootstrap, 'dynamic_storage', return_value={'tool_images': {}}), \
+        with patch.object(bootstrap, 'dynamic_storage', return_value={'tool_images': {}, 'image_references': []}), \
                 patch.object(bootstrap, 'run') as run:
             with self.assertRaises(ValueError):
                 bootstrap.apply([obj])

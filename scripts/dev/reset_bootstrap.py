@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 import environment as dev
 import signal_tls
+import migrations
 
 CLAIMS = {'postgres': 'pgdata-voice-postgres-0', 'minio': 'data-voice-minio-0',
           'clickhouse': 'chdata-voice-clickhouse-0', 'nats': 'voice-nats-jsdata'}
@@ -623,10 +624,18 @@ def execute_locked(kube, directory, root, *, actor, claim):
         if json.loads(private_read(runtime / 'package-binding.json')) != runtime_binding:
             raise ValueError('interrupted runtime package binding changed')
     dynamic = runtime / 'fresh-storage.json'
+    dynamic_binding = {'schema': 'voice-dev-fresh-storage-v1', 'operation': plan['operation'],
+        'old_namespace_uid': plan['namespace_uid'], 'retained': plan['retained'],
+        'storage_class': plan['storage_class'], 'tool_images': receipt['tool_images'],
+        'image_references': sorted({r['reference'] for r in receipt['images']} | set(receipt['tool_images'].values())
+                                   | set(migrations.GAMEINTEGRATION_IMAGES.values()))}
     if not dynamic.exists():
-        write_private(dynamic, {'schema': 'voice-dev-fresh-storage-v1', 'operation': plan['operation'],
-            'old_namespace_uid': plan['namespace_uid'], 'retained': plan['retained'],
-            'storage_class': plan['storage_class'], 'tool_images': receipt['tool_images']})
+        write_private(dynamic, dynamic_binding)
+    else:
+        current_binding = json.loads(private_read(dynamic))
+        if ({k: current_binding.get(k) for k in dynamic_binding} != dynamic_binding
+                or set(current_binding) - set(dynamic_binding) - {'new_namespace_uid'}):
+            raise ValueError('interrupted runtime authority/image binding changed')
     if journal.state['steps'].get('stop-writers', {}).get('status') != 'complete':
         stop_writers(kube, plan, journal, check_window=check_window)
     if journal.state['steps'].get('delete-namespace', {}).get('status') != 'complete':
