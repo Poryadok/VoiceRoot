@@ -277,6 +277,180 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('discards a delayed linked-account list after profile change', (
+    tester,
+  ) async {
+    final oldResponse = Completer<http.Response>();
+    var listRequests = 0;
+    late AuthController authController;
+    await tester.pumpWidget(
+      _linkedAccountsTestApp(
+        MockClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/auth/linked-accounts') {
+            listRequests++;
+            if (listRequests == 1) return oldResponse.future;
+            return http.Response(
+              jsonEncode({
+                'linked_accounts': [
+                  {
+                    'platform': 'youtube',
+                    'profile_id': 'profile-next',
+                    'external_id': 'next-1',
+                    'external_login': 'next-profile-link',
+                  },
+                ],
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+        onAuthController: (controller) => authController = controller,
+      ),
+    );
+    await tester.pump();
+
+    await authController.applySession(_testSession('profile-next'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('profile-next'), findsOneWidget);
+    expect(find.textContaining('next-profile-link'), findsOneWidget);
+
+    oldResponse.complete(
+      http.Response(
+        jsonEncode({
+          'linked_accounts': [
+            {
+              'platform': 'twitch',
+              'profile_id': 'profile-selected',
+              'external_id': 'old-1',
+              'external_login': 'old-profile-link',
+            },
+          ],
+        }),
+        200,
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('profile-next'), findsOneWidget);
+    expect(find.textContaining('next-profile-link'), findsOneWidget);
+    expect(find.textContaining('old-profile-link'), findsNothing);
+    expect(listRequests, 2);
+  });
+
+  testWidgets('does not launch a delayed OAuth URL after profile change', (
+    tester,
+  ) async {
+    final linkResponse = Completer<http.Response>();
+    final launchCalls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      _urlLauncher,
+      (call) async {
+        launchCalls.add(call);
+        return true;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        _urlLauncher,
+        null,
+      ),
+    );
+    late AuthController authController;
+    await tester.pumpWidget(
+      _linkedAccountsTestApp(
+        MockClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/auth/linked-accounts') {
+            return http.Response(jsonEncode({'linked_accounts': []}), 200);
+          }
+          if (request.method == 'POST' &&
+              request.url.path == '/api/v1/auth/linked-accounts/twitch/link') {
+            return linkResponse.future;
+          }
+          return http.Response('{}', 404);
+        }),
+        onAuthController: (controller) => authController = controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(VerificationSettingsSheet.twitchLinkKey));
+    await tester.pump();
+    await authController.applySession(_testSession('profile-next'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('profile-next'), findsOneWidget);
+
+    linkResponse.complete(
+      http.Response(
+        jsonEncode({'authorization_url': 'https://twitch.test/old-profile'}),
+        200,
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(launchCalls, isEmpty);
+    expect(find.textContaining('old-profile'), findsNothing);
+  });
+
+  testWidgets('discards delayed unlink completion after profile change', (
+    tester,
+  ) async {
+    final unlinkResponse = Completer<http.Response>();
+    var listRequests = 0;
+    late AuthController authController;
+    await tester.pumpWidget(
+      _linkedAccountsTestApp(
+        MockClient((request) async {
+          if (request.method == 'GET' &&
+              request.url.path == '/api/v1/auth/linked-accounts') {
+            listRequests++;
+            return http.Response(
+              jsonEncode({
+                'linked_accounts': listRequests == 1
+                    ? [
+                        {
+                          'platform': 'twitch',
+                          'profile_id': 'profile-selected',
+                          'external_id': 'old-1',
+                          'external_login': 'old-profile-link',
+                        },
+                      ]
+                    : <Map<String, String>>[],
+              }),
+              200,
+            );
+          }
+          if (request.method == 'POST' &&
+              request.url.path ==
+                  '/api/v1/auth/linked-accounts/twitch/unlink') {
+            return unlinkResponse.future;
+          }
+          return http.Response('{}', 404);
+        }),
+        onAuthController: (controller) => authController = controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('verification_twitch_unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(VerificationSettingsSheet.unlinkConfirmKey));
+    await tester.pump();
+
+    await authController.applySession(_testSession('profile-next'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('profile-next'), findsOneWidget);
+    expect(find.textContaining('old-profile-link'), findsNothing);
+
+    unlinkResponse.complete(http.Response('', 204));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('profile-next'), findsOneWidget);
+    expect(find.textContaining('old-profile-link'), findsNothing);
+    expect(listRequests, 2);
+  });
+
   for (final locale in ['en', 'ru']) {
     testWidgets(
       'linked accounts $locale no-session guard is localized without HTTP',
@@ -585,7 +759,11 @@ void main() {
   }
 }
 
-Widget _linkedAccountsTestApp(http.Client client) {
+Widget _linkedAccountsTestApp(
+  http.Client client, {
+  AuthSession? session,
+  void Function(AuthController controller)? onAuthController,
+}) {
   final gateway = GatewayHttpClient(
     httpClient: client,
     config: const GatewayConfig(baseUrl: 'http://api.test'),
@@ -610,15 +788,18 @@ Widget _linkedAccountsTestApp(http.Client client) {
           storage: ref.watch(authSessionStorageProvider),
           guestCredentialsStorage: ref.watch(guestCredentialsStorageProvider),
         );
-        controller.state = const AuthState(
-          session: AuthSession(
-            accessToken: 'access-token',
-            refreshToken: 'refresh-token',
-            expiresInSeconds: 900,
-            accountId: 'account-1',
-            activeProfileId: 'profile-selected',
-          ),
+        controller.state = AuthState(
+          session:
+              session ??
+              const AuthSession(
+                accessToken: 'access-token',
+                refreshToken: 'refresh-token',
+                expiresInSeconds: 900,
+                accountId: 'account-1',
+                activeProfileId: 'profile-selected',
+              ),
         );
+        onAuthController?.call(controller);
         return controller;
       }),
     ],
@@ -635,6 +816,14 @@ Widget _linkedAccountsTestApp(http.Client client) {
     ),
   );
 }
+
+AuthSession _testSession(String profileId) => AuthSession(
+  accessToken: 'access-token-$profileId',
+  refreshToken: 'refresh-token-$profileId',
+  expiresInSeconds: 900,
+  accountId: 'account-1',
+  activeProfileId: profileId,
+);
 
 Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
   for (var attempt = 0; attempt < 20; attempt++) {

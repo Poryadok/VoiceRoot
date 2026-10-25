@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/auth_client.dart';
+import '../../backend/auth_session.dart';
+import '../../backend/gateway_http.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
 import '../../theme/voice_colors.dart';
@@ -35,6 +37,20 @@ class VerificationSettingsSheet extends ConsumerStatefulWidget {
 
 enum _VerificationErrorSource { load, link, unlink }
 
+class _SessionActionSnapshot {
+  const _SessionActionSnapshot({
+    required this.accountId,
+    required this.profileId,
+    required this.installGeneration,
+    required this.requestIdentity,
+  });
+
+  final String accountId;
+  final String profileId;
+  final int installGeneration;
+  final GatewayRequestIdentity requestIdentity;
+}
+
 class _VerificationSettingsSheetState
     extends ConsumerState<VerificationSettingsSheet> {
   List<LinkedAccount>? _accounts;
@@ -43,15 +59,64 @@ class _VerificationSettingsSheetState
   _VerificationErrorSource? _errorSource;
   String? _selectedProfileId;
   String? _busyPlatform;
+  late int _observedSessionInstallGeneration;
 
   @override
   void initState() {
     super.initState();
+    _observedSessionInstallGeneration = ref
+        .read(authControllerProvider.notifier)
+        .sessionInstallGeneration;
     _loadLinkedAccounts();
+  }
+
+  _SessionActionSnapshot? _snapshotFor(AuthSession session) {
+    if (ref.read(profileSwitchInProgressProvider)) return null;
+    final controller = ref.read(authControllerProvider.notifier);
+    final requestIdentity = controller.gatewayRequestIdentity;
+    if (requestIdentity == null ||
+        requestIdentity.accountId != session.accountId ||
+        requestIdentity.profileId != session.activeProfileId) {
+      return null;
+    }
+    return _SessionActionSnapshot(
+      accountId: session.accountId,
+      profileId: session.activeProfileId,
+      installGeneration: controller.sessionInstallGeneration,
+      requestIdentity: requestIdentity,
+    );
+  }
+
+  bool _isCurrent(_SessionActionSnapshot snapshot) {
+    if (!mounted || ref.read(profileSwitchInProgressProvider)) return false;
+    final current = ref.read(authControllerProvider).session;
+    final controller = ref.read(authControllerProvider.notifier);
+    return current != null &&
+        current.accountId == snapshot.accountId &&
+        current.activeProfileId == snapshot.profileId &&
+        controller.sessionInstallGeneration == snapshot.installGeneration &&
+        controller.gatewayRequestIdentity == snapshot.requestIdentity;
+  }
+
+  void _clearForSessionChange({required bool switching}) {
+    if (!mounted) return;
+    final session = ref.read(authControllerProvider).session;
+    setState(() {
+      _accounts = null;
+      _selectedProfileId = null;
+      _busyPlatform = null;
+      _error = session == null && !switching ? 'not_authenticated' : null;
+      _errorSource = session == null && !switching
+          ? _VerificationErrorSource.load
+          : null;
+      _loading = session != null || switching;
+    });
+    if (session != null && !switching) _loadLinkedAccounts();
   }
 
   Future<void> _loadLinkedAccounts() async {
     final session = ref.read(authControllerProvider).session;
+    if (ref.read(profileSwitchInProgressProvider)) return;
     if (session == null) {
       setState(() {
         _loading = false;
@@ -60,6 +125,8 @@ class _VerificationSettingsSheetState
       });
       return;
     }
+    final snapshot = _snapshotFor(session);
+    if (snapshot == null) return;
     if (mounted && !_loading) {
       setState(() {
         _loading = true;
@@ -71,7 +138,7 @@ class _VerificationSettingsSheetState
     final result = await ref
         .read(voiceAuthClientProvider)
         .listLinkedAccounts(session: session);
-    if (!mounted) return;
+    if (!_isCurrent(snapshot)) return;
     setState(() {
       _loading = false;
       switch (result) {
@@ -98,6 +165,8 @@ class _VerificationSettingsSheetState
   Future<void> _linkProvider(String platform) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
+    final snapshot = _snapshotFor(session);
+    if (snapshot == null) return;
     setState(() {
       _busyPlatform = platform;
       if (_errorSource == _VerificationErrorSource.link) {
@@ -112,7 +181,7 @@ class _VerificationSettingsSheetState
           platform: platform,
           redirectUri: 'https://app.voice.test/oauth/$platform',
         );
-    if (!mounted) return;
+    if (!_isCurrent(snapshot)) return;
     setState(() => _busyPlatform = null);
     switch (result) {
       case AuthApiOk(:final data):
@@ -129,6 +198,7 @@ class _VerificationSettingsSheetState
           _setActionError(_VerificationErrorSource.link);
           return;
         }
+        if (!_isCurrent(snapshot)) return;
         var launched = false;
         try {
           launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -147,6 +217,8 @@ class _VerificationSettingsSheetState
   Future<void> _unlinkProvider(String platform) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
+    final snapshot = _snapshotFor(session);
+    if (snapshot == null) return;
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -168,12 +240,12 @@ class _VerificationSettingsSheetState
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !_isCurrent(snapshot)) return;
     setState(() => _busyPlatform = platform);
     final result = await ref
         .read(voiceAuthClientProvider)
         .unlinkLinkedAccount(session: session, platform: platform);
-    if (!mounted) return;
+    if (!_isCurrent(snapshot)) return;
     switch (result) {
       case AuthApiOk<void>():
         await _loadLinkedAccounts();
@@ -200,6 +272,26 @@ class _VerificationSettingsSheetState
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authControllerProvider, (previous, next) {
+      final generation = ref
+          .read(authControllerProvider.notifier)
+          .sessionInstallGeneration;
+      if (generation == _observedSessionInstallGeneration) return;
+      _observedSessionInstallGeneration = generation;
+      _clearForSessionChange(
+        switching: ref.read(profileSwitchInProgressProvider),
+      );
+    });
+    ref.listen<bool>(profileSwitchInProgressProvider, (previous, switching) {
+      if (switching) {
+        _clearForSessionChange(switching: true);
+      } else if (previous == true) {
+        _observedSessionInstallGeneration = ref
+            .read(authControllerProvider.notifier)
+            .sessionInstallGeneration;
+        _clearForSessionChange(switching: false);
+      }
+    });
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
 
