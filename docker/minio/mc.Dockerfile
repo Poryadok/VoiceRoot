@@ -7,7 +7,7 @@ ARG MC_SHA256=01f866e9c5f9b87c2b09116fa5d7c06695b106242d829a8bb32990c00312e891
 # This official MinIO release key is published in minio/mc's Dockerfile.
 ARG MINISIGN_PUBLIC_KEY=RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 
-RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0 minisign=0.12-r2 \
+RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.23.0-r0 minisign=0.12-r2 \
     && asset="mc.linux-amd64.${MC_RELEASE}" \
     && base="https://github.com/minio/mc/releases/download/${MC_RELEASE}" \
     && curl --fail --show-error --silent --location "${base}/${asset}" --output "/tmp/${asset}" \
