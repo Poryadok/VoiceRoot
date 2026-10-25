@@ -15,6 +15,8 @@ import 'package:voice_frontend/backend/gateway_http.dart';
 import 'package:voice_frontend/backend/matchmaking_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/matchmaking_providers.dart';
+import 'package:voice_frontend/theme/voice_theme.dart';
+import 'package:voice_frontend/theme/voice_token_catalog.dart';
 import 'package:voice_frontend/ui/matchmaking/add_game_screen.dart';
 import 'package:voice_frontend/ui/matchmaking/game_catalog_screen.dart';
 
@@ -22,8 +24,18 @@ import 'support/auth_test_overrides.dart';
 import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
+late ThemeData _editorTheme;
+
 void main() {
   setUpAll(() async {
+    final catalog = VoiceTokenCatalog.parseJson(
+      await rootBundle.loadString('assets/design/voice.tokens.json'),
+    );
+    _editorTheme = await VoiceTheme.build(
+      catalog: catalog,
+      mode: VoiceThemeMode.dark,
+      profileAccent: catalog.profileAccentAt(0),
+    );
     if (const bool.fromEnvironment('VOICE_CAPTURE_ADD_GAME')) {
       final text = FontLoader('Noto Sans')
         ..addFont(rootBundle.load('assets/fonts/NotoSans-Regular.ttf'));
@@ -151,19 +163,18 @@ void main() {
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       semantics.dispose();
       if (const bool.fromEnvironment('VOICE_CAPTURE_ADD_GAME')) {
-        await tester.runAsync(() async {
-          final boundary = tester.renderObject<RenderRepaintBoundary>(
-            find.byKey(const Key('add_game_capture')),
-          );
-          final image = await boundary.toImage();
-          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-          final output = File(
-            '../../tmp/anton59-addgame/addgame-${size.width.toInt()}.png',
-          );
-          await output.parent.create(recursive: true);
-          await output.writeAsBytes(bytes!.buffer.asUint8List());
-          image.dispose();
-        });
+        await _capture(tester, 'addgame-${size.width.toInt()}');
+      }
+      await tester.scrollUntilVisible(
+        find.byKey(AddGameScreen.submitKey),
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(AddGameScreen.submitKey).hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      if (const bool.fromEnvironment('VOICE_CAPTURE_ADD_GAME')) {
+        await _capture(tester, 'addgame-${size.width.toInt()}-footer');
       }
     });
   }
@@ -385,6 +396,19 @@ void main() {
   });
 }
 
+Future<void> _capture(WidgetTester tester, String name) =>
+    tester.runAsync(() async {
+      final boundary = tester.renderObject<RenderRepaintBoundary>(
+        find.byKey(const Key('add_game_capture')),
+      );
+      final image = await boundary.toImage();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final output = File('../../tmp/anton59-addgame/$name.png');
+      await output.parent.create(recursive: true);
+      await output.writeAsBytes(bytes!.buffer.asUint8List());
+      image.dispose();
+    });
+
 Future<void> _pumpEditor(WidgetTester tester, http.Client client) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -400,9 +424,7 @@ Future<void> _pumpEditor(WidgetTester tester, http.Client client) async {
         ),
       ],
       child: MaterialApp(
-        theme: voiceTestTheme().copyWith(
-          textTheme: voiceTestTheme().textTheme.apply(fontFamily: 'Noto Sans'),
-        ),
+        theme: _editorTheme,
         locale: const Locale('en'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
