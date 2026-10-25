@@ -34,8 +34,10 @@ type PutPresignInput struct {
 }
 
 type GetPresignInput struct {
-	Key string
-	TTL time.Duration
+	Key         string
+	TTL         time.Duration
+	ContentType string
+	Filename    string
 }
 
 type Presigner interface {
@@ -186,11 +188,18 @@ func (p *S3R2Presigner) PresignGet(ctx context.Context, in GetPresignInput) (str
 	if ttl <= 0 {
 		ttl = DefaultURLTTL
 	}
-	out, err := p.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+	input := &s3.GetObjectInput{
 		Bucket:               aws.String(p.bucket),
 		Key:                  aws.String(key),
 		ResponseCacheControl: aws.String("no-store"),
-	}, s3.WithPresignExpires(ttl))
+	}
+	if in.ContentType != "" {
+		input.ResponseContentType = aws.String(in.ContentType)
+	}
+	if in.Filename != "" {
+		input.ResponseContentDisposition = aws.String(mime.FormatMediaType("attachment", map[string]string{"filename": in.Filename}))
+	}
+	out, err := p.presignClient.PresignGetObject(ctx, input, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", err
 	}

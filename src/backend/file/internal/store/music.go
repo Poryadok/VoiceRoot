@@ -33,6 +33,11 @@ func markUnavailableWithMusicEventTx(ctx context.Context, tx pgx.Tx, row FileRow
 	if status == "expired" && row.Status != "ready" {
 		return pgx.ErrNoRows
 	}
+	if status == "deleted" || status == "expired" {
+		if err := queueGIFOriginalCleanupTx(ctx, tx, row); err != nil {
+			return err
+		}
+	}
 	if row.Status == status {
 		return nil
 	}
