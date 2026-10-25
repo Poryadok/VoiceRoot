@@ -446,14 +446,17 @@ def configure_routes():
 
 
 def main():
+    global ROOT
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('prepare', 'start', 'repair-fresh-nats-claim', 'central-bootstrap', 'rotate-postgres', 'activate', 'configure-routes'))
     parser.add_argument('--secrets', type=Path)
     parser.add_argument('--revision')
     parser.add_argument('--work-dir', type=Path, default=WORK)
+    parser.add_argument('--source-root', type=Path, default=ROOT)
     args = parser.parse_args()
     os.umask(0o077)
     configure_work(args.work_dir)
+    ROOT = args.source_root.resolve(strict=True)
     try:
         if args.action == 'prepare':
             prepare(args.secrets, args.revision)

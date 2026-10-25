@@ -16,6 +16,12 @@ window. A reviewer or author has no implied shared-environment execution custody
 ## Prepare before deleting the namespace
 
 Use a reviewed adapter commit and the separately pinned product source. Prepare
+a separate immutable product-source export; the package manifest is checked
+against that export, while actual adapter/helper hashes are captured separately.
+The reviewed adapter's bootstrap uses `--source-root` for canonical SQL, Go and
+mail inputs; it does not pretend its deliberately changed bootstrap file is the
+unchanged product-source blob.
+Prepare
 a complete package through `reset_package.render` and `write_package` in a new
 caller-owned directory under a mode0700 parent. The package contains private
 mode0600 `prepared.json`, `secrets.json`, `foundation.json`, `source-revision`
@@ -47,6 +53,7 @@ On the actual Linux DEV host, with its authorized Kubernetes context:
 
 ```text
 python3 scripts/dev/reset_bootstrap.py plan --work-dir <private-package> \
+  --source-root <immutable-product-source-export> \
   --actor <actual-operator> --resource-claim <actual-claim> \
   --namespace-uid <observed-old-DEV-UID> --staging-uid <observed-STAGING-UID> \
   --budget-seconds <reviewed-budget-with-margin> \
@@ -68,6 +75,7 @@ journals are not a universal gate. A real active/queued DEV executor is a gate.
 
 ```text
 python3 scripts/dev/reset_bootstrap.py run --work-dir <same-private-package> \
+  --source-root <same-immutable-product-source-export> \
   --actor <same-actual-operator> --resource-claim <same-actual-claim>
 ```
 

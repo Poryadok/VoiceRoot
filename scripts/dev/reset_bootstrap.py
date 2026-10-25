@@ -398,6 +398,12 @@ def delete_namespace(kube, expected, journal, *, check_window, timeout=600):
 PACKAGE_FILES = ('prepared.json', 'secrets.json', 'foundation.json', 'package-receipt.json', 'source-revision')
 
 
+def adapter_binding():
+    directory = Path(__file__).resolve().parent
+    return {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
+            for name in ('reset_bootstrap.py', 'bootstrap.py', 'reset_package.py', 'migrations.py', 'environment.py', 'signal_tls.py')}
+
+
 def private_directory(path):
     if path.is_symlink() or not path.is_dir() or path.resolve() != path.absolute():
         raise ValueError('canonical existing private operation directory required')
@@ -539,6 +545,7 @@ def prepare_plan(kube, directory, root, *, namespace_uid, staging_uid, actor, cl
             'writers': writers, 'retained': retained, 'storage_class': storage_pin,
             'provider': provider,
             'host': original, 'package_files': hashes, 'source_sha': receipt['source_sha'],
+            'adapter_code': adapter_binding(),
             'staging_storage': staging,
             'budget_seconds': budget_seconds, 'budget_evidence': budget_evidence}
     write_private(directory / 'reset-plan.json', plan)
@@ -589,7 +596,8 @@ def execute_plan(kube, directory, root, *, actor, claim):
 def execute_locked(kube, directory, root, *, actor, claim):
     plan = json.loads(private_read(directory / 'reset-plan.json'))
     receipt, hashes = validate_package(directory, root)
-    if actor != plan['actor'] or claim != plan['resource_claim'] or hashes != plan['package_files']:
+    if (actor != plan['actor'] or claim != plan['resource_claim'] or hashes != plan['package_files']
+            or adapter_binding() != plan['adapter_code']):
         raise ValueError('operator claim/package changed; no mutation')
     journal = Journal(directory, plan)
     def check_window():
@@ -630,7 +638,7 @@ def execute_locked(kube, directory, root, *, actor, claim):
             journal.begin('bootstrap')
         # Only forward bootstrap may resume; old namespace deletion never replays.
         environment = dict(os.environ, SPACE_NATIVE_INSTALLER_IMAGE=receipt['tool_images']['space-native-installer'])
-        result = subprocess.run([sys.executable, str(root / 'scripts/dev/bootstrap.py'), 'start', '--work-dir', str(runtime)],
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name('bootstrap.py')), 'start', '--work-dir', str(runtime), '--source-root', str(root)],
                                 env=environment, capture_output=True, timeout=24000)
         log = runtime / 'bootstrap.log'
         descriptor = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
@@ -648,6 +656,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=('plan', 'run'))
     parser.add_argument('--work-dir', required=True, type=Path)
+    parser.add_argument('--source-root', required=True, type=Path)
     parser.add_argument('--actor', required=True)
     parser.add_argument('--resource-claim', required=True)
     parser.add_argument('--namespace-uid')
@@ -657,7 +666,7 @@ def main():
     args = parser.parse_args()
     os.umask(0o077)
     directory = private_directory(args.work_dir.absolute())
-    root = Path(__file__).resolve().parents[2]
+    root = args.source_root.resolve(strict=True)
     if args.action == 'plan':
         if (directory / 'reset-state.json').exists():
             raise ValueError('existing operation state must never be reset')
