@@ -100,6 +100,192 @@ DoD; see [PLAN.md](../PLAN.md) A6 and G1's unfinished-rich-type limitation.
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 - [ ] **Verification OAuth callback and client resume contract** — Settings now filters linked sources by the selected active `profile_id` and offers Twitch/YouTube link plus unlink, but define the HTTPS callback owner; allowed redirect URI for Web/Windows/mobile; account/profile/provider-bound state; PKCE; one-time result lifetime; and the Settings → Verification return route. Specify success, cancel, denied, error, provider-unavailable and reload states. Authorization code and provider tokens must never reach a client through a custom-scheme URL; after callback the client rereads authoritative linked-account/verification state. DoD: wrong state/account/provider/redirect fail closed; callback replay is not applied; Web and Windows resume are tested. This records a contract gap, not a resolved OAuth design; see [verification.md](../features/verification.md).
 
+#### OAuth callback/resume proposal — review required
+
+Tracking: `UIV3-SETTINGS-OAUTH-RETURN-CONTRACT`, related to
+`UIV3-PANEL-SETTINGS-LINKEDACCOUNTS`. Consumer: the Settings linked-account
+callback implementation. This is a proposed contract and test plan, **not an
+approved API, implemented behavior, provider enablement, or acceptance evidence**.
+The open checkbox above remains open. Auth owns provider credentials/identity
+checks; User owns the resulting public verification projection.
+
+**Observed source baseline.** Inspected at `1d18297eccead5898767f903f47b5f08fbb847c7`;
+the separately inspected Settings PR [#906](https://github.com/Poryadok/VoiceRoot/pull/906)
+was at `e12dc4f96e5ddb1ed4c92595428fcb038549bc1a`.
+
+| Surface | Current fact and source |
+| --- | --- |
+| Auth REST | `AuthRestController` exposes authenticated `POST /api/v1/auth/linked-accounts/{twitch,youtube}/link`, returning `{authorization_url}`. The request accepts `redirect_uri` and optional client `state`; defaults use `https://app.voice.test/oauth/{provider}`. Start validates the bearer but does not persist an account/profile-bound attempt. |
+| Callback | The existing authenticated `POST .../{provider}/callback` accepts `{code,redirect_uri}` and uses the **callback JWT's** account/profile; returns `{verification_type,badge}`. It has no state/verifier field or server attempt consumption. It is not a public provider GET callback. |
+| Provider exchange | `LinkedAccountsService.buildTwitchAuthorizeUrl` / `buildYoutubeAuthorizeUrl` append optional state; `exchangeAuthorizationCode` sends client ID/secret, code, grant type and redirect, without PKCE. Twitch requires Partner; YouTube currently uses `longUploadsStatus` allowed/eligible as a YPP proxy. The proxy is implementation evidence, not proof of the full documented verified-YPP criterion. |
+| Development fallback | `exchangeTwitchCode` / `exchangeYoutubeCode` use mock tokens for `mock-code` **or unconfigured providers**. A production callback must explicitly exclude this fallback; a returned authorization URL is not evidence of a configured provider. |
+| Gateway | `transcode_profiles_verification.go:serveAuthREST` deliberately returns false for linked-account GET/list and POST subroutes, leaving them to the configured Auth REST upstream. New public GET callback and result/cancel routes need explicit authentication, routing and rate-limit classification; no gRPC callback contract exists here. |
+| Flutter API/UI | `auth_client.dart:startLinkedAccountLink` sends only redirect URI; there is no linked-account callback/resume wrapper. Baseline sheet displays the URL; PR #906 launches HTTP(S) via external `url_launcher`, adds confirmation and session/profile fences. Both use the test callback origin. Browser handoff does not establish callback success. |
+| Return plumbing | `routing/deep_link_listener.dart` reads initial and streamed app links; `deep_link_parser.dart:DeepLinkKind` has no OAuth target and rejects an OAuth path. Initial web recovery is invite-specific. Android manifest declares `voice:` and `https://voice.gg`; iOS Info.plist declares `voice:`. These declarations do not qualify OAuth return or mobile association/signing. Windows runner forwards process arguments but does not itself implement OAuth result handling. |
+| Existing product rules | [verification.md](../features/verification.md), Auth service §Linked provider verification and screen-controls §§27–28 require selected-profile sources, explicit unlink→link for another profile, authoritative User status and LinkedAccounts→Verification navigation. [PLAN.md](../PLAN.md) marks callback/resume and live-provider acceptance outstanding. |
+
+**Recommended protocol, pending the decisions below.** Endpoint names and TTLs
+in this section are proposed wire details; implementation must first freeze them
+in Auth/Gateway docs. Do not reuse Admin/Developer Portal OAuth or SDK linking:
+those are different clients, credentials and trust boundaries.
+
+1. Flutter generates a cryptographically random return verifier (RFC 7636 S256,
+   43–128 unreserved characters), retaining it only for this attempt. Authenticated
+   `POST .../{provider}/link` accepts `{client_surface,return_challenge,
+   return_challenge_method:"S256"}`. No arbitrary callback URL is accepted.
+   Auth derives account/profile/session authority from the bearer, validates
+   current eligibility and provider availability, and maps surface to configured
+   exact callback and return endpoints. Proposed response:
+   `{attempt_id,authorization_url,expires_at}`. Missing provider configuration
+   returns unavailable before launch, with no mock grant. Authorization URLs use
+   the configured provider's exact HTTPS origin/path; Flutter rejects unexpected
+   origins/schemes before launch, rather than trusting every HTTP(S) URL.
+2. Auth creates a durable attempt with random server `state` (at least 256 bits;
+   store only its hash), account ID, profile ID, provider, initiating session
+   identity/epoch, environment/client registration, exact HTTPS provider callback,
+   exact allowed app return destination, return challenge and expiry. No IDs,
+   redirects or credentials are encoded in state. Proposed attempt lifetime:
+   **10 minutes**, measured by server clock, never extended by polling/reload.
+   For a given initiating session/profile/provider, a new attempt supersedes an
+   older pending attempt; independent providers remain distinct. Existing active
+   source/profile conflict rules still apply at final commit.
+3. Provider PKCE is a separate layer from the return proof: Auth generates and
+   retains a provider verifier, sends `code_challenge_method=S256` and challenge,
+   and includes the verifier in server token exchange **only for a provider/client
+   registration whose support is verified**. Neither verifier nor client secret
+   reaches a return URL. Never silently downgrade PKCE after an exchange failure.
+   The inspected linked-account code implements neither layer. Twitch's published
+   [authorization-code flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/)
+   documents a confidential server exchange; this inspection does not establish
+   S256 support for the configured Twitch registration. The Google
+   [web-server flow](https://developers.google.com/identity/protocols/oauth2/web-server)
+   likewise needs qualification for the selected registration. Provider capability
+   and any reviewed confidential-client exception must be explicit before enabling
+   that provider; return S256 proof remains mandatory in either case.
+4. Proposed public `GET /api/v1/auth/linked-accounts/{provider}/oauth-callback`
+   terminates HTTPS at Gateway and executes in Auth. No Voice bearer is expected
+   from the provider browser. Accept exactly one state and either one nonempty
+   code or one provider error; reject duplicates, mixed code/error, missing state,
+   oversized/malformed parameters and unexpected credential-bearing fragments.
+   Validate state, provider path, registration, bound callback and expiry before
+   any token request. Use the **stored** callback for exchange; never Host,
+   forwarded headers or request-supplied redirect. Atomic pending→processing
+   claim allows one exchange across concurrent callbacks. Unknown/wrong state
+   cannot cancel or consume another attempt and gets a neutral failure page.
+5. Auth exchanges the code and checks provider identity/criterion. It records an
+   encrypted short-lived pending result, **without linking a source yet**. This
+   ensures final linking requires a current authenticated client and its return
+   proof. Proposed result handle: independent random opaque 256-bit value, hashed
+   at rest, bound to the whole attempt tuple, single use, expires at the earlier
+   of attempt expiry or **2 minutes after callback completion**. Tokens never
+   appear in result JSON/URLs/logs; pending token material is deleted on expiry,
+   cancellation, denied result or successful finalization. Provider failure gets
+   a safe outcome enum, never raw provider descriptions. Callback replay cannot
+   mint another handle or trigger another exchange. A worker crash/ambiguous token
+   exchange ends the attempt safely; retry starts a new attempt rather than
+   replaying the authorization code. The callback/bridge use `Cache-Control:
+   no-store`, `Referrer-Policy: no-referrer` and a restrictive CSP without third
+   party resources. Gateway/Auth access logs, tracing and analytics redact codes,
+   state, handles and tokens. Provider codes enter only the server HTTPS callback;
+   the bridge never forwards its original query to the app or another origin.
+6. Return only `{attempt_id,result_handle}` through a configured bridge/app
+   destination; no provider code, provider token, Voice token, verifier, arbitrary
+   next URL or claimed success status. Proposed authenticated
+   `POST .../{provider}/results/consume` body is
+   `{attempt_id,result_handle,return_verifier}`. Auth requires the original
+   account/profile/session authority, current epoch/eligibility and S256 match;
+   mismatch, expiry, supersession, logout or revoked session fails closed without
+   consuming another owner's valid result. Profile switching never rebinds or
+   silently switches back. A local generation change discards pending work and
+   delayed responses. A normal bearer refresh may continue only the same still
+   valid initiating session authority.
+7. For a verified pending result, final source persistence, durable verification
+   sync target and result consumption commit atomically; serialize against unlink
+   and conflicting link. Recheck owner/account activity at this commit boundary.
+   The existing source revision/CAS prevents stale Auth→User sync from overriding
+   a later source revision. `success` means the source was committed, not that
+   User's projection has already converged. For denied/cancel/error outcomes,
+   consume the result without mutating any source. Proposed response:
+   `{outcome}` with `success|cancelled|denied|provider_error|unavailable`.
+   Replays receive `409 result_consumed` and do not reapply writes. Expired
+   attempt/result receives `410 result_expired`; bad binding/proof receives
+   generic `400 invalid_link_attempt`; authentication remains `401`.
+8. Flutter clears the URL handle before navigation/analytics and rereads
+   `GET /api/v1/auth/linked-accounts`, filtering the current profile, plus the
+   existing User verification status endpoint. Open Settings→LinkedAccounts;
+   its Verification status action opens Settings→Verification (§27). Source
+   success with pending User sync displays “updating verification”, preserving
+   actual status until reread confirms it. Transport failure after consume may
+   have committed: reread state; never retry provider exchange or infer success
+   from a handle/launch/HTTP redirect. Failure to reread displays retryable unknown
+   state without replacing the last confirmed source/status with an empty list.
+
+**Platform return and recovery.** Web uses an exact configured HTTPS same-origin
+Settings return route. Prefer a full-page browser redirect so pending proof in
+per-tab session storage survives reload; opener messaging is optional notification
+only, with exact origin/target validation. If opening a separate browser tab,
+the original tab must retain the proof and use a reviewed same-origin bridge or
+authenticated attempt lookup; do not depend on copied session storage. Windows
+uses the system browser, then a bridge with an explicit “Return to Voice” action
+and a registered exact app return route carrying only the opaque handle. Persist
+its proof in protected per-user temporary storage until expiry; test both a warm
+instance and cold start and duplicate OS deliveries. If OS launch is unavailable,
+the bridge offers a safe Settings/web recovery path; it never switches the
+attempt's bound client or copies provider credentials. Mobile keeps the same
+HTTPS server callback and returns via a separately qualified universal/app link
+or reviewed custom-scheme handle route. Android/iOS manifest presence alone is
+insufficient; signing/association and physical cold/warm-device checks remain
+required. No mobile availability claim follows from Web/Windows completion.
+
+| State | Required display and recovery |
+| --- | --- |
+| Waiting / browser launched | Waiting for provider; never connected/verified. Close browser has no reliable callback signal. Return to Settings rereads; expiry offers a new attempt. |
+| Success | Show linked source only after authoritative reread. Verification may still be updating; navigate to Verification through the documented action. |
+| Local cancel / close Settings | Proposed authenticated `POST .../{provider}/attempts/{id}/cancel` atomically cancels pending/processing/result-ready work and discards staged tokens. If final commit already won, reread actual linked state; do not claim cancel undid a link. Late callback cannot apply a cancelled attempt. |
+| Consent denied / criterion denied | Provider `access_denied` maps to cancelled; failed Partner/YPP criterion maps to denied. Neither creates/revokes a source. Explain safely; offer a new attempt. |
+| Provider error / unavailable | Error/timeout/configuration unavailable are distinct safe states; retain all prior sources/status. Retry creates fresh state/proofs. |
+| Reload / killed app / consumed result | Recover only matching unexpired protected attempt/proof. If absent, wrong account/profile, expired or already consumed, discard handle and reread. Offer restart; no automatic regrant/relink. |
+
+**Discriminating test matrix for the implementation consumer (not executed by
+this documentation task).** Use stub IdPs and real Gateway/Auth/Flutter boundaries
+first; successful stubs cannot establish live provider qualification.
+
+| Check | Expected assertion / layer |
+| --- | --- |
+| Happy Twitch / YouTube | Correct provider code→server exchange→criteria→authenticated consume; one source and one revision. Gateway route plus Auth integration and Flutter return test. |
+| State/account/profile/provider/environment | Missing/random/swapped state; callback to other provider; result consumed with other account/profile/session/registration: zero exchange for invalid callback, zero source mutation for invalid consume. Valid unrelated attempt survives. |
+| Redirect / open redirect | Reject attacker origin, suffix/subdomain trick, userinfo, path/port/query changes, encoded separators and unregistered return surface. Stored callback used verbatim in exchange; no untrusted Location. |
+| PKCE | Wrong/missing/plain-method return proof rejects; correct S256 consumes once. Provider stub requires matching S256/verifier when supported; unknown support does not silently downgrade or enable. |
+| Replay / races | Duplicate concurrent callback exchanges once; duplicate consume writes once; old callback after cancel/supersession/logout/expiry writes nothing; unlink-vs-consume has a serialized outcome and later revision wins. |
+| Lifetime | Exact attempt/result boundary uses server clock; polling/reload cannot extend TTL; expired pending tokens/proofs are removed. Two providers do not consume each other's results. |
+| Provider / criterion failure | Consent deny, malformed callback, non-200 token reply, timeout, missing token, non-Partner, YPP-proxy rejection: safe distinct UI and unchanged prior sources. Unconfigured production provider cannot use mock fallback. |
+| Auth/User degradation | Source commit with User outage keeps durable sync pending; no false verified badge. Consume response lost after commit plus reload rereads actual state without another write. |
+| Web browser | Real user gesture launch/redirect, exact callback/return, per-tab proof, reload before/after consume, browser Back, two tabs, blocked popup and missing opener; inspect URLs/history/network for credentials. |
+| Windows | Packaged protocol registration; external browser→warm/cold instance→Settings; duplicate delivery, expired proof and no handler. Real OS handoff is separate from widget mocks. |
+| Mobile / UI safety | Android/iOS physical cold/warm return after association/signing; profile switch/logout at every await ignores stale responses; focus restored, safe localized messages and keyboard/accessibility states. |
+
+**Decisions still needed, bounded to this gap.** (1) Approve the proposed
+Auth-owned HTTPS callback plus deferred authenticated finalization, exact
+environment callback/return URLs and Web/Windows delivery registration. Callback
+URI and app return URI are separate allowlists; `app.voice.test` is not a
+production choice. (2) Verify provider/client-registration S256 capability and
+approve any documented confidential-server exception instead of claiming Twitch
+PKCE support. (3) Freeze the proposed 10-minute attempt / 2-minute result limits,
+single-attempt supersession and same-session recovery rules; these numbers and
+API/status names are design recommendations, not existing policy. (4) Select
+the production YouTube verified-YPP evidence; the present long-upload proxy
+alone cannot establish the canonical criterion. These decisions do not require
+secrets for this docs task. UI status/org work can proceed independently.
+
+Smallest next implementation stage after those decisions: one stub-IdP vertical
+slice covering Auth attempt/result persistence and atomic consumption, explicit
+Gateway routes, and Flutter Web+Windows return/reread with the matrix above.
+Freeze Auth/Gateway/data-store docs and write boundary-negative tests first;
+replace or block the legacy unbound POST callback so it cannot bypass the new
+flow. Keep providers unavailable outside the qualified fixture until a separate
+live-provider acceptance stage; no production switch or migration is authorized
+by this proposal.
+
 ### Telegram-parity UX audit — Flutter (2026-08-28)
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
