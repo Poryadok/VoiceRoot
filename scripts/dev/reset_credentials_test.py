@@ -218,6 +218,47 @@ class ReferenceTests(unittest.TestCase):
 
 
 class SourceBindingTests(unittest.TestCase):
+    def test_canonical_source_runtime_references_include_init_output(self):
+        import reset_package
+        import reset_package_test as source
+        material, pins = source.fixture()
+        result = reset_package.render(root=source.ROOT, source_sha=source.SHA,
+            secret_objects=material, image_pins=pins, release_policy=source.policy(),
+            decoder=source.decode, source_manifest=source.MANIFEST)
+        prepared = [o for o in result['prepared'] if o['kind'] == 'ConfigMap' or
+                    o['metadata']['name'] == 'voice-nats-pvc-candidate']
+        rows = credentials.references(prepared, result['secrets'])
+        self.assertTrue(any(row['name'] == 'voice-nats-operator' for row in rows))
+        nats = next(o for o in prepared if o['kind'] == 'Deployment')
+        def pod(obj):
+            return obj['spec']['template']['spec']
+        mutations = {
+            'unknown producer': lambda p: p['initContainers'][0].update(name='unknown'),
+            'shell producer': lambda p: p['initContainers'][0].update(command=['sh', '-c']),
+            'mutable image': lambda p: p['initContainers'][0].update(image='renderer:latest'),
+            'wrong output': lambda p: p['initContainers'][0]['args'].__setitem__(-1, '/run/nats-rendered/other'),
+            'wrong input': lambda p: p['initContainers'][0]['args'].__setitem__(0, '/run/nats/input/missing'),
+            'unknown file': lambda p: p['containers'][0]['volumeMounts'][1].update(subPath='missing'),
+            'traversal': lambda p: p['containers'][0]['volumeMounts'][1].update(subPath='../config/nats.conf'),
+            'writable consumer': lambda p: p['containers'][0]['volumeMounts'][1].update(readOnly=False),
+            'second producer': lambda p: p['initContainers'].append(copy.deepcopy(p['initContainers'][0])),
+            'shadow input': lambda p: p['initContainers'][0]['volumeMounts'].append(
+                {'name': 'jsdata', 'mountPath': '/run/nats/input'}),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(nats)
+                mutate(pod(changed))
+                with self.assertRaisesRegex(ValueError, 'subpath_missing'):
+                    credentials.references([o for o in prepared if o['kind'] == 'ConfigMap'] + [changed], result['secrets'])
+        with self.assertRaisesRegex(ValueError, 'missing_object'):
+            credentials.references(prepared, [o for o in result['secrets'] if o['metadata']['name'] != 'voice-nats-operator'])
+        changed = copy.deepcopy(nats)
+        ref = next(v['secret'] for v in pod(changed)['volumes'] if v['name'] == 'nats-resolver-input')
+        ref['items'] = [{'key': 'operator.jwt', 'path': 'operator.jwt'}] * 2
+        with self.assertRaisesRegex(ValueError, 'projection_collision'):
+            credentials.references([o for o in prepared if o['kind'] == 'ConfigMap'] + [changed], result['secrets'])
+
     def test_canonical_source_renderer_binds_actual_tls_consumer_settings(self):
         # Reference-complete fixtures exercise the real renderer, not trust
         # issuance. Cryptographic qualification is tested independently below.

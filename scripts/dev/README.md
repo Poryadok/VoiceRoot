@@ -546,6 +546,13 @@ credential generation fail closed. Standalone `references`, `verify_replay` and
 `verify_identities` checks are only component checks; they do not independently
 establish the complete final consumer contract.
 
+The NATS `config/nats.conf` emptyDir subPath is checked against the canonical
+`nats-config-renderer` recipe from `deploy/staging/infra.yaml`: immutable image,
+exact input/output arguments, resolved Secret/ConfigMap inputs, Memory emptyDir,
+and one read-only NATS consumer. Unknown producers remain denied. This checks
+the source contract; only a later runtime check can establish that the init
+container actually produced the file.
+
 The receipt keeps `runtime_qualified=false`. Actual HTTPS JWKS/authentication,
 listener/schema readiness, writer fencing and any namespace/storage operation
 remain separate operator gates. Global P3 activation retains its documented
