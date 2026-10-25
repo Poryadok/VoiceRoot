@@ -80,3 +80,11 @@ facts must be read in one cut. A source read does not activate federation.
   Independent exact-head review and PR remain before final delivery. Graphify
   extracted6683 files (known Linux runner header parse warning); graph
   construction is still running, so graph refresh is not yet claimed complete.
+- Final retained-floor hardening RED: removing the legacy PK and inserting a
+  duplicate singleton incorrectly qualified. GREEN: the same snapshot requires
+  exactly one retained floor row. All GIS source owner tests pass again
+  (47.14s), as does the actual protected factory (16.10s); GIS lint reports
+  zero issues. Shared codec lint also passes after an exported-comment fix.
+- First Graphify update completed:117603 nodes,245990 edges. HTML generation
+  exceeds the configured size limit; the graph JSON/report were updated.
+  A final incremental update is running for the latest bounded source changes.

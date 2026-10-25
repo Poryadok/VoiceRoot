@@ -36,7 +36,7 @@ func (s *Store) CheckAuthoritySourceSchema(ctx context.Context) error {
 }
 func gisSourceRevision(ctx context.Context, tx pgx.Tx) (uint64, error) {
 	var revision uint64
-	if err := tx.QueryRow(ctx, `SELECT revision FROM public.gis_authority_revision WHERE singleton`).Scan(&revision); err != nil || revision == 0 {
+	if err := tx.QueryRow(ctx, `SELECT revision FROM public.gis_authority_revision WHERE singleton AND (SELECT count(*) FROM public.gis_authority_revision)=1`).Scan(&revision); err != nil || revision == 0 {
 		return 0, errors.New("GIS authority floor unavailable")
 	}
 	return revision, nil

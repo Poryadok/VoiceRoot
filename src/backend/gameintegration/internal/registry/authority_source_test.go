@@ -59,6 +59,18 @@ func TestGISAuthoritySourceReadOnlyAndWholeReadBudget(t *testing.T) {
 	require.Less(t, time.Since(start), 2*time.Second, "schema lock waits cannot escape the whole read deadline")
 }
 
+func TestGISAuthoritySourceRefusesAmbiguousRetainedFloor(t *testing.T) {
+	ctx, s := gisSourceFixture(t)
+	_, err := s.Pool.Exec(ctx, `ALTER TABLE gis_authority_revision DROP CONSTRAINT gis_authority_revision_pkey; INSERT INTO gis_authority_revision VALUES(true,1)`)
+	require.NoError(t, err)
+	require.Error(t, s.CheckAuthoritySourceSchema(ctx), "a noncanonical retained floor cannot qualify")
+	scope := &authorityv1.SourceScope{SchemaVersion: 1, SpaceId: uuid.NewString(), EnvironmentId: uuid.NewString()}
+	_, err = s.ReadAuthoritySnapshot(ctx, scope)
+	require.Error(t, err)
+	_, err = s.ReadAuthorityRevision(ctx, scope)
+	require.Error(t, err)
+}
+
 func TestGISAuthoritySourceSnapshotMissingClosedAndMaintenance(t *testing.T) {
 	ctx, s := gisSourceFixture(t)
 	scope := &authorityv1.SourceScope{SchemaVersion: 1, SpaceId: uuid.NewString(), EnvironmentId: uuid.NewString(), ProfileIds: []string{uuid.NewString()}}
