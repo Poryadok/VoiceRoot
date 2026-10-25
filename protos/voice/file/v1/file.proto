@@ -120,6 +120,7 @@ message ValidateStoryMediaResponse {}
 // unimplemented; unspecified retains the existing MIME-based behavior.
 enum UploadIntent {
   UPLOAD_INTENT_UNSPECIFIED = 0;
+  UPLOAD_INTENT_GIF = 2;
   UPLOAD_INTENT_MUSIC = 6;
 }
 
@@ -144,6 +145,16 @@ message UploadResponse {
 message ConfirmUploadRequest {
   string file_id = 1;
   string sha256_hash = 2;
+}
+
+// Facts about delivered bytes. Source provenance fields in FileMetadata remain
+// immutable; clients resolve these variants through GetFileURL, never storage keys.
+message FileRepresentation {
+  string mime_type = 1;
+  int64 size_bytes = 2;
+  string sha256_hash = 3;
+  string filename = 4;
+  string processor_version = 5;
 }
 
 message FileMetadata {
@@ -180,6 +191,8 @@ message FileMetadata {
   optional string music_album = 27;
   uint64 music_metadata_revision = 28;
   UploadIntent intent = 29;
+  optional FileRepresentation delivered_full = 30;
+  optional FileRepresentation delivered_thumbnail = 31;
 }
 
 // Selects the stored representation for a presigned file URL.

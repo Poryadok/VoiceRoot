@@ -10,6 +10,8 @@ import (
 )
 
 type FileRow struct {
+	DeliveredFull         *Representation
+	DeliveredThumbnail    *Representation
 	ID                    uuid.UUID
 	UploaderProfileID     uuid.UUID
 	OriginalName          string
@@ -157,6 +159,9 @@ WHERE id = $1
 		&row.MusicMetadataRevision,
 		&row.UploadIntent,
 	)
+	if err == nil {
+		err = loadGIFRepresentations(ctx, q, &row)
+	}
 	return row, err
 }
 
@@ -358,7 +363,17 @@ WHERE id = ANY($1)
 		}
 		out[row.ID] = row
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for id, row := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &row); err != nil {
+			return nil, err
+		}
+		out[id] = row
+	}
+	return out, nil
 }
 
 func (s *FilesStore) ListFilesForChat(ctx context.Context, chatID uuid.UUID, limit int32) ([]FileRow, error) {
@@ -416,7 +431,16 @@ LIMIT $2
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *FilesStore) ListFilesForProfile(ctx context.Context, profileID uuid.UUID, limit int32) ([]FileRow, error) {
@@ -474,7 +498,16 @@ LIMIT $2
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *FilesStore) MarkDeleted(ctx context.Context, id uuid.UUID) error {
@@ -542,7 +575,16 @@ LIMIT $2
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *FilesStore) BytesUsedByProfile(ctx context.Context, profileID uuid.UUID) (int64, error) {

@@ -553,6 +553,9 @@ func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatI
 		if meta.GetStatus() != "ready" {
 			return 0, status.Error(codes.FailedPrecondition, "attachment file is not ready")
 		}
+		if meta.GetIntent() == filev1.UploadIntent_UPLOAD_INTENT_GIF {
+			return 0, status.Error(codes.FailedPrecondition, "processed GIF messaging is not available")
+		}
 		if chatID != nil && meta.GetChat().GetId() != chatID.String() {
 			return 0, status.Error(codes.FailedPrecondition, "attachment file is not linked to chat")
 		}

@@ -191,6 +191,9 @@ func main() {
 			eventPub = pub
 		}
 		filesStore := store.NewFilesStore(pool)
+		if presigner != nil {
+			jobs.StartGIFProcessingWorker(context.Background(), filesStore, presigner, logger)
+		}
 		if musicPub, ok := eventPub.(*fileevents.JetStreamPublisher); ok {
 			musicCtx, stopMusic := context.WithCancel(context.Background())
 			defer stopMusic()
