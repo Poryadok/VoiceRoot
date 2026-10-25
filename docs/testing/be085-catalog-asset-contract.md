@@ -210,10 +210,15 @@ alone does not select an authorized path. Ordinary attachments keep their ACL.
 
 AcquireFileReferences happens only after source and destination checks; it is a
 lifecycle action, never source authorization. Readback requires a committed
-message reference plus current history entitlement. Sticker sends retain exact
+message reference plus current history entitlement. Sticker sends require exact
 installed pack/sticker/File checks; uninstall denies new sends and preserves
 committed history. The new GIF source service does not authorize sticker ingest.
 Existing exact accepted send receipts remain exact retries, not fresh sends.
+The inspected current sticker implementation checks shape/File metadata only;
+the protected installed-pack/exact-tuple authority is an explicit remaining
+implementation gap. The first typed GIF consumer also rejects catalog forwarding
+until its current destination/source lifecycle is integrated; ordinary forward
+authorization is preserved.
 
 Encrypted destinations are rejected before resolving/disclosing source identity.
 This protocol does not add server-visible catalog identity to an E2E envelope or

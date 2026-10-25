@@ -87,6 +87,7 @@ type MessagingGRPC struct {
 	SpaceCoMembership   SpaceCoMembershipChecker
 	// Files is optional for text-only messages and required for non-empty attachments_json.
 	Files                FileMetadataLookup
+	CatalogAssets        *CatalogAssetCoordinator
 	AttachmentReferences *AttachmentReferenceCoordinator
 	// MessageEvents is optional; when set, successful send/edit/delete publishes to NATS JetStream (stream message_events, subjects message.*).
 	MessageEvents messageevents.MessageEventsPublisher
@@ -194,6 +195,7 @@ func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err := s.validateE2ESend(ctx, chatID, isE2E); err != nil {
 		return nil, err
 	}
+	ctx = withCatalogDestination(ctx, chatID, chatType, isE2E)
 
 	var threadParent *uuid.UUID
 	if req.GetThreadParentId() != "" {
@@ -520,9 +522,16 @@ func (s *MessagingGRPC) validateParsedAttachments(ctx context.Context, chatID *u
 		if err := validateFileBackedRichAttachments(contentType, attachments); err != nil {
 			return 0, err
 		}
-		return s.validateFileBackedAttachments(ctx, chatID, attachments)
 	}
-	return s.validateFileBackedAttachments(ctx, chatID, attachments)
+	ordinary, err := s.validateCatalogAttachments(ctx, chatID, attachments, contentType)
+	if err != nil {
+		return 0, err
+	}
+	if len(ordinary) == 0 {
+		return len(attachments), nil
+	}
+	count, err := s.validateFileBackedAttachments(ctx, chatID, ordinary)
+	return count + len(attachments) - len(ordinary), err
 }
 
 func (s *MessagingGRPC) validateFileBackedAttachments(ctx context.Context, chatID *uuid.UUID, attachments []messageAttachment) (int, error) {
@@ -1686,6 +1695,9 @@ func (s *MessagingGRPC) ForwardMessage(ctx context.Context, req *messagingv1.For
 			return nil, err
 		}
 		ctx = context.WithValue(ctx, forwardFileSelectorKey{}, forwardFileSelector{message: source.ID, space: sourcePolicy.SpaceID})
+	}
+	if source.IsE2E {
+		ctx = withCatalogDestination(ctx, uuid.Nil, chatv1.ChatType_CHAT_TYPE_UNSPECIFIED, true)
 	}
 	if _, err := s.validateForwardAttachments(ctx, attachments, contentType); err != nil {
 		return nil, err
