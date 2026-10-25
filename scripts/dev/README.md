@@ -500,6 +500,58 @@ the ACL, issuer, and preservation modules bound to the same source tree while
 the executable, kubeconfig, backups, and private journals remain in the
 root-owned `/home/voice-dev/operator` directory.
 
+## Offline reset credential package (source follow-on)
+
+`reset_credentials.py` prepares a fresh private DEV credential union without
+Kubernetes calls. It is a separate source follow-on to the current installation;
+it does not update or reset the running DEV environment. The reset adapter and
+its provider admission require their own review and selected upgrade window.
+
+Use the reviewed source on Linux as a non-root user, with an explicitly selected
+owned `0700` work directory and a fresh child destination. Inputs are the
+source-built `nats-jwt-issuer`, the canonical NATS ACL, and public system PEM
+roots plus public Java `cacerts` exported from the exact selected Auth image.
+Do not use STAGING credentials or a private-key-bearing Java store. Keep the
+entire output, including issuer keys and NATS seeds, private (`0700` directories,
+`0600` files); never print `credentials.json` or issuer output.
+
+```sh
+python3 scripts/dev/reset_credentials.py \
+  --work-dir /private/voice-dev-reset \
+  --destination /private/voice-dev-reset/generation1 \
+  --nats-issuer /public-tools/nats-jwt-issuer \
+  --public-roots /public-inputs/auth-roots.pem \
+  --java-cacerts /public-inputs/auth-cacerts \
+  --source-sha '<exact-selected-source-sha>'
+```
+
+The issuer replaces whole connected principal/media/P3/MatchSquad families,
+including public JWKS and JVM trust, rather than filling missing leaves under
+an unknown retained CA. The CompleteMatch client root remains separate. Replay
+passwords are empty for the selected DEV Redis without authentication. Fresh
+application/database/MinIO credentials and a coherent NATS issued set belong to
+the same private generation. Its `issuance.json` is an offline receipt, not
+deployment or actual runtime acceptance.
+
+Pass the generated object's `items` to `reset_package.render(...)` as
+`secret_objects`. Retain that complete original render-input dictionary,
+including the source/archive manifest, exact image pins, release policy and
+decoder. Qualify the final package in the same private process with
+`reset_credentials.qualify(prepared, secrets, source_inputs=render_inputs)`.
+Qualification requires a fresh canonical source-qualified render and exact
+equality of both final object lists before checking effective env references,
+projected files, application credentials and the issued identity graph. Missing
+source inputs, endpoint/server-name changes, swapped trust mounts or a different
+credential generation fail closed. Standalone `references`, `verify_replay` and
+`verify_identities` checks are only component checks; they do not independently
+establish the complete final consumer contract.
+
+The receipt keeps `runtime_qualified=false`. Actual HTTPS JWKS/authentication,
+listener/schema readiness, writer fencing and any namespace/storage operation
+remain separate operator gates. Global P3 activation retains its documented
+participant/admission/fence acceptance requirements. Offline generation never
+settles old admissions or restores old application data.
+
 ## Checks
 
 ```sh
