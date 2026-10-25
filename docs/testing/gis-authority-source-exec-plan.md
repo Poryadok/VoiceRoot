@@ -70,6 +70,13 @@ facts must be read in one cut. A source read does not activate federation.
 - Actual factory RED: missing factory; GREEN: source-only mTLS service with
   signed exact requests, replay/missing principal denial and live maintenance.
 - Read-only write refusal and one-second pool/schema-lock budget test passes.
-- `go test ./authoritysource -count=1` passes; GIS and authoritysource vet pass.
-  Full GIS module run is still in progress. Independent exact-head review,
-  Graphify completion, normal push and PR remain before delivery.
+- `go test ./authoritysource -count=1` passes (9.19s); GIS and authoritysource
+  vet pass. Full `go test ./... -count=1` in GIS passes all seven packages
+  (registry331.72s). The existing opt-in
+  `TestT30ComposeChatProvisionLostResponseRetriesRealReceipt` is outside this
+  owner-source slice and skipped without its Phase0 Compose activation flag.
+  No new source test is skipped. The final added read-budget test also passes.
+- Initial implementation checkpoint a1888b33c was normally committed and pushed.
+  Independent exact-head review and PR remain before final delivery. Graphify
+  extracted6683 files (known Linux runner header parse warning); graph
+  construction is still running, so graph refresh is not yet claimed complete.
