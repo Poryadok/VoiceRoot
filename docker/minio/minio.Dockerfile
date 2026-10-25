@@ -7,7 +7,7 @@ ARG MINIO_SHA256=88182336ab5793488f2caad54846056b330f0dcb5c488b60d52434beeebae3c
 # This official MinIO release key is published in minio/minio's Dockerfile.release.
 ARG MINISIGN_PUBLIC_KEY=RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 
-RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0 minisign=0.12-r2 \
+RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.23.0-r0 minisign=0.12-r2 \
     && asset="minio.linux-amd64.${MINIO_RELEASE}" \
     && base="https://github.com/minio/minio/releases/download/${MINIO_RELEASE}" \
     && curl --fail --show-error --silent --location "${base}/${asset}" --output "/tmp/${asset}" \
@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.source="https://github.com/minio/minio" \
 
 ENV MINIO_UPDATE_MINISIGN_PUBKEY=RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav
 
-RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.22.0-r0
+RUN apk add --no-cache ca-certificates-bundle=20260909-r0 curl=8.23.0-r0
 COPY --from=verify /out/minio /usr/local/bin/minio
 COPY --from=verify /out/licenses/ /licenses/
 
