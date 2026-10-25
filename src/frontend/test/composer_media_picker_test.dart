@@ -18,54 +18,133 @@ import 'support/voice_test_theme.dart';
 
 void main() {
   testWidgets(
-    'GIF pagination retains results and retries the exact Chat cursor',
+    '401 token refresh retry renders the successful catalog without manual retry',
     (tester) async {
-      final requests = <http.Request>[];
-      var failPage = true;
-      await _pumpPicker(
+      var catalogCalls = 0;
+      var refreshCalls = 0;
+      final container = await _pumpPicker(
         tester,
         MockClient((request) async {
-          requests.add(request);
-          if (request.url.queryParameters['cursor'] == 'opaque/+==') {
-            if (failPage) {
-              return http.Response('{"error_code":"unavailable"}', 503);
-            }
+          if (request.url.path == '/api/v1/auth/refresh') {
+            refreshCalls++;
+            expect(jsonDecode(request.body)['refresh_token'], 'test-refresh');
             return http.Response(
-              '{"items":[{"provider":"fixture","provider_id":"one"},{"provider":"fixture","provider_id":"two"}]}',
+              '{"session":{"access_token":"fresh-access","refresh_token":"fresh-refresh","expires_in_seconds":900,"account_id":"acc-test","profile_id":"prof-test","account_type":"regular"}}',
               200,
             );
           }
+          catalogCalls++;
+          if (catalogCalls == 1) {
+            return http.Response('{"error_code":"unauthenticated"}', 401);
+          }
+          expect(request.headers['authorization'], 'Bearer fresh-access');
           return http.Response(
-            '{"items":[{"provider":"fixture","provider_id":"one"}],"next_cursor":"opaque/+=="}',
+            '{"items":[{"provider":"fixture","provider_id":"refreshed"}]}',
             200,
           );
         }),
       );
+      final identity = container
+          .read(authControllerProvider.notifier)
+          .gatewayRequestIdentity;
       await tester.tap(find.text('GIFs'));
       await tester.pumpAndSettle();
+      expect(refreshCalls, 1);
+      expect(catalogCalls, 2);
       expect(
-        tester
-            .widget<EditableText>(find.byType(EditableText))
-            .focusNode
-            .hasFocus,
-        isTrue,
+        container.read(authControllerProvider.notifier).gatewayRequestIdentity,
+        identity,
       );
-      await tester.ensureVisible(find.text('Load more'));
+      expect(
+        find.byKey(const Key('gif_result_fixture_refreshed')),
+        findsOneWidget,
+      );
+      expect(find.text('Could not load the catalog'), findsNothing);
+      await container
+          .read(authControllerProvider.notifier)
+          .logoutIfCurrent(
+            container.read(authControllerProvider).session!,
+            serverAlreadyRevoked: true,
+          );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Load more'));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('gif_result_fixture_one')), findsOneWidget);
-      expect(find.text('GIF search unavailable'), findsOneWidget);
-      failPage = false;
-      await tester.tap(find.text('Retry'));
-      await tester.pumpAndSettle();
-      expect(requests.last.url, requests[requests.length - 2].url);
-      expect(requests.last.url.queryParameters['cursor'], 'opaque/+==');
-      expect(find.byKey(const Key('gif_result_fixture_one')), findsOneWidget);
-      expect(find.byKey(const Key('gif_result_fixture_two')), findsOneWidget);
-      expect(find.text('Load more'), findsNothing);
     },
   );
+
+  testWidgets('empty nonterminal GIF pages preserve access to later results', (
+    tester,
+  ) async {
+    final cursors = <String?>[];
+    await _pumpPicker(
+      tester,
+      MockClient((request) async {
+        final cursor = request.url.queryParameters['cursor'];
+        cursors.add(cursor);
+        return http.Response(switch (cursor) {
+          null => '{"items":[],"next_cursor":"empty-a"}',
+          'empty-a' => '{"items":[],"next_cursor":"empty-b"}',
+          _ => '{"items":[{"provider":"fixture","provider_id":"later"}]}',
+        }, 200);
+      }),
+    );
+    await tester.tap(find.text('GIFs'));
+    await tester.pumpAndSettle();
+    expect(find.text('No GIFs found'), findsNothing);
+    expect(find.text('Load more'), findsOneWidget);
+    await tester.tap(find.text('Load more'));
+    await tester.pumpAndSettle();
+    expect(find.text('Load more'), findsOneWidget);
+    await tester.tap(find.text('Load more'));
+    await tester.pumpAndSettle();
+    expect(cursors, [null, 'empty-a', 'empty-b']);
+    expect(find.byKey(const Key('gif_result_fixture_later')), findsOneWidget);
+    expect(find.text('Load more'), findsNothing);
+  });
+
+  testWidgets('GIF pagination retains results and retries the exact Chat cursor', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    var failPage = true;
+    await _pumpPicker(
+      tester,
+      MockClient((request) async {
+        requests.add(request);
+        if (request.url.queryParameters['cursor'] == 'opaque/+==') {
+          if (failPage) {
+            return http.Response('{"error_code":"unavailable"}', 503);
+          }
+          return http.Response(
+            '{"items":[{"provider":"fixture","provider_id":"one"},{"provider":"fixture","provider_id":"two"}]}',
+            200,
+          );
+        }
+        return http.Response(
+          '{"items":[{"provider":"fixture","provider_id":"one"}],"next_cursor":"opaque/+=="}',
+          200,
+        );
+      }),
+    );
+    await tester.tap(find.text('GIFs'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isTrue,
+    );
+    await tester.ensureVisible(find.text('Load more'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Load more'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('gif_result_fixture_one')), findsOneWidget);
+    expect(find.text('GIF search unavailable'), findsOneWidget);
+    failPage = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(requests.last.url, requests[requests.length - 2].url);
+    expect(requests.last.url.queryParameters['cursor'], 'opaque/+==');
+    expect(find.byKey(const Key('gif_result_fixture_one')), findsOneWidget);
+    expect(find.byKey(const Key('gif_result_fixture_two')), findsOneWidget);
+    expect(find.text('Load more'), findsNothing);
+  });
 
   testWidgets(
     'sticker search during loading filters the eventual installed catalog',

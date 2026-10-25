@@ -12,6 +12,15 @@ import 'composer_panels.dart';
 
 enum _PickerTab { emoji, stickers, gifs }
 
+final _catalogIdentityProvider = Provider((ref) {
+  ref.watch(authControllerProvider);
+  final controller = ref.read(authControllerProvider.notifier);
+  return (
+    request: controller.gatewayRequestIdentity,
+    install: controller.sessionInstallGeneration,
+  );
+});
+
 /// Real catalog browsing. Media submission awaits server catalog admission;
 /// preview URLs and File IDs alone must never enable a message send.
 class ComposerMediaPickerBody extends ConsumerStatefulWidget {
@@ -178,14 +187,12 @@ class _ComposerMediaPickerBodyState
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    ref.listen(authControllerProvider.select((state) => state.session), (
-      previous,
-      next,
-    ) {
+    ref.listen(_catalogIdentityProvider, (previous, next) {
+      if (previous == next) return;
       _generation++;
       _debounce?.cancel();
-      if (previous?.activeProfileId != next?.activeProfileId ||
-          previous?.accountId != next?.accountId) {
+      if (previous?.request?.profileId != next.request?.profileId ||
+          previous?.request?.accountId != next.request?.accountId) {
         _search.clear();
       }
       setState(() {
@@ -376,7 +383,7 @@ class _ComposerMediaPickerBodyState
   }
 
   Widget _gifBody(AppLocalizations l10n) {
-    if (_gifs.isEmpty) return _empty(l10n.composerGifEmpty);
+    if (_gifs.isEmpty && _cursor.isEmpty) return _empty(l10n.composerGifEmpty);
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
