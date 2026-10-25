@@ -31,6 +31,9 @@ message ImportCatalogAssetRequest {
   string actor_account_id = 7;
   string actor_profile_id = 8;
   voice.chat.v1.ChatRef destination_chat = 9;
+  // Opaque Chat-local captures. File also enforces its own actor generations.
+  string chat_account_generation = 10;
+  string chat_profile_generation = 11;
 }
 
 // @voice.unknown_fields=accept_preserve
@@ -45,6 +48,8 @@ message ImportCatalogAssetResponse {
   string status = 7;
   string operation_id = 8;
   voice.chat.v1.ChatRef destination_chat = 9;
+  string chat_account_generation = 10;
+  string chat_profile_generation = 11;
 }
 
 // @voice.unknown_fields=reject
@@ -142,4 +147,6 @@ message GetCatalogAssetStatusResponse {
   // Present with the exact destination only for an operation selector.
   string operation_id = 8;
   voice.chat.v1.ChatRef destination_chat = 9;
+  string chat_account_generation = 10;
+  string chat_profile_generation = 11;
 }
