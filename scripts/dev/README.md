@@ -739,3 +739,63 @@ on the designated private Linux operator host; the image runs offline as UID
 10002 with a read-only root filesystem, no capabilities, and bounded private
 scratch space. Preserve its private state volume for the lifetime of its leaf
 credentials; do not improvise a backup or reset after an uncertain result.
+
+## Read-only DEV operation observation
+
+operation_journal.py is an ordinary Linux operator reader. From a reviewed
+checkout on pmdebook, as pmd, run:
+
+```sh
+python3 scripts/dev/operation_journal.py
+```
+
+The interface has no mutation, recovery, unlock, namespace, request-nonce or
+arbitrary-file options. It makes only fixed GET requests through
+/home/pmd/.kube/config, context default, for voice-dev, the exact
+voice-dev-image-update-lock ConfigMap, Deployments and StatefulSets. Namespace
+ownership labels must match DEV. The retained lock operation ID is not a request
+nonce. The reader does not use the installed STAGING NATS bridge.
+
+Output schema voice-dev-operation-observation-v1 includes namespace UID and
+revision; lock UID, revision, creation time and operation marker; per-kind list
+revisions; workload UID, revision, generation, readiness counts and immutable
+container image references. Mutable image references become null. Source commit,
+request ID and candidate remain null because these cannot be reconstructed from
+image digests or lock age. There are no Secret GETs; env, specs, annotations,
+credentials, tokens, private keys, DSNs, signed URLs, customer data and raw
+exceptions are never emitted.
+
+The two existing caller-owned Anton-12 recovery directories under
+/home/pmd/voice-restore-anton12 have fixed metadata-only profiles for their
+known receipt filenames. The reader uses directory descriptors with no symlink
+following; parents must not be group/world writable, and operation directories
+and regular single-link receipts must be private and owned by the caller. It
+never opens receipt payloads: started.json contains original env/spec material.
+Marker presence, file size and filesystem modification time are observations,
+not authenticated journal events, operation success, proof of an inactive
+executor or authorization to replay. Missing/inaccessible/insecure directories
+are UNKNOWN; this does not mean no operation exists.
+
+The reader collects twice. Changed observed revisions, projected state or receipt
+metadata produce UNAVAILABLE and suppress the mixed evidence. Stable observation
+is only a bounded observational interval, not an atomic cluster snapshot, a queue
+census or future freshness guarantee. Root-private queue/inbox/processing, global
+lock, journal version and queue/journal consistency remain explicitly UNKNOWN.
+Both PARTIAL (exit 3) and UNAVAILABLE (exit 2) deny recovery admission. Every output
+has mutation_authority=false and recovery_admission=false. Never pipe this report
+to an unlock, deployment or resource-safety decision.
+
+A full protected DEV journal requires a separately reviewed source binding and a
+legitimate administrator installation of a DEV-only sanitized publisher. Preserve
+root-only private state and writer controls; do not grant generic sudo, expose raw
+journals, assume an empty queue, or retarget the STAGING bridge. The current reader
+provides useful bounded evidence while that installation is unavailable. Record
+the reviewed source SHA, actual ordinary-user read time and exact namespace/lock
+pins with each receipt; reconcile unknown state with the current recovery owner.
+This observation task must not gate independent baseline DEV recovery.
+
+Focused checks (Linux runs the real POSIX descriptor/ownership cases):
+
+```sh
+python3 -m unittest discover -s scripts/dev -p 'operation_journal_test.py'
+```
