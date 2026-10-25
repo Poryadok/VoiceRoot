@@ -337,6 +337,14 @@ class ForwardExecutionTest(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'forward bootstrap incomplete'):
                         reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
                 self.assertEqual(kube.deletes, 1)
+                interrupted = json.loads((directory / 'runtime/bootstrap-interrupted-000000.json').read_text())
+                self.assertFalse(interrupted['accepted_work_cancelled'])
+                kube.current = {'metadata': {'uid': 'replaced-after-interruption'}}
+                with patch.object(reset, 'run_bootstrap') as run:
+                    with self.assertRaisesRegex(ValueError, 'accepted Kubernetes work changed'):
+                        reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
+                    run.assert_not_called()
+                kube.current = {'metadata': {'uid': 'fresh-namespace'}}
                 with patch.object(reset, 'run_bootstrap', return_value=SimpleNamespace(returncode=0, stdout=b'pass', stderr=b'')) as run:
                     state = reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
                     self.assertEqual(run.call_count, 1)
