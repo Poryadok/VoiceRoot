@@ -34,7 +34,7 @@ GIF processing, which is a dependency rather than proof of protected import.
 ## Milestones
 
 - [x] Establish truthful task custody, clean lease/base and write boundaries.
-- [ ] Freeze concrete interface with Chat/Gateway consumer and review it.
+- [x] Freeze concrete interface with Chat/Gateway consumer and review it.
 - [x] RED/GREEN safe fetch: every DNS answer/connection/redirect, bounded bytes
   and lifetime; no proxy fallback or unsafe target.
 - [ ] Durable request/source binding and import into the existing File processing
@@ -127,6 +127,13 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 - Independent Anton-97 found query-secret disclosure through Go's default
   redirect Referer. Real TLS tests reproduced it for both the original and a
   different permitted host; every redirect now removes Referer.
+- Anton-97 reviewed the exact pushed correction `985f774fea80c936cc449862c1b6e156c2079249`
+  and returned narrow byte-fetcher CLEAR. Full import/admission is not covered.
+- The [concrete protocol](be085-catalog-asset-contract.md) includes the mutually
+  agreed Chat/File fields and protected caller matrix. New File schema and
+  generated clients are additive; existing File proto/processing remains owned
+  by PR898. Storage activation still needs the bounded abandoned-import cleanup
+  and receipt-deletion integration described there.
 
 ## Risks and follow-ups
 
