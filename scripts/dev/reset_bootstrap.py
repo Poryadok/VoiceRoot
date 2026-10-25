@@ -736,12 +736,13 @@ def execute_locked(kube, directory, root, *, actor, claim):
         raise ValueError('interrupted namespace deletion needs observed reconciliation')
     if journal.state['steps'].get('bootstrap', {}).get('status') != 'complete':
         interruptions = sorted(runtime.glob('bootstrap-interrupted-*.json'))
-        if interruptions:
+        # The durable start is written before launch. Abrupt supervisor/host
+        # loss may prevent writing the richer interruption receipt entirely.
+        if journal.state['steps'].get('bootstrap') or interruptions:
             raise ValueError('interrupted bootstrap requires explicit operator recovery; remote execution outcomes remain unresolved')
         check_window()
-        if not journal.state['steps'].get('bootstrap'):
-            journal.begin('bootstrap')
-        # Only forward bootstrap may resume; old namespace deletion never replays.
+        journal.begin('bootstrap')
+        # This invocation alone owns the first launch; no automatic replay.
         environment = dict(os.environ, SPACE_NATIVE_INSTALLER_IMAGE=receipt['tool_images']['space-native-installer'])
         log = runtime / 'bootstrap.log'
         try:

@@ -256,6 +256,12 @@ class TlsPreservationTest(unittest.TestCase):
 
 class ForwardExecutionTest(unittest.TestCase):
     def test_interrupted_bootstrap_resumes_without_redeleting_or_mutating_package(self):
+        self.interrupted_bootstrap_case()
+
+    def test_started_bootstrap_without_interruption_receipt_holds_after_supervisor_loss(self):
+        self.interrupted_bootstrap_case(lost_supervisor=True)
+
+    def interrupted_bootstrap_case(self, *, lost_supervisor=False):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / 'source'
             directory = Path(tmp) / 'private'
@@ -339,6 +345,17 @@ class ForwardExecutionTest(unittest.TestCase):
                 self.assertEqual(kube.deletes, 1)
                 interrupted = json.loads((directory / 'runtime/bootstrap-interrupted-000000.json').read_text())
                 self.assertFalse(interrupted['accepted_work_cancelled'])
+                if lost_supervisor:
+                    # SIGKILL/host loss cannot run the exception handler. Durable
+                    # started state is sufficient even with unchanged authority.
+                    (directory / 'runtime/bootstrap-interrupted-000000.json').unlink()
+                    operation = json.loads((directory / 'reset-plan.json').read_text())['operation']
+                    kube.current = {'metadata': {'uid': 'fresh-namespace', 'annotations': {
+                        'voice.dev/reset-operation': operation}}}
+                    with patch.object(reset, 'run_bootstrap') as run:
+                        with self.assertRaisesRegex(ValueError, 'explicit operator recovery'):
+                            reset.execute_plan(kube, directory, root, actor='actual-operator', claim='actual-claim')
+                        run.assert_not_called()
                 kube.current = {'metadata': {'uid': 'replaced-after-interruption'}}
                 with patch.object(reset, 'run_bootstrap') as run:
                     with self.assertRaisesRegex(ValueError, 'explicit operator recovery'):

@@ -110,6 +110,8 @@ exec outcomes can remain unknown after local termination. Actual operator
 recovery must resolve that concrete phase before any further submissions; the
 adapter does not automatically replay bootstrap. It never grants a
 safe resource release or a new deadline merely because a client was killed.
+The durable `bootstrap: started` journal alone also requires this HOLD: abrupt
+supervisor or host loss can prevent any interruption receipt from being written.
 Pre-bootstrap continuation uses the same package, actor and live claim. Resume
 re-observes the old namespace/controller identities; it never deletes a newly
 recreated namespace by name. An already absent old namespace can complete its
