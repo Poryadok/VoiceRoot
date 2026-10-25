@@ -129,7 +129,11 @@ class PackageTests(unittest.TestCase):
         ch = by_name['StatefulSet', 'voice-clickhouse']['spec']['template']['spec']['containers'][0]
         self.assertEqual(ch['resources']['limits']['memory'], '4096Mi')
         self.assertEqual(ch['resources']['requests']['memory'], '256Mi')
-        self.assertNotRegex(json.dumps(result['prepared']), r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER')
+        for obj in result['prepared']:
+            checked = copy.deepcopy(obj)
+            if checked['kind'] == 'ConfigMap' and checked['metadata']['name'] == 'voice-nats-hub-config':
+                checked['data'].pop('nats.conf')
+            self.assertNotRegex(json.dumps(checked), r'__[A-Z0-9_]+__|IMAGE_PLACEHOLDER')
         self.assertNotIn('DEV-LIVEKIT_API_SECRET', json.dumps(result['receipt']))
         self.assertFalse(any(o['kind'] in ('PersistentVolume', 'StorageClass') for o in result['foundation']))
         for obj in result['prepared']:
@@ -164,6 +168,42 @@ class PackageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(ValueError):
                 self.render(root=Path(directory))
+
+    def test_all_workload_pods_are_pinned_to_selected_node_and_conflicts_reject(self):
+        result = self.render(node='pmdebook')
+        self.assertEqual(result['receipt']['node'], 'pmdebook')
+        for obj in result['prepared']:
+            if obj['kind'] in ('Deployment', 'StatefulSet', 'Job'):
+                self.assertEqual(obj['spec']['template']['spec']['nodeSelector']['kubernetes.io/hostname'], 'pmdebook')
+        def conflicting(raw):
+            documents = decode(raw)
+            for obj in documents:
+                if obj['kind'] in ('Deployment', 'StatefulSet', 'Job'):
+                    obj['spec']['template']['spec']['nodeSelector'] = {'kubernetes.io/hostname': 'other-node'}
+                    break
+            return documents
+        with self.assertRaisesRegex(ValueError, 'node'):
+            self.render(decoder=conflicting)
+
+    def test_only_canonical_nats_runtime_template_keeps_its_three_tokens(self):
+        result = self.render()
+        hub = next(o for o in result['prepared'] if o['kind'] == 'ConfigMap' and o['metadata']['name'] == 'voice-nats-hub-config')
+        tokens = ('__NATS_APP_RESOLVER_PRELOAD__', '__NATS_SYS_RESOLVER_PRELOAD__', '__NATS_SYSTEM_ACCOUNT__')
+        for token in tokens:
+            self.assertEqual(hub['data']['nats.conf'].count(token), 1)
+        for mutation in ('elsewhere', 'duplicate', 'missing', 'unknown'):
+            bad = copy.deepcopy(result)
+            config = next(o for o in bad['prepared'] if o['kind'] == 'ConfigMap' and o['metadata']['name'] == 'voice-nats-hub-config')
+            if mutation == 'elsewhere':
+                config['metadata']['annotations'] = {'unexpected': tokens[0]}
+            elif mutation == 'duplicate':
+                config['data']['nats.conf'] += tokens[0]
+            elif mutation == 'missing':
+                config['data']['nats.conf'] = config['data']['nats.conf'].replace(tokens[0], '')
+            else:
+                config['data']['nats.conf'] += '__UNKNOWN_RENDER_TOKEN__'
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                package._validate(bad)
 
     def test_mutable_unmapped_and_wrong_dev_frontend_inputs_rejected(self):
         for name, key, value in [('web', 'api_base_url', 'https://voice.comrade.click'),
