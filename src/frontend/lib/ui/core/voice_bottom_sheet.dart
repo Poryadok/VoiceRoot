@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../settings/reduced_motion.dart';
 import '../a11y/focus_trap.dart';
 import '../a11y/voice_focus_return.dart';
 
@@ -15,11 +17,17 @@ Future<T?> showVoiceBottomSheet<T>({
   double maxSize = 0.95,
   bool scrollable = true,
   VoidCallback? onDismiss,
-}) {
+}) async {
   final focusReturn = VoiceFocusReturn.capture();
+  final container = ProviderScope.containerOf(context, listen: false);
+  await container.read(reducedMotionEnabledProvider.notifier).loaded;
+  if (!context.mounted) return null;
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
+    sheetAnimationStyle: panelAnimationDurationOf(context) == Duration.zero
+        ? AnimationStyle.noAnimation
+        : null,
     builder: (ctx) => VoiceFocusTrap(
       onEscape: () {
         Navigator.of(ctx).pop();
