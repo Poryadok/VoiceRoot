@@ -295,6 +295,8 @@ must not forward current client `space.id` assertions as authority.
 | `GET` | `/api/v1/gifs/search` | `SearchGifs` | `q`, `limit`, **`cursor`** (opaque; Chat-owned `next_cursor`) |
 | `GET` | `/api/v1/gifs/trending` | `GetTrendingGifs` | optional `cursor` |
 
+GIF metadata routes use the authenticated active profile and the standard protobuf JSON transport. Both accept `limit` (default 20, maximum 50) and opaque `cursor`; search requires nonblank `q`. Malformed, duplicate or out-of-range query parameters return 400. Responses use `Cache-Control: no-store`; any trending metadata cache belongs to Chat. Standard gRPC mapping applies: unauthenticated 401, invalid request/cursor 400, provider rate exhaustion 429, disabled/unavailable provider 503 (`error_code=unavailable`, `X-Voice-GRPC-Code: Unavailable`). No provider/key is enabled and no fake results are seeded by production startup. These routes expose search metadata only; they neither accept a remote upload URL nor authorize sending a File reference.
+
 Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach). File upload for pack assets — `/api/v1/files/**` with `intent=sticker`.
 
 ## Маршруты персонала (Admin API)

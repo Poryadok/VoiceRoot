@@ -8835,6 +8835,400 @@ class SetChatMemberPostAsChatResponse extends $pb.GeneratedMessage {
   static SetChatMemberPostAsChatResponse? _defaultInstance;
 }
 
+class SearchGifsRequest extends $pb.GeneratedMessage {
+  factory SearchGifsRequest({
+    $core.String? query,
+    $core.int? limit,
+    $core.String? cursor,
+  }) {
+    final result = create();
+    if (query != null) result.query = query;
+    if (limit != null) result.limit = limit;
+    if (cursor != null) result.cursor = cursor;
+    return result;
+  }
+
+  SearchGifsRequest._();
+
+  factory SearchGifsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SearchGifsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SearchGifsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'query')
+    ..aI(2, _omitFieldNames ? '' : 'limit')
+    ..aOS(3, _omitFieldNames ? '' : 'cursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchGifsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchGifsRequest copyWith(void Function(SearchGifsRequest) updates) =>
+      super.copyWith((message) => updates(message as SearchGifsRequest))
+          as SearchGifsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SearchGifsRequest create() => SearchGifsRequest._();
+  @$core.override
+  SearchGifsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SearchGifsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SearchGifsRequest>(create);
+  static SearchGifsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get query => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set query($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasQuery() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearQuery() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.int get limit => $_getIZ(1);
+  @$pb.TagNumber(2)
+  set limit($core.int value) => $_setSignedInt32(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasLimit() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearLimit() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get cursor => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set cursor($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasCursor() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearCursor() => $_clearField(3);
+}
+
+class GetTrendingGifsRequest extends $pb.GeneratedMessage {
+  factory GetTrendingGifsRequest({
+    $core.int? limit,
+    $core.String? cursor,
+  }) {
+    final result = create();
+    if (limit != null) result.limit = limit;
+    if (cursor != null) result.cursor = cursor;
+    return result;
+  }
+
+  GetTrendingGifsRequest._();
+
+  factory GetTrendingGifsRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetTrendingGifsRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetTrendingGifsRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'limit')
+    ..aOS(2, _omitFieldNames ? '' : 'cursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetTrendingGifsRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetTrendingGifsRequest copyWith(
+          void Function(GetTrendingGifsRequest) updates) =>
+      super.copyWith((message) => updates(message as GetTrendingGifsRequest))
+          as GetTrendingGifsRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetTrendingGifsRequest create() => GetTrendingGifsRequest._();
+  @$core.override
+  GetTrendingGifsRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetTrendingGifsRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetTrendingGifsRequest>(create);
+  static GetTrendingGifsRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get limit => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set limit($core.int value) => $_setSignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasLimit() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearLimit() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get cursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set cursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearCursor() => $_clearField(2);
+}
+
+class GifResult extends $pb.GeneratedMessage {
+  factory GifResult({
+    $core.String? provider,
+    $core.String? providerId,
+    $core.String? fileId,
+    $core.String? previewUrl,
+    $core.int? width,
+    $core.int? height,
+    $core.double? durationSeconds,
+  }) {
+    final result = create();
+    if (provider != null) result.provider = provider;
+    if (providerId != null) result.providerId = providerId;
+    if (fileId != null) result.fileId = fileId;
+    if (previewUrl != null) result.previewUrl = previewUrl;
+    if (width != null) result.width = width;
+    if (height != null) result.height = height;
+    if (durationSeconds != null) result.durationSeconds = durationSeconds;
+    return result;
+  }
+
+  GifResult._();
+
+  factory GifResult.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GifResult.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GifResult',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'provider')
+    ..aOS(2, _omitFieldNames ? '' : 'providerId')
+    ..aOS(3, _omitFieldNames ? '' : 'fileId')
+    ..aOS(4, _omitFieldNames ? '' : 'previewUrl')
+    ..aI(5, _omitFieldNames ? '' : 'width')
+    ..aI(6, _omitFieldNames ? '' : 'height')
+    ..aD(7, _omitFieldNames ? '' : 'durationSeconds',
+        fieldType: $pb.PbFieldType.OF)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GifResult clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GifResult copyWith(void Function(GifResult) updates) =>
+      super.copyWith((message) => updates(message as GifResult)) as GifResult;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GifResult create() => GifResult._();
+  @$core.override
+  GifResult createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GifResult getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<GifResult>(create);
+  static GifResult? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get provider => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set provider($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProvider() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProvider() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get providerId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set providerId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasProviderId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearProviderId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get fileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set fileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasFileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearFileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get previewUrl => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set previewUrl($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasPreviewUrl() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearPreviewUrl() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.int get width => $_getIZ(4);
+  @$pb.TagNumber(5)
+  set width($core.int value) => $_setSignedInt32(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasWidth() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearWidth() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.int get height => $_getIZ(5);
+  @$pb.TagNumber(6)
+  set height($core.int value) => $_setSignedInt32(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasHeight() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearHeight() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $core.double get durationSeconds => $_getN(6);
+  @$pb.TagNumber(7)
+  set durationSeconds($core.double value) => $_setFloat(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasDurationSeconds() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearDurationSeconds() => $_clearField(7);
+}
+
+class SearchGifsResponse extends $pb.GeneratedMessage {
+  factory SearchGifsResponse({
+    $core.Iterable<GifResult>? items,
+    $core.String? nextCursor,
+  }) {
+    final result = create();
+    if (items != null) result.items.addAll(items);
+    if (nextCursor != null) result.nextCursor = nextCursor;
+    return result;
+  }
+
+  SearchGifsResponse._();
+
+  factory SearchGifsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory SearchGifsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'SearchGifsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPM<GifResult>(1, _omitFieldNames ? '' : 'items',
+        subBuilder: GifResult.create)
+    ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchGifsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  SearchGifsResponse copyWith(void Function(SearchGifsResponse) updates) =>
+      super.copyWith((message) => updates(message as SearchGifsResponse))
+          as SearchGifsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static SearchGifsResponse create() => SearchGifsResponse._();
+  @$core.override
+  SearchGifsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static SearchGifsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<SearchGifsResponse>(create);
+  static SearchGifsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<GifResult> get items => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.String get nextCursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nextCursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNextCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNextCursor() => $_clearField(2);
+}
+
+class GetTrendingGifsResponse extends $pb.GeneratedMessage {
+  factory GetTrendingGifsResponse({
+    $core.Iterable<GifResult>? items,
+    $core.String? nextCursor,
+  }) {
+    final result = create();
+    if (items != null) result.items.addAll(items);
+    if (nextCursor != null) result.nextCursor = nextCursor;
+    return result;
+  }
+
+  GetTrendingGifsResponse._();
+
+  factory GetTrendingGifsResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetTrendingGifsResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetTrendingGifsResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..pPM<GifResult>(1, _omitFieldNames ? '' : 'items',
+        subBuilder: GifResult.create)
+    ..aOS(2, _omitFieldNames ? '' : 'nextCursor')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetTrendingGifsResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetTrendingGifsResponse copyWith(
+          void Function(GetTrendingGifsResponse) updates) =>
+      super.copyWith((message) => updates(message as GetTrendingGifsResponse))
+          as GetTrendingGifsResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetTrendingGifsResponse create() => GetTrendingGifsResponse._();
+  @$core.override
+  GetTrendingGifsResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetTrendingGifsResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetTrendingGifsResponse>(create);
+  static GetTrendingGifsResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $pb.PbList<GifResult> get items => $_getList(0);
+
+  @$pb.TagNumber(2)
+  $core.String get nextCursor => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set nextCursor($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasNextCursor() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearNextCursor() => $_clearField(2);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =
