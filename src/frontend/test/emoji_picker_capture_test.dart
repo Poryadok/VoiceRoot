@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/theme/voice_emoji_style.dart';
@@ -50,28 +51,30 @@ void main() {
       final trigger = GlobalKey();
       final selected = <String>[];
       await tester.pumpWidget(
-        RepaintBoundary(
-          key: rootKey,
-          child: MaterialApp(
-            theme: theme,
-            locale: const Locale('ru'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: Builder(
-              builder: (context) => Scaffold(
-                body: Align(
-                  alignment: Alignment.bottomRight,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: TextButton(
-                      key: trigger,
-                      onPressed: () => showComposerEmojiPanel(
-                        context,
-                        anchorContext: trigger.currentContext,
-                        recentEmoji: const ['😀', '😂', '❤️'],
-                        onSelected: selected.add,
+        ProviderScope(
+          child: RepaintBoundary(
+            key: rootKey,
+            child: MaterialApp(
+              theme: theme,
+              locale: const Locale('ru'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Builder(
+                builder: (context) => Scaffold(
+                  body: Align(
+                    alignment: Alignment.bottomRight,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: TextButton(
+                        key: trigger,
+                        onPressed: () => showComposerEmojiPanel(
+                          context,
+                          anchorContext: trigger.currentContext,
+                          recentEmoji: const ['😀', '😂', '❤️'],
+                          onSelected: selected.add,
+                        ),
+                        child: const Text('Эмодзи'),
                       ),
-                      child: const Text('Эмодзи'),
                     ),
                   ),
                 ),

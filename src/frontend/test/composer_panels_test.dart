@@ -91,26 +91,28 @@ void main() {
       var dismissals = 0;
       String? selected;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: voiceTestTheme(),
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Align(
-                alignment: Alignment.bottomRight,
-                child: TextButton(
-                  focusNode: triggerFocus,
-                  onPressed: () => showComposerEmojiPanel(
-                    context,
-                    onSelected: (value) => selected = value,
-                    onDismiss: () {
-                      dismissals++;
-                      triggerFocus.requestFocus();
-                    },
+        ProviderScope(
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Align(
+                  alignment: Alignment.bottomRight,
+                  child: TextButton(
+                    focusNode: triggerFocus,
+                    onPressed: () => showComposerEmojiPanel(
+                      context,
+                      onSelected: (value) => selected = value,
+                      onDismiss: () {
+                        dismissals++;
+                        triggerFocus.requestFocus();
+                      },
+                    ),
+                    child: const Text('open emoji'),
                   ),
-                  child: const Text('open emoji'),
                 ),
               ),
             ),
@@ -278,17 +280,19 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     ComposerAttachAction? picked;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: voiceTestTheme(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () async {
-                picked = await showComposerAttachMenu(context);
-              },
-              child: const Text('attach'),
+      ProviderScope(
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async {
+                  picked = await showComposerAttachMenu(context);
+                },
+                child: const Text('attach'),
+              ),
             ),
           ),
         ),
