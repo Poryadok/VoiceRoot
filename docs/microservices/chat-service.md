@@ -848,7 +848,11 @@ message SearchGifsResponse {
 }
 ```
 
-**Pagination:** `SearchGifsRequest.cursor` ↔ `SearchGifsResponse.next_cursor` — opaque provider- or Chat-cache token; **only Chat Service** owns GIF search cursors. Empty cursor = first page.
+**Pagination:** `SearchGifsRequest.cursor` ↔ `SearchGifsResponse.next_cursor` — opaque provider- or Chat-cache token; **only Chat Service** owns GIF search cursors. Empty cursor = first page. The shipped proto uses a separately named `GetTrendingGifsResponse` with the same `items`/`next_cursor` fields.
+
+**Search metadata implementation:** `SearchGifs` and `GetTrendingGifs` authenticate the active profile, enforce default 20 / maximum 50, and delegate to the provider-neutral `gifcatalog.Catalog`. Empty search queries and invalid limits/cursors return `INVALID_ARGUMENT`; provider rate exhaustion maps to `RESOURCE_EXHAUSTED`, other provider failures to sanitized `UNAVAILABLE`. An absent provider returns `UNAVAILABLE`, never fake product results. No live provider or runtime activation switch is configured in this slice; H1/H2 and the release capability check remain open. Deterministic fake results are for tests/local development only; their cursors are bound to search query or trending mode. The optional bounded trending metadata cache requires an explicit positive TTL and page capacity from its activation consumer, copies returned pages, and never caches errors. Search pages are not cached by this wrapper; provider-specific quotas and cache policy remain part of later provider activation.
+
+Search metadata grants no File access or send authority. `file_id` stays empty until a genuine import/binding exists; a nonempty ID may still be pending and must pass authoritative File readiness and Messaging admission. Protected source resolution/import, shared-asset provenance, E2E handling, capability-manifest wiring and selected-asset → ready File → Messaging proof remain separate prerequisites.
 
 Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/{id}/install`, `GET /api/v1/gifs/search?q=…&cursor=…`, `GET /api/v1/gifs/trending` — full table [api-gateway.md](api-gateway.md) § Stickers and GIF.
 
