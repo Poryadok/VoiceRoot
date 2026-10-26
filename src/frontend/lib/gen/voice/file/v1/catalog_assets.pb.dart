@@ -100,6 +100,7 @@ class ImportCatalogAssetRequest extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<ImportCatalogAssetRequest>(create);
   static ImportCatalogAssetRequest? _defaultInstance;
 
+  /// Must be 2; no protocol-1 admission fallback.
   @$pb.TagNumber(1)
   $core.int get protocolVersion => $_getIZ(0);
   @$pb.TagNumber(1)
@@ -218,6 +219,8 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
     $1.ChatRef? destinationChat,
     $core.String? chatAccountGeneration,
     $core.String? chatProfileGeneration,
+    $fixnum.Int64? selectionRevision,
+    $fixnum.Int64? currentSelectionRevision,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -233,6 +236,9 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
       result.chatAccountGeneration = chatAccountGeneration;
     if (chatProfileGeneration != null)
       result.chatProfileGeneration = chatProfileGeneration;
+    if (selectionRevision != null) result.selectionRevision = selectionRevision;
+    if (currentSelectionRevision != null)
+      result.currentSelectionRevision = currentSelectionRevision;
     return result;
   }
 
@@ -261,6 +267,12 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
         subBuilder: $1.ChatRef.create)
     ..aOS(10, _omitFieldNames ? '' : 'chatAccountGeneration')
     ..aOS(11, _omitFieldNames ? '' : 'chatProfileGeneration')
+    ..a<$fixnum.Int64>(
+        13, _omitFieldNames ? '' : 'selectionRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(14, _omitFieldNames ? '' : 'currentSelectionRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -338,7 +350,7 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
   @$pb.TagNumber(6)
   void clearFileId() => $_clearField(6);
 
-  /// Existing File lifecycle vocabulary; a reservation alone returns no response.
+  /// Catalog binding lifecycle; a pending File never proves READY authority.
   @$pb.TagNumber(7)
   $core.String get status => $_getSZ(6);
   @$pb.TagNumber(7)
@@ -385,6 +397,28 @@ class ImportCatalogAssetResponse extends $pb.GeneratedMessage {
   $core.bool hasChatProfileGeneration() => $_has(10);
   @$pb.TagNumber(11)
   void clearChatProfileGeneration() => $_clearField(11);
+
+  /// Positive File-owned admission order in the exact actor-generation selector.
+  /// Exact retries retain their original revision; they never advance the head.
+  @$pb.TagNumber(13)
+  $fixnum.Int64 get selectionRevision => $_getI64(11);
+  @$pb.TagNumber(13)
+  set selectionRevision($fixnum.Int64 value) => $_setInt64(11, value);
+  @$pb.TagNumber(13)
+  $core.bool hasSelectionRevision() => $_has(11);
+  @$pb.TagNumber(13)
+  void clearSelectionRevision() => $_clearField(13);
+
+  /// Positive retained selector highwater. Equality alone is insufficient when
+  /// the binding status is terminal; successful admission also requires live head.
+  @$pb.TagNumber(14)
+  $fixnum.Int64 get currentSelectionRevision => $_getI64(12);
+  @$pb.TagNumber(14)
+  set currentSelectionRevision($fixnum.Int64 value) => $_setInt64(12, value);
+  @$pb.TagNumber(14)
+  $core.bool hasCurrentSelectionRevision() => $_has(12);
+  @$pb.TagNumber(14)
+  void clearCurrentSelectionRevision() => $_clearField(14);
 }
 
 /// @voice.unknown_fields=reject
@@ -455,6 +489,7 @@ class ValidateCatalogAssetRequest extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<ValidateCatalogAssetRequest>(create);
   static ValidateCatalogAssetRequest? _defaultInstance;
 
+  /// Must be 2.
   @$pb.TagNumber(1)
   $core.int get protocolVersion => $_getIZ(0);
   @$pb.TagNumber(1)
@@ -538,6 +573,8 @@ class ValidateCatalogAssetResponse extends $pb.GeneratedMessage {
     $core.List<$core.int>? deliveredSha256,
     $fixnum.Int64? deliveredSizeBytes,
     $core.String? deliveredMimeType,
+    $fixnum.Int64? selectionRevision,
+    $fixnum.Int64? currentSelectionRevision,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -555,6 +592,9 @@ class ValidateCatalogAssetResponse extends $pb.GeneratedMessage {
     if (deliveredSizeBytes != null)
       result.deliveredSizeBytes = deliveredSizeBytes;
     if (deliveredMimeType != null) result.deliveredMimeType = deliveredMimeType;
+    if (selectionRevision != null) result.selectionRevision = selectionRevision;
+    if (currentSelectionRevision != null)
+      result.currentSelectionRevision = currentSelectionRevision;
     return result;
   }
 
@@ -589,6 +629,12 @@ class ValidateCatalogAssetResponse extends $pb.GeneratedMessage {
         12, _omitFieldNames ? '' : 'deliveredSha256', $pb.PbFieldType.OY)
     ..aInt64(13, _omitFieldNames ? '' : 'deliveredSizeBytes')
     ..aOS(14, _omitFieldNames ? '' : 'deliveredMimeType')
+    ..a<$fixnum.Int64>(
+        15, _omitFieldNames ? '' : 'selectionRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(16, _omitFieldNames ? '' : 'currentSelectionRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -738,6 +784,25 @@ class ValidateCatalogAssetResponse extends $pb.GeneratedMessage {
   $core.bool hasDeliveredMimeType() => $_has(13);
   @$pb.TagNumber(14)
   void clearDeliveredMimeType() => $_clearField(14);
+
+  /// Required positive, equal revisions from an authoritative live current head.
+  @$pb.TagNumber(15)
+  $fixnum.Int64 get selectionRevision => $_getI64(14);
+  @$pb.TagNumber(15)
+  set selectionRevision($fixnum.Int64 value) => $_setInt64(14, value);
+  @$pb.TagNumber(15)
+  $core.bool hasSelectionRevision() => $_has(14);
+  @$pb.TagNumber(15)
+  void clearSelectionRevision() => $_clearField(15);
+
+  @$pb.TagNumber(16)
+  $fixnum.Int64 get currentSelectionRevision => $_getI64(15);
+  @$pb.TagNumber(16)
+  set currentSelectionRevision($fixnum.Int64 value) => $_setInt64(15, value);
+  @$pb.TagNumber(16)
+  $core.bool hasCurrentSelectionRevision() => $_has(15);
+  @$pb.TagNumber(16)
+  void clearCurrentSelectionRevision() => $_clearField(16);
 }
 
 /// Server-owned classification. Client attribution does not choose the ACL path.
@@ -798,6 +863,7 @@ class LookupCatalogAssetRequest extends $pb.GeneratedMessage {
       $pb.GeneratedMessage.$_defaultFor<LookupCatalogAssetRequest>(create);
   static LookupCatalogAssetRequest? _defaultInstance;
 
+  /// Must be 2, including explicit ordinary-file classification.
   @$pb.TagNumber(1)
   $core.int get protocolVersion => $_getIZ(0);
   @$pb.TagNumber(1)
@@ -1196,6 +1262,7 @@ class GetCatalogAssetStatusRequest extends $pb.GeneratedMessage {
   @$pb.TagNumber(5)
   void clearSelector() => $_clearField($_whichOneof(0));
 
+  /// Must be 2. Unknown operation is the only fresh-admission path.
   @$pb.TagNumber(1)
   $core.int get protocolVersion => $_getIZ(0);
   @$pb.TagNumber(1)
@@ -1263,6 +1330,8 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     $core.String? chatAccountGeneration,
     $core.String? chatProfileGeneration,
     $core.String? terminalFenceId,
+    $fixnum.Int64? selectionRevision,
+    $fixnum.Int64? currentSelectionRevision,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -1279,6 +1348,9 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     if (chatProfileGeneration != null)
       result.chatProfileGeneration = chatProfileGeneration;
     if (terminalFenceId != null) result.terminalFenceId = terminalFenceId;
+    if (selectionRevision != null) result.selectionRevision = selectionRevision;
+    if (currentSelectionRevision != null)
+      result.currentSelectionRevision = currentSelectionRevision;
     return result;
   }
 
@@ -1308,6 +1380,12 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     ..aOS(10, _omitFieldNames ? '' : 'chatAccountGeneration')
     ..aOS(11, _omitFieldNames ? '' : 'chatProfileGeneration')
     ..aOS(12, _omitFieldNames ? '' : 'terminalFenceId')
+    ..a<$fixnum.Int64>(
+        13, _omitFieldNames ? '' : 'selectionRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(14, _omitFieldNames ? '' : 'currentSelectionRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1437,6 +1515,7 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
   /// Asset selector only: exact-tuple terminal proof, never READY admission.
   /// Both Chat generations may be absent only with this canonical opaque UUID
   /// and status failed/deleted/expired after raw terminal details were erased.
+  /// Only this exact asset-cleanup proof may have both selection revisions zero.
   @$pb.TagNumber(12)
   $core.String get terminalFenceId => $_getSZ(11);
   @$pb.TagNumber(12)
@@ -1445,6 +1524,26 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
   $core.bool hasTerminalFenceId() => $_has(11);
   @$pb.TagNumber(12)
   void clearTerminalFenceId() => $_clearField(12);
+
+  /// Positive for retained operation and active asset proofs. Exact operation
+  /// recovery echoes its original order even after a newer admission supersedes it.
+  @$pb.TagNumber(13)
+  $fixnum.Int64 get selectionRevision => $_getI64(12);
+  @$pb.TagNumber(13)
+  set selectionRevision($fixnum.Int64 value) => $_setInt64(12, value);
+  @$pb.TagNumber(13)
+  $core.bool hasSelectionRevision() => $_has(12);
+  @$pb.TagNumber(13)
+  void clearSelectionRevision() => $_clearField(13);
+
+  @$pb.TagNumber(14)
+  $fixnum.Int64 get currentSelectionRevision => $_getI64(13);
+  @$pb.TagNumber(14)
+  set currentSelectionRevision($fixnum.Int64 value) => $_setInt64(13, value);
+  @$pb.TagNumber(14)
+  $core.bool hasCurrentSelectionRevision() => $_has(13);
+  @$pb.TagNumber(14)
+  void clearCurrentSelectionRevision() => $_clearField(14);
 }
 
 const $core.bool _omitFieldNames =

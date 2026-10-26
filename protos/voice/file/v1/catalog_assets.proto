@@ -6,7 +6,8 @@ import "voice/chat/v1/chat.proto";
 
 option go_package = "voice.app/voice/file/v1;filev1";
 
-// Protected non-E2E catalog byte import. Ordinary File APIs retain their ACL.
+// Protected non-E2E catalog authority protocol 2. Ordinary File APIs retain
+// their ACL. Protocol 1 has no ordered-currentness proof and cannot admit sends.
 service CatalogAssetService {
   // @voice.security=protected;callers=service:chat
   rpc ImportCatalogAsset(ImportCatalogAssetRequest) returns (ImportCatalogAssetResponse);
@@ -21,6 +22,7 @@ service CatalogAssetService {
 // @voice.unknown_fields=reject
 // @voice.hash=domain_separated_sha256
 message ImportCatalogAssetRequest {
+  // Must be 2; no protocol-1 admission fallback.
   uint32 protocol_version = 1;
   string operation_id = 2;
   string source_id = 3;
@@ -44,17 +46,24 @@ message ImportCatalogAssetResponse {
   string provider = 4;
   string provider_id = 5;
   string file_id = 6;
-  // Existing File lifecycle vocabulary; a reservation alone returns no response.
+  // Catalog binding lifecycle; a pending File never proves READY authority.
   string status = 7;
   string operation_id = 8;
   voice.chat.v1.ChatRef destination_chat = 9;
   string chat_account_generation = 10;
   string chat_profile_generation = 11;
+  // Positive File-owned admission order in the exact actor-generation selector.
+  // Exact retries retain their original revision; they never advance the head.
+  uint64 selection_revision = 13;
+  // Positive retained selector highwater. Equality alone is insufficient when
+  // the binding status is terminal; successful admission also requires live head.
+  uint64 current_selection_revision = 14;
 }
 
 // @voice.unknown_fields=reject
 // @voice.hash=domain_separated_sha256
 message ValidateCatalogAssetRequest {
+  // Must be 2.
   uint32 protocol_version = 1;
   string source_id = 2;
   string provider = 3;
@@ -82,12 +91,16 @@ message ValidateCatalogAssetResponse {
   bytes delivered_sha256 = 12;
   int64 delivered_size_bytes = 13;
   string delivered_mime_type = 14;
+  // Required positive, equal revisions from an authoritative live current head.
+  uint64 selection_revision = 15;
+  uint64 current_selection_revision = 16;
 }
 
 // Server-owned classification. Client attribution does not choose the ACL path.
 // @voice.unknown_fields=reject
 // @voice.hash=domain_separated_sha256
 message LookupCatalogAssetRequest {
+  // Must be 2, including explicit ordinary-file classification.
   uint32 protocol_version = 1;
   string actor_account_id = 2;
   string actor_profile_id = 3;
@@ -124,6 +137,7 @@ message CatalogAssetSelector {
 // @voice.unknown_fields=reject
 // @voice.hash=domain_separated_sha256
 message GetCatalogAssetStatusRequest {
+  // Must be 2. Unknown operation is the only fresh-admission path.
   uint32 protocol_version = 1;
   string actor_account_id = 2;
   string actor_profile_id = 3;
@@ -152,5 +166,10 @@ message GetCatalogAssetStatusResponse {
   // Asset selector only: exact-tuple terminal proof, never READY admission.
   // Both Chat generations may be absent only with this canonical opaque UUID
   // and status failed/deleted/expired after raw terminal details were erased.
+  // Only this exact asset-cleanup proof may have both selection revisions zero.
   string terminal_fence_id = 12;
+  // Positive for retained operation and active asset proofs. Exact operation
+  // recovery echoes its original order even after a newer admission supersedes it.
+  uint64 selection_revision = 13;
+  uint64 current_selection_revision = 14;
 }
