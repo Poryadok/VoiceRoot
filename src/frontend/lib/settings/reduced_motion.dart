@@ -20,8 +20,14 @@ class ReducedMotionNotifier extends Notifier<bool> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    state = prefs.getBool(_prefKey) ?? false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      state = prefs.getBool(_prefKey) ?? false;
+    } catch (_) {
+      // Keep the current in-memory preference if local storage is unavailable
+      // or corrupt. Runtime panels must remain available, including when the
+      // system independently requests reduced motion.
+    }
   }
 
   Future<void> setEnabled(bool value) async {
