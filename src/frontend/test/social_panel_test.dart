@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
@@ -26,6 +27,8 @@ import 'support/voice_test_theme.dart';
 const _backendUnavailableSnippet = 'Start the full API stack';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   Widget socialTestApp({
     required Widget home,
     required http.Client client,

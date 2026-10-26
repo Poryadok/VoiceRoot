@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -12,6 +13,8 @@ import 'support/voice_test_theme.dart';
 import 'support/auth_test_overrides.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets('actual emoji selections populate recents on reopening', (
     tester,
   ) async {
@@ -88,26 +91,28 @@ void main() {
       var dismissals = 0;
       String? selected;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: voiceTestTheme(),
-          locale: const Locale('en'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Align(
-                alignment: Alignment.bottomRight,
-                child: TextButton(
-                  focusNode: triggerFocus,
-                  onPressed: () => showComposerEmojiPanel(
-                    context,
-                    onSelected: (value) => selected = value,
-                    onDismiss: () {
-                      dismissals++;
-                      triggerFocus.requestFocus();
-                    },
+        ProviderScope(
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            locale: const Locale('en'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Align(
+                  alignment: Alignment.bottomRight,
+                  child: TextButton(
+                    focusNode: triggerFocus,
+                    onPressed: () => showComposerEmojiPanel(
+                      context,
+                      onSelected: (value) => selected = value,
+                      onDismiss: () {
+                        dismissals++;
+                        triggerFocus.requestFocus();
+                      },
+                    ),
+                    child: const Text('open emoji'),
                   ),
-                  child: const Text('open emoji'),
                 ),
               ),
             ),
@@ -275,17 +280,19 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     ComposerAttachAction? picked;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: voiceTestTheme(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: TextButton(
-              onPressed: () async {
-                picked = await showComposerAttachMenu(context);
-              },
-              child: const Text('attach'),
+      ProviderScope(
+        child: MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () async {
+                  picked = await showComposerAttachMenu(context);
+                },
+                child: const Text('attach'),
+              ),
             ),
           ),
         ),
