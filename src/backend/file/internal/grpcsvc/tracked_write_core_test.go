@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"voice/backend/file/internal/store"
 )
@@ -46,14 +47,37 @@ VALUES($1,$2,'source.gif','image/gif',13,$3,$4,'pending_upload','image','skipped
 			require.NoError(t, err)
 			var blob uuid.UUID
 			require.NoError(t, tx.QueryRow(ctx, `SELECT blob_id FROM files WHERE id=$1 FOR UPDATE`, file).Scan(&blob))
-			eligible, err := store.CanCollectTrackedObjectTx(ctx, tx, file, key)
+			eligible, err := store.CanCollectTrackedBlobTx(ctx, tx, blob)
 			require.NoError(t, err)
-			require.False(t, eligible)
+			require.False(t, eligible, "deletion cannot clear STARTED pin")
+			require.NoError(t, tx.Commit(ctx))
+			// Kill the exact idle pooled session with a separate admin connection.
+			// Settlement must retry only its idempotent DB bookkeeping, never PUT.
+			cached, err := pool.Acquire(ctx)
+			require.NoError(t, err)
+			pid := cached.Conn().PgConn().PID()
+			cached.Release()
+			admin, err := pgx.Connect(ctx, pool.Config().ConnString())
+			require.NoError(t, err)
+			var killed bool
+			require.NoError(t, admin.QueryRow(ctx, `SELECT pg_terminate_backend($1)`, pid).Scan(&killed))
+			require.True(t, killed)
+			require.NoError(t, admin.Close(ctx))
+			// Do not consume/reconnect the dead pool session before Settle.
+			canceled, stop := context.WithCancel(ctx)
+			stop()
+			require.NoError(t, files.SettleTrackedWrite(canceled, key, gen, ack))
+			tx, err = pool.Begin(ctx)
+			require.NoError(t, err)
+			require.NoError(t, tx.QueryRow(ctx, `SELECT blob_id FROM files WHERE id=$1 FOR UPDATE`, file).Scan(&blob))
+			eligible, err = store.CanCollectTrackedObjectTx(ctx, tx, file, key)
+			require.NoError(t, err)
+			require.Equal(t, ack, eligible)
 			eligible, err = store.CanCollectTrackedBlobTx(ctx, tx, blob)
 			require.NoError(t, err)
-			require.False(t, eligible)
+			require.Equal(t, ack, eligible)
 			require.NoError(t, tx.Commit(ctx))
-			canceled, stop := context.WithCancel(ctx)
+			canceled, stop = context.WithCancel(ctx)
 			stop()
 			require.NoError(t, files.SettleTrackedWrite(canceled, key, gen, ack))
 			tx, err = pool.Begin(ctx)
