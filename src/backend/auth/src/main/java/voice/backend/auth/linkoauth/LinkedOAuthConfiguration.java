@@ -52,6 +52,8 @@ public class LinkedOAuthConfiguration {
       LinkedOAuthSettings settings,TokenBlacklist blacklist,ProfileSwitchValidator profiles,Clock clock,LinkedAccountsService linked) {
     if(profiles instanceof NoOpProfileSwitchValidator)throw new IllegalStateException("linked OAuth requires current User profile authority");
     linked.configureLinkedOAuthSourceTokens(new LinkedOAuthSourceTokens(settings.encryptionKey()));
+    var twitch=settings.providers().get("twitch");
+    if(twitch!=null && twitch.enabled())linked.configureLinkedOAuthTwitchRecheck(twitch.identityUrl(),twitch.clientId());
     return new LinkedOAuthService(jdbc,new TransactionTemplate(transactions),settings,blacklist,profiles,clock,new LinkedOAuthHttpProvider(settings));
   }
 }

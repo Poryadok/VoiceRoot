@@ -46,7 +46,7 @@ public final class LinkedOAuthController {
   public ResponseEntity<String> callback(@PathVariable String provider,@RequestParam MultiValueMap<String,String> params) {
     String target=null; boolean windows=false;
     try {
-      if(params.size()>3 || params.keySet().stream().anyMatch(k->!Set.of("state","code","error").contains(k))
+      if(params.size()>5 || params.keySet().stream().anyMatch(k->!Set.of("state","code","error","scope","error_description").contains(k))
           || params.values().stream().anyMatch(v->v.size()!=1)
           || params.getFirst("state")==null || !params.getFirst("state").matches("[A-Za-z0-9_-]{43}")
           || (params.containsKey("code")==params.containsKey("error"))

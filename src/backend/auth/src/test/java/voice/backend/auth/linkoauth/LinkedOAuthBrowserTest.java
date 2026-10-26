@@ -62,7 +62,12 @@ class LinkedOAuthBrowserTest {
     Process p=new ProcessBuilder(chrome.toString(),"--headless=new","--no-sandbox","--disable-gpu","--no-first-run","--no-default-browser-check",
         "--disable-background-networking","--disable-extensions","--user-data-dir="+profile,"--virtual-time-budget=1500","--dump-dom",url)
         .redirectOutput(output.toFile()).redirectError(error.toFile()).start();
-    try {assertThat(p.waitFor(20,TimeUnit.SECONDS)).isTrue();assertThat(p.exitValue()).isZero();return Files.readString(output);}
-    finally {if(p.isAlive()){p.destroyForcibly();p.waitFor(10,TimeUnit.SECONDS);}}
+    try {assertThat(p.waitFor(45,TimeUnit.SECONDS)).as("owned Chromium fixture exits within bounded startup/navigation window").isTrue();assertThat(p.exitValue()).isZero();return Files.readString(output);}
+    finally {
+      if(p.isAlive()) {
+        // Exact descendants of this test-owned Process only; never terminate another browser session.
+        p.descendants().forEach(child->child.destroyForcibly());p.destroyForcibly();p.waitFor(10,TimeUnit.SECONDS);
+      }
+    }
   }
 }

@@ -270,4 +270,23 @@ class LinkedOAuthJdbcTest {
       assertThat(requests).hasValue(0);
     } finally {server.stop(0);}
   }
+  @Test void taggedSourceRecheckUsesOnlyItsNewRegistrationClientAndIdentityEndpoint() throws Exception {
+    var start=start();var result=callback(start);assertThat(consume(start,result)).isEqualTo("success");
+    var requests=new AtomicInteger();var server=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
+    server.createContext("/new-registration/identity",x->{
+      requests.incrementAndGet();assertThat(x.getRequestHeaders().getFirst("Client-Id")).isEqualTo("new-registration-client");
+      assertThat(x.getRequestHeaders().getFirst("Authorization")).isEqualTo("Bearer secret-access");
+      byte[] data=("{\"data\":[{\"id\":\"partner-"+account+"\",\"login\":\"partner\",\"broadcaster_type\":\"affiliate\"}]}").getBytes(StandardCharsets.UTF_8);
+      x.sendResponseHeaders(200,data.length);try(var out=x.getResponseBody()){out.write(data);}
+    });server.start();
+    try {
+      var linked=new voice.backend.auth.service.LinkedAccountsService(new voice.backend.auth.userdb.NoOpUserVerificationSync(),new JdbcLinkedIdentityRepository(jdbc),new voice.backend.auth.config.AuthProperties.OAuth());
+      // Legacy auth.oauth client and endpoint are intentionally absent.
+      linked.configureLinkedOAuthSourceTokens(new LinkedOAuthSourceTokens(settings.encryptionKey()));
+      // New registration wiring is supplied by LinkedOAuthConfiguration in production.
+      linked.configureLinkedOAuthTwitchRecheck("http://127.0.0.1:"+server.getAddress().getPort()+"/new-registration/identity","new-registration-client");
+      linked.refreshVerificationStatuses();
+      assertThat(sources()).isZero();assertThat(requests.get()).isGreaterThanOrEqualTo(1);
+    } finally {server.stop(0);}
+  }
 }

@@ -875,7 +875,11 @@ Provider activation and YouTube qualification remain separate. The existing
 unbound `POST .../{provider}/callback` is blocked with `oauth_unavailable` after
 authentication. `LinkedOAuthController` owns the new link/consume/cancel routes
 and public GET callback; migration `V32__linked_oauth_transport.sql` stores durable
-attempts. The callback returns a nonce-CSP HTML bridge which scrubs query/fragment
+attempts. Operational loader parity is `000033_linked_oauth_transport.up.sql`;
+its downgrade refuses destructive removal of attempts/receipts. The preexisting
+exact migration-history profile stays intact, and a separate linked-OAuth profile
+adds only the known Flyway32/canonical33 pair; unknown, dirty or mixed histories
+still fail closed. The callback returns a nonce-CSP HTML bridge which scrubs query/fragment
 before an allowlisted Web navigation or an explicit Windows “Return to Voice”
 action. A nonempty fragment prevents handoff. Every constructed return URL ends
 with an explicit empty `#`; provider query values are never forwarded.
@@ -898,7 +902,9 @@ State/result handles persist only as SHA-256 hashes. Provider proof, staged resu
 and newly committed provider tokens use attempt/purpose- or source-bound AES-GCM
 envelopes. Cleanup runs every 30 seconds; expiry/revocation checks fence use
 immediately. New encrypted sources remain unknown on recheck if their key is
-unavailable. Consume commits source, durable sync target and result consumption
+unavailable. Tagged Twitch sources recheck through the validated new registration's
+exact identity endpoint and client ID; legacy rows keep the legacy registration.
+Consume commits source, durable sync target and result consumption
 in one Auth transaction; pending User sync is not a claim of projection success.
 Legacy YouTube refresh treats qualification as unknown and preserves source and
 revision; it no longer infers criterion loss from upload permission. Explicit

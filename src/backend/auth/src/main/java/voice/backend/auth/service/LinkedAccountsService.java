@@ -37,9 +37,14 @@ public class LinkedAccountsService {
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
   private volatile voice.backend.auth.linkoauth.LinkedOAuthSourceTokens linkedOAuthTokens;
+  private volatile LinkedOAuthTwitchRecheck linkedOAuthTwitchRecheck;
+  private record LinkedOAuthTwitchRecheck(String identityUrl, String clientId) {}
 
   public void configureLinkedOAuthSourceTokens(voice.backend.auth.linkoauth.LinkedOAuthSourceTokens tokens) {
     this.linkedOAuthTokens = java.util.Objects.requireNonNull(tokens);
+  }
+  public void configureLinkedOAuthTwitchRecheck(String identityUrl, String clientId) {
+    linkedOAuthTwitchRecheck = new LinkedOAuthTwitchRecheck(identityUrl, clientId);
   }
 
   private volatile String twitchApiBaseUrl;
@@ -216,8 +221,13 @@ public class LinkedAccountsService {
           accessToken = new String(row.accessTokenEncrypted(), StandardCharsets.UTF_8);
         }
         if (PLATFORM_TWITCH.equals(row.platform())) {
+          boolean tagged = voice.backend.auth.linkoauth.LinkedOAuthSourceTokens.tagged(row.accessTokenEncrypted());
+          var registration = linkedOAuthTwitchRecheck;
+          if (tagged && registration == null) continue;
           stillEligible =
-              "partner".equalsIgnoreCase(fetchTwitchUser(accessToken).broadcasterType());
+              "partner".equalsIgnoreCase((tagged
+                  ? fetchTwitchUser(accessToken, registration.identityUrl(), registration.clientId())
+                  : fetchTwitchUser(accessToken)).broadcasterType());
         } else {
           continue;
         }
@@ -340,12 +350,16 @@ public class LinkedAccountsService {
   }
 
   private TwitchUser fetchTwitchUser(String accessToken) {
+    return fetchTwitchUser(accessToken, twitchApiBaseUrl + "/helix/users", blankTo(oauth.getTwitch().getClientId(), "test-client"));
+  }
+
+  private TwitchUser fetchTwitchUser(String accessToken, String identityUrl, String clientId) {
     try {
       HttpRequest request =
           HttpRequest.newBuilder()
-              .uri(URI.create(twitchApiBaseUrl + "/helix/users"))
+              .uri(URI.create(identityUrl))
               .header("Authorization", "Bearer " + accessToken)
-              .header("Client-Id", blankTo(oauth.getTwitch().getClientId(), "test-client"))
+              .header("Client-Id", clientId)
               .GET()
               .timeout(Duration.ofSeconds(5))
               .build();

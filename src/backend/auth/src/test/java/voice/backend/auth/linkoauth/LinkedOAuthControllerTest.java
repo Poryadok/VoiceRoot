@@ -31,7 +31,11 @@ class LinkedOAuthControllerTest {
     verify(auth).validate("Bearer fixture");verifyNoInteractions(service);
   }
   @Test void malformedDuplicateMixedAndUnknownCallbackParametersNeverReachService() throws Exception {
-    for(String query:List.of("state=a&state=b&code=SECRET","state=a&code=SECRET&error=denied","state=a&code=SECRET&redirect_uri=https://evil.test","code=SECRET")) {
+    String state="s".repeat(43);
+    for(String query:List.of("state="+state+"&state=b&code=SECRET","state="+state+"&code=SECRET&error=denied",
+        "state="+state+"&code=SECRET&redirect_uri=https://evil.test","code=SECRET",
+        "state="+state+"&code=SECRET&scope=a&scope=b","state="+state+"&error=denied&error_description=a&error_description=b",
+        "state="+state+"&code=SECRET&scope="+"a".repeat(4097),"state="+state+"&code=SECRET&unknown_metadata=x")) {
       mvc.perform(get("/api/v1/auth/linked-accounts/twitch/oauth-callback?"+query)).andExpect(status().isOk())
           .andExpect(header().string("Cache-Control","no-store")).andExpect(header().string("Referrer-Policy","no-referrer"))
           .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("SECRET"))));
@@ -54,5 +58,17 @@ class LinkedOAuthControllerTest {
         .contentType("application/json").content("{\"code\":\"mock-code\",\"redirect_uri\":\"https://evil.test\"}"))
         .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.error").value("oauth_unavailable"));
     verifyNoInteractions(linked);
+  }
+  @Test void twitchDocumentedScopeAndErrorDescriptionAreInertBoundedMetadata() throws Exception {
+    UUID id=UUID.randomUUID();String state="s".repeat(43),handle="h".repeat(43);
+    when(service.callback("twitch",state,"provider-code",null)).thenReturn(new LinkedOAuthService.Return(id,handle,"https://app.example.test/settings/oauth-return","web"));
+    when(service.callback("twitch",state,null,"access_denied")).thenReturn(new LinkedOAuthService.Return(id,handle,"https://app.example.test/settings/oauth-return","web"));
+    String success=mvc.perform(get("/api/v1/auth/linked-accounts/twitch/oauth-callback").param("state",state).param("code","provider-code").param("scope","user:read:email"))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    assertThat(success).contains("result_handle="+handle).doesNotContain("provider-code","user:read:email");
+    String denied=mvc.perform(get("/api/v1/auth/linked-accounts/twitch/oauth-callback").param("state",state).param("error","access_denied").param("error_description","PRIVATE-PROVIDER-DESCRIPTION"))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    assertThat(denied).contains("result_handle="+handle).doesNotContain("PRIVATE-PROVIDER-DESCRIPTION");
+    verify(service).callback("twitch",state,"provider-code",null);verify(service).callback("twitch",state,null,"access_denied");
   }
 }
