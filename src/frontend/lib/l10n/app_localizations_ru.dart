@@ -2352,6 +2352,14 @@ class AppLocalizationsRu extends AppLocalizations {
   String get subscriptionManageBilling => 'Управление подпиской';
 
   @override
+  String get subscriptionGraceReminderPersonal => 'Оплата не прошла';
+
+  @override
+  String subscriptionGraceReminderSpace(String spaceId) {
+    return 'Оплата Space Pro не прошла ($spaceId)';
+  }
+
+  @override
   String get subscriptionCancel => 'Отменить подписку';
 
   @override

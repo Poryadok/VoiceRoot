@@ -4196,6 +4196,18 @@ abstract class AppLocalizations {
   /// **'Manage subscription'**
   String get subscriptionManageBilling;
 
+  /// No description provided for @subscriptionGraceReminderPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment failed'**
+  String get subscriptionGraceReminderPersonal;
+
+  /// No description provided for @subscriptionGraceReminderSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Space Pro payment failed ({spaceId})'**
+  String subscriptionGraceReminderSpace(String spaceId);
+
   /// No description provided for @subscriptionCancel.
   ///
   /// In en, this message translates to:
