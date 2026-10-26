@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/ui/chat/composer_send_menu.dart';
 import 'package:voice_frontend/theme/voice_theme.dart';
-import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/theme/voice_token_catalog.dart';
 
 import 'support/voice_test_theme.dart';
