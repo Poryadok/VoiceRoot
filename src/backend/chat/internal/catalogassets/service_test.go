@@ -19,6 +19,41 @@ type fakeRepository struct {
 	saves    int
 	capture  ActorCapture
 	closed   bool
+	slots    map[fakeSelectorKey]uuid.UUID
+}
+type fakeSelectorKey struct {
+	Actor
+	ActorCapture
+	Selection
+}
+
+func (s *fakeRepository) CaptureSelection(_ context.Context, actor Actor, selection Selection, capture ActorCapture) (uuid.UUID, error) {
+	if s.closed || capture != s.capture {
+		return uuid.Nil, ErrActorRetired
+	}
+	if s.slots == nil {
+		s.slots = map[fakeSelectorKey]uuid.UUID{}
+	}
+	key := fakeSelectorKey{actor, capture, selection}
+	id := s.slots[key]
+	if id == uuid.Nil {
+		id = uuid.New()
+		s.slots[key] = id
+	}
+	return id, nil
+}
+func (s *fakeRepository) DropEmptySelection(_ context.Context, actor Actor, capture ActorCapture, id uuid.UUID) error {
+	for _, b := range s.bindings {
+		if b.SelectorSlotID == id {
+			return nil
+		}
+	}
+	for key, slot := range s.slots {
+		if key.Actor == actor && key.ActorCapture == capture && slot == id {
+			delete(s.slots, key)
+		}
+	}
+	return nil
 }
 
 func (s *fakeRepository) CaptureActor(_ context.Context, _ Actor, initialize bool) (ActorCapture, error) {
@@ -37,14 +72,36 @@ func (s *fakeRepository) SaveBinding(_ context.Context, b Binding, capture Actor
 	if s.closed || capture != s.capture || b.ActorCapture != capture {
 		return status.Error(codes.FailedPrecondition, "actor retired")
 	}
+	if b.SelectorSlotID == uuid.Nil || s.slots[fakeSelectorKey{b.Actor, capture, b.Selection}] != b.SelectorSlotID {
+		return ErrSelectorInvalidated
+	}
+	for file, old := range s.bindings {
+		if old.Actor == b.Actor && old.ActorCapture == capture && old.Selection == b.Selection {
+			if old.SelectionRevision > b.SelectionRevision {
+				return ErrSelectionSuperseded
+			}
+			if old.SelectionRevision == b.SelectionRevision && old != b {
+				return ErrBindingConflict
+			}
+			delete(s.bindings, file)
+		}
+	}
 	s.saves++
 	s.bindings[b.FileID] = b
 	return nil
 }
-func (s *fakeRepository) RetireBinding(_ context.Context, actor Actor, file uuid.UUID) error {
-	if b, ok := s.bindings[file]; ok && b.Actor == actor {
-		delete(s.bindings, file)
+func (s *fakeRepository) RetireExactBinding(_ context.Context, b Binding) error {
+	key := fakeSelectorKey{b.Actor, b.ActorCapture, b.Selection}
+	if s.slots[key] != b.SelectorSlotID {
+		return nil
 	}
+	for _, old := range s.bindings {
+		if old.SelectorSlotID == b.SelectorSlotID && (old.SelectionRevision > b.SelectionRevision || old.FileID != b.FileID || old.SourceID != b.SourceID) {
+			return nil
+		}
+	}
+	delete(s.bindings, b.FileID)
+	delete(s.slots, key)
 	return nil
 }
 func (s *fakeRepository) FindBinding(_ context.Context, actor Actor, sel Selection, file uuid.UUID, capture ActorCapture) (Binding, bool, error) {
@@ -52,7 +109,7 @@ func (s *fakeRepository) FindBinding(_ context.Context, actor Actor, sel Selecti
 		return Binding{}, false, status.Error(codes.FailedPrecondition, "actor retired")
 	}
 	for _, b := range s.bindings {
-		if b.Actor == actor && b.Selection == sel && b.FileID == file {
+		if b.Actor == actor && b.Selection == sel && b.FileID == file && s.slots[fakeSelectorKey{actor, capture, sel}] == b.SelectorSlotID {
 			return b, true, nil
 		}
 	}
@@ -79,7 +136,7 @@ type fakeFiles struct {
 func (f *fakeFiles) Import(_ context.Context, r ImportRequest) (FileState, error) {
 	f.imports++
 	f.last = r
-	f.state = FileState{Actor: r.Actor, ActorCapture: r.ActorCapture, Selection: r.Selection, SourceID: r.SourceID, FileID: uuid.New(), Status: "processing"}
+	f.state = FileState{Actor: r.Actor, ActorCapture: r.ActorCapture, Selection: r.Selection, SourceID: r.SourceID, FileID: uuid.New(), Status: "processing", SelectionRevision: 1, CurrentSelectionRevision: 1}
 	return f.state, f.err
 }
 func (f *fakeFiles) Status(context.Context, Binding) (FileState, error) {
@@ -199,7 +256,8 @@ func TestValidateGIFAssetIsExactReadOnlySourceAuthority(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := &chatv1.ValidateGifAssetRequest{ProtocolVersion: 1, ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), Provider: resolve.Provider, ProviderId: resolve.ProviderId, FileId: admitted.FileId, DestinationChat: resolve.DestinationChat}
+	s.Files.(*fakeFiles).state.Status = "ready"
+	req := &chatv1.ValidateGifAssetRequest{ProtocolVersion: 2, ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), Provider: resolve.Provider, ProviderId: resolve.ProviderId, FileId: admitted.FileId, DestinationChat: resolve.DestinationChat}
 	got, err := s.ValidateGifAsset(serviceContext(t, req, Actor{}, chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName), req)
 	if err != nil || got.GetSourceId() != admitted.SourceId || got.GetActorProfileId() != actor.ProfileID.String() {
 		t.Fatalf("validate=%v err=%v", got, err)
@@ -208,8 +266,8 @@ func TestValidateGIFAssetIsExactReadOnlySourceAuthority(t *testing.T) {
 	if _, err := s.ValidateGifAsset(serviceContext(t, req, Actor{}, chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName), req); status.Code(err) != codes.NotFound {
 		t.Fatalf("forged tuple=%v", err)
 	}
-	if s.Resolver.(*fakeResolver).calls != 1 || s.Files.(*fakeFiles).imports != 1 || s.Files.(*fakeFiles).statuses != 0 {
-		t.Fatal("validation resolved/imported/read File")
+	if s.Resolver.(*fakeResolver).calls != 1 || s.Files.(*fakeFiles).imports != 1 || s.Files.(*fakeFiles).statuses != 1 {
+		t.Fatal("validation must read current File proof without resolution/import")
 	}
 }
 
@@ -224,6 +282,7 @@ func TestResolveGIFAssetRecoversFileReceiptWithoutNewURLResolution(t *testing.T)
 	// receipt, not a new CDN URL, determines the original source and File identity.
 	store := s.Store.(*fakeRepository)
 	store.bindings = map[uuid.UUID]Binding{}
+	store.slots = map[fakeSelectorKey]uuid.UUID{}
 	s.Resolver.(*fakeResolver).err = errors.New("CDN URL rotated; must not resolve")
 	again, err := s.ResolveGifAsset(serviceContext(t, req, actor, method), req)
 	if err != nil || again.GetFileId() != original.FileId || s.Resolver.(*fakeResolver).calls != 1 || len(store.bindings) != 1 {

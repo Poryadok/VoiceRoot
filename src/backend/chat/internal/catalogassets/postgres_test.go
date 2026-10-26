@@ -3,13 +3,16 @@ package catalogassets
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"voice/backend/pkg/integrationtest"
 )
@@ -63,6 +66,12 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	down, err := os.ReadFile(filepath.Join(migrations, "000028_catalog_assets.down.sql"))
 	require.NoError(t, err)
+	orderedUp, err := os.ReadFile(filepath.Join(migrations, "000029_catalog_selection_cache.up.sql"))
+	require.NoError(t, err)
+	orderedDown, err := os.ReadFile(filepath.Join(migrations, "000029_catalog_selection_cache.down.sql"))
+	require.NoError(t, err)
+	up = append(append(up, '\n'), orderedUp...)
+	down = append(append(orderedDown, '\n'), down...)
 	pool := integrationtest.StartPostgres(t, ctx, "chat_catalog_actor", "")
 	_, err = pool.Exec(ctx, string(up))
 	require.NoError(t, err)
@@ -79,7 +88,9 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	capture, err := repo.CaptureActor(ctx, actor, true)
 	require.NoError(t, err)
 	require.True(t, validCapture(capture))
-	binding := Binding{Actor: actor, ActorCapture: capture, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New()}
+	binding := Binding{Actor: actor, ActorCapture: capture, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New(), SelectionRevision: 1}
+	binding.SelectorSlotID, err = repo.CaptureSelection(ctx, actor, binding.Selection, capture)
+	require.NoError(t, err)
 	require.NoError(t, repo.SaveBinding(ctx, binding, capture))
 	got, found, err := repo.FindBinding(ctx, actor, binding.Selection, binding.FileID, capture)
 	require.NoError(t, err)
@@ -87,24 +98,76 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	require.Equal(t, binding, got)
 
 	const contenders = 8
+	monitorCtx, stopMonitor := context.WithCancel(ctx)
+	monitorDone := make(chan struct{})
+	go func() {
+		defer close(monitorDone)
+		select {
+		case <-monitorCtx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+		call, cancel := context.WithTimeout(monitorCtx, 2*time.Second)
+		defer cancel()
+		conn, err := pgx.Connect(call, pool.Config().ConnConfig.ConnString())
+		if err != nil {
+			t.Logf("catalog wait diagnostic connect: %v", err)
+			return
+		}
+		defer func() { _ = conn.Close(context.Background()) }()
+		rows, err := conn.Query(call, `SELECT pid,state,COALESCE(wait_event_type,''),COALESCE(wait_event,''),array_to_string(pg_blocking_pids(pid),','),left(query,180) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()`)
+		if err != nil {
+			t.Logf("catalog wait diagnostic query: %v", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var pid int32
+			var state, kind, event, blocking, query string
+			if err := rows.Scan(&pid, &state, &kind, &event, &blocking, &query); err != nil {
+				t.Logf("catalog wait diagnostic scan: %v", err)
+				return
+			}
+			t.Logf("catalog PG pid=%d state=%s wait=%s/%s blocked_by=%s query=%s", pid, state, kind, event, blocking, query)
+		}
+	}()
 	start := make(chan struct{})
 	errors := make(chan error, contenders)
 	captures := make(chan ActorCapture, contenders)
-	for range contenders {
-		go func() {
+	for contender := range contenders {
+		go func(index int) {
 			<-start
+			began := time.Now()
 			c, err := repo.CaptureActor(ctx, actor, true)
+			captureElapsed := time.Since(began)
+			phase := "capture"
 			if err == nil {
+				phase = "save"
 				err = repo.SaveBinding(ctx, binding, c)
+			}
+			if err != nil {
+				err = fmt.Errorf("contender %d phase=%s elapsed=%s capture_elapsed=%s: %w", index, phase, time.Since(began), captureElapsed, err)
 			}
 			captures <- c
 			errors <- err
-		}()
+		}(contender)
 	}
 	close(start)
+	failed := false
 	for range contenders {
-		require.NoError(t, <-errors)
-		require.Equal(t, capture, <-captures)
+		if err := <-errors; err != nil {
+			t.Error(err)
+			failed = true
+		}
+		if got := <-captures; got != capture {
+			t.Errorf("captured generation changed: want=%v got=%v", capture, got)
+			failed = true
+		}
+	}
+	stopMonitor()
+	<-monitorDone
+	if failed {
+		t.FailNow()
 	}
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM catalog_asset_bindings`).Scan(&count))
@@ -136,7 +199,19 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	fresh.FileID = uuid.New()
 	fresh.SourceID = uuid.New()
 	fresh.ActorCapture = restored
+	fresh.SelectorSlotID, err = repo.CaptureSelection(ctx, actor, fresh.Selection, restored)
+	require.NoError(t, err)
 	require.NoError(t, repo.SaveBinding(ctx, fresh, restored))
+	page, err := repo.ScanBindings(ctx, uuid.Nil, 100)
+	require.NoError(t, err)
+	require.Equal(t, []Binding{fresh}, page)
+	page, err = repo.ScanBindings(ctx, fresh.FileID, 100)
+	require.NoError(t, err)
+	require.Empty(t, page)
+	stale := fresh
+	stale.ActorCapture = capture
+	require.NoError(t, repo.RetireExactBinding(ctx, stale), "old cleanup cannot delete restored projection")
+	require.NoError(t, repo.PurgeCapturedProfile(ctx, stale), "old profile snapshot cannot close restored generation")
 	require.NoError(t, repo.PurgeAccount(ctx, actor.AccountID, event), "same deletion event cannot erase a restored generation")
 	_, found, err = repo.FindBinding(ctx, actor, fresh.Selection, fresh.FileID, restored)
 	require.NoError(t, err)
@@ -165,7 +240,9 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	racingActor := Actor{AccountID: uuid.New(), ProfileID: uuid.New()}
 	racingCapture, err := repo.CaptureActor(ctx, racingActor, true)
 	require.NoError(t, err)
-	racingBinding := Binding{Actor: racingActor, ActorCapture: racingCapture, Selection: Selection{Provider: "fixture", ProviderID: "race"}, SourceID: uuid.New(), FileID: uuid.New()}
+	racingBinding := Binding{Actor: racingActor, ActorCapture: racingCapture, Selection: Selection{Provider: "fixture", ProviderID: "race"}, SourceID: uuid.New(), FileID: uuid.New(), SelectionRevision: 1}
+	racingBinding.SelectorSlotID, err = repo.CaptureSelection(ctx, racingActor, racingBinding.Selection, racingCapture)
+	require.NoError(t, err)
 	entered, release := make(chan struct{}), make(chan struct{})
 	observer.blockNext(entered, release)
 	saved, purged := make(chan error, 1), make(chan error, 1)

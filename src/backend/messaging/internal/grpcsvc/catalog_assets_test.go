@@ -20,15 +20,18 @@ import (
 )
 
 type catalogFileFake struct {
-	snapshot                   *filev1.ValidateCatalogAssetResponse
-	ordinary                   bool
-	lookupCalls, validateCalls int
-	fail                       error
-	mutateFinal                bool
+	snapshot                       *filev1.ValidateCatalogAssetResponse
+	ordinary                       bool
+	lookupCalls, validateCalls     int
+	fail                           error
+	mutateFinal                    bool
+	lookupVersion, validateVersion uint32
+	final                          *filev1.ValidateCatalogAssetResponse
 }
 
 func (f *catalogFileFake) LookupCatalogAsset(ctx context.Context, req *filev1.LookupCatalogAssetRequest, _ ...grpc.CallOption) (*filev1.LookupCatalogAssetResponse, error) {
 	f.lookupCalls++
+	f.lookupVersion = req.ProtocolVersion
 	md, _ := metadata.FromOutgoingContext(ctx)
 	if len(md.Get("authorization")) != 1 || len(md.Get("x-request-id")) != 1 || len(md.Get("x-voice-profile-id")) != 0 {
 		return nil, status.Error(codes.Unauthenticated, "unsigned call")
@@ -41,9 +44,13 @@ func (f *catalogFileFake) LookupCatalogAsset(ctx context.Context, req *filev1.Lo
 	}
 	return &filev1.LookupCatalogAssetResponse{Classification: &filev1.LookupCatalogAssetResponse_Catalog{Catalog: proto.Clone(f.snapshot).(*filev1.ValidateCatalogAssetResponse)}}, nil
 }
-func (f *catalogFileFake) ValidateCatalogAsset(_ context.Context, _ *filev1.ValidateCatalogAssetRequest, _ ...grpc.CallOption) (*filev1.ValidateCatalogAssetResponse, error) {
+func (f *catalogFileFake) ValidateCatalogAsset(_ context.Context, req *filev1.ValidateCatalogAssetRequest, _ ...grpc.CallOption) (*filev1.ValidateCatalogAssetResponse, error) {
 	f.validateCalls++
+	f.validateVersion = req.ProtocolVersion
 	r := proto.Clone(f.snapshot).(*filev1.ValidateCatalogAssetResponse)
+	if f.final != nil {
+		r = proto.Clone(f.final).(*filev1.ValidateCatalogAssetResponse)
+	}
 	if f.mutateFinal {
 		r.SourceSha256 = bytes.Repeat([]byte{9}, 32)
 	}
@@ -51,14 +58,17 @@ func (f *catalogFileFake) ValidateCatalogAsset(_ context.Context, _ *filev1.Vali
 }
 
 type catalogChatFake struct {
-	calls           int
-	denyDestination bool
-	wrongSource     bool
-	destination     string
+	calls                                       int
+	denyDestination                             bool
+	wrongSource                                 bool
+	destination                                 string
+	version                                     uint32
+	selectionRevision, currentSelectionRevision uint64
 }
 
 func (f *catalogChatFake) ValidateGifAsset(_ context.Context, r *chatv1.ValidateGifAssetRequest, _ ...grpc.CallOption) (*chatv1.ValidateGifAssetResponse, error) {
 	f.calls++
+	f.version = r.ProtocolVersion
 	f.destination = r.GetDestinationChat().GetId()
 	if f.denyDestination {
 		return nil, status.Error(codes.PermissionDenied, "destination denied")
@@ -67,7 +77,7 @@ func (f *catalogChatFake) ValidateGifAsset(_ context.Context, r *chatv1.Validate
 	if f.wrongSource {
 		source = uuid.NewString()
 	}
-	return &chatv1.ValidateGifAssetResponse{SourceId: source, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Provider: r.Provider, ProviderId: r.ProviderId, FileId: r.FileId}, nil
+	return &chatv1.ValidateGifAssetResponse{SourceId: source, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Provider: r.Provider, ProviderId: r.ProviderId, FileId: r.FileId, SelectionRevision: f.selectionRevision, CurrentSelectionRevision: f.currentSelectionRevision}, nil
 }
 
 func catalogAdmissionFixture(t *testing.T) (*MessagingGRPC, context.Context, uuid.UUID, messageAttachment, *catalogFileFake, *catalogChatFake) {
@@ -78,11 +88,56 @@ func catalogAdmissionFixture(t *testing.T) (*MessagingGRPC, context.Context, uui
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "messaging", KeyID: "test", PrivateKey: key})
 	require.NoError(t, err)
 	f := &catalogFileFake{snapshot: &filev1.ValidateCatalogAssetResponse{SourceId: "00000000-0000-4000-8000-000000000001", ActorAccountId: account.String(), ActorProfileId: profile.String(), Provider: "fixture", ProviderId: "asset-1", FileId: file.String(), ObjectRevision: 1, Intent: "gif", ScanResult: "clean", FileType: "video", SourceSha256: bytes.Repeat([]byte{1}, 32), DeliveredSha256: bytes.Repeat([]byte{2}, 32), DeliveredSizeBytes: 42, DeliveredMimeType: "video/mp4"}}
-	c := &catalogChatFake{}
+	f.snapshot.SelectionRevision, f.snapshot.CurrentSelectionRevision = 7, 7
+	c := &catalogChatFake{selectionRevision: 7, currentSelectionRevision: 7}
 	s := &MessagingGRPC{CatalogAssets: &CatalogAssetCoordinator{Files: f, Chat: c, Issuer: issuer}}
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-user-id", account.String(), "x-voice-profile-id", profile.String()))
 	ctx = withCatalogDestination(ctx, chat, chatv1.ChatType_CHAT_TYPE_GROUP, false)
 	return s, ctx, chat, messageAttachment{FileID: file.String(), Type: "gif"}, f, c
+}
+
+func TestCatalogSendUsesOnlyProtocolTwoOrderedAuthority(t *testing.T) {
+	s, ctx, chat, a, f, c := catalogAdmissionFixture(t)
+	remaining, err := s.validateCatalogAttachments(ctx, &chat, []messageAttachment{a}, "gif")
+	require.NoError(t, err)
+	require.Empty(t, remaining)
+	require.Equal(t, uint32(2), f.lookupVersion)
+	require.Equal(t, uint32(2), c.version)
+	require.Equal(t, uint32(2), f.validateVersion)
+}
+
+func TestCatalogSendRejectsUnqualifiedSelectionProofAtEveryHop(t *testing.T) {
+	for _, hop := range []string{"lookup", "chat", "final"} {
+		for _, pair := range []struct {
+			name               string
+			selection, current uint64
+		}{
+			{"legacy-or-terminal-zero", 0, 0}, {"zero-selection", 0, 7}, {"zero-head", 7, 0},
+			{"superseded", 7, 8}, {"inverted-head", 8, 7}, {"mixed-current-selection", 8, 8},
+		} {
+			t.Run(hop+"/"+pair.name, func(t *testing.T) {
+				s, ctx, chat, a, f, c := catalogAdmissionFixture(t)
+				switch hop {
+				case "lookup":
+					f.snapshot.SelectionRevision, f.snapshot.CurrentSelectionRevision = pair.selection, pair.current
+				case "chat":
+					c.selectionRevision, c.currentSelectionRevision = pair.selection, pair.current
+				case "final":
+					f.final = proto.Clone(f.snapshot).(*filev1.ValidateCatalogAssetResponse)
+					f.final.SelectionRevision, f.final.CurrentSelectionRevision = pair.selection, pair.current
+				}
+				remaining, err := s.validateCatalogAttachments(ctx, &chat, []messageAttachment{a}, "gif")
+				require.Equal(t, codes.FailedPrecondition, status.Code(err))
+				require.Nil(t, remaining, "unqualified proof must never fall back to ordinary ACL")
+				if hop == "chat" {
+					require.Zero(t, f.validateCalls, "bad Chat proof must not reach final File validation")
+				}
+				if hop == "lookup" && (pair.selection != pair.current || pair.selection == 0) {
+					require.Zero(t, c.calls, "bad File classification must not disclose the source to Chat")
+				}
+			})
+		}
+	}
 }
 
 func TestCatalogSendClassifiesOmittedAttributionAndAuthorizesEachDestination(t *testing.T) {

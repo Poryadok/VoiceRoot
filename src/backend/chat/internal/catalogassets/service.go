@@ -32,7 +32,10 @@ type Binding struct {
 	Actor
 	ActorCapture
 	Selection
-	SourceID, FileID uuid.UUID
+	SourceID, FileID  uuid.UUID
+	SelectorSlotID    uuid.UUID
+	SelectionRevision uint64
+	Legacy            bool
 }
 type ImportRequest struct {
 	Actor
@@ -48,6 +51,9 @@ type FileState struct {
 	Selection
 	SourceID, FileID uuid.UUID
 	Status           string
+	// Only an exact File asset-selector proof can retire a compacted binding.
+	TerminalFenceID                             uuid.UUID
+	SelectionRevision, CurrentSelectionRevision uint64
 }
 type OperationSelector struct {
 	Actor
@@ -61,9 +67,11 @@ type Resolver interface {
 }
 type Repository interface {
 	CaptureActor(context.Context, Actor, bool) (ActorCapture, error)
+	CaptureSelection(context.Context, Actor, Selection, ActorCapture) (uuid.UUID, error)
+	DropEmptySelection(context.Context, Actor, ActorCapture, uuid.UUID) error
 	SaveBinding(context.Context, Binding, ActorCapture) error
 	FindBinding(context.Context, Actor, Selection, uuid.UUID, ActorCapture) (Binding, bool, error)
-	RetireBinding(context.Context, Actor, uuid.UUID) error
+	RetireExactBinding(context.Context, Binding) error
 }
 type FileClient interface {
 	Import(context.Context, ImportRequest) (FileState, error)
@@ -114,6 +122,18 @@ func (s *Service) ResolveGifAsset(ctx context.Context, req *chatv1.ResolveGifAss
 	if !validCapture(capture) {
 		return nil, status.Error(codes.Unavailable, "invalid catalog actor generation")
 	}
+	slot, err := s.Store.CaptureSelection(ctx, actor, selection, capture)
+	if err != nil {
+		return nil, catalogError(err)
+	}
+	if slot == uuid.Nil {
+		return nil, status.Error(codes.Unavailable, "invalid catalog selector capture")
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		_ = s.Store.DropEmptySelection(cleanup, actor, capture, slot)
+	}()
 	operation := uuid.MustParse(req.OperationId)
 	// File owns the durable operation fence. Consult it before resolving a new URL
 	// so a committed File survives a lost Chat response and CDN URL rotation.
@@ -139,11 +159,14 @@ func (s *Service) ResolveGifAsset(ctx context.Context, req *chatv1.ResolveGifAss
 	if err != nil {
 		return nil, catalogError(err)
 	}
-	if !validState(state, actor, selection) {
+	if !validState(state, actor, selection) || !validOrderedState(state) {
 		return nil, status.Error(codes.Unavailable, "invalid catalog File binding")
 	}
 	if state.ActorCapture != capture {
 		return nil, status.Error(codes.FailedPrecondition, "catalog operation belongs to a retired actor generation")
+	}
+	if state.SelectionRevision != state.CurrentSelectionRevision {
+		return nil, catalogError(ErrSelectionSuperseded)
 	}
 	if _, err := requireCaller(ctx, req, chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName); err != nil {
 		return nil, err
@@ -155,9 +178,9 @@ func (s *Service) ResolveGifAsset(ctx context.Context, req *chatv1.ResolveGifAss
 		return nil, destinationError(err)
 	}
 	if terminalState(state.Status) {
-		err = s.Store.RetireBinding(ctx, actor, state.FileID)
+		err = s.Store.RetireExactBinding(ctx, Binding{Actor: actor, ActorCapture: capture, Selection: selection, SourceID: state.SourceID, FileID: state.FileID, SelectorSlotID: slot, SelectionRevision: state.SelectionRevision})
 	} else {
-		err = s.Store.SaveBinding(ctx, Binding{Actor: actor, ActorCapture: capture, Selection: selection, SourceID: state.SourceID, FileID: state.FileID}, capture)
+		err = s.Store.SaveBinding(ctx, Binding{Actor: actor, ActorCapture: capture, Selection: selection, SourceID: state.SourceID, FileID: state.FileID, SelectorSlotID: slot, SelectionRevision: state.SelectionRevision}, capture)
 	}
 	if err != nil {
 		return nil, catalogError(err)
@@ -169,10 +192,10 @@ func (s *Service) ValidateGifAsset(ctx context.Context, req *chatv1.ValidateGifA
 	if _, err := requireCaller(ctx, req, chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName); err != nil {
 		return nil, err
 	}
-	if req.GetProtocolVersion() != 1 || !canonicalID(req.GetActorAccountId()) || !canonicalID(req.GetActorProfileId()) || !canonicalID(req.GetFileId()) || !validSelection(req.GetProvider(), req.GetProviderId()) || !validDestination(req.GetDestinationChat()) {
+	if req.GetProtocolVersion() != 2 || !canonicalID(req.GetActorAccountId()) || !canonicalID(req.GetActorProfileId()) || !canonicalID(req.GetFileId()) || !validSelection(req.GetProvider(), req.GetProviderId()) || !validDestination(req.GetDestinationChat()) {
 		return nil, status.Error(codes.InvalidArgument, "invalid GIF source tuple")
 	}
-	if s == nil || s.Store == nil || s.Authority == nil {
+	if s == nil || s.Store == nil || s.Authority == nil || s.Files == nil {
 		return nil, status.Error(codes.Unavailable, "catalog authority unavailable")
 	}
 	actor := Actor{AccountID: uuid.MustParse(req.ActorAccountId), ProfileID: uuid.MustParse(req.ActorProfileId)}
@@ -195,8 +218,22 @@ func (s *Service) ValidateGifAsset(ctx context.Context, req *chatv1.ValidateGifA
 	if !found {
 		return nil, status.Error(codes.NotFound, "catalog asset unavailable")
 	}
-	if binding.Actor != actor || binding.ActorCapture != capture || binding.Selection != selection || binding.FileID != file || binding.SourceID == uuid.Nil {
+	if binding.Legacy || binding.Actor != actor || binding.ActorCapture != capture || binding.Selection != selection || binding.FileID != file || binding.SourceID == uuid.Nil || binding.SelectorSlotID == uuid.Nil || binding.SelectionRevision == 0 {
 		return nil, status.Error(codes.Unavailable, "invalid catalog source binding")
+	}
+	state, err := s.Files.Status(ctx, binding)
+	if err != nil {
+		return nil, catalogError(err)
+	}
+	if !validState(state, actor, selection) || !validOrderedState(state) || state.SourceID != binding.SourceID || state.FileID != binding.FileID || state.ActorCapture != capture || state.SelectionRevision != binding.SelectionRevision || state.SelectionRevision != state.CurrentSelectionRevision || state.Status != "ready" {
+		return nil, catalogError(ErrSelectionSuperseded)
+	}
+	current, stillCurrent, err := s.Store.FindBinding(ctx, actor, selection, file, capture)
+	if err != nil {
+		return nil, catalogError(err)
+	}
+	if !stillCurrent || current != binding {
+		return nil, catalogError(ErrSelectorInvalidated)
 	}
 	if _, err := requireCaller(ctx, req, chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName); err != nil {
 		return nil, err
@@ -204,7 +241,7 @@ func (s *Service) ValidateGifAsset(ctx context.Context, req *chatv1.ValidateGifA
 	if err := s.Authority.RequirePlaintextMember(ctx, actor, req.DestinationChat); err != nil {
 		return nil, destinationError(err)
 	}
-	return &chatv1.ValidateGifAssetResponse{SourceId: binding.SourceID.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), Provider: selection.Provider, ProviderId: selection.ProviderID, FileId: file.String()}, nil
+	return &chatv1.ValidateGifAssetResponse{SourceId: binding.SourceID.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), Provider: selection.Provider, ProviderId: selection.ProviderID, FileId: file.String(), SelectionRevision: state.SelectionRevision, CurrentSelectionRevision: state.CurrentSelectionRevision}, nil
 }
 
 func (s *Service) AuthorizeCatalogDestination(ctx context.Context, req *chatv1.AuthorizeCatalogDestinationRequest) (*chatv1.AuthorizeCatalogDestinationResponse, error) {
@@ -327,6 +364,9 @@ func validState(state FileState, actor Actor, selection Selection) bool {
 func terminalState(state string) bool {
 	return state == "failed" || state == "deleted" || state == "expired"
 }
+func validOrderedState(state FileState) bool {
+	return state.SelectionRevision > 0 && state.CurrentSelectionRevision >= state.SelectionRevision && state.CurrentSelectionRevision <= uint64(1<<63-1)
+}
 
 func sourceGeneration(actor Actor, capture ActorCapture, requestHash, sourceURL string) uuid.UUID {
 	// The UUID is an identity, never a capability. Full File operation fences still
@@ -360,7 +400,7 @@ func catalogError(err error) error {
 		return status.Error(codes.DeadlineExceeded, "catalog request deadline exceeded")
 	case errors.Is(err, ErrBindingConflict) || status.Code(err) == codes.AlreadyExists:
 		return status.Error(codes.AlreadyExists, "catalog operation conflicts with its original selection")
-	case errors.Is(err, ErrActorRetired) || status.Code(err) == codes.FailedPrecondition:
+	case errors.Is(err, ErrSelectionSuperseded) || errors.Is(err, ErrSelectorInvalidated) || errors.Is(err, ErrActorRetired) || status.Code(err) == codes.FailedPrecondition:
 		return status.Error(codes.FailedPrecondition, "catalog operation is terminal or unavailable")
 	case status.Code(err) == codes.PermissionDenied:
 		return status.Error(codes.PermissionDenied, "catalog asset denied")

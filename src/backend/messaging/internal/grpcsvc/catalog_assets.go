@@ -30,6 +30,8 @@ type CatalogAssetCoordinator struct {
 	Issuer *principal.Issuer
 }
 
+const catalogAuthorityProtocolVersion uint32 = 2
+
 type catalogDestinationKey struct{}
 type catalogDestination struct {
 	chat      uuid.UUID
@@ -64,7 +66,7 @@ func catalogUUID(value string) bool {
 	return err == nil && id != uuid.Nil && id.String() == value
 }
 func validCatalogSnapshot(r *filev1.ValidateCatalogAssetResponse, account, profile uuid.UUID, fileID string) bool {
-	return r != nil && catalogUUID(r.SourceId) && r.ActorAccountId == account.String() && r.ActorProfileId == profile.String() && r.FileId == fileID && r.Provider != "" && r.ProviderId != "" && r.ObjectRevision > 0 && r.Intent == "gif" && r.FileType == "video" && (r.ScanResult == "clean" || r.ScanResult == "skipped") && len(r.SourceSha256) == 32 && len(r.DeliveredSha256) == 32 && r.DeliveredSizeBytes > 0 && r.DeliveredSizeBytes <= 5<<20 && (r.DeliveredMimeType == "video/mp4" || r.DeliveredMimeType == "video/webm")
+	return r != nil && catalogUUID(r.SourceId) && r.ActorAccountId == account.String() && r.ActorProfileId == profile.String() && r.FileId == fileID && r.Provider != "" && r.ProviderId != "" && r.SelectionRevision > 0 && r.SelectionRevision == r.CurrentSelectionRevision && r.ObjectRevision > 0 && r.Intent == "gif" && r.FileType == "video" && (r.ScanResult == "clean" || r.ScanResult == "skipped") && len(r.SourceSha256) == 32 && len(r.DeliveredSha256) == 32 && r.DeliveredSizeBytes > 0 && r.DeliveredSizeBytes <= 5<<20 && (r.DeliveredMimeType == "video/mp4" || r.DeliveredMimeType == "video/webm")
 }
 
 // validateCatalogAttachments returns only attachments still requiring ordinary
@@ -93,7 +95,7 @@ func (s *MessagingGRPC) validateCatalogAttachments(ctx context.Context, chatID *
 		if !catalogUUID(fileID) {
 			return nil, status.Error(codes.InvalidArgument, "invalid attachment file")
 		}
-		lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 1, ActorAccountId: account.String(), ActorProfileId: profile.String(), FileId: fileID}
+		lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: catalogAuthorityProtocolVersion, ActorAccountId: account.String(), ActorProfileId: profile.String(), FileId: fileID}
 		call, cancel, err := c.signed(ctx, "file", filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, lookup)
 		if err != nil {
 			return nil, err
@@ -126,7 +128,7 @@ func (s *MessagingGRPC) validateCatalogAttachments(ctx context.Context, chatID *
 		if scope.chat != *chatID || scope.kind == chatv1.ChatType_CHAT_TYPE_UNSPECIFIED {
 			return nil, status.Error(codes.Unavailable, "catalog destination admission unavailable")
 		}
-		chatRequest := &chatv1.ValidateGifAssetRequest{ProtocolVersion: 1, ActorAccountId: account.String(), ActorProfileId: profile.String(), Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: fileID, DestinationChat: &chatv1.ChatRef{Id: chatID.String(), Type: &scope.kind}}
+		chatRequest := &chatv1.ValidateGifAssetRequest{ProtocolVersion: catalogAuthorityProtocolVersion, ActorAccountId: account.String(), ActorProfileId: profile.String(), Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: fileID, DestinationChat: &chatv1.ChatRef{Id: chatID.String(), Type: &scope.kind}}
 		call, cancel, err = c.signed(ctx, "chat", chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName, chatRequest)
 		if err != nil {
 			return nil, err
@@ -136,10 +138,10 @@ func (s *MessagingGRPC) validateCatalogAttachments(ctx context.Context, chatID *
 		if err != nil {
 			return nil, err
 		}
-		if binding == nil || binding.SourceId != snapshot.SourceId || binding.ActorAccountId != snapshot.ActorAccountId || binding.ActorProfileId != snapshot.ActorProfileId || binding.Provider != snapshot.Provider || binding.ProviderId != snapshot.ProviderId || binding.FileId != snapshot.FileId {
+		if binding == nil || binding.SourceId != snapshot.SourceId || binding.ActorAccountId != snapshot.ActorAccountId || binding.ActorProfileId != snapshot.ActorProfileId || binding.Provider != snapshot.Provider || binding.ProviderId != snapshot.ProviderId || binding.FileId != snapshot.FileId || binding.SelectionRevision != snapshot.SelectionRevision || binding.CurrentSelectionRevision != snapshot.CurrentSelectionRevision {
 			return nil, status.Error(codes.FailedPrecondition, "catalog source binding mismatch")
 		}
-		validation := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: fileID, ActorAccountId: account.String(), ActorProfileId: profile.String()}
+		validation := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: catalogAuthorityProtocolVersion, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: fileID, ActorAccountId: account.String(), ActorProfileId: profile.String()}
 		call, cancel, err = c.signed(ctx, "file", filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName, validation)
 		if err != nil {
 			return nil, err
