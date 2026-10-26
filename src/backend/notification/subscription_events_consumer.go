@@ -45,6 +45,14 @@ func runSubscriptionEventsConsumer(
 			_ = msg.Ack()
 			return
 		}
+		// A7 authority/channel activation is not installed yet. The legacy
+		// recognizer has no durable effects, so canonical work must remain on the
+		// broker rather than being logged and ACKed as if delivery succeeded.
+		if env.GetProtocolVersion() != 0 || env.GetEntitlementChanged() != nil || env.GetGraceReminder() != nil {
+			natslog.LogConsume(logger, msg, slog.LevelWarn, "subscription delivery runtime unavailable")
+			consumer.JetStreamConsumeAck(msg, fmt.Errorf("subscription delivery runtime unavailable"))
+			return
+		}
 		if routeSubscriptionNotification(handler, &env) {
 			natslog.LogConsume(logger, msg, slog.LevelInfo, "subscription notification event consumed")
 		}
