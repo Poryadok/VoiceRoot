@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"io"
+	"net"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var ErrTrackedWrite = errors.New("tracked object write unavailable")
@@ -200,6 +203,18 @@ func (s *FilesStore) SettleTrackedWrite(ctx context.Context, key string, generat
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = s.settleTrackedWriteAttempt(ctx, key, generation, acknowledged)
+		if err == nil || ctx.Err() != nil || !retryableTrackedSettlement(err) {
+			return err
+		}
+	}
+	return err
+}
+
+// Only idempotent database settlement is retried. Storage is never invoked here.
+func (s *FilesStore) settleTrackedWriteAttempt(ctx context.Context, key string, generation uuid.UUID, acknowledged bool) error {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -226,6 +241,18 @@ func (s *FilesStore) SettleTrackedWrite(ctx context.Context, key string, generat
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func retryableTrackedSettlement(err error) bool {
+	if errors.Is(err, ErrTrackedWrite) || errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	var database *pgconn.PgError
+	if errors.As(err, &database) {
+		return strings.HasPrefix(database.Code, "08") || database.Code == "57P01" || database.Code == "57P02" || database.Code == "57P03" || database.Code == "40001" || database.Code == "40P01"
+	}
+	var network net.Error
+	return pgconn.SafeToRetry(err) || errors.As(err, &network) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed)
 }
 
 func trackedWriteLedgerExists(ctx context.Context, tx pgx.Tx) (bool, error) {
