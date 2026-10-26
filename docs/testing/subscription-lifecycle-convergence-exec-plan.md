@@ -537,13 +537,14 @@ aggregate lock immediately before publishing the saved bytes with
 lease can complete it. Lost PubAck and expired leases resend the same bytes and
 ID. A PubAck records transport acknowledgement, not push or in-app delivery.
 
-The wire draft uses the existing `GraceReminder` arm: envelope protocol version
+The producer/BE-118 consumer wire uses the existing `GraceReminder` arm: envelope protocol version
 1, canonical aggregate key and grace revision; payload payer `account_id`,
 `plan`, `day`, and Space-only `space_id`. For Space the payer is its purchaser,
 not its owner or an arbitrary member. Notification must resolve the payer's
 authoritative primary profile, compare the matching entitlement revision and
-window, and deduplicate logical/channel effects. Producer/consumer agreement is
-recorded in BE-027/BE-118 before this draft becomes an agreed contract.
+window, and deduplicate logical/channel effects. Producer Anton-144 and consumer
+Anton-146 agreed this wire for BE-117/BE-118; that agreement excludes activation,
+protected final-state comparison and delivery acceptance.
 
 The isolated PostgreSQL and embedded JetStream tests cover atomic schedule and
 rollback, replay, D1/D3/D7 windows, concurrent claims, multiple Spaces for one
