@@ -3,15 +3,10 @@ package r2file
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
-	"net/http"
-	"strings"
-	"time"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
+	"strings"
 )
 
 var ErrCatalogPut = errors.New("catalog source write unavailable")
@@ -30,11 +25,8 @@ func (p *S3R2Presigner) PutCatalogSource(ctx context.Context, key string, body [
 			return ErrCatalogPut
 		}
 	}
-	transport := awshttp.NewBuildableClient().GetTransport()
-	transport.DisableKeepAlives = true
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	_, e := p.client.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(p.bucket), Key: aws.String(key), Body: bytes.NewReader(body), ContentType: aws.String("image/gif")}, func(options *s3.Options) { options.RetryMaxAttempts = 1; options.HTTPClient = client })
+	sum := sha256.Sum256(body)
+	e := p.PutTrackedObject(ctx, TrackedPut{Key: key, Kind: "catalog_source", ContentType: "image/gif", ExpectedSHA256: sum[:], ExpectedSize: int64(len(body))}, body)
 	if e != nil {
 		return errors.Join(ErrCatalogPut, ctx.Err())
 	}
