@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CatalogAssetService_ResolveGifAsset_FullMethodName  = "/voice.chat.v1.CatalogAssetService/ResolveGifAsset"
-	CatalogAssetService_ValidateGifAsset_FullMethodName = "/voice.chat.v1.CatalogAssetService/ValidateGifAsset"
+	CatalogAssetService_ResolveGifAsset_FullMethodName             = "/voice.chat.v1.CatalogAssetService/ResolveGifAsset"
+	CatalogAssetService_ValidateGifAsset_FullMethodName            = "/voice.chat.v1.CatalogAssetService/ValidateGifAsset"
+	CatalogAssetService_AuthorizeCatalogDestination_FullMethodName = "/voice.chat.v1.CatalogAssetService/AuthorizeCatalogDestination"
 )
 
 // CatalogAssetServiceClient is the client API for CatalogAssetService service.
@@ -33,6 +34,8 @@ type CatalogAssetServiceClient interface {
 	ResolveGifAsset(ctx context.Context, in *ResolveGifAssetRequest, opts ...grpc.CallOption) (*ResolveGifAssetResponse, error)
 	// @voice.security=protected;callers=service:messaging
 	ValidateGifAsset(ctx context.Context, in *ValidateGifAssetRequest, opts ...grpc.CallOption) (*ValidateGifAssetResponse, error)
+	// @voice.security=protected;callers=service:file
+	AuthorizeCatalogDestination(ctx context.Context, in *AuthorizeCatalogDestinationRequest, opts ...grpc.CallOption) (*AuthorizeCatalogDestinationResponse, error)
 }
 
 type catalogAssetServiceClient struct {
@@ -63,6 +66,16 @@ func (c *catalogAssetServiceClient) ValidateGifAsset(ctx context.Context, in *Va
 	return out, nil
 }
 
+func (c *catalogAssetServiceClient) AuthorizeCatalogDestination(ctx context.Context, in *AuthorizeCatalogDestinationRequest, opts ...grpc.CallOption) (*AuthorizeCatalogDestinationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(AuthorizeCatalogDestinationResponse)
+	err := c.cc.Invoke(ctx, CatalogAssetService_AuthorizeCatalogDestination_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CatalogAssetServiceServer is the server API for CatalogAssetService service.
 // All implementations must embed UnimplementedCatalogAssetServiceServer
 // for forward compatibility.
@@ -73,6 +86,8 @@ type CatalogAssetServiceServer interface {
 	ResolveGifAsset(context.Context, *ResolveGifAssetRequest) (*ResolveGifAssetResponse, error)
 	// @voice.security=protected;callers=service:messaging
 	ValidateGifAsset(context.Context, *ValidateGifAssetRequest) (*ValidateGifAssetResponse, error)
+	// @voice.security=protected;callers=service:file
+	AuthorizeCatalogDestination(context.Context, *AuthorizeCatalogDestinationRequest) (*AuthorizeCatalogDestinationResponse, error)
 	mustEmbedUnimplementedCatalogAssetServiceServer()
 }
 
@@ -88,6 +103,9 @@ func (UnimplementedCatalogAssetServiceServer) ResolveGifAsset(context.Context, *
 }
 func (UnimplementedCatalogAssetServiceServer) ValidateGifAsset(context.Context, *ValidateGifAssetRequest) (*ValidateGifAssetResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateGifAsset not implemented")
+}
+func (UnimplementedCatalogAssetServiceServer) AuthorizeCatalogDestination(context.Context, *AuthorizeCatalogDestinationRequest) (*AuthorizeCatalogDestinationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AuthorizeCatalogDestination not implemented")
 }
 func (UnimplementedCatalogAssetServiceServer) mustEmbedUnimplementedCatalogAssetServiceServer() {}
 func (UnimplementedCatalogAssetServiceServer) testEmbeddedByValue()                             {}
@@ -146,6 +164,24 @@ func _CatalogAssetService_ValidateGifAsset_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CatalogAssetService_AuthorizeCatalogDestination_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AuthorizeCatalogDestinationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CatalogAssetServiceServer).AuthorizeCatalogDestination(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CatalogAssetService_AuthorizeCatalogDestination_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CatalogAssetServiceServer).AuthorizeCatalogDestination(ctx, req.(*AuthorizeCatalogDestinationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CatalogAssetService_ServiceDesc is the grpc.ServiceDesc for CatalogAssetService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -160,6 +196,10 @@ var CatalogAssetService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateGifAsset",
 			Handler:    _CatalogAssetService_ValidateGifAsset_Handler,
+		},
+		{
+			MethodName: "AuthorizeCatalogDestination",
+			Handler:    _CatalogAssetService_AuthorizeCatalogDestination_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

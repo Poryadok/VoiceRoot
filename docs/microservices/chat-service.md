@@ -854,6 +854,42 @@ message SearchGifsResponse {
 
 Search metadata grants no File access or send authority. `file_id` stays empty until a genuine import/binding exists; a nonempty ID may still be pending and must pass authoritative File readiness and Messaging admission. Protected source resolution/import, shared-asset provenance, E2E handling, capability-manifest wiring and selected-asset → ready File → Messaging proof remain separate prerequisites.
 
+### Protected catalog source authority (non-E2E implementation in progress)
+
+The separate `voice.chat.v1.CatalogAssetService` schema in `catalog_assets.proto`
+has no ordinary-listener or raw-header fallback. `ResolveGifAsset` accepts only a
+verified Gateway delegated active account/profile; `ValidateGifAsset` is a pure
+Messaging read of the exact admitted source/profile/File tuple.
+`AuthorizeCatalogDestination` is a pure File read: it independently checks current
+membership, authoritative chat type and plaintext state, returning the exact
+request echo, observed type and current opaque Chat actor generations. File must
+match these generations to its original import before fetching/retrying.
+
+The operation-status lookup in protected File precedes any new provider lookup.
+It preserves original import identity after a lost Chat response or CDN URL
+rotation; compacted operations deny rather than recreate an old File. Chat keeps
+only active admitted File projections, with no raw source URL, full request body
+or second permanent operation ledger. A source-generation UUID is an identity,
+never an access capability. Source URLs exist only transiently on the protected
+Chat-to-File request. The complete producer/consumer protocol and its remaining
+integration work are in [the catalog asset contract](../testing/be085-catalog-asset-contract.md).
+
+Migration `000028_catalog_assets` adds account/profile purpose-HMAC gates and
+active source bindings. Admission consults fresh protected Auth account/session
+and User ownership/deletion facts. Save locks account then profile gates, checks
+both captured generations and inserts the binding in that same transaction.
+Purge closes the same gates and removes raw actor/catalog projections; old
+operations cannot attach to a restored generation. Gate/event aliases are
+restricted pseudonymous anti-resurrection evidence, not anonymous data or public
+lookup keys. Historical HMAC keys remain available; an unknown/changed registered
+key fails closed, and nonempty rollback refuses to erase the negative state.
+
+User snapshots are not atomic cross-service permits. `UNKNOWN` denies admission
+without authorizing erasure; account events and bounded profile reconciliation
+must supply the cleanup integration. Runtime wiring, physical File import and
+Messaging proof remain open at this source checkpoint. This does not activate a
+live provider, E2E GIFs or sticker-source admission.
+
 Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/{id}/install`, `GET /api/v1/gifs/search?q=…&cursor=…`, `GET /api/v1/gifs/trending` — full table [api-gateway.md](api-gateway.md) § Stickers and GIF.
 
 **Send wire:** Messaging `SendMessage` + `content_type=STICKER|GIF` — full validation — [messaging-service.md](messaging-service.md) § Stickers and GIF.
