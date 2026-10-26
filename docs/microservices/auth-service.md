@@ -382,6 +382,26 @@ credentials. Request replies use `_INBOX.voice.auth.requests.>`.
 - **[auth-and-contacts](../features/auth-and-contacts.md):** перед выдачей access JWT Auth вызывает internal User gRPC `EnsurePrimaryProfile`; claim `profile_id` равен User-owned `profiles.id`. Auth не получает credentials к `user_db`; см. [primary-profile-bootstrap.md](primary-profile-bootstrap.md), [EXEC_PLAN.md](../EXEC_PLAN.md).
 - OTP генерация и валидация (email)
 
+### Ordered Subscription account lifecycle facts (source producer)
+
+The additive V33/canonical 000034 source migration captures the actual Auth
+`account_deletion_operations` insertion and conditional account restore in their
+own database transactions. `account_subscription_lifecycle_heads` allocates an
+increasing raw-lifetime account revision; immutable
+`account_subscription_lifecycle_outbox` facts retain the deletion operation UUID
+as the cycle, stable event UUID, account/epoch, original scheduled time and fixed
+P30D (720-hour) deadline. Operation replay and successful-restore retry do not
+append another fact. Receipt cleanup cannot erase undelivered facts or reset the
+head. Both migration engines preserve their exact predecessor history profile.
+
+`DELETE_SCHEDULED` is an input to Subscription's immediate revocation path;
+`RESTORE_REQUESTED` requests provider reconciliation and never grants paid time
+or resumes recurring billing by itself. A legacy restore without a proven cycle
+keeps the free path and creates no guessed authority fact. This producer is not a
+protected transport, complete purge/HMAC retirement, account CURRENT certificate
+or activated paid boundary. Those remain required by the
+[authority ExecPlan](../testing/subscription-current-authority-exec-plan.md).
+
 ### PR и ревью (bootstrap JWT ↔ User)
 
 - Перед merge — зелёный job **`backend-auth`** в CI (`mvn -B test`). Интеграция Auth JDBC + Redis и контракт Auth ↔ User gRPC покрывают регистрацию / login / refresh / validate, включая совпадение `profile_id` с ответом `EnsurePrimaryProfile` и fail-closed поведение.

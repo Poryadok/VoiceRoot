@@ -418,13 +418,21 @@ The Space tombstone keeps 365 days from `purged_at`.
 | Store owner | Additive durable data |
 |---|---|
 | `subscription_db` | permanent personal/Space aggregate revision, normalized provider outcome/order evidence, immutable provider-neutral lifecycle journal, leased event/reminder outbox, current-entitlement snapshot rows |
-| `auth_db` | subscription event inbox and durable personal tier/revision/deadline projection used for JWT issuance |
+| `auth_db` | subscription event inbox and durable personal tier/revision/deadline projection used for JWT issuance; source-side `account_subscription_lifecycle_heads` and `account_subscription_lifecycle_outbox` for ordered Auth deletion/restore facts |
 | `user_db` | subscription event inbox/projection, downgrade pending selection and subscription-specific profile freeze provenance |
 | `file_db` | immutable `retention_account_id` per exact reference, subscription event inbox/projection and revision-serialized retention deadlines |
 | `space_db` | subscription event inbox and revisioned Space Pro projection including grace |
 | `voice_db` | subscription event inbox and revisioned Space Pro admission projection; personal quality uses Auth's short-lived trusted entitlement claim |
 | `notification_db` | subscription event inbox/projection, unique in-app reminder and leased push dispatch outbox |
 | Analytics ClickHouse ingest | canonical event-ID dedupe and complete lifecycle reason mapping; no Analytics PostgreSQL database |
+
+The Auth source capture pair V33/000034 retains immutable `DELETE_SCHEDULED`
+and `RESTORE_REQUESTED` facts independently of coordinator-receipt retention.
+The source revision spans delete/restore cycles during the raw account lifetime;
+raw rows belong to Auth and cascade with that account. This source stage does
+not qualify permanent HMAC retirement or P30D cleanup/transport: those remain
+required before the current-entitlement boundary is admitted. A restore fact
+does not grant paid access or resume billing.
 
 Account deletion adds an opaque `deletion_fence_id`, one-use cycle/`purge_at`, a
 Subscription participant receipt and permanent purpose-scoped HMAC tombstone.

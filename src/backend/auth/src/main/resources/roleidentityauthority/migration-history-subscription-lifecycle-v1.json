@@ -1,0 +1,186 @@
+{
+  "profile": "subscription-lifecycle-capture-v1",
+  "canonicalVersion": 34,
+  "flyway": [
+    {
+      "version": "1",
+      "script": "V1__auth_schema.sql",
+      "checksum": -374473020,
+      "sha256": "83f69c4ad7f8a37d8bc58602277501d485415efc206e20675f6a56d974b49432"
+    },
+    {
+      "version": "2",
+      "script": "V2__backup_codes.sql",
+      "checksum": -418298815,
+      "sha256": "312b3aac93ea20128c4ca48211f0b03b763f79088835a8a093d11981c5f1cbec"
+    },
+    {
+      "version": "3",
+      "script": "V3__linked_identities.sql",
+      "checksum": -1580479165,
+      "sha256": "dabc9bb71964e08c173396bab098bdf0e45854f42e995623c1bd2f17d88670e9"
+    },
+    {
+      "version": "4",
+      "script": "V4__e2e_key_backups.sql",
+      "checksum": 598022095,
+      "sha256": "9186c2cdceb18d5e8bf215b8fdc4eb7d089d999876052baa64d1e38dca35bcc3"
+    },
+    {
+      "version": "5",
+      "script": "V5__accounts_last_online_at.sql",
+      "checksum": -1464173197,
+      "sha256": "9751d42e11de665cfdbd9d38d02cb30bc85439d949b9e8fa7598a3a708e32b59"
+    },
+    {
+      "version": "6",
+      "script": "V6__guest_reminder_last_shown_at.sql",
+      "checksum": -29039831,
+      "sha256": "207ae4413500dd5c02e210eed60fd5e90cf652c431be0070e9d02b782a10bf21"
+    },
+    {
+      "version": "7",
+      "script": "V7__linked_identities_profile_id.sql",
+      "checksum": 687236620,
+      "sha256": "1ff92abd546ebd541c2bc2c1f5a3181a8b5ce2ede2c3da74c78d2bcde32684f2"
+    },
+    {
+      "version": "8",
+      "script": "V8__guest_conversion_operations.sql",
+      "checksum": 1728507542,
+      "sha256": "4011ad8fbdd47141acb46a84750c192ef6986657ea40f94e0d957d28d6b52366"
+    },
+    {
+      "version": "9",
+      "script": "V9__accounts_session_epoch.sql",
+      "checksum": 1957744057,
+      "sha256": "e0c9810f7603a4f7544db7b5a4a3301a414e017487164ff20db53c7056b089cf"
+    },
+    {
+      "version": "10",
+      "script": "V10__account_deletion_operations.sql",
+      "checksum": 579299026,
+      "sha256": "39e7644c2b9d00a48cc2931d5427242455c5eafc90256161bc495aad0785a0a3"
+    },
+    {
+      "version": "11",
+      "script": "V11__regular_email_verification_pending.sql",
+      "checksum": -136490510,
+      "sha256": "69895b6822d3684f3cad8a56c14663368e2d4dfef330a7919dc879c845e092eb"
+    },
+    {
+      "version": "12",
+      "script": "V12__ownership_transfer_proofs.sql",
+      "checksum": 783903191,
+      "sha256": "d8bb335db193a5ad7221fb79d563957f4c4c51ce3223c69593860df768a9e99c"
+    },
+    {
+      "version": "13",
+      "script": "V13__space_deletion_proofs.sql",
+      "checksum": -2096795640,
+      "sha256": "786719916281680fed6866cad46962cf593b8094066229bea82e4e0df4365608"
+    },
+    {
+      "version": "14",
+      "script": "V14__verification_source_sync.sql",
+      "checksum": 1413327056,
+      "sha256": "b61514b44b8289a8802602008e220851ab97e3dcc3b22ad5c7cc99f702820717"
+    },
+    {
+      "version": "15",
+      "script": "V15__refresh_tokens_profile_id.sql",
+      "checksum": -1487889784,
+      "sha256": "be0dc007eb79353f22f171ea23ad2f67ee3f1f7b579e8699121070e101a6f034"
+    },
+    {
+      "version": "16",
+      "script": "V16__sdk_identity.sql",
+      "checksum": -1120448086,
+      "sha256": "a2d757b896232851bfa436e7e2e710378c41a4b386bbf79586d67676e0e72c95"
+    },
+    {
+      "version": "17",
+      "script": "V17__sdk_authorization.sql",
+      "checksum": -1845439557,
+      "sha256": "2c4144721925f50d5044c5258b843162ae9d922e2b89af0d0a86bc541b1a8182"
+    },
+    {
+      "version": "18",
+      "script": "V18__sdk_conversion_preparation.sql",
+      "checksum": -2124892700,
+      "sha256": "3d9e96cc36a7e34acc1150a5d3a61e568616f56e6733ed2bec6582b33c94611f"
+    },
+    {
+      "version": "19",
+      "script": "V19__sdk_device_keys.sql",
+      "checksum": 348551280,
+      "sha256": "7e7c866067a6a273590338af015a61f67590378b039d527d187dac8d4858a0ea"
+    },
+    {
+      "version": "20",
+      "script": "V20__sdk_device_authority_issues.sql",
+      "checksum": 1686579632,
+      "sha256": "db2ea1a32f29e32ac5cb1c7e1238a081da553301a247b886e87753741302b878"
+    },
+    {
+      "version": "21",
+      "script": "V21__sdk_game_binding_handoff.sql",
+      "checksum": 1111947715,
+      "sha256": "11c563c1ca30090ffcb946e298e6ce619489202810ee2b53a8f63b04f20c6f0a"
+    },
+    {
+      "version": "22",
+      "script": "V22__sdk_game_binding_approval_challenge.sql",
+      "checksum": -1496489375,
+      "sha256": "1c46a72ad5f299edd7210259c2d3f298d6598c7318452e52b94f9870dbed2c06"
+    },
+    {
+      "version": "23",
+      "script": "V23__sdk_game_binding_approval_code_receipt.sql",
+      "checksum": 2005189186,
+      "sha256": "a7cce463c282bcdb8c3949bc3f49321c83e7f1b72bdd98cb9c5991cc648226d1"
+    },
+    {
+      "version": "24",
+      "script": "V24__sdk_game_message_execution_grants.sql",
+      "checksum": 2048701961,
+      "sha256": "6c4095fa66c17224456ff743fdbef43128f593d1fd1841c0cc1e516bed7d40e2"
+    },
+    {
+      "version": "25",
+      "script": "V25__sdk_conversion_owner_receipts.sql",
+      "checksum": -1476335151,
+      "sha256": "2aafdb0b0a6fe319e724dc30ee00d9fac7534f86a8dda738e350011850a5ac6f"
+    },
+    {
+      "version": "26",
+      "script": "V26__authority_source_revision.sql",
+      "checksum": -1356890391,
+      "sha256": "7dc77ce6479f7713780a5cc43f211346a781618c1d8a66595c63c1ca9c2e8441"
+    },
+    {
+      "version": "28",
+      "script": "V28__role_identity_owner.sql",
+      "checksum": -1142833847,
+      "sha256": "d45a6d138a1856fffc7fa79834d1c3b175c6fa5ae1f8d768a5f20b19204e670e"
+    },
+    {
+      "version": "31",
+      "script": "V31__auth_identity_ddl_barrier.sql",
+      "checksum": -2048249827,
+      "sha256": "9bc1e3474ba1a2703e661452478b22b7514df0c1322d5e285dd783b6307120b1"
+    },
+    {
+      "version": "32",
+      "script": "V32__linked_oauth_transport.sql",
+      "checksum": -1958853122,
+      "sha256": "812d4f20cd6ea8ccc97104fc1a1bd899e5d3e71a35e8065003eb8babcfcb51cc"
+    },
+    {
+      "version": "33",
+      "script": "V33__subscription_lifecycle_capture.sql",
+      "checksum": 590944410,
+      "sha256": "fbf9d6e8e509f4345d84921f3cf420561e2aaf5c77c16c02f9f453e34afcb7fe"
+    }
+  ]
+}

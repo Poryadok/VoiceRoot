@@ -117,6 +117,54 @@ runtime, writer and reader; they never execute programs or access server files.
 The old-runtime program-role case causally produced a persisted fence before
 the correction, so its rejection is tested independently of a guessed flag.
 
+### Next fact: ordered Auth delete/restore capture
+
+The successor normally merges OAuth predecessor
+`5c0a104631e6b4cea8f5ad74c3b58e7cb3989b07` as copied source, without claiming
+its independent CI or master integration. Existing V32/canonical 000033 and
+their exact history profile remain immutable. The reserved next pair is
+V33/canonical 000034; add a new exact history profile instead of rewriting an
+accepted profile.
+
+Capture actual durable `account_deletion_operations` insertion in its Auth
+transaction, using that operation UUID as the deletion cycle/event identity and
+the account's actual `deleted_at` as scheduled time. Capture the actual conditional
+`JdbcAccountRepository.restoreDeleted` write in its statement transaction. The
+restore fact is `RESTORE_REQUESTED`, never a paid grant: Subscription must still
+reconcile the provider and enforce the original cycle/P30D boundary. Both facts
+use a per-account source revision across delete/restore cycles, stable stored event UUID and complete
+fact columns in an Auth-owned outbox. Replaying an operation, advancing its
+delivery markers or retrying an already successful restore creates no new fact.
+
+Tests drive the real Java transactional deletion starter, real JDBC repository,
+actual Flyway catalog and PostgreSQL triggers; they do not manually insert a
+CURRENT marker or invoke a pretend transport. A floor-store double isolates the
+unrelated Redis dependency and is never claimed as live Redis proof. Required
+RED/GREEN cases are deletion+fact atomicity, external-floor rollback, lost
+response/replay identity, restore+fact rollback and a two-connection concurrent
+restore. Legacy restore with no proven deletion operation remains a functioning
+free path and creates no invented paid-authority fact. No new RPC, dispatcher,
+purge completion, account CURRENT certification or runtime activation is claimed
+by this bounded producer fact; those remain required later stages.
+
+Receipt cleanup must not delete pending facts or reset the head: the deletion
+cycle is an immutable logical reference, independent of coordinator-row retention.
+Raw capture rows are Auth-owned and cascade only with the owning account; terminal
+HMAC retirement and P30D dispatch/purge handling remain required before CURRENT
+qualification. Fixed P30D is 720 hours, independent of a session's DST change.
+Real regressions first erased both pending facts during receipt cleanup and
+extended a Europe/Berlin deadline by one hour before these corrections.
+
+The ordinary Maven lifecycle selected 22 cases with zero failures/errors/skips:
+9 actual capture/rollback/replay/retention/DST/history cases; 2 existing deletion
+repository cases; 6 source-catalog contracts; 4 finite-history tests; and the
+actual fresh Flyway plus pinned canonical-loader parity case. This includes the
+real owning Auth reader accepting the exact appended profile and rejecting a
+changed database checksum. V32/000033 and their accepted profile are unchanged.
+The configured Spring deletion/floor rollback regression also passes separately.
+No full Auth suite, live Redis/provider, protected Subscription RPC or CURRENT
+qualification is inferred from this producer package.
+
 ## Decisions
 
 The privilege fence is a real database boundary: drain old DML under table locks,

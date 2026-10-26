@@ -10,6 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 final class AuthIdentityMigrationHistory {
   private static final JsonNode PROFILE = AuthIdentityDdlGateCatalog.json("migration-history-v1.json");
   private static final JsonNode LINKED_OAUTH = AuthIdentityDdlGateCatalog.json("migration-history-linked-oauth-v1.json");
+  private static final JsonNode SUBSCRIPTION_LIFECYCLE = AuthIdentityDdlGateCatalog.json("migration-history-subscription-lifecycle-v1.json");
   private AuthIdentityMigrationHistory() {}
   static void validate(JdbcTemplate jdbc, AuthIdentityDatabasePolicy.Loader loader) {
     AuthIdentityDdlGateCatalog.require(loader != null);
@@ -28,7 +29,7 @@ final class AuthIdentityMigrationHistory {
     }
   }
   static void validateFlyway(List<Map<String,Object>> rows) {
-    AuthIdentityDdlGateCatalog.require(matchesFlyway(rows,PROFILE) || matchesFlyway(rows,LINKED_OAUTH));
+    AuthIdentityDdlGateCatalog.require(matchesFlyway(rows,PROFILE) || matchesFlyway(rows,LINKED_OAUTH) || matchesFlyway(rows,SUBSCRIPTION_LIFECYCLE));
   }
   private static boolean matchesFlyway(List<Map<String,Object>> rows,JsonNode profile) {
     var expected = new HashMap<String,JsonNode>();
@@ -46,7 +47,8 @@ final class AuthIdentityMigrationHistory {
   static void validateCanonical(List<Map<String,Object>> rows) {
     AuthIdentityDdlGateCatalog.require(rows.size() == 1 && rows.getFirst().get("version") instanceof Number
         && (((Number)rows.getFirst().get("version")).longValue() == PROFILE.path("canonicalVersion").asLong()
-          || ((Number)rows.getFirst().get("version")).longValue() == LINKED_OAUTH.path("canonicalVersion").asLong())
+          || ((Number)rows.getFirst().get("version")).longValue() == LINKED_OAUTH.path("canonicalVersion").asLong()
+          || ((Number)rows.getFirst().get("version")).longValue() == SUBSCRIPTION_LIFECYCLE.path("canonicalVersion").asLong())
         && Boolean.FALSE.equals(rows.getFirst().get("dirty")));
     // A canonical marker is not a checksum or reconstructed Flyway history.
     // Gate and owned V28 object metadata are independently validated in this Tx.

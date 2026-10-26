@@ -57,7 +57,7 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
     AccountDeletionOperationRepository first = repository();
     AccountDeletionOperationRepository second = repository();
     UUID accountId = UUID.randomUUID();
-    seedAccount(accountId);
+    seedAccount(accountId, 7);
     Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
     AccountDeletionOperation operation =
         first.createOrResume(UUID.randomUUID(), accountId, 7, "token-verifier", now);
@@ -106,7 +106,7 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
   void leaseDue_usesTheLeasedRowColumnsAndReturnsARecoverableFencedLease() {
     AccountDeletionOperationRepository repository = repository();
     UUID accountId = UUID.randomUUID();
-    seedAccount(accountId);
+    seedAccount(accountId, 3);
     Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
     AccountDeletionOperation operation =
         repository.createOrResume(UUID.randomUUID(), accountId, 3, "token-verifier", now);
@@ -143,13 +143,13 @@ class AccountDeletionOperationRepositoryJdbcIntegrationTest {
     return new JdbcAccountDeletionOperationRepository(jdbc());
   }
 
-  private void seedAccount(UUID accountId) {
+  private void seedAccount(UUID accountId, long epoch) {
     jdbc().update(
         """
-        INSERT INTO accounts (id, password_hash, type, status, deleted_at)
-        VALUES (:accountId, 'test-hash', 'regular', 'deleted', CURRENT_TIMESTAMP)
+        INSERT INTO accounts (id, password_hash, type, status, deleted_at, session_epoch)
+        VALUES (:accountId, 'test-hash', 'regular', 'deleted', CURRENT_TIMESTAMP, :epoch)
         """,
-        new MapSqlParameterSource("accountId", accountId));
+        new MapSqlParameterSource("accountId", accountId).addValue("epoch", epoch));
   }
 
   private NamedParameterJdbcTemplate jdbc() {
