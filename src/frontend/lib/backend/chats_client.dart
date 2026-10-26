@@ -225,6 +225,8 @@ class StickerPack {
     this.thumbFileId,
     this.creatorProfileId,
     this.stickerCount = 0,
+    this.stickers = const [],
+    this.isPremium = false,
   });
 
   final String id;
@@ -233,6 +235,23 @@ class StickerPack {
   final String? thumbFileId;
   final String? creatorProfileId;
   final int stickerCount;
+  final List<StickerCatalogItem> stickers;
+  final bool isPremium;
+}
+
+class StickerCatalogItem {
+  const StickerCatalogItem({
+    required this.id,
+    required this.fileId,
+    required this.emoji,
+    required this.width,
+    required this.height,
+  });
+  final String id;
+  final String fileId;
+  final String emoji;
+  final int width;
+  final int height;
 }
 
 class StickerPackListData {
@@ -322,9 +341,21 @@ StickerPack stickerPackFromProto(chat_pb.StickerPack pack) => StickerPack(
   id: pack.id,
   title: pack.title,
   isSystem: pack.isSystem,
+  isPremium: pack.isPremium,
   thumbFileId: pack.hasThumbFileId() ? pack.thumbFileId : null,
   creatorProfileId: pack.hasCreatorProfileId() ? pack.creatorProfileId : null,
   stickerCount: pack.stickerCount,
+  stickers: pack.stickers
+      .map(
+        (item) => StickerCatalogItem(
+          id: item.id,
+          fileId: item.fileId,
+          emoji: item.emoji,
+          width: item.width,
+          height: item.height,
+        ),
+      )
+      .toList(growable: false),
 );
 
 /// HTTP client for Chat routes (`/api/v1/chats/**`).

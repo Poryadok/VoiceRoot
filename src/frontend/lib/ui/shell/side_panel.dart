@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../state/auth_providers.dart';
 import '../../state/chat_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/space_providers.dart';
@@ -10,6 +11,7 @@ import '../../theme/voice_emoji_style.dart';
 import '../../theme/voice_layout.dart';
 import '../chat/chat_info_panel.dart';
 import '../chat/composer_panels.dart';
+import '../chat/composer_media_picker.dart';
 import '../chat/group_members_sheet.dart';
 import '../space/space_members_sheet.dart';
 
@@ -178,7 +180,10 @@ class _EmojiPickerBody extends StatelessWidget {
           InkWell(
             onTap: () => onSelected?.call(emoji),
             child: Center(
-              child: Text(emoji, style: VoiceEmojiStyle.textStyle(fontSize: 28)),
+              child: Text(
+                emoji,
+                style: VoiceEmojiStyle.textStyle(fontSize: 28),
+              ),
             ),
           ),
       ],
@@ -202,15 +207,47 @@ void openMembersPanel(
 }
 
 /// Opens emoji picker as transient overlay (§3.6b) — not SideHost.
+// Device-session recents remain separate for each active profile.
+final composerRecentEmojiProvider = StateProvider.family<List<String>, String>(
+  (ref, profileId) => const [],
+);
+
 Future<void> openEmojiPanel(
   BuildContext context,
   WidgetRef ref, {
   required void Function(String emoji) onSelected,
+  BuildContext? anchorContext,
   VoidCallback? onDismiss,
 }) {
+  final profileId = ref.read(authControllerProvider).activeProfileId;
   return showComposerEmojiPanel(
     context,
-    onSelected: onSelected,
+    anchorContext: anchorContext,
+    panelBuilder: (routeContext) => ComposerMediaPickerBody(
+      recentEmoji: profileId == null
+          ? const []
+          : ref.read(composerRecentEmojiProvider(profileId)),
+      onEmojiSelected: (emoji) => Navigator.of(routeContext).pop(emoji),
+    ),
+    recentEmoji: profileId == null
+        ? const []
+        : ref.read(composerRecentEmojiProvider(profileId)),
+    onSelected: (emoji) {
+      if (!ref.context.mounted ||
+          ref.read(authControllerProvider).activeProfileId != profileId) {
+        return;
+      }
+      if (profileId != null) {
+        final recents = ref.read(
+          composerRecentEmojiProvider(profileId).notifier,
+        );
+        recents.state = [
+          emoji,
+          ...recents.state.where((value) => value != emoji),
+        ].take(24).toList(growable: false);
+      }
+      onSelected(emoji);
+    },
     onDismiss: onDismiss,
   );
 }
