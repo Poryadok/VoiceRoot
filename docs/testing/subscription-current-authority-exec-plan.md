@@ -108,6 +108,15 @@ an incomplete legacy-role manifest, and same-request replay rechecks current
 privileges. The sole administrative exception is the actual installing session.
 The fence state is `FENCED`, never `READY` or a per-account CURRENT marker.
 
+Exact-commit review of `d5153d552bb6075846348739df583d0025ee0e14`
+confirmed those corrections and found predefined server-file/program roles could
+still bypass ordinary database ACLs. The role predicate now also rejects
+`pg_read_server_files`, `pg_write_server_files` and `pg_execute_server_program`
+through the complete membership closure. Grant-only negative tests cover old
+runtime, writer and reader; they never execute programs or access server files.
+The old-runtime program-role case causally produced a persisted fence before
+the correction, so its rejection is tested independently of a guessed flag.
+
 ## Decisions
 
 The privilege fence is a real database boundary: drain old DML under table locks,

@@ -1,4 +1,4 @@
-// Package currentauthority implements Subscription's qualified authority kernel.
+// Package currentauthority provides the database fence for Subscription's authority kernel.
 // A privilege fence is only one prerequisite: it never certifies shadow rows,
 // account eligibility, provider provenance, or runtime activation by itself.
 package currentauthority
@@ -265,7 +265,8 @@ func limitedRole(ctx context.Context, tx pgx.Tx, role string) error {
 	var unsafe bool
 	err := tx.QueryRow(ctx, `SELECT r.rolsuper OR r.rolcreaterole OR r.rolcreatedb OR r.rolreplication OR r.rolbypassrls
  OR EXISTS(SELECT 1 FROM pg_roles inherited WHERE pg_has_role(r.oid,inherited.oid,'MEMBER')
- AND (inherited.rolsuper OR inherited.rolcreaterole OR inherited.rolcreatedb OR inherited.rolreplication OR inherited.rolbypassrls))
+	AND (inherited.rolsuper OR inherited.rolcreaterole OR inherited.rolcreatedb OR inherited.rolreplication OR inherited.rolbypassrls
+	OR inherited.rolname IN ('pg_read_server_files','pg_write_server_files','pg_execute_server_program')))
  OR pg_has_role(r.oid,(SELECT datdba FROM pg_database WHERE datname=current_database()),'MEMBER')
 	OR EXISTS(SELECT 1 FROM pg_namespace n WHERE n.nspname='public' AND pg_has_role(r.oid,n.nspowner,'MEMBER'))
  OR EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace

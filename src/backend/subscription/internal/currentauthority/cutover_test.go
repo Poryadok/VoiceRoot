@@ -197,3 +197,25 @@ func TestFenceRejectsOmittedWritableLogin(t *testing.T) {
 	request.Generation = generation
 	require.ErrorIs(t, InstallFence(ctx, pool, request), ErrUnsafeRole, "an omitted writable login invalidates the source-role inventory")
 }
+
+func TestFenceRejectsServerFileAndProgramCapabilities(t *testing.T) {
+	pool := cutoverDB(t)
+	ctx := context.Background()
+	for _, loginRole := range []string{"old_runtime", "canonical_writer", "canonical_reader"} {
+		for _, capability := range []string{"pg_read_server_files", "pg_write_server_files", "pg_execute_server_program"} {
+			t.Run(loginRole+"/"+capability, func(t *testing.T) {
+				// A grant is enough to prove the unsafe capability. This test must
+				// never execute server programs or read/write server files.
+				grant := pgx.Identifier{capability}.Sanitize() + " TO " + pgx.Identifier{loginRole}.Sanitize()
+				_, err := pool.Exec(ctx, "GRANT "+grant+" WITH INHERIT FALSE, SET TRUE")
+				require.NoError(t, err)
+				require.ErrorIs(t, InstallFence(ctx, pool, fenceRequest()), ErrUnsafeRole)
+				_, err = pool.Exec(ctx, "REVOKE "+pgx.Identifier{capability}.Sanitize()+" FROM "+pgx.Identifier{loginRole}.Sanitize())
+				require.NoError(t, err)
+			})
+		}
+	}
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM subscription_authority_fence").Scan(&count))
+	require.Zero(t, count, "no unsafe attempt can persist fence evidence")
+}
