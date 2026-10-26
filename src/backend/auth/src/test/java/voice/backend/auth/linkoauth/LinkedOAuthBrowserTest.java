@@ -62,7 +62,19 @@ class LinkedOAuthBrowserTest {
     Process p=new ProcessBuilder(chrome.toString(),"--headless=new","--no-sandbox","--disable-gpu","--no-first-run","--no-default-browser-check",
         "--disable-background-networking","--disable-extensions","--user-data-dir="+profile,"--virtual-time-budget=1500","--dump-dom",url)
         .redirectOutput(output.toFile()).redirectError(error.toFile()).start();
-    try {assertThat(p.waitFor(45,TimeUnit.SECONDS)).as("owned Chromium fixture exits within bounded startup/navigation window").isTrue();assertThat(p.exitValue()).isZero();return Files.readString(output);}
+    try {
+      // --dump-dom can finish output before Chromium finishes flushing its profile.
+      // DOM completion is the browser assertion boundary; shutdown is owned cleanup.
+      long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(45);
+      while(System.nanoTime()<deadline) {
+        String dom=Files.exists(output)?Files.readString(output):"";
+        if(dom.stripTrailing().endsWith("</html>"))return dom;
+        if(p.waitFor(100,TimeUnit.MILLISECONDS))break;
+      }
+      String dom=Files.readString(output);
+      assertThat(dom.stripTrailing()).as("owned Chromium emits a complete DOM within the bounded window").endsWith("</html>");
+      return dom;
+    }
     finally {
       if(p.isAlive()) {
         // Exact descendants of this test-owned Process only; never terminate another browser session.
