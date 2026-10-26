@@ -94,7 +94,10 @@ Plaintext `application/pdf` documents use the existing `processing` state as a
 durable asynchronous thumbnail queue. The worker renders only page one to PNG
 (at most 320 pixels per edge and 1 MiB), with a 10 MiB input bound, a ten-second
 renderer deadline and one renderer per process. Poppler `pdftoppm` must be
-installed in the File runtime. Encrypted documents bypass server rendering.
+installed in the File runtime; the File image includes `poppler-utils`.
+Startup registers the worker when database and R2 storage are configured and
+refuses missing renderer/schema dependencies or a disabled tracked-write GC
+guard. Encrypted documents bypass server rendering.
 The worker rechecks the confirmed SHA-256 before rendering. The original PDF,
 SHA-256, size and retention deadline remain unchanged.
 Malformed PDFs become `failed`; temporary storage/tool failures remain
