@@ -23,9 +23,11 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 const _urlLauncher = MethodChannel('plugins.flutter.io/url_launcher');
-Future<void>? _goldenFontsFuture;
+bool _goldenFontsLoaded = false;
 
-Future<void> _loadGoldenFonts() => _goldenFontsFuture ??= () async {
+Future<void> _loadGoldenFonts() async {
+  // Each test needs a fresh Future in its own FakeAsync zone.
+  if (_goldenFontsLoaded) return;
   await (FontLoader(
     'MaterialIcons',
   )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
@@ -35,7 +37,8 @@ Future<void> _loadGoldenFonts() => _goldenFontsFuture ??= () async {
         ..addFont(rootBundle.load('assets/fonts/NotoSans-SemiBold.ttf'))
         ..addFont(rootBundle.load('assets/fonts/NotoSans-Bold.ttf')))
       .load();
-}();
+  _goldenFontsLoaded = true;
+}
 
 class _MemoryAuthStorage implements AuthSessionStorage {
   @override
