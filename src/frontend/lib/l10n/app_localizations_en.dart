@@ -2457,6 +2457,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get verificationNotVerified => 'Not verified';
 
   @override
+  String get verificationPendingDnsChallenge => 'DNS challenge pending';
+
+  @override
+  String get verificationPendingDnsDomainLabel => 'Domain';
+
+  @override
+  String get verificationPendingDnsTxtRecordLabel => 'TXT record';
+
+  @override
+  String get verificationPendingDnsExpiresAtLabel => 'Expires';
+
+  @override
   String get verificationOrganizationUnavailable =>
       'Organization verification unavailable';
 

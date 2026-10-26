@@ -2480,6 +2480,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get verificationNotVerified => 'Не верифицирован';
 
   @override
+  String get verificationPendingDnsChallenge => 'Ожидается DNS-проверка';
+
+  @override
+  String get verificationPendingDnsDomainLabel => 'Домен';
+
+  @override
+  String get verificationPendingDnsTxtRecordLabel => 'TXT-запись';
+
+  @override
+  String get verificationPendingDnsExpiresAtLabel => 'Истекает';
+
+  @override
   String get verificationOrganizationUnavailable =>
       'Верификация организации недоступна';
 

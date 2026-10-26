@@ -42,8 +42,77 @@ void main() {
         expect(status.profileId, 'profile-1');
         expect(status.verificationType, 'personal');
         expect(status.badge, 'twitch');
+        expect(status.pendingOrganizationChallenge, isNull);
       },
     );
+
+    test(
+      'GET status restores the owner-scoped pending organization challenge',
+      () async {
+        const expiry = '2026-10-27T12:34:56.123456789Z';
+        final mock = MockClient((request) async {
+          expect(request.method, 'GET');
+          expect(request.url.path, '/api/v1/users/me/verification');
+          expect(request.headers['Authorization'], auth);
+          return http.Response(
+            jsonEncode({
+              'verification_status': {
+                'profile_id': 'profile-1',
+                'verification_type': 'none',
+              },
+              'pending_organization_challenge': {
+                'domain': 'example.org',
+                'txt_record': 'voice-verify=exact-token',
+                'expires_at': expiry,
+              },
+            }),
+            200,
+          );
+        });
+        final client = VoiceUsersClient(
+          gateway: gatewayHttpForTest(mock, config: config),
+        );
+
+        final result = await client.getVerificationStatus(authorization: auth);
+
+        expect(result, isA<UsersApiOk<VerificationStatus>>());
+        final status = (result as UsersApiOk<VerificationStatus>).data;
+        final challenge = status.pendingOrganizationChallenge;
+        expect(challenge, isNotNull);
+        expect(challenge!.domain, 'example.org');
+        expect(challenge.txtRecord, 'voice-verify=exact-token');
+        expect(challenge.expiresAt, DateTime.parse(expiry));
+      },
+    );
+
+    test('GET status rejects a malformed pending challenge payload', () async {
+      final client = VoiceUsersClient(
+        gateway: gatewayHttpForTest(
+          MockClient(
+            (_) async => http.Response(
+              jsonEncode({
+                'verification_status': {
+                  'profile_id': 'profile-1',
+                  'verification_type': 'none',
+                },
+                'pending_organization_challenge': {
+                  'domain': 'example.org',
+                  'txt_record': 'voice-verify=exact-token',
+                  'expires_at': 'not-a-timestamp',
+                },
+              }),
+              200,
+            ),
+          ),
+          config: config,
+        ),
+      );
+
+      final result = await client.getVerificationStatus(authorization: auth);
+
+      expect(result, isA<UsersApiFailure>());
+      expect((result as UsersApiFailure).errorCode, 'invalid_response');
+    });
 
     test(
       'POST organization start sends domain and maps the TXT challenge',

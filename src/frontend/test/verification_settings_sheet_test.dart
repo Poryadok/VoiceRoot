@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -32,11 +33,143 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 }
 
 void main() {
+  testWidgets(
+    'late verification response from the prior profile cannot clear current status',
+    (tester) async {
+      final firstStatusResponse = Completer<http.Response>();
+      var statusRequests = 0;
+      final statusAuthorizations = <String?>[];
+      late AuthController authController;
+      final mock = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/users/me/verification') {
+          statusRequests++;
+          statusAuthorizations.add(request.headers['Authorization']);
+          if (statusRequests == 1) return firstStatusResponse.future;
+          return http.Response(
+            jsonEncode({
+              'verification_status': {
+                'profile_id': 'profile-b',
+                'verification_type': 'none',
+              },
+              'pending_organization_challenge': {
+                'domain': 'profile-b.example.org',
+                'txt_record': 'voice-verify=profile-b-token',
+                'expires_at': DateTime.now()
+                    .add(const Duration(days: 1))
+                    .toUtc()
+                    .toIso8601String(),
+              },
+            }),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/linked-accounts') {
+          return http.Response(jsonEncode({'linked_accounts': []}), 200);
+        }
+        return http.Response('not found', 404);
+      });
+      final gateway = GatewayHttpClient(
+        httpClient: mock,
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            voiceAuthClientProvider.overrideWithValue(
+              VoiceAuthClient(gateway: gateway),
+            ),
+            voiceUsersClientProvider.overrideWithValue(
+              VoiceUsersClient(gateway: gateway),
+            ),
+            authControllerProvider.overrideWith((ref) {
+              authController = AuthController(
+                authClient: ref.watch(voiceAuthClientProvider),
+                storage: ref.watch(authSessionStorageProvider),
+                guestCredentialsStorage: ref.watch(
+                  guestCredentialsStorageProvider,
+                ),
+              );
+              authController.state = const AuthState(
+                session: AuthSession(
+                  accessToken: 'profile-a-token',
+                  refreshToken: 'profile-a-refresh',
+                  expiresInSeconds: 900,
+                  accountId: 'account-a',
+                  activeProfileId: 'profile-a',
+                ),
+              );
+              return authController;
+            }),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: VerificationSettingsSheet()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(VerificationSettingsSheet.verificationStatusKey),
+      );
+      await tester.pump();
+      expect(statusRequests, 1);
+
+      authController.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'profile-b-token',
+          refreshToken: 'profile-b-refresh',
+          expiresInSeconds: 900,
+          accountId: 'account-b',
+          activeProfileId: 'profile-b',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(statusRequests, 2);
+      expect(statusAuthorizations, [
+        'Bearer profile-a-token',
+        'Bearer profile-b-token',
+      ]);
+      expect(
+        find.text('profile-b.example.org'),
+        findsOneWidget,
+        reason:
+            'auth=$statusAuthorizations; text=${tester.widgetList<Text>(find.byType(Text)).map((widget) => widget.data).join(' | ')}',
+      );
+      expect(find.text('voice-verify=profile-b-token'), findsOneWidget);
+
+      firstStatusResponse.complete(
+        http.Response(jsonEncode({'message': 'stale profile A failure'}), 503),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('profile-b.example.org'), findsOneWidget);
+      expect(find.text('voice-verify=profile-b-token'), findsOneWidget);
+      expect(find.textContaining('stale profile A failure'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('verification status destination loads selected profile status', (
     tester,
   ) async {
     final requests = <http.Request>[];
     var statusAttempts = 0;
+    late AuthController authController;
     final mock = MockClient((request) async {
       requests.add(request);
       if (request.method == 'GET' &&
@@ -51,10 +184,29 @@ void main() {
         return http.Response(
           jsonEncode({
             'verification_status': {
-              'profile_id': 'profile-selected',
-              'verification_type': 'organization',
-              'badge': 'organization',
+              'profile_id': statusAttempts == 2
+                  ? 'profile-selected'
+                  : 'profile-next',
+              'verification_type': 'none',
             },
+            if (statusAttempts == 2)
+              'pending_organization_challenge': {
+                'domain': 'example.org',
+                'txt_record': 'voice-verify=restored-token',
+                'expires_at': DateTime.now()
+                    .add(const Duration(days: 1))
+                    .toUtc()
+                    .toIso8601String(),
+              },
+            if (statusAttempts == 3)
+              'pending_organization_challenge': {
+                'domain': 'old.example.org',
+                'txt_record': 'voice-verify=expired-token',
+                'expires_at': DateTime.now()
+                    .subtract(const Duration(minutes: 1))
+                    .toUtc()
+                    .toIso8601String(),
+              },
           }),
           200,
         );
@@ -88,14 +240,14 @@ void main() {
             VoiceUsersClient(gateway: gateway),
           ),
           authControllerProvider.overrideWith((ref) {
-            final controller = AuthController(
+            authController = AuthController(
               authClient: ref.watch(voiceAuthClientProvider),
               storage: ref.watch(authSessionStorageProvider),
               guestCredentialsStorage: ref.watch(
                 guestCredentialsStorageProvider,
               ),
             );
-            controller.state = const AuthState(
+            authController.state = const AuthState(
               session: AuthSession(
                 accessToken: 'access-token',
                 refreshToken: 'refresh-token',
@@ -104,7 +256,7 @@ void main() {
                 activeProfileId: 'profile-selected',
               ),
             );
-            return controller;
+            return authController;
           }),
         ],
         child: const MaterialApp(
@@ -159,8 +311,45 @@ void main() {
       find.byKey(VerificationSettingsSheet.verificationStatusViewKey),
       findsOneWidget,
     );
-    expect(find.text('Verified'), findsOneWidget);
-    expect(find.text('organization'), findsOneWidget);
+    expect(find.text('Not verified'), findsOneWidget);
+    expect(
+      find.byKey(VerificationSettingsSheet.pendingChallengeKey),
+      findsOneWidget,
+    );
+    expect(find.text('example.org'), findsOneWidget);
+    expect(find.text('voice-verify=restored-token'), findsOneWidget);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(VerificationSettingsSheet.pendingChallengeTxtRecordKey),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('voice-verify=restored-token'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+
+    authController.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'next-access-token',
+        refreshToken: 'next-refresh-token',
+        expiresInSeconds: 900,
+        accountId: 'account-1',
+        activeProfileId: 'profile-next',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('profile-next'), findsOneWidget);
+    expect(
+      find.byKey(VerificationSettingsSheet.pendingChallengeKey),
+      findsNothing,
+    );
+    expect(find.text('old.example.org'), findsNothing);
+    expect(statusAttempts, 3);
   });
 
   testWidgets('shows and mutates links only for the selected profile', (

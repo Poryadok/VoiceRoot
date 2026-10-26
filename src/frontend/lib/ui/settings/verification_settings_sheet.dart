@@ -19,12 +19,28 @@ class VerificationSettingsSheet extends ConsumerStatefulWidget {
   static const Key selectedProfileKey = Key('verification_selected_profile');
   static const Key twitchLinkKey = Key('verification_twitch_link');
   static const Key youtubeLinkKey = Key('verification_youtube_link');
-  static const Key verificationStatusKey = Key('verification_status_destination');
+  static const Key verificationStatusKey = Key(
+    'verification_status_destination',
+  );
   static const Key verificationStatusViewKey = Key('verification_status_view');
   static const Key verificationStatusRetryKey = Key(
     'verification_status_retry',
   );
-  static const Key verificationStatusValueKey = Key('verification_status_value');
+  static const Key verificationStatusValueKey = Key(
+    'verification_status_value',
+  );
+  static const Key pendingChallengeKey = Key(
+    'verification_pending_organization_challenge',
+  );
+  static const Key pendingChallengeDomainKey = Key(
+    'verification_pending_challenge_domain',
+  );
+  static const Key pendingChallengeTxtRecordKey = Key(
+    'verification_pending_challenge_txt_record',
+  );
+  static const Key pendingChallengeExpiresAtKey = Key(
+    'verification_pending_challenge_expires_at',
+  );
   static const Key organizationUnavailableKey = Key(
     'verification_organization_unavailable',
   );
@@ -47,7 +63,13 @@ class _VerificationSettingsSheetState
   var _showVerificationStatus = false;
   var _verificationStatusLoading = false;
   VerificationStatus? _verificationStatus;
+  PendingOrganizationChallenge? _pendingOrganizationChallenge;
   String? _verificationStatusError;
+  var _hasObservedSession = false;
+  int? _observedSessionInstallGeneration;
+  String? _observedAccountId;
+  String? _observedProfileId;
+  var _verificationStatusRequestGeneration = 0;
 
   @override
   void initState() {
@@ -165,11 +187,13 @@ class _VerificationSettingsSheetState
   }
 
   Future<void> _loadVerificationStatus() async {
+    final requestGeneration = ++_verificationStatusRequestGeneration;
     final session = ref.read(authControllerProvider).session;
     if (session == null) {
       setState(() {
         _verificationStatusLoading = false;
         _verificationStatus = null;
+        _pendingOrganizationChallenge = null;
         _verificationStatusError = 'not_authenticated';
       });
       return;
@@ -177,31 +201,34 @@ class _VerificationSettingsSheetState
     final authController = ref.read(authControllerProvider.notifier);
     final requestIdentity = authController.gatewayRequestIdentity;
     final installGeneration = authController.sessionInstallGeneration;
-    if (requestIdentity == null ||
-        ref.read(profileSwitchInProgressProvider)) {
+    if (requestIdentity == null || ref.read(profileSwitchInProgressProvider)) {
+      setState(() {
+        _verificationStatusLoading = false;
+        _verificationStatus = null;
+        _pendingOrganizationChallenge = null;
+      });
       return;
     }
     setState(() {
       _verificationStatusLoading = true;
       _verificationStatus = null;
+      _pendingOrganizationChallenge = null;
       _verificationStatusError = null;
     });
     final result = await ref
         .read(voiceUsersClientProvider)
         .getVerificationStatus(authorization: session.authorizationHeader);
-    if (!mounted) return;
+    if (!mounted || requestGeneration != _verificationStatusRequestGeneration) {
+      return;
+    }
     if (ref.read(profileSwitchInProgressProvider) ||
         authController.sessionInstallGeneration != installGeneration ||
         authController.gatewayRequestIdentity != requestIdentity ||
         ref.read(authControllerProvider).session?.activeProfileId !=
             session.activeProfileId) {
-      setState(() {
-        _verificationStatusLoading = false;
-        _verificationStatus = null;
-        _verificationStatusError = AppLocalizations.of(
-          context,
-        )!.commonActionFailed;
-      });
+      // Session/profile listeners clear and reload their own state. This
+      // response no longer owns the visible request and must not publish over
+      // it (or its loading/error state).
       return;
     }
     switch (result) {
@@ -209,19 +236,31 @@ class _VerificationSettingsSheetState
         if (data.profileId != session.activeProfileId) {
           setState(() {
             _verificationStatusLoading = false;
-            _verificationStatusError = 'invalid_response';
+            _verificationStatus = null;
+            _pendingOrganizationChallenge = null;
+            _verificationStatusError = AppLocalizations.of(
+              context,
+            )!.commonActionFailed;
           });
           return;
         }
+        final challenge = data.pendingOrganizationChallenge;
         setState(() {
           _verificationStatusLoading = false;
           _verificationStatus = data;
+          _pendingOrganizationChallenge =
+              data.verificationType == 'none' &&
+                  challenge != null &&
+                  challenge.expiresAt.isAfter(DateTime.now())
+              ? challenge
+              : null;
           _verificationStatusError = null;
         });
       case UsersApiFailure(:final message, :final statusCode):
         setState(() {
           _verificationStatusLoading = false;
           _verificationStatus = null;
+          _pendingOrganizationChallenge = null;
           _verificationStatusError = settingsLoadErrorMessage(
             AppLocalizations.of(context)!,
             message,
@@ -239,8 +278,55 @@ class _VerificationSettingsSheetState
       ? l10n.verificationNotVerified
       : l10n.verificationVerified;
 
+  void _syncObservedSession() {
+    final authController = ref.read(authControllerProvider.notifier);
+    final session = ref.read(authControllerProvider).session;
+    _observedSessionInstallGeneration = authController.sessionInstallGeneration;
+    _observedAccountId = session?.accountId;
+    _observedProfileId = session?.activeProfileId;
+    _hasObservedSession = true;
+  }
+
+  void _clearVerificationForSessionChange({required bool reload}) {
+    _verificationStatusRequestGeneration++;
+    final session = ref.read(authControllerProvider).session;
+    setState(() {
+      _selectedProfileId = session?.activeProfileId;
+      _verificationStatusLoading = false;
+      _verificationStatus = null;
+      _pendingOrganizationChallenge = null;
+      _verificationStatusError = session == null ? 'not_authenticated' : null;
+    });
+    if (reload && _showVerificationStatus && session != null) {
+      _loadVerificationStatus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!_hasObservedSession) _syncObservedSession();
+    ref.listen(authControllerProvider, (previous, next) {
+      final authController = ref.read(authControllerProvider.notifier);
+      final session = next.session;
+      final generation = authController.sessionInstallGeneration;
+      final changed =
+          generation != _observedSessionInstallGeneration ||
+          session?.accountId != _observedAccountId ||
+          session?.activeProfileId != _observedProfileId;
+      if (!changed) return;
+      _syncObservedSession();
+      _clearVerificationForSessionChange(
+        reload: !ref.read(profileSwitchInProgressProvider),
+      );
+    });
+    ref.listen<bool>(profileSwitchInProgressProvider, (previous, switching) {
+      if (switching) {
+        _clearVerificationForSessionChange(reload: false);
+      } else if (previous == true) {
+        _syncObservedSession();
+        _clearVerificationForSessionChange(reload: true);
+      }
+    });
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
 
@@ -259,9 +345,8 @@ class _VerificationSettingsSheetState
                       tooltip: MaterialLocalizations.of(
                         context,
                       ).backButtonTooltip,
-                      onPressed: () => setState(
-                        () => _showVerificationStatus = false,
-                      ),
+                      onPressed: () =>
+                          setState(() => _showVerificationStatus = false),
                       icon: const Icon(Icons.arrow_back),
                     ),
                     Expanded(
@@ -295,23 +380,38 @@ class _VerificationSettingsSheetState
                     label: Text(l10n.commonRetry),
                   ),
                 ] else if (_verificationStatus != null)
-                  Semantics(
-                    liveRegion: true,
-                    child: ListTile(
-                      key: VerificationSettingsSheet.verificationStatusValueKey,
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        _verificationStatus!.verificationType == 'none'
-                            ? Icons.verified_outlined
-                            : Icons.verified,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Semantics(
+                        liveRegion: true,
+                        child: ListTile(
+                          key: VerificationSettingsSheet
+                              .verificationStatusValueKey,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            _verificationStatus!.verificationType == 'none'
+                                ? Icons.verified_outlined
+                                : Icons.verified,
+                          ),
+                          title: Text(
+                            _verificationStatusLabel(
+                              l10n,
+                              _verificationStatus!,
+                            ),
+                          ),
+                          subtitle: _verificationStatus!.badge == null
+                              ? null
+                              : Text(_verificationStatus!.badge!),
+                        ),
                       ),
-                      title: Text(
-                        _verificationStatusLabel(l10n, _verificationStatus!),
-                      ),
-                      subtitle: _verificationStatus!.badge == null
-                          ? null
-                          : Text(_verificationStatus!.badge!),
-                    ),
+                      if (_pendingOrganizationChallenge != null) ...[
+                        const SizedBox(height: 16),
+                        _PendingOrganizationChallengeView(
+                          challenge: _pendingOrganizationChallenge!,
+                        ),
+                      ],
+                    ],
                   ),
               ],
             ),
@@ -432,6 +532,54 @@ class _VerificationSettingsSheetState
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PendingOrganizationChallengeView extends StatelessWidget {
+  const _PendingOrganizationChallengeView({required this.challenge});
+
+  final PendingOrganizationChallenge challenge;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final localExpiry = challenge.expiresAt.toLocal();
+    final material = MaterialLocalizations.of(context);
+    final expiry =
+        '${material.formatMediumDate(localExpiry)} '
+        '${material.formatTimeOfDay(TimeOfDay.fromDateTime(localExpiry))}';
+    final textTheme = Theme.of(context).textTheme;
+
+    return Semantics(
+      container: true,
+      child: Column(
+        key: VerificationSettingsSheet.pendingChallengeKey,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.verificationPendingDnsChallenge,
+            style: textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          Text(l10n.verificationPendingDnsDomainLabel),
+          SelectableText(
+            challenge.domain,
+            key: VerificationSettingsSheet.pendingChallengeDomainKey,
+          ),
+          const SizedBox(height: 8),
+          Text(l10n.verificationPendingDnsTxtRecordLabel),
+          SelectableText(
+            challenge.txtRecord,
+            key: VerificationSettingsSheet.pendingChallengeTxtRecordKey,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${l10n.verificationPendingDnsExpiresAtLabel}: $expiry',
+            key: VerificationSettingsSheet.pendingChallengeExpiresAtKey,
+          ),
+        ],
       ),
     );
   }
