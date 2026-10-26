@@ -97,7 +97,10 @@ renderer deadline and one renderer per process. Poppler `pdftoppm` must be
 installed in the File runtime. Encrypted documents bypass server rendering.
 The original PDF, SHA-256, size and retention deadline remain unchanged.
 Malformed PDFs become `failed`; temporary storage/tool failures remain
-`processing` and retry. Thumbnail keys are persisted in File/blob storage
+`processing` and retry. For [Poppler's exit contract](https://manpages.debian.org/bookworm/poppler-utils/pdftoppm.1.en.html),
+PDF-open (1) and PDF-permission (3) failures are permanent; output-open (2),
+other (99), unknown exits and killed processes remain retryable. Cancellation
+also leaves the document retryable. Thumbnail keys are persisted in File/blob storage
 before object writes, so crashes and ambiguous PUT responses leave GC-visible
 objects. Ready metadata and its redacted preview outbox event commit together.
 

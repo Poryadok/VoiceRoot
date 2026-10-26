@@ -64,7 +64,10 @@ func (p Renderer) Render(ctx context.Context, raw []byte) ([]byte, error) {
 	}
 	if err != nil {
 		var exit *exec.ExitError
-		if errors.As(err, &exit) {
+		// Poppler documents 1 (PDF open) and 3 (PDF permissions) as
+		// document errors. Output-open (2), other (99), unknown and killed
+		// processes remain retryable; they do not prove invalid input.
+		if errors.As(err, &exit) && (exit.ExitCode() == 1 || exit.ExitCode() == 3) {
 			return nil, ErrInvalidPDF
 		}
 		return nil, errors.New("PDF renderer unavailable")
