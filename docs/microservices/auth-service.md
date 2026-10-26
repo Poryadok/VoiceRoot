@@ -861,6 +861,63 @@ their own evidence.
 
 ### Linked provider verification
 
+#### Callback/return transport v1 (default-off implementation)
+
+The [linked-account transport contract](../todo/client.md#oauth-callbackresume-transport-contract-v1--target)
+defines Auth-owned HTTPS callback processing, durable attempt/staged result,
+provider S256 plus independent client return S256, and authenticated one-time
+finalization. Bind the original access JWT account/profile/`jti`/epoch/expiry;
+refresh or profile/session replacement starts a new attempt. Defaults are
+`PT300S` attempt and `PT60S` result, capped at original access expiry. Provider
+registrations, exact origins and secrets are validated deployment configuration;
+their absence does not block implementing the default-off fixture flow.
+Provider activation and YouTube qualification remain separate. The existing
+unbound `POST .../{provider}/callback` is blocked with `oauth_unavailable` after
+authentication. `LinkedOAuthController` owns the new link/consume/cancel routes
+and public GET callback; migration `V32__linked_oauth_transport.sql` stores durable
+attempts. Operational loader parity is `000033_linked_oauth_transport.up.sql`;
+its downgrade refuses destructive removal of attempts/receipts. The preexisting
+exact migration-history profile stays intact, and a separate linked-OAuth profile
+adds only the known Flyway32/canonical33 pair; unknown, dirty or mixed histories
+still fail closed. The callback returns a nonce-CSP HTML bridge which scrubs query/fragment
+before an allowlisted Web navigation or an explicit Windows “Return to Voice”
+action. A nonempty fragment prevents handoff. Every constructed return URL ends
+with an explicit empty `#`; provider query values are never forwarded.
+
+Configuration uses `auth.linked-oauth.enabled` (default `false`), `.revision`,
+`.encryption-key-base64` (dedicated nonzero 32-byte AES-256 key), `.attempt-ttl`
+(`PT300S` maximum), `.result-ttl` (`PT60S` maximum), and `.web-origin`. Under each
+`.twitch` / `.youtube`: `.enabled` (default `false`), `.s256` (default `false`),
+`.authorization-url`, `.token-url`, `.identity-url`, `.client-id`, `.client-secret`,
+`.callback-uri`, `.web.enabled`/`.web.return-uri`, and
+`.windows.enabled`/`.windows.return-uri`. Endpoints are exact, without wildcard,
+userinfo, query or fragment. Callback path must match the provider; Web return
+origin must exactly match `.web-origin`; Windows uses an exact registered `voice:`
+route through the bridge. Enabled incomplete settings fail startup and require
+Auth PostgreSQL plus current User profile authority. Mobile remains disabled.
+No checked-in configuration enables any registration. YouTube start stays
+unavailable until canonical membership plus verified-channel evidence is defined.
+
+State/result handles persist only as SHA-256 hashes. Provider proof, staged result
+and newly committed provider tokens use attempt/purpose- or source-bound AES-GCM
+envelopes. A no-key JDBC worker runs cleanup every 30 seconds independently of
+transport/provider enablement or credentials; disabling routes does not retain
+expired ciphertext. Memory mode has no worker/store dependency. A pre-V32 store
+with transport disabled is left unchanged; the worker never creates/repairs schema.
+Ordinary Auth scheduling controls still apply. Expiry/revocation checks fence use
+immediately. New encrypted sources remain unknown on recheck if their key is
+unavailable. Tagged Twitch sources recheck through the validated new registration's
+exact identity endpoint and client ID; legacy rows keep the legacy registration.
+Consume commits source, durable sync target and result consumption
+in one Auth transaction; pending User sync is not a claim of projection success.
+Legacy YouTube refresh treats qualification as unknown and preserves source and
+revision; it no longer infers criterion loss from upload permission. Explicit
+unlink, Twitch refresh and already durable sync-target retries remain unchanged.
+The portable [HTTP fixture](../../src/backend/auth/src/test/resources/linked-oauth-transport-v1.json)
+records exact wire responses. Source-backed PostgreSQL, stub-IdP, controller and
+optional local Chromium checks do not establish live provider, Flutter, packaged
+Windows or mobile acceptance.
+
 `linked_identities` хранит единственную account/provider identity вместе с owning
 `profile_id` и монотонной `source_revision`. Активную identity нельзя молча перенести на
 другой профиль: V1 требует unlink → link. `verification_source_sync_targets` — durable

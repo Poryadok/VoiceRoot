@@ -48,6 +48,16 @@ copy_reports "${TMP_DIR}/skipped"
 sed -i 's/skipped="0"/skipped="1"/' "${TMP_DIR}/skipped/TEST-voice.backend.auth.AuthJdbcRedisIntegrationTest.xml"
 expect_fail "${TMP_DIR}/skipped"
 
+echo "== missing linked OAuth transport suite fails =="
+copy_reports "${TMP_DIR}/missing-linked-oauth"
+rm -f "${TMP_DIR}/missing-linked-oauth/TEST-voice.backend.auth.linkoauth.LinkedOAuthJdbcTest.xml"
+expect_fail "${TMP_DIR}/missing-linked-oauth"
+
+echo "== skipped linked OAuth transport suite fails =="
+copy_reports "${TMP_DIR}/skipped-linked-oauth"
+sed -i 's/skipped="0"/skipped="1"/' "${TMP_DIR}/skipped-linked-oauth/TEST-voice.backend.auth.linkoauth.LinkedOAuthJdbcTest.xml"
+expect_fail "${TMP_DIR}/skipped-linked-oauth"
+
 echo "== failing Testcontainers suite fails =="
 copy_reports "${TMP_DIR}/failed"
 sed -i 's/failures="0"/failures="1"/' "${TMP_DIR}/failed/TEST-voice.backend.auth.AuthJdbcRedisIntegrationTest.xml"

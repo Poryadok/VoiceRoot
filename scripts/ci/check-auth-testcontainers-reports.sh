@@ -26,6 +26,7 @@ required_suites=(
   "voice.backend.auth.ProfilesVerificationIntegrationTest"
   "voice.backend.auth.SessionEpochRepositoryJdbcIntegrationTest"
   "voice.backend.auth.SetAccountStatusIntegrationTest"
+  "voice.backend.auth.linkoauth.LinkedOAuthJdbcTest"
   "voice.backend.auth.service.RedisAccountRestoreTokenStoreIntegrationTest"
   "voice.backend.auth.service.RedisOtpThrottleIntegrationTest"
   "voice.backend.auth.sessionepoch.RedisSessionEpochFloorStoreIntegrationTest"

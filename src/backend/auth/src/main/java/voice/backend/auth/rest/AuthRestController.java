@@ -267,14 +267,9 @@ public class AuthRestController {
   public Map<String, String> twitchCallback(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody OAuthCallbackRequest request) {
-    TokenClaims claims = authService.validate(authorization);
-    var result =
-        linkedAccountsService.completeTwitchCallback(
-            java.util.UUID.fromString(claims.userId()),
-            java.util.UUID.fromString(claims.profileId()),
-            request.code(),
-            request.redirectUri());
-    return Map.of("verification_type", result.verificationType(), "badge", result.badge());
+    authService.validate(authorization);
+    // Unbound legacy callbacks cannot bypass the one-time transport.
+    throw new AuthException("oauth_unavailable");
   }
 
   @PostMapping("/linked-accounts/twitch/unlink")
@@ -287,32 +282,12 @@ public class AuthRestController {
     return ResponseEntity.noContent().build();
   }
 
-  @PostMapping("/linked-accounts/twitch/link")
-  public Map<String, String> twitchLinkStart(
-      @RequestHeader(name = "Authorization", required = false) String authorization,
-      @RequestBody(required = false) OAuthLinkStartRequest request) {
-    authService.validate(authorization);
-    String redirect =
-        request == null || request.redirectUri() == null || request.redirectUri().isBlank()
-            ? "https://app.voice.test/oauth/twitch"
-            : request.redirectUri();
-    String state = request == null ? null : request.state();
-    return Map.of(
-        "authorization_url", linkedAccountsService.buildTwitchAuthorizeUrl(redirect, state));
-  }
-
   @PostMapping("/linked-accounts/youtube/callback")
   public Map<String, String> youtubeCallback(
       @RequestHeader(name = "Authorization", required = false) String authorization,
       @Valid @RequestBody OAuthCallbackRequest request) {
-    TokenClaims claims = authService.validate(authorization);
-    var result =
-        linkedAccountsService.completeYoutubeCallback(
-            java.util.UUID.fromString(claims.userId()),
-            java.util.UUID.fromString(claims.profileId()),
-            request.code(),
-            request.redirectUri());
-    return Map.of("verification_type", result.verificationType(), "badge", result.badge());
+    authService.validate(authorization);
+    throw new AuthException("oauth_unavailable");
   }
 
   @PostMapping("/linked-accounts/youtube/unlink")
@@ -323,20 +298,6 @@ public class AuthRestController {
         java.util.UUID.fromString(claims.userId()),
         java.util.UUID.fromString(claims.profileId()));
     return ResponseEntity.noContent().build();
-  }
-
-  @PostMapping("/linked-accounts/youtube/link")
-  public Map<String, String> youtubeLinkStart(
-      @RequestHeader(name = "Authorization", required = false) String authorization,
-      @RequestBody(required = false) OAuthLinkStartRequest request) {
-    authService.validate(authorization);
-    String redirect =
-        request == null || request.redirectUri() == null || request.redirectUri().isBlank()
-            ? "https://app.voice.test/oauth/youtube"
-            : request.redirectUri();
-    String state = request == null ? null : request.state();
-    return Map.of(
-        "authorization_url", linkedAccountsService.buildYoutubeAuthorizeUrl(redirect, state));
   }
 
   @GetMapping("/.well-known/jwks.json")
@@ -455,9 +416,6 @@ public class AuthRestController {
 
   public record OAuthCallbackRequest(
       @NotBlank String code, @JsonProperty("redirect_uri") String redirectUri) {}
-
-  public record OAuthLinkStartRequest(
-      @JsonProperty("redirect_uri") String redirectUri, String state) {}
 
   /** Aligns with proto `RegisterResponse` / `AuthSession` nesting. */
   public record SessionEnvelope(@JsonProperty("session") SessionBody session) {
