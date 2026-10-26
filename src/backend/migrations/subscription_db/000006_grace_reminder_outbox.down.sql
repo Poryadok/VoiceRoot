@@ -1,0 +1,1 @@
+DROP TABLE subscription_grace_reminders;
