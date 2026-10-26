@@ -31,7 +31,7 @@ func TestCatalogLookupRequiresRealReadyBindingAndLiveBlob(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, out.GetOrdinaryFile())
 	require.Equal(t, f.source.String(), out.GetCatalog().SourceId)
-	r := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1, SourceId: f.source.String(), Provider: "fixture", ProviderId: "asset-1", FileId: f.file.String(), ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String()}
+	r := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 2, SourceId: f.source.String(), Provider: "fixture", ProviderId: "asset-1", FileId: f.file.String(), ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String()}
 	_, err = files.ValidateCatalogFile(ctx, r, time.Now())
 	require.NoError(t, err)
 	r.SourceId = uuid.NewString()

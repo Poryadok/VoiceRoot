@@ -285,3 +285,47 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 PR898 source and generated File proto ownership must be reconciled before File
 API edits. Full delivery depends on the protected Chat producer, not its preview
 search API. Encrypted-DM privacy semantics remain explicitly open.
+
+### Protocol 2 ordering and shared physical custody checkpoint
+
+The isolated protocol-only branch is frozen at
+`19ad40c1b77dee9716d1af040f67447c101a448e` (parent exact `d3d0e5`), with no
+import-executor ancestry. The isolated tracked-write core is frozen at
+`1484a90b1924abb0a731ed5458957235b304e33c`, parent `c46b13b4`; PDF owner126
+consumed it by normal merge. Migration11 is owner126's schema-only
+`8e8de42bcb4c9b8f757d814a884bda29b337bc3f`, consumed without PDF source edits.
+The core retries only idempotent database settlement, never PUT. Real
+terminated-connection RED57P01 became race GREEN8.888s. Source settlement now
+records the physical outcome before caller/actor publication checks (source
+`73817aa183333d86954cb000548b7db310e20c3d`); cancellation RED STARTED became
+GREEN in the focused write/purge/direct-cleanup race matrix21.126s.
+
+Migration12 and the File store now assign one positive selection revision in
+the pending-admission transaction. The stable account lock and complete retained
+HMAC keyring locate a single selector counter across rotation. Operations/assets
+carry immutable admission proof; retained v1 rows are historical and cannot
+become new v2 admissions. Retry returns its original revision and current head.
+File Lookup/Validate require an exact live current head in addition to existing
+ready/scan/representation/actor predicates. Status reports both revisions;
+only the separate exact minimized terminal-asset proof permits zero revisions.
+Terminal File transitions/source retirement clear current identity but preserve
+the opaque aggregate highwater and terminal fence, never restoring older READY
+assets. Compact head state has no raw actor/provider/URL fields.
+
+Actual PostgreSQL tests cover A1/B2, retry A1/head2, terminal B then fresh3,
+READY A denied by pending B and after B failure, simultaneous admissions2/3,
+key rotation without a second counter, missing retained keys, and legacy replay
+failure rather than fresh NotFound. Focused ordering race14.448s, complete
+catalog matrix84.266s, File short and scoped vet passed. Native byte proof was
+rerun under v2: actual127B GIF ->1613B MP4 +68B WebP, revision3, using the pinned
+FFmpeg helper/image and actual File worker/object bytes. Actor/destination/source
+authorities remain injected in that engineering test; this is not cross-service
+Messaging insertion/acquisition proof.
+
+Activation remains incomplete: File runtime composition/reconciliation,
+catalog reference-acquisition currentness and immutable retention-account
+contract, derived GIF tracked writes, unknown remote-write recovery and purge
+minimization remain required. The current unresolved-write File FK/tombstone
+does not justify retaining raw uploader/profile identifiers indefinitely.
+Encrypted-DM identity disclosure and installed-sticker source authority remain
+outside this GIF/non-E2E implementation.

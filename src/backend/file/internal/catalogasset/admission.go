@@ -33,7 +33,7 @@ func canonicalID(value string) bool {
 // ValidateReady verifies the exact expected binding and closed File predicate.
 // The caller must separately authenticate the source, actor and destination.
 func ValidateReady(request *filev1.ValidateCatalogAssetRequest, snapshot *filev1.ValidateCatalogAssetResponse, state LifecycleState, now time.Time) error {
-	if request == nil || snapshot == nil || request.ProtocolVersion != 1 || len(request.ProtoReflect().GetUnknown()) != 0 {
+	if request == nil || snapshot == nil || request.ProtocolVersion != 2 || len(request.ProtoReflect().GetUnknown()) != 0 {
 		return ErrAdmission
 	}
 	for _, id := range []string{request.SourceId, request.ActorAccountId, request.ActorProfileId, request.FileId} {
@@ -45,6 +45,9 @@ func ValidateReady(request *filev1.ValidateCatalogAssetRequest, snapshot *filev1
 		return ErrAdmission
 	}
 	if snapshot.SourceId != request.SourceId || snapshot.ActorAccountId != request.ActorAccountId || snapshot.ActorProfileId != request.ActorProfileId || snapshot.FileId != request.FileId || snapshot.Provider != request.Provider || snapshot.ProviderId != request.ProviderId {
+		return ErrAdmission
+	}
+	if snapshot.SelectionRevision == 0 || snapshot.SelectionRevision != snapshot.CurrentSelectionRevision {
 		return ErrAdmission
 	}
 	if state.BlobState != "LIVE" || state.BlobDeleting {

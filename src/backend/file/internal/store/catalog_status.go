@@ -17,7 +17,7 @@ import (
 // CatalogStatus recovers File-owned operation authority without a source URL.
 // Operation receipt compaction never erases active asset status authority.
 func (s *FilesStore) CatalogStatus(ctx context.Context, r *filev1.GetCatalogAssetStatusRequest, keys *catalogasset.ReplayKeys, now time.Time) (*filev1.GetCatalogAssetStatusResponse, error) {
-	if r == nil || r.ProtocolVersion != 1 || len(r.ProtoReflect().GetUnknown()) != 0 {
+	if r == nil || r.ProtocolVersion != 2 || len(r.ProtoReflect().GetUnknown()) != 0 {
 		return nil, catalogasset.ErrAdmission
 	}
 	account, e := uuid.Parse(r.ActorAccountId)
@@ -72,9 +72,12 @@ func (s *FilesStore) CatalogStatus(ctx context.Context, r *filev1.GetCatalogAsse
 			var status, outcome, blobState *string
 			var updated, retain *time.Time
 			var deleting *bool
-			e = tx.QueryRow(ctx, `SELECT o.file_id,o.source_id,o.provider,o.provider_id,o.chat_account_generation,o.chat_profile_generation,o.destination_chat_id,o.requested_chat_type,o.selection_sha256,o.outcome,o.retain_until,f.status,f.updated_at,b.state,b.deleted_at IS NOT NULL
+			var protocol int
+			var head *uuid.UUID
+			var revision *int64
+			e = tx.QueryRow(ctx, `SELECT o.file_id,o.source_id,o.provider,o.provider_id,o.chat_account_generation,o.chat_profile_generation,o.destination_chat_id,o.requested_chat_type,o.selection_sha256,o.outcome,o.retain_until,f.status,f.updated_at,b.state,b.deleted_at IS NOT NULL,o.authority_protocol,o.selection_head_id,o.selection_revision
 FROM file_catalog_import_operations o LEFT JOIN files f ON f.id=o.file_id LEFT JOIN file_blobs b ON b.blob_id=f.blob_id
-WHERE o.key_version=$1 AND o.operation_hmac=$2 FOR UPDATE OF o`, d.KeyVersion, d.HMAC).Scan(&file, &source, &out.Provider, &out.ProviderId, &chatAccount, &chatProfile, &chat, &requested, &storedHash, &outcome, &retain, &status, &updated, &blobState, &deleting)
+WHERE o.key_version=$1 AND o.operation_hmac=$2 FOR UPDATE OF o`, d.KeyVersion, d.HMAC).Scan(&file, &source, &out.Provider, &out.ProviderId, &chatAccount, &chatProfile, &chat, &requested, &storedHash, &outcome, &retain, &status, &updated, &blobState, &deleting, &protocol, &head, &revision)
 			if errors.Is(e, pgx.ErrNoRows) {
 				continue
 			}
@@ -95,6 +98,15 @@ WHERE o.key_version=$1 AND o.operation_hmac=$2 FOR UPDATE OF o`, d.KeyVersion, d
 			if !bytes.Equal(storedHash, selectionHash) {
 				return nil, ErrCatalogConflict
 			}
+			if protocol != 2 || head == nil || revision == nil {
+				return nil, ErrCatalogTerminal
+			}
+			current, _, e := readCatalogSelectionTx(ctx, tx, *head, *revision, source, file)
+			if e != nil {
+				return nil, e
+			}
+			out.SelectionRevision = uint64(*revision)
+			out.CurrentSelectionRevision = uint64(current)
 			out.FileId = file.String()
 			out.SourceId = source.String()
 			out.ChatAccountGeneration = chatAccount.String()
@@ -162,18 +174,30 @@ WHERE o.key_version=$1 AND o.operation_hmac=$2 FOR UPDATE OF o`, d.KeyVersion, d
 	var blobState string
 	var deleting bool
 	var live bool
+	var protocol int
+	var head *uuid.UUID
+	var revision *int64
 	e = tx.QueryRow(ctx, `SELECT f.status,a.chat_account_generation,a.chat_profile_generation,b.state,b.deleted_at IS NOT NULL,
-ag.state='LIVE' AND pg.state='LIVE' AND ag.generation=a.account_generation AND pg.generation=a.profile_generation
+ag.state='LIVE' AND pg.state='LIVE' AND ag.generation=a.account_generation AND pg.generation=a.profile_generation,a.authority_protocol,a.selection_head_id,a.selection_revision
 FROM file_catalog_assets a JOIN files f ON f.id=a.file_id JOIN file_blobs b ON b.blob_id=f.blob_id
 JOIN file_catalog_actor_gates ag ON ag.id=a.account_gate_id JOIN file_catalog_actor_gates pg ON pg.id=a.profile_gate_id
 WHERE a.file_id=$1 AND a.source_id=$2 AND a.actor_account_id=$3 AND a.actor_profile_id=$4 AND a.provider=$5 AND a.provider_id=$6
-FOR SHARE OF a,f,b,ag,pg`, file, source, account, profile, asset.Provider, asset.ProviderId).Scan(&out.Status, &ag, &pg, &blobState, &deleting, &live)
+FOR SHARE OF a,f,b,ag,pg`, file, source, account, profile, asset.Provider, asset.ProviderId).Scan(&out.Status, &ag, &pg, &blobState, &deleting, &live, &protocol, &head, &revision)
 	if e != nil {
 		return nil, e
 	}
 	if !live {
 		return nil, ErrCatalogActorClosed
 	}
+	if protocol != 2 || head == nil || revision == nil {
+		return nil, ErrCatalogTerminal
+	}
+	current, _, e := readCatalogSelectionTx(ctx, tx, *head, *revision, source, file)
+	if e != nil {
+		return nil, e
+	}
+	out.SelectionRevision = uint64(*revision)
+	out.CurrentSelectionRevision = uint64(current)
 	if out.Status == "ready" && (blobState != "LIVE" || deleting) {
 		return nil, catalogasset.ErrAdmission
 	}

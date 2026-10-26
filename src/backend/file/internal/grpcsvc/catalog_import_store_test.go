@@ -30,13 +30,14 @@ func TestCatalogImportReservationIsRealFileAndImmutableRetry(t *testing.T) {
 	ctx := context.Background()
 	pool := startR23FilePostgres(t, ctx)
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000010_catalog_asset_import.up.sql"))
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000012_catalog_selection_authority.up.sql"))
 	keys, err := catalogasset.NewReplayKeys("fixture", map[string][]byte{"fixture": bytes.Repeat([]byte{1}, 32)})
 	require.NoError(t, err)
 	files := store.NewFilesStore(pool)
 	actor := catalogasset.ActorPair{AccountID: uuid.New(), ProfileID: uuid.New()}
 	capture, err := files.CaptureCatalogActor(ctx, actor, keys)
 	require.NoError(t, err)
-	r := &filev1.ImportCatalogAssetRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), SourceId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", SourceUrl: "https://example.com/source.gif?secret=private", ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), DestinationChat: &chatv1.ChatRef{Id: uuid.NewString()}, ChatAccountGeneration: uuid.NewString(), ChatProfileGeneration: uuid.NewString()}
+	r := &filev1.ImportCatalogAssetRequest{ProtocolVersion: 2, OperationId: uuid.NewString(), SourceId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", SourceUrl: "https://example.com/source.gif?secret=private", ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), DestinationChat: &chatv1.ChatRef{Id: uuid.NewString()}, ChatAccountGeneration: uuid.NewString(), ChatProfileGeneration: uuid.NewString()}
 	first, created, err := files.BeginCatalogImport(ctx, r, capture, keys, chatv1.ChatType_CHAT_TYPE_GROUP, nil, 50<<20)
 	require.NoError(t, err)
 	require.True(t, created)
@@ -47,7 +48,7 @@ func TestCatalogImportReservationIsRealFileAndImmutableRetry(t *testing.T) {
 	require.Equal(t, "pending_upload", state)
 	require.Zero(t, size)
 	require.True(t, unknown)
-	statusRequest := &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 1, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: r.OperationId, Provider: r.Provider, ProviderId: r.ProviderId, DestinationChat: r.DestinationChat}}}
+	statusRequest := &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 2, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: r.OperationId, Provider: r.Provider, ProviderId: r.ProviderId, DestinationChat: r.DestinationChat}}}
 	recovered, err := files.CatalogStatus(ctx, statusRequest, keys, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, first.FileID.String(), recovered.FileId)
@@ -91,7 +92,7 @@ func TestCatalogOperationCompactionPreservesIndependentActiveAssetStatus(t *test
 	var completed, deadline time.Time
 	require.NoError(t, f.pool.QueryRow(ctx, `SELECT completed_at,retain_until FROM file_catalog_import_operations`).Scan(&completed, &deadline))
 	require.WithinDuration(t, completed.Add(30*24*time.Hour), deadline, time.Microsecond)
-	r := &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 1, ActorAccountId: public.ActorAccountId, ActorProfileId: public.ActorProfileId, Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: public.OperationId, Provider: public.Provider, ProviderId: public.ProviderId, DestinationChat: public.DestinationChat}}}
+	r := &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 2, ActorAccountId: public.ActorAccountId, ActorProfileId: public.ActorProfileId, Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: public.OperationId, Provider: public.Provider, ProviderId: public.ProviderId, DestinationChat: public.DestinationChat}}}
 	out, err := files.CatalogStatus(ctx, r, f.keys, completed.Add(time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, "ready", out.Status)

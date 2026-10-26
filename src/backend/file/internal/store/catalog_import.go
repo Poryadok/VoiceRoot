@@ -33,6 +33,8 @@ type CatalogImport struct {
 	KeyVersion                                   string
 	OperationHMAC, RequestHash, SelectionHash    []byte
 	MaxFetchBytes                                int64
+	SelectionHead                                uuid.UUID
+	SelectionRevision, CurrentSelectionRevision  int64
 }
 
 // CaptureCatalogActor is called only after a fresh owning-authority read.
@@ -132,7 +134,7 @@ func catalogImportHashes(r *filev1.ImportCatalogAssetRequest) ([]byte, []byte, e
 
 func (s *FilesStore) BeginCatalogImport(ctx context.Context, r *filev1.ImportCatalogAssetRequest, capture CatalogActorCapture, keys *catalogasset.ReplayKeys, observed chatv1.ChatType, expires *time.Time, budget int64) (CatalogImport, bool, error) {
 	var result CatalogImport
-	if r == nil || r.ProtocolVersion != 1 || r.DestinationChat == nil || budget <= 0 || budget > 50<<20 || r.SourceUrl == "" || r.Provider == "" || r.ProviderId == "" || r.Provider != strings.TrimSpace(r.Provider) || r.ProviderId != strings.TrimSpace(r.ProviderId) || len(r.ProtoReflect().GetUnknown()) != 0 || len(r.DestinationChat.ProtoReflect().GetUnknown()) != 0 {
+	if r == nil || r.ProtocolVersion != 2 || r.DestinationChat == nil || budget <= 0 || budget > 50<<20 || r.SourceUrl == "" || r.Provider == "" || r.ProviderId == "" || r.Provider != strings.TrimSpace(r.Provider) || r.ProviderId != strings.TrimSpace(r.ProviderId) || len(r.ProtoReflect().GetUnknown()) != 0 || len(r.DestinationChat.ProtoReflect().GetUnknown()) != 0 {
 		return result, false, catalogasset.ErrAdmission
 	}
 	ids := []string{r.ActorAccountId, r.ActorProfileId, r.OperationId, r.SourceId, r.DestinationChat.Id, r.ChatAccountGeneration, r.ChatProfileGeneration}
@@ -191,8 +193,11 @@ func (s *FilesStore) BeginCatalogImport(ctx context.Context, r *filev1.ImportCat
 		}
 		var storedHash []byte
 		var expired bool
-		e = tx.QueryRow(ctx, `SELECT o.file_id,o.source_id,o.generation,o.request_sha256,o.phase,COALESCE(o.retain_until<=clock_timestamp(),false),COALESCE(f.status,o.outcome,'pending_upload')
-FROM file_catalog_import_operations o LEFT JOIN files f ON f.id=o.file_id WHERE o.key_version=$1 AND o.operation_hmac=$2`, d.KeyVersion, d.HMAC).Scan(&result.FileID, &result.SourceID, &result.Generation, &storedHash, &result.Phase, &expired, &result.Status)
+		var protocol int
+		var head *uuid.UUID
+		var revision *int64
+		e = tx.QueryRow(ctx, `SELECT o.file_id,o.source_id,o.generation,o.request_sha256,o.phase,COALESCE(o.retain_until<=clock_timestamp(),false),COALESCE(f.status,o.outcome,'pending_upload'),o.authority_protocol,o.selection_head_id,o.selection_revision
+FROM file_catalog_import_operations o LEFT JOIN files f ON f.id=o.file_id WHERE o.key_version=$1 AND o.operation_hmac=$2`, d.KeyVersion, d.HMAC).Scan(&result.FileID, &result.SourceID, &result.Generation, &storedHash, &result.Phase, &expired, &result.Status, &protocol, &head, &revision)
 		if errors.Is(e, pgx.ErrNoRows) {
 			continue
 		}
@@ -207,6 +212,14 @@ FROM file_catalog_import_operations o LEFT JOIN files f ON f.id=o.file_id WHERE 
 				return result, false, e
 			}
 			return CatalogImport{}, false, ErrCatalogTerminal
+		}
+		if protocol != 2 || head == nil || revision == nil {
+			return result, false, ErrCatalogTerminal
+		}
+		result.SelectionHead, result.SelectionRevision = *head, *revision
+		result.CurrentSelectionRevision, _, e = readCatalogSelectionTx(ctx, tx, *head, *revision, result.SourceID, result.FileID)
+		if e != nil {
+			return result, false, e
 		}
 		if !bytes.Equal(storedHash, requestHash) {
 			return result, false, ErrCatalogConflict
@@ -249,6 +262,11 @@ FROM file_catalog_import_operations o LEFT JOIN files f ON f.id=o.file_id WHERE 
 		return result, false, ErrCatalogConflict
 	}
 	result = CatalogImport{FileID: uuid.New(), SourceID: parsed[3], OperationID: parsed[2], Generation: uuid.New(), Actor: actor, Provider: r.Provider, ProviderID: r.ProviderId, Phase: "PENDING", Status: "pending_upload", Destination: r.DestinationChat, ChatAccountGeneration: parsed[5], ChatProfileGeneration: parsed[6], KeyVersion: digests[0].KeyVersion, OperationHMAC: digests[0].HMAC, RequestHash: requestHash, SelectionHash: selectionHash, MaxFetchBytes: budget}
+	result.SelectionHead, result.SelectionRevision, e = admitCatalogSelectionTx(ctx, tx, result, capture, keys)
+	if e != nil {
+		return result, false, e
+	}
+	result.CurrentSelectionRevision = result.SelectionRevision
 	result.R2Key = "catalog/" + result.SourceID.String() + "/" + result.Generation.String() + "/source.gif"
 	_, e = tx.Exec(ctx, `INSERT INTO files(id,uploader_profile_id,original_name,mime_type,size_bytes,r2_key,status,file_type,scan_result,upload_intent,catalog_asset,catalog_source_size_unknown,expires_at)
 VALUES($1,$2,'catalog.gif','image/gif',0,$3,'pending_upload','image','skipped','gif',true,true,$4)`, result.FileID, actor.ProfileID, result.R2Key, expires)
@@ -256,8 +274,8 @@ VALUES($1,$2,'catalog.gif','image/gif',0,$3,'pending_upload','image','skipped','
 		return result, false, e
 	}
 	urlHash := sha256Bytes([]byte(r.SourceUrl))
-	_, e = tx.Exec(ctx, `INSERT INTO file_catalog_assets(file_id,source_id,actor_account_id,actor_profile_id,provider,provider_id,account_gate_id,profile_gate_id,account_generation,profile_generation,chat_account_generation,chat_profile_generation,source_url_sha256)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, result.FileID, result.SourceID, actor.AccountID, actor.ProfileID, r.Provider, r.ProviderId, capture.AccountGate, capture.ProfileGate, capture.AccountGeneration, capture.ProfileGeneration, result.ChatAccountGeneration, result.ChatProfileGeneration, urlHash)
+	_, e = tx.Exec(ctx, `INSERT INTO file_catalog_assets(file_id,source_id,actor_account_id,actor_profile_id,provider,provider_id,account_gate_id,profile_gate_id,account_generation,profile_generation,chat_account_generation,chat_profile_generation,source_url_sha256,authority_protocol,selection_head_id,selection_revision)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,2,$14,$15)`, result.FileID, result.SourceID, actor.AccountID, actor.ProfileID, r.Provider, r.ProviderId, capture.AccountGate, capture.ProfileGate, capture.AccountGeneration, capture.ProfileGeneration, result.ChatAccountGeneration, result.ChatProfileGeneration, urlHash, result.SelectionHead, result.SelectionRevision)
 	if e != nil {
 		return result, false, e
 	}
@@ -266,8 +284,8 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, result.FileID, result.Sourc
 		v := int32(r.DestinationChat.GetType())
 		requested = &v
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO file_catalog_import_operations(key_version,operation_hmac,generation,phase,operation_id,file_id,source_id,provider,provider_id,chat_account_generation,chat_profile_generation,actor_account_id,actor_profile_id,destination_chat_id,destination_chat_type,requested_chat_type,request_sha256,selection_sha256,max_fetch_bytes)
-VALUES($1,$2,$3,'PENDING',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`, result.KeyVersion, result.OperationHMAC, result.Generation, result.OperationID, result.FileID, result.SourceID, r.Provider, r.ProviderId, result.ChatAccountGeneration, result.ChatProfileGeneration, actor.AccountID, actor.ProfileID, parsed[4], typeName, requested, requestHash, selectionHash, budget)
+	_, e = tx.Exec(ctx, `INSERT INTO file_catalog_import_operations(key_version,operation_hmac,generation,phase,operation_id,file_id,source_id,provider,provider_id,chat_account_generation,chat_profile_generation,actor_account_id,actor_profile_id,destination_chat_id,destination_chat_type,requested_chat_type,request_sha256,selection_sha256,max_fetch_bytes,authority_protocol,selection_head_id,selection_revision)
+VALUES($1,$2,$3,'PENDING',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,2,$19,$20)`, result.KeyVersion, result.OperationHMAC, result.Generation, result.OperationID, result.FileID, result.SourceID, r.Provider, r.ProviderId, result.ChatAccountGeneration, result.ChatProfileGeneration, actor.AccountID, actor.ProfileID, parsed[4], typeName, requested, requestHash, selectionHash, budget, result.SelectionHead, result.SelectionRevision)
 	if e != nil {
 		return result, false, e
 	}

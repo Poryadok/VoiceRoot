@@ -30,7 +30,7 @@ func (s *CatalogAssetGRPC) ImportCatalogAsset(ctx context.Context, r *filev1.Imp
 	if err := catalogCaller(ctx, r, filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName, "chat"); err != nil {
 		return nil, err
 	}
-	if r == nil || r.ProtocolVersion != 1 || r.DestinationChat == nil || len(r.DestinationChat.ProtoReflect().GetUnknown()) != 0 || !catalogCanonicalID(r.OperationId) || !catalogCanonicalID(r.SourceId) || !catalogCanonicalID(r.ChatAccountGeneration) || !catalogCanonicalID(r.ChatProfileGeneration) || !catalogCanonicalID(r.DestinationChat.Id) || r.Provider == "" || r.ProviderId == "" || r.Provider != strings.TrimSpace(r.Provider) || r.ProviderId != strings.TrimSpace(r.ProviderId) || r.SourceUrl == "" {
+	if r == nil || r.ProtocolVersion != 2 || r.DestinationChat == nil || len(r.DestinationChat.ProtoReflect().GetUnknown()) != 0 || !catalogCanonicalID(r.OperationId) || !catalogCanonicalID(r.SourceId) || !catalogCanonicalID(r.ChatAccountGeneration) || !catalogCanonicalID(r.ChatProfileGeneration) || !catalogCanonicalID(r.DestinationChat.Id) || r.Provider == "" || r.ProviderId == "" || r.Provider != strings.TrimSpace(r.Provider) || r.ProviderId != strings.TrimSpace(r.ProviderId) || r.SourceUrl == "" {
 		return nil, status.Error(codes.InvalidArgument, "invalid catalog import")
 	}
 	if s == nil || s.Destination == nil || nilCatalogAuthority(s.Destination) || s.Fetcher == nil || nilCatalogAuthority(s.Fetcher) || s.Writer == nil || nilCatalogAuthority(s.Writer) || s.Keys == nil {
@@ -130,11 +130,11 @@ func catalogCompletionContext(ctx context.Context) (context.Context, context.Can
 }
 
 func (s *CatalogAssetGRPC) catalogImportResponse(ctx context.Context, r *filev1.ImportCatalogAssetRequest) (*filev1.ImportCatalogAssetResponse, error) {
-	state, err := s.Files.CatalogStatus(ctx, &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 1, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: r.OperationId, Provider: r.Provider, ProviderId: r.ProviderId, DestinationChat: r.DestinationChat}}}, s.Keys, s.catalogNow())
+	state, err := s.Files.CatalogStatus(ctx, &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 2, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: r.OperationId, Provider: r.Provider, ProviderId: r.ProviderId, DestinationChat: r.DestinationChat}}}, s.Keys, s.catalogNow())
 	if err != nil {
 		return nil, catalogImportError(err)
 	}
-	return &filev1.ImportCatalogAssetResponse{SourceId: state.SourceId, ActorAccountId: state.ActorAccountId, ActorProfileId: state.ActorProfileId, Provider: state.Provider, ProviderId: state.ProviderId, FileId: state.FileId, Status: state.Status, OperationId: state.OperationId, DestinationChat: state.DestinationChat, ChatAccountGeneration: state.ChatAccountGeneration, ChatProfileGeneration: state.ChatProfileGeneration}, nil
+	return &filev1.ImportCatalogAssetResponse{SourceId: state.SourceId, ActorAccountId: state.ActorAccountId, ActorProfileId: state.ActorProfileId, Provider: state.Provider, ProviderId: state.ProviderId, FileId: state.FileId, Status: state.Status, OperationId: state.OperationId, DestinationChat: state.DestinationChat, ChatAccountGeneration: state.ChatAccountGeneration, ChatProfileGeneration: state.ChatProfileGeneration, SelectionRevision: state.SelectionRevision, CurrentSelectionRevision: state.CurrentSelectionRevision}, nil
 }
 
 func catalogImportError(err error) error {

@@ -30,7 +30,7 @@ func catalogVerifiedContext(t *testing.T, r proto.Message, method, issuer string
 }
 
 func TestCatalogHandlersRequireBoundPrivateMessagingPrincipal(t *testing.T) {
-	r := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 1, ActorAccountId: uuid.NewString(), ActorProfileId: uuid.NewString(), FileId: uuid.NewString()}
+	r := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 2, ActorAccountId: uuid.NewString(), ActorProfileId: uuid.NewString(), FileId: uuid.NewString()}
 	s := &CatalogAssetGRPC{}
 	public := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-voice-account-id", r.ActorAccountId, "x-voice-profile-id", r.ActorProfileId, "authorization", "Bearer forged"))
 	for _, ctx := range []context.Context{public, catalogVerifiedContext(t, r, filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, "chat"), catalogVerifiedContext(t, r, filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName, "messaging")} {
@@ -54,7 +54,7 @@ func TestCatalogHandlersUseActorSnapshotAndAuthoritativeDatabase(t *testing.T) {
 		calls++
 		return []catalogasset.ActorState{state}, nil
 	})}
-	r := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 1, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), FileId: f.file.String()}
+	r := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 2, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), FileId: f.file.String()}
 	call := func() (*filev1.LookupCatalogAssetResponse, error) {
 		return s.LookupCatalogAsset(catalogVerifiedContext(t, r, filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, "messaging"), r)
 	}

@@ -24,6 +24,7 @@ func seedCatalogPurgeFixture(t *testing.T, ctx context.Context, ready bool) cata
 	t.Helper()
 	pool := startR23FilePostgres(t, ctx)
 	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000010_catalog_asset_import.up.sql"))
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000012_catalog_selection_authority.up.sql"))
 	keys, err := catalogasset.NewReplayKeys("fixture", map[string][]byte{"fixture": bytes.Repeat([]byte{1}, 32)})
 	require.NoError(t, err)
 	f := catalogPurgeFixture{pool: pool, keys: keys, actor: catalogasset.ActorPair{AccountID: uuid.New(), ProfileID: uuid.New()}, file: uuid.New(), source: uuid.New(), operation: uuid.New(), profileGate: uuid.New(), profileGeneration: uuid.New()}
@@ -46,6 +47,19 @@ func seedCatalogPurgeFixture(t *testing.T, ctx context.Context, ready bool) cata
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `INSERT INTO file_catalog_import_operations(key_version,operation_hmac,generation,phase,operation_id,file_id,actor_account_id,actor_profile_id,destination_chat_id,destination_chat_type,request_sha256,selection_sha256,max_fetch_bytes,source_id,provider,provider_id,chat_account_generation,chat_profile_generation)
 SELECT 'fixture',$1,$2,'PROCESSING',$3,$4,$5,$6,$7,'group',$8,$8,52428800,source_id,provider,provider_id,chat_account_generation,chat_profile_generation FROM file_catalog_assets WHERE file_id=$4`, op[0].HMAC, uuid.New(), f.operation, f.file, f.actor.AccountID, f.actor.ProfileID, uuid.New(), bytes.Repeat([]byte{3}, 32))
+	require.NoError(t, err)
+	// This hand-built lifecycle fixture represents an already admitted v2 row.
+	// Admission-order behavior itself is tested through BeginCatalogImport.
+	var ca, cp uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT chat_account_generation,chat_profile_generation FROM file_catalog_assets WHERE file_id=$1`, f.file).Scan(&ca, &cp))
+	selector, err := keys.Selection(f.actor, accountGeneration, f.profileGeneration, ca, cp, "fixture", "asset-1")
+	require.NoError(t, err)
+	head := uuid.New()
+	_, err = pool.Exec(ctx, `INSERT INTO file_catalog_selection_heads(id,key_version,selector_hmac,revision,current_source_id,current_file_id) VALUES($1,'fixture',$2,1,$3,$4)`, head, selector[0].HMAC, f.source, f.file)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE file_catalog_assets SET authority_protocol=2,selection_head_id=$2,selection_revision=1 WHERE file_id=$1;`, f.file, head)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE file_catalog_import_operations SET authority_protocol=2,selection_head_id=$2,selection_revision=1 WHERE file_id=$1`, f.file, head)
 	require.NoError(t, err)
 	return f
 }

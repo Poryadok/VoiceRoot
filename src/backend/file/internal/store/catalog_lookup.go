@@ -36,17 +36,32 @@ func (s *FilesStore) LookupCatalogFile(ctx context.Context, actor catalogasset.A
 	snapshot := &filev1.ValidateCatalogAssetResponse{FileId: id.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), Intent: row.UploadIntent, ScanResult: row.ScanResult, FileType: row.FileType}
 	state := catalogasset.LifecycleState{Status: row.Status, IsE2E: row.IsE2E, ExpiresAt: row.ExpiresAt}
 	var source uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT a.source_id,a.provider,a.provider_id,a.source_sha256,f.preview_metadata_revision,b.state,b.deleted_at IS NOT NULL
+	var head *uuid.UUID
+	var revision *int64
+	var protocol int
+	err = tx.QueryRow(ctx, `SELECT a.source_id,a.provider,a.provider_id,a.source_sha256,f.preview_metadata_revision,b.state,b.deleted_at IS NOT NULL,a.authority_protocol,a.selection_head_id,a.selection_revision
 FROM file_catalog_assets a JOIN files f ON f.id=a.file_id JOIN file_blobs b ON b.blob_id=f.blob_id
 JOIN file_catalog_actor_gates ag ON ag.id=a.account_gate_id JOIN file_catalog_actor_gates pg ON pg.id=a.profile_gate_id
 WHERE a.file_id=$1 AND a.actor_account_id=$2 AND a.actor_profile_id=$3
 AND ag.actor_kind='account' AND pg.actor_kind='profile' AND ag.state='LIVE' AND pg.state='LIVE'
 AND ag.generation=a.account_generation AND pg.generation=a.profile_generation
-FOR SHARE OF a,b,ag,pg`, id, actor.AccountID, actor.ProfileID).Scan(&source, &snapshot.Provider, &snapshot.ProviderId, &snapshot.SourceSha256, &snapshot.ObjectRevision, &state.BlobState, &state.BlobDeleting)
+FOR SHARE OF a,b,ag,pg`, id, actor.AccountID, actor.ProfileID).Scan(&source, &snapshot.Provider, &snapshot.ProviderId, &snapshot.SourceSha256, &snapshot.ObjectRevision, &state.BlobState, &state.BlobDeleting, &protocol, &head, &revision)
 	if err != nil {
 		return nil, err
 	}
 	snapshot.SourceId = source.String()
+	if protocol != 2 || head == nil || revision == nil {
+		return nil, catalogasset.ErrAdmission
+	}
+	current, isCurrent, err := readCatalogSelectionTx(ctx, tx, *head, *revision, source, id)
+	if err != nil {
+		return nil, err
+	}
+	if !isCurrent {
+		return nil, catalogasset.ErrAdmission
+	}
+	snapshot.SelectionRevision = uint64(*revision)
+	snapshot.CurrentSelectionRevision = uint64(current)
 	state.ObjectRevision = snapshot.ObjectRevision
 	if row.SHA256Hash == nil || row.DeliveredFull == nil {
 		return nil, catalogasset.ErrAdmission
@@ -64,7 +79,7 @@ FOR SHARE OF a,b,ag,pg`, id, actor.AccountID, actor.ProfileID).Scan(&source, &sn
 	if row.DeliveredFull.Key == "" || row.DeliveredFull.ProcessorVersion != GIFProcessorVersion {
 		return nil, catalogasset.ErrAdmission
 	}
-	request := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: id.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String()}
+	request := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 2, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: id.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String()}
 	if err = catalogasset.ValidateReady(request, snapshot, state, now); err != nil {
 		return nil, err
 	}
@@ -77,7 +92,7 @@ FOR SHARE OF a,b,ag,pg`, id, actor.AccountID, actor.ProfileID).Scan(&source, &sn
 // ValidateCatalogFile uses the same locked reader as classification and binds
 // its canonical result to the exact tuple approved independently by Chat.
 func (s *FilesStore) ValidateCatalogFile(ctx context.Context, request *filev1.ValidateCatalogAssetRequest, now time.Time) (*filev1.ValidateCatalogAssetResponse, error) {
-	if request == nil || request.ProtocolVersion != 1 {
+	if request == nil || request.ProtocolVersion != 2 {
 		return nil, catalogasset.ErrAdmission
 	}
 	account, e := uuid.Parse(request.ActorAccountId)

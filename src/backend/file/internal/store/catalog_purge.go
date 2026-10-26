@@ -175,7 +175,7 @@ func catalogActorLock(ctx context.Context, tx pgx.Tx, actor catalogasset.ActorPa
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(binary.BigEndian.Uint64(hash[:8]))); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT key_version FROM file_catalog_actor_gates UNION SELECT key_version FROM file_catalog_import_operations UNION SELECT key_version FROM file_catalog_terminal_fences`)
+	rows, err := tx.Query(ctx, `SELECT key_version FROM file_catalog_actor_gates UNION SELECT key_version FROM file_catalog_import_operations UNION SELECT key_version FROM file_catalog_terminal_fences UNION SELECT key_version FROM file_catalog_selection_heads`)
 	if err != nil {
 		return err
 	}

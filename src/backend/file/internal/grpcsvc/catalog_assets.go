@@ -45,7 +45,7 @@ func (s *CatalogAssetGRPC) GetCatalogAssetStatus(ctx context.Context, r *filev1.
 	if err := catalogCaller(ctx, r, filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName, "chat"); err != nil {
 		return nil, err
 	}
-	if r == nil || r.ProtocolVersion != 1 {
+	if r == nil || r.ProtocolVersion != 2 {
 		return nil, status.Error(codes.InvalidArgument, "invalid catalog status")
 	}
 	actor, err := s.catalogActor(ctx, r.ActorAccountId, r.ActorProfileId)
@@ -81,7 +81,7 @@ func (s *CatalogAssetGRPC) LookupCatalogAsset(ctx context.Context, r *filev1.Loo
 	if err := catalogCaller(ctx, r, filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, "messaging"); err != nil {
 		return nil, err
 	}
-	if r == nil || r.ProtocolVersion != 1 || !catalogCanonicalID(r.FileId) {
+	if r == nil || r.ProtocolVersion != 2 || !catalogCanonicalID(r.FileId) {
 		return nil, status.Error(codes.InvalidArgument, "invalid catalog lookup")
 	}
 	actor, err := s.catalogActor(ctx, r.ActorAccountId, r.ActorProfileId)
@@ -99,7 +99,7 @@ func (s *CatalogAssetGRPC) ValidateCatalogAsset(ctx context.Context, r *filev1.V
 	if err := catalogCaller(ctx, r, filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName, "messaging"); err != nil {
 		return nil, err
 	}
-	if r == nil || r.ProtocolVersion != 1 || !catalogCanonicalID(r.SourceId) || !catalogCanonicalID(r.FileId) || r.Provider == "" || r.ProviderId == "" {
+	if r == nil || r.ProtocolVersion != 2 || !catalogCanonicalID(r.SourceId) || !catalogCanonicalID(r.FileId) || r.Provider == "" || r.ProviderId == "" {
 		return nil, status.Error(codes.InvalidArgument, "invalid catalog validation")
 	}
 	if _, err := s.catalogActor(ctx, r.ActorAccountId, r.ActorProfileId); err != nil {

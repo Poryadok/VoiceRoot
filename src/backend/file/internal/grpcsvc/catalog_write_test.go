@@ -39,7 +39,7 @@ func TestCatalogFetchFailureKeepsFiniteReceiptWithoutInventedSize(t *testing.T) 
 	require.NoError(t, f.pool.QueryRow(ctx, `SELECT outcome,completed_at,retain_until FROM file_catalog_import_operations`).Scan(&state, &completed, &deadline))
 	require.Equal(t, "failed", state)
 	require.True(t, completed.Add(30*24*time.Hour).Equal(deadline))
-	r := &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 1, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: f.request.OperationId, Provider: f.request.Provider, ProviderId: f.request.ProviderId, DestinationChat: f.request.DestinationChat}}}
+	r := &filev1.GetCatalogAssetStatusRequest{ProtocolVersion: 2, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), Selector: &filev1.GetCatalogAssetStatusRequest_Operation{Operation: &filev1.CatalogImportOperationSelector{OperationId: f.request.OperationId, Provider: f.request.Provider, ProviderId: f.request.ProviderId, DestinationChat: f.request.DestinationChat}}}
 	out, err := f.files.CatalogStatus(ctx, r, f.keys, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, "failed", out.Status)
@@ -54,6 +54,7 @@ func seedCatalogInput(t *testing.T, ctx context.Context) pendingCatalogFixture {
 	var f pendingCatalogFixture
 	f.pool = startR23FilePostgres(t, ctx)
 	applyFileGateSQL(t, ctx, f.pool, filepath.Join("src", "backend", "migrations", "file_db", "000010_catalog_asset_import.up.sql"))
+	applyFileGateSQL(t, ctx, f.pool, filepath.Join("src", "backend", "migrations", "file_db", "000012_catalog_selection_authority.up.sql"))
 	var err error
 	f.keys, err = catalogasset.NewReplayKeys("fixture", map[string][]byte{"fixture": bytes.Repeat([]byte{1}, 32)})
 	require.NoError(t, err)
@@ -61,7 +62,7 @@ func seedCatalogInput(t *testing.T, ctx context.Context) pendingCatalogFixture {
 	f.actor = catalogasset.ActorPair{AccountID: uuid.New(), ProfileID: uuid.New()}
 	f.capture, err = f.files.CaptureCatalogActor(ctx, f.actor, f.keys)
 	require.NoError(t, err)
-	f.request = &filev1.ImportCatalogAssetRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), SourceId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", SourceUrl: "https://example.com/source.gif", ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), DestinationChat: &chatv1.ChatRef{Id: uuid.NewString()}, ChatAccountGeneration: uuid.NewString(), ChatProfileGeneration: uuid.NewString()}
+	f.request = &filev1.ImportCatalogAssetRequest{ProtocolVersion: 2, OperationId: uuid.NewString(), SourceId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", SourceUrl: "https://example.com/source.gif", ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), DestinationChat: &chatv1.ChatRef{Id: uuid.NewString()}, ChatAccountGeneration: uuid.NewString(), ChatProfileGeneration: uuid.NewString()}
 	return f
 }
 

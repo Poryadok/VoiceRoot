@@ -13,8 +13,8 @@ import (
 func readyFixture() (*filev1.ValidateCatalogAssetRequest, *filev1.ValidateCatalogAssetResponse, LifecycleState, time.Time) {
 	now := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
 	expires := now.Add(time.Hour)
-	req := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1, SourceId: uuid.NewString(), ActorAccountId: uuid.NewString(), ActorProfileId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", FileId: uuid.NewString()}
-	response := &filev1.ValidateCatalogAssetResponse{SourceId: req.SourceId, ActorAccountId: req.ActorAccountId, ActorProfileId: req.ActorProfileId, Provider: req.Provider, ProviderId: req.ProviderId, FileId: req.FileId, ObjectRevision: 1, Intent: "gif", ScanResult: "clean", FileType: "video", SourceSha256: bytes.Repeat([]byte{1}, 32), DeliveredSha256: bytes.Repeat([]byte{2}, 32), DeliveredSizeBytes: 1024, DeliveredMimeType: "video/mp4"}
+	req := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 2, SourceId: uuid.NewString(), ActorAccountId: uuid.NewString(), ActorProfileId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", FileId: uuid.NewString()}
+	response := &filev1.ValidateCatalogAssetResponse{SourceId: req.SourceId, ActorAccountId: req.ActorAccountId, ActorProfileId: req.ActorProfileId, Provider: req.Provider, ProviderId: req.ProviderId, FileId: req.FileId, SelectionRevision: 1, CurrentSelectionRevision: 1, ObjectRevision: 1, Intent: "gif", ScanResult: "clean", FileType: "video", SourceSha256: bytes.Repeat([]byte{1}, 32), DeliveredSha256: bytes.Repeat([]byte{2}, 32), DeliveredSizeBytes: 1024, DeliveredMimeType: "video/mp4"}
 	return req, response, LifecycleState{Status: "ready", BlobState: "LIVE", ExpiresAt: &expires, SourceSHA256: append([]byte(nil), response.SourceSha256...), ObjectRevision: 1}, now
 }
 
@@ -39,6 +39,9 @@ func TestCatalogReadyAdmissionRequiresExactAuthoritativeSourceAndRepresentation(
 		t.Fatal(err)
 	}
 	for name, change := range map[string]func(*filev1.ValidateCatalogAssetResponse, *LifecycleState){
+		"missing-selection":     func(r *filev1.ValidateCatalogAssetResponse, _ *LifecycleState) { r.SelectionRevision = 0 },
+		"missing-head":          func(r *filev1.ValidateCatalogAssetResponse, _ *LifecycleState) { r.CurrentSelectionRevision = 0 },
+		"superseded":            func(r *filev1.ValidateCatalogAssetResponse, _ *LifecycleState) { r.CurrentSelectionRevision = 2 },
 		"source":                func(r *filev1.ValidateCatalogAssetResponse, _ *LifecycleState) { r.SourceId = uuid.NewString() },
 		"account":               func(r *filev1.ValidateCatalogAssetResponse, _ *LifecycleState) { r.ActorAccountId = uuid.NewString() },
 		"profile":               func(r *filev1.ValidateCatalogAssetResponse, _ *LifecycleState) { r.ActorProfileId = uuid.NewString() },
@@ -82,7 +85,7 @@ func TestCatalogReadyAdmissionRequiresExactAuthoritativeSourceAndRepresentation(
 func TestCatalogReadyAdmissionRejectsInvalidIdentityAndAcceptsDocumentedVariants(t *testing.T) {
 	req, response, state, now := readyFixture()
 	for _, change := range []func(*filev1.ValidateCatalogAssetRequest){
-		func(r *filev1.ValidateCatalogAssetRequest) { r.ProtocolVersion = 2 },
+		func(r *filev1.ValidateCatalogAssetRequest) { r.ProtocolVersion = 1 },
 		func(r *filev1.ValidateCatalogAssetRequest) { r.SourceId = "not-a-uuid" },
 		func(r *filev1.ValidateCatalogAssetRequest) { r.ActorAccountId = uuid.Nil.String() },
 		func(r *filev1.ValidateCatalogAssetRequest) { r.ActorProfileId = "" },

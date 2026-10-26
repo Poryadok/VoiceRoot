@@ -153,7 +153,7 @@ func TestCatalogImportActualBytesReachNativeReadyAuthority(t *testing.T) {
 	require.Equal(t, "ready", row.Status)
 	require.NotNil(t, row.DeliveredFull)
 	require.NotNil(t, row.DeliveredThumbnail)
-	lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 1, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), FileId: imported.FileId}
+	lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 2, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), FileId: imported.FileId}
 	attested, err := server.LookupCatalogAsset(catalogVerifiedContext(t, lookup, filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, "messaging"), lookup)
 	require.NoError(t, err)
 	snapshot := attested.GetCatalog()
