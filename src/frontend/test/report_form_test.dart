@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/moderation_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -21,6 +22,8 @@ const _activePageFieldKey = Key('active_report_page_field');
 late ThemeData _appTheme;
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
