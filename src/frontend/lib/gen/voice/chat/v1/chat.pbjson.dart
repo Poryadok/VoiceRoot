@@ -2751,3 +2751,96 @@ const SetChatMemberPostAsChatResponse$json = {
 /// Descriptor for `SetChatMemberPostAsChatResponse`. Decode as a `google.protobuf.DescriptorProto`.
 final $typed_data.Uint8List setChatMemberPostAsChatResponseDescriptor =
     $convert.base64Decode('Ch9TZXRDaGF0TWVtYmVyUG9zdEFzQ2hhdFJlc3BvbnNl');
+
+@$core.Deprecated('Use searchGifsRequestDescriptor instead')
+const SearchGifsRequest$json = {
+  '1': 'SearchGifsRequest',
+  '2': [
+    {'1': 'query', '3': 1, '4': 1, '5': 9, '10': 'query'},
+    {'1': 'limit', '3': 2, '4': 1, '5': 5, '10': 'limit'},
+    {'1': 'cursor', '3': 3, '4': 1, '5': 9, '10': 'cursor'},
+  ],
+};
+
+/// Descriptor for `SearchGifsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List searchGifsRequestDescriptor = $convert.base64Decode(
+    'ChFTZWFyY2hHaWZzUmVxdWVzdBIUCgVxdWVyeRgBIAEoCVIFcXVlcnkSFAoFbGltaXQYAiABKA'
+    'VSBWxpbWl0EhYKBmN1cnNvchgDIAEoCVIGY3Vyc29y');
+
+@$core.Deprecated('Use getTrendingGifsRequestDescriptor instead')
+const GetTrendingGifsRequest$json = {
+  '1': 'GetTrendingGifsRequest',
+  '2': [
+    {'1': 'limit', '3': 1, '4': 1, '5': 5, '10': 'limit'},
+    {'1': 'cursor', '3': 2, '4': 1, '5': 9, '10': 'cursor'},
+  ],
+};
+
+/// Descriptor for `GetTrendingGifsRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getTrendingGifsRequestDescriptor =
+    $convert.base64Decode(
+        'ChZHZXRUcmVuZGluZ0dpZnNSZXF1ZXN0EhQKBWxpbWl0GAEgASgFUgVsaW1pdBIWCgZjdXJzb3'
+        'IYAiABKAlSBmN1cnNvcg==');
+
+@$core.Deprecated('Use gifResultDescriptor instead')
+const GifResult$json = {
+  '1': 'GifResult',
+  '2': [
+    {'1': 'provider', '3': 1, '4': 1, '5': 9, '10': 'provider'},
+    {'1': 'provider_id', '3': 2, '4': 1, '5': 9, '10': 'providerId'},
+    {'1': 'file_id', '3': 3, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'preview_url', '3': 4, '4': 1, '5': 9, '10': 'previewUrl'},
+    {'1': 'width', '3': 5, '4': 1, '5': 5, '10': 'width'},
+    {'1': 'height', '3': 6, '4': 1, '5': 5, '10': 'height'},
+    {'1': 'duration_seconds', '3': 7, '4': 1, '5': 2, '10': 'durationSeconds'},
+  ],
+};
+
+/// Descriptor for `GifResult`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List gifResultDescriptor = $convert.base64Decode(
+    'CglHaWZSZXN1bHQSGgoIcHJvdmlkZXIYASABKAlSCHByb3ZpZGVyEh8KC3Byb3ZpZGVyX2lkGA'
+    'IgASgJUgpwcm92aWRlcklkEhcKB2ZpbGVfaWQYAyABKAlSBmZpbGVJZBIfCgtwcmV2aWV3X3Vy'
+    'bBgEIAEoCVIKcHJldmlld1VybBIUCgV3aWR0aBgFIAEoBVIFd2lkdGgSFgoGaGVpZ2h0GAYgAS'
+    'gFUgZoZWlnaHQSKQoQZHVyYXRpb25fc2Vjb25kcxgHIAEoAlIPZHVyYXRpb25TZWNvbmRz');
+
+@$core.Deprecated('Use searchGifsResponseDescriptor instead')
+const SearchGifsResponse$json = {
+  '1': 'SearchGifsResponse',
+  '2': [
+    {
+      '1': 'items',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.GifResult',
+      '10': 'items'
+    },
+    {'1': 'next_cursor', '3': 2, '4': 1, '5': 9, '10': 'nextCursor'},
+  ],
+};
+
+/// Descriptor for `SearchGifsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List searchGifsResponseDescriptor = $convert.base64Decode(
+    'ChJTZWFyY2hHaWZzUmVzcG9uc2USLgoFaXRlbXMYASADKAsyGC52b2ljZS5jaGF0LnYxLkdpZl'
+    'Jlc3VsdFIFaXRlbXMSHwoLbmV4dF9jdXJzb3IYAiABKAlSCm5leHRDdXJzb3I=');
+
+@$core.Deprecated('Use getTrendingGifsResponseDescriptor instead')
+const GetTrendingGifsResponse$json = {
+  '1': 'GetTrendingGifsResponse',
+  '2': [
+    {
+      '1': 'items',
+      '3': 1,
+      '4': 3,
+      '5': 11,
+      '6': '.voice.chat.v1.GifResult',
+      '10': 'items'
+    },
+    {'1': 'next_cursor', '3': 2, '4': 1, '5': 9, '10': 'nextCursor'},
+  ],
+};
+
+/// Descriptor for `GetTrendingGifsResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List getTrendingGifsResponseDescriptor = $convert.base64Decode(
+    'ChdHZXRUcmVuZGluZ0dpZnNSZXNwb25zZRIuCgVpdGVtcxgBIAMoCzIYLnZvaWNlLmNoYXQudj'
+    'EuR2lmUmVzdWx0UgVpdGVtcxIfCgtuZXh0X2N1cnNvchgCIAEoCVIKbmV4dEN1cnNvcg==');
