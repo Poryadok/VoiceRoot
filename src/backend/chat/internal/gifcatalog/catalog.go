@@ -3,6 +3,8 @@ package gifcatalog
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
@@ -14,6 +16,9 @@ const (
 )
 
 var ErrInvalidSearchRequest = errors.New("invalid GIF search request")
+
+// ErrRateLimited lets provider adapters report throttling without gRPC coupling.
+var ErrRateLimited = errors.New("GIF provider rate limit exceeded")
 
 // Catalog is implemented by a selected provider adapter or a deterministic local fake.
 // Chat owns the cursor in Page; File and Messaging do not paginate GIF search.
@@ -76,7 +81,7 @@ func (c fakeCatalog) Search(_ context.Context, request SearchRequest) (Page, err
 	if query == "" {
 		return Page{}, ErrInvalidSearchRequest
 	}
-	return page(c.matches(query), PageRequest{Limit: request.Limit, Cursor: request.Cursor})
+	return page(c.matches(query), PageRequest{Limit: request.Limit, Cursor: request.Cursor}, "search:"+strings.ToLower(query))
 }
 
 func (c fakeCatalog) Trending(_ context.Context, request PageRequest) (Page, error) {
@@ -84,10 +89,10 @@ func (c fakeCatalog) Trending(_ context.Context, request PageRequest) (Page, err
 	for i, fixture := range c.fixtures {
 		results[i] = fixture.Result
 	}
-	return page(results, request)
+	return page(results, request, "trending")
 }
 
-func page(results []Result, request PageRequest) (Page, error) {
+func page(results []Result, request PageRequest, scope string) (Page, error) {
 	if request.Limit < 0 || request.Limit > MaxSearchLimit {
 		return Page{}, ErrInvalidSearchRequest
 	}
@@ -95,14 +100,14 @@ func page(results []Result, request PageRequest) (Page, error) {
 	if limit == 0 {
 		limit = DefaultSearchLimit
 	}
-	start, ok := cursorOffset(request.Cursor, len(results))
+	start, ok := cursorOffset(request.Cursor, len(results), scope)
 	if !ok {
 		return Page{}, ErrInvalidSearchRequest
 	}
 	end := min(start+limit, len(results))
 	page := Page{Items: append([]Result(nil), results[start:end]...)}
 	if end < len(results) {
-		page.NextCursor = cursorFor(end)
+		page.NextCursor = cursorPrefix(scope) + strconv.Itoa(end)
 	}
 	return page, nil
 }
@@ -121,18 +126,20 @@ func (c fakeCatalog) matches(query string) []Result {
 	return matches
 }
 
-func cursorFor(offset int) string {
-	return "fake:" + strconv.Itoa(offset)
+func cursorPrefix(scope string) string {
+	digest := sha256.Sum256([]byte(scope))
+	return "fake:" + hex.EncodeToString(digest[:]) + ":"
 }
 
-func cursorOffset(cursor string, size int) (int, bool) {
+func cursorOffset(cursor string, size int, scope string) (int, bool) {
 	if cursor == "" {
 		return 0, true
 	}
-	if !strings.HasPrefix(cursor, "fake:") {
+	prefix := cursorPrefix(scope)
+	if !strings.HasPrefix(cursor, prefix) {
 		return 0, false
 	}
-	offset, err := strconv.Atoi(strings.TrimPrefix(cursor, "fake:"))
+	offset, err := strconv.Atoi(strings.TrimPrefix(cursor, prefix))
 	if err != nil {
 		return 0, false
 	}
