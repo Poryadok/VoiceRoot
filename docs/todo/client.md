@@ -337,12 +337,18 @@ the public REST prose does not define its availability or absent/false semantics
 Google's [paused monetization guidance](https://support.google.com/youtube/answer/10269388?hl=en)
 states a paused channel can remain in YPP. Thus neither upload eligibility nor
 absent/false monetization evidence is a documented proof of membership loss.
-The feature additionally requires a verified channel; these sources do not
-establish the intended verification signal. YouTube qualification remains
+The feature additionally requires a verified channel but does not distinguish
+[phone verification](https://support.google.com/youtube/answer/171664) from an
+[official channel authenticity badge](https://support.google.com/youtube/answer/3046484)
+or OAuth control. These are separate claims; neither OAuth `mine` nor upload
+eligibility establishes the intended verification kind. YouTube qualification remains
 `unavailable` until its positive membership+verification evidence and recheck
 negative/unknown mapping are specified. Do not grant or revoke a source using
 the unrelated long-upload proxy, assume a missing monetization field means
-denied, scrape YouTube Studio, or silently change the product criterion.
+denied, scrape YouTube Studio, or silently change the product criterion. Unknown
+evidence preserves prior source state per the existing outage rule. Any
+remediation of historical proxy-issued badges needs an explicit correction
+policy; it cannot be disguised as provider-confirmed criterion loss.
 This gap does not block default-off transport implementation or the documented
 Twitch Partner check. UI status/org work also proceeds independently.
 
