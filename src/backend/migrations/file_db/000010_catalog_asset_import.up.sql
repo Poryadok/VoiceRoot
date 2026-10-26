@@ -54,20 +54,29 @@ CREATE TABLE file_catalog_import_operations (
     generation UUID NOT NULL,
     phase TEXT NOT NULL CHECK (phase IN ('PENDING','FETCHED','WRITE_STARTED','RECONCILIATION','PROCESSING','COMPLETE')),
     operation_id UUID NOT NULL,
-    file_id UUID NOT NULL REFERENCES files(id),
+    -- The retained receipt survives a no-bytes failed File's removal. This is
+    -- an immutable response identity, never proof that a live File exists.
+    file_id UUID NOT NULL,
+    source_id UUID NOT NULL,
+    provider TEXT NOT NULL CHECK (provider <> ''),
+    provider_id TEXT NOT NULL CHECK (provider_id <> ''),
+    chat_account_generation UUID NOT NULL,
+    chat_profile_generation UUID NOT NULL,
     actor_account_id UUID NOT NULL,
     actor_profile_id UUID NOT NULL,
     destination_chat_id UUID NOT NULL,
     destination_chat_type TEXT NOT NULL CHECK (destination_chat_type IN ('dm','group','channel')),
+    requested_chat_type INTEGER NULL CHECK (requested_chat_type BETWEEN 0 AND 3),
     request_sha256 BYTEA NOT NULL CHECK (octet_length(request_sha256) = 32),
     selection_sha256 BYTEA NOT NULL CHECK (octet_length(selection_sha256) = 32),
     max_fetch_bytes BIGINT NOT NULL CHECK (max_fetch_bytes > 0 AND max_fetch_bytes <= 52428800),
     completed_at TIMESTAMPTZ NULL,
     retain_until TIMESTAMPTZ NULL,
+    outcome TEXT NULL CHECK (outcome IN ('ready','failed','deleted','expired')),
     PRIMARY KEY (key_version,operation_hmac),
     UNIQUE (actor_account_id,actor_profile_id,operation_id),
-    CHECK ((completed_at IS NULL AND retain_until IS NULL AND phase <> 'COMPLETE')
-        OR (completed_at IS NOT NULL AND retain_until = completed_at + interval '30 days' AND phase = 'COMPLETE'))
+    CHECK ((completed_at IS NULL AND retain_until IS NULL AND outcome IS NULL AND phase <> 'COMPLETE')
+        OR (completed_at IS NOT NULL AND retain_until = completed_at + interval '30 days' AND outcome IS NOT NULL AND phase = 'COMPLETE'))
 );
 CREATE INDEX file_catalog_import_operations_actor ON file_catalog_import_operations(actor_account_id,actor_profile_id);
 
@@ -135,3 +144,20 @@ BEGIN
 END $$;
 CREATE TRIGGER file_catalog_guard_file BEFORE INSERT OR UPDATE ON files
     FOR EACH ROW EXECUTE FUNCTION file_catalog_guard_file();
+
+-- Receipt retention starts at the actual File outcome, never a later poll or
+-- retry. Later metadata/status updates cannot refresh the original deadline.
+CREATE FUNCTION file_catalog_complete_operation() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE completed TIMESTAMPTZ;
+BEGIN
+    IF NEW.catalog_asset AND NEW.status IN ('ready','failed','deleted','expired')
+       AND NEW.status IS DISTINCT FROM OLD.status THEN
+        completed := clock_timestamp();
+        UPDATE file_catalog_import_operations SET phase='COMPLETE',outcome=NEW.status,
+            completed_at=completed,retain_until=completed+interval '30 days'
+        WHERE file_id=NEW.id AND completed_at IS NULL;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER file_catalog_complete_operation AFTER UPDATE ON files
+    FOR EACH ROW EXECUTE FUNCTION file_catalog_complete_operation();

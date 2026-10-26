@@ -44,7 +44,8 @@ func seedCatalogPurgeFixture(t *testing.T, ctx context.Context, ready bool) cata
 	}
 	op, err := keys.Operation(f.actor, f.operation)
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, `INSERT INTO file_catalog_import_operations(key_version,operation_hmac,generation,phase,operation_id,file_id,actor_account_id,actor_profile_id,destination_chat_id,destination_chat_type,request_sha256,selection_sha256,max_fetch_bytes) VALUES('fixture',$1,$2,'PROCESSING',$3,$4,$5,$6,$7,'group',$8,$8,52428800)`, op[0].HMAC, uuid.New(), f.operation, f.file, f.actor.AccountID, f.actor.ProfileID, uuid.New(), bytes.Repeat([]byte{3}, 32))
+	_, err = pool.Exec(ctx, `INSERT INTO file_catalog_import_operations(key_version,operation_hmac,generation,phase,operation_id,file_id,actor_account_id,actor_profile_id,destination_chat_id,destination_chat_type,request_sha256,selection_sha256,max_fetch_bytes,source_id,provider,provider_id,chat_account_generation,chat_profile_generation)
+SELECT 'fixture',$1,$2,'PROCESSING',$3,$4,$5,$6,$7,'group',$8,$8,52428800,source_id,provider,provider_id,chat_account_generation,chat_profile_generation FROM file_catalog_assets WHERE file_id=$4`, op[0].HMAC, uuid.New(), f.operation, f.file, f.actor.AccountID, f.actor.ProfileID, uuid.New(), bytes.Repeat([]byte{3}, 32))
 	require.NoError(t, err)
 	return f
 }

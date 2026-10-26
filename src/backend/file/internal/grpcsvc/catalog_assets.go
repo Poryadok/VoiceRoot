@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	chatv1 "voice.app/voice/chat/v1"
 	filev1 "voice.app/voice/file/v1"
 	"voice/backend/file/internal/catalogasset"
 	"voice/backend/file/internal/store"
@@ -21,15 +22,56 @@ type CatalogActorAuthority interface {
 	States(context.Context, []catalogasset.ActorPair) ([]catalogasset.ActorState, error)
 }
 
+type CatalogDestinationAuthority interface {
+	Authorize(context.Context, catalogasset.DestinationRequest) (chatv1.ChatType, error)
+}
+
 // CatalogAssetGRPC is registered only on the protected File listener. Each
 // handler also checks the private verified principal and exact request binding;
 // forwarded user headers never authorize source-scoped metadata access.
 type CatalogAssetGRPC struct {
 	filev1.UnimplementedCatalogAssetServiceServer
-	Files  *store.FilesStore
-	Actors CatalogActorAuthority
-	Keys   *catalogasset.ReplayKeys
-	Clock  Clock
+	Files       *store.FilesStore
+	Actors      CatalogActorAuthority
+	Keys        *catalogasset.ReplayKeys
+	Clock       Clock
+	Destination CatalogDestinationAuthority
+}
+
+func (s *CatalogAssetGRPC) GetCatalogAssetStatus(ctx context.Context, r *filev1.GetCatalogAssetStatusRequest) (*filev1.GetCatalogAssetStatusResponse, error) {
+	if err := catalogCaller(ctx, r, filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName, "chat"); err != nil {
+		return nil, err
+	}
+	if r == nil || r.ProtocolVersion != 1 {
+		return nil, status.Error(codes.InvalidArgument, "invalid catalog status")
+	}
+	actor, err := s.catalogActor(ctx, r.ActorAccountId, r.ActorProfileId)
+	if err != nil {
+		return nil, err
+	}
+	out, err := s.Files.CatalogStatus(ctx, r, s.Keys, s.catalogNow())
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) && r.GetOperation() != nil {
+			return nil, status.Error(codes.NotFound, "catalog operation unknown")
+		}
+		if errors.Is(err, store.ErrCatalogConflict) {
+			return nil, status.Error(codes.AlreadyExists, "catalog operation selection conflicts")
+		}
+		if errors.Is(err, store.ErrCatalogTerminal) || errors.Is(err, store.ErrCatalogActorClosed) {
+			return nil, status.Error(codes.FailedPrecondition, "catalog operation unavailable")
+		}
+		return nil, catalogReadError(err)
+	}
+	if r.GetOperation() != nil {
+		if s.Destination == nil || nilCatalogAuthority(s.Destination) || !catalogCanonicalID(out.ChatAccountGeneration) || !catalogCanonicalID(out.ChatProfileGeneration) {
+			return nil, status.Error(codes.Unavailable, "catalog destination authority unavailable")
+		}
+		_, err = s.Destination.Authorize(ctx, catalogasset.DestinationRequest{Actor: actor, Destination: out.DestinationChat, ChatAccountGeneration: uuid.MustParse(out.ChatAccountGeneration), ChatProfileGeneration: uuid.MustParse(out.ChatProfileGeneration)})
+		if err != nil {
+			return nil, status.Error(codes.PermissionDenied, "catalog destination unavailable")
+		}
+	}
+	return out, nil
 }
 
 func (s *CatalogAssetGRPC) LookupCatalogAsset(ctx context.Context, r *filev1.LookupCatalogAssetRequest) (*filev1.LookupCatalogAssetResponse, error) {

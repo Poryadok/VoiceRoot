@@ -182,6 +182,27 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 
 ## Risks and follow-ups
 
+- The User compilation dependency is now coherent: normal merge of exact PR907
+  `a479a15dbdfcfb6871ef4b3e218d7bc9c6bc4d44` at `b5fa2c7034`, followed by LF-only
+  correction `a284ae299270d73b348027bfccc18bddb2277fac`, preserves both User
+  authority contracts. Actual User short passed (grpcsvc 8.265 s). This
+  supersedes the earlier compilation-failure checkpoint, not its history.
+- File now atomically creates the real internal unknown-size pending File,
+  immutable source binding and operation receipt before fetch. Local gates are
+  captured by exact actor and never reopened by a read. Same-body retry recovers
+  identity, changed URL/body conflicts, and terminal generation fences deny
+  resurrection. No raw URL is persisted. Missing API and hash-prefix REDs became
+  real PostgreSQL race GREEN (8.971 s, then 6.381 s after binding hardening).
+- File-owned status recovers a committed operation before Chat resolves a URL;
+  protected operation status independently reauthorizes its original destination.
+  The actual File terminal transition records receipt P30D once, and replay/poll
+  cannot refresh it. Compaction removes raw receipt details, retains an opaque
+  terminal fence and leaves independent active asset status intact. Real PG
+  receipt/handler tests passed race (20.592 s); the wider catalog matrix passed
+  race (64.866 s). These are storage/status primitives, not byte-write/import or
+  full Messaging-send proof. Object-write declaration/settlement, recovery,
+  Import handler and listener activation remain unfinished.
+
 - Normal merge `a631b630b672ada8ece1ff93543ca31ef73551ec` consumes Chat's
   `5c05cf34358eb9beda472a6ce8502c8a80b4ce11` destination-authority protocol.
   File's signed pure-service client checks exact actor/destination echo, actual

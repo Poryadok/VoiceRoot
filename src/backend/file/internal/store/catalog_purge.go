@@ -54,7 +54,7 @@ generation=CASE WHEN file_catalog_actor_gates.state='LIVE' THEN EXCLUDED.generat
 		return err
 	}
 	rows, err := tx.Query(ctx, `SELECT file_id,source_id,provider,provider_id FROM file_catalog_assets
-WHERE actor_account_id=$1 AND actor_profile_id=$2 ORDER BY file_id FOR UPDATE`, actor.AccountID, actor.ProfileID)
+WHERE actor_account_id=$1 AND actor_profile_id=$2 ORDER BY file_id`, actor.AccountID, actor.ProfileID)
 	if err != nil {
 		return err
 	}

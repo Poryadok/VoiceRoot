@@ -10,6 +10,8 @@ DO $$ BEGIN
 END $$;
 DROP TRIGGER file_catalog_guard_file ON files;
 DROP FUNCTION file_catalog_guard_file();
+DROP TRIGGER file_catalog_complete_operation ON files;
+DROP FUNCTION file_catalog_complete_operation();
 DROP TRIGGER file_catalog_immutable_source ON file_catalog_assets;
 DROP FUNCTION file_catalog_immutable_source();
 DROP TABLE file_catalog_writes;
