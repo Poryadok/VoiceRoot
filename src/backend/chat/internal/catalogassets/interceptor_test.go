@@ -27,6 +27,7 @@ func TestCatalogPrincipalExactBindingAndReplay(t *testing.T) {
 	account, profile := uuid.NewString(), uuid.NewString()
 	gateway, _ := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "one", PrivateKey: key})
 	messaging, _ := principal.NewIssuer(principal.IssuerConfig{Issuer: "messaging", KeyID: "one", PrivateKey: key})
+	fileIssuer, _ := principal.NewIssuer(principal.IssuerConfig{Issuer: "file", KeyID: "one", PrivateKey: key})
 	seen := map[string]bool{}
 	var mu sync.Mutex
 	auth := Authenticator{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, SessionEpoch: func(_ context.Context, id string, epoch int64) error {
@@ -45,6 +46,7 @@ func TestCatalogPrincipalExactBindingAndReplay(t *testing.T) {
 	}}
 	resolve := &chatv1.ResolveGifAssetRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), Provider: "fixture", ProviderId: "one", DestinationChat: &chatv1.ChatRef{Id: uuid.NewString(), Type: chatv1.ChatType_CHAT_TYPE_DM.Enum()}}
 	validate := &chatv1.ValidateGifAssetRequest{ProtocolVersion: 1, ActorAccountId: account, ActorProfileId: profile, Provider: "fixture", ProviderId: "one", FileId: uuid.NewString(), DestinationChat: resolve.DestinationChat}
+	authorize := &chatv1.AuthorizeCatalogDestinationRequest{ProtocolVersion: 1, ActorAccountId: account, ActorProfileId: profile, DestinationChat: resolve.DestinationChat}
 	issue := func(method string, req proto.Message, kind string) (context.Context, string) {
 		t.Helper()
 		hash, err := principal.RequestHash(req)
@@ -56,7 +58,11 @@ func TestCatalogPrincipalExactBindingAndReplay(t *testing.T) {
 		if kind == "delegated" {
 			token, err = gateway.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "chat", RPC: method, RequestID: rid, RequestHash: hash, AccountID: account, ProfileID: profile, SessionEpoch: 7, ClientExpiresAt: time.Now().Add(time.Minute)})
 		} else {
-			token, err = messaging.IssueService(principal.ServiceInput{Audience: "chat", RPC: method, RequestID: rid, RequestHash: hash})
+			issuer := messaging
+			if kind == "file" {
+				issuer = fileIssuer
+			}
+			token, err = issuer.IssueService(principal.ServiceInput{Audience: "chat", RPC: method, RequestID: rid, RequestHash: hash})
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -72,7 +78,7 @@ func TestCatalogPrincipalExactBindingAndReplay(t *testing.T) {
 		method string
 		req    proto.Message
 		kind   string
-	}{{chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName, resolve, "delegated"}, {chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName, validate, "service"}} {
+	}{{chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName, resolve, "delegated"}, {chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName, validate, "service"}, {chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName, authorize, "file"}} {
 		ctx, _ := issue(tc.method, tc.req, tc.kind)
 		if called, err := call(ctx, tc.method, tc.req); err != nil || !called {
 			t.Fatalf("valid %s called=%v err=%v", tc.method, called, err)

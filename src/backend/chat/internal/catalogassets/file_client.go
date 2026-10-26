@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	chatv1 "voice.app/voice/chat/v1"
@@ -84,17 +83,7 @@ func (c *GRPCFileClient) callContext(ctx context.Context, method string, req pro
 	if c == nil || c.Client == nil || c.Issuer == nil {
 		return nil, nil, status.Error(codes.Unavailable, "catalog File unavailable")
 	}
-	hash, err := principal.RequestHash(req)
-	if err != nil {
-		return nil, nil, status.Error(codes.InvalidArgument, "invalid catalog File request")
-	}
-	requestID := uuid.NewString()
-	token, err := c.Issuer.IssueService(principal.ServiceInput{Audience: "file", RPC: method, RequestID: requestID, RequestHash: hash})
-	if err != nil {
-		return nil, nil, status.Error(codes.Unavailable, "catalog File signer unavailable")
-	}
-	call, cancel := context.WithTimeout(ctx, timeout)
-	return metadata.NewOutgoingContext(call, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID)), cancel, nil
+	return bindServiceCall(ctx, c.Issuer, "file", method, req, timeout)
 }
 
 type fileStateIdentity interface {

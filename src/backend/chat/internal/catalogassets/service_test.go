@@ -102,6 +102,10 @@ type fakeAuthority struct {
 	err   error
 }
 
+func (a *fakeAuthority) ObservePlaintextMember(ctx context.Context, actor Actor, ref *chatv1.ChatRef) (chatv1.ChatType, error) {
+	return chatv1.ChatType_CHAT_TYPE_DM, a.RequirePlaintextMember(ctx, actor, ref)
+}
+
 func (a *fakeAuthority) RequirePlaintextMember(context.Context, Actor, *chatv1.ChatRef) error {
 	a.calls++
 	return a.err
@@ -133,6 +137,10 @@ func serviceContext(t *testing.T, req proto.Message, actor Actor, method string)
 		p.Kind = "service"
 		p.Issuer = "messaging"
 		p.Subject = "service:messaging"
+		if method == chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName {
+			p.Issuer = "file"
+			p.Subject = "service:file"
+		}
 	}
 	return context.WithValue(context.Background(), callerContextKey{}, verifiedCaller{principal: p, requestHash: hash, method: method})
 }
@@ -260,5 +268,26 @@ func TestResolveGIFAssetRechecksSessionBeforeProjection(t *testing.T) {
 	_, err := s.ResolveGifAsset(serviceContext(t, req, actor, chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName), req)
 	if status.Code(err) != codes.Unauthenticated || s.Store.(*fakeRepository).saves != 0 {
 		t.Fatalf("revoked session=%v saves=%d checks=%d", err, s.Store.(*fakeRepository).saves, checks)
+	}
+}
+
+func TestAuthorizeCatalogDestinationIsFileOnlyCurrentRead(t *testing.T) {
+	s, selection, actor := serviceFixture()
+	if _, err := s.ResolveGifAsset(serviceContext(t, selection, actor, chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName), selection); err != nil {
+		t.Fatal(err)
+	}
+	req := &chatv1.AuthorizeCatalogDestinationRequest{ProtocolVersion: 1, ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), DestinationChat: selection.DestinationChat}
+	method := chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName
+	response, err := s.AuthorizeCatalogDestination(serviceContext(t, req, Actor{}, method), req)
+	capture := s.Store.(*fakeRepository).capture
+	if err != nil || response.GetObservedChatType() != chatv1.ChatType_CHAT_TYPE_DM || response.GetChatAccountGeneration() != capture.AccountGeneration.String() || response.GetChatProfileGeneration() != capture.ProfileGeneration.String() || !proto.Equal(response.GetDestinationChat(), req.DestinationChat) {
+		t.Fatalf("destination=%v err=%v", response, err)
+	}
+	if s.Resolver.(*fakeResolver).calls != 1 || s.Files.(*fakeFiles).imports != 1 {
+		t.Fatal("authorization resolved or imported an asset")
+	}
+	s.Authority.(*fakeAuthority).err = status.Error(codes.FailedPrecondition, "encrypted")
+	if _, err := s.AuthorizeCatalogDestination(serviceContext(t, req, Actor{}, method), req); status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("encrypted=%v", err)
 	}
 }

@@ -478,6 +478,232 @@ class ValidateGifAssetResponse extends $pb.GeneratedMessage {
   void clearFileId() => $_clearField(6);
 }
 
+/// Read-only independent destination observation for File's protected importer.
+/// @voice.unknown_fields=reject
+class AuthorizeCatalogDestinationRequest extends $pb.GeneratedMessage {
+  factory AuthorizeCatalogDestinationRequest({
+    $core.int? protocolVersion,
+    $core.String? actorAccountId,
+    $core.String? actorProfileId,
+    $1.ChatRef? destinationChat,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (actorAccountId != null) result.actorAccountId = actorAccountId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (destinationChat != null) result.destinationChat = destinationChat;
+    return result;
+  }
+
+  AuthorizeCatalogDestinationRequest._();
+
+  factory AuthorizeCatalogDestinationRequest.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AuthorizeCatalogDestinationRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AuthorizeCatalogDestinationRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'actorAccountId')
+    ..aOS(3, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOM<$1.ChatRef>(4, _omitFieldNames ? '' : 'destinationChat',
+        subBuilder: $1.ChatRef.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuthorizeCatalogDestinationRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuthorizeCatalogDestinationRequest copyWith(
+          void Function(AuthorizeCatalogDestinationRequest) updates) =>
+      super.copyWith((message) =>
+              updates(message as AuthorizeCatalogDestinationRequest))
+          as AuthorizeCatalogDestinationRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AuthorizeCatalogDestinationRequest create() =>
+      AuthorizeCatalogDestinationRequest._();
+  @$core.override
+  AuthorizeCatalogDestinationRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AuthorizeCatalogDestinationRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AuthorizeCatalogDestinationRequest>(
+          create);
+  static AuthorizeCatalogDestinationRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get actorAccountId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorAccountId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorAccountId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorAccountId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get actorProfileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set actorProfileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasActorProfileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearActorProfileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $1.ChatRef get destinationChat => $_getN(3);
+  @$pb.TagNumber(4)
+  set destinationChat($1.ChatRef value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasDestinationChat() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearDestinationChat() => $_clearField(4);
+  @$pb.TagNumber(4)
+  $1.ChatRef ensureDestinationChat() => $_ensure(3);
+}
+
+class AuthorizeCatalogDestinationResponse extends $pb.GeneratedMessage {
+  factory AuthorizeCatalogDestinationResponse({
+    $core.String? actorAccountId,
+    $core.String? actorProfileId,
+    $1.ChatRef? destinationChat,
+    $1.ChatType? observedChatType,
+    $core.String? chatAccountGeneration,
+    $core.String? chatProfileGeneration,
+  }) {
+    final result = create();
+    if (actorAccountId != null) result.actorAccountId = actorAccountId;
+    if (actorProfileId != null) result.actorProfileId = actorProfileId;
+    if (destinationChat != null) result.destinationChat = destinationChat;
+    if (observedChatType != null) result.observedChatType = observedChatType;
+    if (chatAccountGeneration != null)
+      result.chatAccountGeneration = chatAccountGeneration;
+    if (chatProfileGeneration != null)
+      result.chatProfileGeneration = chatProfileGeneration;
+    return result;
+  }
+
+  AuthorizeCatalogDestinationResponse._();
+
+  factory AuthorizeCatalogDestinationResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AuthorizeCatalogDestinationResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AuthorizeCatalogDestinationResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.chat.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'actorAccountId')
+    ..aOS(2, _omitFieldNames ? '' : 'actorProfileId')
+    ..aOM<$1.ChatRef>(3, _omitFieldNames ? '' : 'destinationChat',
+        subBuilder: $1.ChatRef.create)
+    ..aE<$1.ChatType>(4, _omitFieldNames ? '' : 'observedChatType',
+        enumValues: $1.ChatType.values)
+    ..aOS(5, _omitFieldNames ? '' : 'chatAccountGeneration')
+    ..aOS(6, _omitFieldNames ? '' : 'chatProfileGeneration')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuthorizeCatalogDestinationResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AuthorizeCatalogDestinationResponse copyWith(
+          void Function(AuthorizeCatalogDestinationResponse) updates) =>
+      super.copyWith((message) =>
+              updates(message as AuthorizeCatalogDestinationResponse))
+          as AuthorizeCatalogDestinationResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AuthorizeCatalogDestinationResponse create() =>
+      AuthorizeCatalogDestinationResponse._();
+  @$core.override
+  AuthorizeCatalogDestinationResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AuthorizeCatalogDestinationResponse getDefault() =>
+      _defaultInstance ??= $pb.GeneratedMessage.$_defaultFor<
+          AuthorizeCatalogDestinationResponse>(create);
+  static AuthorizeCatalogDestinationResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get actorAccountId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set actorAccountId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasActorAccountId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearActorAccountId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get actorProfileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set actorProfileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasActorProfileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearActorProfileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $1.ChatRef get destinationChat => $_getN(2);
+  @$pb.TagNumber(3)
+  set destinationChat($1.ChatRef value) => $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasDestinationChat() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearDestinationChat() => $_clearField(3);
+  @$pb.TagNumber(3)
+  $1.ChatRef ensureDestinationChat() => $_ensure(2);
+
+  @$pb.TagNumber(4)
+  $1.ChatType get observedChatType => $_getN(3);
+  @$pb.TagNumber(4)
+  set observedChatType($1.ChatType value) => $_setField(4, value);
+  @$pb.TagNumber(4)
+  $core.bool hasObservedChatType() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearObservedChatType() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get chatAccountGeneration => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set chatAccountGeneration($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasChatAccountGeneration() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearChatAccountGeneration() => $_clearField(5);
+
+  @$pb.TagNumber(6)
+  $core.String get chatProfileGeneration => $_getSZ(5);
+  @$pb.TagNumber(6)
+  set chatProfileGeneration($core.String value) => $_setString(5, value);
+  @$pb.TagNumber(6)
+  $core.bool hasChatProfileGeneration() => $_has(5);
+  @$pb.TagNumber(6)
+  void clearChatProfileGeneration() => $_clearField(6);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

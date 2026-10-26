@@ -73,6 +73,9 @@ type FileClient interface {
 type DestinationAuthority interface {
 	RequirePlaintextMember(context.Context, Actor, *chatv1.ChatRef) error
 }
+type DestinationTypeAuthority interface {
+	ObservePlaintextMember(context.Context, Actor, *chatv1.ChatRef) (chatv1.ChatType, error)
+}
 
 type Service struct {
 	chatv1.UnimplementedCatalogAssetServiceServer
@@ -104,7 +107,7 @@ func (s *Service) ResolveGifAsset(ctx context.Context, req *chatv1.ResolveGifAss
 		return nil, destinationError(err)
 	}
 	selection := Selection{Provider: req.Provider, ProviderID: req.ProviderId}
-	capture, err := s.Store.CaptureActor(ctx, actor, true)
+	capture, err := s.Store.CaptureActor(ctx, actor, s.Resolver != nil)
 	if err != nil {
 		return nil, catalogError(err)
 	}
@@ -204,6 +207,51 @@ func (s *Service) ValidateGifAsset(ctx context.Context, req *chatv1.ValidateGifA
 	return &chatv1.ValidateGifAssetResponse{SourceId: binding.SourceID.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), Provider: selection.Provider, ProviderId: selection.ProviderID, FileId: file.String()}, nil
 }
 
+func (s *Service) AuthorizeCatalogDestination(ctx context.Context, req *chatv1.AuthorizeCatalogDestinationRequest) (*chatv1.AuthorizeCatalogDestinationResponse, error) {
+	if _, err := requireCaller(ctx, req, chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName); err != nil {
+		return nil, err
+	}
+	if req.GetProtocolVersion() != 1 || !canonicalID(req.GetActorAccountId()) || !canonicalID(req.GetActorProfileId()) || !validDestination(req.GetDestinationChat()) {
+		return nil, status.Error(codes.InvalidArgument, "invalid catalog destination request")
+	}
+	if s == nil || s.Store == nil || s.Authority == nil {
+		return nil, status.Error(codes.Unavailable, "catalog destination authority unavailable")
+	}
+	authority, ok := s.Authority.(DestinationTypeAuthority)
+	if !ok {
+		return nil, status.Error(codes.Unavailable, "catalog destination type authority unavailable")
+	}
+	actor := Actor{AccountID: uuid.MustParse(req.ActorAccountId), ProfileID: uuid.MustParse(req.ActorProfileId)}
+	observed, err := authority.ObservePlaintextMember(ctx, actor, req.DestinationChat)
+	if err != nil {
+		return nil, destinationError(err)
+	}
+	if observed != chatv1.ChatType_CHAT_TYPE_DM && observed != chatv1.ChatType_CHAT_TYPE_GROUP && observed != chatv1.ChatType_CHAT_TYPE_CHANNEL {
+		return nil, status.Error(codes.Unavailable, "invalid catalog destination observation")
+	}
+	if req.DestinationChat.GetType() != chatv1.ChatType_CHAT_TYPE_UNSPECIFIED && req.DestinationChat.GetType() != observed {
+		return nil, status.Error(codes.InvalidArgument, "catalog destination type mismatch")
+	}
+	capture, err := s.Store.CaptureActor(ctx, actor, false)
+	if err != nil {
+		return nil, catalogError(err)
+	}
+	if !validCapture(capture) {
+		return nil, status.Error(codes.Unavailable, "invalid catalog actor generation")
+	}
+	current, err := authority.ObservePlaintextMember(ctx, actor, req.DestinationChat)
+	if err != nil {
+		return nil, destinationError(err)
+	}
+	if current != observed {
+		return nil, status.Error(codes.Unavailable, "catalog destination observation changed")
+	}
+	if _, err := requireCaller(ctx, req, chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName); err != nil {
+		return nil, err
+	}
+	return &chatv1.AuthorizeCatalogDestinationResponse{ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String(), DestinationChat: proto.Clone(req.DestinationChat).(*chatv1.ChatRef), ObservedChatType: observed, ChatAccountGeneration: capture.AccountGeneration.String(), ChatProfileGeneration: capture.ProfileGeneration.String()}, nil
+}
+
 func requireCaller(ctx context.Context, message proto.Message, method string) (verifiedCaller, error) {
 	fail := func() (verifiedCaller, error) {
 		return verifiedCaller{}, status.Error(codes.Unauthenticated, "catalog principal required")
@@ -216,8 +264,14 @@ func requireCaller(ctx context.Context, message proto.Message, method string) (v
 		if caller.principal.Kind != "delegated_user" || caller.principal.Issuer != "gateway" || caller.principal.Subject != caller.principal.AccountID || caller.principal.SessionEpoch <= 0 || !canonicalID(caller.principal.AccountID) || !canonicalID(caller.principal.ProfileID) {
 			return fail()
 		}
-	} else if caller.principal.Kind != "service" || caller.principal.Issuer != "messaging" || caller.principal.Subject != "service:messaging" || caller.principal.AccountID != "" || caller.principal.ProfileID != "" || caller.principal.SessionEpoch != 0 {
-		return fail()
+	} else {
+		expected := "messaging"
+		if method == chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName {
+			expected = "file"
+		}
+		if caller.principal.Kind != "service" || caller.principal.Issuer != expected || caller.principal.Subject != "service:"+expected || caller.principal.AccountID != "" || caller.principal.ProfileID != "" || caller.principal.SessionEpoch != 0 {
+			return fail()
+		}
 	}
 	if message == nil || !message.ProtoReflect().IsValid() || hasUnknown(message) {
 		return verifiedCaller{}, status.Error(codes.InvalidArgument, "invalid catalog request")
@@ -306,7 +360,7 @@ func catalogError(err error) error {
 		return status.Error(codes.DeadlineExceeded, "catalog request deadline exceeded")
 	case errors.Is(err, ErrBindingConflict) || status.Code(err) == codes.AlreadyExists:
 		return status.Error(codes.AlreadyExists, "catalog operation conflicts with its original selection")
-	case status.Code(err) == codes.FailedPrecondition:
+	case errors.Is(err, ErrActorRetired) || status.Code(err) == codes.FailedPrecondition:
 		return status.Error(codes.FailedPrecondition, "catalog operation is terminal or unavailable")
 	case status.Code(err) == codes.PermissionDenied:
 		return status.Error(codes.PermissionDenied, "catalog asset denied")

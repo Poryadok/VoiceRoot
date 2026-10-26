@@ -31,7 +31,7 @@ type verifiedCaller struct {
 
 func (a Authenticator) UnaryInterceptor() grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if info == nil || (info.FullMethod != chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName && info.FullMethod != chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName) {
+		if info == nil || (info.FullMethod != chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName && info.FullMethod != chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName && info.FullMethod != chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName) {
 			return nil, status.Error(codes.PermissionDenied, "method unavailable on catalog listener")
 		}
 		transport, err := principal.IncomingMetadata(ctx)
@@ -63,6 +63,9 @@ func (a Authenticator) UnaryInterceptor() grpc.UnaryServerInterceptor {
 			}
 		} else {
 			cfg.ExpectedIssuer = "messaging"
+			if info.FullMethod == chatv1.CatalogAssetService_AuthorizeCatalogDestination_FullMethodName {
+				cfg.ExpectedIssuer = "file"
+			}
 			verified, err = principal.VerifyService(ctx, transport.BearerToken, cfg)
 			if err == nil && (verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 || verified.AccountType != "") {
 				err = errors.New("mixed actor")
