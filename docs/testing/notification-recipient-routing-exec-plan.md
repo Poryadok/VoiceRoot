@@ -31,7 +31,8 @@ Realtime rechecks current delivery authorization and keeps lifecycle admission.
 - [x] Wire the real NATS request/reply boundary and Realtime consumer.
 - [x] Prove unsubscribed delivery and mute/type/auth suppression on Linux.
 - [x] Update contracts and run affected checks.
-- [ ] Obtain independent review and deliver the pushed change through a PR.
+- [x] Publish the pushed source in draft PR929.
+- [ ] Obtain independent review, required hosted CI and merge through a PR.
 
 ## Detailed Steps
 
@@ -68,7 +69,15 @@ source SHA and dirty diff identity. Hosted CI and runtime acceptance are separat
 - [x] Existing Realtime consumer tests retain their assertions and explicitly
   provision the new Notification decision responder.
 - [x] Notification and Realtime static lint reported zero issues.
-- [ ] Final shared-package lint, Graphify and independent review/delivery.
+- [x] Shared-package static lint reported zero issues.
+- [x] Graphify AST update completed: 118169 nodes and 247000 edges. Optional HTML
+  was not emitted because the graph exceeds the existing visualization limit.
+- [x] Published code commit `415e19f68e798e42b72ceb58348f74cb78e8a58d` and
+  [draft PR929](https://github.com/Poryadok/VoiceRoot/pull/929). Merged current
+  `origin/master` (`258b48d0b4506e118b833a194642142fb5847c2e`) normally; its ten
+  bootstrap-script changes do not change any tested Go/NATS input.
+- [ ] Independent ACL/cross-service review and integration. Requests sent to
+  the scout and actual Luna delivery integrator; no approval is inferred.
 
 ## Decisions
 
