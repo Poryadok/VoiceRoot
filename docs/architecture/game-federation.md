@@ -286,6 +286,14 @@ or message grant creates no Voice room permission. Exact caller/session admissio
 Role/GIS rights, the unchanged-vector publisher and native node enforcement are
 still required. This source alone activates no node authority.
 
+GIS's implemented [owning source](../microservices/game-integration-service.md#protected-owning-authority-source-gi-t73-gis)
+uses clean catalog32 and a permanent transactional whole-source clock. It returns
+exact environment/profile-scoped raw app, policy, binding, installation,
+mapping, managed Chat lease and session facts; it cannot establish cross-store
+Space ownership or replace Auth's exact SDK tuple. Time-only expiry preserves
+canonical bytes and bounds live leases through the response validity cutoff.
+The source is opt-in and source-only; release activation remains deferred.
+
 Handshake: открыть scoped stream → получить snapshot на watermark R и буфер
 изменений после R → атомарно активировать snapshot → применить последовательные
 изменения → ACK applied revision → получить свежую lease. Если буфер переполнен,

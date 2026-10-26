@@ -15,12 +15,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc"
 	"voice/backend/gameintegration/internal/botproof"
 	"voice/backend/gameintegration/internal/httpapi"
 	"voice/backend/gameintegration/internal/registry"
 	"voice/backend/gameintegration/internal/sessionowners"
+	"voice/backend/pkg/authoritysource"
 	"voice/backend/pkg/httpserver"
 	voicejwt "voice/backend/pkg/jwt"
+	authorityv1 "voice/backend/pkg/pb/voice/authority/v1"
 	"voice/backend/pkg/postgres"
 	"voice/backend/pkg/principal"
 	voiceprom "voice/backend/pkg/promhttp"
@@ -72,6 +75,25 @@ func main() {
 	api.BindingRevocations = &httpapi.BindingRevocationHandler{Tokens: authorizer, Store: applications, Auth: cfg.AuthBindingClient}
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
+	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_GAME_INTEGRATION, ":9097")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var sourceServer *grpc.Server
+	var sourceListener net.Listener
+	if sourceEnabled {
+		var sourceRuntime *authoritysource.Runtime
+		sourceServer, sourceRuntime, err = newGISAuthorityServer(workerCtx, sourceConfig, applications)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() { _ = sourceRuntime.Close() }()
+		sourceListener, err = net.Listen("tcp", sourceConfig.ListenAddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer sourceServer.Stop()
+	}
 	var sessionOrchestrator *registry.SessionOrchestrator
 	if cfg.SessionOwnersEnabled {
 		signingKey, err := principal.LoadRSAPrivateKeyFile(cfg.PrincipalPrivateKeyFile)
@@ -174,7 +196,10 @@ func main() {
 	}
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	errorsCh := make(chan error, len(servers)+1)
+	errorsCh := make(chan error, len(servers)+2)
+	if sourceServer != nil {
+		go func() { errorsCh <- sourceServer.Serve(sourceListener) }()
+	}
 	for index, current := range servers {
 		go func(index int, current *http.Server) {
 			if index == 1 {
