@@ -1556,6 +1556,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatArchiveUnarchive => 'Вернуть';
 
   @override
+  String get chatArchiveMarkRead => 'Отметить прочитанным';
+
+  @override
+  String get chatArchivePlaceholderTitle => 'Здесь будет архив';
+
+  @override
+  String get chatArchivePlaceholderHint => 'Скрытые чаты остаются под рукой';
+
+  @override
   String get chatArchiveUnarchived => 'Чат возвращён в основной список';
 
   @override
@@ -1598,6 +1607,53 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get spaceCreateTitle => 'Новый спейс';
+
+  @override
+  String get spaceCreateAccess => 'Доступ';
+
+  @override
+  String get spaceCreatePublic => 'Публичный';
+
+  @override
+  String get spaceCreateInviteOnly => 'По приглашению';
+
+  @override
+  String get spaceCreatePrivate => 'Приватный';
+
+  @override
+  String get spaceCreateTemplate => 'Стартовый шаблон';
+
+  @override
+  String get spaceCreateGaming => 'Игровое';
+
+  @override
+  String get spaceCreateWork => 'Рабочее';
+
+  @override
+  String get spaceCreateSocial => 'Общение';
+
+  @override
+  String get spaceCreateTemplatesUnavailable =>
+      'Стартовые шаблоны пока недоступны. Спейс будет создан без каналов.';
+
+  @override
+  String get spaceCreateIconHelp =>
+      'Укажите URL изображения. Загрузка изображения пока недоступна.';
+
+  @override
+  String get spaceCreateIconInvalid =>
+      'Укажите корректный URL изображения с http или https.';
+
+  @override
+  String get spaceCreateIconFailed =>
+      'Спейс создан, но иконка не сохранилась. Повторите сохранение иконки или закройте панель, чтобы продолжить без неё.';
+
+  @override
+  String get spaceCreateRetryIcon => 'Повторить сохранение иконки';
+
+  @override
+  String get spaceCreateUncertain =>
+      'Не удалось подтвердить создание. Проверьте свои спейсы, прежде чем создавать ещё один.';
 
   @override
   String get spaceCreateNameLabel => 'Название спейса';

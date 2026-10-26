@@ -379,6 +379,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsOneWidget);
 
+        await tester.longPress(find.byKey(ChatArchiveScreen.tileKey('chat-1')));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Unarchive'));
         await tester.pumpAndSettle();
         expect(find.byKey(ChatArchiveScreen.tileKey('chat-1')), findsNothing);

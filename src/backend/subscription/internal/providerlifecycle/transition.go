@@ -1,6 +1,7 @@
 // Package providerlifecycle implements an internal, source-disabled provider
 // transition engine. No live adapter may call it until protected reconciliation,
-// reminder scheduling, privacy fences and consumer cutover are complete.
+// privacy fences and consumer cutover are complete. Reminder scheduling is
+// transactional, but its source-disabled producer is not Notification delivery.
 package providerlifecycle
 
 import (
