@@ -2732,6 +2732,24 @@ abstract class AppLocalizations {
   /// **'Unarchive'**
   String get chatArchiveUnarchive;
 
+  /// No description provided for @chatArchiveMarkRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get chatArchiveMarkRead;
+
+  /// No description provided for @chatArchivePlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your archive lives here'**
+  String get chatArchivePlaceholderTitle;
+
+  /// No description provided for @chatArchivePlaceholderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden chats stay within reach'**
+  String get chatArchivePlaceholderHint;
+
   /// No description provided for @chatArchiveUnarchived.
   ///
   /// In en, this message translates to:
