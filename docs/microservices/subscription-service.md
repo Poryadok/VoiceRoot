@@ -58,7 +58,7 @@ authority and do not read the A7 successor/shadow projection.
 | `profile_banner` | 0 | 1 | Subscription cosmetics |
 | `custom_status` | 0 | 1 | Subscription cosmetics |
 | `emoji_status` | 0 | 1 | Subscription cosmetics |
-| `primary_premium_username` | 0 | 1 | Subscription; additional profiles require separate purchase |
+| `premium_username_count` | 0 | 1 | Subscription / Multi-profile; one clean username per account, additional names require separate purchase; no profile allocation rule implied |
 | `exclusive_stickers` | 0 | 1 | Subscription cosmetics; content availability remains separate |
 | `exclusive_emoji` | 0 | 1 | Subscription cosmetics; content availability remains separate |
 | `custom_app_icons` | 0 | 1 | Subscription cosmetics |

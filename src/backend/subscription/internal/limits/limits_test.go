@@ -18,7 +18,7 @@ func decode(t *testing.T, raw string) map[string]int64 {
 
 // Expectations are literal product values, independent of production fixtures.
 func TestPersonalBenefitMatrix(t *testing.T) {
-	flags := []string{"premium_badge", "animated_avatar", "profile_banner", "custom_status", "emoji_status", "primary_premium_username", "exclusive_stickers", "exclusive_emoji", "custom_app_icons", "exclusive_chat_themes", "file_download_priority"}
+	flags := []string{"premium_badge", "animated_avatar", "profile_banner", "custom_status", "emoji_status", "premium_username_count", "exclusive_stickers", "exclusive_emoji", "custom_app_icons", "exclusive_chat_themes", "file_download_priority"}
 	for _, tc := range []struct {
 		tier string
 		paid bool

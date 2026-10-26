@@ -50,7 +50,7 @@ func accountLimits(tier string) map[string]int64 {
 	}
 	for _, key := range []string{
 		"premium_badge", "animated_avatar", "profile_banner", "custom_status",
-		"emoji_status", "primary_premium_username", "exclusive_stickers",
+		"emoji_status", "premium_username_count", "exclusive_stickers",
 		"exclusive_emoji", "custom_app_icons", "exclusive_chat_themes",
 		"file_download_priority",
 	} {
