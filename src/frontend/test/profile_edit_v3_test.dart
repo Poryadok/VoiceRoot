@@ -93,6 +93,176 @@ void main() {
     );
   });
   testWidgets(
+    'saved avatar preview survives privacy failure without repeating upload',
+    (tester) async {
+      final bytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
+      );
+      var presigns = 0;
+      var uploads = 0;
+      var profilePatches = 0;
+      var privacyPatches = 0;
+      await _pump(
+        tester,
+        MockClient((req) async {
+          if (req.url.path.endsWith('/presigned-upload')) {
+            presigns++;
+            return http.Response(
+              jsonEncode({
+                'upload_url': 'http://upload.test/avatar',
+                'public_url': 'http://cdn.test/avatar',
+                'required_headers': {},
+              }),
+              200,
+            );
+          }
+          if (req.method == 'PUT') {
+            uploads++;
+            return http.Response('', 200);
+          }
+          if (req.url.path.endsWith('/privacy')) {
+            if (req.method == 'GET') {
+              return http.Response(
+                jsonEncode({
+                  'privacy_settings': {
+                    'profile_id': 'prof-test',
+                    'preset': 'personal',
+                  },
+                }),
+                200,
+              );
+            }
+            privacyPatches++;
+            if (privacyPatches == 1) return http.Response('{}', 503);
+            return http.Response(
+              jsonEncode({
+                'privacy_settings': {
+                  'profile_id': 'prof-test',
+                  'preset': 'work',
+                },
+              }),
+              200,
+            );
+          }
+          if (req.method == 'PATCH') {
+            profilePatches++;
+            return http.Response(
+              jsonEncode({
+                'profile': {
+                  'id': 'prof-test',
+                  'account_id': 'acc-test',
+                  'display_name': 'Voice User',
+                  'avatar_url': 'http://cdn.test/avatar',
+                },
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 404);
+        }),
+        avatarPicker: () async => ProfileAvatarFile(
+          bytes: bytes,
+          contentType: 'image/png',
+          name: 'saved.png',
+        ),
+      );
+      await tester.tap(find.byKey(ProfileEditSheet.avatarButtonKey));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Work'));
+      await tester.tap(find.text('Work'));
+      await tester.pump();
+      await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
+      await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Could not complete this action.'), findsOneWidget);
+      final preview = tester
+          .widget<CircleAvatar>(find.byType(CircleAvatar))
+          .backgroundImage;
+      expect(preview, isA<MemoryImage>());
+      expect((preview! as MemoryImage).bytes, bytes);
+      await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+      await tester.pumpAndSettle();
+      expect(presigns, 1);
+      expect(uploads, 1);
+      expect(profilePatches, 1);
+      expect(privacyPatches, 2);
+    },
+  );
+
+  for (final viaOtherPreset in [false, true]) {
+    testWidgets(
+      'explicit Work defaults reset custom audiences even with same label (via other: $viaOtherPreset)',
+      (tester) async {
+        Map<String, dynamic>? saved;
+        var profilePatches = 0;
+        await _pump(
+          tester,
+          MockClient((req) async {
+            if (req.url.path.endsWith('/privacy')) {
+              if (req.method == 'GET') {
+                return http.Response(
+                  jsonEncode({
+                    'privacy_settings': {
+                      'profile_id': 'prof-test',
+                      'preset': 'work',
+                      'show_online': {'friends': true},
+                      'show_game_status': {'friends': true},
+                    },
+                  }),
+                  200,
+                );
+              }
+              saved =
+                  (jsonDecode(req.body) as Map<String, dynamic>)['settings']
+                      as Map<String, dynamic>;
+              return http.Response(
+                jsonEncode({'privacy_settings': saved}),
+                200,
+              );
+            }
+            if (req.method == 'PATCH') profilePatches++;
+            return http.Response('{}', 404);
+          }),
+        );
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(ProfileEditSheet.saveButtonKey))
+              .onPressed,
+          isNull,
+        );
+        if (viaOtherPreset) {
+          await tester.ensureVisible(find.text('Personal'));
+          await tester.tap(find.text('Personal'));
+          await tester.pump();
+        }
+        await tester.ensureVisible(find.text('Work'));
+        await tester.tap(find.text('Work'));
+        await tester.pump();
+        await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
+        expect(
+          tester
+              .widget<FilledButton>(find.byKey(ProfileEditSheet.saveButtonKey))
+              .onPressed,
+          isNotNull,
+        );
+        await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
+        await tester.pumpAndSettle();
+        expect(saved?['preset'], 'work');
+        expect(saved?['profile_id'], 'prof-test');
+        expect(saved?['show_game_status'], {
+          'friends': false,
+          'friends_of_friends': false,
+          'space_members': false,
+          'include_guests': false,
+        });
+        expect((saved?['show_online'] as Map)['space_members'], isTrue);
+        expect((saved?['show_online'] as Map)['friends'], isFalse);
+        expect(profilePatches, 0);
+      },
+    );
+  }
+
+  testWidgets(
     'profile switch during avatar presign cancels follow-up mutations',
     (tester) async {
       final presign = Completer<http.Response>();

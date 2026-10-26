@@ -54,7 +54,9 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
   Object? _identity;
   String? _accent;
   String? _preset;
-  String? _initialPreset;
+  // A preset is an explicit request to apply defaults, even if its name matches
+  // the server label of privacy rules that have since been customized.
+  bool _applyPresetDefaults = false;
   bool _privacyLoading = true;
   bool _privacyFailed = false;
   late String _savedName;
@@ -62,6 +64,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
   String? _savedAccent;
   String? _uploadedAvatarUrl;
   ProfileAvatarFile? _avatar;
+  ProfileAvatarFile? _savedAvatarPreview;
   var _saving = false;
   String? _error;
 
@@ -98,8 +101,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
       _bioController.text != _savedBio ||
       _avatar != null ||
       _accent != _savedAccent;
-  bool get _dirty =>
-      _profileDirty || (_preset != null && _preset != _initialPreset);
+  bool get _dirty => _profileDirty || _applyPresetDefaults;
 
   Future<void> _loadPrivacy() async {
     final auth = ref.read(authorizationHeaderProvider);
@@ -128,7 +130,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
             _privacyFailed = true;
             break;
           }
-          _preset = _initialPreset = data.preset;
+          _preset = data.preset;
         case UserPrivacyApiFailure():
           _privacyFailed = true;
       }
@@ -149,6 +151,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
     final voice = VoiceColors.of(context);
     ref.watch(authControllerProvider);
     final catalog = ref.watch(voiceTokenCatalogProvider).valueOrNull;
+    final avatarPreview = _avatar ?? _savedAvatarPreview;
     return Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
@@ -199,15 +202,15 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                           children: [
                             CircleAvatar(
                               radius: 28,
-                              backgroundImage: _avatar != null
-                                  ? MemoryImage(_avatar!.bytes)
+                              backgroundImage: avatarPreview != null
+                                  ? MemoryImage(avatarPreview.bytes)
                                   : (widget.profile.avatarUrl != null
                                         ? NetworkImage(
                                             widget.profile.avatarUrl!,
                                           )
                                         : null),
                               child:
-                                  _avatar == null &&
+                                  avatarPreview == null &&
                                       widget.profile.avatarUrl == null
                                   ? Text(_avatarFallback)
                                   : null,
@@ -348,7 +351,10 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
                                   selected: _preset == preset,
                                   onSelected: _saving
                                       ? null
-                                      : (_) => setState(() => _preset = preset),
+                                      : (_) => setState(() {
+                                          _preset = preset;
+                                          _applyPresetDefaults = true;
+                                        }),
                                 ),
                             ],
                           ),
@@ -527,6 +533,10 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
         _savedName = displayName;
         _savedBio = bio;
         _savedAccent = _accent;
+        // The sheet keeps its original widget.profile after a partial save.
+        // Keep the committed image visible while the remaining privacy write
+        // is retried, without marking the avatar as an unsaved draft again.
+        _savedAvatarPreview = _avatar ?? _savedAvatarPreview;
         _avatar = null;
         _uploadedAvatarUrl = null;
         ref.invalidate(profileProvider(widget.profile.id));
@@ -534,7 +544,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
         ref.invalidate(myProfilesProvider);
         ref.invalidate(profileAccentColorProvider(widget.profile.id));
       }
-      if (_preset != null && _preset != _initialPreset) {
+      if (_preset != null && _applyPresetDefaults) {
         if (!_currentIdentity) {
           _saveFailed(l10n);
           return;
@@ -555,7 +565,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
           _saveFailed(l10n);
           return;
         }
-        _initialPreset = _preset;
+        _applyPresetDefaults = false;
       }
       if (!mounted || !_currentIdentity) return;
       Navigator.of(context).pop();
