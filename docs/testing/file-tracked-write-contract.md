@@ -23,6 +23,9 @@ reported as actual size. Keys/generations are unique server-owned attempts.
 - `FilesStore.SettleTrackedWrite(ctx, key, generation, acknowledged) error`
   records the actual storage outcome on a fresh, bounded connection independently
   of caller cancellation, File deletion or actor/current-publication loss.
+  Stale/dead pooled connections and transient settlement failures receive at
+  most three idempotent database-only attempts under one five-second deadline,
+  using the same key/generation/outcome. This never retries PUT.
 - `CanCollectTrackedObjectTx(ctx, tx, fileID, key)` and
   `CanCollectTrackedBlobTx(ctx, tx, blobID)` supply the shared physical predicate.
   They do not replace reference/alias/attempt/lifecycle ownership checks.
