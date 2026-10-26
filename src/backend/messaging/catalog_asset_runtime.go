@@ -40,7 +40,7 @@ func loadCatalogAssetConfig(lookup func(string) (string, bool)) (catalogAssetCon
 	}
 	for _, owner := range []catalogAssetEndpoint{config.file, config.chat} {
 		if owner.address == "" || owner.ca == "" || owner.serverName == "" || owner.cert == "" || owner.key == "" {
-			return config, true, errors.New("Messaging catalog asset clients require complete File and Chat dedicated mTLS configuration")
+			return config, true, errors.New("messaging catalog asset clients require complete File and Chat dedicated mTLS configuration")
 		}
 	}
 	return config, true, nil
