@@ -911,8 +911,8 @@ issuer, existing account-deletion durable and consumer dependencies. Space
 destinations require native Space membership and the protected Role
 `TEXT_CHAT_VIEW` decision; no fabricated user headers are forwarded.
 
-Runtime composition keeps the production resolver absent. Physical File import,
-Gateway selection transport and Messaging integration proof remain open at this
+Runtime composition keeps the production resolver absent. Gateway selection
+transport uses the dedicated listener; physical File import and Messaging integration proof remain open at this
 source checkpoint. This does not activate a live provider, E2E GIFs or
 sticker-source admission.
 
