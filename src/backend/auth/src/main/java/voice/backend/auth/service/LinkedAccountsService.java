@@ -36,6 +36,11 @@ public class LinkedAccountsService {
   private final AuthProperties.OAuth oauth;
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
+  private volatile voice.backend.auth.linkoauth.LinkedOAuthSourceTokens linkedOAuthTokens;
+
+  public void configureLinkedOAuthSourceTokens(voice.backend.auth.linkoauth.LinkedOAuthSourceTokens tokens) {
+    this.linkedOAuthTokens = java.util.Objects.requireNonNull(tokens);
+  }
 
   private volatile String twitchApiBaseUrl;
   private volatile String twitchTokenUrl;
@@ -192,17 +197,27 @@ public class LinkedAccountsService {
   public int refreshVerificationStatuses() {
     int cleared = 0;
     for (LinkedIdentity row : linkedIdentities.listAllActive()) {
+      // The frozen transport contract leaves YPP + verified-channel evidence unavailable.
+      // Upload permission cannot prove membership loss or authorize historical remediation.
+      if (PLATFORM_YOUTUBE.equals(row.platform())) continue;
       if (row.accessTokenEncrypted() == null || row.profileId() == null) {
         continue;
       }
-      String accessToken = new String(row.accessTokenEncrypted(), StandardCharsets.UTF_8);
       boolean stillEligible;
       try {
+        String accessToken;
+        if (voice.backend.auth.linkoauth.LinkedOAuthSourceTokens.tagged(row.accessTokenEncrypted())) {
+          var codec = linkedOAuthTokens;
+          // Missing key / invalid envelope is unknown evidence, never criterion loss.
+          if (codec == null) continue;
+          try { accessToken = codec.open(row, row.accessTokenEncrypted(), "access"); }
+          catch (RuntimeException invalidEnvelope) { continue; }
+        } else {
+          accessToken = new String(row.accessTokenEncrypted(), StandardCharsets.UTF_8);
+        }
         if (PLATFORM_TWITCH.equals(row.platform())) {
           stillEligible =
               "partner".equalsIgnoreCase(fetchTwitchUser(accessToken).broadcasterType());
-        } else if (PLATFORM_YOUTUBE.equals(row.platform())) {
-          stillEligible = isYoutubePartner(fetchYoutubeChannel(accessToken).longUploadsStatus());
         } else {
           continue;
         }
