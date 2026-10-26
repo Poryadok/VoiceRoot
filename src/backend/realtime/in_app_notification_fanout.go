@@ -362,6 +362,19 @@ func dispatchMessageStreamEvent(hub *wsHub, data []byte, header nats.Header, log
 		fanouts, notifyOK = inAppNotificationFanouts(data, recipientIDs, "", recipientStates)
 	}
 	var archiveFanouts []profileFanout
+	if hub != nil {
+		if router := hub.messageNotificationRouter(); router != nil && (messageSentFromBytes(data) != nil || mentionAddedFromBytes(data) != nil || isReactionAddedEvent(data)) {
+			var err error
+			fanouts, err = notificationPolicyFanouts(context.Background(), router, data)
+			notifyOK = err == nil
+			if err != nil && logger != nil {
+				logger.Warn("notification recipient routing failed", slog.Any("error", err))
+			}
+			for _, fanout := range fanouts {
+				recipientIDs = append(recipientIDs, fanout.ProfileID)
+			}
+		}
+	}
 	if lookupOK {
 		archiveFanouts = archiveActivityFanouts(data, recipientStates)
 	}
