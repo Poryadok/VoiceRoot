@@ -103,6 +103,15 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
 - Утверждения: **`github.com/stretchr/testify`** (`require` / `assert`) — единый стиль по репозиторию для читаемости.
 - Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
+- BE-076 message views: from `src/backend/messaging`, run
+  `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
+  and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.
+  The latter builds an isolated User fixture subprocess to avoid duplicate
+  protobuf registration across service modules, then uses actual protected
+  mTLS/JWKS authority, a shared network miniredis replay store and two disposable
+  PostgreSQL databases. It covers authority outage, retry and explicit
+  soft-deletion compaction; frozen/active/missing profiles retain views. It skips
+  under `-short`; no DEV/STAGING or external providers are used.
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 - Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
@@ -735,3 +744,15 @@ Opt-in: `VOICE_RUN_LIVE_COMPOSE=true` в `src/backend/gateway` для analytics 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ветки и PR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — где гоняются тесты в CI и staging
 - [OPERATIONS.md](OPERATIONS.md) — canary, rollback
+
+### User catalog actor snapshot (BE085)
+
+Run `cd src/backend/user; go test ./internal/grpcsvc -run TestCatalogActor -count=1`
+for the exact ownership/deleted_at/nonmutation PostgreSQL suite and the real
+mTLS/JWKS/request-binding/shared-miniredis transport checks. Run
+`cd src/backend/pkg; go test ./socialprincipal -run TestCatalogActor -count=1`
+for the signed caller matrix and complete listener configuration checks.
+The User `-short ./...` suite keeps the protected Messaging snapshot regressions.
+PostgreSQL tests require Docker and are distinct from short tests; miniredis is
+explicitly a test dependency, not deployed Redis acceptance. Execution details:
+[catalog actor ExecPlan](testing/catalog-actor-states-exec-plan.md).

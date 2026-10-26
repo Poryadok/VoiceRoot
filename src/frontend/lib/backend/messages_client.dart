@@ -134,6 +134,7 @@ class VoiceMessage {
     this.threadParentId,
     this.isE2e = false,
     this.decryptionFailed = false,
+    this.viewCount,
   });
 
   final String id;
@@ -154,6 +155,7 @@ class VoiceMessage {
   final String? threadParentId;
   final bool isE2e;
   final bool decryptionFailed;
+  final int? viewCount;
 
   factory VoiceMessage.fromJson(Map<String, dynamic> json) {
     final chat = json['chat'] as Map<String, dynamic>? ?? {};
@@ -174,6 +176,7 @@ class VoiceMessage {
       isPinned: json['is_pinned'] as bool? ?? false,
       threadParentId: json['thread_parent_id'] as String?,
       isE2e: json['is_e2e'] as bool? ?? false,
+      viewCount: (json['view_count'] as num?)?.toInt(),
     );
   }
 
@@ -207,6 +210,7 @@ class VoiceMessage {
       'is_pinned': isPinned,
       if (threadParentId != null) 'thread_parent_id': threadParentId,
       'is_e2e': isE2e,
+      if (viewCount != null) 'view_count': viewCount,
     };
   }
 
@@ -240,6 +244,7 @@ class VoiceMessage {
     String? content,
     bool? isE2e,
     bool? decryptionFailed,
+    int? viewCount,
   }) {
     return VoiceMessage(
       id: id,
@@ -260,6 +265,7 @@ class VoiceMessage {
       threadParentId: threadParentId,
       isE2e: isE2e ?? this.isE2e,
       decryptionFailed: decryptionFailed ?? this.decryptionFailed,
+      viewCount: viewCount ?? this.viewCount,
     );
   }
 }
@@ -747,6 +753,23 @@ class VoiceMessagesClient {
         statusCode: GatewayApiResultMapper.failureStatus(error),
       ),
     };
+  }
+
+  Future<MessagesApiResult<int>> recordMessageView({
+    required String authorization,
+    required String chatId,
+    required String messageId,
+  }) async {
+    final result = await _gateway.postProto(
+      uri: _gateway.resolve('/api/v1/messages/views'),
+      authorization: authorization,
+      body: messaging_pb.RecordMessageViewRequest(
+        chatId: chatId,
+        messageId: messageId,
+      ),
+      createEmpty: messaging_pb.RecordMessageViewResponse.create,
+    );
+    return _map(result, (response) => response.viewCount.toInt());
   }
 
   Future<MessagesApiResult<void>> markRead({

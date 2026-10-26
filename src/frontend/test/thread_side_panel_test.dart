@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
@@ -67,6 +69,150 @@ void main() {
     }),
     200,
     headers: {'content-type': 'application/json'},
+  );
+
+  testWidgets(
+    'visible thread reply records and shows its group/channel view count',
+    (tester) async {
+      var views = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/messages/views') {
+          views++;
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          expect(body['message_id'], 'reply-1');
+          return http.Response(
+            '{"view_count":"9"}',
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [
+                {
+                  'id': 'reply-1',
+                  'chat': {'id': 'chat-thread', 'type': 'CHAT_TYPE_CHANNEL'},
+                  'sender_profile_id': 'profile-peer',
+                  'content': 'Newer thread reply',
+                  'view_count': '8',
+                },
+              ],
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      await tester.pumpWidget(threadTestApp(client: client));
+      await tester.pumpAndSettle();
+      expect(views, 1);
+      expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+      expect(find.text('9'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'late thread view result cannot overwrite another profile response',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      var views = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/api/v1/messages/views') {
+          views++;
+          if (views == 1) return pending.future;
+          return http.Response(
+            '{"view_count":"10"}',
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return http.Response(
+          jsonEncode({
+            'message_list': {
+              'messages': [
+                {
+                  'id': 'reply-1',
+                  'chat': {'id': 'chat-thread', 'type': 'CHAT_TYPE_CHANNEL'},
+                  'sender_profile_id': 'profile-peer',
+                  'content': 'Reply',
+                  'view_count': '8',
+                },
+              ],
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      await tester.pumpWidget(threadTestApp(client: client));
+      await tester.pumpAndSettle();
+      expect(views, 1);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadSidePanel)),
+      );
+      container.read(authControllerProvider.notifier).state = const AuthState(
+        session: AuthSession(
+          accessToken: 'other-token',
+          refreshToken: 'other-refresh',
+          accountId: 'other-account',
+          activeProfileId: 'other-profile',
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(views, 2);
+      expect(find.text('10'), findsOneWidget);
+      pending.complete(
+        http.Response(
+          '{"view_count":"99"}',
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('99'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'token rotation during thread load restarts the current profile request',
+    (tester) async {
+      final pending = Completer<http.Response>();
+      var loads = 0;
+      final client = MockClient((request) async {
+        loads++;
+        if (loads == 1) return pending.future;
+        return http.Response(
+          '{"message_list":{"messages":[{"id":"fresh","chat":{"id":"chat-thread"},"content":"Fresh reply"}]}}',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      await tester.pumpWidget(threadTestApp(client: client));
+      await tester.pumpAndSettle();
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ThreadSidePanel)),
+      );
+      final session = container.read(authControllerProvider).session!;
+      container.read(authControllerProvider.notifier).state = AuthState(
+        session: AuthSession(
+          accessToken: 'rotated-token',
+          refreshToken: session.refreshToken,
+          accountId: session.accountId,
+          activeProfileId: session.activeProfileId,
+          expiresInSeconds: 900,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(loads, 2);
+      expectMessagePlainText(tester, 'Fresh reply');
+      pending.complete(threadRepliesResponse());
+      await tester.pumpAndSettle();
+      expectMessagePlainText(tester, 'Fresh reply');
+      expect(richPlainText(tester), isNot(contains('Recovered reply')));
+    },
   );
 
   testWidgets('thread load failure uses safe localized copy', (tester) async {

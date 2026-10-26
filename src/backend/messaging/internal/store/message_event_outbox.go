@@ -129,6 +129,9 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 	if err := lockMessageMutation(ctx, tx, row.ChatID, spaceID, &row.ID); err != nil {
 		return nil, false, err
 	}
+	if err := validateScheduledDispatch(ctx, tx); err != nil {
+		return nil, false, err
+	}
 	if row.BotSendAdmission != nil {
 		var cancel context.CancelFunc
 		ctx, cancel, err = row.BotSendAdmission(ctx)
@@ -157,6 +160,9 @@ func (s *MessagesStore) InsertMessageWithOutbox(ctx context.Context, row Message
 				return nil, false, err
 			}
 		}
+	}
+	if err := completeScheduledDispatch(ctx, tx, saved, events); err != nil {
+		return nil, false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, false, err
@@ -241,7 +247,7 @@ func (s *MessagesStore) SoftDeleteMessageWithOutbox(ctx context.Context, chatID,
 
 // UpsertReadStateAndOutbox commits private progress independently of the
 // optional public receipt; only the public, currently visible cursor emits an event.
-func (s *MessagesStore) UpsertReadStateAndOutbox(ctx context.Context, chatID, spaceID, profileID, messageID uuid.UUID, publishReceipt bool, event *messageevents.OutboxEvent) error {
+func (s *MessagesStore) UpsertReadStateAndOutbox(ctx context.Context, chatID, spaceID, profileID, messageID uuid.UUID, publishReceipt bool, event *messageevents.OutboxEvent, viewIDs ...uuid.UUID) error {
 	if s == nil || s.Pool == nil {
 		return errors.New("messages store: pool not configured")
 	}
@@ -279,6 +285,9 @@ ON CONFLICT(chat_id,profile_id) DO UPDATE SET last_read_message_id=CASE WHEN rea
 		}
 	} else if event != nil {
 		return errors.New("private read position cannot publish an outbox event")
+	}
+	if err := insertMessageViews(ctx, tx, chatID, profileID, viewIDs); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
