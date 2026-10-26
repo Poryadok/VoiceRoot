@@ -35,9 +35,17 @@ func (l *subscriptionConsumptionLog) snapshot() string {
 	return l.buffer.String()
 }
 
-func TestSubscriptionEventsJetStreamRestartDrainsBacklogAndAcks(t *testing.T) {
-	// Subscription currently records a grace-reminder stub. This proves its
-	// actual durable consumption/ACK path, not the unimplemented A7 push outbox.
+func TestSubscriptionEventsJetStreamRestartRetainsCanonicalReminderUntilDeliveryRuntimeExists(t *testing.T) {
+	testSubscriptionEventsJetStreamRetainsReminder(t, 1)
+}
+
+func TestSubscriptionEventsJetStreamRestartRetainsLegacyReminderUntilDeliveryRuntimeExists(t *testing.T) {
+	testSubscriptionEventsJetStreamRetainsReminder(t, 0)
+}
+
+func testSubscriptionEventsJetStreamRetainsReminder(t *testing.T, version uint32) {
+	// A recognized canonical reminder is not a durable delivery. Until A7's
+	// protected authority and channel runtime exist, preserve it for retry.
 	server, err := natsserver.NewServer(&natsserver.Options{JetStream: true, StoreDir: t.TempDir(), Port: -1})
 	require.NoError(t, err)
 	go server.Start()
@@ -73,7 +81,7 @@ func TestSubscriptionEventsJetStreamRestartDrainsBacklogAndAcks(t *testing.T) {
 	before, err := js.ConsumerInfo(jsStreamSubscriptionEvents, durable)
 	require.NoError(t, err)
 
-	encoded, err := proto.Marshal(&eventsv1.SubscriptionStreamEvent{Payload: &eventsv1.SubscriptionStreamEvent_GraceReminder{
+	encoded, err := proto.Marshal(&eventsv1.SubscriptionStreamEvent{ProtocolVersion: version, Payload: &eventsv1.SubscriptionStreamEvent_GraceReminder{
 		GraceReminder: &eventsv1.GraceReminder{AccountId: uuid.NewString(), Plan: "premium", Day: 1},
 	}})
 	require.NoError(t, err)
@@ -88,14 +96,13 @@ func TestSubscriptionEventsJetStreamRestartDrainsBacklogAndAcks(t *testing.T) {
 	second := start()
 	require.Eventually(t, func() bool {
 		info, infoErr := js.ConsumerInfo(jsStreamSubscriptionEvents, durable)
-		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 0 &&
-			info.AckFloor.Stream >= published.Sequence && info.NumRedelivered == 0 && info.Created.Equal(before.Created)
-	}, 5*time.Second, 20*time.Millisecond, "rebound original durable ACKs the valid reminder and drains backlog")
+		return infoErr == nil && info.NumPending == 0 && info.NumAckPending == 1 &&
+			info.AckFloor.Stream < published.Sequence && info.NumRedelivered > 0 && info.Created.Equal(before.Created)
+	}, 5*time.Second, 20*time.Millisecond, "rebound durable retries canonical work instead of ACKing a recognized stub")
 	err, joined = second.stop()
 	require.True(t, joined, "restarted subscription consumer is joined before fixture shutdown")
 	require.ErrorIs(t, err, context.Canceled)
-	require.Contains(t, recorded.snapshot(), `"msg":"subscription notification event consumed"`)
+	require.NotContains(t, recorded.snapshot(), `"msg":"subscription notification event consumed"`)
 	require.Contains(t, recorded.snapshot(), `"subject":"subscription.grace_reminder"`)
-	require.Equal(t, 1, bytes.Count([]byte(recorded.snapshot()), []byte(`"msg":"subscription notification event consumed"`)),
-		"the ACKed backlog event is handled once")
+	require.Contains(t, recorded.snapshot(), "subscription delivery runtime unavailable")
 }

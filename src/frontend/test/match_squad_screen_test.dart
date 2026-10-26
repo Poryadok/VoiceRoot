@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -222,7 +223,10 @@ void main() {
       expect(find.byKey(MatchSquadScreen.leaveButtonKey), findsOneWidget);
       await expectLater(
         find.byType(MatchSquadScreen),
-        matchesGoldenFile('goldens/match_squad_${layout.name}.png'),
+        matchesGoldenFile(
+          'goldens/${Platform.isWindows ? 'windows/' : ''}'
+          'match_squad_${layout.name}.png',
+        ),
       );
       expect(find.text('Valorant · ranked'), findsOneWidget);
       expect(find.text('Alex Chen'), findsOneWidget);
@@ -292,7 +296,10 @@ void main() {
     );
     await expectLater(
       find.byType(MatchSquadScreen),
-      matchesGoldenFile('goldens/match_squad_keyboard_focus.png'),
+      matchesGoldenFile(
+        'goldens/${Platform.isWindows ? 'windows/' : ''}'
+        'match_squad_keyboard_focus.png',
+      ),
     );
     await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);

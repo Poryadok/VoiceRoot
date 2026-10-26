@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/users_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/create_group_friends_provider.dart';
@@ -11,6 +12,8 @@ import 'package:voice_frontend/ui/chat/group_member_picker_sheet.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets(
     'filters complete friends, excludes current members and returns only on submit',
     (tester) async {
