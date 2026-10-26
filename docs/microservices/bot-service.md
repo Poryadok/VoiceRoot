@@ -188,7 +188,7 @@ service BotService {
 
 ### Install / uninstall
 
-- **Install** (`InstallBotInSpace`): `SPACE_MANAGE_BOTS` через Role `CheckPermission`; `Space.AddBotMember` для `actor_profile_id`; whitelist чатов; `acknowledge_privileged_scopes` обязателен при privileged scopes.
+- **Install** (`InstallBotInSpace`): `SPACE_MANAGE_BOTS` через Role `CheckPermission`; `Space.AddBotMember` для `actor_profile_id`; whitelist чатов; `acknowledge_privileged_scopes` обязателен при privileged scopes. Channel refs do not call `Chat.AddMembers` because Space-chat membership inherits from `space_db.space_members`. If Space rejects `AddBotMember`, installation finalization and whitelist writes do not run; the prepared membership intent remains available for recovery.
 - **Uninstall** (`UninstallBotFromSpace`): снимает whitelist/installation, `Space.RemoveBotMember`; **S2S cleanup** — см. [CONTRACT_MATRIX.md](../CONTRACT_MATRIX.md):
   - Role: `DeleteRolesCreatedByProfile` (роли с `created_by_profile_id = actor_profile_id`), затем `GetMemberRoles` + `RevokeRole` для назначенных ролей бота
   - Messaging: `UnpinMessagesBySenderInChats` по whitelisted `chat_id` и `sender_profile_id = actor_profile_id`
