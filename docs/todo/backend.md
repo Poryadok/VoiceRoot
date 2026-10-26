@@ -625,7 +625,7 @@ and Voice IDs denied while history remains.
 - [ ] **[Bot] `DeleteBot` is soft-disable only** — `status = 'disabled'` (`internal/grpcsvc/bot.go`); `bot_space_installations` / `bot_chat_whitelist` rows remain.
 - [ ] **[Bot] `UpdateBot` ignores proto fields** — only name/description updated; `avatar_url`, `scopes_json` from `UpdateBotRequest` ignored (`internal/grpcsvc/bot.go`).
 - [ ] **[Bot] Archive chat not implemented** — `TEXT_CHAT_CREATE_IN_SPACE` docs say create/**archive** (`docs/features/bots.md`); only `CreateBotChat` exists (`internal/grpcsvc/bot_c.go`).
-- [ ] **[Bot] Channel install skips `Chat.AddMembers`** — `InstallBotInSpace` `continue`s on channel refs (`internal/grpcsvc/interaction.go`); bot actor may not join channel chats.
+- [x] **[Bot] Channel install uses inherited Space membership** — protected installation adds the bot actor to the Space; channel refs do not call `Chat.AddMembers` because Space-chat membership inherits from `space_db.space_members`. Space rejection stops installation and whitelist finalization. Effective multi-service access remains a separate qualification.
 - [ ] **[Bot] Autocomplete skips offline check** — `ExecuteSlashInteraction` gates on presence; `AutocompleteSlashOption` does not (`internal/grpcsvc/autocomplete.go` vs `interaction.go`).
 
 ### Cross-cutting
