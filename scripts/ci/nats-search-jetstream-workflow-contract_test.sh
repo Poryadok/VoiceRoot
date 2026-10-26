@@ -34,7 +34,7 @@ source_line="$(printf '%s\n' "$probe" | grep -nF 'Download exact staging source 
 probe_checkout_line="$(printf '%s\n' "$probe" | grep -nF 'uses: actions/checkout@' | head -n 1 | cut -d: -f1 || true)"
 [[ -n "$source_line" && -z "$probe_checkout_line" ]] || fail "probe must acquire its source archive without git checkout"
 printf '%s\n' "$probe" | grep -Fq 'STAGING_SOURCE_SHA: ${{ github.sha }}' || fail "probe must use its immutable workflow commit"
-printf '%s\n' "$deploy" | grep -Fq 'STAGING_SOURCE_SHA: ${{ inputs.image_tag }}' || fail "deploy must use the selected source image tag"
+grep -Fq 'STAGING_SOURCE_SHA: ${{ inputs.image_tag }}' <<<"$deploy" || fail "deploy must use the selected source image tag"
 for requirement in \
   'source_sha" =~ ^[[:xdigit:]]{40}$' \
   'api="https://api.github.com/repos/Poryadok/VoiceRoot"' \
