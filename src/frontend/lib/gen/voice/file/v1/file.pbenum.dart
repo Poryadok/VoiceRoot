@@ -128,11 +128,14 @@ class FileScanOutcome extends $pb.ProtobufEnum {
 class UploadIntent extends $pb.ProtobufEnum {
   static const UploadIntent UPLOAD_INTENT_UNSPECIFIED =
       UploadIntent._(0, _omitEnumNames ? '' : 'UPLOAD_INTENT_UNSPECIFIED');
+  static const UploadIntent UPLOAD_INTENT_GIF =
+      UploadIntent._(2, _omitEnumNames ? '' : 'UPLOAD_INTENT_GIF');
   static const UploadIntent UPLOAD_INTENT_MUSIC =
       UploadIntent._(6, _omitEnumNames ? '' : 'UPLOAD_INTENT_MUSIC');
 
   static const $core.List<UploadIntent> values = <UploadIntent>[
     UPLOAD_INTENT_UNSPECIFIED,
+    UPLOAD_INTENT_GIF,
     UPLOAD_INTENT_MUSIC,
   ];
 
