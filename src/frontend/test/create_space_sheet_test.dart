@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
@@ -27,6 +28,8 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   ThemeData? captureTheme;
   setUpAll(() async {
     if (const bool.fromEnvironment('VOICE_CAPTURE_SPACE_CREATE')) {
