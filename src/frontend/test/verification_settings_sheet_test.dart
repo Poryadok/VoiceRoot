@@ -50,54 +50,18 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  testWidgets('linked accounts horizontal and vertical screenshots', (
-    tester,
-  ) async {
-    await _loadGoldenFonts();
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    for (final layout in [
-      (name: 'h', size: const Size(1280, 800)),
-      (name: 'v', size: const Size(390, 844)),
-    ]) {
-      tester.view.physicalSize = layout.size;
-      tester.view.devicePixelRatio = 1;
-      await tester.pumpWidget(
-        _linkedAccountsTestApp(
-          MockClient((request) async {
-            if (request.method == 'GET' &&
-                request.url.path == '/api/v1/auth/linked-accounts') {
-              return http.Response(
-                jsonEncode({
-                  'linked_accounts': [
-                    {
-                      'platform': 'twitch',
-                      'profile_id': 'profile-selected',
-                      'external_id': 'tw-1',
-                      'external_login': 'selected-streamer',
-                    },
-                  ],
-                }),
-                200,
-              );
-            }
-            return http.Response('{}', 404);
-          }),
-        ),
+  for (final layout in [
+    (name: 'horizontal', suffix: 'h', size: const Size(1280, 800)),
+    (name: 'vertical', suffix: 'v', size: const Size(390, 844)),
+  ]) {
+    testWidgets('linked accounts ${layout.name} screenshot', (tester) async {
+      await _verifyLinkedAccountsGolden(
+        tester,
+        name: layout.suffix,
+        size: layout.size,
       );
-      await _pumpUntil(tester, find.textContaining('selected-streamer'));
-
-      expect(tester.takeException(), isNull);
-      expect(find.textContaining('selected-streamer'), findsOneWidget);
-      final goldenPath = Platform.isLinux && layout.name == 'h'
-          ? 'goldens/linux/linked_accounts_h.png'
-          : 'goldens/linked_accounts_${layout.name}.png';
-      await expectLater(
-        find.byKey(VerificationSettingsSheet.sheetKey),
-        matchesGoldenFile(goldenPath),
-      );
-    }
-  });
+    });
+  }
 
   testWidgets('shows loading then the empty state and connect actions', (
     tester,
@@ -818,6 +782,52 @@ Widget _linkedAccountsTestApp(
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(body: VerificationSettingsSheet()),
     ),
+  );
+}
+
+Future<void> _verifyLinkedAccountsGolden(
+  WidgetTester tester, {
+  required String name,
+  required Size size,
+}) async {
+  await _loadGoldenFonts();
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  await tester.pumpWidget(
+    _linkedAccountsTestApp(
+      MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/linked-accounts') {
+          return http.Response(
+            jsonEncode({
+              'linked_accounts': [
+                {
+                  'platform': 'twitch',
+                  'profile_id': 'profile-selected',
+                  'external_id': 'tw-1',
+                  'external_login': 'selected-streamer',
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+    ),
+  );
+  await _pumpUntil(tester, find.textContaining('selected-streamer'));
+
+  expect(tester.takeException(), isNull);
+  expect(find.textContaining('selected-streamer'), findsOneWidget);
+  final goldenPath = Platform.isLinux && name == 'h'
+      ? 'goldens/linux/linked_accounts_h.png'
+      : 'goldens/linked_accounts_$name.png';
+  await expectLater(
+    find.byKey(VerificationSettingsSheet.sheetKey),
+    matchesGoldenFile(goldenPath),
   );
 }
 
