@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -88,9 +89,12 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.textContaining('selected-streamer'), findsOneWidget);
+      final goldenPath = Platform.isLinux && layout.name == 'h'
+          ? 'goldens/linux/linked_accounts_h.png'
+          : 'goldens/linked_accounts_${layout.name}.png';
       await expectLater(
         find.byKey(VerificationSettingsSheet.sheetKey),
-        matchesGoldenFile('goldens/linked_accounts_${layout.name}.png'),
+        matchesGoldenFile(goldenPath),
       );
     }
   });
