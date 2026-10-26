@@ -8,9 +8,14 @@ final reducedMotionEnabledProvider =
     NotifierProvider<ReducedMotionNotifier, bool>(ReducedMotionNotifier.new);
 
 class ReducedMotionNotifier extends Notifier<bool> {
+  Future<void> _loaded = Future<void>.value();
+
+  /// Completes when the persisted preference is available to runtime consumers.
+  Future<void> get loaded => _loaded;
+
   @override
   bool build() {
-    _load();
+    _loaded = _load();
     return false;
   }
 
@@ -28,8 +33,10 @@ class ReducedMotionNotifier extends Notifier<bool> {
 
 /// Panel/sheet animation duration respecting reduced motion (docs/features/accessibility.md).
 Duration panelAnimationDurationOf(BuildContext context) {
-  final reduced = ProviderScope.containerOf(context, listen: true)
-      .read(reducedMotionEnabledProvider);
+  final reduced = ProviderScope.containerOf(
+    context,
+    listen: true,
+  ).read(reducedMotionEnabledProvider);
   if (reduced || MediaQuery.disableAnimationsOf(context)) {
     return Duration.zero;
   }
