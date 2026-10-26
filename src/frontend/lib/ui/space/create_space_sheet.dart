@@ -237,6 +237,13 @@ class _CreateSpaceSheetState extends ConsumerState<CreateSpaceSheet> {
                                         : colors.borderDefault,
                                   ),
                                   selected: _visibility == entry.key,
+                                  selectedColor: colors.profileAccent,
+                                  labelStyle: theme.textTheme.labelLarge
+                                      ?.copyWith(
+                                        color: _visibility == entry.key
+                                            ? theme.colorScheme.onPrimary
+                                            : colors.textPrimary,
+                                      ),
                                   onSelected: _canEdit
                                       ? (_) => setState(
                                           () => _visibility = entry.key,
