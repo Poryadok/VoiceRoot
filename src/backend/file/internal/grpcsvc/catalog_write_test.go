@@ -128,6 +128,25 @@ func TestCatalogWriteErrorRemainsUnsettledAndUnsendable(t *testing.T) {
 	require.Zero(t, jobs)
 }
 
+func TestCatalogAcknowledgedWriteSettlesBeforeCancelledPublication(t *testing.T) {
+	ctx := context.Background()
+	f := seedPendingCatalog(t, ctx)
+	digest := sha256.Sum256([]byte("GIF89a-source"))
+	require.NoError(t, f.files.RecordCatalogFetched(ctx, f.imported, f.capture, f.keys, 13, digest[:]))
+	require.NoError(t, f.files.StartCatalogWrite(ctx, f.imported, f.capture, f.keys))
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	require.Error(t, f.files.SettleCatalogWrite(cancelled, f.imported, f.capture, f.keys, true))
+	var state string
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT state FROM file_catalog_writes WHERE file_id=$1`, f.imported.FileID).Scan(&state))
+	require.Equal(t, "SETTLED", state, "known physical ACK must survive cancellation of publication authority")
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT status FROM files WHERE id=$1`, f.imported.FileID).Scan(&state))
+	require.Equal(t, "pending_upload", state)
+	require.NoError(t, f.files.SettleCatalogWrite(ctx, f.imported, f.capture, f.keys, true))
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT status FROM files WHERE id=$1`, f.imported.FileID).Scan(&state))
+	require.Equal(t, "processing", state)
+}
+
 func TestCatalogLateSettledWriteCannotPublishAfterPurge(t *testing.T) {
 	ctx := context.Background()
 	f := seedPendingCatalog(t, ctx)

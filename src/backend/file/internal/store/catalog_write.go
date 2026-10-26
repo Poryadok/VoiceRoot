@@ -87,7 +87,7 @@ func (s *FilesStore) RecordCatalogFetched(ctx context.Context, imp CatalogImport
 	if _, e = tx.Exec(ctx, `UPDATE file_catalog_assets SET source_sha256=$2,source_url_sha256=NULL WHERE file_id=$1`, imp.FileID, digest); e != nil {
 		return e
 	}
-	if _, e = tx.Exec(ctx, `INSERT INTO file_catalog_writes(object_key,file_id,generation,state,expected_sha256,expected_size_bytes) VALUES($1,$2,$3,'DECLARED',$4,$5)`, key, imp.FileID, imp.Generation, digest, size); e != nil {
+	if e = DeclareTrackedWriteTx(ctx, tx, TrackedWriteIntent{Key: key, FileID: imp.FileID, Generation: imp.Generation, Kind: "catalog_source", ExpectedSHA256: digest, ExpectedSize: size}); e != nil {
 		return e
 	}
 	if _, e = tx.Exec(ctx, `UPDATE file_catalog_import_operations SET phase='FETCHED' WHERE key_version=$1 AND operation_hmac=$2`, imp.KeyVersion, imp.OperationHMAC); e != nil {
@@ -180,12 +180,8 @@ func (s *FilesStore) StartCatalogWrite(ctx context.Context, imp CatalogImport, c
 	if tag.RowsAffected() != 1 {
 		return ErrCatalogTerminal
 	}
-	tag, e = tx.Exec(ctx, `UPDATE file_catalog_writes SET state='STARTED' WHERE file_id=$1 AND generation=$2 AND state='DECLARED'`, imp.FileID, imp.Generation)
-	if e != nil {
+	if _, e = StartTrackedWriteTx(ctx, tx, imp.R2Key, imp.Generation); e != nil {
 		return e
-	}
-	if tag.RowsAffected() != 1 {
-		return ErrCatalogTerminal
 	}
 	return tx.Commit(ctx)
 }
@@ -195,6 +191,11 @@ func (s *FilesStore) StartCatalogWrite(ctx context.Context, imp CatalogImport, c
 // retries; it is not an administrator-provided crash/recovery fencing claim.
 // Every error is UNSETTLED. No timer/session loss can promote it to settled.
 func (s *FilesStore) SettleCatalogWrite(ctx context.Context, imp CatalogImport, c CatalogActorCapture, keys *catalogasset.ReplayKeys, acknowledged bool) error {
+	// Physical outcome is independent of caller cancellation and actor/source
+	// publication authority. A later authorization failure cannot erase this ACK.
+	if e := s.SettleTrackedWrite(ctx, imp.R2Key, imp.Generation, acknowledged); e != nil {
+		return e
+	}
 	tx, state, _, e := s.catalogWriteTx(ctx, imp, keys)
 	if e != nil {
 		return e
@@ -205,10 +206,10 @@ func (s *FilesStore) SettleCatalogWrite(ctx context.Context, imp CatalogImport, 
 	if e != nil {
 		return e
 	}
-	if writeState == "SETTLED" {
+	if acknowledged && (writeState == "GC_PENDING" || writeState == "DONE") {
 		return tx.Commit(ctx)
 	}
-	if writeState != "STARTED" {
+	if (acknowledged && writeState != "SETTLED") || (!acknowledged && writeState != "UNSETTLED") {
 		return ErrCatalogTerminal
 	}
 	before, e := getFileByID(ctx, tx, imp.FileID, "")
@@ -216,9 +217,6 @@ func (s *FilesStore) SettleCatalogWrite(ctx context.Context, imp CatalogImport, 
 		return e
 	}
 	if !acknowledged {
-		if _, e = tx.Exec(ctx, `UPDATE file_catalog_writes SET state='UNSETTLED' WHERE file_id=$1 AND generation=$2`, imp.FileID, imp.Generation); e != nil {
-			return e
-		}
 		if state == "pending_upload" || state == "processing" {
 			if e = catalogFailMeasuredFile(ctx, tx, before); e != nil {
 				return e
@@ -229,6 +227,9 @@ func (s *FilesStore) SettleCatalogWrite(ctx context.Context, imp CatalogImport, 
 		return tx.Commit(ctx)
 	}
 	gateError := catalogWriteSource(ctx, tx, imp, c, keys)
+	if gateError == nil && state == "processing" {
+		return tx.Commit(ctx)
+	}
 	if gateError != nil || state != "pending_upload" {
 		if gateError != nil && !errors.Is(gateError, ErrCatalogActorClosed) && !errors.Is(gateError, pgx.ErrNoRows) {
 			return gateError
@@ -265,9 +266,6 @@ func (s *FilesStore) SettleCatalogWrite(ctx context.Context, imp CatalogImport, 
 	}
 	if tag.RowsAffected() != 1 {
 		return ErrCatalogTerminal
-	}
-	if _, e = tx.Exec(ctx, `UPDATE file_catalog_writes SET state='SETTLED' WHERE file_id=$1 AND generation=$2`, imp.FileID, imp.Generation); e != nil {
-		return e
 	}
 	if _, e = tx.Exec(ctx, `UPDATE files SET status='processing',updated_at=clock_timestamp() WHERE id=$1`, imp.FileID); e != nil {
 		return e
