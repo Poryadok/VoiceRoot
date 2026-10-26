@@ -193,6 +193,36 @@ fail startup. The ordinary listener rejects both methods, and the legacy
 
 ## API (gRPC)
 
+### Authenticated Space catalog
+
+`SearchPublicSpaces` backs `GET /api/v1/spaces/catalog`. It keeps the ordinary
+authenticated active-profile read policy; nonmember does not mean anonymous.
+Empty/whitespace `query` lists discoverable Spaces. A nonempty trimmed query
+matches current `name` or `description` case-insensitively as literal text;
+`%`, `_` and backslash are not client-supplied wildcards.
+
+Only `public` and `invite_only` rows are eligible. Private and deletion-frozen
+Spaces are excluded before paging. The existing shared Space mutation locks
+protect the authority read and candidate set is revalidated after locking;
+pending ownership and unavailable authority fail closed without partial results.
+Order is `is_verified DESC, member_count DESC, id DESC`; page size defaults to 50
+and caps at 100. The opaque cursor is versioned and bound to the exact trimmed
+query/rank position. Pagination observes live data: later rank changes can move
+cards, so it is not a catalog snapshot.
+
+The existing `space_list.spaces` envelope projects only `id`, `name`,
+`description`, optional `icon_url`, `member_count`, `is_verified`. Protobuf JSON
+defaults may be omitted; absent count/verified mean 0/false. Owner, entry policy,
+questions/answers, tree, roles, matchmaking and lifecycle details are not card
+metadata. Membership remains owned by `ListMySpaces`; discovery never grants
+membership or weakens `GetSpace`, `JoinSpace` or invite-only admission.
+
+The feature mentions searching by topic/game, but no authoritative game/category
+metadata, taxonomy, edit API or catalog filter contract exists. Description text
+search supports the existing topic text; clients must not infer game/category
+tags from names, descriptions or icons. That remaining contract and legacy
+Search index hydration/update projections remain open in BE-043.
+
 ### Ban and Unban operation identity
 
 Space constructs the protected User account-capture client when all five
@@ -334,7 +364,7 @@ service SpaceService {
 | UpdateSpaceMmConfig | ✓ | ✓ | MM config on space |
 | DeleteSpace | ✓ | Disabled | Obsolete owner-only hard delete is blocked at the DB boundary; BE-245 must schedule the 7-day hidden/frozen recovery window and freeze the public status mapping |
 | RestoreSpace | ✗ | ✗ | Target owner-only restore during recovery window |
-| SearchPublicSpaces | ✓ | ✗ | Catalog search backlog |
+| SearchPublicSpaces | ✓ | ✓ source | Authenticated nonmember-safe catalog; current Space metadata, verified/count ranking and cursor paging. Runtime acceptance remains open. |
 | Create/Update/Delete VoiceRoom | ✓ | ✓ | |
 | UpsertTreeNode, RemoveTreeNode, ReorderSpaceTree | ✓ | ✓ | Tree pin fields shipped in migration `000007_tree_pin` |
 | **ListSpaceTree** | ✓ | ✓ | **Omitted from earlier doc inventory** |
