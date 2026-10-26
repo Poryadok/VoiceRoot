@@ -1158,6 +1158,7 @@ void main() {
   );
 
   testWidgets('ChatRoomPanel composer has no @ mention button', (tester) async {
+    var messageSends = 0;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -1174,6 +1175,7 @@ void main() {
           ),
           httpClientProvider.overrideWithValue(
             MockClient((req) async {
+              if (req.url.path == '/api/v1/messages/send') messageSends++;
               if (req.url.path == '/api/v1/messages') {
                 return http.Response(
                   jsonEncode({
@@ -1206,6 +1208,21 @@ void main() {
 
     expect(find.byKey(const Key('chat_room_mention_button')), findsNothing);
     expect(find.byIcon(Icons.alternate_email), findsNothing);
+    final input = find.descendant(
+      of: find.byKey(ChatRoomPanel.inputKey),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(input, 'Soon ');
+    await tester.tap(find.byKey(ChatRoomPanel.emojiPickerKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('composer_emoji_😀')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(input).controller!.text, 'Soon 😀');
+    expect(
+      messageSends,
+      0,
+      reason: 'Emoji selection only inserts into the composer',
+    );
   });
 
   testWidgets('blocked DM send keeps draft and shows neutral error', (
