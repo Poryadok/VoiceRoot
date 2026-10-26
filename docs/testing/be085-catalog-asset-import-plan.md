@@ -163,6 +163,22 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
   typed-nil dependency panic. Corrected focused race tests passed (4.055 s);
   Messaging and File `go test -short ./...` and scoped vet passed. Database tests
   are skipped by short suites; these are not full import/send delivery proof.
+- File's User actor client now verifies exact pair/version/enum/cardinality
+  snapshots, signs with the pure File principal and preserves UNKNOWN. Its tests
+  verify actual JWT signatures, full request binding and fresh replay IDs.
+- Migration 10 and zero-size metadata exclusion passed real isolated PostgreSQL
+  race tests (13.025 s): an old publisher actually blocked on the closing actor
+  row and was rejected after closure committed; restored generations do not
+  revive old bindings, ordinary zero-size uploads remain invalid and DOWN cannot
+  erase permanent fences. Empty DOWN remains reversible. No R2 drain/GC claim.
+- Purpose-framed HMAC keys retain old versions and separate actor/operation/
+  source/asset purposes; mutation/rotation tests passed in the combined File
+  catalog race suite (3.212 s).
+- User source dependency was narrowed with forward commit `98a4371c4b` to the
+  new catalogactor proto/generated clients. Importing the whole child initially
+  failed User tests on absent PR907-only helpers; server code was removed from
+  this consumer branch and the restored User short suite passed. User authority
+  server source/review remains owned by Anton-104/PR910, not this proof.
 
 ## Risks and follow-ups
 
