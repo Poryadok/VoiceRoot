@@ -45,7 +45,7 @@ func testDB(t *testing.T) *pgxpool.Pool {
 	require.True(t, ok)
 	root := filepath.Join(filepath.Dir(file), "../../../migrations/subscription_db")
 	pool := integrationtest.StartPostgres(t, context.Background(), "provider_lifecycle", filepath.Join(root, "000001_init.up.sql"))
-	for _, name := range []string{"000002_grace_reminders.up.sql", "000003_space_lifecycle_provider_dedup.up.sql", "000004_entitlement_outbox.up.sql", "000005_provider_lifecycle.up.sql"} {
+	for _, name := range []string{"000002_grace_reminders.up.sql", "000003_space_lifecycle_provider_dedup.up.sql", "000004_entitlement_outbox.up.sql", "000005_provider_lifecycle.up.sql", "000006_grace_reminder_outbox.up.sql"} {
 		migration, err := os.ReadFile(filepath.Join(root, name))
 		require.NoError(t, err)
 		_, err = pool.Exec(context.Background(), string(migration))
