@@ -82,7 +82,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-export PHASE0_MATCHSQUAD_FIXTURE_UID=65532
+unset PHASE0_MATCHSQUAD_FIXTURE_UID
+if python3 -c 'import os, sys; sys.exit(0 if os.name == "posix" else 1)'; then
+  export PHASE0_MATCHSQUAD_FIXTURE_UID=65532
+fi
 python3 "$ROOT/scripts/dev/generate-phase0-fixture.py" "$phase0_fixture_dir"
 printf 'PHASE0_FIXTURE_DIR=%s\n' "$phase0_fixture_dir" >"$compose_env"
 export PHASE0_FIXTURE_DIR="$phase0_fixture_dir"
@@ -120,6 +123,9 @@ export VOICE_FILE_ATTACHMENT_RESTART_STATE_PATH="$state_path"
 
 manifest="$ROOT/.github/ci/e2e-features.yml"
 mapfile -t restart_tests < <(bash "$ROOT/scripts/ci/e2e-manifest.sh" "$manifest" restart_proof_gateway)
+for index in "${!restart_tests[@]}"; do
+  restart_tests[$index]="${restart_tests[$index]%$'\r'}"
+done
 if (( ${#restart_tests[@]} != 1 )) || [[ "${restart_tests[0]}" != "TestComposeFileAttachmentRestartProof_live" ]]; then
   echo "restart_proof_gateway manifest must contain exactly TestComposeFileAttachmentRestartProof_live" >&2
   exit 2
