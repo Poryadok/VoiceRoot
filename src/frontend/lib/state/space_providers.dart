@@ -60,22 +60,51 @@ final spaceProvider = FutureProvider.family<VoiceSpace, String>((
   };
 });
 
+enum SpaceCreateErrorKind { rejected, iconUpdate, uncertain }
+
+class SpaceCreateActionError {
+  const SpaceCreateActionError(
+    this.message, {
+    this.kind = SpaceCreateErrorKind.rejected,
+    this.createdSpaceId,
+  });
+
+  final String message;
+  final SpaceCreateErrorKind kind;
+  final String? createdSpaceId;
+}
+
 class SpaceActions {
   SpaceActions(this._ref);
 
   final Ref _ref;
 
-  /// Creates a private space; PATCHes icon when [iconUrl] is non-empty.
-  Future<String?> createSpace({
+  /// Creates once; a known-created Space can retry only its icon PATCH.
+  Future<SpaceCreateActionError?> createSpace({
     required String name,
     String? description,
     String? iconUrl,
+    String visibility = 'private',
+    String? retryIconForSpaceId,
   }) async {
     final auth = _ref.read(authorizationHeaderProvider);
-    if (auth == null) return 'not_authenticated';
+    if (auth == null) return const SpaceCreateActionError('not_authenticated');
+
+    if (retryIconForSpaceId != null) {
+      return _patchIconIfNeeded(
+        auth: auth,
+        spaceId: retryIconForSpaceId,
+        iconUrl: iconUrl?.trim(),
+      );
+    }
 
     final trimmedName = name.trim();
-    if (trimmedName.isEmpty) return 'name_required';
+    if (trimmedName.isEmpty) {
+      return const SpaceCreateActionError('name_required');
+    }
+    if (!const {'public', 'invite_only', 'private'}.contains(visibility)) {
+      return const SpaceCreateActionError('invalid_visibility');
+    }
 
     final trimmedDescription = description?.trim();
     final createResult = await _ref
@@ -83,24 +112,39 @@ class SpaceActions {
         .createSpace(
           authorization: auth,
           name: trimmedName,
+          visibility: visibility,
           description: trimmedDescription == null || trimmedDescription.isEmpty
               ? null
               : trimmedDescription,
         );
 
-    return switch (createResult) {
-      SpacesApiFailure(:final message) => message,
-      SpacesApiOk(:final data) => _patchIconIfNeeded(
-        auth: auth,
-        space: data,
-        iconUrl: iconUrl?.trim(),
-      ),
-    };
+    if (createResult case final SpacesApiFailure failure) {
+      // POST has no stable client operation key. A transport/5xx outcome may
+      // already have committed; never turn it into another creation attempt.
+      final uncertain =
+          failure.outcomeUncertain ||
+          failure.errorCode == 'network_error' ||
+          (failure.statusCode != null && failure.statusCode! >= 500);
+      if (uncertain) _invalidateMySpaces(_ref);
+      return SpaceCreateActionError(
+        failure.message,
+        kind: uncertain
+            ? SpaceCreateErrorKind.uncertain
+            : SpaceCreateErrorKind.rejected,
+      );
+    }
+    final data = (createResult as SpacesApiOk<VoiceSpace>).data;
+    _invalidateMySpaces(_ref);
+    return _patchIconIfNeeded(
+      auth: auth,
+      spaceId: data.id,
+      iconUrl: iconUrl?.trim(),
+    );
   }
 
-  Future<String?> _patchIconIfNeeded({
+  Future<SpaceCreateActionError?> _patchIconIfNeeded({
     required String auth,
-    required VoiceSpace space,
+    required String spaceId,
     String? iconUrl,
   }) async {
     if (iconUrl == null || iconUrl.isEmpty) {
@@ -109,9 +153,13 @@ class SpaceActions {
     }
     final updateResult = await _ref
         .read(voiceSpacesClientProvider)
-        .updateSpace(authorization: auth, spaceId: space.id, iconUrl: iconUrl);
+        .updateSpace(authorization: auth, spaceId: spaceId, iconUrl: iconUrl);
     return switch (updateResult) {
-      SpacesApiFailure(:final message) => message,
+      SpacesApiFailure(:final message) => SpaceCreateActionError(
+        message,
+        kind: SpaceCreateErrorKind.iconUpdate,
+        createdSpaceId: spaceId,
+      ),
       SpacesApiOk() => () {
         _invalidateMySpaces(_ref);
         return null;
