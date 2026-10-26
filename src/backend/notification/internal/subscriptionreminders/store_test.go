@@ -203,3 +203,38 @@ func TestSpacePayerDoesNotCollapseDifferentSpacesAndDaySeven(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 4)
 }
+
+func TestPurchaserPurgedGraceMetadataSuccessorSuppressesPendingWork(t *testing.T) {
+	ctx, s := fixture(t)
+	snapshot := grace(t, s, ctx)
+	payer := snapshot.AggregateId
+	snapshot.AggregateKind = eventsv1.SubscriptionAggregateKind_SUBSCRIPTION_AGGREGATE_KIND_SPACE
+	snapshot.AggregateId = uuid.NewString()
+	p := snapshot.GetEntitlementChanged()
+	p.AccountId = ""
+	p.SpaceId = snapshot.AggregateId
+	p.Plan = "space_pro"
+	p.PurchaserAccountId = &payer
+	_, err := apply(t, ctx, s, snapshot)
+	require.NoError(t, err)
+	e := reminder(snapshot, 1)
+	e.GetGraceReminder().AccountId = payer
+	e.GetGraceReminder().Plan = "space_pro"
+	e.GetGraceReminder().SpaceId = &snapshot.AggregateId
+	_, err = apply(t, ctx, s, e)
+	require.NoError(t, err)
+	purged := proto.Clone(snapshot).(*eventsv1.SubscriptionStreamEvent)
+	purged.EventId = uuid.NewString()
+	purged.AggregateRevision++
+	p = purged.GetEntitlementChanged()
+	p.PurchaserDeleted = true
+	p.PurchaserAccountId = nil
+	p.Reason = eventsv1.EntitlementReason_ENTITLEMENT_REASON_PURCHASER_PURGED
+	p.EffectiveAt = purged.OccurredAt // metadata transition time, not grace origin
+	outcome, err := apply(t, ctx, s, purged)
+	require.NoError(t, err)
+	require.Equal(t, "APPLIED", outcome)
+	var count int
+	require.NoError(t, s.Pool.QueryRow(ctx, "SELECT count(*) FROM notification_reminder_dispatch WHERE status='SUPPRESSED'").Scan(&count))
+	require.Equal(t, 2, count)
+}

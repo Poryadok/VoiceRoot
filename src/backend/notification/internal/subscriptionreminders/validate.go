@@ -94,7 +94,10 @@ func decode(raw []byte) (*eventsv1.SubscriptionStreamEvent, error) {
 			return nil, ErrContractMismatch
 		}
 	case eventsv1.EntitlementState_ENTITLEMENT_STATE_GRACE_PERIOD:
-		if !validTime(s.GracePeriodEnd) || !proto.Equal(s.EntitledUntil, s.GracePeriodEnd) || !s.GracePeriodEnd.AsTime().Equal(s.EffectiveAt.AsTime().Add(7*24*time.Hour)) {
+		// Metadata successors (for example PURCHASER_PURGED) keep the paid
+		// deadline and advance effective_at. P7D belongs to the originating
+		// payment-failure schedule, not every complete grace snapshot.
+		if !validTime(s.GracePeriodEnd) || !proto.Equal(s.EntitledUntil, s.GracePeriodEnd) || !s.EntitledUntil.AsTime().After(s.EffectiveAt.AsTime()) {
 			return nil, ErrContractMismatch
 		}
 	case eventsv1.EntitlementState_ENTITLEMENT_STATE_INACTIVE:

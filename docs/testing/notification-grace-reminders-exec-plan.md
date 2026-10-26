@@ -75,6 +75,11 @@ Tests cannot label stored pending work as provider or WebSocket delivery.
   Real NATS regression failed on the former ACK path, then passed with delayed
   NAK/redelivery; the original durable survives restart.
 - [x] Notification `go vet ./...` and `golangci-lint run ./...`: pass, zero issues.
+- [x] Independent review P2 fixed with real PostgreSQL RED/GREEN: a Space
+  `PURCHASER_PURGED` metadata successor advances `effective_at` while retaining
+  the grace deadline. Accept it under the general snapshot contract and suppress
+  predecessor channel work. Six focused race tests pass (16.440s); scoped vet and
+  lint pass after the correction.
 - [ ] Whole Notification short suite: all package checks pass except the existing
   Windows Unix file-mode assertion in `TestReleaseSnapshotPrivateBoundAndExclusive`
   (expected 0600, actual 0666). This change does not touch that path.
