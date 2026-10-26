@@ -68,7 +68,7 @@ selected product commit:
 
 ```sh
 gh workflow run dev-candidate-publish.yml --ref master \
-  -f product_sha=4e88e14e64300667e3349b08e75c4c31bf50b61e
+  -f product_sha=31a04a471c604488bedd5b442039dfdf0434f9c3
 ```
 
 This bounded consumer accepts only that product commit. It builds the eight
@@ -77,6 +77,10 @@ User, Notification, Realtime and the native Space installer. The source checkout
 and publisher checkout are separate, clean and byte-verified. Explicit source
 build arguments bind the four capability owners and native installer; frontend
 build arguments target the DEV API and LiveKit endpoints.
+
+This selection is a fresh candidate. Earlier `4e88e14e` image/package receipts
+remain historical; they do not qualify this commit or replace its new immutable
+image closure and canonical package checks.
 
 Tags include the product SHA, actual run ID and attempt; existing or unavailable
 tag state fails closed. No shared `latest`, master or full-SHA tag is overwritten.

@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-PRODUCT = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
+PRODUCT = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 REPOSITORY = 'Poryadok/VoiceRoot'
 REGISTRY = 'ghcr.io/poryadok/voiceroot'
 WORKFLOW = '.github/workflows/dev-candidate-publish.yml'
