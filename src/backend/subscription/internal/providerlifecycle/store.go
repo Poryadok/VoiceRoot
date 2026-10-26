@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/subscription/internal/entitlementoutbox"
+	"voice/backend/subscription/internal/gracereminders"
 )
 
 type Store struct{ Pool *pgxpool.Pool }
@@ -195,6 +196,9 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 			event := &eventsv1.SubscriptionStreamEvent{EventId: uuid.NewString(), OccurredAt: timestamppb.New(now), ProtocolVersion: 1, AggregateKind: c.Kind, AggregateId: c.AggregateID, AggregateRevision: revision + 1,
 				Payload: &eventsv1.SubscriptionStreamEvent_EntitlementChanged{EntitlementChanged: snapshot}}
 			if err = entitlementoutbox.Append(ctx, tx, int64(revision), event); err != nil {
+				return Result{}, err
+			}
+			if err = gracereminders.Sync(ctx, tx, event); err != nil {
 				return Result{}, err
 			}
 			result = Result{Event: event, Disposition: "APPLIED"}
