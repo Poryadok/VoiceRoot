@@ -13,19 +13,23 @@ import 'story_audience_picker.dart';
 
 /// Create or edit a highlight (name, visibility, story membership).
 class HighlightEditSheet extends ConsumerStatefulWidget {
-  const HighlightEditSheet._({this.highlight});
+  const HighlightEditSheet._({this.highlight, this.initialStoryIds = const []});
 
   static const Key sheetKey = Key('highlight_edit_sheet');
   static const Key nameFieldKey = Key('highlight_edit_name');
   static const Key saveButtonKey = Key('highlight_edit_save');
 
   final HighlightData? highlight;
+  final List<String> initialStoryIds;
 
-  static Future<void> showCreate(BuildContext context) {
+  static Future<void> showCreate(
+    BuildContext context, {
+    List<String> initialStoryIds = const [],
+  }) {
     return showVoiceBottomSheet<void>(
       context: context,
       scrollable: false,
-      child: const HighlightEditSheet._(),
+      child: HighlightEditSheet._(initialStoryIds: initialStoryIds),
     );
   }
 
@@ -50,6 +54,8 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
   var _saving = false;
   String? _error;
   late List<String> _storyIds;
+  String? _createdHighlightId;
+  final Set<String> _savedStoryIds = {};
 
   bool get _isEdit => widget.highlight != null;
 
@@ -59,7 +65,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
     final highlight = widget.highlight;
     _nameController = TextEditingController(text: highlight?.name ?? '');
     _visibility = highlight?.visibility ?? 'everyone';
-    _storyIds = List.of(highlight?.storyIds ?? const []);
+    _storyIds = List.of(highlight?.storyIds ?? widget.initialStoryIds);
   }
 
   @override
@@ -69,6 +75,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final auth = ref.read(authorizationHeaderProvider);
     final profileId = ref.read(authControllerProvider).activeProfileId;
     if (auth == null || profileId == null) return;
@@ -84,7 +91,14 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
     final client = ref.read(voiceStoriesClientProvider);
     final StoriesApiResult<HighlightData> result;
 
-    if (_isEdit) {
+    if (_createdHighlightId != null) {
+      result = await client.updateHighlight(
+        authorization: auth,
+        highlightId: _createdHighlightId!,
+        name: name,
+        visibility: _visibility,
+      );
+    } else if (_isEdit) {
       result = await client.updateHighlight(
         authorization: auth,
         highlightId: widget.highlight!.id,
@@ -102,13 +116,28 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
     if (!mounted) return;
     switch (result) {
       case StoriesApiOk(:final data):
+        if (!_isEdit) _createdHighlightId ??= data.id;
         if (!_isEdit && _storyIds.isNotEmpty) {
           for (final storyId in _storyIds) {
-            await client.addToHighlight(
+            if (_savedStoryIds.contains(storyId)) continue;
+            final added = await client.addToHighlight(
               authorization: auth,
-              highlightId: data.id,
+              highlightId: _createdHighlightId!,
               storyId: storyId,
             );
+            if (!mounted) return;
+            if (added case StoriesApiFailure(:final statusCode)) {
+              ref.invalidate(profileHighlightsProvider(profileId));
+              setState(() {
+                _saving = false;
+                _error = commonActionErrorMessage(
+                  AppLocalizations.of(context)!,
+                  statusCode: statusCode,
+                );
+              });
+              return;
+            }
+            _savedStoryIds.add(storyId);
           }
         }
         ref.invalidate(profileHighlightsProvider(profileId));

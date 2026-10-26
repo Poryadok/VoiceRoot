@@ -1441,6 +1441,7 @@
   "storyLfpWrite": "Написать",
   "socialStoryCreate": "Новая сторис",
   "storyArchiveTitle": "Архив сторис",
+  "storyArchivePrivate": "Только вы видите архив",
   "storyArchiveEmpty": "Нет архивных сторис",
   "storyArchiveLoadError": "Не удалось загрузить архив",
   "storyArchiveAddToHighlight": "В избранное",

@@ -6476,6 +6476,12 @@ abstract class AppLocalizations {
   /// **'Story archive'**
   String get storyArchiveTitle;
 
+  /// No description provided for @storyArchivePrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can see this archive'**
+  String get storyArchivePrivate;
+
   /// No description provided for @storyArchiveEmpty.
   ///
   /// In en, this message translates to:

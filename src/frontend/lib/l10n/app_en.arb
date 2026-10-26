@@ -1532,6 +1532,7 @@
   "storyLfpWrite": "Write",
   "socialStoryCreate": "New story",
   "storyArchiveTitle": "Story archive",
+  "storyArchivePrivate": "Only you can see this archive",
   "storyArchiveEmpty": "No archived stories",
   "storyArchiveLoadError": "Could not load story archive",
   "storyArchiveAddToHighlight": "Add to highlight",
