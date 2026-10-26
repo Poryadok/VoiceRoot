@@ -1498,5 +1498,14 @@
   "profileNotInContactsWarning": "Не в контактах · сообщения могут быть небезопасны",
   "contactProfilePlayingGame": "Играет в {title}",
   "matchSquadOpenChat": "Открыть чат",
-  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
+  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}},
+  "gameCatalogAll": "Все игры",
+  "gameCatalogBrowseAll": "Все игры",
+  "gameCatalogChanged": "Каталог изменился. Начните просмотр заново, чтобы увидеть актуальные игры.",
+  "gameCatalogClearSearch": "Очистить поиск",
+  "gameCatalogLoadMore": "Загрузить ещё игры",
+  "gameCatalogPopular": "Популярные",
+  "gameCatalogRecent": "Недавние",
+  "gameCatalogRecentError": "Не удалось загрузить недавние игры",
+  "gameCatalogSearchResults": "Результаты поиска"
 }

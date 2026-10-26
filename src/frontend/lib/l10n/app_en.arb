@@ -1596,5 +1596,14 @@
   "profileNotInContactsWarning": "Not in contacts · messages may be unsafe",
   "contactProfilePlayingGame": "Playing {title}",
   "matchSquadOpenChat": "Open chat",
-  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}}
+  "@contactProfilePlayingGame": {"placeholders": {"title": {"type": "String"}}},
+  "gameCatalogAll": "All games",
+  "gameCatalogBrowseAll": "Browse all",
+  "gameCatalogChanged": "The catalog changed. Restart to see the current games.",
+  "gameCatalogClearSearch": "Clear search",
+  "gameCatalogLoadMore": "Load more games",
+  "gameCatalogPopular": "Popular",
+  "gameCatalogRecent": "Recent",
+  "gameCatalogRecentError": "Could not load recent games",
+  "gameCatalogSearchResults": "Search results"
 }
