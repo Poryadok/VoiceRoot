@@ -96,6 +96,31 @@ class PublisherTests(unittest.TestCase):
             with self.assertRaises(publisher.Refused):
                 registry._read(request)
 
+    def test_registry_refreshes_once_on_actual401_without_waiving_denial(self):
+        class Response(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *unused):
+                self.close()
+
+        def denied(code):
+            return urllib.error.HTTPError('https://ghcr.io/v2/fixture/manifests/tag', code, 'fixture', {}, None)
+
+        for final, expected_calls in ((Response(b'actual-manifest'), 4), (denied(401), 4), (denied(403), 2)):
+            registry = publisher.Registry('fixture', 'not-a-real-token')
+            responses = ([Response(b'{"token":"first"}'), denied(401), Response(b'{"token":"second"}'), final]
+                         if expected_calls == 4 else [Response(b'{"token":"first"}'), final])
+            with mock.patch.object(registry.opener, 'open', side_effect=responses) as request:
+                if isinstance(final, Exception):
+                    with self.assertRaises(publisher.Refused):
+                        registry.get('fixture', 'manifests/tag')
+                else:
+                    self.assertEqual(registry.get('fixture', 'manifests/tag'), b'actual-manifest')
+                    self.assertEqual(request.call_args_list[1].args[0].get_header('Authorization'), 'Bearer first')
+                    self.assertEqual(request.call_args_list[3].args[0].get_header('Authorization'), 'Bearer second')
+                self.assertEqual(request.call_count, expected_calls)
+
     def test_registry_redirect_does_not_forward_cross_origin_bearer(self):
         request = urllib.request.Request('https://ghcr.io/blob', headers={'Authorization': 'Bearer fixture'})
         redirect = publisher.SafeRedirect().redirect_request(request, None, 302, 'fixture', {}, 'https://pkg-containers.githubusercontent.com/blob?opaque=fixture')

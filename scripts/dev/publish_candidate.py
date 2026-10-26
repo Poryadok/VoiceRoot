@@ -162,6 +162,22 @@ class Registry:
         return raw
 
     def get(self, repository, path, absent=False):
+        for attempt in range(2):
+            bearer = self._bearer(repository)
+            headers = {'Authorization': 'Bearer ' + bearer,
+                       'Accept': 'application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'}
+            try:
+                return self._read(urllib.request.Request('https://ghcr.io/v2/' + repository + '/' + path,
+                                                        headers=headers), absent=absent)
+            except Refused as error:
+                # No TTL assumption and no mutation retry: only one fresh
+                # authorization for the same read after an actual401.
+                if attempt == 0 and str(error) == 'registry_HTTP_401':
+                    self.bearers.pop(repository, None)
+                else:
+                    raise
+
+    def _bearer(self, repository):
         if repository not in self.bearers:
             query = urllib.parse.urlencode({'service': 'ghcr.io', 'scope': 'repository:' + repository + ':pull,push'})
             authorization = base64.b64encode((self.actor + ':' + self.token).encode()).decode()
@@ -171,10 +187,7 @@ class Registry:
             bearer = value.get('token') or value.get('access_token')
             require(isinstance(bearer, str) and bearer, 'registry_bearer_missing')
             self.bearers[repository] = bearer
-        headers = {'Authorization': 'Bearer ' + self.bearers[repository],
-                   'Accept': 'application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'}
-        return self._read(urllib.request.Request('https://ghcr.io/v2/' + repository + '/' + path,
-                                                headers=headers), absent=absent)
+        return self.bearers[repository]
 
 
 def command(args, *, cwd=None, log=None):
