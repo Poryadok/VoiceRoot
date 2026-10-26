@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,6 +30,39 @@ type fileServerFixture struct {
 	operation   string
 	destination *chatv1.ChatRef
 	bad         string
+}
+
+func TestCatalogAssetTerminalProofIsNarrow(t *testing.T) {
+	b := Binding{Actor: Actor{AccountID: uuid.New(), ProfileID: uuid.New()}, ActorCapture: ActorCapture{AccountGeneration: uuid.New(), ProfileGeneration: uuid.New()}, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New()}
+	base := &filev1.GetCatalogAssetStatusResponse{SourceId: b.SourceID.String(), ActorAccountId: b.AccountID.String(), ActorProfileId: b.ProfileID.String(), Provider: b.Provider, ProviderId: b.ProviderID, FileId: b.FileID.String(), Status: "deleted", TerminalFenceId: uuid.NewString()}
+	got, err := parseAssetFileState(base, b)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, got.TerminalFenceID)
+	require.Equal(t, ActorCapture{}, got.ActorCapture)
+	require.Empty(t, base.ChatAccountGeneration, "parsing must not mutate the authenticated response")
+	for _, change := range []func(*filev1.GetCatalogAssetStatusResponse){
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.Status = "ready" },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.Status = "processing" },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.TerminalFenceId = "" },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.TerminalFenceId = "bad" },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.ChatAccountGeneration = b.AccountGeneration.String() },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.ActorProfileId = uuid.NewString() },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.SourceId = uuid.NewString() },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.ProviderId = "other" },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.FileId = uuid.NewString() },
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.OperationId = uuid.NewString() },
+		func(r *filev1.GetCatalogAssetStatusResponse) {
+			r.DestinationChat = &chatv1.ChatRef{Id: uuid.NewString()}
+		},
+		func(r *filev1.GetCatalogAssetStatusResponse) { r.ProtoReflect().SetUnknown([]byte{0x98, 0x06, 0x01}) },
+	} {
+		r := proto.Clone(base).(*filev1.GetCatalogAssetStatusResponse)
+		change(r)
+		_, err := parseAssetFileState(r, b)
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	}
+	_, err = parseFileState(base, b.Actor, b.Selection)
+	require.Equal(t, codes.Unavailable, status.Code(err), "operation/import cannot accept erased generations")
 }
 
 func (s *fileServerFixture) check(ctx context.Context, req proto.Message, method string) error {

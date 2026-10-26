@@ -885,10 +885,36 @@ lookup keys. Historical HMAC keys remain available; an unknown/changed registere
 key fails closed, and nonempty rollback refuses to erase the negative state.
 
 User snapshots are not atomic cross-service permits. `UNKNOWN` denies admission
-without authorizing erasure; account events and bounded profile reconciliation
-must supply the cleanup integration. Runtime wiring, physical File import and
-Messaging proof remain open at this source checkpoint. This does not activate a
-live provider, E2E GIFs or sticker-source admission.
+without authorizing erasure. The account consumer closes its local catalog gate
+before external User lookup/fanout and does not ACK failed effects. A bounded
+reconciler scans at most 100 existing File projections per 30-second pass, with a
+15-second pass budget. Only explicit owner `SOFT_DELETED` closes the scanned
+profile generation; a stale scan cannot close a newly restored generation.
+Protected File status may retire only the exact cache tuple. Compacted status
+requires the qualified `terminal_fence_id` proof; `NotFound`, unavailable or a
+generic failed precondition never proves erasure. Binding retirement does not
+delete committed messages, references or their retained File bytes.
+
+The dedicated listener is disabled when all `CHAT_CATALOG_ASSET_*` configuration
+is absent. Any recognized setting requires the complete configuration:
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, issuer endpoints
+`GATEWAY_JWKS_URL`, `MESSAGING_JWKS_URL`, `FILE_JWKS_URL`, `JWKS_CA_FILE`,
+`JWKS_CLIENT_CERT_FILE`, `JWKS_CLIENT_KEY_FILE`, `REPLAY_REDIS_ADDR` (optional
+`REPLAY_REDIS_PASSWORD`), and `ACTOR_KEYS_FILE`. Each protected owner prefix
+`CHAT_CATALOG_ASSET_AUTH_`, `CHAT_CATALOG_ASSET_USER_` and
+`CHAT_CATALOG_ASSET_FILE_` requires `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`,
+`TLS_CLIENT_CERT_FILE` and `TLS_CLIENT_KEY_FILE`. The actor key file is a bounded
+JSON object with `active_key_id` and `keys: [{id, secret_base64}]`; each secret is
+exactly 32 random bytes in canonical standard Base64. Historical registered keys
+cannot be removed or replaced. Startup requires the catalog migration, signing
+issuer, existing account-deletion durable and consumer dependencies. Space
+destinations require native Space membership and the protected Role
+`TEXT_CHAT_VIEW` decision; no fabricated user headers are forwarded.
+
+Runtime composition keeps the production resolver absent. Physical File import,
+Gateway selection transport and Messaging integration proof remain open at this
+source checkpoint. This does not activate a live provider, E2E GIFs or
+sticker-source admission.
 
 Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/{id}/install`, `GET /api/v1/gifs/search?q=…&cursor=…`, `GET /api/v1/gifs/trending` — full table [api-gateway.md](api-gateway.md) § Stickers and GIF.
 
