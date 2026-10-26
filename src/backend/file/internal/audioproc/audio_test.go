@@ -2,6 +2,9 @@ package audioproc
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -51,7 +54,7 @@ func TestProbePermitsEmbeddedCoverButNotVideo(t *testing.T) {
 
 func TestProbeOutputLimit(t *testing.T) {
 	var b limitedBuffer
-	if _, err := b.Write(make([]byte, maxProbeBytes+1)); err == nil || !b.overflow || b.Len() != 0 {
+	if _, err := b.Write(make([]byte, maxProbeBytes+1)); err == nil || !b.overflow || b.buffer.Len() != 0 {
 		t.Fatal("oversized process output was retained")
 	}
 }
@@ -79,5 +82,66 @@ func TestExtractorRejectsSizeBeforeExecuting(t *testing.T) {
 		if _, err := p.Extract(context.Background(), raw); err != ErrSize {
 			t.Fatalf("size admission error = %v", err)
 		}
+	}
+}
+
+func TestExtractorBoundsProcessOutput(t *testing.T) {
+	// A real child and pipe exercise exec's io.Copy optimizations. Calling Write
+	// directly does not catch a promoted bytes.Buffer.ReadFrom bypassing the cap.
+	dir := t.TempDir()
+	source := filepath.Join(dir, "ffprobe.go")
+	binary := filepath.Join(dir, "ffprobe.exe")
+	const helper = `package main
+import ("io"; "os")
+func main() {
+	f, err := os.Open(os.Getenv("AUDIO_TEST_OUTPUT")); if err != nil { os.Exit(2) }
+	defer f.Close()
+	if _, err := io.Copy(os.Stdout, f); err != nil { os.Exit(3) }
+	if err := os.WriteFile(os.Getenv("AUDIO_TEST_COMPLETED"), []byte(os.Args[len(os.Args)-1]), 0600); err != nil { os.Exit(4) }
+}`
+	if err := os.WriteFile(source, []byte(helper), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("go", "build", "-o", binary, source).CombinedOutput(); err != nil {
+		t.Fatalf("build fake ffprobe: %v: %s", err, out)
+	}
+	const valid = `{"streams":[{"codec_type":"audio","codec_name":"mp3"}],"format":{"duration":"1","tags":{"title":"Track"}}}`
+	for _, tc := range []struct {
+		name string
+		size int
+	}{
+		{"valid", len(valid)},
+		{"exact limit", maxProbeBytes},
+		{"oversized", 8 * 1024 * 1024},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			output := filepath.Join(t.TempDir(), "stdout")
+			marker := filepath.Join(t.TempDir(), "completed")
+			if err := os.WriteFile(output, []byte(valid+strings.Repeat(" ", tc.size-len(valid))), 0600); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("AUDIO_TEST_OUTPUT", output)
+			t.Setenv("AUDIO_TEST_COMPLETED", marker)
+			got, err := (Extractor{Binary: binary}).Extract(context.Background(), []byte("audio fixture"))
+			inputPath, markerErr := os.ReadFile(marker)
+			if tc.size > maxProbeBytes {
+				if err != ErrAudio || got != (Metadata{}) {
+					t.Fatalf("oversized metadata = %#v, %v", got, err)
+				}
+				if !os.IsNotExist(markerErr) {
+					t.Fatalf("child completed oversized stdout instead of stopping at capture limit: marker=%q, err=%v", inputPath, markerErr)
+				}
+				return
+			}
+			if err != nil || got.Title != "Track" || got.DurationSeconds != 1 {
+				t.Fatalf("metadata = %#v, %v", got, err)
+			}
+			if markerErr != nil {
+				t.Fatalf("child did not complete admitted stdout: %v", markerErr)
+			}
+			if _, err := os.Stat(string(inputPath)); !os.IsNotExist(err) {
+				t.Fatalf("temporary input was retained: %v", err)
+			}
+		})
 	}
 }
