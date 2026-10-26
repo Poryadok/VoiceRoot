@@ -118,7 +118,8 @@ func (h retentionLogFixture) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h retentionLogFixture) WithGroup(string) slog.Handler      { return h }
 
 func TestAccountBanRetentionErrorsAreCoarseAndRetryNextTick(t *testing.T) {
-	ticks := make(chan time.Time, 1)
+	ticks := time.NewTicker(time.Millisecond)
+	ticks.Stop()
 	records := make(chan slog.Record, 4)
 	finished := make(chan uuid.UUID, 4)
 	var lists atomic.Int32
@@ -129,6 +130,7 @@ func TestAccountBanRetentionErrorsAreCoarseAndRetryNextTick(t *testing.T) {
 			if lists.Add(1) == 1 {
 				return nil, errors.New(secret)
 			}
+			ticks.Stop() // This test needs exactly one retry cycle.
 			return []uuid.UUID{first, second}, nil
 		},
 		clean: func(_ context.Context, id uuid.UUID, _ int) (int64, error) {
@@ -138,7 +140,7 @@ func TestAccountBanRetentionErrorsAreCoarseAndRetryNextTick(t *testing.T) {
 			}
 			return 1, nil
 		},
-	}, slog.New(retentionLogFixture{records}), ticks, func() {})
+	}, slog.New(retentionLogFixture{records}), ticks.C, ticks.Stop)
 	t.Cleanup(worker.Stop)
 	check := func(r slog.Record) {
 		require.Equal(t, "Space account Ban outcome retention cycle failed", r.Message)
@@ -148,7 +150,9 @@ func TestAccountBanRetentionErrorsAreCoarseAndRetryNextTick(t *testing.T) {
 	}
 	check(retentionAwait(t, records))
 	require.Empty(t, finished, "selector failure aborts the cycle")
-	ticks <- time.Now()
+	// The warning can arrive before the failed cycle returns and drains busy
+	// ticks. Keep producing idle ticks until the retry selector stops the ticker.
+	ticks.Reset(time.Millisecond)
 	require.Equal(t, first, retentionAwait(t, finished))
 	require.Equal(t, second, retentionAwait(t, finished), "one Space failure permits the next hint inside the same cycle budget")
 	check(retentionAwait(t, records))
