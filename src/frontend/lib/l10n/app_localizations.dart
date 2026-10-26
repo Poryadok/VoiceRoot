@@ -2258,6 +2258,78 @@ abstract class AppLocalizations {
   /// **'Emoji'**
   String get composerEmojiPanelTitle;
 
+  /// No description provided for @composerEmojiRecent.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get composerEmojiRecent;
+
+  /// No description provided for @composerStickerTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get composerStickerTab;
+
+  /// No description provided for @composerGifTab.
+  ///
+  /// In en, this message translates to:
+  /// **'GIFs'**
+  String get composerGifTab;
+
+  /// No description provided for @composerGifSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search GIFs'**
+  String get composerGifSearch;
+
+  /// No description provided for @composerStickerSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search sticker packs'**
+  String get composerStickerSearch;
+
+  /// No description provided for @composerMediaSendUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending is currently unavailable'**
+  String get composerMediaSendUnavailable;
+
+  /// No description provided for @composerGifUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF search unavailable'**
+  String get composerGifUnavailable;
+
+  /// No description provided for @composerCatalogError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the catalog'**
+  String get composerCatalogError;
+
+  /// No description provided for @composerCatalogRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get composerCatalogRetry;
+
+  /// No description provided for @composerCatalogMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get composerCatalogMore;
+
+  /// No description provided for @composerStickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No sticker packs found'**
+  String get composerStickerEmpty;
+
+  /// No description provided for @composerGifEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No GIFs found'**
+  String get composerGifEmpty;
+
   /// No description provided for @composerAttachPhotoOrVideo.
   ///
   /// In en, this message translates to:
@@ -2660,6 +2732,24 @@ abstract class AppLocalizations {
   /// **'Unarchive'**
   String get chatArchiveUnarchive;
 
+  /// No description provided for @chatArchiveMarkRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get chatArchiveMarkRead;
+
+  /// No description provided for @chatArchivePlaceholderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your archive lives here'**
+  String get chatArchivePlaceholderTitle;
+
+  /// No description provided for @chatArchivePlaceholderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden chats stay within reach'**
+  String get chatArchivePlaceholderHint;
+
   /// No description provided for @chatArchiveUnarchived.
   ///
   /// In en, this message translates to:
@@ -2737,6 +2827,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New space'**
   String get spaceCreateTitle;
+
+  /// No description provided for @spaceCreateAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Access'**
+  String get spaceCreateAccess;
+
+  /// No description provided for @spaceCreatePublic.
+  ///
+  /// In en, this message translates to:
+  /// **'Public'**
+  String get spaceCreatePublic;
+
+  /// No description provided for @spaceCreateInviteOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite-only'**
+  String get spaceCreateInviteOnly;
+
+  /// No description provided for @spaceCreatePrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Private'**
+  String get spaceCreatePrivate;
+
+  /// No description provided for @spaceCreateTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Starter template'**
+  String get spaceCreateTemplate;
+
+  /// No description provided for @spaceCreateGaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Gaming'**
+  String get spaceCreateGaming;
+
+  /// No description provided for @spaceCreateWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Work'**
+  String get spaceCreateWork;
+
+  /// No description provided for @spaceCreateSocial.
+  ///
+  /// In en, this message translates to:
+  /// **'Social'**
+  String get spaceCreateSocial;
+
+  /// No description provided for @spaceCreateTemplatesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Starter templates are not available yet. Your space starts without channels.'**
+  String get spaceCreateTemplatesUnavailable;
+
+  /// No description provided for @spaceCreateIconHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use an image URL. Image upload is not available yet.'**
+  String get spaceCreateIconHelp;
+
+  /// No description provided for @spaceCreateIconInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http or https image URL.'**
+  String get spaceCreateIconInvalid;
+
+  /// No description provided for @spaceCreateIconFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your space was created, but its icon could not be saved. Retry the icon or close to continue without it.'**
+  String get spaceCreateIconFailed;
+
+  /// No description provided for @spaceCreateRetryIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry icon'**
+  String get spaceCreateRetryIcon;
+
+  /// No description provided for @spaceCreateUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'Creation could not be confirmed. Check your spaces before creating another one.'**
+  String get spaceCreateUncertain;
 
   /// No description provided for @spaceCreateNameLabel.
   ///

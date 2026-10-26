@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
@@ -44,6 +45,8 @@ import 'support/voice_test_theme.dart';
 /// creation. They use the real coordinator provider; only HTTP, durable
 /// storage, and the Realtime boundary are external test boundaries.
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   group('mounted profile-switch entry wiring', () {
     testWidgets('desktop rail menu selection owns one coordinator transition', (
       tester,

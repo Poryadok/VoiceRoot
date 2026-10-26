@@ -150,6 +150,67 @@ class AuthMigrationCatalogJdbcIntegrationTest {
   }
 
   @Test
+  void syntheticHistoricalBaselineCannotBecomeRecoveryEvidence() throws Exception {
+    try (var network = Network.newNetwork(); var postgres = postgres(network)) {
+      postgres.start();
+      Path catalog = legacyFlyway();
+      Flyway.configure().dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+          .locations("filesystem:" + catalog).baselineVersion("24").load().baseline();
+      String before = history(jdbc(postgres));
+      assertThatThrownBy(() -> AuthHistoricalBackupFixture.capture(postgres, catalog))
+          .isInstanceOf(IllegalStateException.class).hasMessage("recovery_history_not_target_sql");
+      assertThat(history(jdbc(postgres)).equals(before)).isTrue();
+      assertThat(postgres.execInContainer("test", "-e", "/tmp/auth-recovery.dump").getExitCode()).isNotZero();
+    }
+  }
+
+  @Test
+  void historicalBackupRequiresMatchingCatalogAndPreservesHistoryAndReceiptBytes() throws Exception {
+    try (var network = Network.newNetwork(); var postgres = postgres(network)) {
+      postgres.start();
+      Path catalog = legacyFlyway();
+      flyway(postgres, "filesystem:" + catalog).migrate();
+      var database = jdbc(postgres);
+      var before = seedEvidence(database);
+      String history = history(database);
+      var backup = AuthHistoricalBackupFixture.capture(postgres, catalog);
+      assertThatThrownBy(() -> backup.restore(AuthMigrationCatalogContractTest.flywayDirectory()))
+          .isInstanceOf(IllegalStateException.class).hasMessage("recovery_catalog_mismatch");
+      assertThat(backup.ready()).isFalse();
+      assertThat(database.queryForObject("SELECT count(*) FROM pg_database WHERE datname='auth_recovery'", Integer.class)).isZero();
+      var restored = backup.restore(catalog);
+      assertThat(evidence(restored).equals(before)).as("restored authority and receipt bytes match target backup").isTrue();
+      assertThat(history(restored).equals(history)).as("restore retains every historical loader field").isTrue();
+      assertThat(backup.ready()).isTrue();
+      assertThat(evidence(database).equals(before) && history(database).equals(history))
+          .as("source remains unchanged throughout recovery").isTrue();
+    }
+  }
+
+  @Test
+  void modifiedHistoricalBackupCannotLeaveMaintenanceOrCreateRestoreTarget() throws Exception {
+    try (var network = Network.newNetwork(); var postgres = postgres(network)) {
+      postgres.start();
+      Path catalog = legacyFlyway();
+      flyway(postgres, "filesystem:" + catalog).migrate();
+      var database = jdbc(postgres);
+      var before = seedEvidence(database);
+      String history = history(database);
+      var backup = AuthHistoricalBackupFixture.capture(postgres, catalog);
+      postgres.execInContainer("sh", "-c", "printf corruption >> /tmp/auth-recovery.dump");
+      assertThatThrownBy(() -> backup.restore(catalog)).isInstanceOf(IllegalStateException.class)
+          .hasMessage("recovery_archive_mismatch");
+      assertThat(backup.ready()).isFalse();
+      assertThat(database.queryForObject("SELECT count(*) FROM pg_database WHERE datname='auth_recovery'", Integer.class)).isZero();
+      assertThat(evidence(database).equals(before) && history(database).equals(history)).isTrue();
+    }
+  }
+
+  private static String history(JdbcTemplate jdbc) {
+    return jdbc.queryForObject("SELECT jsonb_agg(to_jsonb(h) ORDER BY installed_rank)::text FROM flyway_schema_history h", String.class);
+  }
+
+  @Test
   void historicalSdkFlywayHistoryRefusesUpgradeWithoutChangingRowsOrHistory() throws Exception {
     try (var network = Network.newNetwork(); var postgres = postgres(network)) {
       postgres.start();

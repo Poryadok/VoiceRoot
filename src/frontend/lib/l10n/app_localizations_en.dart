@@ -1247,6 +1247,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override
+  String get composerEmojiRecent => 'Recent';
+
+  @override
+  String get composerStickerTab => 'Stickers';
+
+  @override
+  String get composerGifTab => 'GIFs';
+
+  @override
+  String get composerGifSearch => 'Search GIFs';
+
+  @override
+  String get composerStickerSearch => 'Search sticker packs';
+
+  @override
+  String get composerMediaSendUnavailable => 'Sending is currently unavailable';
+
+  @override
+  String get composerGifUnavailable => 'GIF search unavailable';
+
+  @override
+  String get composerCatalogError => 'Could not load the catalog';
+
+  @override
+  String get composerCatalogRetry => 'Retry';
+
+  @override
+  String get composerCatalogMore => 'Load more';
+
+  @override
+  String get composerStickerEmpty => 'No sticker packs found';
+
+  @override
+  String get composerGifEmpty => 'No GIFs found';
+
+  @override
   String get composerAttachPhotoOrVideo => 'Photo or video';
 
   @override
@@ -1466,6 +1502,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatArchiveUnarchive => 'Unarchive';
 
   @override
+  String get chatArchiveMarkRead => 'Mark as read';
+
+  @override
+  String get chatArchivePlaceholderTitle => 'Your archive lives here';
+
+  @override
+  String get chatArchivePlaceholderHint => 'Hidden chats stay within reach';
+
+  @override
   String get chatArchiveUnarchived => 'Chat restored to your main list';
 
   @override
@@ -1508,6 +1553,52 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spaceCreateTitle => 'New space';
+
+  @override
+  String get spaceCreateAccess => 'Access';
+
+  @override
+  String get spaceCreatePublic => 'Public';
+
+  @override
+  String get spaceCreateInviteOnly => 'Invite-only';
+
+  @override
+  String get spaceCreatePrivate => 'Private';
+
+  @override
+  String get spaceCreateTemplate => 'Starter template';
+
+  @override
+  String get spaceCreateGaming => 'Gaming';
+
+  @override
+  String get spaceCreateWork => 'Work';
+
+  @override
+  String get spaceCreateSocial => 'Social';
+
+  @override
+  String get spaceCreateTemplatesUnavailable =>
+      'Starter templates are not available yet. Your space starts without channels.';
+
+  @override
+  String get spaceCreateIconHelp =>
+      'Use an image URL. Image upload is not available yet.';
+
+  @override
+  String get spaceCreateIconInvalid => 'Enter a valid http or https image URL.';
+
+  @override
+  String get spaceCreateIconFailed =>
+      'Your space was created, but its icon could not be saved. Retry the icon or close to continue without it.';
+
+  @override
+  String get spaceCreateRetryIcon => 'Retry icon';
+
+  @override
+  String get spaceCreateUncertain =>
+      'Creation could not be confirmed. Check your spaces before creating another one.';
 
   @override
   String get spaceCreateNameLabel => 'Space name';

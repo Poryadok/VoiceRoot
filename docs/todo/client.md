@@ -34,6 +34,18 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Flutter delivery
 
+- [ ] **UIV3-PANEL-SPACE-CREATE — templates and image upload** — section 17
+  requires an image picker and starter templates that create default channels.
+  The current creation contract accepts name, description and visibility, with
+  an optional icon URL persisted separately through UpdateSpace. There is no
+  Space-specific image upload client contract; User avatar presign belongs to
+  the profile and cannot stand in for Space-owned media. ListTemplates and
+  CreateFromTemplate remain unimplemented in Space Service. The supported panel
+  explains these unavailable capabilities; completing them requires the
+  documented Space/File ownership contract and real template producer/consumer
+  under PLAN A5, followed by H/V and runtime verification. This subset does not
+  complete the original creation-window acceptance.
+
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
 ### AttachMenu rich-action contracts
@@ -156,7 +168,7 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [x] **Chat switch flicker: chat area flashes and a blue line appears when switching chats** — fixed in `ChatRoomPanel`: empty initial history now renders a visible skeleton and the room no longer draws a blue progress line. `chat_room_panel_test.dart` taps chat B from `ChatListBody` while chat A is open inside `ThreeColumnShell`, verifies navigation remains mounted and the conversation stays visible without a progress line, and fails on the pre-fix code. Local app-stack visual confirmation remains an optional follow-up.
 - [ ] **Локальные черновики** — Hive/SQLite, один на chat; multi-device sync отказано в спеке.
 - [ ] **OG link preview** — unfurl на клиенте; сервер не обязан.
-- [ ] **Stickers / GIF / voice-note composer** — нет UI (и нет backend packs). См. [backend.md](backend.md) § High Chat; решение спеки — [product-roadmap.md](product-roadmap.md).
+- [ ] **Stickers / GIF / voice-note composer** — full EmojiPicker §3.6b remains open. Emoji insertion and profile session recents work; the picker browses installed sticker metadata and uses BE-085's public GIF search/trending API with opaque pagination and retry. No live provider is activated: unconfigured search remains unavailable. Sticker asset previews, media recents and first-class immediate sends still require authorized catalog import/readiness and destination-message File reference acquisition. Until that path is implemented, media send remains disabled even when a search response contains `file_id`; sticker tiles show unavailable-image placeholders with associated emoji metadata. Current Messaging validates destination `chat_id` on ordinary files, while catalog assets are reusable. Do not substitute text/ordinary attachments or weaken that ACL. File processing alone does not establish Messaging admission; E2E catalog identity/encrypted-file behavior needs its separate contract. Voice-note capture remains separate. See [backend.md](backend.md), [messaging wire](../microservices/messaging-service.md#stickers-and-gif-cross-service-wire-contract) and [product-roadmap.md](product-roadmap.md).
 - [x] **Message requests inbox UI** — virtual «Запросы» folder in rail/drawer (visible when pending > 0, unread badge); removed middle-column segmented toggle (§1.3 tombstone); accept/decline on list rows; `notificationTypeMessageRequest` settings toggle — **Batch 22b** (backend bucketing Batch 21a).
 - [x] **Кастомные папки чатов** — All/DMs/Groups + custom; REST folders + rail/drawer UI shipped (parallel/client); **pin/reorder UI** in list ctx + custom-folder drag reorder shipped (Batch 21b); edit-folders management UI shipped (**Batch 25b**).
 - [x] **In-chat search: next/prev highlight** — `in_chat_search.dart` `_step`
