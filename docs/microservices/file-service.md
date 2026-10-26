@@ -95,14 +95,30 @@ durable asynchronous thumbnail queue. The worker renders only page one to PNG
 (at most 320 pixels per edge and 1 MiB), with a 10 MiB input bound, a ten-second
 renderer deadline and one renderer per process. Poppler `pdftoppm` must be
 installed in the File runtime. Encrypted documents bypass server rendering.
-The original PDF, SHA-256, size and retention deadline remain unchanged.
+The worker rechecks the confirmed SHA-256 before rendering. The original PDF,
+SHA-256, size and retention deadline remain unchanged.
 Malformed PDFs become `failed`; temporary storage/tool failures remain
 `processing` and retry. For [Poppler's exit contract](https://manpages.debian.org/bookworm/poppler-utils/pdftoppm.1.en.html),
 PDF-open (1) and PDF-permission (3) failures are permanent; output-open (2),
 other (99), unknown exits and killed processes remain retryable. Cancellation
-also leaves the document retryable. Thumbnail keys are persisted in File/blob storage
-before object writes, so crashes and ambiguous PUT responses leave GC-visible
-objects. Ready metadata and its redacted preview outbox event commit together.
+also leaves the document retryable. Apply migrations `000010` and `000011`
+before activating the PDF worker. It uses the shared File tracked-write ledger,
+with a unique immutable thumbnail attempt key, measured digest/size and
+`pdf_thumbnail` purpose. `STARTED` commits before the single storage attempt;
+hidden SDK retries and redirects are disabled. An exact successful ACK settles
+physical custody independently of caller cancellation or a lost SQL session.
+Publication separately rechecks the File, attempt key, blob and references;
+logical deletion or release cannot resurrect `ready`. Settled publication can
+resume without another PUT. Ready metadata and its redacted preview outbox
+event commit together.
+
+Any missing/ambiguous storage ACK remains a non-expiring physical cleanup pin.
+HEAD absence, a timer, process restart or an administrator assertion cannot clear
+it. Reference release and logical deletion can proceed while physical deletion
+remains pending. The worker reports unresolved write counts at most once per
+minute; actual remote settlement/fencing proof is required for reconciliation.
+This is an explicit recovery limitation, not automatic orphan cleanup success.
+See [the shared tracked-write contract](../testing/file-tracked-write-contract.md).
 
 The request retains `FileAccessSelector`, and File performs the same ACL,
 reference/capability, file-state and `FILE_READ_SURFACE_URL` checks before

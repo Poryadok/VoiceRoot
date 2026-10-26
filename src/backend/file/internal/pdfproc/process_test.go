@@ -34,6 +34,14 @@ func init() {
 		}
 		os.Exit(99)
 	}
+	if mode == "bad-output" {
+		_, _ = os.Stdout.Write([]byte("not a PNG"))
+		os.Exit(0)
+	}
+	if mode == "large-output" {
+		_, _ = os.Stdout.Write(make([]byte, MaxThumbnailBytes+1))
+		os.Exit(1)
+	}
 	code, err := strconv.Atoi(mode)
 	if err != nil {
 		os.Exit(99)
@@ -46,7 +54,7 @@ func TestRendererDistinguishesPDFErrorsFromToolFailures(t *testing.T) {
 		mode    string
 		invalid bool
 	}{
-		{"1", true}, {"3", true}, {"2", false}, {"99", false}, {"42", false}, {"kill", false},
+		{"1", true}, {"3", true}, {"2", false}, {"99", false}, {"42", false}, {"kill", false}, {"bad-output", false}, {"large-output", false},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			if tc.mode == "kill" && runtime.GOOS == "windows" {
