@@ -25,6 +25,7 @@ import (
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
 	"voice/backend/messaging/internal/messageevents"
+	"voice/backend/messaging/internal/messageviews"
 	"voice/backend/messaging/internal/principalgrpc"
 	"voice/backend/messaging/internal/principalruntime"
 	"voice/backend/messaging/internal/s2s"
@@ -504,6 +505,19 @@ func main() {
 		var roleIssuer *principal.Issuer
 		if managedChatPurge != nil {
 			roleIssuer = managedChatPurge.Issuer
+		}
+		viewDeletion, viewConn, err := newMessageViewDeletionClient(os.LookupEnv, roleIssuer)
+		if err != nil {
+			log.Fatalf("message view compaction config: %v", err)
+		}
+		if viewConn != nil {
+			defer func() { _ = viewConn.Close() }()
+			viewDone := make(chan struct{})
+			defer func() { runCancel(); <-viewDone }()
+			go func() {
+				defer close(viewDone)
+				(&messageviews.Compactor{Store: &store.MessagesStore{Pool: pool}, Checker: viewDeletion, Logger: logger}).Run(runCtx)
+			}()
 		}
 		rolePerms, rconn, err := newRolePermissionsClient(os.Getenv, roleIssuer)
 		if err != nil {

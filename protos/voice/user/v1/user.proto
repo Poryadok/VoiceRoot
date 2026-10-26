@@ -79,6 +79,9 @@ service UserService {
   // Internal Messaging decision for an owned scheduled dispatch.
   // Exposed only on the dedicated authenticated Messaging principal listener.
   rpc GetScheduledMessageDispatchPresence(GetScheduledMessageDispatchPresenceRequest) returns (GetScheduledMessageDispatchPresenceResponse);
+  // @voice.security=protected;callers=service:messaging
+  // Deletion fact only; dedicated Messaging mTLS listener, never ordinary User or Gateway.
+  rpc GetProfileDeletionStates(GetProfileDeletionStatesRequest) returns (GetProfileDeletionStatesResponse);
 
   rpc GetSettings(GetSettingsRequest) returns (GetSettingsResponse);
   rpc UpdateSettings(UpdateSettingsRequest) returns (UpdateSettingsResponse);
@@ -625,4 +628,28 @@ message GetSpaceAdmissionProfileEligibilityResponse {
   uint64 profile_revision = 4;
   bool deleted = 5;
   bool frozen = 6;
+}
+
+// Current User-owned deletion fact; unspecified is never a valid response state.
+enum ProfileDeletionState {
+  PROFILE_DELETION_STATE_UNSPECIFIED = 0;
+  PROFILE_DELETION_STATE_NOT_DELETED = 1;
+  PROFILE_DELETION_STATE_SOFT_DELETED = 2;
+  PROFILE_DELETION_STATE_UNKNOWN = 3;
+}
+
+message GetProfileDeletionStatesRequest {
+  // 1..500 distinct canonical nonnil UUIDs; invalid batches fail atomically.
+  repeated string profile_ids = 1;
+}
+
+message ProfileDeletionStateEntry {
+  string profile_id = 1;
+  // Missing rows are UNKNOWN, never evidence of deletion.
+  ProfileDeletionState state = 2;
+}
+
+message GetProfileDeletionStatesResponse {
+  // Exactly one entry per requested ID, in request order.
+  repeated ProfileDeletionStateEntry states = 1;
 }

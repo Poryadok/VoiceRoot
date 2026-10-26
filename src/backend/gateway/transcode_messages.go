@@ -16,6 +16,19 @@ func (t *transcoder) serveMessages(w http.ResponseWriter, r *http.Request, rest 
 	}
 
 	switch {
+	case r.Method == http.MethodPost && rest == "views":
+		req := &messagingv1.RecordMessageViewRequest{}
+		if err := readProtoJSON(r, req); err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		resp, err := t.clients.messaging.RecordMessageView(ctx, req)
+		if err != nil {
+			writeGRPCError(w, err)
+			return true
+		}
+		writeProtoJSON(w, http.StatusOK, resp)
+		return true
 	case r.Method == http.MethodPost && rest == "forward":
 		req := &messagingv1.ForwardMessageRequest{}
 		if err := readProtoJSON(r, req); err != nil {

@@ -176,6 +176,8 @@ service MessagingService {
   rpc ForwardMessage(ForwardMessageRequest) returns (ForwardMessageResponse);
 
   rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  // Idempotent first viewport view by the authenticated profile; group/channel only.
+  rpc RecordMessageView(RecordMessageViewRequest) returns (RecordMessageViewResponse);
   rpc GetReadState(GetReadStateRequest) returns (GetReadStateResponse);
   rpc GetBulkReadState(GetBulkReadStateRequest) returns (GetBulkReadStateResponse);
   rpc GetChatListMetadata(GetChatListMetadataRequest) returns (GetChatListMetadataResponse);
@@ -459,6 +461,17 @@ message Message {
   optional string game_character_binding_id = 27;
   bool game_card_actions_enabled = 28;
   repeated GameActionResult game_action_results = 29;
+  // Group/channel only. Absent for DM and legacy producers.
+  optional uint64 view_count = 30;
+}
+
+message RecordMessageViewRequest {
+  string chat_id = 1;
+  string message_id = 2;
+}
+
+message RecordMessageViewResponse {
+  uint64 view_count = 1;
 }
 
 message GameActionResult {

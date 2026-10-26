@@ -248,6 +248,17 @@ class UserServiceClient extends $grpc.Client {
         options: options);
   }
 
+  /// @voice.security=protected;callers=service:messaging
+  /// Deletion fact only; dedicated Messaging mTLS listener, never ordinary User or Gateway.
+  $grpc.ResponseFuture<$1.GetProfileDeletionStatesResponse>
+      getProfileDeletionStates(
+    $1.GetProfileDeletionStatesRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getProfileDeletionStates, request,
+        options: options);
+  }
+
   $grpc.ResponseFuture<$1.GetSettingsResponse> getSettings(
     $1.GetSettingsRequest request, {
     $grpc.CallOptions? options,
@@ -525,6 +536,12 @@ class UserServiceClient extends $grpc.Client {
       ($1.GetScheduledMessageDispatchPresenceRequest value) =>
           value.writeToBuffer(),
       $1.GetScheduledMessageDispatchPresenceResponse.fromBuffer);
+  static final _$getProfileDeletionStates = $grpc.ClientMethod<
+          $1.GetProfileDeletionStatesRequest,
+          $1.GetProfileDeletionStatesResponse>(
+      '/voice.user.v1.UserService/GetProfileDeletionStates',
+      ($1.GetProfileDeletionStatesRequest value) => value.writeToBuffer(),
+      $1.GetProfileDeletionStatesResponse.fromBuffer);
   static final _$getSettings =
       $grpc.ClientMethod<$1.GetSettingsRequest, $1.GetSettingsResponse>(
           '/voice.user.v1.UserService/GetSettings',
@@ -850,6 +867,15 @@ abstract class UserServiceBase extends $grpc.Service {
             $1.GetScheduledMessageDispatchPresenceRequest.fromBuffer(value),
         ($1.GetScheduledMessageDispatchPresenceResponse value) =>
             value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$1.GetProfileDeletionStatesRequest,
+            $1.GetProfileDeletionStatesResponse>(
+        'GetProfileDeletionStates',
+        getProfileDeletionStates_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $1.GetProfileDeletionStatesRequest.fromBuffer(value),
+        ($1.GetProfileDeletionStatesResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$1.GetSettingsRequest, $1.GetSettingsResponse>(
             'GetSettings',
@@ -1236,6 +1262,15 @@ abstract class UserServiceBase extends $grpc.Service {
   $async.Future<$1.GetScheduledMessageDispatchPresenceResponse>
       getScheduledMessageDispatchPresence($grpc.ServiceCall call,
           $1.GetScheduledMessageDispatchPresenceRequest request);
+
+  $async.Future<$1.GetProfileDeletionStatesResponse>
+      getProfileDeletionStates_Pre($grpc.ServiceCall $call,
+          $async.Future<$1.GetProfileDeletionStatesRequest> $request) async {
+    return getProfileDeletionStates($call, await $request);
+  }
+
+  $async.Future<$1.GetProfileDeletionStatesResponse> getProfileDeletionStates(
+      $grpc.ServiceCall call, $1.GetProfileDeletionStatesRequest request);
 
   $async.Future<$1.GetSettingsResponse> getSettings_Pre($grpc.ServiceCall $call,
       $async.Future<$1.GetSettingsRequest> $request) async {
