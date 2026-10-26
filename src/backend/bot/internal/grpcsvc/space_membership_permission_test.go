@@ -180,8 +180,7 @@ func TestChannelInstallSpaceAddFailureStopsBeforeLocalCompletion(t *testing.T) {
 	requireNoError(t, err)
 	var add spacev1.AddBotMemberRequest
 	requireNoError(t, proto.Unmarshal(addBytes, &add))
-	var intent spacev1.BotInstallationIntent
-	intent = *add.GetInstallationIntent()
+	intent := *add.GetInstallationIntent()
 	record := store.MembershipRecord{SpaceID: spaceID, BotID: botID, InstallationID: uuid.MustParse(intent.GetInstallationId()), ActorProfileID: actorProfileID, AddOperationID: uuid.MustParse(intent.GetOperationId()), Generation: 1, AddBytes: addBytes}
 	journal := &installBoundaryJournal{record: record}
 	transport := &installBoundaryTransport{err: errors.New("Space rejected member add")}
