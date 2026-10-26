@@ -166,7 +166,8 @@ those are different clients, credentials and trust boundaries.
    terminates HTTPS at Gateway and executes in Auth. No Voice bearer is expected
    from the provider browser. Accept exactly one state and either one nonempty
    code or one provider error; reject duplicates, mixed code/error, missing state,
-   oversized/malformed parameters and unexpected credential-bearing fragments.
+   oversized/malformed parameters. URL fragments are not sent in HTTP requests;
+   Gateway/Auth cannot inspect or reject a browser's fragment in this GET.
    Validate state, provider path, registration, bound callback and expiry before
    any token request. Use the **stored** callback for exchange; never Host,
    forwarded headers or request-supplied redirect. Atomic pending→processing
@@ -188,6 +189,15 @@ those are different clients, credentials and trust boundaries.
    party resources. Gateway/Auth access logs, tracing and analytics redact codes,
    state, handles and tokens. Provider codes enter only the server HTTPS callback;
    the bridge never forwards its original query to the app or another origin.
+   Every callback/bridge HTTP redirect, including error redirects, constructs its
+   allowlisted `Location` with an explicit empty fragment (`#`), preventing the
+   browser from inheriting the incoming fragment across redirects
+   ([RFC 9110 §§10.2.2, 17.11](https://www.rfc-editor.org/rfc/rfc9110.html#section-17.11)).
+   Before analytics, logging, result consumption or OS handoff, the browser bridge
+   rejects any nonempty `location.hash` and scrubs it via history replacement;
+   Flutter likewise rejects a nonempty fragment in a directly delivered return
+   URI and clears it from recoverable URL state. Neither component records the
+   fragment or copies it into messages, return links or app-launch arguments.
 6. Return only `{attempt_id,result_handle}` through a configured bridge/app
    destination; no provider code, provider token, Voice token, verifier, arbitrary
    next URL or claimed success status. Proposed authenticated
@@ -261,6 +271,7 @@ first; successful stubs cannot establish live provider qualification.
 | Provider / criterion failure | Consent deny, malformed callback, non-200 token reply, timeout, missing token, non-Partner, YPP-proxy rejection: safe distinct UI and unchanged prior sources. Unconfigured production provider cannot use mock fallback. |
 | Auth/User degradation | Source commit with User outage keeps durable sync pending; no false verified badge. Consume response lost after commit plus reload rereads actual state without another write. |
 | Web browser | Real user gesture launch/redirect, exact callback/return, per-tab proof, reload before/after consume, browser Back, two tabs, blocked popup and missing opener; inspect URLs/history/network for credentials. |
+| Fragment inheritance / direct delivery | Real browser regression starts at a callback URL with a synthetic credential-bearing fragment: assert it is absent from the HTTP request, every redirect `Location` has explicit empty fragment, and the resulting bridge/app URL inherits none. Direct bridge and Flutter return URLs with nonempty fragments must be rejected and scrubbed before analytics/consume/OS handoff; assert no fragment in history recovery, messages, logs or captured app-launch arguments. |
 | Windows | Packaged protocol registration; external browser→warm/cold instance→Settings; duplicate delivery, expired proof and no handler. Real OS handoff is separate from widget mocks. |
 | Mobile / UI safety | Android/iOS physical cold/warm return after association/signing; profile switch/logout at every await ignores stale responses; focus restored, safe localized messages and keyboard/accessibility states. |
 
