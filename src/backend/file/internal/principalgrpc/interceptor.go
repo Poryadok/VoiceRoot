@@ -17,7 +17,11 @@ type Verifier interface {
 
 func IsProtectedMethod(method string) bool {
 	switch method {
-	case filev1.FileService_ValidateStoryMedia_FullMethodName,
+	case filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName,
+		filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName,
+		filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName,
+		filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName,
+		filev1.FileService_ValidateStoryMedia_FullMethodName,
 		filev1.FileService_ResolveMessageAttachmentPreview_FullMethodName,
 		filev1.FileService_AcquireFileReferences_FullMethodName,
 		filev1.FileService_ReleaseFileReferences_FullMethodName,
@@ -78,6 +82,12 @@ func StrictUnaryInterceptor(verifier Verifier) grpc.UnaryServerInterceptor {
 
 func expectedIssuerForMethod(method string) string {
 	switch method {
+	case filev1.CatalogAssetService_ImportCatalogAsset_FullMethodName,
+		filev1.CatalogAssetService_GetCatalogAssetStatus_FullMethodName:
+		return "chat"
+	case filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName,
+		filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName:
+		return "messaging"
 	case filev1.FileService_ValidateStoryMedia_FullMethodName:
 		return "story"
 	case filev1.FileService_PrepareSpaceDeletionReferenceManifest_FullMethodName, filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, filev1.FileService_PurgeSpace_FullMethodName, filev1.FileService_GetSpacePurgeReceipt_FullMethodName:

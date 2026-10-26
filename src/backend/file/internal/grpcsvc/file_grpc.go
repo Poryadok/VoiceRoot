@@ -25,7 +25,6 @@ import (
 
 	"voice/backend/file/internal/authctx"
 	"voice/backend/file/internal/fileevents"
-	"voice/backend/file/internal/pdfproc"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/store"
 
@@ -194,6 +193,14 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 	intent := ""
 	switch req.GetIntent() {
 	case filev1.UploadIntent_UPLOAD_INTENT_UNSPECIFIED:
+		if mimeType == "image/gif" {
+			return nil, status.Error(codes.InvalidArgument, "image/gif requires explicit GIF upload intent")
+		}
+	case filev1.UploadIntent_UPLOAD_INTENT_GIF:
+		if mimeType != "image/gif" || req.GetIsE2E() || req.GetContextStory() != nil {
+			return nil, status.Error(codes.InvalidArgument, "GIF processing requires plaintext image/gif upload")
+		}
+		intent = "gif"
 	case filev1.UploadIntent_UPLOAD_INTENT_MUSIC:
 		if r2file.MediaCategory(mimeType) != "audio" || req.GetContextChat() == nil || req.GetContextStory() != nil {
 			return nil, status.Error(codes.InvalidArgument, "music upload requires audio and chat context")
@@ -312,6 +319,10 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 	if row.Status != "ready" {
 		return nil, status.Error(codes.FailedPrecondition, "file is not ready")
 	}
+	representation, err := selectedRepresentation(row, req.GetVariant())
+	if err != nil {
+		return nil, err
+	}
 	if isMessageReferenceSelector(req.GetAccess()) {
 		if len(s.revocableDownloadKey) < minimumDownloadCapabilityKeyBytes || s.revocableDownloadBaseURL == "" || s.reader == nil {
 			return nil, status.Error(codes.FailedPrecondition, "revocable message download is not configured")
@@ -326,12 +337,12 @@ func (s *FileGRPC) GetFileURL(ctx context.Context, req *filev1.GetFileURLRequest
 		return &filev1.GetFileURLResponse{PresignedGetUrl: s.revocableDownloadBaseURL + "/" + token,
 			ExpiresAt: timestamppb.New(expiresAt)}, nil
 	}
-	key, err := fileURLKey(row, req.GetVariant())
-	if err != nil {
-		return nil, err
-	}
 	ttl := r2file.DefaultURLTTL
-	getURL, err := s.presigner.PresignGet(ctx, r2file.GetPresignInput{Key: key, TTL: ttl})
+	presignInput := r2file.GetPresignInput{Key: representation.Key, TTL: ttl}
+	if row.UploadIntent == "gif" {
+		presignInput.ContentType, presignInput.Filename = representation.MIMEType, representation.Filename
+	}
+	getURL, err := s.presigner.PresignGet(ctx, presignInput)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -372,21 +383,22 @@ func (s *FileGRPC) FetchRevocableDownload(ctx context.Context, capability revoca
 	if row.Status != "ready" {
 		return store.FileRow{}, nil, status.Error(codes.NotFound, "download unavailable")
 	}
-	key, err := fileURLKey(row, capability.Variant)
+	representation, err := selectedRepresentation(row, capability.Variant)
 	if err != nil {
 		return store.FileRow{}, nil, err
 	}
-	maxBytes := row.SizeBytes
-	if capability.Variant == filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL && row.FileType == "document" && row.MimeType == "application/pdf" {
-		maxBytes = pdfproc.MaxThumbnailBytes
-		// These are response attributes only; persisted document facts stay intact.
-		row.MimeType = "image/png"
-		row.OriginalName += ".png"
-	}
-	body, err := s.reader.ReadObject(ctx, key, maxBytes)
+	body, err := s.reader.ReadObject(ctx, representation.Key, representation.SizeBytes)
 	if err != nil {
 		return store.FileRow{}, nil, status.Error(codes.Unavailable, "download unavailable")
 	}
+	if row.UploadIntent == "gif" {
+		if int64(len(body)) != representation.SizeBytes || verifySHA256(body, representation.SHA256) != nil {
+			return store.FileRow{}, nil, status.Error(codes.Unavailable, "download integrity mismatch")
+		}
+	}
+	// This return value is a response-local selected representation, never a
+	// mutation of source provenance persisted in files or returned as metadata.
+	row.MimeType, row.SizeBytes, row.OriginalName = representation.MIMEType, representation.SizeBytes, representation.Filename
 	if capability.Variant == filev1.FileURLVariant_FILE_URL_VARIANT_UNSPECIFIED {
 		if err := s.events.PublishFileDownloaded(ctx, row.ID.String(), capability.ProfileID.String()); err != nil {
 			slog.Default().WarnContext(ctx, "file.downloaded publish failed",
@@ -412,6 +424,25 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	row, err := s.fileOwnedByUploader(ctx, fileID, profileID)
 	if err != nil {
 		return nil, err
+	}
+	if row.UploadIntent == "gif" {
+		if row.Status == "pending_upload" {
+			raw, readErr := s.readUploadBytes(ctx, row)
+			if readErr != nil {
+				return nil, status.Error(codes.Unavailable, "GIF upload bytes unavailable")
+			}
+			if err := verifySHA256(raw, sha); err != nil {
+				return nil, err
+			}
+		}
+		updated, confirmErr := s.files.ConfirmGIFUpload(ctx, fileID, strings.ToLower(sha))
+		if errors.Is(confirmErr, store.ErrGIFConfirmationConflict) {
+			return nil, status.Error(codes.FailedPrecondition, "GIF confirmation conflicts with verified source")
+		}
+		if confirmErr != nil {
+			return nil, status.Error(codes.Internal, "GIF confirmation persistence failed")
+		}
+		return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(updated)}, nil
 	}
 	if row.Status != "pending_upload" {
 		return nil, status.Error(codes.FailedPrecondition, "file upload is already confirmed")
@@ -1039,6 +1070,10 @@ func fileURLKey(row store.FileRow, variant filev1.FileURLVariant) (string, error
 	if err := validateFileURLVariant(variant); err != nil {
 		return "", err
 	}
+	if row.UploadIntent == "gif" {
+		r, err := selectedRepresentation(row, variant)
+		return r.Key, err
+	}
 	switch variant {
 	case filev1.FileURLVariant_FILE_URL_VARIANT_UNSPECIFIED:
 		return downloadKey(row), nil
@@ -1129,6 +1164,11 @@ func fileRowToProto(row store.FileRow) *filev1.FileMetadata {
 	}
 	if row.UploadIntent == "music" {
 		meta.Intent = filev1.UploadIntent_UPLOAD_INTENT_MUSIC
+	}
+	if row.UploadIntent == "gif" {
+		meta.Intent = filev1.UploadIntent_UPLOAD_INTENT_GIF
+		meta.DeliveredFull = representationToProto(row.DeliveredFull)
+		meta.DeliveredThumbnail = representationToProto(row.DeliveredThumbnail)
 	}
 	if row.ThumbnailR2Key != nil {
 		meta.ThumbnailR2Key = row.ThumbnailR2Key

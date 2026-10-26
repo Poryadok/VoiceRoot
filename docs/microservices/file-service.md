@@ -158,7 +158,7 @@ file_references (дедупликация)
 | `article_thumb` | OG/thumb for Article attach | ≤2 MB |
 | `location_map` | Static map tile | ≤500 KB |
 
-**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing) and `MUSIC` (6); Music is persisted at request admission and cannot be changed at confirm. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
+**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), and `MUSIC` (6). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
 
 ```protobuf
 enum UploadIntent {
@@ -275,6 +275,64 @@ Client → Chat.SearchGifs(query) → provider adapter (Giphy or Tenor — one a
 | Premium ★ packs | Entitlement gate on **install** in Chat, not on File storage |
 
 `file.processed` for sticker/GIF intents triggers Messaging list preview refresh ([messaging-service.md](messaging-service.md) § File → Messaging).
+
+### API-only GIF processing (BE-033)
+
+`RequestUpload(intent=GIF, mime_type="image/gif")` accepts plaintext source
+uploads under the existing uploader/chat authorization and upload limits. E2E,
+Story context and provider source URLs are not admitted by this API slice.
+The existing Flutter A1 `.gif` attachment fallback remains octet-stream/other.
+`UNSPECIFIED` with `image/gif` is rejected instead of decoding a static first
+frame. Existing pending rows are not migrated or reinterpreted by this guard.
+New GIF-intent files cannot be sent or forwarded by relabeling them as generic
+video or stickers; Messaging rejects them until its GIF-send contract is enabled.
+
+Confirmation verifies source bytes and atomically stores the source hash and
+one durable processing job. Repeating the same hash returns current metadata;
+a different hash fails with `FailedPrecondition`. Processing is asynchronous:
+poll metadata until `ready` or `failed`. The ordinary File runtime owns the job
+worker; no live provider/key is needed. Recovery claims a fresh attempt token
+after lease expiry. Only the live attempt can commit ready state, delivered
+descriptors and the preview outbox together. Attempts use distinct storage keys.
+
+Source `original_name`, `mime_type`, `size_bytes`, `sha256_hash` and
+`object_revision=1` retain source provenance. `delivered_full` and
+`delivered_thumbnail` describe the actual MIME, size, hash, filename and processor
+version of output bytes. They contain no public URL or storage key. Clients use
+these descriptors to validate delivered downloads; source SHA is not an MP4 hash.
+The selected key, read bound, MIME and filename travel together through presigned
+and revocable downloads. Missing GIF output fails closed without original fallback.
+Existing `CheckQuota` remains source-size accounting, not physical R2 usage.
+
+Processor `gif-mp4-v1` produces H.264/yuv420p MP4 without audio, faststart and a
+static first-composited-frame WebP thumbnail. Each output is at most 5 MiB.
+Frame timing and GIF disposal are preserved, with transparent pixels composited
+on black and odd dimensions padded to even edges. Zero delays normalize to
+100 ms; positive delays preserve centisecond timing. One terminal 10 ms packet
+closes the final frame hold. Metadata duration rounds the source duration up to
+whole seconds. Technical rejection budgets: 4096-pixel canvas edge, 16 Mi pixels
+per canvas, 64 Mi cumulative canvas pixels, 600 frames, 120 seconds and the
+existing upload byte cap. Codec execution is bounded to 90 seconds; a whole
+attempt has 120 seconds, its lease 180 seconds, and stale-key cleanup waits 240
+seconds from claim. Malformed or over-budget inputs become failed; transient
+storage/codec failures remain recoverable processing jobs.
+
+Every attempt declares keys durably before writing. Successful completion queues
+original cleanup only after the metadata commit; ambiguous storage/commit failure
+leaves durable cleanup evidence. Cleanup retries never delete a committed winner
+or another live alias's original. Normal File reference GC still owns retained
+full/thumb deletion, with existing ACL and retention ownership unchanged.
+Because the signed upload PUT can be replayed until its one-hour expiry, original
+cleanup repeats every minute through `created_at + URL TTL + 1 minute`, then
+confirms its final deletion. Processing/status/download never fall back to that
+original during the reconciliation window.
+
+Apply File migration `000009` before the binary. DOWN refuses to discard retained
+GIF jobs, outputs or cleanup evidence. Deploy File/Messaging accepting the shared
+GIF preview protocol v2 before using the new GIF upload producer. Legacy preview
+v1 remains unchanged and excludes nonempty intents. GIF v2 terminal snapshots
+remain redacted; ready snapshots require video plus converted/thumbnail variants.
+This does not advertise first-class GIF messaging or completion of A6.
 
 ### Messaging send payload cross-ref (R2-A32)
 
