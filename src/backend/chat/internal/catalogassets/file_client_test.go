@@ -66,6 +66,10 @@ func TestCatalogAssetTerminalProofIsNarrow(t *testing.T) {
 }
 
 func (s *fileServerFixture) check(ctx context.Context, req proto.Message, method string) error {
+	versioned, ok := req.(interface{ GetProtocolVersion() uint32 })
+	if !ok || versioned.GetProtocolVersion() != 2 {
+		return status.Error(codes.InvalidArgument, "ordered protocol2 required")
+	}
 	md, err := principal.IncomingMetadata(ctx)
 	if err != nil {
 		return err
@@ -90,10 +94,22 @@ func (s *fileServerFixture) ImportCatalogAsset(ctx context.Context, r *filev1.Im
 	}
 	s.operation = r.OperationId
 	s.destination = r.DestinationChat
-	s.state = FileState{Actor: Actor{AccountID: uuid.MustParse(r.ActorAccountId), ProfileID: uuid.MustParse(r.ActorProfileId)}, ActorCapture: ActorCapture{AccountGeneration: uuid.MustParse(r.ChatAccountGeneration), ProfileGeneration: uuid.MustParse(r.ChatProfileGeneration)}, Selection: Selection{Provider: r.Provider, ProviderID: r.ProviderId}, SourceID: uuid.MustParse(r.SourceId), FileID: uuid.New(), Status: "processing"}
+	s.state = FileState{Actor: Actor{AccountID: uuid.MustParse(r.ActorAccountId), ProfileID: uuid.MustParse(r.ActorProfileId)}, ActorCapture: ActorCapture{AccountGeneration: uuid.MustParse(r.ChatAccountGeneration), ProfileGeneration: uuid.MustParse(r.ChatProfileGeneration)}, Selection: Selection{Provider: r.Provider, ProviderID: r.ProviderId}, SourceID: uuid.MustParse(r.SourceId), FileID: uuid.New(), Status: "processing", SelectionRevision: 1, CurrentSelectionRevision: 1}
 	response := &filev1.ImportCatalogAssetResponse{SourceId: r.SourceId, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, Provider: r.Provider, ProviderId: r.ProviderId, FileId: s.state.FileID.String(), Status: s.state.Status, OperationId: r.OperationId, DestinationChat: r.DestinationChat, ChatAccountGeneration: r.ChatAccountGeneration, ChatProfileGeneration: r.ChatProfileGeneration}
 	if s.bad == "actor" {
 		response.ActorProfileId = uuid.NewString()
+	}
+	response.SelectionRevision = s.state.SelectionRevision
+	response.CurrentSelectionRevision = s.state.CurrentSelectionRevision
+	if s.bad == "zero revision" {
+		response.SelectionRevision = 0
+	}
+	if s.bad == "zero head" {
+		response.CurrentSelectionRevision = 0
+	}
+	if s.bad == "future revision" {
+		response.SelectionRevision = 2
+		response.CurrentSelectionRevision = 1
 	}
 	if s.bad == "operation" {
 		response.OperationId = uuid.NewString()
@@ -117,6 +133,8 @@ func (s *fileServerFixture) GetCatalogAssetStatus(ctx context.Context, r *filev1
 		return nil, err
 	}
 	response := &filev1.GetCatalogAssetStatusResponse{SourceId: s.state.SourceID.String(), ActorAccountId: s.state.AccountID.String(), ActorProfileId: s.state.ProfileID.String(), Provider: s.state.Provider, ProviderId: s.state.ProviderID, FileId: s.state.FileID.String(), Status: "ready", ChatAccountGeneration: s.state.AccountGeneration.String(), ChatProfileGeneration: s.state.ProfileGeneration.String()}
+	response.SelectionRevision = s.state.SelectionRevision
+	response.CurrentSelectionRevision = s.state.CurrentSelectionRevision
 	if operation := r.GetOperation(); operation != nil {
 		response.OperationId = operation.OperationId
 		response.DestinationChat = operation.DestinationChat
@@ -155,14 +173,14 @@ func TestCatalogFileClientUsesFreshPureBoundCredentialAndChecksEcho(t *testing.T
 	if err != nil || recovered.FileID != state.FileID || recovered.Status != "ready" {
 		t.Fatalf("status=%+v err=%v", recovered, err)
 	}
-	bound := Binding{Actor: req.Actor, ActorCapture: req.ActorCapture, Selection: req.Selection, SourceID: req.SourceID, FileID: state.FileID}
+	bound := Binding{Actor: req.Actor, ActorCapture: req.ActorCapture, Selection: req.Selection, SourceID: req.SourceID, FileID: state.FileID, SelectorSlotID: uuid.New(), SelectionRevision: state.SelectionRevision}
 	if _, err := client.Status(ctx, bound); err != nil {
 		t.Fatal(err)
 	}
 	if len(fixture.ids) != 3 || fixture.ids[0] == fixture.ids[1] || fixture.ids[1] == fixture.ids[2] || fixture.ids[0] == req.OperationID.String() {
 		t.Fatalf("transport IDs=%v", fixture.ids)
 	}
-	for _, bad := range []string{"actor", "operation", "status", "destination", "generation", "error"} {
+	for _, bad := range []string{"actor", "operation", "status", "destination", "generation", "zero revision", "zero head", "future revision", "error"} {
 		fixture.bad = bad
 		_, err := client.Import(ctx, req)
 		want := codes.Unavailable

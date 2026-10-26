@@ -12,6 +12,7 @@
 
 import 'dart:core' as $core;
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:protobuf/protobuf.dart' as $pb;
 
 import 'chat.pb.dart' as $1;
@@ -371,6 +372,8 @@ class ValidateGifAssetResponse extends $pb.GeneratedMessage {
     $core.String? provider,
     $core.String? providerId,
     $core.String? fileId,
+    $fixnum.Int64? selectionRevision,
+    $fixnum.Int64? currentSelectionRevision,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -379,6 +382,9 @@ class ValidateGifAssetResponse extends $pb.GeneratedMessage {
     if (provider != null) result.provider = provider;
     if (providerId != null) result.providerId = providerId;
     if (fileId != null) result.fileId = fileId;
+    if (selectionRevision != null) result.selectionRevision = selectionRevision;
+    if (currentSelectionRevision != null)
+      result.currentSelectionRevision = currentSelectionRevision;
     return result;
   }
 
@@ -401,6 +407,12 @@ class ValidateGifAssetResponse extends $pb.GeneratedMessage {
     ..aOS(4, _omitFieldNames ? '' : 'provider')
     ..aOS(5, _omitFieldNames ? '' : 'providerId')
     ..aOS(6, _omitFieldNames ? '' : 'fileId')
+    ..a<$fixnum.Int64>(
+        7, _omitFieldNames ? '' : 'selectionRevision', $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
+    ..a<$fixnum.Int64>(8, _omitFieldNames ? '' : 'currentSelectionRevision',
+        $pb.PbFieldType.OU6,
+        defaultOrMaker: $fixnum.Int64.ZERO)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -476,6 +488,24 @@ class ValidateGifAssetResponse extends $pb.GeneratedMessage {
   $core.bool hasFileId() => $_has(5);
   @$pb.TagNumber(6)
   void clearFileId() => $_clearField(6);
+
+  @$pb.TagNumber(7)
+  $fixnum.Int64 get selectionRevision => $_getI64(6);
+  @$pb.TagNumber(7)
+  set selectionRevision($fixnum.Int64 value) => $_setInt64(6, value);
+  @$pb.TagNumber(7)
+  $core.bool hasSelectionRevision() => $_has(6);
+  @$pb.TagNumber(7)
+  void clearSelectionRevision() => $_clearField(7);
+
+  @$pb.TagNumber(8)
+  $fixnum.Int64 get currentSelectionRevision => $_getI64(7);
+  @$pb.TagNumber(8)
+  set currentSelectionRevision($fixnum.Int64 value) => $_setInt64(7, value);
+  @$pb.TagNumber(8)
+  $core.bool hasCurrentSelectionRevision() => $_has(7);
+  @$pb.TagNumber(8)
+  void clearCurrentSelectionRevision() => $_clearField(8);
 }
 
 /// Read-only independent destination observation for File's protected importer.

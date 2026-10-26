@@ -878,6 +878,29 @@ Migration `000028_catalog_assets` adds account/profile purpose-HMAC gates and
 active source bindings. Admission consults fresh protected Auth account/session
 and User ownership/deletion facts. Save locks account then profile gates, checks
 both captured generations and inserts the binding in that same transaction.
+Forward migration `000029_catalog_selection_cache` preserves unordered v1 rows
+as cleanup-only history and adds a disposable selector-slot incarnation captured
+before remote File work. File orders selections by first successful pending
+admission, not request/response time or UUID. A new admitted choice supersedes
+the prior choice even while pending or subsequently failed. Save updates only
+the captured incarnation: greater revision advances, equal requires an identical
+tuple, lower denies. Retirement/eviction deletes that incarnation; a delayed
+response cannot reinstall into a newly created slot. File retains the current
+watermark, so cache deletion never makes an older READY choice current again.
+
+Public Resolve uses envelope1 but translates only to private File protocol2.
+Protected source Validate requires protocol2 and a fresh positive File revision
+equal to the current head, then rechecks the exact cached slot; a cache miss
+fails closed. Destination-only observation remains version1. Missing/zero/v1
+ordering proof never grants admission. Only qualified asset-terminal cleanup
+may omit both generations and use both zero revisions with exact tuple and
+nonzero terminal fence; this exception grants no send/import authority.
+
+Selector metadata is bounded to 16384 slots globally and 256 per profile.
+Eviction prefers empty slots, including crashed or in-flight captures; a bounded
+reconciliation pass also evicts empty slots. Failed/cancelled requests remove
+only their own still-empty incarnation. This is disposable cache maintenance,
+not a TTL or proof about File execution. A retry obtains fresh File status.
 Purge closes the same gates and removes raw actor/catalog projections; old
 operations cannot attach to a restored generation. Gate/event aliases are
 restricted pseudonymous anti-resurrection evidence, not anonymous data or public

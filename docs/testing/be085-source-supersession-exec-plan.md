@@ -48,13 +48,13 @@ This is cache maintenance, not File execution fencing or a retention TTL.
 
 - [x] Confirm139 finding against exact implementation and contract155-159.
 - [x] Obtain101's first-admission, disposable-slot and protocol2 decision.
-- [x] Agree exact fields with95;95 prepares separate protocol-only branch from
-  d3, excluding unreviewed executor89ce. No protocol-only source has been merged yet.
-- [ ] Demonstrate real PG A→B supersession failure before behavior changes.
-- [ ] Add HMAC slots/current projection/forward migration29 and bounded eviction.
-- [ ] Translate public envelope to strict private2; enforce fresh File proof,
+- [x] Agree exact fields with95; normal-merge standalone protocol-only
+  `19ad40c1b77dee9716d1af040f67447c101a448e`, direct parent d3, excluding executor89ce.
+- [x] Demonstrate real PG A→B supersession failure before behavior changes.
+- [x] Add HMAC slots/current projection/forward migration29 and bounded eviction.
+- [x] Translate public envelope to strict private2; enforce fresh File proof,
   current equality and update-only captured incarnation in Chat service/client.
-- [ ] Cover delayed A after B, B admitted before Chat projection, B terminal and
+- [x] Cover delayed A after B, B admitted before Chat projection, B terminal and
   cache deletion/recreation, failure-before-admission, no fallback after failed B,
   actor purge/restore, key rotation, legacy/zero proof and current-scope isolation.
 - [ ] Rerun actual PG/race/TLS, affected component/contract checks, then request
@@ -66,6 +66,16 @@ guard remain unchanged. Added phase/timing and isolated wait-graph diagnostics
 retain every contender before failure cleanup; that diagnostic run passed2.67s.
 Earlier failures remain nonPASS evidence, not erased by that run. Diagnosis and
 final exact-tree verification continue with the correction.
+
+Working correction evidence: actual PostgreSQL supersession test failed against
+the old behavior (A still found after B); corrected catalog package race passes
+45 tests, including the final legacy negative and purge cleanup. Chat short
+passes279 tests/12 packages; Chat lint reports0 issues. The isolated actor-gate
+test rerun also passes without changing its eight-contender success conditions
+or production lock timeout. Buf lint/format pass; broader final checks and
+immutable rereview remain pending. The service tests control response delivery,
+not a replacement File admission algorithm: File ordering behavior itself stays
+95-owned and requires its own implementation/review.
 
 No live provider, fake product data, executor uptake, E2E/sticker activation,
 environment mutation, deployment or acceptance is authorized by this fix.

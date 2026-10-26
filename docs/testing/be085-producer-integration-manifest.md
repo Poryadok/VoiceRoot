@@ -74,8 +74,10 @@ are byte-identical to95d3; User internal/main/proto/socialprincipal and generate
 User Go/Dart messages are byte-identical to90700f34bb. These are source-equivalence
 facts, not independent security or execution passes for this assembled tree.
 
-Whole source review base is929f9e19 (after907/898, before95): the actual result
-adds74 paths/17460 lines, mostly schemas/generated bindings. The own-producer-only
+Whole source review base is929f9e19 (after907/898, before95): the initial4fb result
+adds74 paths/17460 lines, mostly schemas/generated bindings. The later8febb
+documentation checkpoint has76 paths by independent139's exact audit. These
+historical counts do not describe the protocol2 correction below. The own-producer-only
 comparison a54b5466→4fb4ff2 changes51 paths/5429 additions/158 deletions; it must
 not hide95's shared protocol/typed-consumer review requirement. Source owner95
 has been asked to inspect Messaging composition; final full review55 was
@@ -116,3 +118,21 @@ environment mutation, deployment, runtime qualification or acceptance is part
 of this source checkpoint. Destination ACL and lifecycle/reference guards must
 remain fail closed. UNKNOWN snapshots and generic File errors never authorize
 purge; cache bindings never grant blob retention or history authority.
+
+## Ordered-selection correction after independent review
+
+Independent139 marked exact8febb291 versus929f9e19 **NOT CLEAR** (BE-085 c12):
+the old file-ID-only projection admitted both A and B for the same selector.
+The six-path Gateway review remains insufficient. The correction follows
+[the ordered source ExecPlan](be085-source-supersession-exec-plan.md): File-owned
+first-admission revision, disposable Chat selector incarnation, strict private
+protocol2 and fresh File currentness on Validate. Migration29 preserves unordered
+legacy records as cleanup-only history, with no ordering backfill or message loss.
+
+The only additional external uptake is95's standalone protocol-only
+`19ad40c1b77dee9716d1af040f67447c101a448e`, direct parentd3:12 schema/generated/doc
+paths, normal merged, no later executor/DB/runtime ancestry. Chat correction is
+93-owned. File's revision allocation/current-head enforcement and114's runtime
+consumer proof checks remain separate owned implementation requirements. No
+working-tree pass or design agreement substitutes for corrected immutable
+139 rereview, full-result independent coverage and exact-head CI.

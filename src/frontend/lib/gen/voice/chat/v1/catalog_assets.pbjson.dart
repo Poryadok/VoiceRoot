@@ -100,6 +100,20 @@ const ValidateGifAssetResponse$json = {
     {'1': 'provider', '3': 4, '4': 1, '5': 9, '10': 'provider'},
     {'1': 'provider_id', '3': 5, '4': 1, '5': 9, '10': 'providerId'},
     {'1': 'file_id', '3': 6, '4': 1, '5': 9, '10': 'fileId'},
+    {
+      '1': 'selection_revision',
+      '3': 7,
+      '4': 1,
+      '5': 4,
+      '10': 'selectionRevision'
+    },
+    {
+      '1': 'current_selection_revision',
+      '3': 8,
+      '4': 1,
+      '5': 4,
+      '10': 'currentSelectionRevision'
+    },
   ],
 };
 
@@ -109,7 +123,9 @@ final $typed_data.Uint8List validateGifAssetResponseDescriptor = $convert.base64
     'IoChBhY3Rvcl9hY2NvdW50X2lkGAIgASgJUg5hY3RvckFjY291bnRJZBIoChBhY3Rvcl9wcm9m'
     'aWxlX2lkGAMgASgJUg5hY3RvclByb2ZpbGVJZBIaCghwcm92aWRlchgEIAEoCVIIcHJvdmlkZX'
     'ISHwoLcHJvdmlkZXJfaWQYBSABKAlSCnByb3ZpZGVySWQSFwoHZmlsZV9pZBgGIAEoCVIGZmls'
-    'ZUlk');
+    'ZUlkEi0KEnNlbGVjdGlvbl9yZXZpc2lvbhgHIAEoBFIRc2VsZWN0aW9uUmV2aXNpb24SPAoaY3'
+    'VycmVudF9zZWxlY3Rpb25fcmV2aXNpb24YCCABKARSGGN1cnJlbnRTZWxlY3Rpb25SZXZpc2lv'
+    'bg==');
 
 @$core.Deprecated('Use authorizeCatalogDestinationRequestDescriptor instead')
 const AuthorizeCatalogDestinationRequest$json = {
