@@ -20,7 +20,8 @@ import 'catalog_assets.pb.dart' as $0;
 
 export 'catalog_assets.pb.dart';
 
-/// Protected non-E2E catalog byte import. Ordinary File APIs retain their ACL.
+/// Protected non-E2E catalog authority protocol 2. Ordinary File APIs retain
+/// their ACL. Protocol 1 has no ordered-currentness proof and cannot admit sends.
 @$pb.GrpcServiceName('voice.file.v1.CatalogAssetService')
 class CatalogAssetServiceClient extends $grpc.Client {
   /// The hostname for this service.

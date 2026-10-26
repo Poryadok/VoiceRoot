@@ -1,5 +1,10 @@
 # Non-E2E catalog asset protocol v1
 
+Protocol 1 is historical schema context, not current send authority. The
+[ordered authority protocol 2](be085-catalog-authority-v2-contract.md) supersedes
+its current-selection and physical-write assumptions. No version-1 fallback
+may admit a catalog send.
+
 This is the concrete implementation contract for `BE085-FILE-MESSAGING-ASSET-IMPORT`
 and the protected Chat consumer of `BE-085`. It implements PLAN A6 and the owning
 File, Chat and Messaging contracts. It does not activate a provider or resolve
