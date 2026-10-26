@@ -182,6 +182,17 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 
 ## Risks and follow-ups
 
+- Independent Anton-140 marked `89ce2f2dd9948555806612b0b6838fcfe74f16b5`
+  NOT CLEAR: ordinary GIF original cleanup bypassed the source write pin and
+  could declare deletion complete before a late PUT. A real owned HTTP PUT plus
+  PostgreSQL MarkDeleted/Cleanup test reproduced both acknowledged and lost-ACK
+  cases (RED). The shared collection predicate now filters candidates and
+  rechecks after the File lock with a fresh snapshot. Source writes cannot be
+  deleted/completed by age; actual ACK permits cleanup after deletion, while a
+  lost ACK remains explicit reconciliation. Focused race GREEN (10.011 s).
+  The ordinary blob/reference/legacy paths retain their existing lifecycle
+  authority and the database pin; this is no blanket end-to-end clearance.
+
 - The protected Chat Import handler now creates the real File/receipt before
   fetch, stores actual length/digest and a unique write declaration before PUT,
   rechecks current actor/destination before PUT, and queues the existing GIF
