@@ -100,6 +100,27 @@ CREATE TABLE file_catalog_writes (
     expected_sha256 BYTEA NOT NULL CHECK (octet_length(expected_sha256) = 32),
     expected_size_bytes BIGINT NOT NULL CHECK (expected_size_bytes > 0 AND expected_size_bytes <= 52428800)
 );
+CREATE INDEX file_catalog_writes_file_state ON file_catalog_writes(file_id,state);
+
+-- Existing reference/expiry cleanup must not collect a source that can still
+-- receive a late PUT. Keep reference release independent: the reference can be
+-- released while physical cleanup remains blocked by actual unsettled work.
+CREATE FUNCTION file_catalog_guard_blob_gc() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.state IN ('GC_PENDING','GC_COMPLETE') AND EXISTS (
+        SELECT 1 FROM files f JOIN file_catalog_writes w ON w.file_id=f.id
+        WHERE f.blob_id=NEW.blob_id AND w.state IN ('STARTED','UNSETTLED')
+    ) THEN
+        NEW.state := OLD.state;
+        NEW.gc_operation_id := OLD.gc_operation_id;
+        NEW.gc_attempt := OLD.gc_attempt;
+        NEW.next_attempt_at := OLD.next_attempt_at;
+        NEW.deleted_at := OLD.deleted_at;
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER file_catalog_guard_blob_gc BEFORE UPDATE ON file_blobs
+    FOR EACH ROW EXECUTE FUNCTION file_catalog_guard_blob_gc();
 
 CREATE FUNCTION file_catalog_immutable_source() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

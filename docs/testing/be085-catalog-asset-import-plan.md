@@ -182,6 +182,29 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 
 ## Risks and follow-ups
 
+- The protected Chat Import handler now creates the real File/receipt before
+  fetch, stores actual length/digest and a unique write declaration before PUT,
+  rechecks current actor/destination before PUT, and queues the existing GIF
+  worker only after an acknowledged write. Replays keep the original File and
+  perform no second fetch/PUT; destination loss during fetch terminalizes the
+  prepared, never-started write. Missing-API RED became real-PG handler GREEN
+  (37.658 s, then 72.900 s including compensation).
+- The new source PUT uses one SDK attempt and follows no HTTP redirect. Real
+  HTTP success/503/307 tests passed race (4.475 s), proving no hidden retries or
+  redirect writes. Every write error stays UNSETTLED, and a database guard keeps
+  ordinary reference/expiry GC from collecting STARTED/UNSETTLED source writes.
+  Timeout/session loss is never treated as runtime/storage fencing evidence.
+- Real PG source-write/handler matrix passed race (114.764 s); File short and
+  scoped vet passed. These tests inject the source-byte provider/writer where
+  stated and do not prove native codec READY, actual cross-service Messaging
+  insertion or production listener configuration. Source/actor reconciliation,
+  terminal mapping retirement, named recovery/cleanup consumer and final
+  catalog reference-acquisition barrier are still required before activation.
+- Existing FileReferenceKey/AcquireFileReferences do not carry
+  `retention_account_id`; committed live-reference preservation is implemented,
+  but this source slice does not invent or certify missing per-reference
+  retention-account policy. The gap is reported to root and remains open.
+
 - The User compilation dependency is now coherent: normal merge of exact PR907
   `a479a15dbdfcfb6871ef4b3e218d7bc9c6bc4d44` at `b5fa2c7034`, followed by LF-only
   correction `a284ae299270d73b348027bfccc18bddb2277fac`, preserves both User

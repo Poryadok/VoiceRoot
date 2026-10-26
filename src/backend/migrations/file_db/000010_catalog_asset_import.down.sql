@@ -14,6 +14,8 @@ DROP TRIGGER file_catalog_complete_operation ON files;
 DROP FUNCTION file_catalog_complete_operation();
 DROP TRIGGER file_catalog_immutable_source ON file_catalog_assets;
 DROP FUNCTION file_catalog_immutable_source();
+DROP TRIGGER file_catalog_guard_blob_gc ON file_blobs;
+DROP FUNCTION file_catalog_guard_blob_gc();
 DROP TABLE file_catalog_writes;
 DROP TABLE file_catalog_terminal_fences;
 DROP TABLE file_catalog_import_operations;

@@ -31,11 +31,14 @@ type CatalogDestinationAuthority interface {
 // forwarded user headers never authorize source-scoped metadata access.
 type CatalogAssetGRPC struct {
 	filev1.UnimplementedCatalogAssetServiceServer
-	Files       *store.FilesStore
-	Actors      CatalogActorAuthority
-	Keys        *catalogasset.ReplayKeys
-	Clock       Clock
-	Destination CatalogDestinationAuthority
+	Files        *store.FilesStore
+	Actors       CatalogActorAuthority
+	Keys         *catalogasset.ReplayKeys
+	Clock        Clock
+	Destination  CatalogDestinationAuthority
+	Fetcher      CatalogByteFetcher
+	Writer       CatalogSourceWriter
+	Entitlements EntitlementResolver
 }
 
 func (s *CatalogAssetGRPC) GetCatalogAssetStatus(ctx context.Context, r *filev1.GetCatalogAssetStatusRequest) (*filev1.GetCatalogAssetStatusResponse, error) {
