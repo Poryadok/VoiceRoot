@@ -501,6 +501,7 @@ func main() {
 		chatv1.RegisterChatServiceServer(grpcSrv, &grpcsvc.ChatGRPC{
 			DM:                     dmStore,
 			StickerPacks:           dmStore,
+			GIFCatalog:             nil, // Live provider activation requires H1/H2; never seed a product fake.
 			Profiles:               profiles,
 			DMPeerDisplayNames:     dmPeerDisplayNames,
 			LifecycleOwners:        lifecycleOwners,
