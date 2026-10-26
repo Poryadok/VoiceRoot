@@ -714,6 +714,10 @@ void main() {
     await tester.pumpWidget(_archiveApp(chats));
     await tester.pumpAndSettle();
 
+    await tester.longPress(
+      find.byKey(ChatArchiveScreen.tileKey('archive-action')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Unarchive'));
     await tester.pumpAndSettle();
 
