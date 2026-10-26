@@ -91,6 +91,13 @@ func TestAuditInitiatingConfig_ProtectedClientsUseMutualTLSAndReadiness(t *testi
 	if clients.role != nil || clients.chat != nil || clients.bot != nil {
 		t.Fatal("ordinary clients populated by protected configuration")
 	}
+	for suffix, value := range map[string]string{"GRPC_ADDR": listener.Addr().String(), "TLS_CA_FILE": certFile, "TLS_SERVER_NAME": "audit.test", "CLIENT_CERT_FILE": certFile, "CLIENT_KEY_FILE": keyFile} {
+		t.Setenv("GATEWAY_CHAT_CATALOG_ASSET_"+suffix, value)
+	}
+	clients.configureCatalogAssetTransport()
+	if clients.chatCatalog == nil || len(clients.connections) != 4 || clients.chat != nil {
+		t.Fatal("catalog transport must be independent from ordinary Chat")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := clients.waitAuditInitiatingReady(ctx); err != nil {

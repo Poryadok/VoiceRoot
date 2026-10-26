@@ -128,6 +128,11 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "GIF search unavailable"))
 		return
 	}
+	if isGIFSelectionRequest(r) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeGRPCError(w, status.Error(codes.Unavailable, "GIF selection unavailable"))
+		return
+	}
 	if isProtectedRoleOrBotRequest(r) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "protected Role or Bot transport unavailable"))
 		return

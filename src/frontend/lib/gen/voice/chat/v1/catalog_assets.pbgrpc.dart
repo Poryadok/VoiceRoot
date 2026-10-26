@@ -49,6 +49,16 @@ class CatalogAssetServiceClient extends $grpc.Client {
     return $createUnaryCall(_$validateGifAsset, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:file
+  $grpc.ResponseFuture<$0.AuthorizeCatalogDestinationResponse>
+      authorizeCatalogDestination(
+    $0.AuthorizeCatalogDestinationRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$authorizeCatalogDestination, request,
+        options: options);
+  }
+
   // method descriptors
 
   static final _$resolveGifAsset =
@@ -61,6 +71,12 @@ class CatalogAssetServiceClient extends $grpc.Client {
       '/voice.chat.v1.CatalogAssetService/ValidateGifAsset',
       ($0.ValidateGifAssetRequest value) => value.writeToBuffer(),
       $0.ValidateGifAssetResponse.fromBuffer);
+  static final _$authorizeCatalogDestination = $grpc.ClientMethod<
+          $0.AuthorizeCatalogDestinationRequest,
+          $0.AuthorizeCatalogDestinationResponse>(
+      '/voice.chat.v1.CatalogAssetService/AuthorizeCatalogDestination',
+      ($0.AuthorizeCatalogDestinationRequest value) => value.writeToBuffer(),
+      $0.AuthorizeCatalogDestinationResponse.fromBuffer);
 }
 
 @$pb.GrpcServiceName('voice.chat.v1.CatalogAssetService')
@@ -86,6 +102,16 @@ abstract class CatalogAssetServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ValidateGifAssetRequest.fromBuffer(value),
         ($0.ValidateGifAssetResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.AuthorizeCatalogDestinationRequest,
+            $0.AuthorizeCatalogDestinationResponse>(
+        'AuthorizeCatalogDestination',
+        authorizeCatalogDestination_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.AuthorizeCatalogDestinationRequest.fromBuffer(value),
+        ($0.AuthorizeCatalogDestinationResponse value) =>
+            value.writeToBuffer()));
   }
 
   $async.Future<$0.ResolveGifAssetResponse> resolveGifAsset_Pre(
@@ -105,4 +131,14 @@ abstract class CatalogAssetServiceBase extends $grpc.Service {
 
   $async.Future<$0.ValidateGifAssetResponse> validateGifAsset(
       $grpc.ServiceCall call, $0.ValidateGifAssetRequest request);
+
+  $async.Future<$0.AuthorizeCatalogDestinationResponse>
+      authorizeCatalogDestination_Pre($grpc.ServiceCall $call,
+          $async.Future<$0.AuthorizeCatalogDestinationRequest> $request) async {
+    return authorizeCatalogDestination($call, await $request);
+  }
+
+  $async.Future<$0.AuthorizeCatalogDestinationResponse>
+      authorizeCatalogDestination($grpc.ServiceCall call,
+          $0.AuthorizeCatalogDestinationRequest request);
 }

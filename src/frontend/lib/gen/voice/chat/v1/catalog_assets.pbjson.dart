@@ -110,3 +110,79 @@ final $typed_data.Uint8List validateGifAssetResponseDescriptor = $convert.base64
     'aWxlX2lkGAMgASgJUg5hY3RvclByb2ZpbGVJZBIaCghwcm92aWRlchgEIAEoCVIIcHJvdmlkZX'
     'ISHwoLcHJvdmlkZXJfaWQYBSABKAlSCnByb3ZpZGVySWQSFwoHZmlsZV9pZBgGIAEoCVIGZmls'
     'ZUlk');
+
+@$core.Deprecated('Use authorizeCatalogDestinationRequestDescriptor instead')
+const AuthorizeCatalogDestinationRequest$json = {
+  '1': 'AuthorizeCatalogDestinationRequest',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'actor_account_id', '3': 2, '4': 1, '5': 9, '10': 'actorAccountId'},
+    {'1': 'actor_profile_id', '3': 3, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {
+      '1': 'destination_chat',
+      '3': 4,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'destinationChat'
+    },
+  ],
+};
+
+/// Descriptor for `AuthorizeCatalogDestinationRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List authorizeCatalogDestinationRequestDescriptor =
+    $convert.base64Decode(
+        'CiJBdXRob3JpemVDYXRhbG9nRGVzdGluYXRpb25SZXF1ZXN0EikKEHByb3RvY29sX3ZlcnNpb2'
+        '4YASABKA1SD3Byb3RvY29sVmVyc2lvbhIoChBhY3Rvcl9hY2NvdW50X2lkGAIgASgJUg5hY3Rv'
+        'ckFjY291bnRJZBIoChBhY3Rvcl9wcm9maWxlX2lkGAMgASgJUg5hY3RvclByb2ZpbGVJZBJBCh'
+        'BkZXN0aW5hdGlvbl9jaGF0GAQgASgLMhYudm9pY2UuY2hhdC52MS5DaGF0UmVmUg9kZXN0aW5h'
+        'dGlvbkNoYXQ=');
+
+@$core.Deprecated('Use authorizeCatalogDestinationResponseDescriptor instead')
+const AuthorizeCatalogDestinationResponse$json = {
+  '1': 'AuthorizeCatalogDestinationResponse',
+  '2': [
+    {'1': 'actor_account_id', '3': 1, '4': 1, '5': 9, '10': 'actorAccountId'},
+    {'1': 'actor_profile_id', '3': 2, '4': 1, '5': 9, '10': 'actorProfileId'},
+    {
+      '1': 'destination_chat',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.chat.v1.ChatRef',
+      '10': 'destinationChat'
+    },
+    {
+      '1': 'observed_chat_type',
+      '3': 4,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.chat.v1.ChatType',
+      '10': 'observedChatType'
+    },
+    {
+      '1': 'chat_account_generation',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'chatAccountGeneration'
+    },
+    {
+      '1': 'chat_profile_generation',
+      '3': 6,
+      '4': 1,
+      '5': 9,
+      '10': 'chatProfileGeneration'
+    },
+  ],
+};
+
+/// Descriptor for `AuthorizeCatalogDestinationResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List authorizeCatalogDestinationResponseDescriptor = $convert.base64Decode(
+    'CiNBdXRob3JpemVDYXRhbG9nRGVzdGluYXRpb25SZXNwb25zZRIoChBhY3Rvcl9hY2NvdW50X2'
+    'lkGAEgASgJUg5hY3RvckFjY291bnRJZBIoChBhY3Rvcl9wcm9maWxlX2lkGAIgASgJUg5hY3Rv'
+    'clByb2ZpbGVJZBJBChBkZXN0aW5hdGlvbl9jaGF0GAMgASgLMhYudm9pY2UuY2hhdC52MS5DaG'
+    'F0UmVmUg9kZXN0aW5hdGlvbkNoYXQSRQoSb2JzZXJ2ZWRfY2hhdF90eXBlGAQgASgOMhcudm9p'
+    'Y2UuY2hhdC52MS5DaGF0VHlwZVIQb2JzZXJ2ZWRDaGF0VHlwZRI2ChdjaGF0X2FjY291bnRfZ2'
+    'VuZXJhdGlvbhgFIAEoCVIVY2hhdEFjY291bnRHZW5lcmF0aW9uEjYKF2NoYXRfcHJvZmlsZV9n'
+    'ZW5lcmF0aW9uGAYgASgJUhVjaGF0UHJvZmlsZUdlbmVyYXRpb24=');

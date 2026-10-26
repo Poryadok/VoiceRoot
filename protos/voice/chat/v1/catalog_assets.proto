@@ -12,6 +12,8 @@ service CatalogAssetService {
   rpc ResolveGifAsset(ResolveGifAssetRequest) returns (ResolveGifAssetResponse);
   // @voice.security=protected;callers=service:messaging
   rpc ValidateGifAsset(ValidateGifAssetRequest) returns (ValidateGifAssetResponse);
+  // @voice.security=protected;callers=service:file
+  rpc AuthorizeCatalogDestination(AuthorizeCatalogDestinationRequest) returns (AuthorizeCatalogDestinationResponse);
 }
 
 // @voice.unknown_fields=reject
@@ -51,4 +53,22 @@ message ValidateGifAssetResponse {
   string provider = 4;
   string provider_id = 5;
   string file_id = 6;
+}
+
+// Read-only independent destination observation for File's protected importer.
+// @voice.unknown_fields=reject
+message AuthorizeCatalogDestinationRequest {
+  uint32 protocol_version = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  voice.chat.v1.ChatRef destination_chat = 4;
+}
+
+message AuthorizeCatalogDestinationResponse {
+  string actor_account_id = 1;
+  string actor_profile_id = 2;
+  voice.chat.v1.ChatRef destination_chat = 3; // Exact request echo.
+  voice.chat.v1.ChatType observed_chat_type = 4;
+  string chat_account_generation = 5;
+  string chat_profile_generation = 6;
 }
