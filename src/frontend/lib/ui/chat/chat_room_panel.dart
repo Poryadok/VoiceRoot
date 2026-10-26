@@ -1533,6 +1533,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               : () => openEmojiPanel(
                                   context,
                                   ref,
+                                  anchorContext: _emojiFocus.context,
                                   onSelected: (emoji) {
                                     ref
                                             .read(
