@@ -167,6 +167,15 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.
 - [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.
 - [ ] **Windows: автоопределение игры** — process list → `game_title` + toggle; 0 кода. Post-MVP рядом с П.17.
+  CL-016: перед реализацией нужен канонический контракт распознавания:
+  источник разрешённых соответствий executable identity → название игры,
+  его владелец/обновление и выбор при нескольких запущенных играх.
+  `presence.md` задаёт список процессов, но не эти соответствия;
+  текущий `GameConfig` каталога содержит genre/platforms/regions/modes без
+  идентификаторов процессов. Имя произвольного процесса или заголовок окна
+  нельзя считать названием игры. Ограничение только foreground-игрой в каноне
+  не задано. Существующая viewer-filtered проекция `game_title` не является
+  источником распознавания процессов.
 - [ ] **E2E fingerprint + key-change banner** — [encryption.md](../features/encryption.md); П.13.
 - [ ] **Shorebird OTA или явный defer** — [updates.md](../features/updates.md).
 - [ ] **Voice: local MP3 recording; ducking via `setVolume`; in-voice overlay без кражи фокуса** — [voice-chat.md](../features/voice-chat.md).
