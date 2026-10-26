@@ -3,8 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,6 +65,8 @@ func TestComposeMatchmakingRating_live(t *testing.T) {
 	require.Equal(t, sessB.ProfileID, profileB)
 	completeComposeMatch(t, client, base, sessA.AccessToken, matchID)
 	completeComposeMatch(t, client, base, sessB.AccessToken, matchID)
+	waitComposeMatchSquadTeardownComplete(t, matchID)
+	assertComposeMatchHistoryContains(t, client, base, sessA.AccessToken, matchID)
 
 	rateComposeMatch(t, client, base, sessA.AccessToken, matchID, profileB, 5)
 
@@ -70,6 +76,70 @@ func TestComposeMatchmakingRating_live(t *testing.T) {
 		ratingValue, _ = rating["rating_value"].(float64)
 	}
 	require.Equal(t, 5.0, ratingValue)
+
+	banComposeMMPeer(t, client, base, sessA.AccessToken, profileB)
+	require.True(t, getComposeMMBanStatus(t, client, base, sessA.AccessToken, profileB))
+
+	nextA := startComposeMatchmakingSearch(t, client, base, sessA.AccessToken, gameID, "Duo", string(criteriaBytes))
+	nextB := startComposeMatchmakingSearch(t, client, base, sessB.AccessToken, gameID, "Duo", string(criteriaBytes))
+	deadline = time.Now().Add(12 * time.Second)
+	for time.Now().Before(deadline) {
+		statusA := getComposeMatchmakingSearch(t, client, base, sessA.AccessToken, nextA)
+		statusB := getComposeMatchmakingSearch(t, client, base, sessB.AccessToken, nextB)
+		require.Empty(t, composeSearchMatchID(statusA), "banned peers must not match in a subsequent search")
+		require.Empty(t, composeSearchMatchID(statusB), "banned peers must not match in a subsequent search")
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func waitComposeMatchSquadTeardownComplete(t *testing.T, matchID string) {
+	t.Helper()
+	id, err := uuid.Parse(matchID)
+	require.NoError(t, err, "match id must be a UUID before querying teardown state")
+	project := os.Getenv("COMPOSE_PROJECT_NAME")
+	require.NotEmpty(t, project, "COMPOSE_PROJECT_NAME must bind the read to this disposable Compose project")
+	// Provider teardown and search-reservation projection are independent durable
+	// cleanup steps. Observe both before exercising the next concurrent searches.
+	query := fmt.Sprintf(`
+		SELECT count(*)::text || ':' || COALESCE(max(state), '') || ':' ||
+		       (SELECT count(*)::text || ':' || (count(*) FILTER (WHERE applied_at IS NULL))::text
+		        FROM matchmaking_match_recovery_effects WHERE match_id='%[1]s' AND action='release')
+		FROM matchmaking_match_squad_teardowns WHERE match_id='%[1]s'
+	`, id.String())
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("docker", "compose", "--project-name", project, "exec", "-T", "postgres", "psql", "-X", "-U", "voice", "-d", "matchmaking_db", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", query)
+		cmd.Dir = repoRootFromTest(t)
+		out, runErr := cmd.CombinedOutput()
+		require.NoError(t, runErr, "required teardown-state query failed (project=%s): %s", project, strings.TrimSpace(string(out)))
+		if strings.TrimSpace(string(out)) == "1:complete:2:0" {
+			return
+		}
+		time.Sleep(time.Second)
+	}
+	t.Fatalf("match cleanup did not complete provider teardown and both search releases for match %s in the disposable Compose project", id)
+}
+
+func assertComposeMatchHistoryContains(t *testing.T, client *http.Client, base, token, matchID string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, base+"/api/v1/matchmaking/profile/me/matches?page_size=25", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "match history body=%s", string(raw))
+	require.Contains(t, string(raw), matchID, "completed match must remain in matchmaking history")
+}
+
+func composeSearchMatchID(status map[string]any) string {
+	id, _ := status["matchId"].(string)
+	if id == "" {
+		id, _ = status["match_id"].(string)
+	}
+	return id
 }
 
 func extractProfileID(t *testing.T, match map[string]any, fallback string) string {

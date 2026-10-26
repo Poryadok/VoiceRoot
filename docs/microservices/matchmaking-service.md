@@ -256,6 +256,17 @@ that key conflicts. Provider teardown and aggregate completion remain durable
 separate lifecycle steps; a successful HTTP response is not evidence that
 external Chat or Voice cleanup has completed.
 
+The final participant leave also advances each original matched search session's
+recovery generation and commits an exact-session queue-release obligation in the
+same transaction. Matched session rows and their history links remain intact;
+they are not cancelled through `CancelSearch`. The existing recovery worker
+retries these obligations until Redis has retired the original FIFO member and
+only the profile lock still owned by that session. A delayed release cannot
+delete a newer search reservation, and an older enqueue generation cannot
+resurrect the retired search. Queue convergence and provider teardown are
+independent cleanup steps; after they complete, both profiles may search again
+and their persisted peer bans still apply.
+
 The recovery worker claims each incomplete provider operation independently and
 replays only its persisted request. Every RPC has a fresh 10-second deadline;
 transient failures persist a retry time using 1-second exponential backoff,
