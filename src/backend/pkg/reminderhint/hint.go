@@ -67,6 +67,13 @@ func Decode(raw []byte, now time.Time) (Hint, error) {
 		if err != nil || !ok || seen[key] {
 			return h, ErrInvalid
 		}
+		// encoding/json also matches struct fields case-insensitively. Reject
+		// aliases before its decode so they cannot overwrite recipient binding.
+		switch key {
+		case "schema_version", "notification_id", "target_profile_id", "aggregate_kind", "aggregate_id", "grace_revision", "day", "plan", "window_end", "space_id":
+		default:
+			return h, ErrInvalid
+		}
 		seen[key] = true
 		var value json.RawMessage
 		if d.Decode(&value) != nil {

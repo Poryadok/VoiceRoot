@@ -92,3 +92,17 @@ the canonical raw-identity purge ledger. No raw internal payload logging is adde
 - Initial codec test run failed at missing symbols (scaffolding only, not a
   behavioral RED claim). Integration fixture was corrected to provision the new
   stream's exact push target. No historical-source or deployed acceptance claim.
+
+### Independent review correction
+
+Anton-146 found two P2s at `04de2cb7b`: JSON's case-insensitive struct matching
+could bypass case-sensitive duplicate detection, and watching all AuthState
+discarded banner/collapse state during ordinary refresh or unrelated UI updates.
+Before production correction, new alias regressions failed because Decode
+accepted recipient/day/version aliases; the client regression failed because an
+unrelated AuthState update cleared its visible banner. The codec now checks an
+exact lowercase key allowlist before struct decode. The client depends on the
+AuthController installation, account/profile, and sessionInstallGeneration;
+refresh preserves visible/dismissed hints, while logout/profile/new login reset.
+Focused Linux codec/race and Realtime boundary tests pass after correction;
+33 focused Flutter tests and scoped analysis pass. Re-review remains required.

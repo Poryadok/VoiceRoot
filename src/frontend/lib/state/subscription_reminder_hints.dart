@@ -147,9 +147,17 @@ final subscriptionReminderHintsProvider =
       SubscriptionReminderHints,
       List<SubscriptionReminderHint>
     >((ref) {
-      // Discard hints and local collapse state on logout/profile/session replacement.
-      final auth = ref.watch(authControllerProvider);
-      return SubscriptionReminderHints(
-        auth.isAuthenticated ? auth.activeProfileId : null,
+      // Routine token rotation and unrelated UI auth state are the same login.
+      // A replaced controller, installed login, account or profile resets hints.
+      final controller = ref.watch(authControllerProvider.notifier);
+      final binding = ref.watch(
+        authControllerProvider.select(
+          (auth) => (
+            auth.session?.accountId,
+            auth.activeProfileId,
+            controller.sessionInstallGeneration,
+          ),
+        ),
       );
+      return SubscriptionReminderHints(binding.$1 != null ? binding.$2 : null);
     });
