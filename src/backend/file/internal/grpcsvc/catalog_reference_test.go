@@ -3,6 +3,7 @@ package grpcsvc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -46,6 +47,41 @@ func TestCatalogReferenceAcquireRequiresCurrentReadySource(t *testing.T) {
 	var count int
 	require.NoError(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM file_references WHERE file_id=$1`, f.file).Scan(&count))
 	require.Equal(t, 1, count)
+}
+
+func TestCatalogReferenceAcquireRechecksExpiryAfterAuthorityLockWait(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	f := seedCatalogPurgeFixture(t, ctx, true)
+	seedCatalogReadyRepresentation(t, ctx, f)
+	blocker, err := f.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(context.Background()) }()
+	_, err = blocker.Exec(ctx, `SELECT id FROM files WHERE id=$1 FOR UPDATE`, f.file)
+	require.NoError(t, err)
+	s := &FileGRPC{files: store.NewFilesStore(f.pool)}
+	r := &filev1.AcquireFileReferencesRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), ProducerId: filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, References: []*filev1.FileReferenceKey{{FileId: f.file.String(), OwnerType: filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE, OwnerId: uuid.NewString()}}}
+	verified := catalogVerifiedContext(t, r, filev1.FileService_AcquireFileReferences_FullMethodName, "messaging")
+	done := make(chan error, 1)
+	go func() { _, e := s.AcquireFileReferences(verified, r); done <- e }()
+	r23WaitForBlockedTransactions(t, ctx, f.pool, 1)
+	// The acquire has captured its old caller clock and is blocked on File.
+	// Install an expiry causally later, then wait for actual DATABASE expiry.
+	expiry := time.Now().Add(200 * time.Millisecond)
+	_, err = blocker.Exec(ctx, `UPDATE files SET expires_at=$2 WHERE id=$1`, f.file, expiry)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		var expired bool
+		err := blocker.QueryRow(ctx, `SELECT clock_timestamp()>=$1`, expiry).Scan(&expired)
+		return err == nil && expired
+	}, 5*time.Second, 10*time.Millisecond)
+	require.NoError(t, blocker.Commit(ctx))
+	require.Error(t, <-done, "acquisition cannot use the pre-lock clock after logical expiry")
+	var count int
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM file_references WHERE file_id=$1`, f.file).Scan(&count))
+	require.Zero(t, count)
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM file_reference_operations WHERE operation_id=$1`, r.OperationId).Scan(&count))
+	require.Zero(t, count)
 }
 
 func TestOrdinaryReferenceAcquireKeepsPreCatalogProcessingBehavior(t *testing.T) {

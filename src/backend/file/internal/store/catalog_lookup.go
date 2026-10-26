@@ -92,6 +92,12 @@ AND ag.generation=a.account_generation AND pg.generation=a.profile_generation`+l
 		return nil, catalogasset.ErrAdmission
 	}
 	request := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 2, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: id.String(), ActorAccountId: actor.AccountID.String(), ActorProfileId: actor.ProfileID.String()}
+	// Authority locks can wait past logical expiry. Use database wall time
+	// after those waits; transaction now() and the caller's earlier clock are
+	// not a current admission observation.
+	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return nil, err
+	}
 	if err = catalogasset.ValidateReady(request, snapshot, state, now); err != nil {
 		return nil, err
 	}
