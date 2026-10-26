@@ -783,6 +783,63 @@ GIS changes to `role_revoke_pending` after Voice close receipt and reports
 commit and active media within five seconds. Session history and terminal receipts follow the T32 30-day
 boundary; external-key tombstones are non-content and indefinite.
 
+## Protected owning authority source (GI-T73-GIS)
+
+The GAME implementation exception in [PLAN](../PLAN.md) permits this owner
+source; federation release activation and live rollout remain deferred.
+GIS implements `voice.authority.v1.AuthoritySourceService` on a separate opt-in
+mTLS listener. `GAMEINTEGRATION_AUTHORITY_SOURCE_ENABLED=true` requires the
+matching prefix's `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, and
+`REPLAY_REDIS_ADDR`; optional settings are `JWKS_CA_FILE`,
+`REPLAY_REDIS_PASSWORD`, and `GRPC_LISTEN` (default `:9097`). The Federation
+HTTPS JWKS endpoint is the exact `federation` entry in `S2S_JWKS_URLS_JSON`.
+Absent activation exposes no source service; partial settings without an
+explicit flag refuse startup. Explicit false disables retained settings.
+Public HTTP, Auth-HMAC and Messaging listeners never register the source.
+
+Only `service:federation` with audience `gameintegration`, exact RPC and signed
+request hash is accepted, with mTLS and Redis replay protection. Requests bind
+schema1, Space ID, exact environment ID and sorted unique profile/actor IDs;
+account and room lists are rejected. The Space ID binds the publisher's cut:
+GIS cannot establish Space ownership from environment, Chat or session IDs.
+Publisher must establish ownership and its complete requested subject set using
+the owning Space/resource source.
+
+The canonical schema1 `authoritysource.GISState` includes environment presence,
+app/environment status and revisions, provider/scope/redirect/origin policy,
+the complete requested subjects, bindings with account/actor/profile/device
+association/status/revision, environment installations and resource mappings,
+requested bindings' raw managed Chat leases, and sessions intersecting the
+requested subjects. Session `members` is that intersection; `roster_complete`
+is the owning session flag, not an assertion that the returned subset is its
+whole roster. No matching binding is explicit missing state for that requested
+subject. A missing environment returns complete closed state without app or
+grants; a retired/suspended environment retains its distinct raw closed status.
+
+Names, callbacks, external keys, provider identities/digests, credential hashes,
+secrets, proof/permit/receipt bytes and outbox payloads do not leave GIS.
+Mismatched legacy app/environment tuples and nonempty
+`permitted_character_context` fail closed: the current writer persists only
+`[]`, and no new character authority schema is invented. Auth remains the
+source of SDK generation/device key/current session; GIS does not replace the
+exact caller-tuple check. User/Role qualification and Space community rights
+remain their respective owners' responsibility.
+
+Migration32 installs a permanent `gis_authority_revision` singleton and
+transactional insert/update/delete coverage over applications, environments,
+bindings, installations, mappings, managed Chat leases, sessions, notification
+consent and service credentials. Conservative invalidation may advance several
+times in one status mutation. Deletes and status-only `revoking → revoked`
+writes invalidate the source. Rollback preserves the floor; floor reset/removal,
+TRUNCATE and downgrade are refused. Preflight and every read require clean
+catalog32, canonical owning tables and pinned clock trigger/function bodies.
+State and clock share one read-only repeatable-read transaction with a one-second
+whole-read budget including pool checkout. Oversized/malformed/incomplete state
+fails closed. Time-only expiry preserves raw bytes/revision; a response validity
+cutoff bounds active managed leases. Publisher must evaluate expiry on every use.
+The source does not invent the still-open T32 session lease or establish
+Chat/Role permissions from GIS references.
+
 ## T32: session lifecycle and roster authority
 
 GIS owns stable app/environment external-resource mappings, session operation
