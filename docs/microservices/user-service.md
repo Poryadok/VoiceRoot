@@ -1,5 +1,28 @@
 # User Service
 
+## Notification primary lookup (BE-118 prerequisite)
+
+The separate `notification-primary` capability exposes only the existing
+read-only `ResolvePrimaryProfileIDs` RPC on an opt-in mTLS listener (`:9098`).
+It accepts one canonical nonzero account UUID and requires verified issuer
+`notification`, subject `service:notification`, audience `user`, exact RPC,
+request ID and deterministic full-request hash with shared Redis replay denial.
+Notification cannot use the ordinary listener's internal-header path; that
+compatibility path retains the documented exact Auth caller for primary lookup.
+The existing Notification presence capability gains no lookup method.
+
+Configuration uses `USER_NOTIFICATION_PRIMARY_PRINCIPAL_*`: TLS certificate/key,
+client CA, replay Redis, optional listen override and JWKS CA plus mutual JWKS
+client certificate/key; `S2S_JWKS_URLS_JSON` supplies Notification's HTTPS JWKS.
+Absent configuration leaves the listener disabled; partial configuration fails
+startup. No deployment credentials or listener activation is included here.
+
+The lookup reads User's existing primary/non-deleted row; frozen primary remains
+canonical. Missing/no-primary/deleted accounts are omitted without creating a
+profile. Reminder delivery must treat an omitted/unavailable lookup as an
+unresolved recipient and retry only inside its window. This prerequisite does
+not implement full grace delivery; see the [primary read ExecPlan](../testing/notification-primary-profile-read-exec-plan.md).
+
 ## Space admission profile eligibility (SPACE-ADMISSION-IDENTITY-v1)
 
 `GetSpaceAdmissionProfileEligibility` is a separate Auth-only current-pair

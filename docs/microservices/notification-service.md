@@ -1,5 +1,23 @@
 # Notification Service
 
+## Protected primary lookup client (BE-118 prerequisite)
+
+The existing Notification workload signer can construct a narrowly scoped
+primary-profile client for User's separate `notification-primary` mTLS listener.
+`USER_NOTIFICATION_PRIMARY_GRPC_ADDR`, `USER_NOTIFICATION_PRIMARY_TLS_SERVER_NAME`,
+`USER_NOTIFICATION_PRIMARY_TLS_CA_FILE`, `USER_NOTIFICATION_PRIMARY_CLIENT_CERT_FILE`
+and `USER_NOTIFICATION_PRIMARY_CLIENT_KEY_FILE` must be configured together.
+No ordinary-User or internal-header fallback exists. The client replaces ambient
+metadata, signs a fresh exact-method/body-bound request for one payer account,
+and uses the shorter of its caller deadline and 500ms. It accepts only the exact
+requested account mapped to one canonical nonzero primary UUID; nil, omitted,
+malformed, extra-account and unavailable responses fail closed.
+
+This is a constructor/transport prerequisite for the reminder worker, not worker
+registration, in-app insertion, provider activation or a full BE-118 delivery
+claim. The reviewed durable predecessor remains PR936 at `4a281f191`; see the
+[primary read ExecPlan](../testing/notification-primary-profile-read-exec-plan.md).
+
 ## Release capability enforcement
 
 Notification consumes the immutable, source/digest-bound

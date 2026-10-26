@@ -61,10 +61,14 @@ func TestSpaceCommunicationRuntimeProtectsBothExactCapabilities(t *testing.T) {
 	jwks.StartTLS()
 	defer jwks.Close()
 	replay := miniredis.RunT(t)
-	for _, capability := range []string{"space-voice-communication", "space-messaging-communication"} {
+	for _, capability := range []string{"space-voice-communication", "space-messaging-communication", "notification-primary"} {
 		t.Run(capability, func(t *testing.T) {
 			issuerName := expectedIssuer(capability)
-			cfg := Config{Target: "space", Capability: capability, JWKSURLs: map[string]string{issuerName: jwks.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: serverPath, TLSCertFile: serverPath, TLSKeyFile: serverKeyPath, ListenAddr: "127.0.0.1:0", ClientCAFile: caPath, ClientCAs: clientRoots, JWKSClientCertFile: clientPath, JWKSClientKeyFile: clientKeyPath}
+			target, wrongAudience := "space", "user"
+			if capability == "notification-primary" {
+				target, wrongAudience = "user", "space"
+			}
+			cfg := Config{Target: target, Capability: capability, JWKSURLs: map[string]string{issuerName: jwks.URL}, RefreshAfter: 30 * time.Second, HardExpiry: 2 * time.Minute, UnknownKIDCooldown: time.Second, ReplayAddr: replay.Addr(), JWKSCAFile: serverPath, TLSCertFile: serverPath, TLSKeyFile: serverKeyPath, ListenAddr: "127.0.0.1:0", ClientCAFile: caPath, ClientCAs: clientRoots, JWKSClientCertFile: clientPath, JWKSClientKeyFile: clientKeyPath}
 			a, err := New(t.Context(), cfg)
 			require.NoError(t, err)
 			defer func() { _ = a.Close() }()
@@ -87,14 +91,14 @@ func TestSpaceCommunicationRuntimeProtectsBothExactCapabilities(t *testing.T) {
 				ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 				return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", "communication-test")), cancel
 			}
-			ctx, cancel := issue(issuerName, "space", method)
+			ctx, cancel := issue(issuerName, target, method)
 			defer cancel()
 			require.NoError(t, connA.Invoke(ctx, method, req, new(wrapperspb.StringValue)))
 			require.Equal(t, codes.Unauthenticated, status.Code(connB.Invoke(ctx, method, req, new(wrapperspb.StringValue))), "independent receivers must reject one shared replay")
 			for _, tc := range []struct {
 				issuer, audience, rpc string
 				body                  *wrapperspb.StringValue
-			}{{"social", "space", method, req}, {issuerName, "user", method, req}, {issuerName, "space", method, wrapperspb.String("changed profile")}} {
+			}{{"social", target, method, req}, {issuerName, wrongAudience, method, req}, {issuerName, target, method, wrapperspb.String("changed profile")}} {
 				ctx, cancel := issue(tc.issuer, tc.audience, tc.rpc)
 				err := connB.Invoke(ctx, method, tc.body, new(wrapperspb.StringValue))
 				cancel()
@@ -104,11 +108,14 @@ func TestSpaceCommunicationRuntimeProtectsBothExactCapabilities(t *testing.T) {
 			if other == method {
 				other = "/voice.space.v1.SpaceService/ResolveMemberCommunicationState"
 			}
-			ctx, stop := issue(issuerName, "space", other)
+			if capability == "notification-primary" {
+				other = Method("notification")
+			}
+			ctx, stop := issue(issuerName, target, other)
 			require.Equal(t, codes.PermissionDenied, status.Code(connA.Invoke(ctx, other, req, new(wrapperspb.StringValue))))
 			stop()
 			noCertificate := communicationRuntimeConnection(t, a, &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: "privacy.test"}, &callsA)
-			ctx, stop = issue(issuerName, "space", method)
+			ctx, stop = issue(issuerName, target, method)
 			require.Error(t, noCertificate.Invoke(ctx, method, req, new(wrapperspb.StringValue)))
 			stop()
 			require.EqualValues(t, 1, callsA.Load())
@@ -123,8 +130,14 @@ func communicationRuntimeConnection(t *testing.T, runtime *Runtime, clientTLS *t
 	listener := bufconn.Listen(1 << 20)
 	server := grpc.NewServer(runtime.ServerOptions()...)
 	var methods []grpc.MethodDesc
-	for _, name := range []string{"ResolveVoiceRoomAccess", "ResolveMemberCommunicationState", "DeleteSpace"} {
-		full := "/voice.space.v1.SpaceService/" + name
+	serviceName := "voice.space.v1.SpaceService"
+	names := []string{"ResolveVoiceRoomAccess", "ResolveMemberCommunicationState", "DeleteSpace"}
+	if runtime.target == "user" {
+		serviceName = "voice.user.v1.UserService"
+		names = []string{"ResolvePrimaryProfileIDs", "GetNotificationRoutingPresence", "EnsurePrimaryProfile"}
+	}
+	for _, name := range names {
+		full := "/" + serviceName + "/" + name
 		methods = append(methods, grpc.MethodDesc{MethodName: name, Handler: func(srv any, ctx context.Context, decode func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 			req := new(wrapperspb.StringValue)
 			if err := decode(req); err != nil {
@@ -133,7 +146,7 @@ func communicationRuntimeConnection(t *testing.T, runtime *Runtime, clientTLS *t
 			return interceptor(ctx, req, &grpc.UnaryServerInfo{Server: srv, FullMethod: full}, func(context.Context, any) (any, error) { calls.Add(1); return req, nil })
 		}})
 	}
-	server.RegisterService(&grpc.ServiceDesc{ServiceName: strings.TrimPrefix("/voice.space.v1.SpaceService", "/"), HandlerType: (*interface{})(nil), Methods: methods}, new(struct{}))
+	server.RegisterService(&grpc.ServiceDesc{ServiceName: strings.TrimPrefix(serviceName, "/"), HandlerType: (*interface{})(nil), Methods: methods}, new(struct{}))
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(server.Stop)
 	conn, err := grpc.NewClient("passthrough:///privacy.test", grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return listener.DialContext(ctx) }), grpc.WithTransportCredentials(credentials.NewTLS(clientTLS)))

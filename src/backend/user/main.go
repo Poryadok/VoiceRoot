@@ -95,6 +95,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("user Notification presence principal config: %v", err)
 	}
+	notificationPrimaryConfig, notificationPrimaryEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "notification-primary", "USER_NOTIFICATION_PRIMARY_PRINCIPAL_", ":9098")
+	if err != nil {
+		log.Fatalf("user Notification primary principal config: %v", err)
+	}
 	messagingPresenceConfig, messagingPresenceEnabled, err := socialprincipal.LoadFromEnvWithAudience("user", "messaging", "USER_MESSAGING_PRINCIPAL_", ":9096")
 	if err != nil {
 		log.Fatalf("user Messaging scheduled presence principal config: %v", err)
@@ -172,6 +176,17 @@ func main() {
 			log.Fatalf("user Notification presence principal: %v", err)
 		}
 		defer func() { _ = notificationPresenceRuntime.Close() }()
+	}
+	var notificationPrimaryRuntime *socialprincipal.Runtime
+	if notificationPrimaryEnabled {
+		if strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+			log.Fatal("user Notification primary principal listener requires DATABASE_URL")
+		}
+		notificationPrimaryRuntime, err = socialprincipal.New(context.Background(), notificationPrimaryConfig)
+		if err != nil {
+			log.Fatalf("user Notification primary principal: %v", err)
+		}
+		defer func() { _ = notificationPrimaryRuntime.Close() }()
 	}
 	var messagingPresenceRuntime *socialprincipal.Runtime
 	if messagingPresenceEnabled {
@@ -517,6 +532,22 @@ func main() {
 			go func() {
 				if err := notificationPresenceServer.Serve(notificationPresenceListener); err != nil {
 					log.Fatalf("user Notification presence principal serve: %v", err)
+				}
+			}()
+		}
+		if notificationPrimaryRuntime != nil {
+			notificationPrimaryListener, err := net.Listen("tcp", notificationPrimaryConfig.ListenAddr)
+			if err != nil {
+				log.Fatalf("user Notification primary principal listen: %v", err)
+			}
+			notificationPrimaryOptions := append([]grpc.ServerOption{}, sharedOptions...)
+			notificationPrimaryOptions = append(notificationPrimaryOptions, notificationPrimaryRuntime.ServerOptions()...)
+			notificationPrimaryServer := grpc.NewServer(notificationPrimaryOptions...)
+			grpcsvc.RegisterNotificationPrimaryServer(notificationPrimaryServer, userSvc)
+			defer notificationPrimaryServer.Stop()
+			go func() {
+				if err := notificationPrimaryServer.Serve(notificationPrimaryListener); err != nil {
+					log.Fatalf("user Notification primary principal serve: %v", err)
 				}
 			}()
 		}
