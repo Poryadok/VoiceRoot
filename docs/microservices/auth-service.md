@@ -900,7 +900,11 @@ unavailable until canonical membership plus verified-channel evidence is defined
 
 State/result handles persist only as SHA-256 hashes. Provider proof, staged result
 and newly committed provider tokens use attempt/purpose- or source-bound AES-GCM
-envelopes. Cleanup runs every 30 seconds; expiry/revocation checks fence use
+envelopes. A no-key JDBC worker runs cleanup every 30 seconds independently of
+transport/provider enablement or credentials; disabling routes does not retain
+expired ciphertext. Memory mode has no worker/store dependency. A pre-V32 store
+with transport disabled is left unchanged; the worker never creates/repairs schema.
+Ordinary Auth scheduling controls still apply. Expiry/revocation checks fence use
 immediately. New encrypted sources remain unknown on recheck if their key is
 unavailable. Tagged Twitch sources recheck through the validated new registration's
 exact identity endpoint and client ID; legacy rows keep the legacy registration.

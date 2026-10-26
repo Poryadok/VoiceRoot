@@ -7,7 +7,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.security.TokenBlacklist;
@@ -16,7 +15,6 @@ import voice.backend.auth.userdb.*;
 
 @Configuration(proxyBeanMethods=false)
 @ConditionalOnProperty(name="auth.linked-oauth.enabled",havingValue="true")
-@EnableScheduling
 public class LinkedOAuthConfiguration {
   @Bean LinkedOAuthSettings linkedOAuthSettings(Environment e) {
     if(!"jdbc".equals(e.getProperty("auth.persistence","jdbc"))) throw new IllegalStateException("linked OAuth requires Auth PostgreSQL");

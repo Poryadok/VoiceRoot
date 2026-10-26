@@ -289,4 +289,27 @@ class LinkedOAuthJdbcTest {
       assertThat(sources()).isZero();assertThat(requests.get()).isGreaterThanOrEqualTo(1);
     } finally {server.stop(0);}
   }
+  @Test void restartDisabledWithoutSecretsStillCleansExpiredStagedMaterial() {
+    var start=start();var result=callback(start);
+    assertThat(jdbc.queryForObject("SELECT result_secret IS NOT NULL FROM linked_oauth_attempts WHERE id=:id",Map.of("id",start.attemptId()),Boolean.class)).isTrue();
+    time.set(NOW.plusSeconds(60));
+    // A new disabled application context has no registration/key/User/blacklist beans.
+    new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+        .withUserConfiguration(LinkedOAuthConfiguration.class,LinkedOAuthCleanupConfiguration.class)
+        .withPropertyValues("auth.persistence=jdbc","auth.linked-oauth.enabled=false")
+        .withBean(NamedParameterJdbcTemplate.class,()->jdbc).withBean(Clock.class,()->clock)
+        .run(context->{
+          assertThat(context).hasNotFailed();assertThat(context).doesNotHaveBean(LinkedOAuthService.class);
+          context.getBean(LinkedOAuthCleanup.class).cleanup();
+          assertThat(jdbc.queryForObject("SELECT result_secret IS NULL AND provider_secret IS NULL AND status='expired' FROM linked_oauth_attempts WHERE id=:id",Map.of("id",start.attemptId()),Boolean.class)).isTrue();
+          assertThat(sources()).isZero();
+        });
+  }
+  @Test void expiryDuringProfileAuthorityLookupPreventsProviderExchange() {
+    var start=start();
+    doAnswer(invocation->{time.set(NOW.plusSeconds(300));return null;}).when(profiles)
+        .validateOwnedSwitchable(account,profile,profile,"free");
+    error(()->callback(start),"result_expired");
+    assertThat(exchanges).hasValue(0);
+  }
 }

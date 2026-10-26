@@ -10,8 +10,10 @@ import org.springframework.mock.env.MockEnvironment;
 
 class LinkedOAuthSettingsTest {
   @Test void disabledNeedsNoStoreSecretsOrProviderAndEnabledIncompleteFailsStartup() {
-    new ApplicationContextRunner().withUserConfiguration(LinkedOAuthConfiguration.class).run(context->{
+    new ApplicationContextRunner().withUserConfiguration(LinkedOAuthConfiguration.class,LinkedOAuthCleanupConfiguration.class)
+        .withPropertyValues("auth.persistence=memory").run(context->{
       assertThat(context).hasNotFailed();assertThat(context).doesNotHaveBean(LinkedOAuthService.class);
+      assertThat(context).doesNotHaveBean(LinkedOAuthCleanup.class);
     });
     assertThatThrownBy(()->new LinkedOAuthConfiguration().linkedOAuthSettings(new MockEnvironment()
         .withProperty("auth.linked-oauth.twitch.enabled","true"))).isInstanceOf(IllegalStateException.class)
@@ -35,5 +37,13 @@ class LinkedOAuthSettingsTest {
     var settings=new LinkedOAuthSettings("revision",Duration.ofSeconds(300),Duration.ofSeconds(60),key,Map.of("twitch",p));
     assertThatThrownBy(settings::validateProduction).isInstanceOf(IllegalArgumentException.class);
     assertThat(settings.toString()).doesNotContain("secret");assertThat(p.toString()).doesNotContain("secret");
+  }
+  @Test void disabledLegacyJdbcWithoutTransportTableDoesNotCreateOrRepairSchema() {
+    var jdbc=org.mockito.Mockito.mock(org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate.class);
+    org.mockito.Mockito.when(jdbc.queryForObject(
+        org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyMap(),org.mockito.ArgumentMatchers.eq(Boolean.class))).thenReturn(false);
+    new LinkedOAuthCleanup(jdbc,java.time.Clock.systemUTC()).cleanup();
+    org.mockito.Mockito.verify(jdbc,org.mockito.Mockito.never()).update(
+        org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.anyMap());
   }
 }

@@ -8,7 +8,6 @@ import java.sql.Timestamp;
 import java.time.*;
 import java.util.*;
 import org.springframework.jdbc.core.namedparam.*;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 import voice.backend.auth.repository.*;
 import voice.backend.auth.security.TokenBlacklist;
@@ -82,13 +81,15 @@ public final class LinkedOAuthService {
     Row claimed=tx.execute(status -> {
       Row row=byState(state); lockAccount(row.account()); row=locked(row.id());
       if (!provider.equals(row.text("provider")) || !"pending".equals(row.text("status"))) throw invalid();
-      valid(row); authority(row.claims());
+      valid(row); authority(row.claims()); valid(row);
       jdbc.update("UPDATE linked_oauth_attempts SET status='processing' WHERE id=:id",Map.of("id",row.id()));
       return row;
     });
     LinkedOAuthProvider.Result result;
     if (error!=null) result=new LinkedOAuthProvider.Result(error.equals("access_denied")?"cancelled":"provider_error",null,null,null,null);
     else {
+      // Profile authority and the transaction commit may outlive the attempt deadline.
+      fresh(claimed.time("expires_at")); fresh(claimed.time("original_exp"));
       try {
         String verifier=new String(vault.open(claimed.id(),"provider",claimed.bytes("provider_secret")),StandardCharsets.US_ASCII);
         result=exchange.exchange(provider,code,claimed.text("callback_uri"),verifier);
@@ -149,13 +150,8 @@ public final class LinkedOAuthService {
       jdbc.update("UPDATE linked_oauth_attempts SET status='cancelled',provider_secret=NULL,result_secret=NULL WHERE id=:id",Map.of("id",id));
     });
   }
-  @Scheduled(fixedDelay=30000)
   public void cleanup() {
-    jdbc.update("""
-        UPDATE linked_oauth_attempts SET provider_secret=NULL,result_secret=NULL,
-          status=CASE WHEN status IN ('pending','processing','ready') THEN 'expired' ELSE status END
-        WHERE expires_at<=:now OR result_expires_at<=:now OR status IN ('cancelled','superseded','consumed','expired')
-        """,Map.of("now",Timestamp.from(clock.instant())));
+    new LinkedOAuthCleanup(jdbc,clock).cleanup();
   }
   private byte[] sourceToken(Row row, String token, String purpose) {
     if (token==null) return null;
