@@ -8,6 +8,25 @@ import { once } from 'node:events';
 
 const root = await realpath(process.argv[2]);
 const profile = await mkdtemp(join(tmpdir(), 'voice-music-chrome-'));
+// Observability only: never use diagnostic text to decide the probe result.
+function diagnosticText(value, maxBytes) {
+  const text = String(value)
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replaceAll(profile, '<chrome-profile>')
+    .replace(/\bBearer\s+[^\s"']+/gi, 'Bearer <redacted>')
+    .replace(/(["']?(?:authorization|cookie|set-cookie|password|secret|(?:access_|refresh_)?token|api[_-]?key)["']?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)/gi, '$1<redacted>');
+  let result = '', bytes = 0;
+  for (const character of text) {
+    const size = Buffer.byteLength(character);
+    if (bytes + size > maxBytes) break;
+    result += character;
+    bytes += size;
+  }
+  return result;
+}
+const diagnostics = { node_version: process.version };
+let chromeStderr = '', chromeStderrTruncated = false;
 const mime = { '.js': 'text/javascript', '.wasm': 'application/wasm', '.html': 'text/html', '.json': 'application/json' };
 const server = createServer(async (req, res) => {
   try {
@@ -32,7 +51,13 @@ try {
     '--autoplay-policy=no-user-gesture-required', '--remote-debugging-port=0',
     '--remote-debugging-address=127.0.0.1', '--no-first-run',
     '--user-data-dir=' + profile, 'about:blank',
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chrome.stderr.setEncoding('utf8');
+  chrome.stderr.on('data', chunk => {
+    const text = chromeStderr + chunk;
+    chromeStderrTruncated ||= Buffer.byteLength(text) > 8192;
+    chromeStderr = diagnosticText(text, 8192);
+  });
   chromeClosed = new Promise(resolveClose => chrome.once('close', () => resolveClose(true)));
   let spawnError;
   chrome.on('error', error => {
@@ -49,7 +74,12 @@ try {
     catch { await new Promise(r => setTimeout(r, 100)); }
   }
   setupStage = 'devtools_page_create';
-  const page = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT', signal: AbortSignal.timeout(5000) })).json();
+  const response = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT', signal: AbortSignal.timeout(5000) });
+  diagnostics.page_http_status = response.status;
+  const pageBody = await response.text();
+  diagnostics.page_body = diagnosticText(pageBody, 2048);
+  diagnostics.page_body_truncated = Buffer.byteLength(pageBody) > 2048;
+  const page = JSON.parse(pageBody);
   setupStage = 'cdp_websocket';
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolveOpen, reject) => { socket.addEventListener('open', resolveOpen, { once: true }); socket.addEventListener('error', reject, { once: true }); });
@@ -93,7 +123,13 @@ try {
   const expected = ['track.mp3', 'track.flac', 'vorbis.ogg', 'opus.ogg', 'flac.ogg', 'pcm.wav', 'float.wav']
     .flatMap(fixture => [false, true].map(encrypted => ({ fixture, encrypted, result: 'pass' })));
   if (receipt.result !== 'pass' || JSON.stringify(receipt.cases) !== JSON.stringify(expected)) process.exitCode = 1;
-} catch {
+} catch (error) {
+  diagnostics.stage = setupStage;
+  diagnostics.error_name = ['AbortError', 'TimeoutError', 'SyntaxError', 'TypeError', 'Error'].includes(error?.name) ? error.name : 'Other';
+  diagnostics.error_category = ['AbortError', 'TimeoutError'].includes(error?.name)
+    ? 'timeout_or_abort' : error?.name === 'SyntaxError' ? 'json_parse' : 'setup_operation';
+  const code = error?.cause?.code ?? error?.code;
+  if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) diagnostics.error_code = code;
   process.exitCode = 1;
   if (receipt.stage === 'chrome_setup') {
     receipt = { result: 'fail', stage: setupStage, reason: setupFailure || 'setup_operation_failed' };
@@ -141,5 +177,13 @@ try {
     process.exitCode = 1;
   }
   await writeFile(join(root, 'music-playback-result.json'), JSON.stringify(receipt) + '\n');
+  diagnostics.chrome_stderr = diagnosticText(chromeStderr, 8192);
+  diagnostics.chrome_stderr_truncated = chromeStderrTruncated;
+  console.error(JSON.stringify({ music_playback_diagnostics: diagnostics }));
+  try {
+    await writeFile(join(root, 'music-playback-diagnostics.json'), JSON.stringify(diagnostics) + '\n');
+  } catch {
+    console.error('Music diagnostic artifact could not be written');
+  }
   console.log(JSON.stringify(receipt));
 }
