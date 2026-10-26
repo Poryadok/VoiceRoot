@@ -16,6 +16,8 @@ var ErrAdmission = errors.New("catalog asset is not available")
 // digest comes from that row, independently of the catalog provenance binding.
 // This predicate grants neither destination nor viewer permission.
 type LifecycleState struct {
+	BlobState      string
+	BlobDeleting   bool
 	Status         string
 	IsE2E          bool
 	ExpiresAt      *time.Time
@@ -43,6 +45,9 @@ func ValidateReady(request *filev1.ValidateCatalogAssetRequest, snapshot *filev1
 		return ErrAdmission
 	}
 	if snapshot.SourceId != request.SourceId || snapshot.ActorAccountId != request.ActorAccountId || snapshot.ActorProfileId != request.ActorProfileId || snapshot.FileId != request.FileId || snapshot.Provider != request.Provider || snapshot.ProviderId != request.ProviderId {
+		return ErrAdmission
+	}
+	if state.BlobState != "LIVE" || state.BlobDeleting {
 		return ErrAdmission
 	}
 	if state.Status != "ready" || state.IsE2E || state.ExpiresAt != nil && !now.Before(*state.ExpiresAt) || snapshot.ObjectRevision == 0 || snapshot.ObjectRevision != state.ObjectRevision {

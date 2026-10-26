@@ -31,6 +31,12 @@ type ReplayKeys struct {
 func (*ReplayKeys) String() string   { return "[catalog lifecycle keys]" }
 func (*ReplayKeys) GoString() string { return "[catalog lifecycle keys]" }
 
+// HasVersion lets durable lifecycle consumers reject an incomplete keyring.
+// Missing historical keys must never turn an existing fence into a fresh actor.
+func (k *ReplayKeys) HasVersion(version string) bool {
+	return k != nil && len(k.keys[version]) == 32
+}
+
 func NewReplayKeys(active string, keys map[string][]byte) (*ReplayKeys, error) {
 	if !replayKeyVersion.MatchString(active) || len(keys) == 0 || len(keys[active]) != 32 {
 		return nil, ErrReplayKeys

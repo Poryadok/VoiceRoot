@@ -182,6 +182,18 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 
 ## Risks and follow-ups
 
+- File profile purge now commits a CLOSED opaque generation before erasing
+  private source/operation mappings. It writes purpose-scoped terminal fences,
+  preserves committed message references and ready history, and rejects an
+  incomplete historical keyring. Missing-method RED became four real isolated
+  PostgreSQL race tests GREEN (12.648 s). Unsettled writes remain unchanged and
+  do not authorize blob GC. Internal unknown-size rows are removed only with no
+  write declarations/references; their surviving blob ledger enters existing
+  GC. No runtime authority reconciliation or account-purge wiring is claimed.
+- READY admission additionally requires an authoritative LIVE blob with no
+  deletion in progress. Catalog package race tests passed (3.316 s), and scoped
+  File vet passed. This predicate still requires an actual protected DB reader.
+
 PR898 source and generated File proto ownership must be reconciled before File
 API edits. Full delivery depends on the protected Chat producer, not its preview
 search API. Encrypted-DM privacy semantics remain explicitly open.

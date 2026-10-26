@@ -115,6 +115,12 @@ non-E2E, unexpired, undeleted READY File whose persisted source binding, upload
 intent, scan and delivered representation satisfy these predicates. It returns
 no source URL, R2 key, uploader metadata, or unrelated File record. Public
 `GetBulkMetadata` and its ACL do not change.
+An apparent READY row is insufficient when its blob authority is GC_PENDING,
+GC_COMPLETE or deletion has started; source validation requires a live blob.
+The active catalog mapping never extends blob lifetime. An exact qualified
+`deleted` terminal asset proof can retire only the catalog binding while
+committed message references still keep the underlying bytes readable; it
+never claims physical blob GC or deletes message history.
 
 File Lookup is the authoritative discriminator for every file-backed attachment,
 not only payloads containing optional provider attribution. Its response is a

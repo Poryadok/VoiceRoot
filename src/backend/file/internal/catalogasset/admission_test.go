@@ -15,7 +15,22 @@ func readyFixture() (*filev1.ValidateCatalogAssetRequest, *filev1.ValidateCatalo
 	expires := now.Add(time.Hour)
 	req := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1, SourceId: uuid.NewString(), ActorAccountId: uuid.NewString(), ActorProfileId: uuid.NewString(), Provider: "fixture", ProviderId: "asset-1", FileId: uuid.NewString()}
 	response := &filev1.ValidateCatalogAssetResponse{SourceId: req.SourceId, ActorAccountId: req.ActorAccountId, ActorProfileId: req.ActorProfileId, Provider: req.Provider, ProviderId: req.ProviderId, FileId: req.FileId, ObjectRevision: 1, Intent: "gif", ScanResult: "clean", FileType: "video", SourceSha256: bytes.Repeat([]byte{1}, 32), DeliveredSha256: bytes.Repeat([]byte{2}, 32), DeliveredSizeBytes: 1024, DeliveredMimeType: "video/mp4"}
-	return req, response, LifecycleState{Status: "ready", ExpiresAt: &expires, SourceSHA256: append([]byte(nil), response.SourceSha256...), ObjectRevision: 1}, now
+	return req, response, LifecycleState{Status: "ready", BlobState: "LIVE", ExpiresAt: &expires, SourceSHA256: append([]byte(nil), response.SourceSha256...), ObjectRevision: 1}, now
+}
+
+func TestCatalogReadyRequiresLiveBlobAuthority(t *testing.T) {
+	request, response, state, now := readyFixture()
+	for _, blobState := range []string{"", "GC_PENDING", "GC_COMPLETE"} {
+		state.BlobState = blobState
+		if err := ValidateReady(request, response, state, now); err == nil {
+			t.Fatalf("blob %q was admitted", blobState)
+		}
+	}
+	state.BlobState = "LIVE"
+	state.BlobDeleting = true
+	if err := ValidateReady(request, response, state, now); err == nil {
+		t.Fatal("deleting blob was admitted")
+	}
 }
 
 func TestCatalogReadyAdmissionRequiresExactAuthoritativeSourceAndRepresentation(t *testing.T) {
