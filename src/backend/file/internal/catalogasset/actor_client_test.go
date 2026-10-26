@@ -102,13 +102,14 @@ func TestActorSnapshotClientRejectsAmbiguityWithoutInventingDeletion(t *testing.
 				return response, nil
 			})}
 			states, err := client.States(context.Background(), []ActorPair{actor})
-			if name == "unknown" {
+			switch name {
+			case "unknown":
 				require.NoError(t, err)
 				require.Equal(t, []ActorState{ActorUnknown}, states)
-			} else if name == "deleted" {
+			case "deleted":
 				require.NoError(t, err)
 				require.Equal(t, []ActorState{ActorSoftDeleted}, states)
-			} else {
+			default:
 				require.Error(t, err)
 				require.Nil(t, states)
 				require.NotContains(t, err.Error(), "private provider")

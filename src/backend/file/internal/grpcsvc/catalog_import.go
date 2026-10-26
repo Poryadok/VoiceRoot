@@ -20,7 +20,7 @@ type CatalogByteFetcher interface {
 	FetchGIF(context.Context, string, string, int64) ([]byte, error)
 }
 
-// Implementations acknowledge exactly one tracked storage attempt; the real
+// CatalogSourceWriter acknowledges exactly one tracked storage attempt; the real
 // r2file implementation disables SDK retries and all HTTP redirects.
 type CatalogSourceWriter interface {
 	PutCatalogSource(context.Context, string, []byte) error
