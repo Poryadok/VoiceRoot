@@ -51,6 +51,7 @@ import '../social/presence_indicator.dart';
 import '../report/report_sheet.dart';
 import 'chat_info_panel.dart';
 import 'chat_message_list.dart';
+import 'message_view_count.dart';
 import 'scheduled_messages_strip.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
@@ -1405,6 +1406,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               deferredInteraction: deferredInteraction,
                               activeId: activeId,
                               isGroup: isGroup,
+                              showMessageViews:
+                                  chatMeta?.isGroup == true ||
+                                  chatMeta?.isChannel == true,
                               l10n: l10n,
                               initialUnreadCount: _initialUnreadCount,
                               highlightedMessageId: _highlightedMessageId,
@@ -3166,6 +3170,7 @@ class _MessageListView extends ConsumerWidget {
     this.deferredInteraction,
     required this.activeId,
     required this.isGroup,
+    required this.showMessageViews,
     required this.l10n,
     required this.initialUnreadCount,
     required this.chatTheme,
@@ -3181,6 +3186,7 @@ class _MessageListView extends ConsumerWidget {
   final DeferredBotInteraction? deferredInteraction;
   final String? activeId;
   final bool isGroup;
+  final bool showMessageViews;
   final AppLocalizations l10n;
   final int initialUnreadCount;
   final ChatTheme? chatTheme;
@@ -3260,20 +3266,35 @@ class _MessageListView extends ConsumerWidget {
                   : null,
               child: GestureDetector(
                 onLongPress: () => onLongPress(msg, isMine),
-                child: ChatMessageBubbleTile(
-                  message: msg,
-                  isMine: isMine,
-                  showTimestamp: row.showTimestamp,
-                  l10n: l10n,
-                  deliveryFooter: isMine
-                      ? _DeliveryTick(
-                          l10n: l10n,
-                          delivered: room.deliveredMessageIds.contains(msg.id),
-                          read: room.readMessageIds.contains(msg.id),
-                        )
-                      : null,
-                  content: _MessageBubbleContent(message: msg, l10n: l10n),
-                  theme: chatTheme,
+                child: MessageViewportView(
+                  key: ValueKey('view:$activeId:${msg.id}'),
+                  onVisible: () {
+                    if (showMessageViews) {
+                      return ref
+                          .read(chatRoomControllerProvider(chatId).notifier)
+                          .recordMessageView(msg.id);
+                    }
+                    return Future.value(true);
+                  },
+                  child: ChatMessageBubbleTile(
+                    message: msg,
+                    isMine: isMine,
+                    showTimestamp: row.showTimestamp,
+                    l10n: l10n,
+                    deliveryFooter: showMessageViews
+                        ? MessageViewCount(count: msg.viewCount ?? 0)
+                        : isMine && !isGroup
+                        ? _DeliveryTick(
+                            l10n: l10n,
+                            delivered: room.deliveredMessageIds.contains(
+                              msg.id,
+                            ),
+                            read: room.readMessageIds.contains(msg.id),
+                          )
+                        : null,
+                    content: _MessageBubbleContent(message: msg, l10n: l10n),
+                    theme: chatTheme,
+                  ),
                 ),
               ),
             ),

@@ -12,6 +12,7 @@ import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import 'chat_composer_text_field.dart';
 import 'mention_message_content.dart';
+import 'message_view_count.dart';
 
 /// Thread replies for a root message (roles/threads (docs/features/roles.md)).
 class ThreadSidePanel extends ConsumerStatefulWidget {
@@ -39,6 +40,23 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
   var _sending = false;
   List<VoiceMessage> _replies = const [];
   MessagesApiFailure? _error;
+  String? _historyProfileId;
+  int _loadGeneration = 0;
+  final Set<String> _recordedViews = {};
+
+  @override
+  void didUpdateWidget(covariant ThreadSidePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId != widget.chatId ||
+        oldWidget.parentMessageId != widget.parentMessageId) {
+      _loadGeneration++;
+      _historyProfileId = null;
+      _replies = const [];
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -55,7 +73,9 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
 
   Future<void> _load() async {
     final auth = ref.read(authorizationHeaderProvider);
-    if (auth == null) return;
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    if (auth == null || profileId == null) return;
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _error = null;
@@ -67,19 +87,62 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
           chatId: widget.chatId,
           threadParentId: widget.parentMessageId,
         );
-    if (!mounted) return;
+    if (!mounted ||
+        generation != _loadGeneration ||
+        ref.read(authControllerProvider).activeProfileId != profileId ||
+        ref.read(authorizationHeaderProvider) != auth) {
+      return;
+    }
     switch (result) {
       case MessagesApiOk(:final data):
         setState(() {
           _replies = data.messages;
+          _historyProfileId = profileId;
           _loading = false;
         });
       case final failure as MessagesApiFailure:
         setState(() {
           _error = failure;
+          _historyProfileId = profileId;
           _loading = false;
         });
     }
+  }
+
+  Future<bool> _recordView(VoiceMessage message) async {
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final auth = ref.read(authorizationHeaderProvider);
+    final generation = _loadGeneration;
+    if (profileId == null || auth == null || profileId != _historyProfileId) {
+      return false;
+    }
+    final key = '$profileId:${message.id}';
+    if (_recordedViews.contains(key)) return true;
+    final result = await ref
+        .read(voiceMessagesClientProvider)
+        .recordMessageView(
+          authorization: auth,
+          chatId: widget.chatId,
+          messageId: message.id,
+        );
+    if (!mounted ||
+        generation != _loadGeneration ||
+        ref.read(authControllerProvider).activeProfileId != profileId ||
+        ref.read(authorizationHeaderProvider) != auth) {
+      return false;
+    }
+    if (result is! MessagesApiOk<int>) return false;
+    _recordedViews.add(key);
+    setState(() {
+      _replies = [
+        for (final reply in _replies)
+          if (reply.id == message.id)
+            reply.copyWith(viewCount: result.data)
+          else
+            reply,
+      ];
+    });
+    return true;
   }
 
   String? _loadErrorMessage(AppLocalizations l10n) {
@@ -115,6 +178,22 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final profileId = ref.watch(authControllerProvider).activeProfileId;
+    ref.listen<AuthState>(authControllerProvider, (previous, next) {
+      if (previous?.activeProfileId != next.activeProfileId ||
+          previous?.session?.accountId != next.session?.accountId ||
+          previous?.session?.accessToken != next.session?.accessToken) {
+        _loadGeneration++;
+        setState(() {
+          _historyProfileId = null;
+          _replies = const [];
+          _loading = true;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _load();
+        });
+      }
+    });
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     return Material(
@@ -150,7 +229,7 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
           ),
           const Divider(height: 1),
           Expanded(
-            child: _loading
+            child: _loading || _historyProfileId != profileId
                 ? const VoiceListSkeleton()
                 : _error != null
                 ? VoiceStatePanel(
@@ -170,9 +249,22 @@ class _ThreadSidePanelState extends ConsumerState<ThreadSidePanel> {
                     itemCount: _replies.length,
                     itemBuilder: (context, index) {
                       final msg = _replies[index];
-                      return Padding(
+                      final content = Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: MentionMessageContent(content: msg.content),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            MentionMessageContent(content: msg.content),
+                            if (msg.viewCount != null)
+                              MessageViewCount(count: msg.viewCount!),
+                          ],
+                        ),
+                      );
+                      if (msg.viewCount == null) return content;
+                      return MessageViewportView(
+                        key: ValueKey('thread-view:$profileId:${msg.id}'),
+                        onVisible: () => _recordView(msg),
+                        child: content,
                       );
                     },
                   ),
