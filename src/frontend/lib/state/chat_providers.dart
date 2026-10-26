@@ -1029,6 +1029,41 @@ class ChatArchiveListController extends StateNotifier<ChatListState> {
     }
   }
 
+  /// Marks the latest durable message read without opening or restoring the chat.
+  Future<String?> markChatRead(String chatId) async {
+    final session = _ref.read(authControllerProvider).session;
+    if (session == null) return 'not_authenticated';
+    final auth = session.authorizationHeader;
+    final profileId = session.activeProfileId;
+    final messages = _ref.read(voiceMessagesClientProvider);
+    final latest = await messages.getMessages(
+      authorization: auth,
+      chatId: chatId,
+      pageSize: 1,
+    );
+    if (!mounted || !_matchesSession(profileId, auth)) {
+      return kChatActionStaleContext;
+    }
+    if (latest is MessagesApiFailure) return latest.message;
+    final items = (latest as MessagesApiOk<MessageListData>).data.messages;
+    if (items.isEmpty) return null;
+    final ok = await MessagingReadSync(
+      messagesClient: messages,
+      realtimeMarkRead: (cid, mid) {
+        if (mounted && _matchesSession(profileId, auth)) {
+          _ref.read(realtimeHubProvider).markRead(cid, mid);
+        }
+      },
+    ).markRead(authorization: auth, chatId: chatId, messageId: items.first.id);
+    if (!mounted || !_matchesSession(profileId, auth)) {
+      return kChatActionStaleContext;
+    }
+    if (!ok) return 'mark_read_failed';
+    _ref.read(inboxReconcilerProvider.notifier).reconcileAfterMutation();
+    await loadInitial();
+    return null;
+  }
+
   /// Quiet activity for an archived chat: update its badge only. The Realtime
   /// `archive_activity` frame intentionally has no notification-center or
   /// sound semantics (text-chat.md §Архивирование).
