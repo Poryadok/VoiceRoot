@@ -178,6 +178,16 @@ redirect, PKCE, linked-credential validity, consent and profile eligibility.
 | `POST /api/v1/auth/sdk/authorizations/{requestId}/exchange` | No Gateway JWT; Auth validates code, exact redirect, PKCE verifier and device proof | `AuthOAuth`: 30 requests / 15 min, keyed by client IP |
 | `POST /api/v1/auth/sdk/authorizations/linked-session` | Exactly one Bearer credential, forwarded for Auth linked-credential validation | `AuthOAuth`: 30 requests / 15 min, keyed by client IP |
 
+Linked-provider Settings callback/return transport is a separate default-off
+[target contract](../todo/client.md#oauth-callbackresume-transport-contract-v1--target),
+not an SDK authorization route. Explicit Auth REST routing is required for
+`POST /api/v1/auth/linked-accounts/{provider}/link`,
+`POST .../{provider}/results/consume`, `POST .../{provider}/attempts/{id}/cancel`
+and public `GET .../{provider}/oauth-callback`. The POST routes require verified
+Voice bearer context and account-keyed `AuthOAuth`; the provider callback uses
+IP-keyed `AuthOAuth` without a bearer and Auth validates its stored authority.
+Do not infer callback handling from the existing POST-only REST fallthrough.
+
 The `AuthOAuth` group is the existing Gateway OAuth limit and is applied to all
 five routes by the T20 Gateway slice. SDK creation, consent view, and approval
 use the verified account key. Code exchange and opaque linked-session use the
