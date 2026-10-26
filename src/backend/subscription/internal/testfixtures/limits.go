@@ -6,12 +6,16 @@ const (
 	FileUploadBytesPremium int64 = 209_715_200 // 200 MiB
 	ProfileCountFree             = 2
 	ProfileCountPremium            = 5
+	SpaceJoinCountFree             = 100
+	SpaceJoinCountPremium          = 1000
 	SpaceMemberCountFree           = 50
 	SpaceMemberCountSpacePro       = 5000
 	SpaceTreeNodesFree             = 50
 	SpaceTreeNodesSpacePro         = 500
 	VoiceRoomParticipantsFree      = 32
 	VoiceRoomParticipantsSpacePro  = 128
+	VoiceQualityHeightFree         = 360
+	VoiceQualityHeightPremium      = 720
 	PremiumMonthlyPriceCents       = 500
 	YearlyDiscountPercent          = 20
 )

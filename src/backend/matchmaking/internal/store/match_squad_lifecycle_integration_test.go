@@ -669,6 +669,33 @@ func TestMatchSquadProvisioningRequestsAndReceiptsAreDurableAndImmutable(t *test
 	require.Equal(t, MatchStatusActive, active.Status)
 	require.Equal(t, chatID.String(), *active.ChatID)
 	require.Equal(t, roomID.String(), *active.VoiceRoomID)
+	// A recovery worker can activate while another caller's identical provider
+	// RPC is still returning. Its late receipt must observe that durable success.
+	activeOperation, err := matches.GetMatchSquadProvisioningOperation(ctx, intent.MatchID)
+	require.NoError(t, err)
+	t.Run("late exact Chat receipt after competing activation", func(t *testing.T) {
+		replayed, err := matches.RecordMatchSquadChatReceipt(ctx, intent.MatchID, chatReceiptID, chatID, chatReceiptBytes, sumSHA256(voiceRequest), voiceRequest)
+		require.NoError(t, err)
+		require.Equal(t, activeOperation, replayed)
+	})
+	t.Run("late exact Voice receipt after competing activation", func(t *testing.T) {
+		replayed, err := matches.RecordMatchSquadVoiceReceipt(ctx, intent.MatchID, voiceReceiptID, roomID, voiceReceiptBytes)
+		require.NoError(t, err)
+		require.Equal(t, activeOperation, replayed)
+	})
+	t.Run("active receipt replay preserves immutable bindings", func(t *testing.T) {
+		_, err := matches.RecordMatchSquadChatReceipt(ctx, intent.MatchID, chatReceiptID, uuid.New(), chatReceiptBytes, sumSHA256(voiceRequest), voiceRequest)
+		require.ErrorIs(t, err, ErrMatchSquadConflict)
+		_, err = matches.RecordMatchSquadChatReceipt(ctx, intent.MatchID, chatReceiptID, chatID, []byte("changed receipt"), sumSHA256(voiceRequest), voiceRequest)
+		require.ErrorIs(t, err, ErrMatchSquadConflict)
+		_, err = matches.RecordMatchSquadVoiceReceipt(ctx, intent.MatchID, voiceReceiptID, uuid.New(), voiceReceiptBytes)
+		require.ErrorIs(t, err, ErrMatchSquadConflict)
+		_, err = matches.RecordMatchSquadVoiceReceipt(ctx, intent.MatchID, voiceReceiptID, roomID, []byte("changed receipt"))
+		require.ErrorIs(t, err, ErrMatchSquadConflict)
+		unchanged, err := matches.GetMatchSquadProvisioningOperation(ctx, intent.MatchID)
+		require.NoError(t, err)
+		require.Equal(t, activeOperation, unchanged)
+	})
 	replayedActive, err := matches.ActivateProvisionedMatch(ctx, intent.MatchID)
 	require.NoError(t, err)
 	require.Equal(t, active.ChatID, replayedActive.ChatID)
