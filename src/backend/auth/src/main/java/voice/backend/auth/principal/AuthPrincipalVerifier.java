@@ -26,6 +26,14 @@ public final class AuthPrincipalVerifier {
       .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
   private final KeyResolver keys;
   private boolean identityAuthority;
+  private boolean subscriptionLifecycle;
+  /** Closed Subscription account/lifecycle input capability; no user or legacy grants. */
+  public static AuthPrincipalVerifier subscriptionLifecycle(KeyResolver keys, ReplayGuard replay, Clock clock) {
+    var result = new AuthPrincipalVerifier(keys,
+        account -> { throw new IllegalStateException("Subscription owner observation has no user epoch capability"); }, replay, clock);
+    result.subscriptionLifecycle = true;
+    return result;
+  }
   /** Closed identity authority; never reuses delegated-user or legacy method grants. */
   public static AuthPrincipalVerifier identityAuthority(KeyResolver keys, ReplayGuard replay, Clock clock) {
     var result = new AuthPrincipalVerifier(keys,
@@ -62,6 +70,9 @@ public final class AuthPrincipalVerifier {
     try {
       if (token == null || token.length() > 32768 || requestId == null || requestId.isBlank()
           || requestHash == null || !requestHash.matches("sha256:[0-9a-f]{64}")) throw invalid();
+      if (subscriptionLifecycle) {
+        if (!AuthPrincipalServerInterceptor.SUBSCRIPTION_OWNER_RPC.equals(rpc) || uuid(requestId).equals(new UUID(0,0))) throw invalid();
+      }
       if (AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc)) {
         UUID id = uuid(requestId);
         if (id.getMostSignificantBits() == 0 && id.getLeastSignificantBits() == 0) throw invalid();
@@ -75,7 +86,7 @@ public final class AuthPrincipalVerifier {
       if (!kid.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,127}")) throw invalid();
       JsonNode claims = JSON.readTree(decoder.decode(parts[1]));
       String issuer = string(claims, "iss");
-      if (!(identityAuthority ? Set.of("role", "user") : Set.of("gateway", "space", "voice", "role", "bot", "chat")).contains(issuer)) throw invalid();
+      if (!(subscriptionLifecycle ? Set.of("subscription") : identityAuthority ? Set.of("role", "user") : Set.of("gateway", "space", "voice", "role", "bot", "chat")).contains(issuer)) throw invalid();
       RSAPublicKey key = (AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc) ? botFloorKeys : keys).resolve(issuer, kid);
       if (key == null || key.getModulus().bitLength() < 2048) throw invalid();
       var signature = Signature.getInstance("SHA256withRSA");
@@ -93,13 +104,18 @@ public final class AuthPrincipalVerifier {
           || issued.isAfter(now.plusSeconds(5)) || !expires.isAfter(now)
           || !expires.isAfter(notBefore) || expires.isAfter(issued.plusSeconds(30))) throw invalid();
       jti = string(claims, "jti");
+      if (subscriptionLifecycle && !subscriptionJti(jti)) throw invalid();
       String kind = string(claims, "principal_type");
       String subject = string(claims, "sub");
       if ((AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
-          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc))
+          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.SUBSCRIPTION_OWNER_RPC.equals(rpc))
           && !VerifiedPrincipal.SERVICE.equals(kind)) throw invalid();
       if (VerifiedPrincipal.SERVICE.equals(kind)) {
         if (!subject.equals("service:" + issuer)) throw invalid();
+        if (subscriptionLifecycle) {
+          var names = claims.fieldNames();
+          while (names.hasNext()) if (!CHAT_FLOOR_CLAIMS.contains(names.next())) throw invalid();
+        }
         if (AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)) {
           var names = claims.fieldNames();
           while (names.hasNext()) if (!BOT_FLOOR_CLAIMS.contains(names.next())) throw invalid();
@@ -112,7 +128,7 @@ public final class AuthPrincipalVerifier {
             && (claims.has("account_id") || claims.has("profile_id") || claims.has("session_epoch"))) throw invalid();
         principal = new VerifiedPrincipal(kind, issuer, null, null, 0);
       } else if (VerifiedPrincipal.DELEGATED_USER.equals(kind)) {
-        if (identityAuthority || !"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
+        if (subscriptionLifecycle || identityAuthority || !"gateway".equals(issuer) || !subject.equals(string(claims, "account_id"))) throw invalid();
         UUID account = uuid(subject);
         UUID profile = uuid(string(claims, "profile_id"));
         long epoch = integer(claims, "session_epoch");
@@ -124,7 +140,7 @@ public final class AuthPrincipalVerifier {
       }
     } catch (Exception ex) {
       if ((AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
-          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc))
+          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.SUBSCRIPTION_OWNER_RPC.equals(rpc))
           && ex instanceof PrincipalDependencyUnavailableException) {
         throw Status.UNAVAILABLE.withDescription("principal authority unavailable").asRuntimeException();
       }
@@ -161,6 +177,10 @@ public final class AuthPrincipalVerifier {
                   "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ResolveAccountHandle",
                   "/voice.identityerasure.v1.AuthUserIdentityAuthorityService/ObserveAccountHandles").contains(rpc)));
     }
+    if (subscriptionLifecycle) {
+      allowed = principal.kind().equals(VerifiedPrincipal.SERVICE) && principal.issuer().equals("subscription")
+          && rpc.equals(AuthPrincipalServerInterceptor.SUBSCRIPTION_OWNER_RPC);
+    }
     if (!allowed) throw Status.PERMISSION_DENIED.withDescription("principal caller not permitted").asRuntimeException();
     try {
       if (!expires.isAfter(clock.instant())) throw invalid();
@@ -168,7 +188,7 @@ public final class AuthPrincipalVerifier {
       if (!expires.isAfter(clock.instant())) throw invalid();
     } catch (Exception ex) {
       if ((AuthPrincipalServerInterceptor.SPACE_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.BOT_SESSION_FLOOR_RPC.equals(rpc)
-          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc))
+          || AuthPrincipalServerInterceptor.CHAT_SESSION_FLOOR_RPC.equals(rpc) || AuthPrincipalServerInterceptor.SUBSCRIPTION_OWNER_RPC.equals(rpc))
           && ex instanceof PrincipalDependencyUnavailableException) {
         throw Status.UNAVAILABLE.withDescription("principal authority unavailable").asRuntimeException();
       }
@@ -193,6 +213,21 @@ public final class AuthPrincipalVerifier {
     UUID id = UUID.fromString(value);
     if (!id.toString().equals(value)) throw invalid();
     return id;
+  }
+
+  // The common Go issuer uses a canonical 20-byte base64url nonce; Auth's
+  // existing Java fixtures/issuers use canonical UUIDs. Neither is user identity.
+  private static boolean subscriptionJti(String value) {
+    try { return !uuid(value).equals(new UUID(0,0)); }
+    catch (RuntimeException notUuid) {
+      try {
+        if (value.length()!=27) return false;
+        byte[] bytes=Base64.getUrlDecoder().decode(value);
+        if (bytes.length!=20 || !Base64.getUrlEncoder().withoutPadding().encodeToString(bytes).equals(value)) return false;
+        for (byte item:bytes) if(item!=0)return true;
+        return false;
+      } catch (RuntimeException malformed) { return false; }
+    }
   }
 
   private static IllegalArgumentException invalid() {

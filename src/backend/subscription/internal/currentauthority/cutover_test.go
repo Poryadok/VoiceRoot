@@ -22,7 +22,7 @@ func cutoverDB(t *testing.T) *pgxpool.Pool {
 	require.True(t, ok)
 	root := filepath.Join(filepath.Dir(file), "../../../migrations/subscription_db")
 	pool := integrationtest.StartPostgres(t, context.Background(), "authority_cutover", "")
-	for _, migration := range []string{"000001_init", "000002_grace_reminders", "000003_space_lifecycle_provider_dedup", "000004_entitlement_outbox", "000005_provider_lifecycle", "000006_grace_reminder_outbox", "000007_authority_fence", "000008_kernel_writes"} {
+	for _, migration := range []string{"000001_init", "000002_grace_reminders", "000003_space_lifecycle_provider_dedup", "000004_entitlement_outbox", "000005_provider_lifecycle", "000006_grace_reminder_outbox", "000007_authority_fence", "000008_kernel_writes", "000009_auth_lifecycle_ingress"} {
 		body, err := os.ReadFile(filepath.Join(root, migration+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(context.Background(), string(body))

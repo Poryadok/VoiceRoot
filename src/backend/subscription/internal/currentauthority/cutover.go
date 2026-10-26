@@ -36,6 +36,7 @@ type FenceRequest struct {
 // Fixed names intentionally include every source-owned legacy/canonical writer
 // table. A new authoritative writer table must join this inventory before use.
 var authorityTables = []string{
+	"subscription_auth_account_observations", "subscription_auth_lifecycle_facts", "subscription_auth_observation_receipts",
 	"billing_events", "space_subscriptions", "subscription_entitlement_aggregates",
 	"subscription_event_outbox", "subscription_grace_reminders",
 	"subscription_kernel_writes",

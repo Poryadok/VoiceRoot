@@ -23,6 +23,19 @@ public final class RedisPrincipalReplayGuard implements AuthPrincipalVerifier.Re
     this.clock = Objects.requireNonNull(clock);
   }
 
+  /** Read-only, bounded startup preflight; it does not consume a credential/JTI. */
+  public void requireAvailable() {
+    Future<String> pending = null;
+    try {
+      pending = commands.submit(() -> { try(var connection=redis.getConnectionFactory().getConnection()) { return connection.ping(); } });
+      if (!"PONG".equals(pending.get(2,TimeUnit.SECONDS))) throw new PrincipalDependencyUnavailableException();
+    } catch (Exception unavailable) {
+      if(pending!=null)pending.cancel(true);
+      if(unavailable instanceof InterruptedException)Thread.currentThread().interrupt();
+      throw new PrincipalDependencyUnavailableException();
+    }
+  }
+
   @Override public void record(String issuer, String jti, Instant expires) {
     Future<Boolean> result = null;
     try {

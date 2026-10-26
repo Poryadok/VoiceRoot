@@ -417,7 +417,7 @@ The Space tombstone keeps 365 days from `purged_at`.
 
 | Store owner | Additive durable data |
 |---|---|
-| `subscription_db` | permanent personal/Space aggregate revision, normalized provider outcome/order evidence, immutable provider-neutral lifecycle journal, leased event/reminder outbox, current-entitlement snapshot rows |
+| `subscription_db` | permanent personal/Space aggregate revision, normalized provider outcome/order evidence, immutable provider-neutral lifecycle journal, leased event/reminder outbox, current-entitlement snapshot rows; protected Auth input observations, ordered facts and request-bound ingest receipts |
 | `auth_db` | subscription event inbox and durable personal tier/revision/deadline projection used for JWT issuance; source-side `account_subscription_lifecycle_heads` and `account_subscription_lifecycle_outbox` for ordered Auth deletion/restore facts |
 | `user_db` | subscription event inbox/projection, downgrade pending selection and subscription-specific profile freeze provenance |
 | `file_db` | immutable `retention_account_id` per exact reference, subscription event inbox/projection and revision-serialized retention deadlines |
@@ -430,9 +430,21 @@ The Auth source capture pair V33/000034 retains immutable `DELETE_SCHEDULED`
 and `RESTORE_REQUESTED` facts independently of coordinator-receipt retention.
 The source revision spans delete/restore cycles during the raw account lifetime;
 raw rows belong to Auth and cascade with that account. This source stage does
-not qualify permanent HMAC retirement or P30D cleanup/transport: those remain
+not qualify permanent HMAC retirement or P30D cleanup: those remain
 required before the current-entitlement boundary is admitted. A restore fact
 does not grant paid access or resume billing.
+
+Subscription migration 000009 adds `subscription_auth_account_observations`,
+`subscription_auth_lifecycle_facts` and `subscription_auth_observation_receipts`.
+Only the dedicated Auth mTLS client can mint the private observation accepted by
+ingestion. The transaction takes the installed generation barrier before its
+account mutex; it commits matching head, ordered immutable fact bytes/hashes and
+request/snapshot hashes atomically. Replay cannot refresh a historical snapshot;
+revision/epoch rollback, same-revision drift, wrong generation and expired
+observations fail closed. The only persisted input state is `OBSERVED`, never
+`CURRENT`. These raw-account rows also require the accepted P30D retirement and
+permanent purge-fence procedure before paid admission; they are not permanent
+privacy tombstones or substitute provider evidence.
 
 Account deletion adds an opaque `deletion_fence_id`, one-use cycle/`purge_at`, a
 Subscription participant receipt and permanent purpose-scoped HMAC tombstone.

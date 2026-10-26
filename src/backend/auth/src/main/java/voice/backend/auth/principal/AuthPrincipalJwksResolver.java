@@ -67,6 +67,16 @@ public final class AuthPrincipalJwksResolver {
     throw unavailable();
   }
 
+  /** Startup preflight for an explicitly closed endpoint policy, outside a serving request. */
+  synchronized void prime(String issuer) {
+    try {
+      if (issuer == null || issuer.isBlank()) throw new IllegalArgumentException();
+      var keys = parse(fetcher.fetch(issuer));
+      sets.put(issuer,new Snapshot(keys,clock.instant()));
+      unknownRefresh.remove(issuer);
+    } catch (Exception unavailable) { throw unavailable(); }
+  }
+
   /** Bot floor only: distinguish a successfully refreshed authoritative absence from an outage. */
   public synchronized RSAPublicKey resolveForBotFloor(String issuer, String kid) {
     if (issuer == null || issuer.isBlank() || kid == null || kid.isBlank()) throw unavailable();

@@ -10,6 +10,7 @@ import java.util.Set;
 /** Buffers the unary message before creating any protected handler. */
 public final class AuthPrincipalServerInterceptor implements ServerInterceptor, AutoCloseable {
   public static final String SPACE_ADMISSION_RPC = "/voice.auth.v1.AuthService/ObserveSpaceAdmissionSubject";
+  public static final String SUBSCRIPTION_OWNER_RPC = "/voice.auth.v1.AuthSubscriptionLifecycleService/ObserveSubscriptionAccount";
   public static final String ISSUE_RPC = "/voice.auth.v1.AuthService/IssueOwnershipTransferProof";
   public static final String CONSUME_RPC = "/voice.auth.v1.AuthService/ConsumeOwnershipTransferProof";
   public static final String LOOKUP_RPC = "/voice.auth.v1.AuthService/GetOwnershipTransferReceipt";
@@ -28,8 +29,15 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
   private final AuthPrincipalVerifier verifier;
   private final Runnable cleanup;
   private final String botPeerUri;
+  private String subscriptionPeerUri;
   private Set<String> closedMethods;
   static final Context.Key<String> REQUEST_ID_CONTEXT = Context.key("auth-verified-request-id");
+  public static AuthPrincipalServerInterceptor subscriptionLifecycle(AuthPrincipalVerifier verifier, String expectedPeerUri) {
+    var result = new AuthPrincipalServerInterceptor(java.util.Objects.requireNonNull(verifier));
+    result.closedMethods = Set.of(SUBSCRIPTION_OWNER_RPC);
+    result.subscriptionPeerUri = SubscriptionLifecyclePeer.normalized(expectedPeerUri);
+    return result;
+  }
   public static String verifiedRequestId() { return REQUEST_ID_CONTEXT.get(); }
   /** Dedicated listener policy. Legacy floor callers retain their original checks. */
   public static AuthPrincipalServerInterceptor identityAuthority(AuthPrincipalVerifier verifier) {
@@ -61,6 +69,9 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
         call.close(Status.PERMISSION_DENIED.withDescription("principal caller not permitted"), new Metadata());
         return new ServerCall.Listener<>() {};
       }
+    } else if (SUBSCRIPTION_OWNER_RPC.equals(rpc)) {
+      call.close(Status.PERMISSION_DENIED.withDescription("dedicated Subscription owner transport required"), new Metadata());
+      return new ServerCall.Listener<>() {};
     } else if (!ISSUE_RPC.equals(rpc) && !CONSUME_RPC.equals(rpc) && !LOOKUP_RPC.equals(rpc) && !SPACE_ADMISSION_RPC.equals(rpc)
         && !VOICE_SESSION_FLOOR_RPC.equals(rpc)
         && !ROLE_SESSION_FLOOR_RPC.equals(rpc) && !SPACE_SESSION_FLOOR_RPC.equals(rpc) && !BOT_SESSION_FLOOR_RPC.equals(rpc) && !CHAT_SESSION_FLOOR_RPC.equals(rpc)
@@ -69,6 +80,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
     final String token, requestId;
     try {
       if (verifier == null) throw new IllegalArgumentException();
+      if (SUBSCRIPTION_OWNER_RPC.equals(rpc)) SubscriptionLifecyclePeer.require(call.getAttributes(), subscriptionPeerUri);
       if (BOT_SESSION_FLOOR_RPC.equals(rpc)) BotSessionFloorPeer.require(call.getAttributes(), botPeerUri);
       for (String key : headers.keys()) {
         if (key.startsWith("x-voice-") || RAW.contains(key)) throw new IllegalArgumentException();
@@ -105,7 +117,7 @@ public final class AuthPrincipalServerInterceptor implements ServerInterceptor, 
           verified = verifier.verify(token, rpc, requestId, requestHash((MessageLite) request));
         } catch (RuntimeException ex) {
           Status status = Status.fromThrowable(ex);
-          deny((SPACE_SESSION_FLOOR_RPC.equals(rpc) || BOT_SESSION_FLOOR_RPC.equals(rpc) || CHAT_SESSION_FLOOR_RPC.equals(rpc)) && status.getCode() == Status.Code.UNAVAILABLE
+          deny((SPACE_SESSION_FLOOR_RPC.equals(rpc) || BOT_SESSION_FLOOR_RPC.equals(rpc) || CHAT_SESSION_FLOOR_RPC.equals(rpc) || SUBSCRIPTION_OWNER_RPC.equals(rpc)) && status.getCode() == Status.Code.UNAVAILABLE
               ? Status.UNAVAILABLE
               : status.getCode() == Status.Code.PERMISSION_DENIED ? Status.PERMISSION_DENIED : Status.UNAUTHENTICATED);
           return;

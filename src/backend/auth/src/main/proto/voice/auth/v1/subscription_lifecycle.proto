@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package voice.auth.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "voice.app/voice/auth/v1;authv1";
+option java_multiple_files = true;
+option java_package = "app.voice.auth.v1";
+
+// Dedicated Auth-owned account/lifecycle input. It never grants paid entitlement.
+service AuthSubscriptionLifecycleService {
+  // @voice.security=protected;callers=service:subscription
+  rpc ObserveSubscriptionAccount(ObserveSubscriptionAccountRequest) returns (ObserveSubscriptionAccountResponse);
+}
+
+message ObserveSubscriptionAccountRequest {
+  string account_id = 1;
+  uint64 minimum_lifecycle_revision = 2;
+}
+
+enum SubscriptionAccountCaptureCoverage {
+  SUBSCRIPTION_ACCOUNT_CAPTURE_COVERAGE_UNSPECIFIED = 0;
+  // Actual account state exists, but no captured lifecycle history qualifies it.
+  SUBSCRIPTION_ACCOUNT_CAPTURE_COVERAGE_UNRECORDED = 1;
+  // Complete retained capture history only, never paid eligibility or CURRENT.
+  SUBSCRIPTION_ACCOUNT_CAPTURE_COVERAGE_CAPTURED = 2;
+}
+
+enum SubscriptionAccountLifecycleKind {
+  SUBSCRIPTION_ACCOUNT_LIFECYCLE_KIND_UNSPECIFIED = 0;
+  SUBSCRIPTION_ACCOUNT_LIFECYCLE_KIND_DELETE_SCHEDULED = 1;
+  SUBSCRIPTION_ACCOUNT_LIFECYCLE_KIND_RESTORE_REQUESTED = 2;
+}
+
+message SubscriptionAccountLifecycleFact {
+  string account_id = 1;
+  uint64 source_revision = 2;
+  string event_id = 3;
+  string deletion_cycle_id = 4;
+  SubscriptionAccountLifecycleKind kind = 5;
+  uint64 session_epoch = 6;
+  google.protobuf.Timestamp scheduled_at = 7;
+  google.protobuf.Timestamp purge_at = 8;
+  google.protobuf.Timestamp effective_at = 9;
+  google.protobuf.Timestamp captured_at = 10;
+}
+
+message ObserveSubscriptionAccountResponse {
+  uint32 protocol_version = 1;
+  string account_id = 2;
+  string account_type = 3;
+  string account_status = 4;
+  bool regular_email_verification_pending = 5;
+  uint64 session_epoch = 6;
+  uint64 security_revision = 7;
+  google.protobuf.Timestamp deleted_at = 8;
+  google.protobuf.Timestamp observed_at = 9;
+  SubscriptionAccountCaptureCoverage capture_coverage = 10;
+  SubscriptionAccountLifecycleFact head = 11;
+  repeated SubscriptionAccountLifecycleFact facts = 12;
+}

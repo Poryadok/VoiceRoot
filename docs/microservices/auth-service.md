@@ -397,10 +397,39 @@ head. Both migration engines preserve their exact predecessor history profile.
 `DELETE_SCHEDULED` is an input to Subscription's immediate revocation path;
 `RESTORE_REQUESTED` requests provider reconciliation and never grants paid time
 or resumes recurring billing by itself. A legacy restore without a proven cycle
-keeps the free path and creates no guessed authority fact. This producer is not a
-protected transport, complete purge/HMAC retirement, account CURRENT certificate
-or activated paid boundary. Those remain required by the
+keeps the free path and creates no guessed authority fact. These facts do not
+complete purge/HMAC retirement, account CURRENT qualification or an activated
+paid boundary. Those remain required by the
 [authority ExecPlan](../testing/subscription-current-authority-exec-plan.md).
+
+The dedicated `AuthSubscriptionLifecycleService/ObserveSubscriptionAccount`
+source implementation returns actual account type/status, email-pending state,
+security/session revisions, deletion time, DB observation time and the matching
+head plus complete retained ordered facts. It locks the account before the
+head/facts under READ COMMITTED and validates the installed DDL barrier, finite
+migration history, native account security-revision guard and capture functions
+and triggers. Missing/lower/conflicting data is unavailable; an account without
+capture history explicitly returns `UNRECORDED`, never clean paid eligibility.
+`CAPTURED` describes retained input history, not entitlement or CURRENT.
+
+Only issuer `subscription`, subject `service:subscription`, audience `auth` can
+call this method, bound to the exact RPC, canonical request hash, request UUID and
+one-use JTI. The common Go issuer's canonical 20-byte base64url JTI and canonical
+UUID JTIs are accepted; replay is admitted atomically by actual Redis. A separate
+mTLS listener pins the Subscription client URI SAN. The ordinary listener denies
+this method even if accidentally registered there. The outer 500ms server budget
+covers authentication and SQL; callers use the earlier of 500ms and their own
+deadline, without retry beyond it. HTTPS JWKS and Redis have bounded startup
+preflight; this does not establish account or paid readiness.
+
+The listener is absent unless the complete `AUTH_SUBSCRIPTION_LIFECYCLE_` property
+set is supplied: `LISTEN_ADDR`, `TLS_CERT_FILE`, `TLS_KEY_FILE`,
+`TLS_CLIENT_CA_FILE`, `SUBSCRIPTION_PEER_URI`, `JWKS_URL` and optional
+`JWKS_CA_FILE`. It also requires the native Auth schema-owner/loader policy and
+real JDBC/Redis dependencies. This source implementation does not activate those
+settings or qualify restored cohorts. Subscription ingests these protected inputs
+as `OBSERVED`; provider reconciliation, account/Space/purge writers and the
+separate current-entitlement admission gate remain required.
 
 ### PR и ревью (bootstrap JWT ↔ User)
 

@@ -167,6 +167,58 @@ qualification is inferred from this producer package.
 
 ## Decisions
 
+### Dedicated Auth owner observation implementation
+
+Implemented source uses the separate canonical/Java-mirrored
+`voice.auth.v1.AuthSubscriptionLifecycleService/ObserveSubscriptionAccount` RPC.
+Go and Dart outputs are generated; the Auth mirror guard now covers both files.
+The finite principal is issuer `subscription`, subject `service:subscription`,
+audience `auth`, exact RPC/hash/request UUID and replay JTI, plus a pinned client
+URI SAN on mandatory mTLS. Complete HTTPS JWKS and Redis startup preflight is
+outside the 500ms request budget; authentication and SQL remain inside that cap.
+The common Go signer actually emits a 20-byte base64url JTI. A genuine Go-to-Java
+request first failed UNAUTHENTICATED against the draft UUID-only check; the
+closed verifier now accepts both canonical nonce forms and the real chain passes.
+
+The native account security-revision function/trigger is pinned too: V12 covers
+every observed eligibility/status/session field, including email-pending and
+deleted_at. No historical migration is edited. The fresh source denies unsafe
+runtime roles, capture/guard drift, future facts, missing/lower/conflicting rows;
+legacy/headless accounts explicitly remain UNRECORDED. A late RESTORE_REQUESTED
+is retained as truthful input, never converted into a paid grant.
+
+New 000009 records only protected inputs in subscription_db. The private Go client
+observation binds exact request/hash, full canonical response/hash, installed
+generation and the remaining request deadline. Ingest performs no network wait
+under SQL locks, uses generation 17006 before account 17010, preserves ordered
+fact identity/bytes and commits the OBSERVED head, facts and receipt atomically.
+It rejects revision/security/session rollback, same-version drift, expired input
+and generation changes. Existing 000006/000007/000008 are unchanged. The new
+tables join the complete fence inventory; no old manifest replay auto-grants them.
+There is deliberately no CURRENT promotion/read in this source stage.
+
+Real fixtures exercise Auth's production server factory with PostgreSQL16,
+Redis7, HTTPS JWKS, exact client certificate, ordinary-listener/peer/replay/hash
+negatives and SQL/authentication deadline waits. A standalone actual Java receiver
+then accepts the common Go issuer and feeds the real restricted-role Subscription
+ingest transaction, including delete then restore and replay. Private wire fixtures
+are separately labelled as local transaction/decoder tests, not live Auth proof.
+The native Go fixture requires a compiled Auth test classpath; a configured
+zero-skip run is required evidence, not its default short/unconfigured skip.
+
+The owner read acquires the native Auth DDL barrier and validates the exact
+owned capture functions/triggers/history, then lock the actual account before
+its head and ordered facts under READ COMMITTED. It returns full account state,
+source security/session revisions, observation DB time and retained lifecycle
+facts. An untouched account explicitly has UNRECORDED capture coverage; missing
+accounts, gaps, head/fact conflicts, lower revisions or changed capture metadata
+never become a positive clean-account result. It does not expose eligibility or
+borrow role-purpose selectors. Concurrent restore/delete tests must prove the
+actual account-row linearization point and coherent post-wait facts. The next
+protected transport uses a separate Subscription-only principal/mTLS capability,
+request binding, replay protection and bounded deadlines; source observation is
+not a paid grant or CURRENT certification.
+
 ### Generation-bound normalized provider writer
 
 The next bounded kernel stage adds `ApplyFenced`, using a real installed limited
@@ -239,3 +291,11 @@ gates; tests cannot fabricate those receipts. BE-014 snapshot sessions/journal
 and all downstream convergence, and full BE-028 privacy/provider behavior remain
 open until actually implemented and qualified. No broad task completion is
 claimed from a source substage.
+
+## Auth owner observation and ordered ingress source checkpoint
+
+The dedicated Java owner snapshot and Subscription ingress are implemented in this source stage. The closed mTLS RPC is voice.auth.v1.AuthSubscriptionLifecycleService/ObserveSubscriptionAccount; its result is a complete coherent Auth input observation. Subscription stores only OBSERVED head/facts/receipts under the installed writer generation. No CURRENT promotion, paid decision or runtime activation is implemented.
+
+The production listener factory is exercised with actual PostgreSQL, Redis, HTTPS JWKS and mTLS fixtures. The real Go Subscription signer/client calls that Java listener and ingests the returned ordered lifecycle chain into a separate actual Subscription PostgreSQL database. The configured race run passed without skips; private decoder/transaction fixtures are separate unit evidence. The final targeted Auth run covers 14 tests without failures or skips after remaining JDBC budget propagation; the preceding selected regression run covers 65 tests. Native lock and slow-JWKS cases retain the 500 ms total serving deadline.
+
+Remaining admission gates include provider/account/local-expiry/Space reconciliation, fixed-cycle restore and purge fences, retention and controlled recovery qualification, then the complete protected Subscription boundary snapshot. WRITTEN and OBSERVED are insufficient admission evidence. Existing BE-014 and BE-028 criteria remain open.

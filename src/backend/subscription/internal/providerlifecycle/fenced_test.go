@@ -20,7 +20,7 @@ func fencedDB(t *testing.T, seeds ...Command) (*pgxpool.Pool, *pgxpool.Pool, str
 	t.Helper()
 	admin := testDB(t)
 	_, file, _, _ := runtime.Caller(0)
-	for _, name := range []string{"000007_authority_fence", "000008_kernel_writes"} {
+	for _, name := range []string{"000007_authority_fence", "000008_kernel_writes", "000009_auth_lifecycle_ingress"} {
 		body, err := os.ReadFile(filepath.Join(filepath.Dir(file), "../../../migrations/subscription_db", name+".up.sql"))
 		require.NoError(t, err)
 		_, err = admin.Exec(context.Background(), string(body))
