@@ -2288,6 +2288,78 @@ abstract class AppLocalizations {
   /// **'Emoji'**
   String get composerEmojiPanelTitle;
 
+  /// No description provided for @composerEmojiRecent.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get composerEmojiRecent;
+
+  /// No description provided for @composerStickerTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get composerStickerTab;
+
+  /// No description provided for @composerGifTab.
+  ///
+  /// In en, this message translates to:
+  /// **'GIFs'**
+  String get composerGifTab;
+
+  /// No description provided for @composerGifSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search GIFs'**
+  String get composerGifSearch;
+
+  /// No description provided for @composerStickerSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search sticker packs'**
+  String get composerStickerSearch;
+
+  /// No description provided for @composerMediaSendUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending is currently unavailable'**
+  String get composerMediaSendUnavailable;
+
+  /// No description provided for @composerGifUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF search unavailable'**
+  String get composerGifUnavailable;
+
+  /// No description provided for @composerCatalogError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the catalog'**
+  String get composerCatalogError;
+
+  /// No description provided for @composerCatalogRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get composerCatalogRetry;
+
+  /// No description provided for @composerCatalogMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get composerCatalogMore;
+
+  /// No description provided for @composerStickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No sticker packs found'**
+  String get composerStickerEmpty;
+
+  /// No description provided for @composerGifEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No GIFs found'**
+  String get composerGifEmpty;
+
   /// No description provided for @composerAttachPhotoOrVideo.
   ///
   /// In en, this message translates to:

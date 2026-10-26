@@ -315,6 +315,21 @@ class ChatServiceClient extends $grpc.Client {
     return $createUnaryCall(_$uninstallStickerPack, request, options: options);
   }
 
+  /// Provider-neutral metadata only; search does not authorize a File reference.
+  $grpc.ResponseFuture<$0.SearchGifsResponse> searchGifs(
+    $0.SearchGifsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$searchGifs, request, options: options);
+  }
+
+  $grpc.ResponseFuture<$0.GetTrendingGifsResponse> getTrendingGifs(
+    $0.GetTrendingGifsRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$getTrendingGifs, request, options: options);
+  }
+
   /// DM-only opt-in E2E encryption — docs/features/encryption.md.
   $grpc.ResponseFuture<$0.EnableChatE2EResponse> enableChatE2E(
     $0.EnableChatE2ERequest request, {
@@ -585,6 +600,16 @@ class ChatServiceClient extends $grpc.Client {
       '/voice.chat.v1.ChatService/UninstallStickerPack',
       ($0.UninstallStickerPackRequest value) => value.writeToBuffer(),
       $0.UninstallStickerPackResponse.fromBuffer);
+  static final _$searchGifs =
+      $grpc.ClientMethod<$0.SearchGifsRequest, $0.SearchGifsResponse>(
+          '/voice.chat.v1.ChatService/SearchGifs',
+          ($0.SearchGifsRequest value) => value.writeToBuffer(),
+          $0.SearchGifsResponse.fromBuffer);
+  static final _$getTrendingGifs =
+      $grpc.ClientMethod<$0.GetTrendingGifsRequest, $0.GetTrendingGifsResponse>(
+          '/voice.chat.v1.ChatService/GetTrendingGifs',
+          ($0.GetTrendingGifsRequest value) => value.writeToBuffer(),
+          $0.GetTrendingGifsResponse.fromBuffer);
   static final _$enableChatE2E =
       $grpc.ClientMethod<$0.EnableChatE2ERequest, $0.EnableChatE2EResponse>(
           '/voice.chat.v1.ChatService/EnableChatE2E',
@@ -960,6 +985,22 @@ abstract class ChatServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.UninstallStickerPackRequest.fromBuffer(value),
         ($0.UninstallStickerPackResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.SearchGifsRequest, $0.SearchGifsResponse>(
+        'SearchGifs',
+        searchGifs_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) => $0.SearchGifsRequest.fromBuffer(value),
+        ($0.SearchGifsResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.GetTrendingGifsRequest,
+            $0.GetTrendingGifsResponse>(
+        'GetTrendingGifs',
+        getTrendingGifs_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.GetTrendingGifsRequest.fromBuffer(value),
+        ($0.GetTrendingGifsResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.EnableChatE2ERequest, $0.EnableChatE2EResponse>(
             'EnableChatE2E',
@@ -1363,6 +1404,23 @@ abstract class ChatServiceBase extends $grpc.Service {
 
   $async.Future<$0.UninstallStickerPackResponse> uninstallStickerPack(
       $grpc.ServiceCall call, $0.UninstallStickerPackRequest request);
+
+  $async.Future<$0.SearchGifsResponse> searchGifs_Pre($grpc.ServiceCall $call,
+      $async.Future<$0.SearchGifsRequest> $request) async {
+    return searchGifs($call, await $request);
+  }
+
+  $async.Future<$0.SearchGifsResponse> searchGifs(
+      $grpc.ServiceCall call, $0.SearchGifsRequest request);
+
+  $async.Future<$0.GetTrendingGifsResponse> getTrendingGifs_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.GetTrendingGifsRequest> $request) async {
+    return getTrendingGifs($call, await $request);
+  }
+
+  $async.Future<$0.GetTrendingGifsResponse> getTrendingGifs(
+      $grpc.ServiceCall call, $0.GetTrendingGifsRequest request);
 
   $async.Future<$0.EnableChatE2EResponse> enableChatE2E_Pre(
       $grpc.ServiceCall $call,

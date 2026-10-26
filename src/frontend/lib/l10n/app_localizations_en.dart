@@ -1266,6 +1266,42 @@ class AppLocalizationsEn extends AppLocalizations {
   String get composerEmojiPanelTitle => 'Emoji';
 
   @override
+  String get composerEmojiRecent => 'Recent';
+
+  @override
+  String get composerStickerTab => 'Stickers';
+
+  @override
+  String get composerGifTab => 'GIFs';
+
+  @override
+  String get composerGifSearch => 'Search GIFs';
+
+  @override
+  String get composerStickerSearch => 'Search sticker packs';
+
+  @override
+  String get composerMediaSendUnavailable => 'Sending is currently unavailable';
+
+  @override
+  String get composerGifUnavailable => 'GIF search unavailable';
+
+  @override
+  String get composerCatalogError => 'Could not load the catalog';
+
+  @override
+  String get composerCatalogRetry => 'Retry';
+
+  @override
+  String get composerCatalogMore => 'Load more';
+
+  @override
+  String get composerStickerEmpty => 'No sticker packs found';
+
+  @override
+  String get composerGifEmpty => 'No GIFs found';
+
+  @override
   String get composerAttachPhotoOrVideo => 'Photo or video';
 
   @override
