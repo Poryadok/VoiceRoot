@@ -329,3 +329,14 @@ minimization remain required. The current unresolved-write File FK/tombstone
 does not justify retaining raw uploader/profile identifiers indefinitely.
 Encrypted-DM identity disclosure and installed-sticker source authority remain
 outside this GIF/non-E2E implementation.
+
+The next reference checkpoint reuses the authoritative current/READY reader in
+the actual File acquisition transaction. A real PG regression first reproduced
+catalog acquisition during processing (expected error, actual success), then
+passed with the guard. New acquisition after supersession is denied; exact
+completed-operation replay preserves one original reference/receipt. Two
+concurrent current-source references pass without blob lock upgrade, and an
+ordinary processing File still acquires under the original pre-catalog schema.
+Focused reference race10.627s passed. The native byte proof now also commits one
+actual File message reference after READY (6.361s, no skip); it still injects
+actor/destination/source authority and does not invoke Messaging insertion.

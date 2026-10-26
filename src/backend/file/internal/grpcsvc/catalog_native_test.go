@@ -160,6 +160,16 @@ func TestCatalogImportActualBytesReachNativeReadyAuthority(t *testing.T) {
 	require.NotNil(t, snapshot)
 	require.Equal(t, "gif", snapshot.Intent)
 	require.Equal(t, "video", snapshot.FileType)
+	// Exercise the real File reference transaction after native READY. This is
+	// still not a Messaging insertion or a destination authorization proof.
+	ref := &filev1.AcquireFileReferencesRequest{ProtocolVersion: 1, OperationId: uuid.NewString(), ProducerId: filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING, References: []*filev1.FileReferenceKey{{FileId: imported.FileId, OwnerType: filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE, OwnerId: uuid.NewString()}}}
+	owner := &FileGRPC{files: f.files}
+	receipt, err := owner.AcquireFileReferences(catalogVerifiedContext(t, ref, filev1.FileService_AcquireFileReferences_FullMethodName, "messaging"), ref)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, receipt.Receipt.ReferenceCount)
+	var references int
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM file_references WHERE file_id=$1`, id).Scan(&references))
+	require.Equal(t, 1, references)
 	sourceHash := sha256.Sum256(body)
 	require.Equal(t, sourceHash[:], snapshot.SourceSha256)
 	mu.Lock()

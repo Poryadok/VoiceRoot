@@ -107,3 +107,15 @@ retention requires its immutable verified retention account; the current
 FileReferenceKey/AcquireFileReferences schema lacks `retention_account_id` and
 that integration gap remains open. No new TTL or fake message reference fills
 the gap. Ordinary attachment ACLs and committed history entitlement stay intact.
+
+New catalog message reference acquisition rechecks the same locked File
+READY/scan/representation, actor-gate and live current-head predicate inside its
+reference transaction. Only Messaging message ownership may acquire this GIF
+catalog path. File/blob/head authority remains held until the reference and
+operation receipt commit. Acquisition takes the blob's exclusive lock directly,
+avoiding competing SHARE-to-UPDATE upgrades. An exact previously completed
+operation returns its original receipt without creating another reference;
+it is not new send/source authority. Messaging must still authorize the current
+source and destination before invoking acquisition. Ordinary noncatalog
+references retain their existing lifecycle behavior, including pre-catalog
+schemas. This guard does not implement the separate A7 retention projection.

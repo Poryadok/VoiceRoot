@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	filev1 "voice.app/voice/file/v1"
 	"voice/backend/file/internal/catalogasset"
 )
@@ -22,12 +23,20 @@ func (s *FilesStore) LookupCatalogFile(ctx context.Context, actor catalogasset.A
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
+	out, err := lookupCatalogFileTx(ctx, tx, actor, id, now, false)
+	if err != nil {
+		return nil, err
+	}
+	return out, tx.Commit(ctx)
+}
+
+func lookupCatalogFileTx(ctx context.Context, tx pgx.Tx, actor catalogasset.ActorPair, id uuid.UUID, now time.Time, exclusiveBlob bool) (*filev1.LookupCatalogAssetResponse, error) {
 	var catalog bool
-	if err = tx.QueryRow(ctx, `SELECT catalog_asset FROM files WHERE id=$1 FOR SHARE`, id).Scan(&catalog); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT catalog_asset FROM files WHERE id=$1 FOR SHARE`, id).Scan(&catalog); err != nil {
 		return nil, err
 	}
 	if !catalog {
-		return &filev1.LookupCatalogAssetResponse{Classification: &filev1.LookupCatalogAssetResponse_OrdinaryFile{OrdinaryFile: true}}, tx.Commit(ctx)
+		return &filev1.LookupCatalogAssetResponse{Classification: &filev1.LookupCatalogAssetResponse_OrdinaryFile{OrdinaryFile: true}}, nil
 	}
 	row, err := getFileByID(ctx, tx, id, "")
 	if err != nil {
@@ -39,13 +48,16 @@ func (s *FilesStore) LookupCatalogFile(ctx context.Context, actor catalogasset.A
 	var head *uuid.UUID
 	var revision *int64
 	var protocol int
+	lockClause := " FOR SHARE OF a,b,ag,pg"
+	if exclusiveBlob {
+		lockClause = " FOR SHARE OF a,ag,pg FOR UPDATE OF b"
+	}
 	err = tx.QueryRow(ctx, `SELECT a.source_id,a.provider,a.provider_id,a.source_sha256,f.preview_metadata_revision,b.state,b.deleted_at IS NOT NULL,a.authority_protocol,a.selection_head_id,a.selection_revision
 FROM file_catalog_assets a JOIN files f ON f.id=a.file_id JOIN file_blobs b ON b.blob_id=f.blob_id
 JOIN file_catalog_actor_gates ag ON ag.id=a.account_gate_id JOIN file_catalog_actor_gates pg ON pg.id=a.profile_gate_id
 WHERE a.file_id=$1 AND a.actor_account_id=$2 AND a.actor_profile_id=$3
 AND ag.actor_kind='account' AND pg.actor_kind='profile' AND ag.state='LIVE' AND pg.state='LIVE'
-AND ag.generation=a.account_generation AND pg.generation=a.profile_generation
-FOR SHARE OF a,b,ag,pg`, id, actor.AccountID, actor.ProfileID).Scan(&source, &snapshot.Provider, &snapshot.ProviderId, &snapshot.SourceSha256, &snapshot.ObjectRevision, &state.BlobState, &state.BlobDeleting, &protocol, &head, &revision)
+AND ag.generation=a.account_generation AND pg.generation=a.profile_generation`+lockClause, id, actor.AccountID, actor.ProfileID).Scan(&source, &snapshot.Provider, &snapshot.ProviderId, &snapshot.SourceSha256, &snapshot.ObjectRevision, &state.BlobState, &state.BlobDeleting, &protocol, &head, &revision)
 	if err != nil {
 		return nil, err
 	}
@@ -83,10 +95,33 @@ FOR SHARE OF a,b,ag,pg`, id, actor.AccountID, actor.ProfileID).Scan(&source, &sn
 	if err = catalogasset.ValidateReady(request, snapshot, state, now); err != nil {
 		return nil, err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return nil, err
-	}
 	return &filev1.LookupCatalogAssetResponse{Classification: &filev1.LookupCatalogAssetResponse_Catalog{Catalog: snapshot}}, nil
+}
+
+// GuardCatalogReferenceTx reuses File's READY/current-source authority inside
+// the durable reference transaction. It grants no user or destination access;
+// Messaging independently authorizes those before calling lifecycle acquisition.
+// Ordinary pre-catalog schemas/files keep their existing lifecycle behavior.
+func GuardCatalogReferenceTx(ctx context.Context, tx pgx.Tx, id uuid.UUID, now time.Time) (bool, error) {
+	var catalog bool
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false) FROM files f WHERE id=$1`, id).Scan(&catalog); err != nil {
+		return false, err
+	}
+	if !catalog {
+		return false, nil
+	}
+	var actor catalogasset.ActorPair
+	if err := tx.QueryRow(ctx, `SELECT actor_account_id,actor_profile_id FROM file_catalog_assets WHERE file_id=$1`, id).Scan(&actor.AccountID, &actor.ProfileID); err != nil {
+		return true, err
+	}
+	out, err := lookupCatalogFileTx(ctx, tx, actor, id, now, true)
+	if err != nil {
+		return true, err
+	}
+	if out.GetCatalog() == nil {
+		return true, catalogasset.ErrAdmission
+	}
+	return true, nil
 }
 
 // ValidateCatalogFile uses the same locked reader as classification and binds
