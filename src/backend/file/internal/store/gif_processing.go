@@ -246,12 +246,20 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var id uuid.UUID
 	var key string
+	ledger, err := trackedWriteLedgerExists(ctx, tx)
+	if err != nil {
+		return false, err
+	}
+	writeGuard := ""
+	if ledger {
+		writeGuard = ` AND NOT EXISTS(SELECT 1 FROM file_catalog_writes w WHERE (w.file_id=f.id OR w.object_key=c.object_key) AND w.state IN ('STARTED','UNSETTLED'))`
+	}
 	err = tx.QueryRow(ctx, `SELECT f.id,c.object_key FROM file_gif_cleanup c JOIN files f ON f.id=c.file_id
  LEFT JOIN file_gif_jobs j ON j.file_id=f.id
  WHERE NOT c.retained AND c.completed_at IS NULL AND c.not_before<=clock_timestamp()
 	AND NOT EXISTS(SELECT 1 FROM files alias WHERE alias.id<>f.id AND alias.r2_key=c.object_key AND alias.status NOT IN ('deleted','expired','failed'))
  AND (c.attempt_token IS NULL OR j.attempt_token IS DISTINCT FROM c.attempt_token OR j.state<>'running' OR j.lease_until<=clock_timestamp())
- ORDER BY c.not_before,c.object_key FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id, &key)
+ `+writeGuard+` ORDER BY c.not_before,c.object_key FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id, &key)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -267,6 +275,12 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	}
 	if shared {
 		return false, nil
+	}
+	// Recheck after the File lock with a fresh snapshot. A Start that won the
+	// lock before this cleanup may have submitted a PUT since candidate selection.
+	collect, err := CanCollectTrackedObjectTx(ctx, tx, id, key)
+	if err != nil || !collect {
+		return false, err
 	}
 	if err = deleter.DeleteObject(ctx, key); err != nil {
 		return false, err
