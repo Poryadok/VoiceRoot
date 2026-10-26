@@ -34,6 +34,37 @@
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
 
+### Matchmaking terminal search release outbox
+
+Matchmaking owns `matchmaking_db.matchmaking_terminal_search_releases` (migration
+`000019`). Final participant leave atomically authorizes cleanup and captures
+only this routing, uniquely keyed by `(search_session_id, generation)`:
+
+| Fields | Purpose and identity classification |
+|---|---|
+| `search_session_id`, `generation` | Exact original session and monotone Redis generation fence; session UUID is identity-linked data. |
+| `profile_id` | Exact profile-lock key input; personal routing, not an anonymized identifier. |
+| nullable `space_id`, `game_id`, `mode`, `region` | Exact scoped FIFO key inputs. UUID-bearing routing keys remain identity-linked data. No full criteria, participant manifest, account ID or message payload is copied. |
+| `created_at` | Pending ordering and age observation; not an erasure deadline or a new retention grant. |
+
+The pending-only consumer locks its effect row without later parent locks,
+projects the original exact owner/generation to Redis, then acknowledges by
+deleting the whole row. Redis or SQL failure leaves it retryable. There are no
+parent foreign keys: old consumers, parent purge and binary rollback cannot
+swallow pending cleanup. Successful ACK retains no applied routing history.
+Old-producer-only completions remain outside the forward producer guarantee.
+
+Pending routing can survive parent purge while Redis is unavailable; that means
+cleanup is incomplete, not that raw identity may be retained indefinitely.
+Canonical account/Space deletion `P30D` erasure or irreversible pseudonymization
+still applies independently of Redis ACK. Required A4 task
+`A4-MM-TERMINAL-RELEASE-ERASURE` (owner Anton-172; linked from `PL-A3-POSTMATCH`)
+must integrate the canonical deletion fence/deadline, redact or erase these
+fields and any ID-bearing keys by that deadline, and prove outage, expiry,
+restore and late-replay behavior while preserving exact-owner cleanup safety.
+That integration remains open; A3 functional/mixed-version proof does not claim
+privacy-purge compliance, a new escrow exception, or A4/final acceptance.
+
 ### Game Integration Service (`game_integration_db`): T05 ownership target
 
 The service owns this database boundary. Internal DEV/STAGE deployment is

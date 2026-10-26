@@ -102,8 +102,9 @@ func waitComposeMatchSquadTeardownComplete(t *testing.T, matchID string) {
 	// cleanup steps. Observe both before exercising the next concurrent searches.
 	query := fmt.Sprintf(`
 		SELECT count(*)::text || ':' || COALESCE(max(state), '') || ':' ||
-		       (SELECT count(*)::text || ':' || (count(*) FILTER (WHERE applied_at IS NULL))::text
-		        FROM matchmaking_match_recovery_effects WHERE match_id='%[1]s' AND action='release')
+		       (SELECT count(*)::text FROM search_sessions WHERE match_id='%[1]s' AND status='matched') || ':' ||
+		       (SELECT count(*)::text FROM matchmaking_terminal_search_releases
+		        WHERE search_session_id IN (SELECT search_session_id FROM match_proposals WHERE match_id='%[1]s'))
 		FROM matchmaking_match_squad_teardowns WHERE match_id='%[1]s'
 	`, id.String())
 	deadline := time.Now().Add(90 * time.Second)

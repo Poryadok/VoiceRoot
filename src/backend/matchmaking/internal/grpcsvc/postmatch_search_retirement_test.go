@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	matchmakingv1 "voice.app/voice/matchmaking/v1"
-	"voice/backend/matchmaking/internal/criteria"
 	"voice/backend/matchmaking/internal/matcher"
 	"voice/backend/matchmaking/internal/queue"
 	"voice/backend/matchmaking/internal/store"
@@ -40,7 +39,7 @@ func completedMatchWithSearchReservations(t *testing.T) (*MatchmakingGRPC, store
 	_, err = srv.CompleteMatch(completeMatchContext(a), completeMatchRequest(matchText))
 	require.NoError(t, err)
 	var earlyReleases int
-	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_recovery_effects WHERE match_id=$1 AND action='release'`, matchID).Scan(&earlyReleases))
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases WHERE search_session_id IN (SELECT search_session_id FROM match_proposals WHERE match_id=$1)`, matchID).Scan(&earlyReleases))
 	require.Zero(t, earlyReleases, "a non-final leave must not retire the still-active match's reservations")
 	final := completeMatchRequest(matchText)
 	completed, err := srv.CompleteMatch(completeMatchContext(b), final)
@@ -88,6 +87,68 @@ func TestCompletedMatchBothProfilesCanSearchAgainWithoutMatchingBannedPeer(t *te
 	}
 }
 
+func TestCompletedMatchTerminalReleaseIsInvisibleToLegacyRecoveryConsumer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	ctx := context.Background()
+	srv, match, _ := completedMatchWithSearchReservations(t)
+	var visible int
+	// This is the unfiltered legacy consumer selection at base 5af3e186,
+	// matches.go:308-314. That consumer acknowledges matched releases as invalid.
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_recovery_effects WHERE match_id=$1 AND applied_at IS NULL`, match.ID).Scan(&visible))
+	require.Zero(t, visible, "legacy consumers must never discover a new terminal-release obligation")
+	require.NoError(t, srv.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(context.Context, store.SearchSession, string) error {
+		t.Fatal("a legacy recovery consumer must not project terminal-release obligations")
+		return nil
+	}))
+	sweeper := &searchtimeout.Sweeper{Sessions: srv.Sessions, Matches: srv.Matches, Queue: srv.Queue}
+	require.NoError(t, sweeper.RunOnce(ctx))
+	for _, profile := range match.ProfileIDs() {
+		restartCompletedProfileSearch(t, srv, match, profile)
+	}
+}
+
+func TestCompletedMatchBinaryRollbackAndReupgradeCannotSwallowPendingReleases(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	ctx := context.Background()
+	srv, match, _ := completedMatchWithSearchReservations(t)
+	// ApplyPendingRecoveryEffects is byte-identical to the base legacy method.
+	// Simulate an old-only interval, followed by mixed old/new recovery workers.
+	legacy := &store.MatchStore{Pool: srv.Matches.Pool}
+	for range 2 {
+		require.NoError(t, legacy.ApplyPendingRecoveryEffects(ctx, 100, func(context.Context, store.SearchSession, string) error {
+			t.Fatal("old worker discovered a terminal obligation during binary rollback")
+			return nil
+		}))
+	}
+	var pending int
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases`).Scan(&pending))
+	require.Equal(t, 2, pending, "binary rollback retains every new-produced obligation")
+	outage := errors.New("Redis unavailable during re-upgrade")
+	require.ErrorIs(t, srv.Matches.ApplyPendingTerminalSearchReleases(ctx, 100, func(context.Context, store.TerminalSearchRelease) error {
+		return outage
+	}), outage)
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases`).Scan(&pending))
+	require.Equal(t, 2, pending, "an unsuccessful re-upgrade projection cannot acknowledge cleanup")
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- legacy.ApplyPendingRecoveryEffects(ctx, 100, func(context.Context, store.SearchSession, string) error {
+			return errors.New("legacy worker discovered terminal routing")
+		})
+	}()
+	resumed := &searchtimeout.Sweeper{Sessions: srv.Sessions, Matches: &store.MatchStore{Pool: srv.Matches.Pool}, Queue: srv.Queue}
+	require.NoError(t, resumed.RunOnce(ctx))
+	require.NoError(t, <-errCh)
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases`).Scan(&pending))
+	require.Zero(t, pending, "successful Redis acknowledgements erase pending routing")
+	for _, profile := range match.ProfileIDs() {
+		restartCompletedProfileSearch(t, srv, match, profile)
+	}
+}
+
 func TestCompletedMatchRetirementRetryPreservesNewSearchOwnerAndGeneration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires PostgreSQL")
@@ -95,23 +156,19 @@ func TestCompletedMatchRetirementRetryPreservesNewSearchOwnerAndGeneration(t *te
 	ctx := context.Background()
 	srv, match, original := completedMatchWithSearchReservations(t)
 	interrupted := errors.New("lost projection acknowledgement after Redis success")
-	var released store.SearchSession
-	err := srv.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
-		require.Equal(t, "release", action)
-		crit, err := criteria.Parse(sess.Criteria)
-		require.NoError(t, err)
+	var released store.TerminalSearchRelease
+	err := srv.Matches.ApplyPendingTerminalSearchReleases(ctx, 100, func(projectionCtx context.Context, sess store.TerminalSearchRelease) error {
 		require.NoError(t, srv.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{
-			SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode, Region: crit.Region,
-			SessionID: sess.ID, ProfileID: sess.ProfileID, Generation: sess.RecoveryGeneration,
+			SpaceID: sess.SpaceID, GameID: sess.GameID, Mode: sess.Mode, Region: sess.Region,
+			SessionID: sess.SessionID, ProfileID: sess.ProfileID, Generation: sess.Generation,
 		}))
 		released = sess
 		return interrupted
 	})
 	require.ErrorIs(t, err, interrupted)
-	var pending, total int
-	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE applied_at IS NULL) FROM matchmaking_match_recovery_effects WHERE match_id=$1 AND action='release'`, match.ID).Scan(&total, &pending))
-	require.Equal(t, 2, total, "completion replay must retain one release effect per original session")
-	require.Equal(t, 2, pending, "an unacknowledged projection stays durably retryable")
+	var pending int
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases`).Scan(&pending))
+	require.Equal(t, 2, pending, "completion replay retains exactly two unacknowledged, durably retryable obligations")
 	fresh := restartCompletedProfileSearch(t, srv, match, released.ProfileID)
 	// A fresh store/worker replays the old release after a new owner has started.
 	resumed := &searchtimeout.Sweeper{
@@ -139,6 +196,6 @@ func TestCompletedMatchRetirementRetryPreservesNewSearchOwnerAndGeneration(t *te
 		require.Equal(t, old.MatchID, retained.MatchID, "history linkage must survive reservation cleanup")
 		require.Equal(t, old.RecoveryGeneration+1, retained.RecoveryGeneration)
 	}
-	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_match_recovery_effects WHERE match_id=$1 AND applied_at IS NULL`, match.ID).Scan(&pending))
+	require.NoError(t, srv.Matches.Pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases`).Scan(&pending))
 	require.Zero(t, pending)
 }

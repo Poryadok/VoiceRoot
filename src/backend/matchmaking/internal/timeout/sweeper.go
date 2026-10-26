@@ -2,6 +2,7 @@ package timeout
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -112,7 +113,7 @@ func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
 	if s.Queue == nil {
 		return nil
 	}
-	return s.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
+	recoveryErr := s.Matches.ApplyPendingRecoveryEffects(ctx, 100, func(projectionCtx context.Context, sess store.SearchSession, action string) error {
 		if action == "enqueue" {
 			crit, err := criteria.Parse(sess.Criteria)
 			if err != nil {
@@ -137,6 +138,14 @@ func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
 		}
 		return nil
 	})
+	// Independent streams both get a bounded attempt even if one projection fails.
+	terminalErr := s.Matches.ApplyPendingTerminalSearchReleases(ctx, 100, func(projectionCtx context.Context, release store.TerminalSearchRelease) error {
+		return s.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{
+			SpaceID: release.SpaceID, GameID: release.GameID, Mode: release.Mode, Region: release.Region,
+			SessionID: release.SessionID, ProfileID: release.ProfileID, Generation: release.Generation,
+		})
+	})
+	return errors.Join(recoveryErr, terminalErr)
 }
 
 func (s *Sweeper) cleanupQueue(ctx context.Context, sess store.SearchSession) error {

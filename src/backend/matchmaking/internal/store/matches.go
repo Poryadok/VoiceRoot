@@ -340,8 +340,7 @@ func (s *MatchStore) ApplyPendingRecoveryEffects(ctx context.Context, limit int,
 			return err
 		}
 		var lockedMatch uuid.UUID
-		var matchStatus string
-		if err := tx.QueryRow(ctx, `SELECT id, status FROM matches WHERE id = $1 FOR UPDATE`, item.matchID).Scan(&lockedMatch, &matchStatus); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT id FROM matches WHERE id = $1 FOR UPDATE`, item.matchID).Scan(&lockedMatch); err != nil {
 			_ = tx.Rollback(ctx)
 			return err
 		}
@@ -366,11 +365,8 @@ func (s *MatchStore) ApplyPendingRecoveryEffects(ctx context.Context, limit int,
 			_ = tx.Rollback(ctx)
 			return err
 		}
-		completedSession := matchStatus == MatchStatusCompleted && sess.Status == SessionStatusMatched &&
-			sess.MatchID != nil && *sess.MatchID == item.matchID
 		valid := sess.RecoveryGeneration == item.generation &&
-			((action == "enqueue" && sess.Status == SessionStatusSearching) ||
-				(action == "release" && (sess.Status == SessionStatusCancelled || completedSession)))
+			((action == "enqueue" && sess.Status == SessionStatusSearching) || (action == "release" && sess.Status == SessionStatusCancelled))
 		if valid {
 			projectionCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 			if err := apply(projectionCtx, sess, action); err != nil {
@@ -1243,7 +1239,7 @@ func (s *MatchStore) CompleteMatchLeaveWithOperation(ctx context.Context, matchI
 }
 
 // Completion retains matched rows for history while atomically retiring their
-// queue reservations. The existing recovery worker retries these exact session
+// queue reservations. The terminal outbox worker retries these exact session
 // generations; Redis releases only a lock still owned by that original session.
 func persistCompletedMatchSearchReleasesTx(ctx context.Context, tx pgx.Tx, match Match) error {
 	sessions, err := loadMatchSessionsForUpdate(ctx, tx, match.ID)
@@ -1263,7 +1259,7 @@ func persistCompletedMatchSearchReleasesTx(ctx context.Context, tx pgx.Tx, match
 		if err != nil {
 			return err
 		}
-		if err := insertRecoveryEffect(ctx, tx, match.ID, updated, "release"); err != nil {
+		if err := insertTerminalSearchRelease(ctx, tx, updated); err != nil {
 			return err
 		}
 	}

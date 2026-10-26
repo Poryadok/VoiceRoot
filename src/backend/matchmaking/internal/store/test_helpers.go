@@ -47,6 +47,7 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 		"000016_match_deadline_squad_recovery.up.sql",
 		"000017_match_squad_lifecycle.up.sql",
 		"000018_match_squad_durable_recovery.up.sql",
+		"000019_terminal_search_releases.up.sql",
 	} {
 		migrationPath := filepath.Join(root, "src", "backend", "migrations", "matchmaking_db", name)
 		sqlBytes, err := os.ReadFile(migrationPath)
@@ -62,7 +63,7 @@ func applyMatchmakingMigrationsUpTo(t *testing.T, ctx context.Context, pool *pgx
 
 func ApplyMatchmakingMigrationsForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 	t.Helper()
-	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000018_match_squad_durable_recovery.up.sql")
+	applyMatchmakingMigrationsUpTo(t, ctx, pool, "000019_terminal_search_releases.up.sql")
 }
 
 func ApplyMatchmakingMigrationsThrough005ForStoreTest(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

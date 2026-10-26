@@ -36,6 +36,14 @@ func TestSpaceLifecycleFenceReceiptsRestoreAndPurgeSurviveExactReplay(t *testing
 	})
 	require.NoError(t, err)
 
+	// A captured terminal cleanup obligation is independent of the parent row's
+	// later lifecycle. The completion producer authorization is covered by gRPC
+	// regressions; this fixture exercises the unchanged old Space purge consumer.
+	_, err = pool.Exec(ctx, `INSERT INTO matchmaking_terminal_search_releases
+	(search_session_id,generation,profile_id,space_id,game_id,mode,region)
+	VALUES($1,1,$2,$3,$4,$5,'eu')`, session.ID, session.ProfileID, spaceID, session.GameID, session.Mode)
+	require.NoError(t, err)
+
 	participant := New(pool)
 	manifest := &commonv1.ManifestBinding{ManifestId: uuid.NewString(), ManifestSha256: make([]byte, 32), ItemCount: 0}
 	operationID := uuid.NewString()
@@ -98,6 +106,24 @@ func TestSpaceLifecycleFenceReceiptsRestoreAndPurgeSurviveExactReplay(t *testing
 	var sessions int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM search_sessions WHERE space_id=$1`, spaceID).Scan(&sessions))
 	require.Zero(t, sessions)
+	var pending int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases WHERE search_session_id=$1`, session.ID).Scan(&pending))
+	require.Equal(t, 1, pending, "old parent purge must not cascade or acknowledge pending routing")
+	projected := 0
+	require.NoError(t, (&store.MatchStore{Pool: pool}).ApplyPendingTerminalSearchReleases(ctx, 100, func(_ context.Context, release store.TerminalSearchRelease) error {
+		projected++
+		require.Equal(t, session.ID, release.SessionID)
+		require.Equal(t, session.ProfileID, release.ProfileID)
+		require.Equal(t, &spaceID, release.SpaceID)
+		require.Equal(t, session.GameID, release.GameID)
+		require.Equal(t, session.Mode, release.Mode)
+		require.Equal(t, "eu", release.Region)
+		require.EqualValues(t, 1, release.Generation)
+		return nil
+	}))
+	require.Equal(t, 1, projected, "an absent parent cannot silently discard required cleanup")
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases WHERE search_session_id=$1`, session.ID).Scan(&pending))
+	require.Zero(t, pending, "successful projection erases all captured personal routing")
 	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM matchmaking_space_lifecycle_fence_heads WHERE space_id=$1`, spaceID).Scan(&state))
 	require.Equal(t, "PURGED", state)
 }

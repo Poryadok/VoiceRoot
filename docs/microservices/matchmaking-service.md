@@ -259,13 +259,28 @@ external Chat or Voice cleanup has completed.
 The final participant leave also advances each original matched search session's
 recovery generation and commits an exact-session queue-release obligation in the
 same transaction. Matched session rows and their history links remain intact;
-they are not cancelled through `CancelSearch`. The existing recovery worker
-retries these obligations until Redis has retired the original FIFO member and
+they are not cancelled through `CancelSearch`. A separate pending-only terminal
+outbox, invisible to legacy recovery consumers, captures the immutable routing.
+Its worker locks only the outbox row and retries until Redis retires the FIFO and
 only the profile lock still owned by that session. A delayed release cannot
 delete a newer search reservation, and an older enqueue generation cannot
-resurrect the retired search. Queue convergence and provider teardown are
+resurrect the retired search. Successful Redis acknowledgement deletes the entire
+outbox row, including its personal routing. Parent purge or binary rollback must
+not cascade or acknowledge pending obligations; an absent parent does not prevent
+their exact-owner projection. Migration 000019 is additive, precedes the new
+writer, and refuses DOWN while pending rows or concurrent writers exist. Binary
+rollback keeps the schema and pending rows for re-upgrade. Completions performed
+entirely by an old producer do not create new terminal intents; this forward
+producer does not backfill them. Queue convergence and provider teardown are
 independent cleanup steps; after they complete, both profiles may search again
 and their persisted peer bans still apply.
+
+Pending means cleanup is incomplete, including during Redis outage after parent
+purge. It is not a personal-data retention exception. Canonical `P30D` erasure or
+irreversible pseudonymization remains required independently of Redis ACK.
+The exact field inventory and required owned A4 deletion-integration gap are
+recorded in [DATA_STORES.md](../DATA_STORES.md#matchmaking-terminal-search-release-outbox).
+This A3 slice does not establish A4/privacy or final acceptance.
 
 The recovery worker claims each incomplete provider operation independently and
 replays only its persisted request. Every RPC has a fresh 10-second deadline;

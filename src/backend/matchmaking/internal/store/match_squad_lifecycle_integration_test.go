@@ -356,6 +356,7 @@ func TestMatchSquadRecoveryDownRunnerPreservesCompensationAndDirtyMarker(t *test
 	`, aggregateID, matchID, uuid.New(), hash, []byte("chat teardown"))
 	require.NoError(t, err)
 
+	fixture.Run(true, "down", "1") // Remove the empty terminal-search outbox.
 	fixture.Run(false, "down", "1")
 	var version int64
 	var dirty bool
@@ -429,6 +430,7 @@ func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing
 
 	// Exercise the real pinned migration runner and let its normal failed-Down
 	// path record the dirty version. Do not force or clear the marker.
+	fixture.Run(true, "down", "1")  // Remove the empty terminal-search outbox.
 	fixture.Run(true, "down", "1")  // Remove the empty 000017 recovery extension.
 	fixture.Run(false, "down", "1") // 000016 then refuses the live provisioning evidence.
 	var version int64
