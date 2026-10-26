@@ -32,7 +32,10 @@ type Binding struct {
 	Actor
 	ActorCapture
 	Selection
-	SourceID, FileID uuid.UUID
+	SourceID, FileID  uuid.UUID
+	SelectorSlotID    uuid.UUID
+	SelectionRevision uint64
+	Legacy            bool
 }
 type ImportRequest struct {
 	Actor
@@ -49,7 +52,8 @@ type FileState struct {
 	SourceID, FileID uuid.UUID
 	Status           string
 	// Only an exact File asset-selector proof can retire a compacted binding.
-	TerminalFenceID uuid.UUID
+	TerminalFenceID                             uuid.UUID
+	SelectionRevision, CurrentSelectionRevision uint64
 }
 type OperationSelector struct {
 	Actor

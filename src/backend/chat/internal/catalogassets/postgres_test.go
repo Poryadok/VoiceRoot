@@ -3,13 +3,16 @@ package catalogassets
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 	"voice/backend/pkg/integrationtest"
 )
@@ -87,24 +90,76 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	require.Equal(t, binding, got)
 
 	const contenders = 8
+	monitorCtx, stopMonitor := context.WithCancel(ctx)
+	monitorDone := make(chan struct{})
+	go func() {
+		defer close(monitorDone)
+		select {
+		case <-monitorCtx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+		call, cancel := context.WithTimeout(monitorCtx, 2*time.Second)
+		defer cancel()
+		conn, err := pgx.Connect(call, pool.Config().ConnConfig.ConnString())
+		if err != nil {
+			t.Logf("catalog wait diagnostic connect: %v", err)
+			return
+		}
+		defer func() { _ = conn.Close(context.Background()) }()
+		rows, err := conn.Query(call, `SELECT pid,state,COALESCE(wait_event_type,''),COALESCE(wait_event,''),array_to_string(pg_blocking_pids(pid),','),left(query,180) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()`)
+		if err != nil {
+			t.Logf("catalog wait diagnostic query: %v", err)
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var pid int32
+			var state, kind, event, blocking, query string
+			if err := rows.Scan(&pid, &state, &kind, &event, &blocking, &query); err != nil {
+				t.Logf("catalog wait diagnostic scan: %v", err)
+				return
+			}
+			t.Logf("catalog PG pid=%d state=%s wait=%s/%s blocked_by=%s query=%s", pid, state, kind, event, blocking, query)
+		}
+	}()
 	start := make(chan struct{})
 	errors := make(chan error, contenders)
 	captures := make(chan ActorCapture, contenders)
-	for range contenders {
-		go func() {
+	for contender := range contenders {
+		go func(index int) {
 			<-start
+			began := time.Now()
 			c, err := repo.CaptureActor(ctx, actor, true)
+			captureElapsed := time.Since(began)
+			phase := "capture"
 			if err == nil {
+				phase = "save"
 				err = repo.SaveBinding(ctx, binding, c)
+			}
+			if err != nil {
+				err = fmt.Errorf("contender %d phase=%s elapsed=%s capture_elapsed=%s: %w", index, phase, time.Since(began), captureElapsed, err)
 			}
 			captures <- c
 			errors <- err
-		}()
+		}(contender)
 	}
 	close(start)
+	failed := false
 	for range contenders {
-		require.NoError(t, <-errors)
-		require.Equal(t, capture, <-captures)
+		if err := <-errors; err != nil {
+			t.Error(err)
+			failed = true
+		}
+		if got := <-captures; got != capture {
+			t.Errorf("captured generation changed: want=%v got=%v", capture, got)
+			failed = true
+		}
+	}
+	stopMonitor()
+	<-monitorDone
+	if failed {
+		t.FailNow()
 	}
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM catalog_asset_bindings`).Scan(&count))
