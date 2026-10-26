@@ -8,6 +8,7 @@ import (
 )
 
 type ReconcileStore interface {
+	EvictEmptySelections(context.Context, int) error
 	ScanBindings(context.Context, uuid.UUID, int) ([]Binding, error)
 	RetireExactBinding(context.Context, Binding) error
 	PurgeCapturedProfile(context.Context, Binding) error
@@ -27,6 +28,9 @@ type Reconciler struct {
 func (r *Reconciler) Step(ctx context.Context, after uuid.UUID, limit int) (uuid.UUID, error) {
 	if r == nil || r.Store == nil || r.Profiles == nil || r.Files == nil || limit < 1 || limit > 100 {
 		return after, ErrActorUnknown
+	}
+	if err := r.Store.EvictEmptySelections(ctx, limit); err != nil {
+		return after, err
 	}
 	bindings, err := r.Store.ScanBindings(ctx, after, limit)
 	if err != nil {
@@ -77,7 +81,16 @@ func (r *Reconciler) Step(ctx context.Context, after uuid.UUID, limit int) (uuid
 				failures = append(failures, ErrBindingConflict)
 				continue
 			}
-			qualifiedFence := state.TerminalFenceID != uuid.Nil && terminalState(state.Status)
+			qualifiedFence := state.TerminalFenceID != uuid.Nil && terminalState(state.Status) && state.ActorCapture == (ActorCapture{}) && state.SelectionRevision == 0 && state.CurrentSelectionRevision == 0
+			legacyCleanup := qualifiedFence
+			if b.Legacy && !legacyCleanup {
+				failures = append(failures, ErrActorUnknown)
+				continue
+			}
+			if !b.Legacy && (!validOrderedState(state) || state.SelectionRevision != b.SelectionRevision) && !legacyCleanup {
+				failures = append(failures, ErrBindingConflict)
+				continue
+			}
 			if state.ActorCapture != b.ActorCapture && (!qualifiedFence || state.ActorCapture != (ActorCapture{})) {
 				failures = append(failures, ErrActorRetired)
 				continue
@@ -86,7 +99,7 @@ func (r *Reconciler) Step(ctx context.Context, after uuid.UUID, limit int) (uuid
 				failures = append(failures, ErrBindingConflict)
 				continue
 			}
-			if terminalState(state.Status) {
+			if terminalState(state.Status) || state.CurrentSelectionRevision > state.SelectionRevision {
 				if err := r.Store.RetireExactBinding(ctx, b); err != nil {
 					failures = append(failures, err)
 				}

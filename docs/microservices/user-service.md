@@ -125,6 +125,33 @@ service UserService {
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
 
+### Owner-only verification challenge readback
+
+`GetVerificationStatusResponse` preserves effective `verification_status` at
+field 1 and adds optional `pending_organization_challenge` at field 2:
+`domain`, exact `txt_record` (`voice-verify=` plus the persisted token), and
+`expires_at` (`google.protobuf.Timestamp`, PostgreSQL `created_at + 24 hours`).
+The caller must own the requested nondeleted profile. Missing credentials,
+invalid profile ID, and foreign/unknown/deleted profiles retain the existing
+Unauthenticated, InvalidArgument, and NotFound errors respectively. No current
+unexpired pending request means successful absence of the optional message;
+storage errors remain errors. Public Profile and VerificationStatus do not
+expose challenge data.
+
+The read checks ownership and pending token in one PostgreSQL statement snapshot
+and uses the existing strict 24-hour lifetime predicate. It does not generate,
+supersede, expire, consume, or verify requests, query DNS, or change badges,
+sources, revisions, or events. Navigation/reload uses this GET, never Start.
+This is an observation: concurrent Start or expiry can invalidate it before
+Check, whose exact-token completion rules remain authoritative. Clients must
+discard delayed responses after account/session/profile changes. After Start,
+clients can reread GET for the current canonical challenge and expiry.
+
+Organization account kind and its authoritative enforcement remain unresolved:
+the feature requires an Organization account, while Auth currently models
+`regular|guest`. This readback does not define that kind, infer eligibility from
+badges/domain, or enable organization verification controls.
+
 ### Переключение профиля и сессия Auth
 
 Несмотря на историческое имя, `UserService.SwitchProfile` проверяет целевой
@@ -488,6 +515,27 @@ subscribe/consumer access; the staging and production User migration job has
 applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
 enabling the consumer. No Compose manifest enables this consumer in PR A.
 
+### Messaging profile deletion-state authority (BE-076)
+
+GetProfileDeletionStates is a read-only Messaging-only method on the existing
+USER_MESSAGING_PRINCIPAL_ mTLS listener (:9096). It requires the exact
+request-bound service:messaging principal (iss=messaging, aud=user, exact
+RPC/hash/request ID), shared Redis replay admission and the existing trusted
+client certificate/JWKS identity configuration. Ordinary User, Social, Auth,
+Notification and Gateway do not expose this authority.
+
+A request contains 1..500 distinct canonical lowercase nonnil profile UUIDs.
+An empty, oversized, duplicate or malformed batch returns INVALID_ARGUMENT
+before store access. The response contains exactly one states entry per
+requested ID in request order. PROFILE_DELETION_STATE_NOT_DELETED means the
+User-owned row exists with deleted_at IS NULL; SOFT_DELETED means its
+deleted_at IS NOT NULL; an absent row is explicitly UNKNOWN. Unspecified
+is never emitted. Privacy, presence, frozen profiles and Auth account eligibility
+(including ACCOUNT_INACTIVE) are not deletion facts. A storage failure returns
+UNAVAILABLE, never a fabricated unknown/deleted result. Messaging compaction
+removes views only for explicit SOFT_DELETED; unknown profiles retain views.
+No cross-service SQL, public route, raw caller marker or fallback lookup exists.
+
 ### Catalog actor ownership/deletion snapshot
 
 Chat and File use the separate internal `voice.catalogactor.v1.CatalogActorAuthorityService/GetCatalogActorStates`
@@ -523,24 +571,3 @@ snapshot, not an atomic permit, Auth account-eligibility proof, generation lease
 zero-lag cross-service deletion barrier. Consumers must combine fresh authority with
 their own durable generation gates. UNKNOWN denies admission and never authorizes
 permanent purge or restore. No profile-deleted event is introduced.
-
-### Messaging profile deletion-state authority (BE-076)
-
-GetProfileDeletionStates is a read-only Messaging-only method on the existing
-USER_MESSAGING_PRINCIPAL_ mTLS listener (:9096). It requires the exact
-request-bound service:messaging principal (iss=messaging, aud=user, exact
-RPC/hash/request ID), shared Redis replay admission and the existing trusted
-client certificate/JWKS identity configuration. Ordinary User, Social, Auth,
-Notification and Gateway do not expose this authority.
-
-A request contains 1..500 distinct canonical lowercase nonnil profile UUIDs.
-An empty, oversized, duplicate or malformed batch returns INVALID_ARGUMENT
-before store access. The response contains exactly one states entry per
-requested ID in request order. PROFILE_DELETION_STATE_NOT_DELETED means the
-User-owned row exists with deleted_at IS NULL; SOFT_DELETED means its
-deleted_at IS NOT NULL; an absent row is explicitly UNKNOWN. Unspecified
-is never emitted. Privacy, presence, frozen profiles and Auth account eligibility
-(including ACCOUNT_INACTIVE) are not deletion facts. A storage failure returns
-UNAVAILABLE, never a fabricated unknown/deleted result. Messaging compaction
-removes views only for explicit SOFT_DELETED; unknown profiles retain views.
-No cross-service SQL, public route, raw caller marker or fallback lookup exists.

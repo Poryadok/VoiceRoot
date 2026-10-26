@@ -15,6 +15,8 @@ type reconcileStoreFixture struct {
 	retired, purged []Binding
 }
 
+func (f *reconcileStoreFixture) EvictEmptySelections(context.Context, int) error { return nil }
+
 func (f *reconcileStoreFixture) ScanBindings(context.Context, uuid.UUID, int) ([]Binding, error) {
 	return f.rows, nil
 }
@@ -46,7 +48,7 @@ func (f *reconcileFilesFixture) Status(context.Context, Binding) (FileState, err
 }
 
 func TestCatalogReconciliationRequiresExactLifecycleEvidence(t *testing.T) {
-	b := Binding{Actor: Actor{AccountID: uuid.New(), ProfileID: uuid.New()}, ActorCapture: ActorCapture{AccountGeneration: uuid.New(), ProfileGeneration: uuid.New()}, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New()}
+	b := Binding{Actor: Actor{AccountID: uuid.New(), ProfileID: uuid.New()}, ActorCapture: ActorCapture{AccountGeneration: uuid.New(), ProfileGeneration: uuid.New()}, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New(), SelectorSlotID: uuid.New(), SelectionRevision: 1}
 	for _, tc := range []struct {
 		name            string
 		profile         ProfileState
@@ -67,9 +69,11 @@ func TestCatalogReconciliationRequiresExactLifecycleEvidence(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store := &reconcileStoreFixture{rows: []Binding{b}}
-			files := &reconcileFilesFixture{state: FileState{Actor: b.Actor, ActorCapture: b.ActorCapture, Selection: b.Selection, SourceID: b.SourceID, FileID: b.FileID, Status: tc.fileStatus}, err: tc.err}
+			files := &reconcileFilesFixture{state: FileState{Actor: b.Actor, ActorCapture: b.ActorCapture, Selection: b.Selection, SourceID: b.SourceID, FileID: b.FileID, Status: tc.fileStatus, SelectionRevision: 1, CurrentSelectionRevision: 1}, err: tc.err}
 			if tc.fence {
 				files.state.ActorCapture = ActorCapture{}
+				files.state.SelectionRevision = 0
+				files.state.CurrentSelectionRevision = 0
 				files.state.TerminalFenceID = uuid.New()
 			}
 			if tc.forged {

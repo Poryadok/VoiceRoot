@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -296,6 +297,34 @@ func (s *ProfileStore) StartOrgVerification(ctx context.Context, profileID uuid.
 		return "", err
 	}
 	return txt, nil
+}
+
+// PendingOrgChallenge is an owner-only point-in-time observation, not a reservation.
+type PendingOrgChallenge struct {
+	Domain    string
+	TXTRecord string
+	ExpiresAt time.Time
+}
+
+// GetOwnedPendingOrgChallenge reads the current unexpired request without cleanup,
+// DNS, or any mutation. Ownership is checked in the same snapshot as the token.
+func (s *ProfileStore) GetOwnedPendingOrgChallenge(ctx context.Context, accountID, profileID uuid.UUID) (*PendingOrgChallenge, error) {
+	var pending PendingOrgChallenge
+	err := s.pool.QueryRow(ctx, `
+		SELECT r.domain, 'voice-verify=' || r.txt_token, r.created_at + interval '24 hours'
+		FROM organization_verification_requests r
+		JOIN profiles p ON p.id = r.profile_id
+		WHERE p.id = $1 AND p.account_id = $2 AND p.deleted_at IS NULL
+		  AND r.status = 'pending'
+		  AND r.created_at > statement_timestamp() - interval '24 hours'
+		ORDER BY r.created_at DESC LIMIT 1`, profileID, accountID).Scan(&pending.Domain, &pending.TXTRecord, &pending.ExpiresAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &pending, nil
 }
 
 // LatestOrgVerification returns domain and txt token for pending org verification.

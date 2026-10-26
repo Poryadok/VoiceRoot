@@ -1703,15 +1703,48 @@ const GetVerificationStatusResponse$json = {
       '6': '.voice.user.v1.VerificationStatus',
       '10': 'verificationStatus'
     },
+    {
+      '1': 'pending_organization_challenge',
+      '3': 2,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.user.v1.PendingOrganizationChallenge',
+      '10': 'pendingOrganizationChallenge'
+    },
   ],
 };
 
 /// Descriptor for `GetVerificationStatusResponse`. Decode as a `google.protobuf.DescriptorProto`.
-final $typed_data.Uint8List getVerificationStatusResponseDescriptor =
+final $typed_data.Uint8List getVerificationStatusResponseDescriptor = $convert.base64Decode(
+    'Ch1HZXRWZXJpZmljYXRpb25TdGF0dXNSZXNwb25zZRJSChN2ZXJpZmljYXRpb25fc3RhdHVzGA'
+    'EgASgLMiEudm9pY2UudXNlci52MS5WZXJpZmljYXRpb25TdGF0dXNSEnZlcmlmaWNhdGlvblN0'
+    'YXR1cxJxCh5wZW5kaW5nX29yZ2FuaXphdGlvbl9jaGFsbGVuZ2UYAiABKAsyKy52b2ljZS51c2'
+    'VyLnYxLlBlbmRpbmdPcmdhbml6YXRpb25DaGFsbGVuZ2VSHHBlbmRpbmdPcmdhbml6YXRpb25D'
+    'aGFsbGVuZ2U=');
+
+@$core.Deprecated('Use pendingOrganizationChallengeDescriptor instead')
+const PendingOrganizationChallenge$json = {
+  '1': 'PendingOrganizationChallenge',
+  '2': [
+    {'1': 'domain', '3': 1, '4': 1, '5': 9, '10': 'domain'},
+    {'1': 'txt_record', '3': 2, '4': 1, '5': 9, '10': 'txtRecord'},
+    {
+      '1': 'expires_at',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.google.protobuf.Timestamp',
+      '10': 'expiresAt'
+    },
+  ],
+};
+
+/// Descriptor for `PendingOrganizationChallenge`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List pendingOrganizationChallengeDescriptor =
     $convert.base64Decode(
-        'Ch1HZXRWZXJpZmljYXRpb25TdGF0dXNSZXNwb25zZRJSChN2ZXJpZmljYXRpb25fc3RhdHVzGA'
-        'EgASgLMiEudm9pY2UudXNlci52MS5WZXJpZmljYXRpb25TdGF0dXNSEnZlcmlmaWNhdGlvblN0'
-        'YXR1cw==');
+        'ChxQZW5kaW5nT3JnYW5pemF0aW9uQ2hhbGxlbmdlEhYKBmRvbWFpbhgBIAEoCVIGZG9tYWluEh'
+        '0KCnR4dF9yZWNvcmQYAiABKAlSCXR4dFJlY29yZBI5CgpleHBpcmVzX2F0GAMgASgLMhouZ29v'
+        'Z2xlLnByb3RvYnVmLlRpbWVzdGFtcFIJZXhwaXJlc0F0');
 
 @$core.Deprecated('Use setVerificationRequestDescriptor instead')
 const SetVerificationRequest$json = {

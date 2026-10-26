@@ -29,7 +29,8 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// Protected non-E2E catalog byte import. Ordinary File APIs retain their ACL.
+// Protected non-E2E catalog authority protocol 2. Ordinary File APIs retain
+// their ACL. Protocol 1 has no ordered-currentness proof and cannot admit sends.
 type CatalogAssetServiceClient interface {
 	// @voice.security=protected;callers=service:chat
 	ImportCatalogAsset(ctx context.Context, in *ImportCatalogAssetRequest, opts ...grpc.CallOption) (*ImportCatalogAssetResponse, error)
@@ -93,7 +94,8 @@ func (c *catalogAssetServiceClient) GetCatalogAssetStatus(ctx context.Context, i
 // All implementations must embed UnimplementedCatalogAssetServiceServer
 // for forward compatibility.
 //
-// Protected non-E2E catalog byte import. Ordinary File APIs retain their ACL.
+// Protected non-E2E catalog authority protocol 2. Ordinary File APIs retain
+// their ACL. Protocol 1 has no ordered-currentness proof and cannot admit sends.
 type CatalogAssetServiceServer interface {
 	// @voice.security=protected;callers=service:chat
 	ImportCatalogAsset(context.Context, *ImportCatalogAssetRequest) (*ImportCatalogAssetResponse, error)

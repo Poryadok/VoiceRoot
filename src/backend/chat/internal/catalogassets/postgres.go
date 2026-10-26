@@ -16,9 +16,10 @@ var ErrActorRetired = errors.New("catalog actor retired")
 var ErrActorUnknown = errors.New("catalog actor authority unavailable")
 
 type PostgresRepository struct {
-	Pool     *pgxpool.Pool
-	Keys     *ActorKeyring
-	Observer ActorObserver
+	Pool             *pgxpool.Pool
+	Keys             *ActorKeyring
+	Observer         ActorObserver
+	MaxSelectorSlots int
 }
 
 type actorGate struct {
@@ -30,7 +31,7 @@ type actorGate struct {
 }
 
 func (s *PostgresRepository) Preflight(ctx context.Context) error {
-	if s == nil || s.Pool == nil || s.Keys == nil || s.Observer == nil {
+	if s == nil || s.Pool == nil || s.Keys == nil || s.Observer == nil || s.MaxSelectorSlots < 0 {
 		return ErrActorUnknown
 	}
 	tx, err := s.Pool.Begin(ctx)
@@ -46,6 +47,9 @@ func (s *PostgresRepository) Preflight(ctx context.Context) error {
 	}
 	if err = s.checkKeys(ctx, tx, true); err != nil {
 		return err
+	}
+	if _, err = tx.Exec(ctx, `SELECT id,account_gate_id,profile_gate_id,account_generation,profile_generation,selection_revision FROM catalog_selector_slots LIMIT 0; SELECT key_id,selector_hmac,slot_id FROM catalog_selector_aliases LIMIT 0; SELECT selector_slot_id,selection_revision FROM catalog_asset_bindings LIMIT 0; SELECT file_id FROM catalog_legacy_asset_bindings LIMIT 0`); err != nil {
+		return errors.Join(ErrActorUnknown, err)
 	}
 	return tx.Commit(ctx)
 }
@@ -268,6 +272,12 @@ func (s *PostgresRepository) CaptureActor(ctx context.Context, actor Actor, init
 		if err = closeGate(ctx, tx, gate); err != nil {
 			return ActorCapture{}, err
 		}
+		if _, err = tx.Exec(ctx, `DELETE FROM catalog_selector_slots WHERE profile_gate_id=$1`, gate.id); err != nil {
+			return ActorCapture{}, err
+		}
+		if _, err = tx.Exec(ctx, `DELETE FROM catalog_legacy_asset_bindings WHERE profile_id=$1`, actor.ProfileID); err != nil {
+			return ActorCapture{}, err
+		}
 		if _, err = tx.Exec(ctx, `DELETE FROM catalog_asset_bindings WHERE profile_id=$1`, actor.ProfileID); err != nil {
 			return ActorCapture{}, err
 		}
@@ -352,97 +362,6 @@ func (s *PostgresRepository) capturedGates(ctx context.Context, tx pgx.Tx, actor
 	return account, profile, nil
 }
 
-func (s *PostgresRepository) SaveBinding(ctx context.Context, binding Binding, capture ActorCapture) error {
-	if !validCapture(capture) || binding.ActorCapture != capture || binding.FileID == uuid.Nil || binding.SourceID == uuid.Nil || !validSelection(binding.Provider, binding.ProviderID) || s == nil || s.Observer == nil {
-		return ErrActorUnknown
-	}
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer rollbackCatalogTx(tx)
-	account, profile, err := s.capturedGates(ctx, tx, binding.Actor, capture)
-	if err != nil {
-		return err
-	}
-	observation, err := s.Observer.Observe(ctx, binding.Actor)
-	if err != nil {
-		return errors.Join(ErrActorUnknown, err)
-	}
-	if observation.SessionEpochFloor <= 0 || observation.SessionEpochFloor < account.epoch || observation.Profile == ProfileUnknown {
-		return ErrActorUnknown
-	}
-	if observation.Profile == ProfileSoftDeleted {
-		if err = closeGate(ctx, tx, profile); err != nil {
-			return err
-		}
-		if _, err = tx.Exec(ctx, `DELETE FROM catalog_asset_bindings WHERE profile_id=$1`, binding.ProfileID); err != nil {
-			return err
-		}
-		if err = tx.Commit(ctx); err != nil {
-			return err
-		}
-		return ErrActorRetired
-	}
-	if observation.Profile != ProfileLive {
-		return ErrActorUnknown
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO catalog_asset_bindings(file_id,source_id,account_id,profile_id,provider,provider_id,account_gate_id,profile_gate_id,account_generation,profile_generation) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING`, binding.FileID, binding.SourceID, binding.AccountID, binding.ProfileID, binding.Provider, binding.ProviderID, account.id, profile.id, capture.AccountGeneration, capture.ProfileGeneration)
-	if err != nil {
-		return err
-	}
-	var matches bool
-	err = tx.QueryRow(ctx, `SELECT source_id=$2 AND account_id=$3 AND profile_id=$4 AND provider=$5 AND provider_id=$6 AND account_gate_id=$7 AND profile_gate_id=$8 AND account_generation=$9 AND profile_generation=$10 FROM catalog_asset_bindings WHERE file_id=$1`, binding.FileID, binding.SourceID, binding.AccountID, binding.ProfileID, binding.Provider, binding.ProviderID, account.id, profile.id, capture.AccountGeneration, capture.ProfileGeneration).Scan(&matches)
-	if err != nil {
-		return err
-	}
-	if !matches {
-		return ErrBindingConflict
-	}
-	return tx.Commit(ctx)
-}
-
-func (s *PostgresRepository) FindBinding(ctx context.Context, actor Actor, selection Selection, file uuid.UUID, capture ActorCapture) (Binding, bool, error) {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return Binding{}, false, err
-	}
-	defer rollbackCatalogTx(tx)
-	account, profile, err := s.capturedGates(ctx, tx, actor, capture)
-	if err != nil {
-		return Binding{}, false, err
-	}
-	binding := Binding{Actor: actor, ActorCapture: capture, Selection: selection, FileID: file}
-	err = tx.QueryRow(ctx, `SELECT source_id FROM catalog_asset_bindings WHERE file_id=$1 AND account_id=$2 AND profile_id=$3 AND provider=$4 AND provider_id=$5 AND account_gate_id=$6 AND profile_gate_id=$7 AND account_generation=$8 AND profile_generation=$9`, file, actor.AccountID, actor.ProfileID, selection.Provider, selection.ProviderID, account.id, profile.id, capture.AccountGeneration, capture.ProfileGeneration).Scan(&binding.SourceID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return Binding{}, false, nil
-	}
-	if err != nil {
-		return Binding{}, false, err
-	}
-	if binding.SourceID == uuid.Nil {
-		return Binding{}, false, ErrActorUnknown
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return Binding{}, false, err
-	}
-	return binding, true, nil
-}
-func (s *PostgresRepository) RetireBinding(ctx context.Context, actor Actor, file uuid.UUID) error {
-	tx, err := s.begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer rollbackCatalogTx(tx)
-	if _, _, err = s.lockActor(ctx, tx, actor); err != nil {
-		return err
-	}
-	if _, err = tx.Exec(ctx, `DELETE FROM catalog_asset_bindings WHERE file_id=$1 AND account_id=$2 AND profile_id=$3`, file, actor.AccountID, actor.ProfileID); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func (s *PostgresRepository) PurgeAccount(ctx context.Context, accountID, eventID uuid.UUID) error {
 	tx, err := s.begin(ctx)
 	if err != nil {
@@ -483,6 +402,12 @@ func (s *PostgresRepository) PurgeAccount(ctx context.Context, accountID, eventI
 	if err = closeGate(ctx, tx, gate); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `DELETE FROM catalog_selector_slots WHERE account_gate_id=$1`, gate.id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM catalog_legacy_asset_bindings WHERE account_id=$1`, accountID); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, `DELETE FROM catalog_asset_bindings WHERE account_id=$1`, accountID); err != nil {
 		return err
 	}
@@ -511,6 +436,12 @@ func (s *PostgresRepository) PurgeProfile(ctx context.Context, actor Actor) erro
 		return err
 	}
 	if err = closeGate(ctx, tx, gate); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM catalog_selector_slots WHERE profile_gate_id=$1`, gate.id); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM catalog_legacy_asset_bindings WHERE profile_id=$1`, actor.ProfileID); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM catalog_asset_bindings WHERE profile_id=$1`, actor.ProfileID); err != nil {

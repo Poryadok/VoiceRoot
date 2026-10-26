@@ -36,7 +36,7 @@ message ResolveGifAssetResponse {
 
 // @voice.unknown_fields=reject
 message ValidateGifAssetRequest {
-  uint32 protocol_version = 1;
+  uint32 protocol_version = 1; // Must be 2; unordered source validation is denied.
   string actor_account_id = 2;
   string actor_profile_id = 3;
   string provider = 4;
@@ -53,6 +53,8 @@ message ValidateGifAssetResponse {
   string provider = 4;
   string provider_id = 5;
   string file_id = 6;
+  uint64 selection_revision = 7;
+  uint64 current_selection_revision = 8;
 }
 
 // Read-only independent destination observation for File's protected importer.
