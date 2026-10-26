@@ -242,7 +242,8 @@ func validGIFRepresentation(r *Representation, key, mime string) bool {
 }
 
 // Terminal deletion and successful/failed processing share this authority. A
-// signed PUT remains replayable even when the normal blob GC is already complete.
+// signed PUT can finish after normal blob GC. recheck_until is a legacy original
+// marker/scheduling hint, never proof that an accepted remote PUT has drained.
 func queueGIFOriginalCleanupTx(ctx context.Context, tx pgx.Tx, row FileRow) error {
 	if row.UploadIntent != "gif" {
 		return nil
@@ -270,6 +271,7 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var id uuid.UUID
 	var key string
+	var publicOriginal bool
 	ledger, err := trackedWriteLedgerExists(ctx, tx)
 	if err != nil {
 		return false, err
@@ -278,12 +280,16 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	if ledger {
 		writeGuard = ` AND NOT EXISTS(SELECT 1 FROM file_catalog_writes w WHERE (w.file_id=f.id OR w.object_key=c.object_key) AND w.state IN ('STARTED','UNSETTLED'))`
 	}
-	err = tx.QueryRow(ctx, `SELECT f.id,c.object_key FROM file_gif_cleanup c JOIN files f ON f.id=c.file_id
+	// Original rows have a trusted store-owned marker distinct from derivative
+	// attempt rows. Recover old clock-completed public originals as well: neither
+	// URL expiration nor a successful DELETE fences a previously accepted PUT.
+	publicOriginalSQL := `(c.attempt_token IS NULL AND c.recheck_until IS NOT NULL AND NOT COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false))`
+	err = tx.QueryRow(ctx, `SELECT f.id,c.object_key,`+publicOriginalSQL+` FROM file_gif_cleanup c JOIN files f ON f.id=c.file_id
  LEFT JOIN file_gif_jobs j ON j.file_id=f.id
- WHERE NOT c.retained AND c.completed_at IS NULL AND c.not_before<=clock_timestamp()
+ WHERE NOT c.retained AND (c.completed_at IS NULL OR `+publicOriginalSQL+`) AND c.not_before<=clock_timestamp()
 	AND NOT EXISTS(SELECT 1 FROM files alias WHERE alias.id<>f.id AND alias.r2_key=c.object_key AND alias.status NOT IN ('deleted','expired','failed'))
  AND (c.attempt_token IS NULL OR j.attempt_token IS DISTINCT FROM c.attempt_token OR j.state<>'running' OR j.lease_until<=clock_timestamp())
- `+writeGuard+` ORDER BY c.not_before,c.object_key FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id, &key)
+ `+writeGuard+` ORDER BY c.not_before,c.object_key FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id, &key, &publicOriginal)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -309,9 +315,11 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	if err = deleter.DeleteObject(ctx, key); err != nil {
 		return false, err
 	}
-	// The upload URL can still recreate the original until its signed PUT TTL.
-	// Keep reconciling that key through the expiry barrier, then confirm deletion.
-	_, err = tx.Exec(ctx, `UPDATE file_gif_cleanup SET completed_at=CASE WHEN recheck_until IS NULL OR recheck_until<=clock_timestamp() THEN clock_timestamp() ELSE NULL END,not_before=clock_timestamp()+interval '1 minute' WHERE object_key=$1`, key)
+	// Public upload clients have no trusted storage completion/fence channel.
+	// Keep their original discoverable after URL expiry and repeat deletion at
+	// the existing cadence; do not claim finite erasure from an age or HEAD check.
+	// Exact catalog/derivative custody still passes the physical guards above.
+	_, err = tx.Exec(ctx, `UPDATE file_gif_cleanup SET completed_at=CASE WHEN $2 THEN NULL ELSE clock_timestamp() END,not_before=clock_timestamp()+interval '1 minute' WHERE object_key=$1`, key, publicOriginal)
 	if err != nil {
 		return false, err
 	}

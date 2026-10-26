@@ -398,3 +398,64 @@ File/raw-uploader retention behind an unknown write pin remains OPEN.
 The final native capture after the retired-write consumer passed race22.744s,
 with exit0 persisted alongside the UTF-8 log. This supersedes the earlier
 console-only wrapper failure; no native test skip or codec stub was used.
+
+## PR945 current-source P2 repair
+
+Reviewer140 reported two P2 findings at exact7333fdff/base19fd (File task c26,
+PR945 comment6418808196). The codec README promises bounded subprocess output,
+but embedding bytes.Buffer promotes ReadFrom and can bypass the capped Write.
+The original signed-PUT cleanup also treats URL age as remote I/O completion.
+No storage-side drain, revocation or accepted-request lifetime proof exists.
+
+Repair scope: gifproc output capture and its real child-process regression;
+original GIF cleanup and its PostgreSQL/delayed HTTP PUT regression; relevant
+README/service contract. Keep the candidate frozen while authoring an isolated
+repair branch. No migration13, source-provider activation, ACL or E2E change.
+
+RED: an actual test helper emits more than16KiB on stdout and stderr; retained
+output must stay capped while the child drains/exits. A real HTTP PUT enters
+before deletion, is held across the database expiry barrier and first DELETE,
+then commits after that DELETE. A fresh cleanup consumer must still discover
+and delete the late object, including a legacy clock-completed cleanup row.
+
+GREEN design: use a named private buffer, exposing only explicitly capped
+writer/read accessors. For public signed originals, retain durable unresolved
+cleanup work and repeat deletion at the existing cadence; URL age and HEAD404
+never authorize final completion. Recover old clock-completed original rows.
+Exact tracked catalog writes retain their existing ACK/unsettled guards; do not
+invent a new TTL, caller-provided fenced flag or remote-quiescence assertion.
+This is safe retained reconciliation, not proof of finite R2 erasure. Existing
+history/identity minimization and production-runtime gaps remain explicit.
+
+Run the discriminating regressions RED then GREEN, relevant codec/cleanup and
+tracked-catalog race tests, affected lint/vet/diff checks. Freeze/push the isolated
+correction and request independent re-review before normal candidate transfer.
+All prior733 hosted green gates become historical after a source update.
+
+Observed RED: the actual child retained65549 stdout bytes instead of16384 and
+the stderr diagnostic reached65652 bytes. The actual HTTP PUT committed after
+the first DELETE; both the normal and legacy-completed rows then became
+undiscoverable to a fresh consumer (race8.455s, exit1). No production edit
+preceded these failures. After correction, capture race2.671s and delayed-PUT
+race9.431s passed. The related GIF cleanup/replay/job-recovery and tracked catalog
+ACK/lost-ACK matrix passed race33.468s. Full File lint reports0issues; affected
+vet and diff checks passed.
+
+Host gifproc race3.731s passed with four explicit missing-codec skips. A freshly
+built Linux test binary then ran the complete gifproc suite with
+GIFPROC_REAL_CODEC=1 in existing immutable image
+sha256:771212dd0203520df0a33fd375e088113f944e43eb536e367b19ba8bfd6e79d9:
+networknone, readonlyroot, UID65534, one CPU,512MiB memory and384MiB noexec tmpfs.
+All cases passed with no skips, including actual ffmpeg/ffprobe and the actual
+child output-cap paths. The first native invocation failed flag parsing before
+tests; its log/exit are preserved separately from the successful quoted-argument
+invocation. This is codec qualification, not full File runtime/R2 acceptance.
+
+The old replay test's final expiry-based completion expectation was deliberately
+corrected to retained reconciliation, following140's finding and the service
+contract correction. Public originals can be recreated between cleanup passes;
+the intent remains discoverable instead of claiming final erasure. Without a
+storage-side fence this work has no proved finite completion; no arbitrary age,
+HEAD404 or public-client acknowledgement clears it. Wider privacy minimization,
+legacy untracked derivative custody and fullsend/runtime qualification are not
+silently closed by this correction.

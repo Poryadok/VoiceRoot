@@ -308,10 +308,16 @@ original cleanup only after the metadata commit; ambiguous storage/commit failur
 leaves durable cleanup evidence. Cleanup retries never delete a committed winner
 or another live alias's original. Normal File reference GC still owns retained
 full/thumb deletion, with existing ACL and retention ownership unchanged.
-Because the signed upload PUT can be replayed until its one-hour expiry, original
-cleanup repeats every minute through `created_at + URL TTL + 1 minute`, then
-confirms its final deletion. Processing/status/download never fall back to that
-original during the reconciliation window.
+An expired signed upload URL does not prove that a previously accepted PUT has
+finished. Public upload clients supply no trusted storage drain/revocation proof.
+Original cleanup therefore remains durable unresolved reconciliation and repeats
+deletion every minute even after URL expiry; old clock-completed original rows
+are rediscovered. The legacy `recheck_until` value is not a completion fence.
+Successful DELETE or HEAD absence cannot authorize final completion while such
+a request may still commit. No finite physical-erasure bound is claimed without
+an actual storage-side write fence. Exact tracked catalog/derivative custody
+retains its separate ACK/unsettled checks. Processing/status/download never fall
+back to the original during reconciliation.
 
 Apply File migration `000009` before the binary. DOWN refuses to discard retained
 GIF jobs, outputs or cleanup evidence. Deploy File/Messaging accepting the shared
