@@ -256,9 +256,8 @@ func (s Store) Dispatch(ctx context.Context, js nats.JetStreamContext, d Deliver
 	}
 	var saved Delivery
 	var revision int64
-	var expired bool
-	err = tx.QueryRow(ctx, `SELECT event_id::text,payload,payload_hash,grace_revision,window_end<=clock_timestamp() FROM subscription_grace_reminders
- WHERE event_id=$1 AND status='PENDING' AND lease_token=$2 AND lease_until>clock_timestamp() FOR UPDATE`, d.EventID, d.LeaseToken).Scan(&saved.EventID, &saved.Payload, &saved.PayloadHash, &revision, &expired)
+	err = tx.QueryRow(ctx, `SELECT event_id::text,payload,payload_hash,grace_revision FROM subscription_grace_reminders
+ WHERE event_id=$1 AND status='PENDING' AND lease_token=$2 AND lease_until>clock_timestamp() FOR UPDATE`, d.EventID, d.LeaseToken).Scan(&saved.EventID, &saved.Payload, &saved.PayloadHash, &revision)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrLeaseLost
 	}
@@ -272,6 +271,18 @@ func (s Store) Dispatch(ctx context.Context, js nats.JetStreamContext, d Deliver
 	if err != nil {
 		return err
 	}
+	// current may wait for an independently locked canonical row. Refresh DB
+	// time after acquiring that authority; the earlier reminder read cannot
+	// authorize a publish after its exclusive window or lease has ended.
+	var expired, leased bool
+	err = tx.QueryRow(ctx, `SELECT window_end<=clock_timestamp(),lease_until>clock_timestamp()
+ FROM subscription_grace_reminders WHERE event_id=$1 AND lease_token=$2 AND status='PENDING'`, d.EventID, d.LeaseToken).Scan(&expired, &leased)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrLeaseLost
+	}
+	if err != nil {
+		return err
+	}
 	if !valid || expired {
 		status := "SUPPRESSED"
 		if valid && expired {
@@ -282,6 +293,9 @@ func (s Store) Dispatch(ctx context.Context, js nats.JetStreamContext, d Deliver
 			return err
 		}
 		return tx.Commit(ctx)
+	}
+	if !leased {
+		return ErrLeaseLost
 	}
 	msg := nats.NewMsg(Subject)
 	msg.Data = saved.Payload

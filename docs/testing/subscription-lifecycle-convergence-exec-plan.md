@@ -532,7 +532,8 @@ and caps remain the provider state machine's responsibility.
 
 Claim skips locked aggregates/rows, validates the current canonical revision,
 and never delivers a closed window. Dispatch repeats that comparison under the
-aggregate lock immediately before publishing the saved bytes with
+aggregate lock, then refreshes DB-time window and lease validity after any
+canonical-row wait immediately before publishing the saved bytes with
 `Nats-Msg-Id=event_id`; only a positive subscription stream PubAck and current
 lease can complete it. Lost PubAck and expired leases resend the same bytes and
 ID. A PubAck records transport acknowledgement, not push or in-app delivery.

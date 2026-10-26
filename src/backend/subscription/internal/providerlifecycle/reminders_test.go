@@ -260,3 +260,74 @@ func TestReminderFailureRollsBackTransitionAndMigrationReapplies(t *testing.T) {
 		require.NoError(t, err)
 	}
 }
+
+// The worker first locks its reminder, then may wait on a canonical aggregate
+// row held by a different database transaction. Real DB time must be checked
+// after that wait, for both the exclusive delivery window and the lease.
+func TestReminderDispatchRechecksWindowAndLeaseAfterAuthorityWait(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	for _, boundary := range []string{"window", "lease"} {
+		t.Run(boundary, func(t *testing.T) {
+			age := time.Hour
+			if boundary == "window" {
+				age = 2*24*time.Hour - 2*time.Second
+			}
+			failure, _ := graceFixture(t, pool, age, "")
+			st := gracereminders.Store{Pool: pool}
+			claimed, err := st.Claim(ctx, 100, time.Minute)
+			require.NoError(t, err)
+			var d gracereminders.Delivery
+			for _, item := range claimed {
+				e := new(eventsv1.SubscriptionStreamEvent)
+				require.NoError(t, proto.Unmarshal(item.Payload, e))
+				if e.AggregateId == failure.AggregateID {
+					d = item
+				}
+			}
+			require.NotEmpty(t, d.EventID)
+			var deadline time.Time
+			if boundary == "lease" {
+				err = pool.QueryRow(ctx, `UPDATE subscription_grace_reminders SET lease_until=clock_timestamp()+interval '2 seconds' WHERE event_id=$1 RETURNING lease_until`, d.EventID).Scan(&deadline)
+			} else {
+				err = pool.QueryRow(ctx, `SELECT window_end FROM subscription_grace_reminders WHERE event_id=$1`, d.EventID).Scan(&deadline)
+			}
+			require.NoError(t, err)
+			holder, err := pool.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = holder.Rollback(ctx) }()
+			var holderPID int
+			require.NoError(t, holder.QueryRow(ctx, `SELECT pg_backend_pid() FROM subscription_entitlement_aggregates WHERE aggregate_kind=2 AND aggregate_id=$1 FOR UPDATE`, failure.AggregateID).Scan(&holderPID))
+			js := reminderJS(t)
+			result := make(chan error, 1)
+			go func() { result <- st.Dispatch(ctx, js, d) }()
+			require.Eventually(t, func() bool {
+				var blocked bool
+				e := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND query LIKE '%SELECT aggregate_revision,payload,payload_hash%')`, holderPID).Scan(&blocked)
+				return e == nil && blocked
+			}, time.Second, 10*time.Millisecond, "Dispatch reached canonical row wait after its initial reminder validity read")
+			require.Eventually(t, func() bool {
+				var crossed bool
+				e := pool.QueryRow(ctx, `SELECT clock_timestamp()>=$1`, deadline).Scan(&crossed)
+				return e == nil && crossed
+			}, 3*time.Second, 10*time.Millisecond, "real PostgreSQL deadline crosses while canonical row is held")
+			require.NoError(t, holder.Commit(ctx))
+			select {
+			case err = <-result:
+			case <-time.After(3 * time.Second):
+				t.Fatal("Dispatch did not settle after releasing authority row")
+			}
+			if boundary == "lease" {
+				require.ErrorIs(t, err, gracereminders.ErrLeaseLost)
+			} else {
+				require.NoError(t, err)
+				var status string
+				require.NoError(t, pool.QueryRow(ctx, `SELECT status FROM subscription_grace_reminders WHERE event_id=$1`, d.EventID).Scan(&status))
+				require.Equal(t, "EXPIRED", status)
+			}
+			info, err := js.StreamInfo("subscription_events")
+			require.NoError(t, err)
+			require.Zero(t, info.State.Msgs, "crossing a window or lease while waiting must not publish")
+		})
+	}
+}
