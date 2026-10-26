@@ -36,6 +36,19 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
+### Space catalog v3 residual
+
+- [ ] **UIV3-SCREEN-SPACE-CATALOG — category/game discovery contract and full acceptance** —
+  `space_catalog_screen.dart` consumes the authenticated Space-owned card projection
+  (DTOv2: six display fields plus `visibility`) for browse, text search, preview,
+  membership-aware Open, public Join and invite-only entry. The category/game
+  controls and game search in [screen-controls.md §19](../design/screen-controls.md#19-space-catalog--discovery-screen--space--catalog)
+  remain open: existing Space metadata/API define neither taxonomy nor game
+  association/filter semantics. Agree the owning producer contract before adding
+  these filters; descriptions and verified badges must not stand in for metadata
+  or admission authority. Complete scoped CI and deployed H/V journey acceptance
+  against the qualified producer version; local widget PNGs are not live proof.
+
 ### AttachMenu rich-action contracts
 
 - [ ] **UIV3-PANEL-CHAT-ATTACHMENU — Location picker/preview contract** —

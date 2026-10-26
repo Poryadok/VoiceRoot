@@ -9,6 +9,7 @@ import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 import 'package:voice_frontend/ui/shell/chat_list_body.dart';
+import 'package:voice_frontend/ui/space/space_catalog_screen.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
@@ -31,7 +32,9 @@ void main() {
             client: MockClient((req) async {
               if (req.url.path == '/api/v1/chats') {
                 return http.Response(
-                  jsonEncode({'chat_list': {'items': []}}),
+                  jsonEncode({
+                    'chat_list': {'items': []},
+                  }),
                   200,
                 );
               }
@@ -68,5 +71,11 @@ void main() {
       tester.element(find.byType(ChatListBody)),
     );
     expect(container.read(selectedSpaceIdProvider), 'space-a');
+    await tester.tap(find.byKey(ChatListBody.spaceCatalogKey));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceCatalogScreen), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceCatalogScreen), findsNothing);
   });
 }
