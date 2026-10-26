@@ -24,6 +24,52 @@ const session = AuthSession(
 
 void main() {
   test(
+    'session change during completion notification cannot reread another actor',
+    () async {
+      final h = Harness();
+      await h.controller.start('twitch');
+      h.controller.addListener(() {
+        if (h.controller.state.outcome == LinkedOAuthOutcome.success) {
+          h.changeSession('logout');
+        }
+      });
+      await h.controller.handleReturn(h.returnUrl);
+      expect(h.events, isNot(contains('reread')));
+    },
+  );
+  test(
+    'duplicate OS return then cancel cannot discard in-flight consume authority',
+    () async {
+      final reply = Completer<http.Response>();
+      final h = Harness(consumeReply: reply.future);
+      await h.controller.start('twitch');
+      final consume = h.controller.handleReturn(h.returnUrl);
+      await Future<void>.delayed(Duration.zero);
+      await h.controller.handleReturn(h.returnUrl);
+      await h.controller.cancel();
+      reply.complete(http.Response('{"outcome":"success"}', 200));
+      await consume;
+      expect(h.events.where((e) => e == 'consume'), hasLength(1));
+      expect(h.controller.state.outcome, LinkedOAuthOutcome.success);
+      expect(h.events.last, 'reread');
+    },
+  );
+  test(
+    'start while consuming cannot discard reconciliation of a committed source',
+    () async {
+      final reply = Completer<http.Response>();
+      final h = Harness(consumeReply: reply.future);
+      await h.controller.start('twitch');
+      final consume = h.controller.handleReturn(h.returnUrl);
+      await Future<void>.delayed(Duration.zero);
+      await h.controller.start('twitch');
+      expect(h.events.where((e) => e == 'start'), hasLength(1));
+      reply.complete(http.Response('{"outcome":"success"}', 200));
+      await consume;
+      expect(h.events.last, 'reread');
+    },
+  );
+  test(
     'commit then dropped consume response rereads without claiming success',
     () async {
       final h = Harness(dropConsumeResponse: true);
@@ -369,6 +415,9 @@ class Harness {
           return consumeReply ?? http.Response('{"outcome":"success"}', 200);
         }),
         config: const GatewayConfig(baseUrl: 'https://gateway.test'),
+        authorizationEndpoints: {
+          'twitch': Uri.parse('https://id.twitch.tv/oauth2/authorize'),
+        },
       ),
       store: store,
       returnUri: Uri.parse('https://voice.test/settings/oauth'),

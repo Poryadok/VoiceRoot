@@ -15,7 +15,8 @@ Uri stripLinkedOAuthReturnSecrets(Uri uri) => Uri.parse(
   uri.toString().split(RegExp(r'[?#]')).first,
 ).replace(fragment: '');
 
-/// Must be tab-scoped (sessionStorage on web), never shared preferences/localStorage.
+/// Web: per-tab sessionStorage. Windows: protected per-user temporary storage.
+/// Never use shared preferences/localStorage. Expired proof must not be restored.
 abstract interface class LinkedOAuthTabStore {
   String? read();
   void write(String value);
@@ -82,6 +83,9 @@ class LinkedOAuthReturnController extends ChangeNotifier {
   AuthSession? _session;
   String? _binding;
   int _generation = 0;
+  int? _consumeGeneration;
+  bool get _hasActiveConsume =>
+      _consumeGeneration != null && _consumeGeneration == _generation;
   bool _bound = false;
   bool _disposed = false;
 
@@ -115,6 +119,7 @@ class LinkedOAuthReturnController extends ChangeNotifier {
   }
 
   Future<void> start(String provider) async {
+    if (_hasActiveConsume) return;
     final session = _session;
     if (session == null || session.accountType != 'regular') {
       _fail('invalid_token');
@@ -182,11 +187,15 @@ class LinkedOAuthReturnController extends ChangeNotifier {
     try {
       scrubLocation(stripLinkedOAuthReturnSecrets(uri));
     } catch (_) {
+      if (_hasActiveConsume) return;
       _generation++;
       _clear();
       _fail('invalid_link_attempt');
       return;
     }
+    // Duplicate platform deliveries must be scrubbed, but cannot invalidate
+    // the request that already owns this one-use result and its reconciliation.
+    if (_hasActiveConsume) return;
     if (uri.fragment.isNotEmpty) {
       _generation++;
       _clear();
@@ -232,36 +241,43 @@ class LinkedOAuthReturnController extends ChangeNotifier {
       _fail('oauth_storage_unavailable');
       return;
     }
+    _consumeGeneration = generation;
     _set(const LinkedOAuthReturnState(LinkedOAuthPhase.consuming));
-    final result = await _client.consume(
-      provider: pending['provider'] as String,
-      authorization: session.authorizationHeader,
-      attemptId: pending['attempt_id'] as String,
-      resultHandle: params['result_handle']!.single,
-      verifier: pending['verifier'] as String,
-    );
-    if (!_current(generation)) return;
-    switch (result) {
-      case GatewayHttpOk(:final data):
-        _set(LinkedOAuthReturnState(LinkedOAuthPhase.complete, outcome: data));
-        if (data == LinkedOAuthOutcome.success) await _reread(generation);
-      case GatewayHttpFailure(:final error):
-        _fail(error.errorCode);
-        if (error.errorCode == 'result_consumed' ||
-            error.errorCode == 'network_error' ||
-            error.errorCode == 'invalid_response' ||
-            error.statusCode >= 500) {
-          // Auth may have committed before its reply was lost. Reconcile reads,
-          // never replay the one-use result or infer a successful source.
-          await _reread(generation);
-        }
+    try {
+      final result = await _client.consume(
+        provider: pending['provider'] as String,
+        authorization: session.authorizationHeader,
+        attemptId: pending['attempt_id'] as String,
+        resultHandle: params['result_handle']!.single,
+        verifier: pending['verifier'] as String,
+      );
+      if (!_current(generation)) return;
+      switch (result) {
+        case GatewayHttpOk(:final data):
+          _set(
+            LinkedOAuthReturnState(LinkedOAuthPhase.complete, outcome: data),
+          );
+          if (data == LinkedOAuthOutcome.success) await _reread(generation);
+        case GatewayHttpFailure(:final error):
+          _fail(error.errorCode);
+          if (error.errorCode == 'result_consumed' ||
+              error.errorCode == 'network_error' ||
+              error.errorCode == 'invalid_response' ||
+              error.statusCode >= 500) {
+            // Auth may have committed before its reply was lost. Reconcile reads,
+            // never replay the one-use result or infer a successful source.
+            await _reread(generation);
+          }
+      }
+    } finally {
+      if (_consumeGeneration == generation) _consumeGeneration = null;
     }
   }
 
   Future<void> cancel() async {
     // Once consume has been sent, keep its authoritative reconciliation alive.
-    // The Settings consumer disables Cancel in this phase.
-    if (_state.phase == LinkedOAuthPhase.consuming) return;
+    // Callers should disable Cancel in this phase.
+    if (_hasActiveConsume) return;
     final pending = _pending();
     final session = _session;
     final generation = ++_generation;
@@ -291,6 +307,7 @@ class LinkedOAuthReturnController extends ChangeNotifier {
   }
 
   Future<void> _reread(int generation) async {
+    if (!_current(generation)) return;
     try {
       await rereadAuthoritativeState();
     } catch (_) {

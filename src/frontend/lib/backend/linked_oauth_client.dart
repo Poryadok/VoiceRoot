@@ -9,9 +9,26 @@ class LinkedOAuthClient {
   LinkedOAuthClient({
     required http.Client httpClient,
     required GatewayConfig config,
-  }) : _gateway = GatewayHttpClient(httpClient: httpClient, config: config);
+    required Map<String, Uri> authorizationEndpoints,
+  }) : _gateway = GatewayHttpClient(httpClient: httpClient, config: config),
+       _authorizationEndpoints = Map.unmodifiable(authorizationEndpoints) {
+    if (authorizationEndpoints.entries.any(
+      (entry) =>
+          !_provider(entry.key) ||
+          entry.value.scheme != 'https' ||
+          entry.value.host.isEmpty ||
+          entry.value.userInfo.isNotEmpty ||
+          entry.value.hasQuery ||
+          entry.value.hasFragment,
+    )) {
+      throw ArgumentError(
+        'Exact configured HTTPS authorization endpoints required',
+      );
+    }
+  }
 
   final GatewayHttpClient _gateway;
+  final Map<String, Uri> _authorizationEndpoints;
 
   Future<GatewayHttpResult<LinkedOAuthAttempt>> start({
     required String provider,
@@ -19,7 +36,10 @@ class LinkedOAuthClient {
     required String surface,
     required String challenge,
   }) async {
-    if (!_provider(provider) || !const ['web', 'windows'].contains(surface)) {
+    final endpoint = _authorizationEndpoints[provider];
+    if (!_provider(provider) ||
+        endpoint == null ||
+        !const ['web', 'windows'].contains(surface)) {
       return _invalid('oauth_unavailable');
     }
     final result = await _gateway.postJson(
@@ -45,6 +65,8 @@ class LinkedOAuthClient {
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         uri.hasFragment ||
+        uri.origin != endpoint.origin ||
+        uri.path != endpoint.path ||
         expiry == null ||
         !expiry.isUtc) {
       return _invalid('invalid_response');

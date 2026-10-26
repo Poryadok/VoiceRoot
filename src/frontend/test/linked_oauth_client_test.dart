@@ -10,11 +10,70 @@ import 'package:voice_frontend/backend/linked_oauth_client.dart';
 // Consumer of immutable fixture addd4b3be9d05e821075de1def75560dec598c78:
 // src/backend/auth/src/test/resources/linked-oauth-transport-v1.json.
 void main() {
+  test(
+    'no configured provider endpoint means unavailable before any request',
+    () async {
+      var requests = 0;
+      final c = LinkedOAuthClient(
+        httpClient: MockClient((r) async {
+          requests++;
+          return http.Response('{}', 200);
+        }),
+        config: const GatewayConfig(baseUrl: 'https://gateway.test'),
+        authorizationEndpoints: {},
+      );
+      expect(
+        await c.start(
+          provider: 'twitch',
+          authorization: 'Bearer original',
+          surface: 'web',
+          challenge: 'c' * 43,
+        ),
+        isA<GatewayHttpFailure>(),
+      );
+      expect(requests, 0);
+    },
+  );
+  for (final url in [
+    'https://attacker.test/oauth2/authorize',
+    'https://id.twitch.tv/wrong-path',
+  ]) {
+    test('rejects unexpected authorization endpoint $url', () async {
+      final c = LinkedOAuthClient(
+        httpClient: MockClient(
+          (r) async => http.Response(
+            jsonEncode({
+              'attempt_id': '11111111-1111-4111-8111-111111111111',
+              'authorization_url': url,
+              'expires_at': '2026-10-26T01:05:00Z',
+            }),
+            200,
+          ),
+        ),
+        config: const GatewayConfig(baseUrl: 'https://gateway.test'),
+        authorizationEndpoints: {
+          'twitch': Uri.parse('https://id.twitch.tv/oauth2/authorize'),
+        },
+      );
+      expect(
+        await c.start(
+          provider: 'twitch',
+          authorization: 'Bearer original',
+          surface: 'web',
+          challenge: 'c' * 43,
+        ),
+        isA<GatewayHttpFailure>(),
+      );
+    });
+  }
   LinkedOAuthClient client(
     Future<http.Response> Function(http.Request) reply,
   ) => LinkedOAuthClient(
     httpClient: MockClient(reply),
     config: const GatewayConfig(baseUrl: 'https://gateway.test'),
+    authorizationEndpoints: {
+      'twitch': Uri.parse('https://id.twitch.tv/oauth2/authorize'),
+    },
   );
 
   for (final status in [400, 401, 409, 410, 503]) {
