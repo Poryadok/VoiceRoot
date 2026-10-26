@@ -1106,6 +1106,36 @@ abstract class AppLocalizations {
   /// **'Schedule message'**
   String get chatScheduleMessage;
 
+  /// No description provided for @composerSendOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Send options'**
+  String get composerSendOptions;
+
+  /// No description provided for @composerSendSilent.
+  ///
+  /// In en, this message translates to:
+  /// **'Send without sound'**
+  String get composerSendSilent;
+
+  /// No description provided for @composerSendSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get composerSendSchedule;
+
+  /// No description provided for @composerSendOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online'**
+  String get composerSendOnline;
+
+  /// No description provided for @composerSendOnlineDmOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online is only available in direct messages'**
+  String get composerSendOnlineDmOnly;
+
   /// No description provided for @chatSendWhenOnline.
   ///
   /// In en, this message translates to:

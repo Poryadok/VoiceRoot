@@ -170,6 +170,7 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   bool isE2e = false,
   DateTime? scheduledAt,
   bool sendWhenOnline = false,
+  bool sendSilent = false,
 }) {
   final request = messaging_pb.SendMessageRequest(
     chat: chatRefToProto(chatId),
@@ -182,6 +183,7 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
             attachments.map((a) => a.toJson()).toList(growable: false),
           ),
     mentionsJson: MessageMention.encodeJson(mentions),
+    sendSilent: sendSilent,
   );
   if (isE2e) {
     request.isE2e = true;

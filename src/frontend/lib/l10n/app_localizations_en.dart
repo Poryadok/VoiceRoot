@@ -604,6 +604,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatScheduleMessage => 'Schedule message';
 
   @override
+  String get composerSendOptions => 'Send options';
+
+  @override
+  String get composerSendSilent => 'Send without sound';
+
+  @override
+  String get composerSendSchedule => 'Schedule message';
+
+  @override
+  String get composerSendOnline => 'Send when online';
+
+  @override
+  String get composerSendOnlineDmOnly =>
+      'Send when online is only available in direct messages';
+
+  @override
   String get chatSendWhenOnline => 'Send when online';
 
   @override

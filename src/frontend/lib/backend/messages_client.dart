@@ -562,6 +562,7 @@ class VoiceMessagesClient {
     String? clientMessageId,
     String? threadParentId,
     bool isE2e = false,
+    bool sendSilent = false,
   }) async {
     final body = sendMessageRequestToProto(
       chatId: chatId,
@@ -571,6 +572,7 @@ class VoiceMessagesClient {
       clientMessageId: clientMessageId,
       threadParentId: threadParentId,
       isE2e: isE2e,
+      sendSilent: sendSilent,
     );
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/messages/send'),
