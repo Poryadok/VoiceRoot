@@ -455,10 +455,10 @@ wait for adapter scheduling/reconciliation; a current snapshot must not grant
 or revoke benefits early. Event `occurred_at` uses that same database time.
 
 This slice remains source-disabled. It does not normalize unverified live
-Paddle/CloudPayments bytes, expose a listener, create scheduled reminder rows,
+Paddle/CloudPayments bytes, expose a listener,
 bootstrap protected snapshots, erase account data, or switch any consumer's
 authority. Missing comparable provider versions and ambiguous transitions need
-reconciliation. Real adapters, atomic reminder scheduling, snapshot/privacy APIs
+reconciliation. Real adapters, snapshot/privacy APIs
 and consumer cutover remain prerequisites for activation. The fixture's version
 is an explicit provider fact, never an arrival timestamp or NATS sequence.
 
@@ -518,6 +518,40 @@ generated contracts remain unchanged during the subsequent master refresh.
   File, Space, Voice, Notification, and Analytics decisions accepted in docs.
 - [ ] Runtime milestones S1–S6 remain open and must not be inferred shipped from
   this decision PR.
+
+### Revision-bound reminder producer slice (BE-027 / BE-117)
+
+`providerlifecycle.Store.Apply` now schedules personal and Space Pro reminders in
+the canonical aggregate transaction through `internal/gracereminders.Sync`.
+Migration `000006_grace_reminder_outbox` stores each unique
+`(aggregate_kind, aggregate_id, grace_revision, day)` with immutable protobuf
+bytes/hash, fixed event ID, DB-time availability/window, fenced lease and
+terminal `DELIVERED`, `SUPPRESSED` or `EXPIRED` outcome. Successor revisions
+suppress pending rows, including leased reminders. Paid entitlement deadlines
+and caps remain the provider state machine's responsibility.
+
+Claim skips locked aggregates/rows, validates the current canonical revision,
+and never delivers a closed window. Dispatch repeats that comparison under the
+aggregate lock immediately before publishing the saved bytes with
+`Nats-Msg-Id=event_id`; only a positive subscription stream PubAck and current
+lease can complete it. Lost PubAck and expired leases resend the same bytes and
+ID. A PubAck records transport acknowledgement, not push or in-app delivery.
+
+The wire draft uses the existing `GraceReminder` arm: envelope protocol version
+1, canonical aggregate key and grace revision; payload payer `account_id`,
+`plan`, `day`, and Space-only `space_id`. For Space the payer is its purchaser,
+not its owner or an arbitrary member. Notification must resolve the payer's
+authoritative primary profile, compare the matching entitlement revision and
+window, and deduplicate logical/channel effects. Producer/consumer agreement is
+recorded in BE-027/BE-118 before this draft becomes an agreed contract.
+
+The isolated PostgreSQL and embedded JetStream tests cover atomic schedule and
+rollback, replay, D1/D3/D7 windows, concurrent claims, multiple Spaces for one
+payer, recovery/expiry suppression, lost PubAck and stale lease fencing, plus
+migration down/up. The producer remains source-disabled. Protected current
+state reconciliation, privacy purge, Notification delivery and complete
+product acceptance remain activation requirements; BE-027 is not closed by
+this producer proof.
 
 ## Risks and follow-ups
 
