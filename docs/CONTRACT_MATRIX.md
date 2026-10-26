@@ -246,3 +246,26 @@ The events stay in `chat.events`; direct participant receipts prove convergence.
 at-least-once with `Nats-Msg-Id=event_id`; consumer inbox and generation state
 provide logical dedup. Unknown payload/protocol and same-generation changed bytes
 are contract mismatch and are not ACKed as success.
+
+## A4 account lifecycle producer semantics (target v1)
+
+`A4-ACCOUNT-LIFECYCLE-PRODUCER-v1` is the
+[Auth/User semantic producer contract](testing/a4-account-lifecycle-producer-contract-exec-plan.md)
+for MM terminal routing. It is not a shipment, a generic reuse of purpose-bound
+identity RPCs, or a new NATS subject/issuer/ACL allocation.
+The [synthetic semantic vector](testing/a4-account-lifecycle-producer-v1.json)
+provides concrete original-time and complete-manifest values, not a transport
+payload or runtime authority.
+
+| Producer / authority | Consumer | Required record or boundary | Runtime status |
+|---|---|---|---|
+| Auth, `BE-019` | User and MM | Opaque fence, never-reused cycle, original immutable schedule/deadline, schedule revision, immutable cycle decision/time/revision and independent current revision/state; transactional outbox and protected request-bound reconciliation | Target only; account-only events are insufficient |
+| User, `BE-020` | MM | Exact Auth tuple plus sealed complete retained-profile manifest, positive coverage revision, hash/count and bounded full set/pages; creation/binding serialize with closure | Target only; selected snapshots and ProfileCreated replay do not prove completeness |
+| Auth/User recovery authorities | Allowlisted recovery/admission owners | Current permanent fences and passed deadlines installed before serving; original-time backfill and compatible rollback floor | Activation prerequisite, not supplied by a historical signed vector or consumer HMAC keys |
+| MM | Its own durable routing store | Original deadline installed while coverage is pending; local `ROUTING_ERASED` differs from Auth `ACCOUNT_PURGED` | Implementation/proof remain with the MM owner; this table changes no MM source |
+
+At the deadline old terminal routing stays erased. A later authenticated restore
+committed before it permits only fresh current-eligible admission, never old
+session/effect resurrection. Post-deadline account restore is forbidden. This
+does not resolve exact restoration of other durable content. Legacy signals
+cannot invent deadlines, assert complete scope or clear versioned fences.

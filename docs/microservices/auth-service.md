@@ -1,5 +1,54 @@
 # Auth Service
 
+## A4 account lifecycle producer contract (target v1)
+
+`BE-019` owns the Auth half of
+[A4-ACCOUNT-LIFECYCLE-PRODUCER-v1](../testing/a4-account-lifecycle-producer-contract-exec-plan.md).
+This is a semantic producer target, not an installed listener, an MM caller grant
+or evidence that existing account-only events implement the contract.
+
+The account-deactivation transaction must commit the opaque stable deletion
+fence, a fresh never-reused cycle, original `scheduled_at`, immutable
+`purge_at = scheduled_at + P30D`, the positive monotonic account lifecycle
+revision and its durable outbox together. Rollback emits no authority. Retries
+preserve the schedule and exact fact; delivery time never becomes a new schedule.
+An existing operation ID may be the cycle only after its never-reused lifetime
+is established, not merely because it is convenient.
+The fence maps to the existing Auth-owned immutable lifetime erasure identity;
+this does not create a second handle lineage or borrow Role-purpose selectors.
+
+The protected current/terminal record distinguishes three revisions:
+
+| Fact | Meaning |
+|---|---|
+| Cycle schedule revision | Immutable account revision that committed this cycle's original schedule; User coverage binds this value |
+| Cycle decision revision/time | Immutable `RESTORED` or `ACCOUNT_PURGED` decision for the queried cycle |
+| Current account revision/state | Latest owning state, possibly a different deletion cycle; an old restore cannot authorize admission over it |
+
+Restore and expiry serialize on the same Auth row with fresh DB time sampled
+after taking its lock, not transaction-start `CURRENT_TIMESTAMP` or caller time.
+Restore commits only strictly before the original deadline; equality loses.
+Terminal cycle decisions cannot change. A later deletion uses a new cycle and
+higher revision. Protected reconciliation returns the queried cycle's decision
+and current account revision with request-bound authenticated evidence; a
+historical signed fact alone is not independent CURRENT authority. Consumers
+neither read `auth_db` nor receive purpose HMAC keys or reverse identity mappings.
+Participant acknowledgements do not gate Auth's local irreversible transition;
+the decision is not a receipt that every other store has completed cleanup.
+
+MM's local `ROUTING_ERASED` is not Auth `ACCOUNT_PURGED`. A restore committed
+before the deadline but learned by MM afterwards may permit fresh admission
+after current Auth/User eligibility checks. It never recreates old sessions,
+queues, effects or final-leave work. Post-deadline account restore is forbidden.
+This does not promise exact restoration of other durable content.
+
+Activation requires the durable producer, protected current/terminal and legacy
+reads, original-time backfill, User joined complete coverage, MM deadline
+enforcement and protected fence-before-serving recovery. Rollback below that
+capability floor is incompatible. Existing Role/User-purpose identity RPCs are
+not implicitly broadened; legacy delete/restore events cannot supply the missing
+cycle, deadline or authority.
+
 When an account-deletion request races scheduled recovery, it observes the same
 durable operation for at most two seconds per pending stage while another worker
 holds its lease. It neither steals that lease nor infers success from a timeout:

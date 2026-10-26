@@ -1,0 +1,184 @@
+{
+  "contract_version": "A4-ACCOUNT-LIFECYCLE-PRODUCER-v1",
+  "fixture_kind": "synthetic_semantic_vector_not_transport_or_runtime_evidence",
+  "manifest_digest": "sha256-framed-user-coverage-v1",
+  "profile_inventory": [
+    {
+      "profile_id": "00000000-0000-7000-8000-000000000001",
+      "fixture_class": "active_at_first_closure"
+    },
+    {
+      "profile_id": "00000000-0000-7000-8000-000000000002",
+      "fixture_class": "retired_with_downstream_reference"
+    },
+    {
+      "profile_id": "00000000-0000-7000-8000-000000000003",
+      "fixture_class": "created_after_first_restore"
+    }
+  ],
+  "auth_schedule": {
+    "deletion_fence_id": "fixture-auth-lifetime-fence-a",
+    "deletion_cycle_id": "fixture-deletion-cycle-a1",
+    "schedule_revision": "41",
+    "scheduled_at": "2026-01-01T00:00:00Z",
+    "purge_at": "2026-01-31T00:00:00Z"
+  },
+  "user_complete_coverage": {
+    "schema_version": 1,
+    "auth_schedule": {
+      "deletion_fence_id": "fixture-auth-lifetime-fence-a",
+      "deletion_cycle_id": "fixture-deletion-cycle-a1",
+      "schedule_revision": "41",
+      "scheduled_at": "2026-01-01T00:00:00Z",
+      "purge_at": "2026-01-31T00:00:00Z"
+    },
+    "coverage_revision": "17",
+    "complete": true,
+    "profile_count": "2",
+    "profile_ids": [
+      "00000000-0000-7000-8000-000000000001",
+      "00000000-0000-7000-8000-000000000002"
+    ],
+    "manifest_sha256": "9df245471267980e6786e5008cd1a8660ca65c800d4a7a9bb5d8a4b70eb7b991"
+  },
+  "manifest_preimage_base64": "dm9pY2UuYWNjb3VudC1saWZlY3ljbGUudXNlci1jb3ZlcmFnZS52MQAAAAABAAAAHWZpeHR1cmUtYXV0aC1saWZldGltZS1mZW5jZS1hAAAAGWZpeHR1cmUtZGVsZXRpb24tY3ljbGUtYTEAAAAAAAAAKQAAAABpVbkAAAAAAAAAAABpfUYAAAAAAAAAAAAAAAARAQAAAAAAAAACAAAAJDAwMDAwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMQAAACQwMDAwMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDI=",
+  "delayed_predeadline_restore": {
+    "auth_cycle_decision": {
+      "deletion_fence_id": "fixture-auth-lifetime-fence-a",
+      "deletion_cycle_id": "fixture-deletion-cycle-a1",
+      "schedule_revision": "41",
+      "decision": "RESTORED",
+      "decision_revision": "42",
+      "decision_at": "2026-01-30T23:59:59Z"
+    },
+    "auth_current": {
+      "lifecycle_revision": "42",
+      "state": "ACTIVE"
+    },
+    "mm_deadline": "2026-01-31T00:00:00Z",
+    "redis_available_at_deadline": false,
+    "restore_reconciled_at": "2026-01-31T01:00:00Z",
+    "fresh_admission": {
+      "user_initiated": true,
+      "profile_id": "00000000-0000-7000-8000-000000000003",
+      "auth_current_revision": "42",
+      "current_account_and_profile_eligible": true
+    },
+    "expected": {
+      "local_routing_state": "ROUTING_ERASED",
+      "infer_auth_account_purged": false,
+      "old_operation_replay_allowed": false,
+      "old_sessions_or_effects_recreated": false,
+      "raw_old_routing_retained": false,
+      "old_roster_payload_digest_retained_as_replay_fence": false,
+      "fresh_admission_may_proceed_after_current_checks": true
+    }
+  },
+  "restore_at_deadline": {
+    "auth_schedule": {
+      "deletion_fence_id": "fixture-auth-lifetime-fence-b",
+      "deletion_cycle_id": "fixture-deletion-cycle-b1",
+      "schedule_revision": "7",
+      "scheduled_at": "2026-01-01T00:00:00Z",
+      "purge_at": "2026-01-31T00:00:00Z"
+    },
+    "restore_attempt_db_time": "2026-01-31T00:00:00Z",
+    "expected_restore_allowed": false,
+    "expected_cycle_decision": "ACCOUNT_PURGED",
+    "expected_decision_revision": "8",
+    "expected_decision_at": "2026-01-31T00:00:00Z"
+  },
+  "newer_delete_not_cancelled_by_old_restore": {
+    "auth_schedule": {
+      "deletion_fence_id": "fixture-auth-lifetime-fence-a",
+      "deletion_cycle_id": "fixture-deletion-cycle-a2",
+      "schedule_revision": "43",
+      "scheduled_at": "2026-02-01T00:00:00Z",
+      "purge_at": "2026-03-03T00:00:00Z"
+    },
+    "auth_current": {
+      "lifecycle_revision": "43",
+      "state": "DELETE_SCHEDULED",
+      "deletion_cycle_id": "fixture-deletion-cycle-a2"
+    },
+    "user_complete_coverage": {
+      "schema_version": 1,
+      "auth_schedule": {
+        "deletion_fence_id": "fixture-auth-lifetime-fence-a",
+        "deletion_cycle_id": "fixture-deletion-cycle-a2",
+        "schedule_revision": "43",
+        "scheduled_at": "2026-02-01T00:00:00Z",
+        "purge_at": "2026-03-03T00:00:00Z"
+      },
+      "coverage_revision": "18",
+      "complete": true,
+      "profile_count": "3",
+      "profile_ids": [
+        "00000000-0000-7000-8000-000000000001",
+        "00000000-0000-7000-8000-000000000002",
+        "00000000-0000-7000-8000-000000000003"
+      ],
+      "manifest_sha256": "f6799f9a2c3e7b0726bff1fc0583c9a4a1cddaefb601134aafbf64d276770c04"
+    },
+    "manifest_preimage_base64": "dm9pY2UuYWNjb3VudC1saWZlY3ljbGUudXNlci1jb3ZlcmFnZS52MQAAAAABAAAAHWZpeHR1cmUtYXV0aC1saWZldGltZS1mZW5jZS1hAAAAGWZpeHR1cmUtZGVsZXRpb24tY3ljbGUtYTIAAAAAAAAAKwAAAABpfpeAAAAAAAAAAABppiSAAAAAAAAAAAAAAAASAQAAAAAAAAADAAAAJDAwMDAwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMQAAACQwMDAwMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIAAAAkMDAwMDAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAz",
+    "late_old_cycle_restore_revision": "42",
+    "expected_current_admission_allowed": false,
+    "expected_new_cycle_purge_cancelled": false,
+    "expected_old_manifest_profile_ids": [
+      "00000000-0000-7000-8000-000000000001",
+      "00000000-0000-7000-8000-000000000002"
+    ]
+  },
+  "incomplete_coverage": {
+    "record": {
+      "schema_version": 1,
+      "auth_schedule": {
+        "deletion_fence_id": "fixture-auth-lifetime-fence-a",
+        "deletion_cycle_id": "fixture-deletion-cycle-a1",
+        "schedule_revision": "41",
+        "scheduled_at": "2026-01-01T00:00:00Z",
+        "purge_at": "2026-01-31T00:00:00Z"
+      },
+      "coverage_revision": "17",
+      "complete": false,
+      "profile_count": "1",
+      "profile_ids": [
+        "00000000-0000-7000-8000-000000000001"
+      ],
+      "manifest_sha256": "1940c48dd34a68b201b4b554f48cb8600d105eed0c96b22335df79452456c66f"
+    },
+    "manifest_preimage_base64": "dm9pY2UuYWNjb3VudC1saWZlY3ljbGUudXNlci1jb3ZlcmFnZS52MQAAAAABAAAAHWZpeHR1cmUtYXV0aC1saWZldGltZS1mZW5jZS1hAAAAGWZpeHR1cmUtZGVsZXRpb24tY3ljbGUtYTEAAAAAAAAAKQAAAABpVbkAAAAAAAAAAABpfUYAAAAAAAAAAAAAAAARAAAAAAAAAAABAAAAJDAwMDAwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMQ==",
+    "expected_complete": false,
+    "expected_affected_admission_allowed": false,
+    "expected_deadline": "2026-01-31T00:00:00Z"
+  },
+  "rejected_mutations_of_complete_coverage": [
+    {
+      "field": "auth_schedule.deletion_cycle_id",
+      "replacement": "foreign-cycle"
+    },
+    {
+      "field": "auth_schedule.schedule_revision",
+      "replacement": "40"
+    },
+    {
+      "field": "auth_schedule.purge_at",
+      "replacement": "2026-02-01T00:00:00Z"
+    },
+    {
+      "field": "profile_count",
+      "replacement": "1"
+    },
+    {
+      "field": "manifest_sha256",
+      "replacement": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "activation_denials": [
+    "legacy_account_event_used_as_deadline_or_complete_coverage",
+    "unbounded_raw_redis_key_can_survive_original_deadline",
+    "restored_backup_served_before_current_permanent_fences",
+    "missing_original_schedule_backfilled_from_arrival_time",
+    "rollback_binary_does_not_enforce_fence_capability_floor"
+  ]
+}

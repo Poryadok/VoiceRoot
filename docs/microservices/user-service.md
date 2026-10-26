@@ -1,5 +1,58 @@
 # User Service
 
+## A4 complete account-profile coverage (target v1)
+
+`BE-020` owns the User half of
+[A4-ACCOUNT-LIFECYCLE-PRODUCER-v1](../testing/a4-account-lifecycle-producer-contract-exec-plan.md).
+Caller-selected snapshots and `ProfileCreated` replay do not prove a complete
+account profile set. Prior read-only inventory/source clearance does not
+establish this transaction or runtime activation.
+
+User obtains authenticated Auth evidence before opening its local transaction.
+Enrollment/preflight also stays outside Auth caller locks, following the existing
+BE010 birth choreography rather than introducing a lock-spanning callback.
+Under one per-account lifecycle/admission row it imports the exact Auth
+fence/cycle/schedule revision/original deadline, closes that cycle's creation and
+binding boundary, enumerates authoritative retained ownership, and commits the
+immutable coverage record plus outbox. Every create/bootstrap/import/binding
+path uses this local serialization point. A birth that won before closure is
+included; one that loses cannot escape the sealed set. No lock or DB transaction
+spans an Auth/User RPC.
+
+Coverage includes retired/deleted profiles with relevant downstream references,
+not only visible profiles. Missing historical ownership is incomplete coverage
+and a backfill/activation blocker, not a reason to trust caller-selected IDs.
+The sealed record binds schema version, exact Auth fence/cycle/schedule revision
+and original `scheduled_at`/`purge_at`, positive User coverage revision, explicit
+completeness, canonical manifest hash/count and full sorted set or sealed bounded
+pages. MM verifies aggregate integrity and exact bindings before treating it as
+complete. Same identity with changed bytes, missing pages or mismatched Auth
+evidence conflicts and fails closed.
+
+User emits the join because User owns enumeration. A delayed old cycle's record
+never applies an older revision as current. An applicable newer Auth restore may
+reopen future creation, but new profiles are not appended to the old manifest; a
+later deletion needs a fresh complete manifest. Current eligibility and historic
+cycle coverage are different observations.
+
+Missing coverage never extends the original deadline. Raw profile-bearing
+manifests, outbox/events and mappings have their applicable retention bound;
+protected terminal/legacy reconciliation retains only permitted opaque replay
+facts, without consumer HMAC keys or reverse mappings. Backup recovery installs
+current fences and passed deadlines before serving. Redis outage, PubAck,
+eventual receipts and unavailable peers are not exceptions.
+The manifest's unkeyed full-roster digest is not a permanent replay fence and
+does not authorize retaining that digest after the corresponding raw payload is
+erased. Retained replay information follows the owning purpose classification.
+
+This does not grant MM existing Role-purpose or Auth-only admission RPCs, install
+a listener, or claim profile/media purge or exact-content restoration complete.
+Those implementation and acceptance obligations remain open.
+In particular, this terminal-routing contract does not replace the earlier
+BE-020 positive-terminal-proof rule for User's recoverable content. The
+[durable-content recovery decision](../todo/backend.md) remains explicit; no
+unconditional exact-content restoration or new retention allowance is selected.
+
 ## Space admission profile eligibility (SPACE-ADMISSION-IDENTITY-v1)
 
 `GetSpaceAdmissionProfileEligibility` is a separate Auth-only current-pair
