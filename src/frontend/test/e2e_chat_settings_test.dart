@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
@@ -21,6 +22,8 @@ import 'support/voice_test_theme.dart';
 
 /// encryption (docs/features/encryption.md) red tests: E2E opt-in/opt-out confirmation dialogs (docs/features/encryption.md).
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   Widget e2eDialogTestApp({required Widget child}) {
     return ProviderScope(
       overrides: voiceThemeTestOverrides(),
