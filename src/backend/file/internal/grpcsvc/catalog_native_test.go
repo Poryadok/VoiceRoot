@@ -153,6 +153,9 @@ func TestCatalogImportActualBytesReachNativeReadyAuthority(t *testing.T) {
 	require.Equal(t, "ready", row.Status)
 	require.NotNil(t, row.DeliveredFull)
 	require.NotNil(t, row.DeliveredThumbnail)
+	var settledOutputs int
+	require.NoError(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM file_catalog_writes WHERE file_id=$1 AND owner_kind IN ('gif_full','gif_thumbnail') AND state='SETTLED'`, id).Scan(&settledOutputs))
+	require.Equal(t, 2, settledOutputs, "native READY requires both actual output PUT acknowledgements")
 	lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 2, ActorAccountId: f.actor.AccountID.String(), ActorProfileId: f.actor.ProfileID.String(), FileId: imported.FileId}
 	attested, err := server.LookupCatalogAsset(catalogVerifiedContext(t, lookup, filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, "messaging"), lookup)
 	require.NoError(t, err)

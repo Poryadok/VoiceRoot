@@ -23,7 +23,8 @@ GIF processing, which is a dependency rather than proof of protected import.
 
 - In: immutable source identity, protected File import and source-scoped lookup,
   safe remote byte retrieval, typed Messaging GIF admission, meaningful negative
-  tests and exact-source evidence. The first activated consumer is GIF search.
+  tests and exact-source evidence. The named activation consumer is non-E2E GIF
+  selection; live provider activation remains disabled.
 - Out: live provider activation, arbitrary URL upload, ordinary attachment ACL
   changes, encrypted-DM catalog identity, new sticker ingestion and pack editing.
 - Existing sticker new-send validation still requires the current installed pack
@@ -340,3 +341,60 @@ ordinary processing File still acquires under the original pre-catalog schema.
 Focused reference race10.627s passed. The native byte proof now also commits one
 actual File message reference after READY (6.361s, no skip); it still injects
 actor/destination/source authority and does not invoke Messaging insertion.
+
+The derived-output checkpoint adapts the existing GIF worker to the one shared
+typed write ledger. The native assertion first failed (expected two settled
+output declarations, actual zero), then passed with real MP4/WebP bytes and
+both single-attempt ACKs. READY now requires the exact settled catalog source
+and both output identities plus live blob/current worker ownership. Ordinary
+pre-ledger GIF worker checks still pass (7.598s); catalog rows cannot fall back
+when typed custody is absent. Ordinary GIF confirmation of an internal catalog
+source was independently RED (unexpected success), then rejected in the store
+without changing the shared ConfirmUpload/PDF handler.
+
+Actual HTTP delayed PUT plus PostgreSQL tests pass under race (13.151s): an
+expired processing lease and File deletion cannot clear STARTED; actual ACK
+settles before failed publication and allows cleanup, lost ACK remains
+UNSETTLED, only one network attempt occurs and no thumbnail starts after
+authority loss. Direct completion with only declared outputs fails even if
+the caller flips its job flag. Native codec + current v2 READY + real File
+reference passed race7.458s (127B ->1613B MP4 +68B WebP, revision3), with the
+same pinned codec image/helper. The stdout capture wrapper had a Windows
+console-encoding error after writing the complete PASS log; the saved UTF-8 log
+contains the actual successful test result and is retained as evidence.
+File short, focused vet and diff checks passed. Unknown remote-write liveness,
+unreferenced raw-actor tombstone minimization, production runtime composition,
+actual cross-service Messaging insertion and A7 retention remain open.
+
+The last-reference variant found an additional real RED: Release during the
+derived PUT left the blob LIVE behind its physical pin, then the old worker
+published READY after ACK. The worker now distinguishes logical retirement,
+preserves unknown pins and runs a bounded retired-write consumer before new
+processing. Actual release/late-ACK and restarted-consumer cases restore GC work
+without another PUT; both canonical and uncommitted output keys are cleaned.
+An actual Acquire paused at receipt insertion wins over reconciliation when it
+commits before the blob lock. The first combined lock/subquery check was RED
+because its reference subquery retained an older READ COMMITTED snapshot; a
+separate reference statement after the blob lock fixes that race. These real
+PG cases passed race11.304s; the broader derived/recovery/legacy-worker matrix
+passed race26.469s. File short and scoped vet passed.
+
+Independent140 review closed the old direct-cleanup P1 at exact6a273e72 and
+cleared isolated shared core1484 (TT c8). Narrow reference identity/currentness
+seam review139 found no additional issue (TT c9), but reference head e63d5d55
+remains NOT CLEAR on140's fresh-expiry P2 (TT c7): its clock was captured before
+authority lock waits. That causal correction is the next separate checkpoint;
+no current admission-complete or activation claim is made. Messaging2 consumer
+upgrade is owned by114 and frozen at d8a95d2083a510e4797e17e236ed48c94d42a52a;
+its new independent review is pending and does not inherit old v1 clearance.
+
+Astra101 approved the next additive13 privacy correction: derive and retain
+immutable blob binding in the same tracked ledger, preserve durable retirement
+of all attempt keys through File erasure, and settle late ACK without reviving
+File. No released-reference/capability/history rows may be cascaded to erase an
+uploader. Until implemented and independently reviewed, unreferenced measured
+File/raw-uploader retention behind an unknown write pin remains OPEN.
+
+The final native capture after the retired-write consumer passed race22.744s,
+with exit0 persisted alongside the UTF-8 log. This supersedes the earlier
+console-only wrapper failure; no native test skip or codec stub was used.

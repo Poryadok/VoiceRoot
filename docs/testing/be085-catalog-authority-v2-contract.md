@@ -119,3 +119,14 @@ it is not new send/source authority. Messaging must still authorize the current
 source and destination before invoking acquisition. Ordinary noncatalog
 references retain their existing lifecycle behavior, including pre-catalog
 schemas. This guard does not implement the separate A7 retention projection.
+
+With the typed shared-write schema installed, the existing GIF worker declares
+both measured output identities before either PUT. Every output uses its
+unique attempt key, durable STARTED and single-attempt writer, followed by
+independent physical settlement. READY requires both exact output ACKs, a live
+blob, current processing lease/token and, for catalog imports, the exact settled
+source identity. An in-memory job flag cannot waive these database predicates.
+Internal catalog imports cannot use ordinary GIF upload confirmation. Ordinary
+pre-ledger schemas keep their prior worker path; catalog rows fail closed when
+typed physical custody is unavailable. Old scheduling leases and cleanup age
+are never proof that a submitted tracked PUT cannot commit later.

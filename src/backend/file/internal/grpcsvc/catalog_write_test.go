@@ -54,6 +54,7 @@ func seedCatalogInput(t *testing.T, ctx context.Context) pendingCatalogFixture {
 	var f pendingCatalogFixture
 	f.pool = startR23FilePostgres(t, ctx)
 	applyFileGateSQL(t, ctx, f.pool, filepath.Join("src", "backend", "migrations", "file_db", "000010_catalog_asset_import.up.sql"))
+	applyFileGateSQL(t, ctx, f.pool, filepath.Join("src", "backend", "migrations", "file_db", "000011_tracked_write_owner_kind.up.sql"))
 	applyFileGateSQL(t, ctx, f.pool, filepath.Join("src", "backend", "migrations", "file_db", "000012_catalog_selection_authority.up.sql"))
 	var err error
 	f.keys, err = catalogasset.NewReplayKeys("fixture", map[string][]byte{"fixture": bytes.Repeat([]byte{1}, 32)})

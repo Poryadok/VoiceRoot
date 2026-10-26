@@ -61,6 +61,13 @@ func (s *FilesStore) ConfirmGIFUpload(ctx context.Context, id uuid.UUID, sha str
 	if before.UploadIntent != "gif" || before.IsE2E {
 		return FileRow{}, ErrGIFConfirmationConflict
 	}
+	var catalog bool
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false) FROM files f WHERE id=$1`, id).Scan(&catalog); err != nil {
+		return FileRow{}, err
+	}
+	if catalog {
+		return FileRow{}, ErrGIFConfirmationConflict
+	}
 	if before.Status != "pending_upload" {
 		if before.SHA256Hash == nil || *before.SHA256Hash != sha {
 			return FileRow{}, ErrGIFConfirmationConflict
@@ -89,11 +96,13 @@ type GIFJob struct {
 	Row                   FileRow
 	Token                 uuid.UUID
 	FullKey, ThumbnailKey string
+	TrackedWrites         bool
 }
 
 // ClaimGIFJob fences every attempt with a fresh UUID and records its output
 // keys before the first object write. A codec/request is bounded to 120 seconds;
-// its database lease is 180 seconds and cleanup waits a further 60 seconds.
+// its database lease is180 seconds. A tracked STARTED/UNSETTLED write remains
+// pinned independently of these scheduling bounds; elapsed time is not fencing.
 func (s *FilesStore) ClaimGIFJob(ctx context.Context) (*GIFJob, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -118,6 +127,10 @@ func (s *FilesStore) ClaimGIFJob(ctx context.Context) (*GIFJob, error) {
 	token := uuid.New()
 	prefix := "processed/" + id.String() + "/gif/" + token.String()
 	job := &GIFJob{Row: row, Token: token, FullKey: prefix + "/full.mp4", ThumbnailKey: prefix + "/thumb.webp"}
+	job.TrackedWrites, err = gifTrackedModeTx(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `UPDATE file_gif_jobs SET state='running',attempt=attempt+1,attempt_token=$2,
  lease_until=clock_timestamp()+interval '180 seconds',updated_at=clock_timestamp() WHERE file_id=$1`, id, token)
 	if err != nil {
@@ -162,6 +175,17 @@ func (s *FilesStore) FinishGIFJob(ctx context.Context, job *GIFJob, full, thumb 
 	} else {
 		if !validGIFRepresentation(full, job.FullKey, "video/mp4") || !validGIFRepresentation(thumb, job.ThumbnailKey, "image/webp") || width <= 0 || height <= 0 || duration <= 0 {
 			return false, fmt.Errorf("invalid GIF processing result")
+		}
+		if err = requireGIFTrackedResultsTx(ctx, tx, job, full, thumb); err != nil {
+			if errors.Is(err, ErrGIFPublicationLost) {
+				if _, retireErr := retireGIFPublicationTx(ctx, tx, before); retireErr != nil {
+					return false, retireErr
+				}
+				if commitErr := tx.Commit(ctx); commitErr != nil {
+					return false, commitErr
+				}
+			}
+			return false, err
 		}
 		f, err := json.Marshal(full)
 		if err != nil {
