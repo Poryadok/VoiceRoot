@@ -10,12 +10,12 @@ import (
 )
 
 func gifTrackedModeTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (bool, error) {
-	var typed, catalog bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='file_catalog_writes' AND column_name='owner_kind'),COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false) FROM files f WHERE id=$1`, id).Scan(&typed, &catalog)
+	var ledger, typed, catalog bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='file_catalog_writes'),EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='file_catalog_writes' AND column_name='owner_kind'),COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false) FROM files f WHERE id=$1`, id).Scan(&ledger, &typed, &catalog)
 	if err != nil {
 		return false, err
 	}
-	if catalog && !typed {
+	if (ledger || catalog) && !typed {
 		return false, ErrTrackedWrite
 	}
 	return typed, nil
