@@ -2810,6 +2810,90 @@ abstract class AppLocalizations {
   /// **'New space'**
   String get spaceCreateTitle;
 
+  /// No description provided for @spaceCreateAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Access'**
+  String get spaceCreateAccess;
+
+  /// No description provided for @spaceCreatePublic.
+  ///
+  /// In en, this message translates to:
+  /// **'Public'**
+  String get spaceCreatePublic;
+
+  /// No description provided for @spaceCreateInviteOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite-only'**
+  String get spaceCreateInviteOnly;
+
+  /// No description provided for @spaceCreatePrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Private'**
+  String get spaceCreatePrivate;
+
+  /// No description provided for @spaceCreateTemplate.
+  ///
+  /// In en, this message translates to:
+  /// **'Starter template'**
+  String get spaceCreateTemplate;
+
+  /// No description provided for @spaceCreateGaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Gaming'**
+  String get spaceCreateGaming;
+
+  /// No description provided for @spaceCreateWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Work'**
+  String get spaceCreateWork;
+
+  /// No description provided for @spaceCreateSocial.
+  ///
+  /// In en, this message translates to:
+  /// **'Social'**
+  String get spaceCreateSocial;
+
+  /// No description provided for @spaceCreateTemplatesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Starter templates are not available yet. Your space starts without channels.'**
+  String get spaceCreateTemplatesUnavailable;
+
+  /// No description provided for @spaceCreateIconHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use an image URL. Image upload is not available yet.'**
+  String get spaceCreateIconHelp;
+
+  /// No description provided for @spaceCreateIconInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid http or https image URL.'**
+  String get spaceCreateIconInvalid;
+
+  /// No description provided for @spaceCreateIconFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your space was created, but its icon could not be saved. Retry the icon or close to continue without it.'**
+  String get spaceCreateIconFailed;
+
+  /// No description provided for @spaceCreateRetryIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry icon'**
+  String get spaceCreateRetryIcon;
+
+  /// No description provided for @spaceCreateUncertain.
+  ///
+  /// In en, this message translates to:
+  /// **'Creation could not be confirmed. Check your spaces before creating another one.'**
+  String get spaceCreateUncertain;
+
   /// No description provided for @spaceCreateNameLabel.
   ///
   /// In en, this message translates to:
