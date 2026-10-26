@@ -37,6 +37,7 @@ void main() {
   ) async {
     final requests = <http.Request>[];
     var statusAttempts = 0;
+    late AuthController authController;
     final mock = MockClient((request) async {
       requests.add(request);
       if (request.method == 'GET' &&
@@ -51,10 +52,29 @@ void main() {
         return http.Response(
           jsonEncode({
             'verification_status': {
-              'profile_id': 'profile-selected',
-              'verification_type': 'organization',
-              'badge': 'organization',
+              'profile_id': statusAttempts == 2
+                  ? 'profile-selected'
+                  : 'profile-next',
+              'verification_type': 'none',
             },
+            if (statusAttempts == 2)
+              'pending_organization_challenge': {
+                'domain': 'example.org',
+                'txt_record': 'voice-verify=restored-token',
+                'expires_at': DateTime.now()
+                    .add(const Duration(days: 1))
+                    .toUtc()
+                    .toIso8601String(),
+              },
+            if (statusAttempts == 3)
+              'pending_organization_challenge': {
+                'domain': 'old.example.org',
+                'txt_record': 'voice-verify=expired-token',
+                'expires_at': DateTime.now()
+                    .subtract(const Duration(minutes: 1))
+                    .toUtc()
+                    .toIso8601String(),
+              },
           }),
           200,
         );
@@ -88,14 +108,14 @@ void main() {
             VoiceUsersClient(gateway: gateway),
           ),
           authControllerProvider.overrideWith((ref) {
-            final controller = AuthController(
+            authController = AuthController(
               authClient: ref.watch(voiceAuthClientProvider),
               storage: ref.watch(authSessionStorageProvider),
               guestCredentialsStorage: ref.watch(
                 guestCredentialsStorageProvider,
               ),
             );
-            controller.state = const AuthState(
+            authController.state = const AuthState(
               session: AuthSession(
                 accessToken: 'access-token',
                 refreshToken: 'refresh-token',
@@ -104,7 +124,7 @@ void main() {
                 activeProfileId: 'profile-selected',
               ),
             );
-            return controller;
+            return authController;
           }),
         ],
         child: const MaterialApp(
@@ -159,8 +179,45 @@ void main() {
       find.byKey(VerificationSettingsSheet.verificationStatusViewKey),
       findsOneWidget,
     );
-    expect(find.text('Verified'), findsOneWidget);
-    expect(find.text('organization'), findsOneWidget);
+    expect(find.text('Not verified'), findsOneWidget);
+    expect(
+      find.byKey(VerificationSettingsSheet.pendingChallengeKey),
+      findsOneWidget,
+    );
+    expect(find.text('example.org'), findsOneWidget);
+    expect(find.text('voice-verify=restored-token'), findsOneWidget);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(VerificationSettingsSheet.pendingChallengeTxtRecordKey),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('voice-verify=restored-token'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+
+    authController.state = const AuthState(
+      session: AuthSession(
+        accessToken: 'next-access-token',
+        refreshToken: 'next-refresh-token',
+        expiresInSeconds: 900,
+        accountId: 'account-1',
+        activeProfileId: 'profile-next',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('profile-next'), findsOneWidget);
+    expect(
+      find.byKey(VerificationSettingsSheet.pendingChallengeKey),
+      findsNothing,
+    );
+    expect(find.text('old.example.org'), findsNothing);
+    expect(statusAttempts, 3);
   });
 
   testWidgets('shows and mutates links only for the selected profile', (
