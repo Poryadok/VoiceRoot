@@ -57,6 +57,13 @@ func waitForRequiredGRPCReady(ctx context.Context, conn *grpc.ClientConn) error 
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	catalogConfig, catalogEnabled, catalogErr := loadCatalogAssetConfig(os.LookupEnv)
+	if catalogErr != nil {
+		log.Fatalf("Chat catalog config: %v", catalogErr)
+	}
+	if catalogEnabled && strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" {
+		log.Fatal("Chat catalog requires DATABASE_URL")
+	}
 	createConfig, createEnabled, createErr := chatcreation.CreateConfigFromEnv()
 	if createErr != nil {
 		log.Fatalf("Chat creation config: %v", createErr)
@@ -329,6 +336,15 @@ func main() {
 			spaceMembers = &store.SpaceMembersStore{Pool: spacePool}
 		}
 		natsURL := strings.TrimSpace(os.Getenv("NATS_URL"))
+		catalogRuntime, catalogErr := startCatalogAssets(runCtx, catalogConfig, catalogEnabled, catalogRuntimeDeps{Issuer: chatPrincipalIssuer, Chats: dmStore, Spaces: spaceMembers, Roles: roleClient, NATSURL: natsURL, HasAccountConsumer: accountProfiles != nil, Logger: logger})
+		if catalogErr != nil {
+			log.Fatalf("Chat catalog runtime: %v", catalogErr)
+		}
+		var catalogPurgers []accountDeletedCatalogPurger
+		if catalogRuntime != nil {
+			defer catalogRuntime.close()
+			catalogPurgers = append(catalogPurgers, catalogRuntime.Repository)
+		}
 		var chatEvents chatevents.Publisher
 		var jsPub *chatevents.JetStreamPublisher
 		if natsURL != "" {
@@ -368,7 +384,7 @@ func main() {
 				consumerDone := make(chan error, 1)
 				accountDeletedConsumerDone = consumerDone
 				go func() {
-					err := runAccountDeletedConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), accountProfiles, dmStore, jsPub, logger)
+					err := runAccountDeletedConsumer(runCtx, natsURL, os.Getenv("HOSTNAME"), accountProfiles, dmStore, jsPub, logger, catalogPurgers...)
 					if err != nil && !errors.Is(err, context.Canceled) {
 						logger.Error("user.account_deleted consumer stopped", slog.String("error", err.Error()))
 					}

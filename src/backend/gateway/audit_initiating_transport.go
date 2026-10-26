@@ -29,7 +29,11 @@ func (t *transcoder) auditInitiatingContext(r *http.Request, request proto.Messa
 	if audience == "" {
 		return nil, status.Error(codes.PermissionDenied, "initiating method is not allowed")
 	}
-	if t == nil || t.lifecycleIssuer == nil || !t.auditInitiatingClientAvailable(audience) {
+	available := t != nil && t.auditInitiatingClientAvailable(audience)
+	if method == chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName {
+		available = t != nil && t.clients.chatCatalog != nil
+	}
+	if t == nil || t.lifecycleIssuer == nil || !available {
 		return nil, status.Error(codes.Unavailable, "protected initiating transport unavailable")
 	}
 	if requestID == "" || strings.TrimSpace(requestID) != requestID {
@@ -68,7 +72,7 @@ func auditInitiatingAudience(method string) string {
 		rolev1.RoleService_GetEffectivePermissions_FullMethodName, rolev1.RoleService_GetDefaultJoinRole_FullMethodName,
 		rolev1.RoleService_GetChatOverrides_FullMethodName, rolev1.RoleService_GetVoiceRoomOverrides_FullMethodName:
 		return "role"
-	case chatv1.ChatService_CreateChat_FullMethodName, chatv1.ChatService_UpdateChat_FullMethodName, chatv1.ChatService_DeleteChat_FullMethodName:
+	case chatv1.ChatService_CreateChat_FullMethodName, chatv1.ChatService_UpdateChat_FullMethodName, chatv1.ChatService_DeleteChat_FullMethodName, chatv1.CatalogAssetService_ResolveGifAsset_FullMethodName:
 		return "chat"
 	case botv1.BotService_InstallBotInSpace_FullMethodName, botv1.BotService_UninstallBotFromSpace_FullMethodName:
 		return "bot"

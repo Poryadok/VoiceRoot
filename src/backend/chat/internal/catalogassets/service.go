@@ -48,6 +48,8 @@ type FileState struct {
 	Selection
 	SourceID, FileID uuid.UUID
 	Status           string
+	// Only an exact File asset-selector proof can retire a compacted binding.
+	TerminalFenceID uuid.UUID
 }
 type OperationSelector struct {
 	Actor

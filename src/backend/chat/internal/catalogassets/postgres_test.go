@@ -137,6 +137,16 @@ func TestCatalogPostgresGateLifecycle(t *testing.T) {
 	fresh.SourceID = uuid.New()
 	fresh.ActorCapture = restored
 	require.NoError(t, repo.SaveBinding(ctx, fresh, restored))
+	page, err := repo.ScanBindings(ctx, uuid.Nil, 100)
+	require.NoError(t, err)
+	require.Equal(t, []Binding{fresh}, page)
+	page, err = repo.ScanBindings(ctx, fresh.FileID, 100)
+	require.NoError(t, err)
+	require.Empty(t, page)
+	stale := fresh
+	stale.ActorCapture = capture
+	require.NoError(t, repo.RetireExactBinding(ctx, stale), "old cleanup cannot delete restored projection")
+	require.NoError(t, repo.PurgeCapturedProfile(ctx, stale), "old profile snapshot cannot close restored generation")
 	require.NoError(t, repo.PurgeAccount(ctx, actor.AccountID, event), "same deletion event cannot erase a restored generation")
 	_, found, err = repo.FindBinding(ctx, actor, fresh.Selection, fresh.FileID, restored)
 	require.NoError(t, err)

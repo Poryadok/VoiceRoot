@@ -45,6 +45,7 @@ type grpcClients struct {
 	social                    socialv1.SocialServiceClient
 	chat                      chatv1.ChatServiceClient
 	chatAudit                 chatv1.ChatServiceClient
+	chatCatalog               chatv1.CatalogAssetServiceClient
 	roleAudit                 rolev1.RoleServiceClient
 	botAuditAdmin             botv1.BotServiceClient
 	messaging                 messagingv1.MessagingServiceClient
@@ -110,6 +111,7 @@ func grpcClientsFromEnv(logger *slog.Logger) *grpcClients {
 		}
 	}
 	clients.configureAuditInitiatingTransports()
+	clients.configureCatalogAssetTransport()
 	if cfg, enabled, err := spaceLifecycleClientConfigFromEnv(); err != nil {
 		clients.spaceLifecycleErr = err
 	} else if enabled {

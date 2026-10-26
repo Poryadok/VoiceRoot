@@ -53,7 +53,7 @@ func (c *GRPCFileClient) StatusByOperation(ctx context.Context, input OperationS
 		return FileState{}, fileCallError(err)
 	}
 	state, err := parseFileState(response, input.Actor, input.Selection)
-	if err != nil || response.GetOperationId() != input.OperationID.String() || !proto.Equal(response.GetDestinationChat(), input.Destination) {
+	if err != nil || response.GetTerminalFenceId() != "" || response.GetOperationId() != input.OperationID.String() || !proto.Equal(response.GetDestinationChat(), input.Destination) {
 		return FileState{}, invalidFileBinding()
 	}
 	return state, nil
@@ -72,9 +72,37 @@ func (c *GRPCFileClient) Status(ctx context.Context, input Binding) (FileState, 
 	if err != nil {
 		return FileState{}, fileCallError(err)
 	}
-	state, err := parseFileState(response, input.Actor, input.Selection)
-	if err != nil || state.SourceID != input.SourceID || state.FileID != input.FileID || state.ActorCapture != input.ActorCapture || response.GetOperationId() != "" || response.GetDestinationChat() != nil {
+	return parseAssetFileState(response, input)
+}
+
+func parseAssetFileState(response *filev1.GetCatalogAssetStatusResponse, input Binding) (FileState, error) {
+	if response == nil || hasUnknown(response) || response.GetOperationId() != "" || response.GetDestinationChat() != nil {
 		return FileState{}, invalidFileBinding()
+	}
+	parsed := response
+	var fence uuid.UUID
+	erased := false
+	if response.TerminalFenceId != "" {
+		if !canonicalID(response.TerminalFenceId) || !terminalState(response.Status) {
+			return FileState{}, invalidFileBinding()
+		}
+		fence = uuid.MustParse(response.TerminalFenceId)
+		if response.ChatAccountGeneration == "" && response.ChatProfileGeneration == "" {
+			// Qualify identity using the exact requested tuple. These substituted
+			// fields exist only on a local parsing copy, never as restored authority.
+			parsed = proto.Clone(response).(*filev1.GetCatalogAssetStatusResponse)
+			parsed.ChatAccountGeneration = input.AccountGeneration.String()
+			parsed.ChatProfileGeneration = input.ProfileGeneration.String()
+			erased = true
+		}
+	}
+	state, err := parseFileState(parsed, input.Actor, input.Selection)
+	if err != nil || state.SourceID != input.SourceID || state.FileID != input.FileID || state.ActorCapture != input.ActorCapture {
+		return FileState{}, invalidFileBinding()
+	}
+	state.TerminalFenceID = fence
+	if erased {
+		state.ActorCapture = ActorCapture{}
 	}
 	return state, nil
 }
@@ -99,6 +127,9 @@ type fileStateIdentity interface {
 }
 
 func parseFileState(response fileStateIdentity, actor Actor, selection Selection) (FileState, error) {
+	if message, ok := response.(proto.Message); ok && (message == nil || !message.ProtoReflect().IsValid() || hasUnknown(message)) {
+		return FileState{}, invalidFileBinding()
+	}
 	if response == nil || !canonicalID(response.GetSourceId()) || !canonicalID(response.GetFileId()) || !canonicalID(response.GetChatAccountGeneration()) || !canonicalID(response.GetChatProfileGeneration()) || response.GetActorAccountId() != actor.AccountID.String() || response.GetActorProfileId() != actor.ProfileID.String() || response.GetProvider() != selection.Provider || response.GetProviderId() != selection.ProviderID {
 		return FileState{}, invalidFileBinding()
 	}
