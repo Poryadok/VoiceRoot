@@ -211,7 +211,14 @@ query/rank position. Pagination observes live data: later rank changes can move
 cards, so it is not a catalog snapshot.
 
 The existing `space_list.spaces` envelope projects only `id`, `name`,
-`description`, optional `icon_url`, `member_count`, `is_verified`. Protobuf JSON
+`description`, optional `icon_url`, `member_count`, `is_verified`, `visibility`
+(catalog DTOv2). Visibility is always `public` or `invite_only`, from the same
+locked current Space authority read as the other fields. It selects the entry
+path only: `public` permits attempting existing `JoinSpace`; `invite_only`
+requires the existing invite-link flow. It does not prove guest, phone, ban,
+capacity, entry-policy or any other admission eligibility. Missing/unknown
+visibility must not enable a direct Join affordance. Verification badges never
+authorize admission. Protobuf JSON
 defaults may be omitted; absent count/verified mean 0/false. Owner, entry policy,
 questions/answers, tree, roles, matchmaking and lifecycle details are not card
 metadata. Membership remains owned by `ListMySpaces`; discovery never grants

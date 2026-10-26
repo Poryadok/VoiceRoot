@@ -40,7 +40,7 @@ func (s *SpaceGRPC) SearchPublicSpaces(ctx context.Context, req *spacev1.SearchP
 	}
 	spaces := make([]*spacev1.Space, 0, len(page.Spaces))
 	for _, row := range page.Spaces {
-		spaces = append(spaces, &spacev1.Space{Id: row.ID.String(), Name: row.Name, Description: row.Description, IconUrl: row.IconURL, MemberCount: row.MemberCount, IsVerified: row.IsVerified})
+		spaces = append(spaces, &spacev1.Space{Id: row.ID.String(), Name: row.Name, Description: row.Description, IconUrl: row.IconURL, MemberCount: row.MemberCount, IsVerified: row.IsVerified, Visibility: row.Visibility})
 	}
 	return &spacev1.SearchPublicSpacesResponse{SpaceList: &spacev1.SpaceList{Spaces: spaces, NextCursor: page.NextCursor}}, nil
 }

@@ -23,6 +23,7 @@ type CatalogSpace struct {
 	IconURL     *string
 	MemberCount int32
 	IsVerified  bool
+	Visibility  string
 }
 
 type CatalogPage struct {
@@ -143,7 +144,7 @@ func queryCatalog(ctx context.Context, tx pgx.Tx, query string, after *catalogCu
 		where += ` AND (s.is_verified,s.member_count,s.id)<($3,$4,$5)`
 		args = append(args, after.Verified, after.Count, after.ID)
 	}
-	rows, err := tx.Query(ctx, `SELECT s.id,s.name,s.description,s.icon_url,s.member_count,s.is_verified
+	rows, err := tx.Query(ctx, `SELECT s.id,s.name,s.description,s.icon_url,s.member_count,s.is_verified,s.visibility
 	 FROM spaces s WHERE `+where+` ORDER BY s.is_verified DESC,s.member_count DESC,s.id DESC LIMIT $2`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrOwnershipScopeUnavailable, err)
@@ -152,7 +153,7 @@ func queryCatalog(ctx context.Context, tx pgx.Tx, query string, after *catalogCu
 	result := make([]CatalogSpace, 0)
 	for rows.Next() {
 		var row CatalogSpace
-		if err := rows.Scan(&row.ID, &row.Name, &row.Description, &row.IconURL, &row.MemberCount, &row.IsVerified); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.Description, &row.IconURL, &row.MemberCount, &row.IsVerified, &row.Visibility); err != nil {
 			return nil, err
 		}
 		result = append(result, row)

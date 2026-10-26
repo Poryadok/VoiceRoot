@@ -31,7 +31,7 @@ func TestSearchPublicSpacesCatalog(t *testing.T) {
 		require.NoError(t, err)
 		_, err = pool.Exec(context.Background(), `UPDATE spaces SET member_count=$2,is_verified=$3,icon_url='https://cdn.voice.gg/icon.webp',entry_questions='[{"answer":"secret"}]' WHERE id=$1`, created.Space.Id, count, verified)
 		require.NoError(t, err)
-		return &spacev1.Space{Id: created.Space.Id, Name: name, Description: "Friday topic", IconUrl: strPtrCatalog("https://cdn.voice.gg/icon.webp"), MemberCount: count, IsVerified: verified}
+		return &spacev1.Space{Id: created.Space.Id, Name: name, Description: "Friday topic", IconUrl: strPtrCatalog("https://cdn.voice.gg/icon.webp"), MemberCount: count, IsVerified: verified, Visibility: visibility}
 	}
 	public := makeSpace("Public", "public", 100, false)
 	invite := makeSpace("Invite", "invite_only", 2, true)
