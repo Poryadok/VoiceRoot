@@ -1533,6 +1533,7 @@
   "socialStoryCreate": "New story",
   "storyArchiveTitle": "Story archive",
   "storyArchivePrivate": "Only you can see this archive",
+  "storySessionChanged": "Your profile or session changed. Reopen this screen to continue.",
   "storyArchiveEmpty": "No archived stories",
   "storyArchiveLoadError": "Could not load story archive",
   "storyArchiveAddToHighlight": "Add to highlight",

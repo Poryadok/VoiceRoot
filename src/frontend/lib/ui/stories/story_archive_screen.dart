@@ -13,6 +13,7 @@ import '../core/voice_skeleton.dart';
 import '../core/voice_state_panel.dart';
 import 'highlight_edit_sheet.dart';
 import 'story_text_style.dart';
+import 'story_author_session.dart';
 
 /// The owner's expired stories; retention remains server-owned.
 class StoryArchiveScreen extends ConsumerWidget {
@@ -102,12 +103,12 @@ class StoryArchiveScreen extends ConsumerWidget {
   }
 }
 
-class _ArchiveStoryTile extends StatelessWidget {
+class _ArchiveStoryTile extends ConsumerWidget {
   const _ArchiveStoryTile({required this.story, required this.onOpen});
   final StoryData story;
   final VoidCallback onOpen;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
     final preview = story.textContent?.trim();
@@ -156,16 +157,27 @@ class _ArchiveStoryTile extends StatelessWidget {
             child: TextButton.icon(
               key: Key('story_archive_add_highlight_${story.id}'),
               onPressed: () async {
+                final authorSession = StoryAuthorSession.capture(ref);
+                if (!authorSession.isCurrent(ref) ||
+                    story.authorProfileId != authorSession.profileId) {
+                  return;
+                }
                 final create = await showVoiceBottomSheet<bool>(
                   context: context,
                   initialSize: 0.5,
                   scrollable: false,
-                  child: _ArchiveHighlightPicker(storyId: story.id),
+                  child: _ArchiveHighlightPicker(
+                    storyId: story.id,
+                    authorSession: authorSession,
+                  ),
                 );
-                if (create == true && context.mounted) {
+                if (create == true &&
+                    context.mounted &&
+                    authorSession.isCurrent(ref)) {
                   await HighlightEditSheet.showCreate(
                     context,
                     initialStoryIds: [story.id],
+                    authorSession: authorSession,
                   );
                 }
               },
@@ -183,8 +195,12 @@ class _ArchiveStoryTile extends StatelessWidget {
 }
 
 class _ArchiveHighlightPicker extends ConsumerStatefulWidget {
-  const _ArchiveHighlightPicker({required this.storyId});
+  const _ArchiveHighlightPicker({
+    required this.storyId,
+    required this.authorSession,
+  });
   final String storyId;
+  final StoryAuthorSession authorSession;
   @override
   ConsumerState<_ArchiveHighlightPicker> createState() =>
       _ArchiveHighlightPickerState();
@@ -194,8 +210,19 @@ class _ArchiveHighlightPickerState
     extends ConsumerState<_ArchiveHighlightPicker> {
   bool _saving = false;
   String? _error;
+  bool _stale = false;
+
+  bool _isCurrent() {
+    if (!mounted || _stale) return false;
+    if (!widget.authorSession.isCurrent(ref)) {
+      _stale = true;
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _add(String highlightId, String profileId) async {
-    if (_saving) return;
+    if (_saving || !_isCurrent()) return;
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
     setState(() {
@@ -209,7 +236,7 @@ class _ArchiveHighlightPickerState
           highlightId: highlightId,
           storyId: widget.storyId,
         );
-    if (!mounted) return;
+    if (!mounted || !_isCurrent()) return;
     switch (result) {
       case StoriesApiOk():
         ref.invalidate(profileHighlightsProvider(profileId));
@@ -233,7 +260,9 @@ class _ArchiveHighlightPickerState
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final profileId = ref.watch(authControllerProvider).activeProfileId;
+    ref.watch(authControllerProvider);
+    if (!_isCurrent()) return const StorySessionExpiredPanel();
+    final profileId = widget.authorSession.profileId;
     final highlights = profileId == null
         ? const AsyncData<List<HighlightData>>([])
         : ref.watch(profileHighlightsProvider(profileId));

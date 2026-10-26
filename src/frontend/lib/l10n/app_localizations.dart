@@ -6482,6 +6482,12 @@ abstract class AppLocalizations {
   /// **'Only you can see this archive'**
   String get storyArchivePrivate;
 
+  /// No description provided for @storySessionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Your profile or session changed. Reopen this screen to continue.'**
+  String get storySessionChanged;
+
   /// No description provided for @storyArchiveEmpty.
   ///
   /// In en, this message translates to:

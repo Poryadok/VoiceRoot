@@ -10,10 +10,15 @@ import '../api_error_messages.dart';
 import '../core/voice_bottom_sheet.dart';
 import '../core/voice_primary_button.dart';
 import 'story_audience_picker.dart';
+import 'story_author_session.dart';
 
 /// Create or edit a highlight (name, visibility, story membership).
 class HighlightEditSheet extends ConsumerStatefulWidget {
-  const HighlightEditSheet._({this.highlight, this.initialStoryIds = const []});
+  const HighlightEditSheet._({
+    this.highlight,
+    this.initialStoryIds = const [],
+    this.authorSession,
+  });
 
   static const Key sheetKey = Key('highlight_edit_sheet');
   static const Key nameFieldKey = Key('highlight_edit_name');
@@ -21,15 +26,20 @@ class HighlightEditSheet extends ConsumerStatefulWidget {
 
   final HighlightData? highlight;
   final List<String> initialStoryIds;
+  final StoryAuthorSession? authorSession;
 
   static Future<void> showCreate(
     BuildContext context, {
     List<String> initialStoryIds = const [],
+    StoryAuthorSession? authorSession,
   }) {
     return showVoiceBottomSheet<void>(
       context: context,
       scrollable: false,
-      child: HighlightEditSheet._(initialStoryIds: initialStoryIds),
+      child: HighlightEditSheet._(
+        initialStoryIds: initialStoryIds,
+        authorSession: authorSession,
+      ),
     );
   }
 
@@ -56,12 +66,24 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
   late List<String> _storyIds;
   String? _createdHighlightId;
   final Set<String> _savedStoryIds = {};
+  late final StoryAuthorSession _authorSession;
+  bool _stale = false;
+
+  bool _isCurrent() {
+    if (!mounted || _stale) return false;
+    if (!_authorSession.isCurrent(ref)) {
+      _stale = true;
+      return false;
+    }
+    return true;
+  }
 
   bool get _isEdit => widget.highlight != null;
 
   @override
   void initState() {
     super.initState();
+    _authorSession = widget.authorSession ?? StoryAuthorSession.capture(ref);
     final highlight = widget.highlight;
     _nameController = TextEditingController(text: highlight?.name ?? '');
     _visibility = highlight?.visibility ?? 'everyone';
@@ -75,9 +97,9 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
   }
 
   Future<void> _save() async {
-    if (_saving) return;
+    if (_saving || !_isCurrent()) return;
     final auth = ref.read(authorizationHeaderProvider);
-    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final profileId = _authorSession.profileId;
     if (auth == null || profileId == null) return;
 
     final name = _nameController.text.trim();
@@ -113,19 +135,20 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
       );
     }
 
-    if (!mounted) return;
+    if (!mounted || !_isCurrent()) return;
     switch (result) {
       case StoriesApiOk(:final data):
         if (!_isEdit) _createdHighlightId ??= data.id;
         if (!_isEdit && _storyIds.isNotEmpty) {
           for (final storyId in _storyIds) {
+            if (!mounted || !_isCurrent()) return;
             if (_savedStoryIds.contains(storyId)) continue;
             final added = await client.addToHighlight(
               authorization: auth,
               highlightId: _createdHighlightId!,
               storyId: storyId,
             );
-            if (!mounted) return;
+            if (!mounted || !_isCurrent()) return;
             if (added case StoriesApiFailure(:final statusCode)) {
               ref.invalidate(profileHighlightsProvider(profileId));
               setState(() {
@@ -141,7 +164,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
           }
         }
         ref.invalidate(profileHighlightsProvider(profileId));
-        if (mounted) Navigator.of(context).pop();
+        if (mounted && _isCurrent()) Navigator.of(context).pop();
       case StoriesApiFailure(:final statusCode):
         setState(() {
           _saving = false;
@@ -154,9 +177,10 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
   }
 
   Future<void> _removeStory(String storyId) async {
+    if (!mounted || !_isCurrent()) return;
     final highlight = widget.highlight;
     final auth = ref.read(authorizationHeaderProvider);
-    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final profileId = _authorSession.profileId;
     if (highlight == null || auth == null || profileId == null) return;
 
     final result = await ref
@@ -167,7 +191,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
           storyId: storyId,
         );
 
-    if (!mounted) return;
+    if (!mounted || !_isCurrent()) return;
     switch (result) {
       case StoriesApiOk():
         setState(() => _storyIds.remove(storyId));
@@ -187,49 +211,68 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
   }
 
   Future<void> _addFromArchive() async {
-    final archive = await ref.read(storyArchiveProvider.future);
-    if (!mounted || archive.isEmpty) return;
+    if (!_isCurrent()) return;
+    final List<StoryData> archive;
+    try {
+      archive = await ref.read(storyArchiveProvider.future);
+    } catch (_) {
+      if (mounted && _isCurrent()) {
+        setState(
+          () => _error = AppLocalizations.of(context)!.storyArchiveLoadError,
+        );
+      }
+      return;
+    }
+    if (!mounted || !_isCurrent() || archive.isEmpty) return;
 
     final storyId = await showVoiceBottomSheet<String>(
       context: context,
       initialSize: 0.5,
       scrollable: false,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                AppLocalizations.of(context)!.storyHighlightAddStories,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+      child: Consumer(
+        builder: (context, ref, _) {
+          ref.watch(authControllerProvider);
+          if (!_isCurrent()) return const StorySessionExpiredPanel();
+          return SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    AppLocalizations.of(context)!.storyHighlightAddStories,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: archive.length,
+                    itemBuilder: (ctx, index) {
+                      final story = archive[index];
+                      final label = story.textContent?.trim();
+                      return ListTile(
+                        title: Text(
+                          label != null && label.isNotEmpty
+                              ? label
+                              : story.type,
+                        ),
+                        onTap: () => Navigator.of(ctx).pop(story.id),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: archive.length,
-                itemBuilder: (ctx, index) {
-                  final story = archive[index];
-                  final label = story.textContent?.trim();
-                  return ListTile(
-                    title: Text(
-                      label != null && label.isNotEmpty ? label : story.type,
-                    ),
-                    onTap: () => Navigator.of(ctx).pop(story.id),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
 
-    if (storyId == null || !mounted) return;
+    if (!mounted || storyId == null || !_isCurrent()) return;
 
     final highlight = widget.highlight;
     final auth = ref.read(authorizationHeaderProvider);
-    final profileId = ref.read(authControllerProvider).activeProfileId;
+    final profileId = _authorSession.profileId;
     if (auth == null || profileId == null) return;
 
     if (highlight != null) {
@@ -240,7 +283,7 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
             highlightId: highlight.id,
             storyId: storyId,
           );
-      if (!mounted) return;
+      if (!mounted || !_isCurrent()) return;
       switch (result) {
         case StoriesApiOk():
           setState(() => _storyIds.add(storyId));
@@ -266,6 +309,8 @@ class _HighlightEditSheetState extends ConsumerState<HighlightEditSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(authControllerProvider);
+    if (!_isCurrent()) return const StorySessionExpiredPanel();
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
 

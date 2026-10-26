@@ -1442,6 +1442,7 @@
   "socialStoryCreate": "Новая сторис",
   "storyArchiveTitle": "Архив сторис",
   "storyArchivePrivate": "Только вы видите архив",
+  "storySessionChanged": "Профиль или сессия изменились. Откройте этот экран заново, чтобы продолжить.",
   "storyArchiveEmpty": "Нет архивных сторис",
   "storyArchiveLoadError": "Не удалось загрузить архив",
   "storyArchiveAddToHighlight": "В избранное",
