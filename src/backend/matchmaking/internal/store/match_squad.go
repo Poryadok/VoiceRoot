@@ -199,7 +199,10 @@ func (s *MatchStore) RecordMatchSquadChatReceipt(ctx context.Context, matchID, r
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
-	if operation.State != "provisioning" {
+	// A concurrent dispatcher may have activated the match while this exact
+	// provider response was in flight. Active state permits only receipt replay;
+	// the immutable binding checks below still reject any changed evidence.
+	if operation.State != "provisioning" && (operation.State != "active" || operation.ChatReceiptID == nil) {
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadPending
 	}
 	chatReceipt := new(chatv1.MatchSquadChatReceipt)
@@ -281,7 +284,9 @@ func (s *MatchStore) RecordMatchSquadVoiceReceipt(ctx context.Context, matchID, 
 	if err != nil {
 		return MatchSquadProvisioningOperation{}, err
 	}
-	if operation.State != "provisioning" || operation.ChatReceiptID == nil || len(operation.VoiceRequestBytes) == 0 {
+	// As for Chat, activation by another dispatcher cannot invalidate an exact
+	// receipt already committed here. Never insert new evidence into active state.
+	if (operation.State != "provisioning" && (operation.State != "active" || operation.VoiceReceiptID == nil)) || operation.ChatReceiptID == nil || len(operation.VoiceRequestBytes) == 0 {
 		return MatchSquadProvisioningOperation{}, ErrMatchSquadPending
 	}
 	if operation.ChatID == nil {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../state/chat_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
 import '../matchmaking/game_catalog_screen.dart';
@@ -19,9 +20,16 @@ class MobileShellTabBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final section = ref.watch(navigationSectionProvider);
+    final selectedChatId = ref.watch(selectedChatIdProvider);
     final shellNav = ref.read(shellNavigationProvider);
     final socialBadge =
         ref.watch(friendRequestsProvider).valueOrNull?.incoming.length ?? 0;
+
+    void showSection(NavigationSection next) {
+      shellNav.exitSpace();
+      if (selectedChatId != null) shellNav.backToChatList();
+      shellNav.setNavigationSection(next);
+    }
 
     var selectedIndex = 0;
     if (section == NavigationSection.social) {
@@ -34,11 +42,9 @@ class MobileShellTabBar extends ConsumerWidget {
       onDestinationSelected: (index) {
         switch (index) {
           case 0:
-            shellNav.exitSpace();
-            shellNav.setNavigationSection(NavigationSection.chats);
+            showSection(NavigationSection.chats);
           case 1:
-            shellNav.exitSpace();
-            shellNav.setNavigationSection(NavigationSection.social);
+            showSection(NavigationSection.social);
           case 2:
             shellNav.exitSpace();
             Navigator.of(context).push(
