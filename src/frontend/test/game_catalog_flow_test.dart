@@ -78,6 +78,70 @@ void main() {
     );
   });
   testWidgets(
+    'Add game stays reachable through catalog and search loading or failure in H/V',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final size in [const Size(1280, 800), const Size(390, 844)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        await tester.binding.setSurfaceSize(size);
+        for (final scenario in [
+          'loading',
+          'error',
+          'search-loading',
+          'search-error',
+        ]) {
+          final waiting = Completer<http.Response>();
+          final client = MockClient((request) async {
+            if (request.url.path.endsWith('/matches'))
+              return _json({'matches': []});
+            final failedRequest =
+                !scenario.startsWith('search-') ||
+                request.url.path.endsWith('/search');
+            if (failedRequest) {
+              return scenario.endsWith('loading')
+                  ? waiting.future
+                  : _json({'message': 'unavailable'}, 503);
+            }
+            return _json({
+              'games': [_game('initial', 'Initial game')],
+            });
+          });
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpWidget(_app(client));
+          if (scenario.startsWith('search-')) {
+            await tester.pumpAndSettle();
+            await tester.enterText(
+              find.byKey(GameCatalogScreen.searchFieldKey),
+              'new game',
+            );
+          }
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 200));
+          final addGame = find.byKey(GameCatalogScreen.addGameButtonKey);
+          expect(
+            addGame.hitTestable(),
+            findsOneWidget,
+            reason: '$size $scenario',
+          );
+          await tester.tap(addGame);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 350));
+          expect(
+            find.byType(AddGameScreen),
+            findsOneWidget,
+            reason: '$size $scenario',
+          );
+          await tester.pumpWidget(const SizedBox.shrink());
+          if (!waiting.isCompleted) waiting.complete(_json({'games': []}));
+          await tester.pump();
+        }
+      }
+      await tester.binding.setSurfaceSize(null);
+    },
+  );
+  testWidgets(
     'recent failure has an independent retry without hiding the public catalog',
     (tester) async {
       var historyCalls = 0;
@@ -398,6 +462,12 @@ void main() {
             await tester.pumpAndSettle();
           }
           expect(tester.takeException(), isNull, reason: '$size $state');
+          expect(
+            find.byKey(GameCatalogScreen.addGameButtonKey).hitTestable(),
+            findsOneWidget,
+            reason:
+                'Submission navigation is independent of catalog state: $size $state',
+          );
           if (state == 'populated') {
             expect(
               find.byKey(GameCatalogScreen.browseAllKey).hitTestable(),

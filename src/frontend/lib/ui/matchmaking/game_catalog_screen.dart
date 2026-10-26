@@ -138,6 +138,17 @@ class _GameCatalogScreenState extends ConsumerState<GameCatalogScreen> {
         ),
         backgroundColor: colors.canvas,
         shape: Border(bottom: BorderSide(color: colors.borderDefault)),
+        actions: [
+          if (!widget.selectMode)
+            IconButton(
+              key: GameCatalogScreen.addGameButtonKey,
+              tooltip: l10n.gameCatalogAddGame,
+              icon: const Icon(Icons.add),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const AddGameScreen()),
+              ),
+            ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -250,16 +261,6 @@ class _GameCatalogScreenState extends ConsumerState<GameCatalogScreen> {
                                   onPressed: () =>
                                       setState(() => _expanded = true),
                                   child: Text(l10n.gameCatalogBrowseAll),
-                                ),
-                              if (!widget.selectMode)
-                                FilledButton(
-                                  key: GameCatalogScreen.addGameButtonKey,
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => const AddGameScreen(),
-                                    ),
-                                  ),
-                                  child: Text(l10n.gameCatalogAddGame),
                                 ),
                             ],
                           );
