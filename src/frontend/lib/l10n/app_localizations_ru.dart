@@ -2204,6 +2204,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsAccent => 'Акцент профиля';
 
   @override
+  String get settingsAccessibilityTitle => 'Доступность';
+
+  @override
+  String get settingsAccessibilityMotionText => 'Движение и текст';
+
+  @override
+  String get settingsAccessibilityVoiceCalls => 'Голосовые вызовы';
+
+  @override
+  String get settingsAccessibilityDefaultVoiceMode => 'Режим по умолчанию';
+
+  @override
   String get settingsReducedMotion => 'Уменьшить анимацию';
 
   @override
@@ -2214,6 +2226,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsPttKeybindHint => 'Нажмите клавишу…';
+
+  @override
+  String get settingsPttKeybindDesktopHint => 'Настраивается на desktop';
 
   @override
   String get trayQuit => 'Выйти';

@@ -2186,6 +2186,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAccent => 'Profile accent';
 
   @override
+  String get settingsAccessibilityTitle => 'Accessibility';
+
+  @override
+  String get settingsAccessibilityMotionText => 'Motion and text';
+
+  @override
+  String get settingsAccessibilityVoiceCalls => 'Voice calls';
+
+  @override
+  String get settingsAccessibilityDefaultVoiceMode => 'Default mode';
+
+  @override
   String get settingsReducedMotion => 'Reduced motion';
 
   @override
@@ -2196,6 +2208,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPttKeybindHint => 'Press a key…';
+
+  @override
+  String get settingsPttKeybindDesktopHint => 'Configurable on desktop';
 
   @override
   String get trayQuit => 'Quit';

@@ -3926,6 +3926,30 @@ abstract class AppLocalizations {
   /// **'Profile accent'**
   String get settingsAccent;
 
+  /// No description provided for @settingsAccessibilityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility'**
+  String get settingsAccessibilityTitle;
+
+  /// No description provided for @settingsAccessibilityMotionText.
+  ///
+  /// In en, this message translates to:
+  /// **'Motion and text'**
+  String get settingsAccessibilityMotionText;
+
+  /// No description provided for @settingsAccessibilityVoiceCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice calls'**
+  String get settingsAccessibilityVoiceCalls;
+
+  /// No description provided for @settingsAccessibilityDefaultVoiceMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Default mode'**
+  String get settingsAccessibilityDefaultVoiceMode;
+
   /// No description provided for @settingsReducedMotion.
   ///
   /// In en, this message translates to:
@@ -3949,6 +3973,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Press a key…'**
   String get settingsPttKeybindHint;
+
+  /// No description provided for @settingsPttKeybindDesktopHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Configurable on desktop'**
+  String get settingsPttKeybindDesktopHint;
 
   /// No description provided for @trayQuit.
   ///
