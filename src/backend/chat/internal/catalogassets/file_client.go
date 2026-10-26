@@ -101,6 +101,9 @@ func parseAssetFileState(response *filev1.GetCatalogAssetStatusResponse, input B
 			identity.TerminalFenceID = fence
 			return identity, nil
 		}
+		// A fence is a minimized terminal discriminator, never mixed with
+		// retained full-detail generations or ordering proof.
+		return FileState{}, invalidFileBinding()
 	}
 	state, err := parseFileState(response, input.Actor, input.Selection)
 	if input.Legacy || err != nil || state.ActorCapture != input.ActorCapture || state.SelectionRevision != input.SelectionRevision {

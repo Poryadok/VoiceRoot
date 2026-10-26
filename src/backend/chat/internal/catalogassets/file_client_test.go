@@ -33,7 +33,7 @@ type fileServerFixture struct {
 }
 
 func TestCatalogAssetTerminalProofIsNarrow(t *testing.T) {
-	b := Binding{Actor: Actor{AccountID: uuid.New(), ProfileID: uuid.New()}, ActorCapture: ActorCapture{AccountGeneration: uuid.New(), ProfileGeneration: uuid.New()}, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New()}
+	b := Binding{Actor: Actor{AccountID: uuid.New(), ProfileID: uuid.New()}, ActorCapture: ActorCapture{AccountGeneration: uuid.New(), ProfileGeneration: uuid.New()}, Selection: Selection{Provider: "fixture", ProviderID: "one"}, SourceID: uuid.New(), FileID: uuid.New(), SelectorSlotID: uuid.New(), SelectionRevision: 1}
 	base := &filev1.GetCatalogAssetStatusResponse{SourceId: b.SourceID.String(), ActorAccountId: b.AccountID.String(), ActorProfileId: b.ProfileID.String(), Provider: b.Provider, ProviderId: b.ProviderID, FileId: b.FileID.String(), Status: "deleted", TerminalFenceId: uuid.NewString()}
 	got, err := parseAssetFileState(base, b)
 	require.NoError(t, err)
@@ -46,6 +46,12 @@ func TestCatalogAssetTerminalProofIsNarrow(t *testing.T) {
 		func(r *filev1.GetCatalogAssetStatusResponse) { r.TerminalFenceId = "" },
 		func(r *filev1.GetCatalogAssetStatusResponse) { r.TerminalFenceId = "bad" },
 		func(r *filev1.GetCatalogAssetStatusResponse) { r.ChatAccountGeneration = b.AccountGeneration.String() },
+		func(r *filev1.GetCatalogAssetStatusResponse) {
+			r.ChatAccountGeneration = b.AccountGeneration.String()
+			r.ChatProfileGeneration = b.ProfileGeneration.String()
+			r.SelectionRevision = 1
+			r.CurrentSelectionRevision = 1
+		},
 		func(r *filev1.GetCatalogAssetStatusResponse) { r.ActorProfileId = uuid.NewString() },
 		func(r *filev1.GetCatalogAssetStatusResponse) { r.SourceId = uuid.NewString() },
 		func(r *filev1.GetCatalogAssetStatusResponse) { r.ProviderId = "other" },

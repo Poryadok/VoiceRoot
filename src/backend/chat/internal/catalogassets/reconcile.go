@@ -81,8 +81,8 @@ func (r *Reconciler) Step(ctx context.Context, after uuid.UUID, limit int) (uuid
 				failures = append(failures, ErrBindingConflict)
 				continue
 			}
-			qualifiedFence := state.TerminalFenceID != uuid.Nil && terminalState(state.Status)
-			legacyCleanup := qualifiedFence && state.ActorCapture == (ActorCapture{}) && state.SelectionRevision == 0 && state.CurrentSelectionRevision == 0
+			qualifiedFence := state.TerminalFenceID != uuid.Nil && terminalState(state.Status) && state.ActorCapture == (ActorCapture{}) && state.SelectionRevision == 0 && state.CurrentSelectionRevision == 0
+			legacyCleanup := qualifiedFence
 			if b.Legacy && !legacyCleanup {
 				failures = append(failures, ErrActorUnknown)
 				continue

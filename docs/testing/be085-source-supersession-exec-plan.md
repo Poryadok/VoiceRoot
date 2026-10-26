@@ -34,6 +34,11 @@ timestamps, arrival or source hash. Protocol1/default/zero denies admission.
 Only qualified asset-selector terminal cleanup may use both zero revisions and
 both empty Chat generations: exact tuple, terminal status and nonzero opaque
 terminal_fence_id. It cannot become Import/op status/READY/lookup admission.
+Any nonempty terminal fence is this minimized discriminator exclusively. Retained
+full-detail terminal status carries positive ordering proof/generations with an
+empty fence; mixing both shapes is rejected. Independent139 found the parser
+fallthrough at12660b9 (c14); a focused mixed-shape negative failed before the
+narrow parser/reconciler correction. No READY admission bypass was identified.
 Retirement compares captured slot/revision/File identity. Legacy unordered rows
 remain historical and inadmissible; no ordering backfill or message/ref/blob
 deletion. Forward Chat migration29 leaves published28 immutable.
@@ -76,6 +81,17 @@ or production lock timeout. Buf lint/format pass; broader final checks and
 immutable rereview remain pending. The service tests control response delivery,
 not a replacement File admission algorithm: File ordering behavior itself stays
 95-owned and requires its own implementation/review.
+
+At12660b9, unfiltered exact-source evidence was recaptured without source edits:
+`go test -race ./internal/catalogassets -count=1 -timeout=4m` PASS10.049s and
+`go test -race . -count=1 -timeout=4m` PASS5.599s. Raw logs are in the isolated
+checkout's ignored `src/backend/chat/tmp/anton93-proof/12660b9-*-race.log`.
+User/Gateway/File/Messaging short reruns after schema changes all pass
+(311/1125/360/643 tests); Buf breaking against258b48d passes. These are developer
+source checks, not full functional integration: the included Messaging
+coordinator still sends private1 and lacks revision-echo verification.114 owns
+that adaptation; conditional Chat File2 authority cannot qualify the integrated
+producer/Messaging result before it is implemented and reviewed.
 
 No live provider, fake product data, executor uptake, E2E/sticker activation,
 environment mutation, deployment or acceptance is authorized by this fix.
