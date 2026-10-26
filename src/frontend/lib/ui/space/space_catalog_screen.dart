@@ -100,7 +100,11 @@ class _SpaceCatalogScreenState extends ConsumerState<SpaceCatalogScreen> {
   }
 
   void _openSpace(String id) {
-    ref.read(shellNavigationProvider).selectSpace(id);
+    // Catalog Open expresses an idempotent destination; the rail's selection
+    // action intentionally toggles an already selected Space off.
+    if (ref.read(selectedSpaceIdProvider) != id) {
+      ref.read(shellNavigationProvider).selectSpace(id);
+    }
     Navigator.of(context).maybePop();
   }
 

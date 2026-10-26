@@ -15,7 +15,7 @@ import 'support/auth_test_overrides.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
-  testWidgets('space strip selects space in shell without Navigator push', (
+  testWidgets('catalog Open is idempotent while space strip still toggles', (
     tester,
   ) async {
     const space = VoiceSpace(
@@ -24,12 +24,39 @@ void main() {
       visibility: 'SPACE_VISIBILITY_PRIVATE',
       ownerProfileId: 'owner-1',
     );
+    const otherSpace = VoiceSpace(
+      id: 'space-b',
+      name: 'Beta Squad',
+      visibility: 'public',
+      ownerProfileId: 'owner-1',
+    );
 
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           ...voiceAppTestOverrides(
             client: MockClient((req) async {
+              if (req.url.path == '/api/v1/spaces/catalog') {
+                return http.Response(
+                  jsonEncode({
+                    'space_list': {
+                      'spaces': [
+                        {
+                          'id': 'space-a',
+                          'name': 'Alpha Squad',
+                          'visibility': 'public',
+                        },
+                        {
+                          'id': 'space-b',
+                          'name': 'Beta Squad',
+                          'visibility': 'public',
+                        },
+                      ],
+                    },
+                  }),
+                  200,
+                );
+              }
               if (req.url.path == '/api/v1/chats') {
                 return http.Response(
                   jsonEncode({
@@ -42,7 +69,7 @@ void main() {
             }),
           ),
           mySpacesProvider.overrideWith(
-            (_) async => const SpaceListData(spaces: [space]),
+            (_) async => const SpaceListData(spaces: [space, otherSpace]),
           ),
         ],
         child: MaterialApp(
@@ -74,6 +101,34 @@ void main() {
     await tester.tap(find.byKey(ChatListBody.spaceCatalogKey));
     await tester.pumpAndSettle();
     expect(find.byType(SpaceCatalogScreen), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(SpaceCatalogScreen.cardKey('space-a')),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceCatalogScreen), findsNothing);
+    expect(container.read(selectedSpaceIdProvider), 'space-a');
+    // Rail toggling remains intentional outside the catalog's Open intent.
+    await tester.tap(find.byKey(ChatListBody.spaceTileKey('space-a')));
+    await tester.pump();
+    expect(container.read(selectedSpaceIdProvider), isNull);
+    await tester.tap(find.byKey(ChatListBody.spaceTileKey('space-a')));
+    await tester.pump();
+    await tester.tap(find.byKey(ChatListBody.spaceCatalogKey));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(SpaceCatalogScreen.cardKey('space-b')),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(selectedSpaceIdProvider), 'space-b');
+    expect(find.byType(SpaceCatalogScreen), findsNothing);
+    await tester.tap(find.byKey(ChatListBody.spaceCatalogKey));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
     expect(find.byType(SpaceCatalogScreen), findsNothing);
