@@ -167,6 +167,33 @@ qualification is inferred from this producer package.
 
 ## Decisions
 
+### Generation-bound normalized provider writer
+
+The next bounded kernel stage adds `ApplyFenced`, using a real installed limited
+writer login and the exact generation under a transaction-scoped shared 17006
+barrier before provider/event/aggregate locks. The installer holds that barrier
+exclusively. The compatibility `Apply` entry refuses an installed fence, including
+when accidentally called using the new writer credential. A source UUID alone,
+installer session, changed generation or fence-control privilege fails closed.
+
+New migration 000008 appends `subscription_kernel_writes` to the complete fence
+inventory. Only a newly APPLIED canonical revision records `WRITTEN`, atomically
+with its matching provider binding/version/outcome, canonical bytes/hash and
+outbox. Historical replay, STALE and UNCHANGED do not certify old rows. This is
+write provenance, not account CURRENT evidence; no public/protected read may
+admit from it alone. No migration, runtime registration or provider is activated.
+Existing 000006/000007 remain immutable. An already installed older fence does
+not automatically receive new table grants through request replay; installation
+and its immutable source/role manifest must be qualified before serving this entry.
+
+Causal tests cover legacy-entry bypass (RED before correction), actual restricted
+login, shadow replay, generation mismatch, evidence-trigger rollback, a real
+two-connection blocking-pid generation drain, fence-control privilege drift and
+deadline expiry during the generation wait. Auth's role-erasure selector/core is
+not reused as Subscription lifecycle authority. Dedicated protected owner
+snapshot/ingress, local expiry/account/Space writers and CURRENT qualification
+remain the next coupled stages; the existing milestone boxes stay open.
+
 The privilege fence is a real database boundary: drain old DML under table locks,
 remove effective direct/inherited write rights, and use separately limited new
 runtime roles. An environment boolean, caller generation or owner/superuser

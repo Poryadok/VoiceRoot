@@ -38,6 +38,7 @@ type FenceRequest struct {
 var authorityTables = []string{
 	"billing_events", "space_subscriptions", "subscription_entitlement_aggregates",
 	"subscription_event_outbox", "subscription_grace_reminders",
+	"subscription_kernel_writes",
 	"subscription_provider_bindings", "subscription_provider_conflicts",
 	"subscription_provider_event_fences", "subscription_provider_outcomes",
 	"subscription_provider_versions", "subscription_space_lifecycle_fences",

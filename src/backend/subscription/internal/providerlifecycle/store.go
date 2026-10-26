@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	eventsv1 "voice.app/voice/events/v1"
+	"voice/backend/subscription/internal/currentauthority"
 	"voice/backend/subscription/internal/entitlementoutbox"
 	"voice/backend/subscription/internal/gracereminders"
 )
@@ -56,6 +57,20 @@ func commandBytes(c Command) ([]byte, []byte, error) {
 // not today's projection. Contract conflicts commit only a durable quarantine
 // record; errors must never be converted to webhook success by a future adapter.
 func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
+	return s.apply(ctx, c, "")
+}
+
+// ApplyFenced is the strict successor entry. It requires the exact installed
+// non-owner login and generation even for a historical replay. Source write
+// provenance does not qualify account CURRENT authority or activate a provider.
+func (s Store) ApplyFenced(ctx context.Context, c Command, generation string) (Result, error) {
+	if generation == "" {
+		return Result{}, currentauthority.ErrFenceConflict
+	}
+	return s.apply(ctx, c, generation)
+}
+
+func (s Store) apply(ctx context.Context, c Command, generation string) (Result, error) {
 	if err := validateCommand(c); err != nil {
 		return Result{}, err
 	}
@@ -70,6 +85,31 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 		return Result{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	var writer *currentauthority.Writer
+	if generation != "" {
+		writer, err = currentauthority.AcquireWriter(ctx, tx, generation)
+		if err != nil {
+			return Result{}, err
+		}
+	} else {
+		// The compatibility producer cannot bypass a completed cutover, even if
+		// accidentally constructed using the replacement writer credential.
+		if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock_shared(17006)"); err != nil {
+			return Result{}, err
+		}
+		var exists bool
+		if err = tx.QueryRow(ctx, "SELECT to_regclass('public.subscription_authority_fence') IS NOT NULL").Scan(&exists); err != nil {
+			return Result{}, err
+		}
+		if exists {
+			if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.subscription_authority_fence)").Scan(&exists); err != nil {
+				return Result{}, err
+			}
+			if exists {
+				return Result{}, currentauthority.ErrFenceConflict
+			}
+		}
+	}
 	// A fixed lock order covers absent rows, cross-target replay, and parallel
 	// provider bindings. Aggregate seed/key exactly match S1 Append.
 	for _, lock := range []struct {
@@ -224,6 +264,11 @@ func (s Store) Apply(ctx context.Context, c Command) (Result, error) {
 	}
 	if _, err = tx.Exec(ctx, `INSERT INTO subscription_provider_outcomes(provider,provider_event_id,request_hash,disposition,payload) VALUES($1,$2,$3,$4,$5)`, c.Provider, c.EventID, requestHash[:], result.Disposition, body); err != nil {
 		return Result{}, err
+	}
+	if writer != nil && result.Disposition == "APPLIED" {
+		if err = writer.RecordProvider(ctx, result.Event, c.Provider, c.SubscriptionID, c.EventID, c.Version); err != nil {
+			return Result{}, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return Result{}, err
