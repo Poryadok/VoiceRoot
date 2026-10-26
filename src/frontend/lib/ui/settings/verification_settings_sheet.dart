@@ -69,6 +69,7 @@ class _VerificationSettingsSheetState
   int? _observedSessionInstallGeneration;
   String? _observedAccountId;
   String? _observedProfileId;
+  var _verificationStatusRequestGeneration = 0;
 
   @override
   void initState() {
@@ -186,6 +187,7 @@ class _VerificationSettingsSheetState
   }
 
   Future<void> _loadVerificationStatus() async {
+    final requestGeneration = ++_verificationStatusRequestGeneration;
     final session = ref.read(authControllerProvider).session;
     if (session == null) {
       setState(() {
@@ -216,20 +218,17 @@ class _VerificationSettingsSheetState
     final result = await ref
         .read(voiceUsersClientProvider)
         .getVerificationStatus(authorization: session.authorizationHeader);
-    if (!mounted) return;
+    if (!mounted || requestGeneration != _verificationStatusRequestGeneration) {
+      return;
+    }
     if (ref.read(profileSwitchInProgressProvider) ||
         authController.sessionInstallGeneration != installGeneration ||
         authController.gatewayRequestIdentity != requestIdentity ||
         ref.read(authControllerProvider).session?.activeProfileId !=
             session.activeProfileId) {
-      setState(() {
-        _verificationStatusLoading = false;
-        _verificationStatus = null;
-        _pendingOrganizationChallenge = null;
-        _verificationStatusError = AppLocalizations.of(
-          context,
-        )!.commonActionFailed;
-      });
+      // Session/profile listeners clear and reload their own state. This
+      // response no longer owns the visible request and must not publish over
+      // it (or its loading/error state).
       return;
     }
     switch (result) {
@@ -289,6 +288,7 @@ class _VerificationSettingsSheetState
   }
 
   void _clearVerificationForSessionChange({required bool reload}) {
+    _verificationStatusRequestGeneration++;
     final session = ref.read(authControllerProvider).session;
     setState(() {
       _selectedProfileId = session?.activeProfileId;
