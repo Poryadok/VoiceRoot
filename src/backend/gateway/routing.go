@@ -25,6 +25,9 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 	}
 
 	namespace := restNamespace(r.URL.Path)
+	if namespace == "gifs" {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	if !isPublicRESTNamespace(namespace) {
 		traceMatchFoundTransport("rest-namespace-not-public")
 		http.NotFound(w, r)
@@ -121,6 +124,10 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 		traceMatchFoundTransport("rest-transcoder-unhandled")
 	}
 
+	if namespace == "gifs" && r.Method == http.MethodGet && (r.URL.Path == "/api/v1/gifs/search" || r.URL.Path == "/api/v1/gifs/trending") {
+		writeGRPCError(w, status.Error(codes.Unavailable, "GIF search unavailable"))
+		return
+	}
 	if isProtectedRoleOrBotRequest(r) {
 		writeGRPCError(w, status.Error(codes.Unavailable, "protected Role or Bot transport unavailable"))
 		return
@@ -227,7 +234,7 @@ func isGameIntegrationSessionCredentialRoute(method, path string) bool {
 
 func isPublicRESTNamespace(namespace string) bool {
 	switch namespace {
-	case "auth", "users", "friends", "chats", "sticker-packs", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links", "game-integrations":
+	case "auth", "users", "friends", "chats", "sticker-packs", "gifs", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links", "game-integrations":
 		return true
 	default:
 		return false
@@ -267,7 +274,7 @@ func isBotTokenRESTRoute(path string) bool {
 }
 
 func publicRESTNamespaces() []string {
-	return []string{"auth", "users", "friends", "chats", "sticker-packs", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links", "game-integrations"}
+	return []string{"auth", "users", "friends", "chats", "sticker-packs", "gifs", "messages", "spaces", "invites", "roles", "voice", "files", "notifications", "search", "matchmaking", "moderation", "subscription", "bots", "stories", "analytics", "links", "game-integrations"}
 }
 
 func (g *gateway) logAnalyticsAudit(r *http.Request, claims tokenClaims) {

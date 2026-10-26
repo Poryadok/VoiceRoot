@@ -13,18 +13,67 @@ enum ComposerAttachAction { photoOrVideo, document, music }
 Future<void> showComposerEmojiPanel(
   BuildContext context, {
   required void Function(String emoji) onSelected,
+  List<String> recentEmoji = const [],
+  BuildContext? anchorContext,
+  WidgetBuilder? panelBuilder,
   VoidCallback? onDismiss,
 }) async {
   final l10n = AppLocalizations.of(context)!;
-  final emoji = await _showComposerOverlay<String>(
-    context: context,
-    onDismiss: onDismiss,
-    child: ComposerEmojiPanelBody(
-      title: l10n.composerEmojiPanelTitle,
-      onSelected: (value) => Navigator.of(context).pop(value),
-    ),
-  );
-  if (emoji != null) onSelected(emoji);
+  Widget body(BuildContext routeContext) =>
+      panelBuilder?.call(routeContext) ??
+      ComposerEmojiPanelBody(
+        title: l10n.composerEmojiPanelTitle,
+        recentEmoji: recentEmoji,
+        onSelected: (value) => Navigator.of(routeContext).pop(value),
+      );
+  try {
+    String? emoji;
+    if (VoiceLayout.isNarrow(MediaQuery.sizeOf(context).width)) {
+      emoji = await showVoiceBottomSheet<String>(
+        context: context,
+        initialSize: (520 / MediaQuery.sizeOf(context).height).clamp(0.3, 0.8),
+        minSize: 0.3,
+        maxSize: 0.9,
+        scrollable: false,
+        child: Builder(builder: body),
+      );
+    } else {
+      final overlay =
+          Navigator.of(
+                context,
+                rootNavigator: true,
+              ).overlay!.context.findRenderObject()!
+              as RenderBox;
+      final targetContext =
+          anchorContext ??
+          FocusManager.instance.primaryFocus?.context ??
+          context;
+      final target = targetContext.findRenderObject()! as RenderBox;
+      final anchor =
+          target.localToGlobal(Offset.zero, ancestor: overlay) & target.size;
+      emoji = await showDialog<String>(
+        context: context,
+        useSafeArea: false,
+        barrierColor: Colors.transparent,
+        builder: (routeContext) => CustomSingleChildLayout(
+          delegate: _AttachMenuLayout(
+            anchor,
+            MediaQuery.paddingOf(routeContext),
+            width: 360,
+            alignRight: true,
+            maxHeight: 360,
+          ),
+          child: VoiceFocusTrap(
+            onEscape: () => Navigator.of(routeContext).pop(),
+            child: body(routeContext),
+          ),
+        ),
+      );
+    }
+    if (emoji != null) onSelected(emoji);
+  } finally {
+    onDismiss?.call();
+  }
 }
 
 /// Attach popup (§3.6a) with focus trap (§3.6e).
@@ -77,29 +126,38 @@ Future<ComposerAttachAction?> showComposerAttachMenu(
 
 /// The reference popup is 260 px wide, 8 px above the actual Attach button.
 class _AttachMenuLayout extends SingleChildLayoutDelegate {
-  const _AttachMenuLayout(this.anchor, this.padding);
+  const _AttachMenuLayout(
+    this.anchor,
+    this.padding, {
+    this.width = 260,
+    this.alignRight = false,
+    this.maxHeight = double.infinity,
+  });
 
   final Rect anchor;
   final EdgeInsets padding;
+  final double width;
+  final bool alignRight;
+  final double maxHeight;
   static const margin = 8.0;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
-    final width = (constraints.maxWidth - padding.horizontal - margin * 2)
-        .clamp(0.0, 260.0);
+    final panelWidth = (constraints.maxWidth - padding.horizontal - margin * 2)
+        .clamp(0.0, width);
     return BoxConstraints(
-      minWidth: width,
-      maxWidth: width,
+      minWidth: panelWidth,
+      maxWidth: panelWidth,
       maxHeight: (constraints.maxHeight - padding.vertical - margin * 2).clamp(
         0.0,
-        double.infinity,
+        maxHeight,
       ),
     );
   }
 
   @override
   Offset getPositionForChild(Size size, Size childSize) => Offset(
-    anchor.left.clamp(
+    (alignRight ? anchor.right - childSize.width : anchor.left).clamp(
       padding.left + margin,
       size.width - padding.right - margin - childSize.width,
     ),
@@ -111,7 +169,11 @@ class _AttachMenuLayout extends SingleChildLayoutDelegate {
 
   @override
   bool shouldRelayout(_AttachMenuLayout oldDelegate) =>
-      anchor != oldDelegate.anchor || padding != oldDelegate.padding;
+      anchor != oldDelegate.anchor ||
+      padding != oldDelegate.padding ||
+      width != oldDelegate.width ||
+      alignRight != oldDelegate.alignRight ||
+      maxHeight != oldDelegate.maxHeight;
 }
 
 Future<T?> _showComposerOverlay<T>({
@@ -148,52 +210,102 @@ class ComposerEmojiPanelBody extends StatelessWidget {
     super.key,
     required this.title,
     required this.onSelected,
+    this.recentEmoji = const [],
+    this.showTitle = true,
   });
 
   static const panelKey = Key('composer_emoji_panel');
-  static const choices = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🔥', '👀'];
+  static const choices = [
+    '😀',
+    '😂',
+    '🥹',
+    '😍',
+    '🤝',
+    '🔥',
+    '🎉',
+    '❤️',
+    '👍',
+    '👀',
+    '💯',
+    '🚀',
+    '✨',
+    '🙌',
+    '🤔',
+    '😎',
+    '👏',
+    '🙏',
+    '💡',
+    '✅',
+    '💬',
+    '🎧',
+    '📎',
+    '🌟',
+    '😮',
+    '😢',
+  ];
 
   final String title;
   final ValueChanged<String> onSelected;
+  final List<String> recentEmoji;
+  final bool showTitle;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       label: title,
-      child: Padding(
+      child: Material(
         key: panelKey,
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 4,
-              runSpacing: 4,
-              children: [
-                for (final emoji in choices)
-                  Semantics(
-                    button: true,
-                    label: emoji,
-                    child: IconButton(
-                      key: Key('composer_emoji_$emoji'),
-                      onPressed: () => onSelected(emoji),
-                      icon: Text(
-                        emoji,
-                        style: VoiceEmojiStyle.textStyle(fontSize: 28),
-                      ),
-                    ),
-                  ),
+        borderRadius: BorderRadius.circular(16),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showTitle) ...[
+                Text(title, style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
               ],
-            ),
-          ],
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (recentEmoji.isNotEmpty) ...[
+                        Text(AppLocalizations.of(context)!.composerEmojiRecent),
+                        _grid(recentEmoji.toSet().toList(), recent: true),
+                        const Divider(),
+                      ],
+                      _grid(choices),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _grid(List<String> emoji, {bool recent = false}) => GridView.count(
+    crossAxisCount: 6,
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    children: [
+      for (final value in emoji)
+        IconButton(
+          autofocus: recent
+              ? value == emoji.first
+              : recentEmoji.isEmpty && value == emoji.first,
+          key: Key(recent ? 'composer_recent_$value' : 'composer_emoji_$value'),
+          tooltip: value,
+          onPressed: () => onSelected(value),
+          icon: Text(value, style: VoiceEmojiStyle.textStyle(fontSize: 28)),
+        ),
+    ],
+  );
 }
 
 class ComposerAttachMenuBody extends StatelessWidget {
