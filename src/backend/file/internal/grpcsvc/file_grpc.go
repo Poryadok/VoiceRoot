@@ -25,6 +25,7 @@ import (
 
 	"voice/backend/file/internal/authctx"
 	"voice/backend/file/internal/fileevents"
+	"voice/backend/file/internal/pdfproc"
 	"voice/backend/file/internal/r2file"
 	"voice/backend/file/internal/store"
 
@@ -375,7 +376,14 @@ func (s *FileGRPC) FetchRevocableDownload(ctx context.Context, capability revoca
 	if err != nil {
 		return store.FileRow{}, nil, err
 	}
-	body, err := s.reader.ReadObject(ctx, key, row.SizeBytes)
+	maxBytes := row.SizeBytes
+	if capability.Variant == filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL && row.FileType == "document" && row.MimeType == "application/pdf" {
+		maxBytes = pdfproc.MaxThumbnailBytes
+		// These are response attributes only; persisted document facts stay intact.
+		row.MimeType = "image/png"
+		row.OriginalName += ".png"
+	}
+	body, err := s.reader.ReadObject(ctx, key, maxBytes)
 	if err != nil {
 		return store.FileRow{}, nil, status.Error(codes.Unavailable, "download unavailable")
 	}
@@ -492,6 +500,9 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 		if extractionErr != nil {
 			_ = s.events.PublishFileProcessed(ctx, row.ID.String(), row.Status, "", "")
 		}
+	} else if row.FileType == "document" && row.MimeType == "application/pdf" && !row.IsE2E && row.Status == "processing" {
+		// The durable PDF worker generates the first-page thumbnail asynchronously.
+		// Keep the original document and expose processing through the existing API.
 	} else if row.Status == "processing" {
 		row, err = s.files.ApplyScanResult(ctx, fileID, "ready", row.ScanResult)
 		if err != nil {

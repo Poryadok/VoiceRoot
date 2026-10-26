@@ -90,6 +90,17 @@ fall back to `converted_r2_key`, `r2_key`, an original, a generated placeholder,
 or an R2 key exposed to the caller. An absent thumbnail returns gRPC
 `FailedPrecondition`; any unrecognised enum value returns `InvalidArgument`.
 
+Plaintext `application/pdf` documents use the existing `processing` state as a
+durable asynchronous thumbnail queue. The worker renders only page one to PNG
+(at most 320 pixels per edge and 1 MiB), with a 10 MiB input bound, a ten-second
+renderer deadline and one renderer per process. Poppler `pdftoppm` must be
+installed in the File runtime. Encrypted documents bypass server rendering.
+The original PDF, SHA-256, size and retention deadline remain unchanged.
+Malformed PDFs become `failed`; temporary storage/tool failures remain
+`processing` and retry. Thumbnail keys are persisted in File/blob storage
+before object writes, so crashes and ambiguous PUT responses leave GC-visible
+objects. Ready metadata and its redacted preview outbox event commit together.
+
 The request retains `FileAccessSelector`, and File performs the same ACL,
 reference/capability, file-state and `FILE_READ_SURFACE_URL` checks before
 creating either URL. The returned URL is presigned; direct R2 object URLs or

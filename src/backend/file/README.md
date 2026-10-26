@@ -10,6 +10,7 @@ Current public surface:
 - gRPC `FileService.GetFileURL` — presigned GET for ready files (prefers `converted_r2_key` when present).
 - gRPC `FileService.DeleteFile` — R2 purge + DB soft-delete.
 - Background expiry worker (`internal/jobs`) — retention purge, `file.expired` NATS when `NATS_URL` is set.
+- Plaintext PDFs remain `processing` after confirmation until the PDF worker writes a first-page PNG thumbnail; original document bytes remain the download. The runtime requires Poppler `pdftoppm`.
 - gRPC `FileService` quota/list — see `file_grpc.go` and `file_service_upload_test.go`.
 
 Compose: `file` + `clamav` services in `--profile app`; set `FILE_R2_*` in `.env` (see `.env.example`). Optional `FILE_RETENTION_DEV` shortens retention TTL in dev (seconds).
