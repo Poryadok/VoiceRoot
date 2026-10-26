@@ -447,6 +447,14 @@ message CompleteOnboardingStepResponse {
 }
 message GetVerificationStatusResponse {
   VerificationStatus verification_status = 1;
+  // Owner-only current unexpired challenge. Absent when nothing can be restored.
+  PendingOrganizationChallenge pending_organization_challenge = 2;
+}
+
+message PendingOrganizationChallenge {
+  string domain = 1;
+  string txt_record = 2;
+  google.protobuf.Timestamp expires_at = 3;
 }
 
 message SetVerificationRequest {

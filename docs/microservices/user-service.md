@@ -125,6 +125,33 @@ service UserService {
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
 
+### Owner-only verification challenge readback
+
+`GetVerificationStatusResponse` preserves effective `verification_status` at
+field 1 and adds optional `pending_organization_challenge` at field 2:
+`domain`, exact `txt_record` (`voice-verify=` plus the persisted token), and
+`expires_at` (`google.protobuf.Timestamp`, PostgreSQL `created_at + 24 hours`).
+The caller must own the requested nondeleted profile. Missing credentials,
+invalid profile ID, and foreign/unknown/deleted profiles retain the existing
+Unauthenticated, InvalidArgument, and NotFound errors respectively. No current
+unexpired pending request means successful absence of the optional message;
+storage errors remain errors. Public Profile and VerificationStatus do not
+expose challenge data.
+
+The read checks ownership and pending token in one PostgreSQL statement snapshot
+and uses the existing strict 24-hour lifetime predicate. It does not generate,
+supersede, expire, consume, or verify requests, query DNS, or change badges,
+sources, revisions, or events. Navigation/reload uses this GET, never Start.
+This is an observation: concurrent Start or expiry can invalidate it before
+Check, whose exact-token completion rules remain authoritative. Clients must
+discard delayed responses after account/session/profile changes. After Start,
+clients can reread GET for the current canonical challenge and expiry.
+
+Organization account kind and its authoritative enforcement remain unresolved:
+the feature requires an Organization account, while Auth currently models
+`regular|guest`. This readback does not define that kind, infer eligibility from
+badges/domain, or enable organization verification controls.
+
 ### Переключение профиля и сессия Auth
 
 Несмотря на историческое имя, `UserService.SwitchProfile` проверяет целевой
