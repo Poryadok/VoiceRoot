@@ -182,6 +182,24 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 
 ## Risks and follow-ups
 
+- Normal merge `a631b630b672ada8ece1ff93543ca31ef73551ec` consumes Chat's
+  `5c05cf34358eb9beda472a6ce8502c8a80b4ce11` destination-authority protocol.
+  File's signed pure-service client checks exact actor/destination echo, actual
+  chat type and captured Chat generations; request-hash/signature/replay tests
+  passed under race (3.239 s). No ordinary user-header fabrication is used.
+- Protected File Lookup/Validate handlers now use actual locked source/gate/
+  blob/representation rows and fresh User actor snapshots. Actual PostgreSQL
+  matrix plus private-principal checks passed under race (19.895 s), including
+  UNKNOWN never authorizing purge, soft deletion closing the local gate, and a
+  later live snapshot never reopening it. No listener/startup activation yet.
+- The Chat dependency merge reintroduced User catalog server tests requiring
+  PR907-only helpers/stubs. User short currently fails compilation on
+  `deletionTransportIdentity` and `GetProfileDeletionStates`; the issue is sent
+  to Chat/User/integration owners. File checks do not qualify that server.
+- Graphify refresh handle 64238 completed exit 0 (119479 nodes/248439 edges);
+  visualization size and pre-existing C++ header warnings do not assert fresh
+  semantic labels. The next source checkpoint requires another AST refresh.
+
 - File profile purge now commits a CLOSED opaque generation before erasing
   private source/operation mappings. It writes purpose-scoped terminal fences,
   preserves committed message references and ready history, and rejects an
