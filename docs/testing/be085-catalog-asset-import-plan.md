@@ -182,6 +182,21 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
 
 ## Risks and follow-ups
 
+- Native byte-backed READY proof passed without a fake converted representation
+  (7.329 s, no skip): 127-byte generated GIF fixture went through the actual
+  source PUT, existing durable GIF worker and native FFmpeg 6.1.1 into a 1613-byte
+  MP4 and 68-byte WebP. Protected File lookup attested the exact source/delivered
+  digests, size, video category and revision 3 from real PG/object bytes. Actor,
+  destination and source-byte adapter are explicit engineering fixtures; this
+  is not an actual Messaging insertion or external-provider proof.
+- Windows lacks ffmpeg on PATH. The engineering-only codec helper was built
+  from this checkout for Linux and ran in immutable image
+  `sha256:771212dd0203520df0a33fd375e088113f944e43eb536e367b19ba8bfd6e79d9`
+  with no network, read-only root, one CPU/512 MiB and bounded temporary space.
+  Helper SHA256 was
+  `357981d49d90afead3658f0d8bed7abcf6a7420991ffc9b2d8feec56934ce45c`.
+  No image application/service or production resolver was started.
+
 - Independent Anton-140 marked `89ce2f2dd9948555806612b0b6838fcfe74f16b5`
   NOT CLEAR: ordinary GIF original cleanup bypassed the source write pin and
   could declare deletion complete before a late PUT. A real owned HTTP PUT plus
