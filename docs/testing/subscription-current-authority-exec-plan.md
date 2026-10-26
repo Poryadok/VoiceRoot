@@ -202,6 +202,37 @@ current writer and account lifecycle provenance remain independently required.
 
 ## Risks And Follow-Ups
 
+### Auth source and recovery disposition
+
+Astra-178's bounded architecture disposition is recorded in BE-028 comment c8,
+with pointers in BE-014 c10 and BE118-GRACE-BOUNDARY-AUTHORITY c2. A dedicated
+fresh Java Auth account/lifecycle snapshot and protected ordered ingress are
+executable next. A7 does not require an external identity-erasure CURRENT adapter;
+BE-181's separate Messaging/PERSONAL decision is not broadened. Do not reuse
+role-purpose selectors, or treat an active/missing native row as complete paid
+eligibility. Read the actual account, lifecycle head and matching facts under one
+coherent owned cut and demonstrate concurrent deletion/restore interleavings.
+This owner observation is an input to Subscription admission, never its result.
+
+Recovery remains fail closed. Before Auth or Subscription database/PITR restore,
+stop paid/source admission; preserve available lifecycle/provider journals and
+permanent purge evidence outside the restored domain. After restore, reconcile
+that actual retained evidence and admit only the proven cohort under a reviewed
+generation. Missing or ambiguous evidence leaves that cohort UNKNOWN. Fresh UUIDs,
+TLS, provider paid state, or a marker inside the same restored database cannot
+prove a lost deletion/purge never happened. There is no automatic READY/CURRENT
+on restart or generation rotation. No CURRENT promotion/read exists in this source
+stage, and WRITTEN-only rows remain insufficient for one.
+
+Before an admission/read implementation can be registered, its executable gate
+must bind the declared restore/admission operation, surviving evidence supplier,
+exact source/cut and completeness rule, and reject stale generations/in-flight
+responses. Actual recovery qualification must exercise older Auth, Subscription
+and simultaneous backups, missing evidence and generation rotation. This records
+required future checks, not completed recovery proof or an invented external
+service. The immediately ready source stage remains the dedicated Auth snapshot
+and ordered ingress; the absence of an identity-erasure adapter does not block it.
+
 Auth paths require current owner coordination. Production role/process inventory,
 provider ordering, privacy restore and real account ingress qualification remain
 gates; tests cannot fabricate those receipts. BE-014 snapshot sessions/journal
