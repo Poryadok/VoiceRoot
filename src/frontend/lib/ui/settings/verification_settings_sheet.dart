@@ -88,10 +88,21 @@ class _VerificationSettingsSheetState
       return;
     }
     final selectedProfileId = session.activeProfileId;
+    final authController = ref.read(authControllerProvider.notifier);
+    final requestIdentity = authController.gatewayRequestIdentity;
+    final installGeneration = authController.sessionInstallGeneration;
     final result = await ref
         .read(voiceAuthClientProvider)
         .listLinkedAccounts(session: session);
-    if (!mounted) return;
+    if (!mounted ||
+        requestIdentity == null ||
+        ref.read(profileSwitchInProgressProvider) ||
+        authController.sessionInstallGeneration != installGeneration ||
+        authController.gatewayRequestIdentity != requestIdentity ||
+        ref.read(authControllerProvider).session?.activeProfileId !=
+            selectedProfileId) {
+      return;
+    }
     setState(() {
       _loading = false;
       switch (result) {

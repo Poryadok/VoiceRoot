@@ -33,6 +33,139 @@ class _MemoryAuthStorage implements AuthSessionStorage {
 }
 
 void main() {
+  for (final switchProfile in [true, false]) {
+    testWidgets('linked-account completion preserves status identity after '
+        '${switchProfile ? 'profile switch' : 'token refresh'}', (
+      tester,
+    ) async {
+      final linkedResponse = Completer<http.Response>();
+      var currentProfileId = 'profile-a';
+      var linkedRequests = 0;
+      var statusRequests = 0;
+      late AuthController authController;
+      final mock = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/auth/linked-accounts') {
+          linkedRequests++;
+          return linkedResponse.future;
+        }
+        if (request.method == 'GET' &&
+            request.url.path == '/api/v1/users/me/verification') {
+          statusRequests++;
+          return http.Response(
+            jsonEncode({
+              'verification_status': {
+                'profile_id': currentProfileId,
+                'verification_type': 'personal',
+                'badge': 'badge-$currentProfileId',
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+      final gateway = GatewayHttpClient(
+        httpClient: mock,
+        config: const GatewayConfig(baseUrl: 'http://api.test'),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            ...voiceThemeTestOverrides(),
+            authSessionStorageProvider.overrideWithValue(_MemoryAuthStorage()),
+            guestCredentialsStorageProvider.overrideWithValue(
+              InMemoryGuestCredentialsStorage(),
+            ),
+            gatewayConfigProvider.overrideWithValue(
+              const GatewayConfig(baseUrl: 'http://api.test'),
+            ),
+            gatewayHttpClientProvider.overrideWithValue(gateway),
+            voiceAuthClientProvider.overrideWithValue(
+              VoiceAuthClient(gateway: gateway),
+            ),
+            voiceUsersClientProvider.overrideWithValue(
+              VoiceUsersClient(gateway: gateway),
+            ),
+            authControllerProvider.overrideWith((ref) {
+              authController = AuthController(
+                authClient: ref.watch(voiceAuthClientProvider),
+                storage: ref.watch(authSessionStorageProvider),
+                guestCredentialsStorage: ref.watch(
+                  guestCredentialsStorageProvider,
+                ),
+              );
+              authController.state = const AuthState(
+                session: AuthSession(
+                  accessToken: 'profile-a-token',
+                  refreshToken: 'profile-a-refresh',
+                  expiresInSeconds: 900,
+                  accountId: 'account-1',
+                  activeProfileId: 'profile-a',
+                ),
+              );
+              return authController;
+            }),
+          ],
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: VerificationSettingsSheet()),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(linkedRequests, 1);
+      await tester.tap(
+        find.byKey(VerificationSettingsSheet.verificationStatusKey),
+      );
+      await tester.pumpAndSettle();
+      expect(statusRequests, 1);
+
+      currentProfileId = switchProfile ? 'profile-b' : 'profile-a';
+      authController.state = authController.state.copyWith(
+        session: AuthSession(
+          accessToken: 'rotated-token',
+          refreshToken: 'rotated-refresh',
+          expiresInSeconds: 900,
+          accountId: 'account-1',
+          activeProfileId: currentProfileId,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(statusRequests, switchProfile ? 2 : 1);
+      expect(find.text('badge-$currentProfileId'), findsOneWidget);
+
+      linkedResponse.complete(
+        http.Response(
+          jsonEncode({
+            'linked_accounts': [
+              {
+                'platform': 'twitch',
+                'profile_id': 'profile-a',
+                'external_id': 'twitch-a',
+                'external_login': 'profile-a-streamer',
+              },
+            ],
+          }),
+          200,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(
+          find.byKey(VerificationSettingsSheet.verificationStatusViewKey),
+        ),
+      )!;
+      expect(
+        find.text(l10n.verificationSelectedProfile(currentProfileId)),
+        findsOneWidget,
+      );
+      expect(find.text('badge-$currentProfileId'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'late verification response from the prior profile cannot clear current status',
     (tester) async {
