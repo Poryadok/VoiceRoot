@@ -28,6 +28,9 @@ GIF processing, which is a dependency rather than proof of protected import.
   changes, encrypted-DM catalog identity, new sticker ingestion and pack editing.
 - Existing sticker new-send validation still requires the current installed pack
   and exact sticker/file tuple. Uninstall does not remove committed history.
+  Source inspection found the current Messaging implementation checks UUID
+  shape and File metadata only; installed-pack/exact-tuple authority remains
+  OPEN. The GIF slice does not claim that negative matrix is implemented.
 - Encrypted-DM opaque references versus server-visible catalog identity remains
   an unresolved product/privacy contract; no plaintext source branch is enabled.
 
@@ -150,6 +153,16 @@ and altered retained retry. E2E exclusion is checked before source disclosure.
   loss plus CDN rotation without persisting URLs. Its route failed ordinary
   listener isolation before the allowlist update (RED), then the combined native
   principal/fetch race suites passed (2.786 s and 3.156 s).
+- Messaging's typed consumer now classifies by File ID, checks canonical Chat
+  source/current destination, repeats File attestation and preserves ordinary
+  origin-chat metadata validation. E2E does not call source authority. Catalog
+  forwarding remains unavailable in this initial consumer; ordinary forwarding
+  is unchanged. Runtime configuration and actual File handlers are not wired.
+- Messaging component RED included missing coordinator, an actual parsed-path
+  metadata dependency failure, forged ordinary attribution acceptance and a
+  typed-nil dependency panic. Corrected focused race tests passed (4.055 s);
+  Messaging and File `go test -short ./...` and scoped vet passed. Database tests
+  are skipped by short suites; these are not full import/send delivery proof.
 
 ## Risks and follow-ups
 

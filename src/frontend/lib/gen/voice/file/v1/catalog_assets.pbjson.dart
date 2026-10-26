@@ -356,6 +356,13 @@ const GetCatalogAssetStatusResponse$json = {
       '5': 9,
       '10': 'chatProfileGeneration'
     },
+    {
+      '1': 'terminal_fence_id',
+      '3': 12,
+      '4': 1,
+      '5': 9,
+      '10': 'terminalFenceId'
+    },
   ],
 };
 
@@ -369,4 +376,5 @@ final $typed_data.Uint8List getCatalogAssetStatusResponseDescriptor = $convert.b
     'tvcGVyYXRpb25JZBJBChBkZXN0aW5hdGlvbl9jaGF0GAkgASgLMhYudm9pY2UuY2hhdC52MS5D'
     'aGF0UmVmUg9kZXN0aW5hdGlvbkNoYXQSNgoXY2hhdF9hY2NvdW50X2dlbmVyYXRpb24YCiABKA'
     'lSFWNoYXRBY2NvdW50R2VuZXJhdGlvbhI2ChdjaGF0X3Byb2ZpbGVfZ2VuZXJhdGlvbhgLIAEo'
-    'CVIVY2hhdFByb2ZpbGVHZW5lcmF0aW9u');
+    'CVIVY2hhdFByb2ZpbGVHZW5lcmF0aW9uEioKEXRlcm1pbmFsX2ZlbmNlX2lkGAwgASgJUg90ZX'
+    'JtaW5hbEZlbmNlSWQ=');

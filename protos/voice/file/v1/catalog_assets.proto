@@ -149,4 +149,8 @@ message GetCatalogAssetStatusResponse {
   voice.chat.v1.ChatRef destination_chat = 9;
   string chat_account_generation = 10;
   string chat_profile_generation = 11;
+  // Asset selector only: exact-tuple terminal proof, never READY admission.
+  // Both Chat generations may be absent only with this canonical opaque UUID
+  // and status failed/deleted/expired after raw terminal details were erased.
+  string terminal_fence_id = 12;
 }

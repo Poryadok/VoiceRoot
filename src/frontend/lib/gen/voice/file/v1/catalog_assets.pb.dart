@@ -1262,6 +1262,7 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
     $1.ChatRef? destinationChat,
     $core.String? chatAccountGeneration,
     $core.String? chatProfileGeneration,
+    $core.String? terminalFenceId,
   }) {
     final result = create();
     if (sourceId != null) result.sourceId = sourceId;
@@ -1277,6 +1278,7 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
       result.chatAccountGeneration = chatAccountGeneration;
     if (chatProfileGeneration != null)
       result.chatProfileGeneration = chatProfileGeneration;
+    if (terminalFenceId != null) result.terminalFenceId = terminalFenceId;
     return result;
   }
 
@@ -1305,6 +1307,7 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
         subBuilder: $1.ChatRef.create)
     ..aOS(10, _omitFieldNames ? '' : 'chatAccountGeneration')
     ..aOS(11, _omitFieldNames ? '' : 'chatProfileGeneration')
+    ..aOS(12, _omitFieldNames ? '' : 'terminalFenceId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -1430,6 +1433,18 @@ class GetCatalogAssetStatusResponse extends $pb.GeneratedMessage {
   $core.bool hasChatProfileGeneration() => $_has(10);
   @$pb.TagNumber(11)
   void clearChatProfileGeneration() => $_clearField(11);
+
+  /// Asset selector only: exact-tuple terminal proof, never READY admission.
+  /// Both Chat generations may be absent only with this canonical opaque UUID
+  /// and status failed/deleted/expired after raw terminal details were erased.
+  @$pb.TagNumber(12)
+  $core.String get terminalFenceId => $_getSZ(11);
+  @$pb.TagNumber(12)
+  set terminalFenceId($core.String value) => $_setString(11, value);
+  @$pb.TagNumber(12)
+  $core.bool hasTerminalFenceId() => $_has(11);
+  @$pb.TagNumber(12)
+  void clearTerminalFenceId() => $_clearField(12);
 }
 
 const $core.bool _omitFieldNames =

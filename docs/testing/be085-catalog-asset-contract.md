@@ -84,6 +84,16 @@ Changed retained public selection conflicts. Only unknown operation `NotFound`
 permits a fresh import; compact terminal `FailedPrecondition` never does. Asset
 lookup permits polling an active mapping beyond the completed operation-detail
 window without retaining raw URLs or a second full receipt in Chat.
+An asset selector may return `terminal_fence_id=12`, a canonical nonzero opaque
+UUID, only after matching a purpose-HMAC fence for the exact requested actor,
+source/provider/File tuple. Such a qualified proof has status `failed`, `deleted`
+or `expired` and echoes only the authenticated request's identity. Both Chat
+generation fields may be empty only in that terminal-proof case; one missing
+generation or a proof on a nonterminal response is invalid. Import and operation
+status never use this exception. This proof lets Chat retire its exact asset
+cache after raw File terminal details were erased; errors alone never do.
+The compact asset fence retains HMAC, terminal outcome and opaque fence UUID,
+without raw actor/provider/URL metadata. It grants no send/read authority.
 
 Gateway owns `POST /api/v1/gifs/resolve`, transporting the Chat Resolve request
 through the protected delegated-principal client. It derives the active actor
@@ -210,10 +220,15 @@ alone does not select an authorized path. Ordinary attachments keep their ACL.
 
 AcquireFileReferences happens only after source and destination checks; it is a
 lifecycle action, never source authorization. Readback requires a committed
-message reference plus current history entitlement. Sticker sends retain exact
+message reference plus current history entitlement. Sticker sends require exact
 installed pack/sticker/File checks; uninstall denies new sends and preserves
 committed history. The new GIF source service does not authorize sticker ingest.
 Existing exact accepted send receipts remain exact retries, not fresh sends.
+The inspected current sticker implementation checks shape/File metadata only;
+the protected installed-pack/exact-tuple authority is an explicit remaining
+implementation gap. The first typed GIF consumer also rejects catalog forwarding
+until its current destination/source lifecycle is integrated; ordinary forward
+authorization is preserved.
 
 Encrypted destinations are rejected before resolving/disclosing source identity.
 This protocol does not add server-visible catalog identity to an E2E envelope or
