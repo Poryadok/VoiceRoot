@@ -365,7 +365,7 @@ no external-custom-emoji enforcement is claimed here.
 
 ### Scheduled messages (lifecycle)
 
-P-008 ships the additive wire contract and durable table foundation below. Populated schedule arms fail closed until lifecycle handlers and the worker own validation and dispatch.
+P-008 ships the additive wire contract and durable table foundation below. BE-077/BE-078 implement authenticated schedule creation, owner list/update/cancel/send-now and shared immediate/scheduled retry identity. Automatic due-time and recipient-presence dispatch remains BE-079; the client deployment gate stays disabled until that worker is qualified.
 
 **Request/response union.** После PR #310 `SendMessageRequest` сохраняет его `send_silent = 11` и добавляет optional `oneof delivery_schedule`: `scheduled_at = 12` или literal `send_when_online = 13`; отсутствие oneof означает immediate send. `scheduled_at` принимает только UTC instant строго позже server `now()` и не дальше **365 дней** от него. `send_when_online` допустим только в DM и ждёт именно live `ONLINE` получателя. Ответ использует два additive поля, но семантически является union:
 
@@ -378,7 +378,7 @@ message SendMessageResponse {
 
 Семантически сервер заполняет ровно одно из двух полей; schedule create никогда не маскируется под уже сохранённый `Message`, а один idempotent retry возвращает исходный вариант union. Невалидный oneof, `send_when_online=false`, non-DM online delivery, instant не в будущем или горизонт более 365 дней возвращают `INVALID_ARGUMENT`.
 
-**Storage:** таблица `scheduled_messages` в `messaging_db` is shipped as foundation migration `000015`; lifecycle handlers and worker remain open:
+**Storage:** таблица `scheduled_messages` в `messaging_db` originates in foundation migration `000015`. Migration `000038` adds immutable create request identity, a mutation revision and a dispatch-time UUIDv7 reservation. Its private `message_send_namespace` transactionally excludes immediate/scheduled key collisions across all message insertion paths; deletion of the owning result releases its namespace row. The automatic worker remains open:
 
 ```
 scheduled_messages
@@ -410,7 +410,7 @@ scheduled_messages
 
 Composer UX — [text-chat.md](../features/text-chat.md) § Send options; strip — [screen-controls.md](../design/screen-controls.md) §3.6 #13–17. Cross-service summary — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § Push-уведомления (send options).
 
-### Scheduled RPC shape (wire contract shipped; handlers open)
+### Scheduled RPC shape
 
 ```protobuf
 rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
