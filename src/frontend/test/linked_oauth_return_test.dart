@@ -24,6 +24,53 @@ const session = AuthSession(
 
 void main() {
   test(
+    'commit then dropped consume response rereads without claiming success',
+    () async {
+      final h = Harness(dropConsumeResponse: true);
+      await h.controller.start('twitch');
+      await h.controller.handleReturn(h.returnUrl);
+      expect(h.committed, isTrue);
+      expect(h.events.last, 'reread');
+      expect(h.controller.state.outcome, isNull);
+      expect(h.controller.state.errorCode, 'network_error');
+      expect(h.store.value, isNull);
+    },
+  );
+
+  for (final response in [
+    http.Response('broken', 200),
+    http.Response('{"error":"internal_error"}', 500),
+  ]) {
+    test(
+      'ambiguous consume ${response.statusCode} rereads without replay',
+      () async {
+        final h = Harness(consumeReply: Future.value(response));
+        await h.controller.start('twitch');
+        await h.controller.handleReturn(h.returnUrl);
+        expect(h.events.last, 'reread');
+        expect(h.events.where((e) => e == 'consume'), hasLength(1));
+        expect(h.controller.state.outcome, isNull);
+      },
+    );
+  }
+
+  test(
+    'cancel while consuming preserves eventual authoritative reconciliation',
+    () async {
+      final reply = Completer<http.Response>();
+      final h = Harness(consumeReply: reply.future);
+      await h.controller.start('twitch');
+      final consume = h.controller.handleReturn(h.returnUrl);
+      await Future<void>.delayed(Duration.zero);
+      await h.controller.cancel();
+      expect(h.controller.state.phase, LinkedOAuthPhase.consuming);
+      reply.complete(http.Response('{"outcome":"success"}', 200));
+      await consume;
+      expect(h.controller.state.outcome, LinkedOAuthOutcome.success);
+      expect(h.events.last, 'reread');
+    },
+  );
+  test(
     'Windows direct URI strips secrets and retains explicit empty fragment',
     () {
       expect(
@@ -247,11 +294,17 @@ class MemoryStore implements LinkedOAuthTabStore {
 }
 
 class Harness {
-  Harness({this.startReply, this.consumeReply}) {
+  Harness({
+    this.startReply,
+    this.consumeReply,
+    this.dropConsumeResponse = false,
+  }) {
     recreate();
   }
   final Future<http.Response>? startReply;
   final Future<http.Response>? consumeReply;
+  final bool dropConsumeResponse;
+  bool committed = false;
   final store = MemoryStore();
   final events = <String>[];
   DateTime time = now;
@@ -290,6 +343,10 @@ class Harness {
             return http.Response('', 204);
           }
           events.add('consume');
+          if (dropConsumeResponse) {
+            committed = true;
+            throw http.ClientException('response lost');
+          }
           expect(store.value, isNull);
           expect(scrubbed?.query, isEmpty);
           final body = jsonDecode(request.body) as Map<String, dynamic>;

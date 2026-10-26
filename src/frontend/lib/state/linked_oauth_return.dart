@@ -247,11 +247,21 @@ class LinkedOAuthReturnController extends ChangeNotifier {
         if (data == LinkedOAuthOutcome.success) await _reread(generation);
       case GatewayHttpFailure(:final error):
         _fail(error.errorCode);
-        if (error.errorCode == 'result_consumed') await _reread(generation);
+        if (error.errorCode == 'result_consumed' ||
+            error.errorCode == 'network_error' ||
+            error.errorCode == 'invalid_response' ||
+            error.statusCode >= 500) {
+          // Auth may have committed before its reply was lost. Reconcile reads,
+          // never replay the one-use result or infer a successful source.
+          await _reread(generation);
+        }
     }
   }
 
   Future<void> cancel() async {
+    // Once consume has been sent, keep its authoritative reconciliation alive.
+    // The Settings consumer disables Cancel in this phase.
+    if (_state.phase == LinkedOAuthPhase.consuming) return;
     final pending = _pending();
     final session = _session;
     final generation = ++_generation;
