@@ -111,23 +111,30 @@ Controls checklist (buttons per surface): [screen-controls.md](screen-controls.m
 
 ### GAP inventory (Penpot · v3 backlog — no shipped frame yet)
 
-Draft in Penpot as `Screen/… · v3` per [todo/design.md](../todo/design.md). Do not add to shipped table until promoted.
+This table is the draft registry for [todo/design.md](../todo/design.md) Critical surfaces. Screen IDs remain stable without a suffix. Expected canvas names use spaced slashes and ` · v3`, for example `Panel / Chat / AttachMenu · v3`; the folder-strip and list-row entries share `Screen / Chat / List · v3`. Keep drafts outside the shipped table until promotion.
 
-| Screen ID | screen-controls | Flutter | Notes |
-|-----------|-----------------|---------|-------|
-| `Screen/Chat/Archive` | §1.10 | — | Archive list + unarchive |
-| `Panel/Chat/AttachMenu` | §3.6a | partial attach | Photo/doc/article/location/music |
-| `Panel/Chat/EmojiPicker` | §3.6b | partial emoji | Stickers/GIF tabs |
-| `Panel/Chat/SendMenu` | §3.6c | — | Silent / schedule / when online |
-| `Panel/Chat/PinnedMessageBar` | §3.1a | partial in room | Up to 5 pins |
-| `Screen/Chat/Room/VideoNoteBubble` | §3.3 #11 | — | Round video ≤60s; canonical ID (Room timeline variant) |
-| `Panel/Chat/ScheduledStrip` | §3.6 #13–17 | — | Pending scheduled messages above composer |
-| `Panel/Shell/Navigation` · v3 | §1.1, §1.1b–c | partial rail | Telegram-parity shell: Nav → Folders → Quick Access → spacer → ProfileStack → Settings |
-| `Panel/Shell/SideHost` · v3 | §1.9 | partial | Modes: info / members / thread / search (H drawer + V sheet/push) |
-| `Screen/Chat/List` · v3 | §1.2–1.4 | partial list | Row preview ticks, media labels, ctx actions (pin/mute/archive/mark read) |
-| `Panel/Chat/ComposerErrors` · v3 | §3.6f | — | Upload fail, processing fail, quota, schedule, sticker/GIF, optimistic retry variants |
-| `Overlay/Call/MiniBar` · v3 | §10.2b #19 | — | Desktop docked call module below chat list; mobile top content slot; never floating |
-| `Overlay/Call/ScreenSharePicker` · v3 | §33 | — | Start picker — keep with `Panel/Call/ScreenShare` (both required) |
+Placement follows [penpot-workflow.md](penpot-workflow.md) § «Telegram-parity · v3 batch»: to the right of the existing `· v2` on the same Y, with X gap ≥80 px; use the documented new-row procedure when the scenario has no row. Preserve the shipped snapshot and existing v2 drafts.
+
+`—` in **Draft viewer / QA** means no verified draft receipt is recorded here; it does not establish whether a frame exists. When framed, add the actual draft viewer URL and a task/PR evidence link for each covered row. The receipt records page/frame IDs, exact name, source section below, frame and neighbor bounding boxes (same Y, no overlap), and readable `export_shape` QA. Do not reuse a shipped frame ID as a draft receipt. Repeat the shared frame URL on each row when one draft covers several surfaces.
+
+All section references below point to [screen-controls.md](screen-controls.md); behavior remains owned by its linked feature specifications.
+
+| Screen ID / surface | screen-controls | Flutter | Notes | Draft viewer / QA |
+|---------------------|-----------------|---------|-------|-------------------|
+| `Screen/Chat/Archive` | §1.10 | — | Archive list + unarchive; entry from profile context menu (§1.1a #6) | — |
+| `Panel/Chat/AttachMenu` | §3.6a | partial attach | Photo/doc/article/location/music | — |
+| `Panel/Chat/EmojiPicker` | §3.6b | partial emoji | Emoji / Stickers / GIF tabs; send vs insert states | — |
+| `Panel/Chat/SendMenu` | §3.6c | — | Silent / schedule / when online | — |
+| `Panel/Chat/PinnedMessageBar` | §3.1a | partial in room | Up to 5 pins; directly under header | — |
+| `Screen/Chat/Room/VideoNoteBubble` | §3.3 #11 | — | Round video ≤60s; stable ID (Room timeline variant) | — |
+| `Panel/Chat/ScheduledStrip` | §3.6 #13–17 | — | Pending scheduled messages above composer | — |
+| `Panel/Shell/Navigation` (Quick Access + ProfileStack) | §1.1, §1.1a, §1.1c | partial rail | Nav → Quick Access (≤15 chats) → spacer → ProfileStack → Settings; folders are outside rail | — |
+| `Screen/Chat/List` (desktop folder strip) | §1.1b | partial list | Compact system/custom filters below search, unread badges + trailing edit; mobile folders in drawer | — |
+| `Panel/Shell/SideHost` | §1.9 | partial | H: info / members / thread / search; V: info/members sheet, thread push, search inline in header (no SideHost sheet) | — |
+| `Screen/Chat/List` (list rows) | §1.2–1.4 | partial list | Row preview ticks, media labels, ctx actions (pin/mute/archive/mark read) | — |
+| `Panel/Chat/ComposerErrors` | §3.6f | — | Upload fail, processing fail, quota, schedule, sticker/GIF, optimistic retry variants | — |
+| `Overlay/Call/MiniBar` | §10.2b #19 | — | Desktop docked call module below chat list; mobile top content slot; never floating | — |
+| `Overlay/Call/ScreenSharePicker` | §33 | — | Start picker — keep with `Panel/Call/ScreenShare` (both required) | — |
 
 Quick Access and ProfileStack ship inside `Panel/Shell/Navigation` **· v3**. Folder filters ship in the `Screen/Chat/List` header area and never in rail.
 
