@@ -68,16 +68,18 @@ func TestCatalogRuntimeAuthenticatedSendAdmission(t *testing.T) {
 	calls := append([]string(nil), f.calls...)
 	f.mu.Unlock()
 	require.Equal(t, []string{"/voice.file.v1.CatalogAssetService/LookupCatalogAsset", "/voice.chat.v1.CatalogAssetService/ValidateGifAsset", "/voice.file.v1.CatalogAssetService/ValidateCatalogAsset"}, calls)
-	for _, scenario := range []string{"wrong-actor", "forged-provider", "unknown-file", "wrong-destination", "wrong-source", "not-ready"} {
+	for _, scenario := range []string{"wrong-actor", "forged-provider", "unknown-file", "wrong-destination", "wrong-source", "not-ready", "legacy-zero-proof", "superseded-file", "mixed-chat-proof"} {
 		t.Run(scenario, func(t *testing.T) {
 			candidate := proto.Clone(request).(*messagingv1.SendMessageRequest)
 			callContext := actorContext
 			stop.reached = false
 			oldSource, oldIntent := snapshot.SourceId, snapshot.Intent
+			oldSelection, oldCurrent := snapshot.SelectionRevision, snapshot.CurrentSelectionRevision
 			oldDestination := f.chat.destination
 			defer func() {
 				snapshot.SourceId = oldSource
 				snapshot.Intent = oldIntent
+				snapshot.SelectionRevision, snapshot.CurrentSelectionRevision = oldSelection, oldCurrent
 				f.chat.destination = oldDestination
 			}()
 			switch scenario {
@@ -95,6 +97,15 @@ func TestCatalogRuntimeAuthenticatedSendAdmission(t *testing.T) {
 				defer func() { f.chat.snapshot = snapshot }()
 			case "not-ready":
 				snapshot.Intent = ""
+			case "legacy-zero-proof":
+				snapshot.SelectionRevision, snapshot.CurrentSelectionRevision = 0, 0
+			case "superseded-file":
+				snapshot.CurrentSelectionRevision++
+			case "mixed-chat-proof":
+				f.chat.snapshot = proto.Clone(snapshot).(*filev1.ValidateCatalogAssetResponse)
+				f.chat.snapshot.SelectionRevision++
+				f.chat.snapshot.CurrentSelectionRevision++
+				defer func() { f.chat.snapshot = snapshot }()
 			}
 			_, err := svc.SendMessage(callContext, candidate)
 			require.Error(t, err)

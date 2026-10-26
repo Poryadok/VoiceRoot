@@ -40,6 +40,9 @@ type catalogRuntimeFileAuthority struct {
 }
 
 func (s *catalogRuntimeFileAuthority) LookupCatalogAsset(_ context.Context, r *filev1.LookupCatalogAssetRequest) (*filev1.LookupCatalogAssetResponse, error) {
+	if r.ProtocolVersion != 2 {
+		return nil, status.Error(codes.InvalidArgument, "ordered catalog protocol two required")
+	}
 	if r.FileId != s.snapshot.FileId {
 		return nil, status.Error(codes.NotFound, "unknown file")
 	}
@@ -49,6 +52,9 @@ func (s *catalogRuntimeFileAuthority) LookupCatalogAsset(_ context.Context, r *f
 	return &filev1.LookupCatalogAssetResponse{Classification: &filev1.LookupCatalogAssetResponse_Catalog{Catalog: proto.Clone(s.snapshot).(*filev1.ValidateCatalogAssetResponse)}}, nil
 }
 func (s *catalogRuntimeFileAuthority) ValidateCatalogAsset(_ context.Context, r *filev1.ValidateCatalogAssetRequest) (*filev1.ValidateCatalogAssetResponse, error) {
+	if r.ProtocolVersion != 2 {
+		return nil, status.Error(codes.InvalidArgument, "ordered catalog protocol two required")
+	}
 	if r.SourceId != s.snapshot.SourceId || r.FileId != s.snapshot.FileId || r.Provider != s.snapshot.Provider || r.ProviderId != s.snapshot.ProviderId || r.ActorAccountId != s.snapshot.ActorAccountId || r.ActorProfileId != s.snapshot.ActorProfileId {
 		return nil, status.Error(codes.PermissionDenied, "wrong lineage")
 	}
@@ -62,13 +68,16 @@ type catalogRuntimeChatAuthority struct {
 }
 
 func (s *catalogRuntimeChatAuthority) ValidateGifAsset(_ context.Context, r *chatv1.ValidateGifAssetRequest) (*chatv1.ValidateGifAssetResponse, error) {
+	if r.ProtocolVersion != 2 {
+		return nil, status.Error(codes.InvalidArgument, "ordered catalog protocol two required")
+	}
 	if r.GetDestinationChat().GetId() != s.destination {
 		return nil, status.Error(codes.PermissionDenied, "wrong destination")
 	}
 	if r.ActorAccountId != s.snapshot.ActorAccountId || r.ActorProfileId != s.snapshot.ActorProfileId || r.FileId != s.snapshot.FileId || r.Provider != s.snapshot.Provider || r.ProviderId != s.snapshot.ProviderId {
 		return nil, status.Error(codes.PermissionDenied, "wrong selection")
 	}
-	return &chatv1.ValidateGifAssetResponse{SourceId: s.snapshot.SourceId, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, FileId: r.FileId, Provider: r.Provider, ProviderId: r.ProviderId}, nil
+	return &chatv1.ValidateGifAssetResponse{SourceId: s.snapshot.SourceId, ActorAccountId: r.ActorAccountId, ActorProfileId: r.ActorProfileId, FileId: r.FileId, Provider: r.Provider, ProviderId: r.ProviderId, SelectionRevision: s.snapshot.SelectionRevision, CurrentSelectionRevision: s.snapshot.CurrentSelectionRevision}, nil
 }
 
 type catalogRuntimeFixture struct {
@@ -88,6 +97,7 @@ func newCatalogRuntimeFixture(t *testing.T) *catalogRuntimeFixture {
 	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "messaging", KeyID: "current", PrivateKey: key})
 	require.NoError(t, err)
 	snapshot := &filev1.ValidateCatalogAssetResponse{SourceId: uuid.NewString(), ActorAccountId: uuid.NewString(), ActorProfileId: uuid.NewString(), FileId: uuid.NewString(), Provider: "fixture", ProviderId: "runtime-test", ObjectRevision: 1, Intent: "gif", ScanResult: "clean", FileType: "video", SourceSha256: bytes.Repeat([]byte{1}, 32), DeliveredSha256: bytes.Repeat([]byte{2}, 32), DeliveredSizeBytes: 42, DeliveredMimeType: "video/mp4"}
+	snapshot.SelectionRevision, snapshot.CurrentSelectionRevision = 7, 7
 	f := &catalogRuntimeFixture{env: map[string]string{}, parent: &managedChatPurgeRuntime{Issuer: issuer, JWKS: &http.Server{}}, file: &catalogRuntimeFileAuthority{snapshot: snapshot}, chat: &catalogRuntimeChatAuthority{snapshot: snapshot, destination: uuid.NewString()}}
 	for _, owner := range []string{"FILE", "CHAT"} {
 		pki := roleJWKSFixture(t, owner)
@@ -172,7 +182,7 @@ func TestCatalogRuntimeDedicatedMTLSAndBoundGeneratedClients(t *testing.T) {
 	f := newCatalogRuntimeFixture(t)
 	c := f.runtime.Coordinator
 	snapshot := f.file.snapshot
-	lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 1, ActorAccountId: snapshot.ActorAccountId, ActorProfileId: snapshot.ActorProfileId, FileId: snapshot.FileId}
+	lookup := &filev1.LookupCatalogAssetRequest{ProtocolVersion: 2, ActorAccountId: snapshot.ActorAccountId, ActorProfileId: snapshot.ActorProfileId, FileId: snapshot.FileId}
 	ctx := catalogRuntimeSigned(t, f, "file", filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, lookup)
 	response, err := c.Files.LookupCatalogAsset(ctx, lookup)
 	require.NoError(t, err)
@@ -184,13 +194,13 @@ func TestCatalogRuntimeDedicatedMTLSAndBoundGeneratedClients(t *testing.T) {
 	ctx = catalogRuntimeSigned(t, f, "file", filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName, lookup)
 	_, err = c.Files.LookupCatalogAsset(ctx, changed)
 	require.Equal(t, codes.Unauthenticated, status.Code(err), "whole request hash is verified")
-	chat := &chatv1.ValidateGifAssetRequest{ProtocolVersion: 1, ActorAccountId: snapshot.ActorAccountId, ActorProfileId: snapshot.ActorProfileId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: snapshot.FileId, DestinationChat: &chatv1.ChatRef{Id: f.chat.destination}}
+	chat := &chatv1.ValidateGifAssetRequest{ProtocolVersion: 2, ActorAccountId: snapshot.ActorAccountId, ActorProfileId: snapshot.ActorProfileId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: snapshot.FileId, DestinationChat: &chatv1.ChatRef{Id: f.chat.destination}}
 	// Type is supplied explicitly as in the send pipeline.
 	kind := chatv1.ChatType_CHAT_TYPE_GROUP
 	chat.DestinationChat.Type = &kind
 	_, err = c.Chat.ValidateGifAsset(catalogRuntimeSigned(t, f, "chat", chatv1.CatalogAssetService_ValidateGifAsset_FullMethodName, chat), chat)
 	require.NoError(t, err)
-	validation := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 1, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: snapshot.FileId, ActorAccountId: snapshot.ActorAccountId, ActorProfileId: snapshot.ActorProfileId}
+	validation := &filev1.ValidateCatalogAssetRequest{ProtocolVersion: 2, SourceId: snapshot.SourceId, Provider: snapshot.Provider, ProviderId: snapshot.ProviderId, FileId: snapshot.FileId, ActorAccountId: snapshot.ActorAccountId, ActorProfileId: snapshot.ActorProfileId}
 	final, err := c.Files.ValidateCatalogAsset(catalogRuntimeSigned(t, f, "file", filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName, validation), validation)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(snapshot, final))
