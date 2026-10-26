@@ -53,6 +53,18 @@ _Пока пусто — критичные клиентские блокеры 
 
 ### Flutter delivery
 
+- [ ] **UIV3-PANEL-SPACE-CREATE — templates and image upload** — section 17
+  requires an image picker and starter templates that create default channels.
+  The current creation contract accepts name, description and visibility, with
+  an optional icon URL persisted separately through UpdateSpace. There is no
+  Space-specific image upload client contract; User avatar presign belongs to
+  the profile and cannot stand in for Space-owned media. ListTemplates and
+  CreateFromTemplate remain unimplemented in Space Service. The supported panel
+  explains these unavailable capabilities; completing them requires the
+  documented Space/File ownership contract and real template producer/consumer
+  under PLAN A5, followed by H/V and runtime verification. This subset does not
+  complete the original creation-window acceptance.
+
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
 ### AttachMenu rich-action contracts
