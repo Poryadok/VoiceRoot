@@ -37,9 +37,9 @@ merge8eda or currently uncommitted import behavior into this package.
   resolved path, clean state and exact258b48d base verified.
 - [x] Freeze this manifest before any dependency merge on
   `codex/anton93-be085-producer-integration`.
-- [ ] Normal-merge the exact inputs above in order. An already-contained input
+- [x] Normal-merge the exact inputs above in order. An already-contained input
   is a verified no-op, not a new source uptake. Preserve original authorship.
-- [ ] Record actual merge parents, conflicts, source-owner resolutions and
+- [x] Record actual merge parents, conflicts, source-owner resolutions and
   complete remaining delta against the frozen/current master.
 - [ ] Run affected Chat/Gateway/User and generated-consumer checks, migration
   and protected auth/concurrency cases appropriate to actual conflict changes.
@@ -47,6 +47,36 @@ merge8eda or currently uncommitted import behavior into this package.
   review55 via scout10 and exact-head CI through delivery67.
 
 ## Review scope and handoff
+
+Actual normal merge receipts:
+
+| Step | Result |
+| --- | --- |
+| Manifest before merges | `289c30b2ce8545f281d10b1b1de98f985b8ef72c` |
+| PR907 into fresh master | `725f2ab1854564a0919038f4392c0d69d4009a2c` |
+| Exact plaintext producer | `929f9e19d6f24798ac479a67c329fa4da62ac6b0` |
+| Exact95 interface/consumer | `a54b5466eb6f91405995ffd5a432a840c276de31` |
+| Intact70a9 source | `4fb4ff2aac4c53d38ba901797e517973efdd2b15` |
+
+Only the last merge required manual resolutions, both documentation-only:
+`docs/TESTING.md` had the identical catalog-actor link with differing line
+endings; `user-service.md` had the same CatalogActor/Messaging sections in
+different order/line endings plus the newer PR914 owner-only challenge readback
+on the integration side. Both retain the exact current907 bytes. No source,
+proto, generated, File or Messaging conflict was manually resolved.
+
+Unrestricted scoped diffs verify Chat plus the new Gateway selection handler/tests
+and Chat catalog proto are byte-identical to70a9; File implementation/File proto
+are byte-identical to95d3; User internal/main/proto/socialprincipal and generated
+User Go/Dart messages are byte-identical to90700f34bb. These are source-equivalence
+facts, not independent security or execution passes for this assembled tree.
+
+Whole source review base is929f9e19 (after907/898, before95): the actual result
+adds74 paths/17460 lines, mostly schemas/generated bindings. The own-producer-only
+comparison a54b5466→4fb4ff2 changes51 paths/5429 additions/158 deletions; it must
+not hide95's shared protocol/typed-consumer review requirement. Source owner95
+has been asked to inspect Messaging composition; final full review55 was
+requested through scout10 while exact-tree checks are prepared.
 
 The reviewer must cover the complete new Chat catalogassets package, actor
 HMAC keyring/migration28, account Save/purge generation synchronization, protected
