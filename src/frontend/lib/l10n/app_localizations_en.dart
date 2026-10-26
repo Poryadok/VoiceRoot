@@ -1502,6 +1502,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatArchiveUnarchive => 'Unarchive';
 
   @override
+  String get chatArchiveMarkRead => 'Mark as read';
+
+  @override
+  String get chatArchivePlaceholderTitle => 'Your archive lives here';
+
+  @override
+  String get chatArchivePlaceholderHint => 'Hidden chats stay within reach';
+
+  @override
   String get chatArchiveUnarchived => 'Chat restored to your main list';
 
   @override

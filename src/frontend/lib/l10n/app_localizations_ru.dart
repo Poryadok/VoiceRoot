@@ -1517,6 +1517,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatArchiveUnarchive => 'Вернуть';
 
   @override
+  String get chatArchiveMarkRead => 'Отметить прочитанным';
+
+  @override
+  String get chatArchivePlaceholderTitle => 'Здесь будет архив';
+
+  @override
+  String get chatArchivePlaceholderHint => 'Скрытые чаты остаются под рукой';
+
+  @override
   String get chatArchiveUnarchived => 'Чат возвращён в основной список';
 
   @override
