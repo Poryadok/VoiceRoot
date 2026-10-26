@@ -62,7 +62,10 @@ Only the last merge required manual resolutions, both documentation-only:
 `docs/TESTING.md` had the identical catalog-actor link with differing line
 endings; `user-service.md` had the same CatalogActor/Messaging sections in
 different order/line endings plus the newer PR914 owner-only challenge readback
-on the integration side. Both retain the exact current907 bytes. No source,
+on the integration side. Both retain current907 content; a forward normalization
+removes inherited CRLF from the User document after raw diff-check flagged it.
+`git diff --ignore-space-at-eol --exit-code` proves that correction changes no
+content. No source,
 proto, generated, File or Messaging conflict was manually resolved.
 
 Unrestricted scoped diffs verify Chat plus the new Gateway selection handler/tests
@@ -77,6 +80,14 @@ comparison a54b5466→4fb4ff2 changes51 paths/5429 additions/158 deletions; it m
 not hide95's shared protocol/typed-consumer review requirement. Source owner95
 has been asked to inspect Messaging composition; final full review55 was
 requested through scout10 while exact-tree checks are prepared.
+
+Source owner95 inspected exact4fb4ff2 Messaging composition against90700f34bb
+and d3 and found no new composition issue: destination context follows E2E
+validation; source classification/final File validation precede scheduled or
+immediate message persistence; opaque E2E forwarding, ordinary origin-chat ACL
+and the existing processed-GIF guard are preserved. This is static owner review,
+not independent blanket CLEAR or actual import/send proof. Runtime author114's
+mandatory AttachmentReferences guard remains a separate not-yet-included stage.
 
 The reviewer must cover the complete new Chat catalogassets package, actor
 HMAC keyring/migration28, account Save/purge generation synchronization, protected
