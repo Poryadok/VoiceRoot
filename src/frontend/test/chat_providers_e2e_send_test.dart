@@ -167,6 +167,7 @@ class _TrackingMessagesClient extends VoiceMessagesClient {
     String? threadParentId,
     String? clientMessageId,
     bool isE2e = false,
+    bool sendSilent = false,
   }) async {
     onSend();
     onEncryption?.call(isE2e);

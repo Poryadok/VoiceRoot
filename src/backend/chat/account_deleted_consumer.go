@@ -37,11 +37,16 @@ type dmPeerDeletedPublisher interface {
 	PublishDMPeerDeleted(context.Context, string, uuid.UUID, uuid.UUID) error
 }
 
+type accountDeletedCatalogPurger interface {
+	PurgeAccount(context.Context, uuid.UUID, uuid.UUID) error
+}
+
 type accountDeletedDMConsumer struct {
 	profiles  accountDeletedProfileLister
 	targets   dmPeerDeletionTargetStore
 	publisher dmPeerDeletedPublisher
 	logger    *slog.Logger
+	catalog   accountDeletedCatalogPurger
 }
 
 func newAccountDeletedDMConsumer(
@@ -101,6 +106,13 @@ func (c *accountDeletedDMConsumer) handleUserAccountDeleted(ctx context.Context,
 	accountID, err := requiredEventUUID(payload.GetAccountId(), "account_id")
 	if err != nil {
 		return err
+	}
+	// Close local generations before any external profile lookup. A User outage
+	// can delay DM fanout, but cannot allow an old in-flight import to Save again.
+	if c.catalog != nil {
+		if err := c.catalog.PurgeAccount(ctx, accountID, sourceEventID); err != nil {
+			return fmt.Errorf("close account catalog barrier: %w", err)
+		}
 	}
 
 	deletedProfileIDs, err := c.profiles.ListProfileIDsForAccount(ctx, accountID.String())
@@ -307,6 +319,7 @@ func subscribeAccountDeletedConsumerWithContext(
 	publisher dmPeerDeletedPublisher,
 	instanceID string,
 	logger *slog.Logger,
+	catalog ...accountDeletedCatalogPurger,
 ) (*accountDeletedSubscription, error) {
 	if js == nil {
 		return nil, fmt.Errorf("user.account_deleted consumer JetStream not configured")
@@ -316,6 +329,12 @@ func subscribeAccountDeletedConsumerWithContext(
 		return nil, err
 	}
 	consumer := newAccountDeletedDMConsumer(profiles, targets, publisher, logger)
+	if len(catalog) > 1 {
+		return nil, fmt.Errorf("multiple account catalog purgers")
+	}
+	if len(catalog) == 1 {
+		consumer.catalog = catalog[0]
+	}
 	inFlight := &accountDeletedInFlight{}
 	handler := func(msg *nats.Msg) {
 		if !inFlight.begin() {
@@ -349,12 +368,13 @@ func runAccountDeletedConsumer(
 	targets dmPeerDeletionTargetStore,
 	publisher dmPeerDeletedPublisher,
 	logger *slog.Logger,
+	catalog ...accountDeletedCatalogPurger,
 ) error {
 	if strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("user.account_deleted consumer: missing NATS URL")
 	}
 	for {
-		err := runAccountDeletedConsumerOnce(ctx, natsURL, instanceID, profiles, targets, publisher, logger)
+		err := runAccountDeletedConsumerOnce(ctx, natsURL, instanceID, profiles, targets, publisher, logger, catalog...)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -376,6 +396,7 @@ func runAccountDeletedConsumerOnce(
 	targets dmPeerDeletionTargetStore,
 	publisher dmPeerDeletedPublisher,
 	logger *slog.Logger,
+	catalog ...accountDeletedCatalogPurger,
 ) error {
 	closed := make(chan struct{})
 	var closeOnce sync.Once
@@ -401,7 +422,7 @@ func runAccountDeletedConsumerOnce(
 	}
 	handlerCtx, cancelHandler := context.WithCancel(context.Background())
 	defer cancelHandler()
-	sub, err := subscribeAccountDeletedConsumerWithContext(handlerCtx, js, profiles, targets, publisher, instanceID, logger)
+	sub, err := subscribeAccountDeletedConsumerWithContext(handlerCtx, js, profiles, targets, publisher, instanceID, logger, catalog...)
 	if err != nil {
 		nc.Close()
 		return err

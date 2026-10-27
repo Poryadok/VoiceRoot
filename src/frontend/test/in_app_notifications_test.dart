@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
+import 'package:voice_frontend/backend/auth_session.dart';
 import 'package:voice_frontend/backend/chats_client.dart';
 import 'package:voice_frontend/backend/friends_client.dart';
 import 'package:voice_frontend/backend/gateway_config.dart';
@@ -17,6 +18,7 @@ import 'package:voice_frontend/state/in_app_notifications.dart';
 import 'package:voice_frontend/state/inbox_reconciler.dart';
 import 'package:voice_frontend/state/message_requests_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
+import 'package:voice_frontend/state/subscription_reminder_hints.dart';
 
 import 'support/auth_test_overrides.dart';
 import 'support/gateway_test_client.dart';
@@ -27,6 +29,160 @@ import 'support/inbox_reconciler_fakes.dart';
 /// Production: [InAppNotificationController] in `lib/state/in_app_notifications.dart`.
 void main() {
   group('InAppNotificationController', () {
+    test(
+      'grace banner and dismissal survive refresh within installed session',
+      () async {
+        const profile = '22222222-2222-4222-8222-222222222222';
+        final container = _container(
+          sound: _RecordingSoundPlayer(),
+          hub: _FakeRealtimeHub(),
+          profileId: profile,
+        );
+        addTearDown(container.dispose);
+        final auth = container.read(authControllerProvider.notifier);
+        final originalGeneration = auth.sessionInstallGeneration;
+        final data = <String, dynamic>{
+          'schema_version': 1,
+          'type': 'subscription_grace_reminder',
+          'notification_id': '11111111-1111-5111-8111-111111111111',
+          'target_profile_id': profile,
+          'plan': 'premium',
+          'day': 3,
+          'window_end': DateTime.now()
+              .toUtc()
+              .add(const Duration(hours: 1))
+              .toIso8601String(),
+        };
+        final hints = container.read(
+          subscriptionReminderHintsProvider.notifier,
+        );
+        expect(hints.onData(data), isTrue);
+        auth.setClientError('unrelated-error');
+        await pumpEventQueue();
+        expect(
+          container.read(subscriptionReminderHintsProvider),
+          hasLength(1),
+          reason: 'unrelated AuthState changes must preserve visible banner',
+        );
+        auth.state = auth.state.copyWith(
+          session: const AuthSession(
+            accessToken: 'refreshed-access',
+            refreshToken: 'refreshed-refresh',
+            accountId: 'acc-test',
+            activeProfileId: profile,
+            expiresInSeconds: 900,
+          ),
+        );
+        await pumpEventQueue();
+        expect(auth.sessionInstallGeneration, originalGeneration);
+        expect(
+          container.read(subscriptionReminderHintsProvider.notifier),
+          same(hints),
+        );
+        expect(container.read(subscriptionReminderHintsProvider), hasLength(1));
+        hints.dismiss(data['notification_id'] as String);
+        auth.state = auth.state.copyWith(
+          session: const AuthSession(
+            accessToken: 'second-refreshed-access',
+            refreshToken: 'second-refreshed-refresh',
+            accountId: 'acc-test',
+            activeProfileId: profile,
+            expiresInSeconds: 900,
+          ),
+        );
+        auth.setClientError('another-unrelated-error');
+        await pumpEventQueue();
+        expect(
+          container
+              .read(subscriptionReminderHintsProvider.notifier)
+              .onData(data),
+          isFalse,
+          reason:
+              'refresh or unrelated state cannot reopen dismissed logical ID',
+        );
+        // A new login installation with the same account/profile does reset state.
+        await auth.applySession(auth.state.session!);
+        await pumpEventQueue();
+        expect(auth.sessionInstallGeneration, greaterThan(originalGeneration));
+        expect(
+          container.read(subscriptionReminderHintsProvider.notifier),
+          isNot(same(hints)),
+        );
+        expect(
+          container
+              .read(subscriptionReminderHintsProvider.notifier)
+              .onData(data),
+          isTrue,
+        );
+        await auth.applySession(
+          const AuthSession(
+            accessToken: 'other-access',
+            refreshToken: 'other-refresh',
+            accountId: 'acc-test',
+            activeProfileId: '33333333-3333-4333-8333-333333333333',
+            expiresInSeconds: 900,
+          ),
+        );
+        await pumpEventQueue();
+        expect(container.read(subscriptionReminderHintsProvider), isEmpty);
+        expect(
+          container
+              .read(subscriptionReminderHintsProvider.notifier)
+              .onData(data),
+          isFalse,
+        );
+        auth.state = auth.state.copyWith(clearSession: true);
+        await pumpEventQueue();
+        expect(container.read(subscriptionReminderHintsProvider), isEmpty);
+        expect(
+          container
+              .read(subscriptionReminderHintsProvider.notifier)
+              .onData(data),
+          isFalse,
+        );
+      },
+    );
+    test(
+      'grace reminder reaches typed banner state without a chat and collapses retry',
+      () async {
+        const profile = '22222222-2222-4222-8222-222222222222';
+        final hub = _FakeRealtimeHub();
+        final sound = _RecordingSoundPlayer();
+        final container = _container(
+          sound: sound,
+          hub: hub,
+          profileId: profile,
+        );
+        addTearDown(container.dispose);
+        container.read(inAppNotificationControllerProvider);
+        final frame = RealtimeFrame(
+          op: 'notification',
+          data: {
+            'schema_version': 1,
+            'type': 'subscription_grace_reminder',
+            'notification_id': '11111111-1111-5111-8111-111111111111',
+            'target_profile_id': profile,
+            'plan': 'premium',
+            'day': 3,
+            'window_end': DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 1))
+                .toIso8601String(),
+          },
+        );
+        hub.emit(frame);
+        await pumpEventQueue();
+        expect(container.read(subscriptionReminderHintsProvider).single.day, 3);
+        hub.emit(frame);
+        await pumpEventQueue();
+        expect(container.read(subscriptionReminderHintsProvider), hasLength(1));
+        expect(container.read(inAppNotificationCenterProvider).items, isEmpty);
+        expect(sound.newMessagePlays, 0);
+        container.invalidate(authControllerProvider);
+        await pumpEventQueue();
+        expect(container.read(subscriptionReminderHintsProvider), isEmpty);
+      },
+    );
     test(
       'friend_request refreshes incoming invitations without reload',
       () async {
@@ -1071,6 +1227,7 @@ ProviderContainer _container({
   VoiceChatsClient? chats,
   VoiceFriendsClient? friends,
   bool soundEnabled = true,
+  String? profileId,
 }) {
   final chatsClient =
       chats ??
@@ -1102,7 +1259,21 @@ ProviderContainer _container({
       authSessionStorageProvider.overrideWithValue(
         InMemoryAuthSessionStorage(),
       ),
-      authControllerProvider.overrideWith(authenticatedAuthController),
+      authControllerProvider.overrideWith((ref) {
+        final controller = authenticatedAuthController(ref);
+        if (profileId != null) {
+          controller.state = AuthState(
+            session: AuthSession(
+              accessToken: 'test-access',
+              refreshToken: 'test-refresh',
+              accountId: 'acc-test',
+              activeProfileId: profileId,
+              expiresInSeconds: 900,
+            ),
+          );
+        }
+        return controller;
+      }),
       gatewayConfigProvider.overrideWithValue(
         const GatewayConfig(baseUrl: 'http://api.test'),
       ),

@@ -64,6 +64,42 @@ restores; it does not establish warm host-cache performance. The isolated proof
 `python3 scripts/ci/compose_go_cache_integration.py` checks repeated execution
 with a warm compilation cache and failure after a source mutation.
 
+## PR scope and image verification
+
+Path detection uses dorny v4 `some-with-excludes`: positive globs select inputs
+and negative globs exclude them. Docs-only changes still require the current
+diff contract. Mixed docs/code changes retain checks for their code inputs.
+
+Known independent proof workflows and diagnostic/latency helpers are excluded
+from broad **PR** product fanout, but still select all four mandatory CI-script
+shards. Their dedicated workflow triggers remain intact. Unknown CI paths,
+`ci.yml`, the filter configuration, Makefile and shared wiring retain broad
+checks. The effective `ci_global` output restores the original broad CI-script
+selection on master/non-PR events and is passed to both matrix resolvers.
+
+PR attachment restart proof has its own input filter: unrelated database
+migrations no longer select it. File/auth/identity/message inputs, relevant
+migrations, shared runtime/Compose wiring and the proof itself retain pre-merge
+coverage. Each database migration directory also selects its own service filter,
+so migration-only PRs retain that service's unit/integration checks instead of
+depending on an incidental unrelated proof. Master retains the original A1
+selector. Renderer PR image verification
+uses its actual package/generated-module/context inputs rather than `run_pkg`;
+master still publishes the renderer on every code SHA. Neither change moves a
+required selected proof after merge.
+
+Go consumer test expansion remains in place. `docker_go_services` separately
+selects directly changed services and consumers of their source `COPY` inputs
+in the actual Dockerfiles. Their backend-go jobs still run tests and selected
+image builds; S2S-only consumers run tests without unrelated image builds.
+Generated modules, shared pkg, module manifests, context exclusions and global
+wiring conservatively select all images/checks. Unsupported COPY grammar or ADD
+widens selection. Post-merge staging build/promotion policy is unchanged.
+
+Offline routing tests prove selector/gate agreement and required-result failure
+propagation, not application runtime correctness or latency improvement. Keep
+hosted exact-head CI and the existing measurement methodology below.
+
 ## Measurement
 
 [Observed baseline](gate-baseline.md) includes 18 heads across 17 branches:

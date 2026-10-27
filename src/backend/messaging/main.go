@@ -25,6 +25,7 @@ import (
 
 	grpcsvc "voice/backend/messaging/internal/grpcsvc"
 	"voice/backend/messaging/internal/messageevents"
+	"voice/backend/messaging/internal/messageviews"
 	"voice/backend/messaging/internal/principalgrpc"
 	"voice/backend/messaging/internal/principalruntime"
 	"voice/backend/messaging/internal/s2s"
@@ -231,6 +232,10 @@ func waitForGRPCReady(ctx context.Context, conn *grpc.ClientConn) error {
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	_, catalogEnabled, err := loadCatalogAssetConfig(os.LookupEnv)
+	if err != nil {
+		log.Fatalf("Messaging catalog asset config: %v", err)
+	}
 	communicationConfig, communicationEnabled, err := spacecommunication.LoadClientConfig(os.LookupEnv, "MESSAGING_SPACE_COMMUNICATION_")
 	if err != nil {
 		log.Fatalf("Messaging Space communication client config: %v", err)
@@ -248,6 +253,9 @@ func main() {
 	}
 
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if catalogEnabled && dbURL == "" {
+		log.Fatal("Messaging catalog asset clients require DATABASE_URL")
+	}
 	if communicationEnabled && dbURL == "" {
 		log.Fatal("Messaging Space communication requires DATABASE_URL")
 	}
@@ -357,6 +365,13 @@ func main() {
 		}
 		if managedChatPurge != nil {
 			defer managedChatPurge.Close()
+		}
+		catalogAssets, err := newCatalogAssetRuntime(os.LookupEnv, managedChatPurge)
+		if err != nil {
+			log.Fatalf("Messaging catalog asset runtime: %v", err)
+		}
+		if catalogAssets != nil {
+			defer catalogAssets.Close()
 		}
 		var communicationStates grpcsvc.CommunicationStateResolver
 		if communicationEnabled {
@@ -504,6 +519,19 @@ func main() {
 		var roleIssuer *principal.Issuer
 		if managedChatPurge != nil {
 			roleIssuer = managedChatPurge.Issuer
+		}
+		viewDeletion, viewConn, err := newMessageViewDeletionClient(os.LookupEnv, roleIssuer)
+		if err != nil {
+			log.Fatalf("message view compaction config: %v", err)
+		}
+		if viewConn != nil {
+			defer func() { _ = viewConn.Close() }()
+			viewDone := make(chan struct{})
+			defer func() { runCancel(); <-viewDone }()
+			go func() {
+				defer close(viewDone)
+				(&messageviews.Compactor{Store: &store.MessagesStore{Pool: pool}, Checker: viewDeletion, Logger: logger}).Run(runCtx)
+			}()
 		}
 		rolePerms, rconn, err := newRolePermissionsClient(os.Getenv, roleIssuer)
 		if err != nil {
@@ -682,6 +710,13 @@ func main() {
 		if gameMessagePermitProcessor != nil {
 			gameMessagePermitProcessor.CommunicationAdmission = messagingService.BeginCommunicationAction
 		}
+		if managedChatPurge != nil && managedChatPurge.Coordinator != nil {
+			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
+			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
+		}
+		if err := attachCatalogAssetRuntime(messagingService, catalogAssets); err != nil {
+			log.Fatalf("Messaging catalog asset activation: %v", err)
+		}
 		messagingv1.RegisterMessagingServiceServer(grpcSrv, messagingService)
 		var botSendIssuer *principal.Issuer
 		if managedChatPurge != nil {
@@ -712,8 +747,6 @@ func main() {
 			}()
 		}
 		if managedChatPurge != nil && managedChatPurge.Coordinator != nil {
-			messagingService.SpaceFileProducer = &grpcsvc.SpaceFileProducerCoordinator{Store: &store.MessagesStore{Pool: pool}, Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
-			messagingService.AttachmentReferences = &grpcsvc.AttachmentReferenceCoordinator{Files: filev1.NewFileServiceClient(managedChatPurge.Connections[0]), Issuer: managedChatPurge.Coordinator.Issuer}
 			retentionCtx, retentionCancel := context.WithCancel(context.Background())
 			retentionDone := make(chan struct{})
 			defer func() { retentionCancel(); <-retentionDone }()

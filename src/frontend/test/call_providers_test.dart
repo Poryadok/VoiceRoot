@@ -24,7 +24,12 @@ import 'package:voice_frontend/state/space_leave.dart';
 
 import 'support/gateway_test_client.dart';
 
-class _FakeLiveKitRoom implements OrdinaryVoicePresentationRoom {
+class _FakeLiveKitRoom
+    implements OrdinaryVoicePresentationRoom, VoiceCallPresentationRoom {
+  @override
+  void Function()? onParticipantsChanged;
+  @override
+  List<VoiceCallParticipant> get callParticipants => const [];
   @override
   bool ordinaryVoicePresentation = false;
   int connectCalls = 0;
@@ -252,6 +257,13 @@ Future<void> _acceptBoundCall({
   await drainMicrotasks();
   expect(container.read(callControllerProvider).phase, CallPhase.active);
   expect(fakeRoom.connectCalls, 1);
+
+  final version = container.read(callControllerProvider).mediaTracksVersion;
+  fakeRoom.onParticipantsChanged!();
+  expect(
+    container.read(callControllerProvider).mediaTracksVersion,
+    version + 1,
+  );
 
   rawRealtime.add(
     RealtimeFrame(op: 'call_accepted', data: {'room_id': session.roomId}),

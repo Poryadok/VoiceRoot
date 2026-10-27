@@ -727,6 +727,7 @@ class _UiMessagesClient extends VoiceMessagesClient {
     String? clientMessageId,
     String? threadParentId,
     bool isE2e = false,
+    bool sendSilent = false,
   }) async {
     sendCalls++;
     return const MessagesApiFailure(message: 'unexpected_send');

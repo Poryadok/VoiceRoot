@@ -76,6 +76,19 @@ func (s *FileGRPC) AcquireFileReferences(ctx context.Context, req *filev1.Acquir
 		var blobID uuid.UUID
 		var blobState string
 		var deletionStartedAt *time.Time
+		catalog, admissionErr := store.GuardCatalogReferenceTx(ctx, tx, ids.file, time.Now())
+		if admissionErr != nil {
+			if !catalog {
+				if errors.Is(admissionErr, pgx.ErrNoRows) {
+					return nil, status.Error(codes.NotFound, "file not found")
+				}
+				return nil, status.Error(codes.Internal, "file persistence unavailable")
+			}
+			return nil, status.Error(codes.FailedPrecondition, "catalog reference unavailable")
+		}
+		if catalog && (req.GetProducerId() != filev1.FileReferenceProducerId_FILE_REFERENCE_PRODUCER_ID_MESSAGING || ref.GetOwnerType() != filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE) {
+			return nil, status.Error(codes.PermissionDenied, "catalog reference requires Messaging message ownership")
+		}
 		if err := tx.QueryRow(ctx, `SELECT b.blob_id,b.state,b.deleted_at FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id=$1 FOR UPDATE OF b`, ids.file).Scan(&blobID, &blobState, &deletionStartedAt); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, status.Error(codes.NotFound, "file not found")

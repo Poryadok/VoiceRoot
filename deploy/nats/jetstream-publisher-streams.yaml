@@ -1,6 +1,11 @@
 # Central, operator-applied bootstrap contract. Publisher workloads receive only
 # read/publish access and validate these exact stream definitions at runtime.
 streams:
+  - name: notification_reminder_hints
+    subjects: [notification.subscription_grace_reminder]
+    retention: limits
+    max_age: 168h
+    storage: file
   - name: message_events
     subjects: [message.sent, message.edited, message.deleted, message.read, message.read_receipt_revoked, message.reaction_added, message.reaction_removed, message.mention_added, message.pinned, message.unpinned, message.forwarded, message.delivery_ack]
     retention: limits

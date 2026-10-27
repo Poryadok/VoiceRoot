@@ -7,6 +7,7 @@
 # space<->user/role, voice<->realtime; any Go service change also runs gateway tests.
 # Trade-off: wider CI than minimal path filter; narrower than global.
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 GO_SERVICES=(
   analytics bot chat controlledgame federation file gameintegration gateway
@@ -88,7 +89,7 @@ for svc in "${GO_SERVICES[@]}"; do
   fi
 done
 
-if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg; then
+if truthy "${FORCE_FULL:-}" || filter_val global || filter_val ci_global || filter_val protos || filter_val pkg || filter_val go_build_shared; then
   services=("${GO_SERVICES[@]}")
   run_pkg=true
 else
@@ -109,6 +110,14 @@ else
   fi
 fi
 
+# Docker source consumers are independent of S2S test edges. Include their
+# ordinary checks too, so every selected build has a backend-go matrix entry.
+docker_json="$(python3 "${ROOT}/scripts/ci/resolve-go-docker-matrix.py")"
+while IFS= read -r svc; do
+  svc="${svc%$'\r'}"
+  [[ -n "${svc}" ]] && add_unique "${svc}"
+done < <(echo "${docker_json}" | jq -r '.[]')
+
 if ((${#services[@]} == 0)); then
   go_json='[]'
   run_go=false
@@ -125,6 +134,7 @@ fi
 
 {
   echo "go_services=${go_json}"
+  echo "docker_go_services=${docker_json}"
   echo "integration_go_services=${integration_json}"
   echo "run_pkg=${run_pkg}"
   echo "run_go=${run_go}"

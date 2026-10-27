@@ -10,6 +10,8 @@ import (
 )
 
 type FileRow struct {
+	DeliveredFull         *Representation
+	DeliveredThumbnail    *Representation
 	ID                    uuid.UUID
 	UploaderProfileID     uuid.UUID
 	OriginalName          string
@@ -128,7 +130,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE id = $1
+WHERE id = $1 AND size_bytes > 0
 `+lockClause, id).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
@@ -157,6 +159,9 @@ WHERE id = $1
 		&row.MusicMetadataRevision,
 		&row.UploadIntent,
 	)
+	if err == nil {
+		err = loadGIFRepresentations(ctx, q, &row)
+	}
 	return row, err
 }
 
@@ -316,7 +321,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE id = ANY($1)
+WHERE id = ANY($1) AND size_bytes > 0
 `, ids)
 	if err != nil {
 		return nil, err
@@ -358,7 +363,17 @@ WHERE id = ANY($1)
 		}
 		out[row.ID] = row
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for id, row := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &row); err != nil {
+			return nil, err
+		}
+		out[id] = row
+	}
+	return out, nil
 }
 
 func (s *FilesStore) ListFilesForChat(ctx context.Context, chatID uuid.UUID, limit int32) ([]FileRow, error) {
@@ -371,7 +386,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE chat_id = $1
+WHERE chat_id = $1 AND size_bytes > 0
   AND status <> 'deleted'
 ORDER BY created_at DESC, id DESC
 LIMIT $2
@@ -416,7 +431,16 @@ LIMIT $2
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *FilesStore) ListFilesForProfile(ctx context.Context, profileID uuid.UUID, limit int32) ([]FileRow, error) {
@@ -429,7 +453,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE uploader_profile_id = $1
+WHERE uploader_profile_id = $1 AND size_bytes > 0
   AND status <> 'deleted'
 ORDER BY created_at DESC, id DESC
 LIMIT $2
@@ -474,7 +498,16 @@ LIMIT $2
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *FilesStore) MarkDeleted(ctx context.Context, id uuid.UUID) error {
@@ -542,7 +575,16 @@ LIMIT $2
 		}
 		out = append(out, row)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		if err := loadGIFRepresentations(ctx, s.Pool, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (s *FilesStore) BytesUsedByProfile(ctx context.Context, profileID uuid.UUID) (int64, error) {

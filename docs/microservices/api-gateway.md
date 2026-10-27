@@ -196,6 +196,16 @@ redirect, PKCE, linked-credential validity, consent and profile eligibility.
 | `POST /api/v1/auth/sdk/authorizations/{requestId}/exchange` | No Gateway JWT; Auth validates code, exact redirect, PKCE verifier and device proof | `AuthOAuth`: 30 requests / 15 min, keyed by client IP |
 | `POST /api/v1/auth/sdk/authorizations/linked-session` | Exactly one Bearer credential, forwarded for Auth linked-credential validation | `AuthOAuth`: 30 requests / 15 min, keyed by client IP |
 
+Linked-provider Settings callback/return transport is a separate default-off
+[target contract](../todo/client.md#oauth-callbackresume-transport-contract-v1--target),
+not an SDK authorization route. Explicit Auth REST routing is required for
+`POST /api/v1/auth/linked-accounts/{provider}/link`,
+`POST .../{provider}/results/consume`, `POST .../{provider}/attempts/{id}/cancel`
+and public `GET .../{provider}/oauth-callback`. The POST routes require verified
+Voice bearer context and account-keyed `AuthOAuth`; the provider callback uses
+IP-keyed `AuthOAuth` without a bearer and Auth validates its stored authority.
+Do not infer callback handling from the existing POST-only REST fallthrough.
+
 The `AuthOAuth` group is the existing Gateway OAuth limit and is applied to all
 five routes by the T20 Gateway slice. SDK creation, consent view, and approval
 use the verified account key. Code exchange and opaque linked-session use the
@@ -288,7 +298,7 @@ must not forward current client `space.id` assertions as authority.
 
 **Rate limits (BOT-C):** `BotRoleOps` — 100/min per bot token on `roles/assign`, `roles/revoke`, `POST /me/roles`.
 
-**[text-chat.md](../features/text-chat.md) — Stickers and GIF (Chat catalog + provider search):** installed-pack catalog routes are transcoded to **Chat Service** ([chat-service.md](chat-service.md) § Sticker packs). The catalog uses the authenticated active profile only; it accepts no profile identifier. GIF search and user-pack upload remain unimplemented.
+**[text-chat.md](../features/text-chat.md) — Stickers and GIF (Chat catalog + provider search):** installed-pack catalog routes are transcoded to **Chat Service** ([chat-service.md](chat-service.md) § Sticker packs). The catalog uses the authenticated active profile only; it accepts no profile identifier. Provider-neutral GIF search transport is implemented with its live provider disabled; user-pack upload remains unimplemented.
 
 | Method | Route | gRPC | Query / body |
 |--------|-------|------|--------------|
@@ -300,8 +310,30 @@ must not forward current client `space.id` assertions as authority.
 | `POST` | `/api/v1/sticker-packs/{pack_id}/stickers` | `AddStickersToUserPack` | deferred: File-ingest slice |
 | `GET` | `/api/v1/gifs/search` | `SearchGifs` | `q`, `limit`, **`cursor`** (opaque; Chat-owned `next_cursor`) |
 | `GET` | `/api/v1/gifs/trending` | `GetTrendingGifs` | optional `cursor` |
+| `POST` | `/api/v1/gifs/resolve` | protected `CatalogAssetService.ResolveGifAsset` | protobuf JSON `protocol_version=1`, canonical UUID `operation_id`, `provider`, `provider_id`, `destination_chat` |
 
 GIF metadata routes use the authenticated active profile and the standard protobuf JSON transport. Both accept `limit` (default 20, maximum 50) and opaque `cursor`; search requires nonblank `q`. Malformed, duplicate or out-of-range query parameters return 400. Responses use `Cache-Control: no-store`; any trending metadata cache belongs to Chat. Standard gRPC mapping applies: unauthenticated 401, invalid request/cursor 400, provider rate exhaustion 429, disabled/unavailable provider 503 (`error_code=unavailable`, `X-Voice-GRPC-Code: Unavailable`). No provider/key is enabled and no fake results are seeded by production startup. These routes expose search metadata only; they neither accept a remote upload URL nor authorize sending a File reference.
+
+GIF selection requires a real issuer/audience-validated client JWT with an active
+profile, explicit account type, JTI and current positive session epoch. Static
+development credentials and raw identity headers cannot mint its delegated
+principal. The body is strict protobuf JSON, limited to 64 KiB; unknown fields
+(including actor IDs, `source_url` and client-chosen `file_id`) reject with 400.
+Gateway signs a fresh transport UUID/JTI and exact whole request for Chat. The
+business `operation_id` remains unchanged for safe retries/polls of that exact
+selection and destination. The response contains only canonical source/File IDs,
+provider tuple and File lifecycle status; pending/processing is not sendable.
+Chat owns source resolution and independently verifies plaintext destination
+membership. Messaging still owns final source/destination admission. All responses
+use `no-store`; errors are sanitized and standard 401/400/429/503 mapping applies.
+
+The dedicated client uses complete `GATEWAY_CHAT_CATALOG_ASSET_` settings
+`GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `CLIENT_CERT_FILE` and
+`CLIENT_KEY_FILE`, with Gateway's existing principal signing issuer. Partial or
+explicitly empty configuration fails readiness; a missing client returns 503.
+There is no ordinary Chat or REST proxy fallback. This transport does not enable
+a live provider, import executor, E2E catalog send or release capability. The
+actual selected-asset → ready File → Messaging proof remains required.
 
 Send after pick — **Messaging** `POST /api/v1/messages/...` (not File attach). File upload for pack assets — `/api/v1/files/**` with `intent=sticker`.
 

@@ -144,6 +144,42 @@ class AvatarPresignedUpload {
   final String objectKey;
 }
 
+class VerificationStatus {
+  const VerificationStatus({
+    required this.profileId,
+    required this.verificationType,
+    this.badge,
+    this.pendingOrganizationChallenge,
+  });
+
+  final String profileId;
+  final String verificationType;
+  final String? badge;
+  final PendingOrganizationChallenge? pendingOrganizationChallenge;
+}
+
+class PendingOrganizationChallenge {
+  const PendingOrganizationChallenge({
+    required this.domain,
+    required this.txtRecord,
+    required this.expiresAt,
+  });
+
+  final String domain;
+  final String txtRecord;
+  final DateTime expiresAt;
+}
+
+class OrganizationVerificationChallenge {
+  const OrganizationVerificationChallenge({
+    required this.domain,
+    required this.txtRecord,
+  });
+
+  final String domain;
+  final String txtRecord;
+}
+
 /// HTTP client for User routes via API Gateway (`/api/v1/users/**`).
 class VoiceUsersClient {
   VoiceUsersClient({required GatewayHttpClient gateway}) : _gateway = gateway;
@@ -260,6 +296,139 @@ class VoiceUsersClient {
       (data) => voiceProfileFromProto(
         data.hasProfile() ? data.profile : user_pb.Profile(),
       ),
+    );
+  }
+
+  Future<UsersApiResult<VerificationStatus>> getVerificationStatus({
+    required String authorization,
+  }) async {
+    final result = await _gateway.getJson(
+      _gateway.resolve('/api/v1/users/me/verification'),
+      authorization: authorization,
+    );
+    return _mapVerificationStatus(result);
+  }
+
+  Future<UsersApiResult<OrganizationVerificationChallenge>>
+  startOrganizationVerification({
+    required String authorization,
+    required String domain,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/users/me/verification/organization'),
+      authorization: authorization,
+      body: {'domain': domain.trim()},
+    );
+    return switch (result) {
+      GatewayHttpOk(:final data) => _organizationChallengeFromJson(data),
+      GatewayHttpFailure(:final error) => UsersApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+    };
+  }
+
+  Future<UsersApiResult<VerificationStatus>> checkOrganizationVerification({
+    required String authorization,
+  }) async {
+    final result = await _gateway.postJson(
+      uri: _gateway.resolve('/api/v1/users/me/verification/organization/check'),
+      authorization: authorization,
+      body: const {},
+    );
+    return _mapVerificationStatus(result);
+  }
+
+  UsersApiResult<VerificationStatus> _mapVerificationStatus(
+    GatewayHttpResult<Map<String, dynamic>> result,
+  ) {
+    return switch (result) {
+      GatewayHttpFailure(:final error) => UsersApiFailure(
+        message: GatewayApiResultMapper.failureMessage(error),
+        errorCode: GatewayApiResultMapper.failureCode(error),
+        statusCode: GatewayApiResultMapper.failureStatus(error),
+      ),
+      GatewayHttpOk(:final data) => _verificationStatusFromJson(data),
+    };
+  }
+
+  UsersApiResult<VerificationStatus> _verificationStatusFromJson(
+    Map<String, dynamic> data,
+  ) {
+    final status = data['verification_status'];
+    if (status is! Map<String, dynamic> ||
+        status['profile_id'] is! String ||
+        status['verification_type'] is! String ||
+        ((status['badge'] != null) && status['badge'] is! String)) {
+      return const UsersApiFailure(
+        message: 'invalid_response',
+        errorCode: 'invalid_response',
+      );
+    }
+    final verificationType = status['verification_type'] as String;
+    if (!const {
+      'none',
+      'personal',
+      'organization',
+    }.contains(verificationType)) {
+      return const UsersApiFailure(
+        message: 'invalid_response',
+        errorCode: 'invalid_response',
+      );
+    }
+    PendingOrganizationChallenge? pendingChallenge;
+    final pendingJson = data['pending_organization_challenge'];
+    if (pendingJson != null) {
+      if (pendingJson is! Map<String, dynamic> ||
+          pendingJson['domain'] is! String ||
+          (pendingJson['domain'] as String).isEmpty ||
+          pendingJson['txt_record'] is! String ||
+          (pendingJson['txt_record'] as String).isEmpty ||
+          pendingJson['expires_at'] is! String) {
+        return const UsersApiFailure(
+          message: 'invalid_response',
+          errorCode: 'invalid_response',
+        );
+      }
+      final expiresAt = DateTime.tryParse(pendingJson['expires_at'] as String);
+      if (expiresAt == null || !expiresAt.isUtc) {
+        return const UsersApiFailure(
+          message: 'invalid_response',
+          errorCode: 'invalid_response',
+        );
+      }
+      pendingChallenge = PendingOrganizationChallenge(
+        domain: pendingJson['domain'] as String,
+        txtRecord: pendingJson['txt_record'] as String,
+        expiresAt: expiresAt,
+      );
+    }
+    return UsersApiOk(
+      VerificationStatus(
+        profileId: status['profile_id'] as String,
+        verificationType: verificationType,
+        badge: status['badge'] as String?,
+        pendingOrganizationChallenge: pendingChallenge,
+      ),
+    );
+  }
+
+  UsersApiResult<OrganizationVerificationChallenge>
+  _organizationChallengeFromJson(Map<String, dynamic> data) {
+    final domain = data['domain'];
+    final txtRecord = data['txt_record'];
+    if (domain is! String ||
+        domain.isEmpty ||
+        txtRecord is! String ||
+        txtRecord.isEmpty) {
+      return const UsersApiFailure(
+        message: 'invalid_response',
+        errorCode: 'invalid_response',
+      );
+    }
+    return UsersApiOk(
+      OrganizationVerificationChallenge(domain: domain, txtRecord: txtRecord),
     );
   }
 

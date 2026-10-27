@@ -1048,6 +1048,7 @@ class _DeferredMutationMessagesClient extends VoiceMessagesClient {
     String? clientMessageId,
     String? threadParentId,
     bool isE2e = false,
+    bool sendSilent = false,
   }) {
     _markRequested(authorization);
     return _send.future;

@@ -12,6 +12,10 @@ import (
 )
 
 func (t *transcoder) serveGIFRoutes(w http.ResponseWriter, r *http.Request, rest string) bool {
+	if isGIFSelectionRequest(r) {
+		t.serveGIFSelection(w, r)
+		return true
+	}
 	if r.Method != http.MethodGet || (rest != "search" && rest != "trending") {
 		return false
 	}

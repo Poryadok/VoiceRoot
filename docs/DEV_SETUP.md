@@ -102,11 +102,40 @@ copy .env.example .env
 docker compose up -d
 ```
 
-Инфра (Postgres, Redis, NATS) поднимается без профиля `app`. Полный стек (auth, gateway, web, …):
+Инфра (Postgres, Redis, NATS) поднимается без профиля `app`. Для полного
+локального стека (Auth, Gateway, Web, …) нужны защищённые межсервисные
+listeners. Используйте существующий media overlay с новой Phase0 fixture;
+один `docker-compose.yml --profile app` не задаёт обязательный mTLS-клиент
+Messaging → Role и не является полным bootstrap приложения.
+
+Из корня репозитория, в одной PowerShell-сессии (Python 3, OpenSSL и JDK
+`keytool` должны быть в `PATH`):
 
 ```powershell
+New-Item -ItemType Directory -Force tmp\phase0 | Out-Null
+$localRun = [guid]::NewGuid().ToString('N').Substring(0, 8)
+$localFixture = Join-Path (Get-Location) "tmp\phase0\credentials-$localRun"
+python scripts/dev/generate-phase0-fixture.py $localFixture
+if ($LASTEXITCODE -ne 0) { throw 'Phase0 fixture generation failed' }
+$env:PHASE0_FIXTURE_DIR = $localFixture
+$env:COMPOSE_PROJECT_NAME = "voice-local-$localRun"
+# Windows uses ';' between COMPOSE_FILE paths; Linux/macOS use ':'.
+$env:COMPOSE_FILE = 'docker-compose.yml;docker-compose.voice-space-media.yml'
+docker compose config --quiet
 make compose-app-up
+docker compose ps --all
+docker compose exec -T gateway wget -qO- http://127.0.0.1:8080/health
 ```
+
+Выберите свободные порты в `.env` перед запуском: отдельное имя project
+изолирует volumes и сеть, но не опубликованные host ports. Сохраните имя
+project и путь fixture для последующих команд в другой сессии. Сертификаты
+fixture действуют два дня; генератор требует новый каталог и не перезаписывает
+существующий. Linux-настройка владельца fixture для UID 65532 и ограничения
+тестовых credentials описаны в [Phase0 fixture](../docker/phase0/README.md).
+Для изолированного attachment restart proof готовый wrapper сам создаёт
+fixture, имя project и отдельный диапазон портов:
+`make compose-file-attachment-restart-proof` ([TESTING.md](TESTING.md)).
 
 Рекомендуемые порты в `.env`:
 
@@ -121,7 +150,8 @@ WEB_PORT=9080
 | Web UI | http://127.0.0.1:9080 |
 | Gateway (REST + WS) | http://127.0.0.1:18080 |
 
-Остановка: `make compose-down`.
+Остановка: `make compose-down` в той же сессии с сохранёнными
+`COMPOSE_FILE`, `COMPOSE_PROJECT_NAME` и `PHASE0_FIXTURE_DIR`.
 
 Миграции после первого подъёма — [`src/backend/migrations/README.md`](../src/backend/migrations/README.md) (`make compose-migrate-all`).
 
@@ -171,7 +201,7 @@ Admin: `src/admin/` — аналогично (`npm ci`, `npm test`).
 
 ```powershell
 make check-toolchain
-make compose-app-up
+# Сначала выполните защищённый Compose bootstrap из раздела 4 выше.
 make build-all
 make flutter-ci
 ```

@@ -4,7 +4,7 @@ from unittest.mock import patch
 import bootstrap_selection
 from bootstrap_selection_test import fixture as enrollment_fixture
 from nats_contract_plan_test import live
-from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V5_SOURCE_HASHES
 from rollout_census_test import CREATED
 import nats_root_plan as module
 from controller import Blocked
@@ -96,7 +96,10 @@ class CanonicalBootstrapTests(unittest.TestCase):
         self.contract=json.loads((repo/'scripts/staging/nats-known-baseline/deployed-contract.json').read_bytes())
         for part in ('realtime','analytics-chat','notification','search'):
             relative='deploy/templates/nats-'+part+'-bootstrap.yaml'
-            shutil.copyfile(repo/relative,self.source/relative)
+            historical=Path(__file__).parent/'fixtures/v5-bootstrap'/Path(relative).name
+            raw=historical.read_bytes()
+            self.assertEqual(hashlib.sha256(raw).hexdigest(),V5_SOURCE_HASHES[relative])
+            (self.source/relative).write_bytes(raw)
         from nats_contract_plan import VOICE_SUBJECTS_10,USER_SUBJECTS_10
         for name,subjects in [('voice_events',VOICE_SUBJECTS_10),('user_events',USER_SUBJECTS_10)]:
             info=copy.deepcopy(self.streams['chat_events'])
@@ -116,6 +119,14 @@ class CanonicalBootstrapTests(unittest.TestCase):
     def mutate(self,part):
         path=self.source/('deploy/templates/nats-'+part+'-bootstrap.yaml')
         path.write_bytes(path.read_bytes().replace(b'    set -eu',b'    set -eu\n    echo unreviewed-change'))
+    def test_current_unapproved_source_tuple_is_refused_by_historical_root(self):
+        repo=Path(__file__).resolve().parents[3]
+        relative='deploy/templates/nats-realtime-bootstrap.yaml'
+        raw=(repo/relative).read_bytes()
+        self.assertNotEqual(hashlib.sha256(raw).hexdigest(),V5_SOURCE_HASHES[relative])
+        (self.source/relative).write_bytes(raw)
+        with self.assertRaisesRegex(Blocked,'nats_migration_root_preflight_refused'):
+            self.run_plan()
     def test_canonical_search_authorized_by_root_then_accepted_by_compiler(self):
         authority=self.run_plan()
         paths=self.compatible(authority)

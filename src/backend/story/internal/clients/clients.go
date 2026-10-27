@@ -43,7 +43,7 @@ func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) jobs.FileDeleter {
 	}
 
 	if addr := strings.TrimSpace(os.Getenv("CHAT_GRPC_ADDR")); addr != "" {
-		if conn, err := dial(addr); err == nil {
+		if conn, err := dialWithBreaker(addr); err == nil {
 			svc.Chat = &chatClient{client: chatv1.NewChatServiceClient(conn)}
 		} else if logger != nil {
 			logger.Error("story chat dial failed", slog.String("error", err.Error()))
@@ -76,7 +76,7 @@ func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) jobs.FileDeleter {
 
 	var deleter jobs.FileDeleter
 	if addr := strings.TrimSpace(os.Getenv("FILE_GRPC_ADDR")); addr != "" {
-		if conn, err := dial(addr); err == nil {
+		if conn, err := dialWithBreaker(addr); err == nil {
 			fileClient := filev1.NewFileServiceClient(conn)
 			deleter = &FileDeleter{client: fileClient}
 		} else if logger != nil {
@@ -88,6 +88,17 @@ func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) jobs.FileDeleter {
 
 func dial(addr string) (*grpc.ClientConn, error) {
 	return grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(insecure.NewCredentials()))
+}
+
+func dialWithBreaker(addr string) (*grpc.ClientConn, error) {
+	breaker, err := grpcclient.NewUnaryBreaker(grpcclient.DefaultBreakerConfig())
+	if err != nil {
+		return nil, err
+	}
+	return grpc.NewClient(grpcclient.DialTarget(addr),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(breaker.UnaryClientInterceptor()),
+		grpc.WithDisableRetry())
 }
 
 type chatClient struct {

@@ -5,15 +5,28 @@ package nativeinstaller
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
+	spacev1 "voice.app/voice/space/v1"
+	"voice/backend/pkg/principal"
+	"voice/backend/space/internal/lifecycleprincipal"
 	"voice/backend/space/internal/store"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 // The caller supplies one genuinely fresh owned private server. This test never
@@ -23,13 +36,32 @@ func TestProductionFreshChainAndRetainedVerify(t *testing.T) {
 	driver := os.Getenv("NATIVE_INSTALLER_TEST_MIGRATE")
 	require.NotEmpty(t, admin, "owned private fresh server required")
 	require.NotEmpty(t, driver)
+	binary := os.Getenv("NATIVE_INSTALLER_TEST_BINARY")
+	require.NotEmpty(t, binary, "source-bound production binary required; go test binaries omit dependency build metadata")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	var out bytes.Buffer
+	retained := filepath.Join(t.TempDir(), "prior.jsonl")
+	run := func(c Config) error {
+		args := []string{"-mode", c.Mode, "-migrations-dir", c.MigrationsDir, "-migrate", c.MigratePath}
+		if c.Prior != nil {
+			args = append(args, "-prior-evidence", retained)
+		}
+		cmd := exec.CommandContext(ctx, binary, args...)
+		cmd.Env = append(os.Environ(), "SPACE_NATIVE_ADMIN_URL="+c.AdminURL)
+		cmd.Stdout = c.Output
+		var diagnostic bytes.Buffer
+		cmd.Stderr = &diagnostic
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%w: %s", err, diagnostic.String())
+		}
+		return nil
+	}
 	c := Config{AdminURL: admin, MigratePath: driver, MigrationsDir: "../../../migrations/space_db", Mode: "provision", Output: &out}
-	require.NoError(t, Run(ctx, c))
+	require.NoError(t, run(c))
 	prior, err := ReadReceipt(bytes.NewReader(out.Bytes()))
 	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(retained, out.Bytes(), 0600))
 	t.Cleanup(func() {
 		cleanupCtx, done := context.WithTimeout(context.Background(), 10*time.Second)
 		defer done()
@@ -52,14 +84,116 @@ func TestProductionFreshChainAndRetainedVerify(t *testing.T) {
 	out.Reset()
 	c.Mode = "verify"
 	c.Prior = prior
-	require.NoError(t, Run(ctx, c))
+	require.NoError(t, run(c))
 	require.Contains(t, out.String(), `"event":"verified"`)
 	require.NotContains(t, out.String(), `"event":"complete"`)
+	// Compose grants the separate serving identity only after the initial
+	// installer has qualified and sealed the fresh source. Exercise that actual
+	// psql script before checking retained provenance with the installer login.
+	targetURL, err := url.Parse(admin)
+	require.NoError(t, err)
+	targetURL.Path = "/space_db"
+	cmd := exec.CommandContext(ctx, "psql", targetURL.String(), "-X", "-v", "ON_ERROR_STOP=1", "-f", "../../../../../docker/postgres/provision-space-runtime-role.sql")
+	cmd.Env = append(os.Environ(), "SPACE_DB_PASSWORD=isolated-runtime-fixture-only")
+	provisionOutput, err := cmd.CombinedOutput()
+	require.NoError(t, err, "canonical runtime provisioning: %s", provisionOutput)
+	withTarget := func(f func(*pgx.Conn)) {
+		conn, err := pgx.Connect(ctx, targetURL.String())
+		require.NoError(t, err)
+		defer conn.Close(context.Background())
+		f(conn)
+	}
+	withTarget(func(conn *pgx.Conn) {
+		var seal, catalog string
+		var grants int
+		require.NoError(t, conn.QueryRow(ctx, `SELECT encode(catalog_sha256,'hex'),encode(native_membership_guard.catalog(),'hex') FROM native_membership_guard.epoch WHERE singleton`).Scan(&seal, &catalog))
+		require.Equal(t, prior.Final.SealSHA256, seal)
+		require.Equal(t, seal, catalog, "canonical serving grants must not change the retained catalog seal")
+		require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(c.relacl) a WHERE n.nspname='public' AND c.relname IN ('space_account_ban_operations','space_account_ban_captures','space_account_ban_reconciliation','space_account_qualifications','space_account_ban_suppressions','space_account_roster_projections') AND a.grantee='space_runtime'::regrole AND NOT a.is_grantable AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE')`).Scan(&grants))
+		require.Equal(t, 24, grants, "all six account-ban relations must have canonical serving DML")
+		t.Logf("canonical runtime DML grants=%d retained seal=%s unchanged=true", grants, seal)
+	})
+	out.Reset()
+	require.NoError(t, run(c), "retained source must qualify after canonical serving grants")
+	expectedVerified, err := json.Marshal(event{Event: "verified", Receipt: prior})
+	require.NoError(t, err)
+	require.JSONEq(t, string(expectedVerified), out.String(), "verify preserves the exact original completed receipt")
+	t.Run("actual serving login", func(t *testing.T) {
+		servingURL := *targetURL
+		servingURL.User = url.UserPassword("space_runtime", "isolated-runtime-fixture-only")
+		pool, err := pgxpool.New(ctx, servingURL.String())
+		require.NoError(t, err)
+		defer pool.Close() // installer verification requires the owning window
+		var login string
+		var owner bool
+		require.NoError(t, pool.QueryRow(ctx, `SELECT session_user,pg_has_role(session_user,(SELECT relowner FROM pg_class WHERE oid='public.spaces'::regclass),'MEMBER')`).Scan(&login, &owner))
+		require.Equal(t, "space_runtime", login)
+		require.False(t, owner)
+		st := &store.SpaceStore{Pool: pool}
+		row, profile, err := createRuntimeFixtureSpace(t, ctx, st)
+		require.NoError(t, err, "actual non-owner native51 creator must retain serving authority")
+		require.NotNil(t, row)
+		observation, err := st.ReadMemberAdmissionAuthority(ctx, &spacev1.GetMemberAdmissionAuthorityRequest{ProtocolVersion: 1, SpaceId: row.ID.String(), ProfileId: profile})
+		require.NoError(t, err, "serving catalog qualification must remain valid")
+		require.NotNil(t, observation)
+		_, err = st.InspectNativeInstallerSource(ctx, 51)
+		require.Error(t, err, "runtime DML never grants owning installer authority")
+	})
+	for _, tc := range []struct{ name, change, restore string }{
+		{"dirty marker", `UPDATE public.schema_migrations SET dirty=true`, `UPDATE public.schema_migrations SET dirty=false`},
+		{"unknown marker", `UPDATE public.schema_migrations SET version=52`, `UPDATE public.schema_migrations SET version=51`},
+		{"public DML", `GRANT SELECT ON public.space_account_ban_captures TO PUBLIC`, `REVOKE SELECT ON public.space_account_ban_captures FROM PUBLIC`},
+		{"unrelated grantee", `CREATE ROLE unrelated_runtime; GRANT SELECT ON public.space_account_ban_captures TO unrelated_runtime`, `REVOKE SELECT ON public.space_account_ban_captures FROM unrelated_runtime; DROP ROLE unrelated_runtime`},
+		{"grant option", `GRANT SELECT ON public.space_account_ban_captures TO space_runtime WITH GRANT OPTION`, `REVOKE GRANT OPTION FOR SELECT ON public.space_account_ban_captures FROM space_runtime`},
+		{"excess privilege", `GRANT TRUNCATE ON public.space_account_ban_captures TO space_runtime`, `REVOKE TRUNCATE ON public.space_account_ban_captures FROM space_runtime`},
+		{"elevated runtime", `ALTER ROLE space_runtime SUPERUSER`, `ALTER ROLE space_runtime NOSUPERUSER`},
+		{"owner membership", `GRANT voice TO space_runtime`, `REVOKE voice FROM space_runtime`},
+		{"catalog trigger", `ALTER TABLE public.space_account_qualifications DISABLE TRIGGER account_qualification_immutable`, `ALTER TABLE public.space_account_qualifications ENABLE TRIGGER account_qualification_immutable`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withTarget(func(conn *pgx.Conn) { _, err := conn.Exec(ctx, tc.change); require.NoError(t, err) })
+			defer withTarget(func(conn *pgx.Conn) { _, err := conn.Exec(ctx, tc.restore); require.NoError(t, err) })
+			out.Reset()
+			require.ErrorContains(t, run(c), "HOLD: current51 source verification failed")
+			require.Empty(t, out.String(), "rejection must not emit verified provenance")
+		})
+		out.Reset()
+		require.NoError(t, run(c), "restored source must verify without resealing or migration")
+	}
 	out.Reset()
 	c.Mode = "provision"
 	c.Prior = nil
-	require.ErrorContains(t, Run(ctx, c), "HOLD")
+	require.ErrorContains(t, run(c), "HOLD")
 	require.Empty(t, out.String(), "existing target cannot be relabeled fresh")
+}
+
+// The Auth session floor is controlled here; signed transport, durable replay,
+// native writer and serving catalog checks use their production implementations.
+func createRuntimeFixtureSpace(t *testing.T, ctx context.Context, st *store.SpaceStore) (*store.SpaceRow, string, error) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	issuer, err := principal.NewIssuer(principal.IssuerConfig{Issuer: "gateway", KeyID: "current", PrivateKey: key})
+	require.NoError(t, err)
+	request := &spacev1.CreateSpaceRequest{Name: "runtime-grants-fixture", Visibility: "private"}
+	hash, err := principal.RequestHash(request)
+	require.NoError(t, err)
+	profile, requestID := uuid.NewString(), uuid.NewString()
+	token, err := issuer.IssueDelegatedUser(principal.DelegatedUserInput{Audience: "space", RPC: spacev1.SpaceService_CreateSpace_FullMethodName, RequestID: requestID, RequestHash: hash, AccountID: uuid.NewString(), ProfileID: profile, SessionEpoch: 7, AccountType: "regular", ClientExpiresAt: time.Now().Add(time.Minute)})
+	require.NoError(t, err)
+	ctx = metadata.NewIncomingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", requestID))
+	v := lifecycleprincipal.Verifier{Keys: func(context.Context, string, string) (*rsa.PublicKey, error) { return &key.PublicKey, nil }, CreatorEpoch: func(context.Context, string, int64) error { return nil }, CreatorReplay: st.ClaimCreatorPrincipalReplay}
+	result, err := v.Unary()(ctx, request, &grpc.UnaryServerInfo{FullMethod: spacev1.SpaceService_CreateSpace_FullMethodName}, func(ctx context.Context, _ any) (any, error) {
+		creator, err := lifecycleprincipal.RequireCreator(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		return st.CreateSpaceWithCreator(ctx, creator, request)
+	})
+	if err != nil {
+		return nil, profile, err
+	}
+	return result.(*store.SpaceRow), profile, nil
 }
 
 type failedEvidenceWriter struct {

@@ -1378,6 +1378,7 @@ class _ImmediateSendAttempt {
     required List<MessageMention> mentions,
     required this.threadParentId,
     required this.isE2e,
+    required this.sendSilent,
   }) : attachments = List.unmodifiable(attachments),
        mentions = List.unmodifiable(mentions);
 
@@ -1390,6 +1391,7 @@ class _ImmediateSendAttempt {
   final List<MessageMention> mentions;
   final String? threadParentId;
   final bool isE2e;
+  final bool sendSilent;
 }
 
 class ChatRoomController extends StateNotifier<ChatRoomState> {
@@ -2172,6 +2174,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     List<MessageAttachment> attachments = const [],
     List<MessageMention> mentions = const [],
     String? threadParentId,
+    bool sendSilent = false,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
@@ -2202,7 +2205,8 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
       var isE2e = false;
       if (_isE2eChat()) {
         final peerId = _dmPeerProfileId();
-        if (peerId == null || retainedAttachments.any((a) => !a.isE2eEncrypted)) {
+        if (peerId == null ||
+            retainedAttachments.any((a) => !a.isE2eEncrypted)) {
           throw E2eEncryptException('e2e_encrypt_failed');
         }
         if (outbound.isNotEmpty) {
@@ -2237,6 +2241,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         mentions: retainedMentions,
         threadParentId: threadParentId,
         isE2e: isE2e,
+        sendSilent: sendSilent,
       );
       _failedImmediateSend = attempt;
       return await _submitImmediateSend(attempt);
@@ -2391,6 +2396,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           mentions: attempt.mentions,
           threadParentId: attempt.threadParentId,
           isE2e: attempt.isE2e,
+          sendSilent: attempt.sendSilent,
         );
     if (!isCurrentRequest()) {
       return kChatActionStaleContext;
@@ -3046,6 +3052,56 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     return _ref
         .read(messageCacheMutationQueueProvider)
         .enqueue(() => mutation(store));
+  }
+
+  final Set<String> _recordedMessageViews = {};
+  final Set<String> _pendingMessageViews = {};
+
+  Future<bool> recordMessageView(String messageId) async {
+    final profileId = _activeProfileId();
+    final auth = _ref.read(authorizationHeaderProvider);
+    if (profileId == null ||
+        auth == null ||
+        state.isOfflineCache ||
+        state.historyProfileId != profileId ||
+        _ref.read(selectedChatIdProvider) != chatId) {
+      return false;
+    }
+    final key = '$profileId:$messageId';
+    if (_recordedMessageViews.contains(key)) return true;
+    if (!_pendingMessageViews.add(key)) return false;
+    try {
+      final result = await _ref
+          .read(voiceMessagesClientProvider)
+          .recordMessageView(
+            authorization: auth,
+            chatId: chatId,
+            messageId: messageId,
+          );
+      if (!mounted ||
+          _activeProfileId() != profileId ||
+          _ref.read(authorizationHeaderProvider) != auth ||
+          state.historyProfileId != profileId) {
+        return false;
+      }
+      if (result is MessagesApiOk<int>) {
+        _recordedMessageViews.add(key);
+        state = state.copyWith(
+          messages: [
+            for (final message in state.messages)
+              if (message.id == messageId)
+                message.copyWith(viewCount: result.data)
+              else
+                message,
+          ],
+        );
+        await _writeCache(state.messages, profileId: profileId);
+        return true;
+      }
+      return false;
+    } finally {
+      _pendingMessageViews.remove(key);
+    }
   }
 
   Future<void> _markLatestRead() async {

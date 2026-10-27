@@ -152,7 +152,14 @@ func main() {
 		}
 		defer func() { _ = sharedNATS.Drain() }()
 		ready.NATS = sharedNATS
-		consumerReady := newRealtimeConsumerReadiness("message", "voice", "chat", "social", "matchmaking", "role", "user")
+		consumerNames := []string{"message", "voice", "chat", "social", "matchmaking", "role", "user"}
+		// Activation waits for the real Notification insertion/intent worker and
+		// protected primary/final-authority reads. No deployment opts in here.
+		reminderHintsEnabled := os.Getenv("REALTIME_SUBSCRIPTION_REMINDER_HINTS") == "true"
+		if reminderHintsEnabled {
+			consumerNames = append(consumerNames, "subscription_reminder")
+		}
+		consumerReady := newRealtimeConsumerReadiness(consumerNames...)
 		ready.Consumers = consumerReady
 		startConsumer := func(name string, run func(context.Context) error) {
 			go func() {
@@ -201,6 +208,11 @@ func main() {
 		startConsumer("user", func(runCtx context.Context) error {
 			return runUserEventsConsumer(runCtx, hub, friendLister, presenceViewer, natsURL, instanceID, logger, sharedNATS)
 		})
+		if reminderHintsEnabled {
+			startConsumer("subscription_reminder", func(runCtx context.Context) error {
+				return runReminderHints(runCtx, hub, natsURL, instanceID, logger, sharedNATS)
+			})
+		}
 	}
 
 	var dap deliveryAckPublisher

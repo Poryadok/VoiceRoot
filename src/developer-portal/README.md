@@ -57,3 +57,27 @@ With `docker compose --profile app up`, portal is at http://localhost:9082 (or `
 ```bash
 npm test
 ```
+
+The CI Compose smoke catalog also selects the Gateway HTTP journey
+`TestComposeDeveloperPortal_live`. With the local app profile running, execute
+it from `src/backend/gateway`:
+
+```bash
+VOICE_RUN_LIVE_COMPOSE=true go test -count=1 -timeout 3m -run '^TestComposeDeveloperPortal_live$' .
+```
+
+It requires the real Gateway, Auth, User, Bot, PostgreSQL/Redis and Compose mail
+fixture plus the portal SPA. It creates and verifies a disposable email account
+through the normal registration/OTP API, performs Voice authorization-code/S256
+PKCE login, checks the callback state, exchanges a single-use code, and uses that
+access token to register and read back an owned bot. The bot is deleted on test
+cleanup. Invalid redirect, password, verifier, code replay and unauthenticated
+registration must fail. An unavailable portal fails the opted-in test.
+
+The defaults use Gateway `http://127.0.0.1:18080` and portal
+`http://127.0.0.1:9082`. Custom local fixtures must set `VOICE_API_BASE_URL`,
+`DEVELOPER_PORTAL_PORT`, and the matching Auth redirect allowlist; propagate the
+configured client ID/secret to the test environment too. Account and database
+state belong to the disposable local stack and are removed with its volumes.
+This HTTP test proves backend protocol and persistence, while browser callback
+execution and `sessionStorage` remain covered separately by frontend tests.

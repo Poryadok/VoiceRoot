@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -17,11 +16,10 @@ import 'privacy_settings_screen.dart';
 import 'notification_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'subscription_settings_screen.dart';
-import '../../settings/reduced_motion.dart';
-import '../../settings/voice_input_settings.dart';
 import 'help_sheet.dart';
 import 'appeal_sheet.dart';
 import 'appearance_settings_screen.dart';
+import 'accessibility_settings_screen.dart';
 import 'verification_settings_sheet.dart';
 
 class SettingsSheet extends ConsumerWidget {
@@ -29,8 +27,7 @@ class SettingsSheet extends ConsumerWidget {
 
   static const Key sheetKey = Key('settings_sheet');
   static const Key accentKey = Key('settings_accent');
-  static const Key pttModeKey = Key('settings_ptt_mode');
-  static const Key pttKeybindKey = Key('settings_ptt_keybind');
+  static const Key accessibilityKey = Key('settings_accessibility');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,7 +36,6 @@ class SettingsSheet extends ConsumerWidget {
     final catalogAsync = ref.watch(voiceTokenCatalogProvider);
     final profileId = ref.watch(authControllerProvider).activeProfileId;
     final subscription = ref.watch(subscriptionProvider).valueOrNull;
-    final reducedMotion = ref.watch(reducedMotionEnabledProvider);
 
     return SafeArea(
       child: Padding(
@@ -84,6 +80,20 @@ class SettingsSheet extends ConsumerWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => const AppearanceSettingsScreen(),
+                    ),
+                  );
+                },
+              ),
+              ListTile(
+                key: accessibilityKey,
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.settingsAccessibilityTitle),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AccessibilitySettingsScreen(),
                     ),
                   );
                 },
@@ -178,27 +188,6 @@ class SettingsSheet extends ConsumerWidget {
                 },
               ),
               const SizedBox(height: 16),
-              SwitchListTile(
-                key: const Key('settings_reduced_motion'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(l10n.settingsReducedMotion),
-                value: reducedMotion,
-                onChanged: (v) => ref
-                    .read(reducedMotionEnabledProvider.notifier)
-                    .setEnabled(v),
-              ),
-              SwitchListTile(
-                key: pttModeKey,
-                contentPadding: EdgeInsets.zero,
-                title: Text(l10n.settingsPttMode),
-                value:
-                    ref.watch(voiceInputSettingsProvider).mode ==
-                    VoiceInputMode.ptt,
-                onChanged: (v) => ref
-                    .read(voiceInputSettingsProvider.notifier)
-                    .setMode(v ? VoiceInputMode.ptt : VoiceInputMode.vad),
-              ),
-              const _PttKeybindTile(),
               ListTile(
                 key: const Key('settings_help'),
                 contentPadding: EdgeInsets.zero,
@@ -402,77 +391,6 @@ class _AccentPickerState extends ConsumerState<_AccentPicker> {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _PttKeybindTile extends ConsumerStatefulWidget {
-  const _PttKeybindTile();
-
-  @override
-  ConsumerState<_PttKeybindTile> createState() => _PttKeybindTileState();
-}
-
-class _PttKeybindTileState extends ConsumerState<_PttKeybindTile> {
-  final _focusNode = FocusNode();
-  var _capturing = false;
-
-  @override
-  void dispose() {
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  bool _isModifier(LogicalKeyboardKey key) {
-    return key == LogicalKeyboardKey.control ||
-        key == LogicalKeyboardKey.controlLeft ||
-        key == LogicalKeyboardKey.controlRight ||
-        key == LogicalKeyboardKey.shift ||
-        key == LogicalKeyboardKey.shiftLeft ||
-        key == LogicalKeyboardKey.shiftRight ||
-        key == LogicalKeyboardKey.alt ||
-        key == LogicalKeyboardKey.altLeft ||
-        key == LogicalKeyboardKey.altRight ||
-        key == LogicalKeyboardKey.meta ||
-        key == LogicalKeyboardKey.metaLeft ||
-        key == LogicalKeyboardKey.metaRight;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final key = ref.watch(voiceInputSettingsProvider).pttKey;
-    return Focus(
-      focusNode: _focusNode,
-      onKeyEvent: (node, event) {
-        if (!_capturing || event is! KeyDownEvent) {
-          return KeyEventResult.ignored;
-        }
-        if (_isModifier(event.logicalKey)) {
-          return KeyEventResult.ignored;
-        }
-        ref
-            .read(voiceInputSettingsProvider.notifier)
-            .setPttKey(event.logicalKey);
-        setState(() => _capturing = false);
-        return KeyEventResult.handled;
-      },
-      child: ListTile(
-        key: SettingsSheet.pttKeybindKey,
-        contentPadding: EdgeInsets.zero,
-        title: Text(l10n.settingsPttKeybind),
-        subtitle: Text(
-          _capturing
-              ? l10n.settingsPttKeybindHint
-              : (key.keyLabel.isNotEmpty
-                    ? key.keyLabel
-                    : key.debugName ?? key.keyId.toString()),
-        ),
-        onTap: () {
-          setState(() => _capturing = true);
-          _focusNode.requestFocus();
-        },
-      ),
     );
   }
 }

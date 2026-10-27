@@ -125,6 +125,33 @@ service UserService {
 
 Канон RPC и сообщений — репозиторий `protos/voice/user/v1/user.proto`.
 
+### Owner-only verification challenge readback
+
+`GetVerificationStatusResponse` preserves effective `verification_status` at
+field 1 and adds optional `pending_organization_challenge` at field 2:
+`domain`, exact `txt_record` (`voice-verify=` plus the persisted token), and
+`expires_at` (`google.protobuf.Timestamp`, PostgreSQL `created_at + 24 hours`).
+The caller must own the requested nondeleted profile. Missing credentials,
+invalid profile ID, and foreign/unknown/deleted profiles retain the existing
+Unauthenticated, InvalidArgument, and NotFound errors respectively. No current
+unexpired pending request means successful absence of the optional message;
+storage errors remain errors. Public Profile and VerificationStatus do not
+expose challenge data.
+
+The read checks ownership and pending token in one PostgreSQL statement snapshot
+and uses the existing strict 24-hour lifetime predicate. It does not generate,
+supersede, expire, consume, or verify requests, query DNS, or change badges,
+sources, revisions, or events. Navigation/reload uses this GET, never Start.
+This is an observation: concurrent Start or expiry can invalidate it before
+Check, whose exact-token completion rules remain authoritative. Clients must
+discard delayed responses after account/session/profile changes. After Start,
+clients can reread GET for the current canonical challenge and expiry.
+
+Organization account kind and its authoritative enforcement remain unresolved:
+the feature requires an Organization account, while Auth currently models
+`regular|guest`. This readback does not define that kind, infer eligibility from
+badges/domain, or enable organization verification controls.
+
 ### Переключение профиля и сессия Auth
 
 Несмотря на историческое имя, `UserService.SwitchProfile` проверяет целевой
@@ -487,3 +514,60 @@ Auth publish access to the exact `user.account_deleted` subject and User only
 subscribe/consumer access; the staging and production User migration job has
 applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
 enabling the consumer. No Compose manifest enables this consumer in PR A.
+
+### Messaging profile deletion-state authority (BE-076)
+
+GetProfileDeletionStates is a read-only Messaging-only method on the existing
+USER_MESSAGING_PRINCIPAL_ mTLS listener (:9096). It requires the exact
+request-bound service:messaging principal (iss=messaging, aud=user, exact
+RPC/hash/request ID), shared Redis replay admission and the existing trusted
+client certificate/JWKS identity configuration. Ordinary User, Social, Auth,
+Notification and Gateway do not expose this authority.
+
+A request contains 1..500 distinct canonical lowercase nonnil profile UUIDs.
+An empty, oversized, duplicate or malformed batch returns INVALID_ARGUMENT
+before store access. The response contains exactly one states entry per
+requested ID in request order. PROFILE_DELETION_STATE_NOT_DELETED means the
+User-owned row exists with deleted_at IS NULL; SOFT_DELETED means its
+deleted_at IS NOT NULL; an absent row is explicitly UNKNOWN. Unspecified
+is never emitted. Privacy, presence, frozen profiles and Auth account eligibility
+(including ACCOUNT_INACTIVE) are not deletion facts. A storage failure returns
+UNAVAILABLE, never a fabricated unknown/deleted result. Messaging compaction
+removes views only for explicit SOFT_DELETED; unknown profiles retain views.
+No cross-service SQL, public route, raw caller marker or fallback lookup exists.
+
+### Catalog actor ownership/deletion snapshot
+
+Chat and File use the separate internal `voice.catalogactor.v1.CatalogActorAuthorityService/GetCatalogActorStates`
+service on the dedicated `USER_CATALOG_PRINCIPAL_` mTLS listener (default `:9098`).
+It is absent from ordinary User registration and has no Gateway route. The existing
+Messaging-only `GetProfileDeletionStates` API and listener remain unchanged.
+
+Protocol version 1 accepts 1..100 exact `(account_id, profile_id)` pairs of canonical
+lowercase nonnil UUIDs, with distinct profile IDs. Unknown protobuf fields, unsupported
+versions and invalid/duplicate/oversized batches reject the entire request. The reply
+has version 1 and exactly one ordered tuple echo per input. An exact ownership match
+returns `NOT_DELETED` or `SOFT_DELETED` based only on User `profiles.deleted_at`;
+frozen/account overlay state does not imply deletion. Missing profiles and wrong owners
+return `UNKNOWN` without disclosing the actual owner. Storage failures fail the whole
+request as unavailable. Clients reject unspecified/unrecognized enums, wrong version,
+missing/extra/duplicate tuples and any unknown response fields.
+
+Only pure `service:chat` and `service:file` principals are admitted: exact issuer,
+audience `user`, full RPC, deterministic protobuf request SHA-256 binding, fresh
+canonical UUID `x-request-id` and JTI replay protection are required. Caller-supplied
+raw identity headers and delegated account/profile authority are forbidden. Activation
+requires the complete prefix-owned `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`,
+`REPLAY_REDIS_ADDR`, `JWKS_CLIENT_CERT_FILE` and `JWKS_CLIENT_KEY_FILE` settings,
+plus both HTTPS chat/file entries in `S2S_JWKS_URLS_JSON`. Optional prefix-owned
+`GRPC_LISTEN`, `REPLAY_REDIS_PASSWORD` and `JWKS_CA_FILE` follow the shared strict
+listener rules; partial configuration fails startup. JWKS outbound identity is separate
+from the listener certificate. Shared S2S settings alone never activate this listener.
+
+Consumer outbound prefixes are `CHAT_CATALOG_ASSET_USER_` and `FILE_CATALOG_ASSET_USER_`
+with `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `TLS_CLIENT_CERT_FILE` and
+`TLS_CLIENT_KEY_FILE`; each consumer uses its own service signer. This read is a
+snapshot, not an atomic permit, Auth account-eligibility proof, generation lease or
+zero-lag cross-service deletion barrier. Consumers must combine fresh authority with
+their own durable generation gates. UNKNOWN denies admission and never authorizes
+permanent purge or restore. No profile-deleted event is introduced.

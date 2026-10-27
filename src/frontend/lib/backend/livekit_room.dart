@@ -124,8 +124,31 @@ abstract interface class VoiceLiveKitRoom {
   Future<void> disconnect();
 }
 
+class VoiceCallParticipant {
+  const VoiceCallParticipant({
+    required this.identity,
+    required this.name,
+    required this.isSpeaking,
+    this.profileId,
+    this.avatarUrl,
+  });
+  final String identity;
+  final String name;
+  final bool isSpeaking;
+  final String? profileId;
+  final String? avatarUrl;
+}
+
+abstract interface class VoiceCallPresentationRoom implements VoiceLiveKitRoom {
+  List<VoiceCallParticipant> get callParticipants;
+  void Function()? onParticipantsChanged;
+}
+
 class LiveKitVoiceRoom
-    implements MatchSquadVoiceLiveKitRoom, OrdinaryVoicePresentationRoom {
+    implements
+        MatchSquadVoiceLiveKitRoom,
+        OrdinaryVoicePresentationRoom,
+        VoiceCallPresentationRoom {
   LiveKitVoiceRoom({livekit.Room? room, this.ordinaryVoicePresentation = false})
     : _room = room ?? livekit.Room();
 
@@ -142,6 +165,36 @@ class LiveKitVoiceRoom
   livekit.LocalTrackPublication<livekit.LocalTrack>? _screenSharePublication;
 
   livekit.Room get room => _room;
+  @override
+  void Function()? onParticipantsChanged;
+
+  /// SDK names and opaque identities are presentation only, never API keys.
+  @override
+  List<VoiceCallParticipant> get callParticipants {
+    final participants = <livekit.Participant>[
+      if (_room.localParticipant != null) _room.localParticipant!,
+      ..._room.remoteParticipants.values,
+    ];
+    final speakers = _room.activeSpeakers.map((p) => p.identity).toSet();
+    final ordered = [
+      ...participants.where((p) => speakers.contains(p.identity)),
+      ...participants.where((p) => !speakers.contains(p.identity)),
+    ];
+    return [
+      for (final p in ordered)
+        VoiceCallParticipant(
+          identity: p.identity,
+          name: p.name,
+          isSpeaking: speakers.contains(p.identity),
+          profileId:
+              _profileIdFromLiveKitIdentity(
+                p.identity,
+                ordinary: ordinaryVoicePresentation,
+              ) ??
+              _matchSquadIdentityProfile(p.identity),
+        ),
+    ];
+  }
 
   @override
   void Function(bool needsUnlock)? onAudioPlaybackUnlockNeeded;
@@ -201,6 +254,9 @@ class LiveKitVoiceRoom
   void _setupListener() {
     _listener?.dispose();
     _listener = _room.createListener()
+      ..on<livekit.ActiveSpeakersChangedEvent>((event) {
+        onParticipantsChanged?.call();
+      })
       ..on<livekit.ParticipantConnectedEvent>((event) {
         _notifyTracksChanged();
       })
@@ -505,6 +561,7 @@ class LiveKitVoiceRoom
 
   @override
   Future<void> disconnect() async {
+    onParticipantsChanged = null;
     _listener?.dispose();
     _listener = null;
     _speakerMuted = false;

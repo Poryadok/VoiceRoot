@@ -1106,6 +1106,36 @@ abstract class AppLocalizations {
   /// **'Schedule message'**
   String get chatScheduleMessage;
 
+  /// No description provided for @composerSendOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Send options'**
+  String get composerSendOptions;
+
+  /// No description provided for @composerSendSilent.
+  ///
+  /// In en, this message translates to:
+  /// **'Send without sound'**
+  String get composerSendSilent;
+
+  /// No description provided for @composerSendSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule message'**
+  String get composerSendSchedule;
+
+  /// No description provided for @composerSendOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online'**
+  String get composerSendOnline;
+
+  /// No description provided for @composerSendOnlineDmOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Send when online is only available in direct messages'**
+  String get composerSendOnlineDmOnly;
+
   /// No description provided for @chatSendWhenOnline.
   ///
   /// In en, this message translates to:
@@ -1747,6 +1777,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Call active'**
   String get callActive;
+
+  /// No description provided for @callMiniConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get callMiniConnected;
+
+  /// No description provided for @callMiniReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to call'**
+  String get callMiniReturn;
+
+  /// No description provided for @callMiniParticipant.
+  ///
+  /// In en, this message translates to:
+  /// **'Participant'**
+  String get callMiniParticipant;
+
+  /// No description provided for @callMiniSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is speaking'**
+  String callMiniSpeaking(String name);
+
+  /// No description provided for @callMiniParticipants.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} participants'**
+  String callMiniParticipants(int count);
 
   /// No description provided for @callTapToEnableAudio.
   ///
@@ -4100,6 +4160,30 @@ abstract class AppLocalizations {
   /// **'Profile accent'**
   String get settingsAccent;
 
+  /// No description provided for @settingsAccessibilityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility'**
+  String get settingsAccessibilityTitle;
+
+  /// No description provided for @settingsAccessibilityMotionText.
+  ///
+  /// In en, this message translates to:
+  /// **'Motion and text'**
+  String get settingsAccessibilityMotionText;
+
+  /// No description provided for @settingsAccessibilityVoiceCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice calls'**
+  String get settingsAccessibilityVoiceCalls;
+
+  /// No description provided for @settingsAccessibilityDefaultVoiceMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Default mode'**
+  String get settingsAccessibilityDefaultVoiceMode;
+
   /// No description provided for @settingsReducedMotion.
   ///
   /// In en, this message translates to:
@@ -4123,6 +4207,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Press a key…'**
   String get settingsPttKeybindHint;
+
+  /// No description provided for @settingsPttKeybindDesktopHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Configurable on desktop'**
+  String get settingsPttKeybindDesktopHint;
 
   /// No description provided for @trayQuit.
   ///
@@ -4369,6 +4459,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage subscription'**
   String get subscriptionManageBilling;
+
+  /// No description provided for @subscriptionGraceReminderPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment failed'**
+  String get subscriptionGraceReminderPersonal;
+
+  /// No description provided for @subscriptionGraceReminderSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Space Pro payment failed ({spaceId})'**
+  String subscriptionGraceReminderSpace(String spaceId);
 
   /// No description provided for @subscriptionCancel.
   ///
@@ -4645,6 +4747,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Selected profile: {profileId}'**
   String verificationSelectedProfile(String profileId);
+
+  /// No description provided for @verificationStatusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification status'**
+  String get verificationStatusTitle;
+
+  /// No description provided for @verificationVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verificationVerified;
+
+  /// No description provided for @verificationNotVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Not verified'**
+  String get verificationNotVerified;
+
+  /// No description provided for @verificationPendingDnsChallenge.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS challenge pending'**
+  String get verificationPendingDnsChallenge;
+
+  /// No description provided for @verificationPendingDnsDomainLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain'**
+  String get verificationPendingDnsDomainLabel;
+
+  /// No description provided for @verificationPendingDnsTxtRecordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT record'**
+  String get verificationPendingDnsTxtRecordLabel;
+
+  /// No description provided for @verificationPendingDnsExpiresAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires'**
+  String get verificationPendingDnsExpiresAtLabel;
+
+  /// No description provided for @verificationOrganizationUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization verification unavailable'**
+  String get verificationOrganizationUnavailable;
 
   /// No description provided for @verifiedBadgePersonal.
   ///
@@ -6650,6 +6800,18 @@ abstract class AppLocalizations {
   /// **'Story archive'**
   String get storyArchiveTitle;
 
+  /// No description provided for @storyArchivePrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can see this archive'**
+  String get storyArchivePrivate;
+
+  /// No description provided for @storySessionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Your profile or session changed. Reopen this screen to continue.'**
+  String get storySessionChanged;
+
   /// No description provided for @storyArchiveEmpty.
   ///
   /// In en, this message translates to:
@@ -6991,6 +7153,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open chat'**
   String get matchSquadOpenChat;
+
+  /// No description provided for @addGameAddMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Add mode'**
+  String get addGameAddMode;
+
+  /// No description provided for @addGameRemoveMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove mode'**
+  String get addGameRemoveMode;
+
+  /// No description provided for @addGameIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Game icon'**
+  String get addGameIcon;
+
+  /// No description provided for @addGameUploadIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload image'**
+  String get addGameUploadIcon;
+
+  /// No description provided for @addGameIconUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Image uploads for game requests are not available yet. You can submit without an icon.'**
+  String get addGameIconUnavailable;
+
+  /// No description provided for @addGameCriteriaUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom criteria are not available yet. You can submit modes for moderation.'**
+  String get addGameCriteriaUnavailable;
+
+  /// No description provided for @addGameNumericCriterion.
+  ///
+  /// In en, this message translates to:
+  /// **'Numeric criterion'**
+  String get addGameNumericCriterion;
+
+  /// No description provided for @addGameEnumCriterion.
+  ///
+  /// In en, this message translates to:
+  /// **'List criterion'**
+  String get addGameEnumCriterion;
+
+  /// No description provided for @addGameModerationHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Your request will be reviewed before the game appears in the catalog.'**
+  String get addGameModerationHint;
+
+  /// No description provided for @addGameSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No similar games found'**
+  String get addGameSearchEmpty;
+
+  /// No description provided for @addGameSlotsInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a positive whole number.'**
+  String get addGameSlotsInvalid;
+
+  /// No description provided for @addGameModeDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a different name for each mode.'**
+  String get addGameModeDuplicate;
 }
 
 class _AppLocalizationsDelegate

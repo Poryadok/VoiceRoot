@@ -18,6 +18,10 @@ void main() {
   testWidgets('ActiveCallPanel shows mute and hangup when call active', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final container = ProviderContainer(
       overrides: [
         ...voiceAppTestOverrides(

@@ -92,6 +92,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
         ? emptyToNull(msg.threadParentId)
         : null,
     isE2e: _protoBoolField(msg, () => msg.isE2e),
+    viewCount: msg.hasViewCount() ? msg.viewCount.toInt() : null,
   );
 }
 
@@ -170,6 +171,7 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
   bool isE2e = false,
   DateTime? scheduledAt,
   bool sendWhenOnline = false,
+  bool sendSilent = false,
 }) {
   final request = messaging_pb.SendMessageRequest(
     chat: chatRefToProto(chatId),
@@ -182,6 +184,7 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
             attachments.map((a) => a.toJson()).toList(growable: false),
           ),
     mentionsJson: MessageMention.encodeJson(mentions),
+    sendSilent: sendSilent,
   );
   if (isE2e) {
     request.isE2e = true;
@@ -686,6 +689,9 @@ VoiceCallSession voiceCallSessionFromProto(calls_pb.CallSession session) {
     mediaKind: voiceCallMediaKindFromProto(session.mediaKind),
     status: voiceCallStatusFromProto(session.status),
     sessionKind: kind,
+    startedAt: protoTimestampToDateTime(
+      session.hasStartedAt() ? session.startedAt : null,
+    ),
     expiresAt: protoTimestampToDateTime(
       session.hasExpiresAt() ? session.expiresAt : null,
     ),

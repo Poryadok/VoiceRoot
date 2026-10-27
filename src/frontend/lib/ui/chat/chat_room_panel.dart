@@ -51,6 +51,7 @@ import '../social/presence_indicator.dart';
 import '../report/report_sheet.dart';
 import 'chat_info_panel.dart';
 import 'chat_message_list.dart';
+import 'message_view_count.dart';
 import 'scheduled_messages_strip.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
@@ -60,6 +61,7 @@ import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
 import 'chat_composer_text_field.dart';
 import 'composer_panels.dart';
+import 'composer_send_menu.dart';
 import 'music_format.dart';
 import 'music_attachment_player.dart';
 import 'music_playback.dart';
@@ -156,6 +158,7 @@ class _TextSendAttempt {
     required List<MessageMention> mentions,
     required this.replyTarget,
     required this.draftKey,
+    this.sendSilent = false,
   }) : mentions = List.unmodifiable(mentions);
 
   final String chatId;
@@ -166,6 +169,7 @@ class _TextSendAttempt {
   final List<MessageMention> mentions;
   final VoiceMessage? replyTarget;
   final ChatDraftKey? draftKey;
+  final bool sendSilent;
 }
 
 class _ScheduledSendAttempt {
@@ -252,6 +256,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     debugLabel: 'chat-room-selected-message',
   );
   final _attachFocus = FocusNode();
+  final _sendMenuAnchor = GlobalKey();
   final _emojiFocus = FocusNode();
   final _scrollController = ScrollController();
   final _inChatSearchTriggerFocus = FocusNode(
@@ -1405,6 +1410,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               deferredInteraction: deferredInteraction,
                               activeId: activeId,
                               isGroup: isGroup,
+                              showMessageViews:
+                                  chatMeta?.isGroup == true ||
+                                  chatMeta?.isChannel == true,
                               l10n: l10n,
                               initialUnreadCount: _initialUnreadCount,
                               highlightedMessageId: _highlightedMessageId,
@@ -1648,14 +1656,27 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             room.isSending ||
                                 _scheduledEdit != null ||
                                 _uploadingAttachment ||
-                                composerBlocked ||
-                                !scheduledMessagesEnabled
+                                _textSendInFlight ||
+                                composerBlocked
                             ? null
-                            : _openScheduledSendMenu,
+                            : _openSendMenu,
                         isLoading: room.isSending || _textSendInFlight,
                         tooltip: _scheduledEdit == null
                             ? l10n.chatSendMessage
                             : l10n.chatScheduleEdit,
+                      ),
+                      IconButton(
+                        key: _sendMenuAnchor,
+                        tooltip: l10n.composerSendOptions,
+                        icon: const Icon(Icons.arrow_drop_down),
+                        onPressed:
+                            room.isSending ||
+                                _textSendInFlight ||
+                                _scheduledEdit != null ||
+                                _uploadingAttachment ||
+                                composerBlocked
+                            ? null
+                            : _openSendMenu,
                       ),
                     ],
                   ),
@@ -1757,15 +1778,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     );
   }
 
-  Future<void> _openScheduledSendMenu() async {
+  Future<void> _openSendMenu() async {
     final chatId = widget.chatId;
-    if (!ref.read(gatewayConfigProvider).scheduledMessagesEnabled ||
-        _composer.text.trim().isEmpty ||
+    if (_composer.text.trim().isEmpty ||
+        _textSendInFlight ||
         _isDmPeerDeleted() ||
         !_isCurrentChat(chatId)) {
       return;
     }
-    final l10n = AppLocalizations.of(context)!;
     final authorization = ref.read(authorizationHeaderProvider);
     final profileId = ref.read(authControllerProvider).activeProfileId;
     if (authorization == null || profileId == null) return;
@@ -1777,26 +1797,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
               .firstOrNull
         : null;
     final isDm = chatType == 'CHAT_TYPE_DM';
-    final mode = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.schedule),
-              title: Text(l10n.chatScheduleMessage),
-              onTap: () => Navigator.pop(sheetContext, 'scheduled'),
-            ),
-            if (isDm)
-              ListTile(
-                leading: const Icon(Icons.notifications_active_outlined),
-                title: Text(l10n.chatSendWhenOnline),
-                onTap: () => Navigator.pop(sheetContext, 'online'),
-              ),
-          ],
-        ),
-      ),
+    final mode = await showComposerSendMenu(
+      context,
+      anchorContext: _sendMenuAnchor.currentContext,
+      isDm: isDm,
+      scheduledMessagesEnabled: ref
+          .read(gatewayConfigProvider)
+          .scheduledMessagesEnabled,
     );
     if (!mounted ||
         mode == null ||
@@ -1806,8 +1813,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         authorization != ref.read(authorizationHeaderProvider)) {
       return;
     }
+    if (mode == ComposerSendAction.silent) {
+      await _send(sendSilent: true);
+      return;
+    }
+    if (!ref.read(gatewayConfigProvider).scheduledMessagesEnabled ||
+        (mode == ComposerSendAction.online && !isDm)) {
+      return;
+    }
     DateTime? scheduledAt;
-    if (mode == 'scheduled') {
+    if (mode == ComposerSendAction.schedule) {
       scheduledAt = await _pickScheduledDateTime();
       if (!mounted ||
           scheduledAt == null ||
@@ -1828,7 +1843,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       clientMessageId: const Uuid().v4(),
       content: text,
       scheduledAt: scheduledAt,
-      sendWhenOnline: mode == 'online',
+      sendWhenOnline: mode == ComposerSendAction.online,
       mentions: mentions,
       threadParentId: replyTarget?.id,
     );
@@ -2336,7 +2351,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     });
   }
 
-  Future<void> _send() async {
+  Future<void> _send({bool sendSilent = false}) async {
     if (_textSendInFlight) return;
     if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
       return;
@@ -2370,6 +2385,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       mentions: _mentionsForComposer(text),
       replyTarget: ref.read(chatReplyTargetProvider(widget.chatId)),
       draftKey: _draftKey,
+      sendSilent: sendSilent,
     );
     _pendingTextSend = attempt;
     _pendingTextSendControllerGeneration = null;
@@ -2481,6 +2497,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         attempt.content,
         mentions: attempt.mentions,
         threadParentId: attempt.replyTarget?.id,
+        sendSilent: attempt.sendSilent,
       );
       _pendingTextSendControllerGeneration = controller.immediateSendGeneration;
     }
@@ -3167,6 +3184,7 @@ class _MessageListView extends ConsumerWidget {
     this.deferredInteraction,
     required this.activeId,
     required this.isGroup,
+    required this.showMessageViews,
     required this.l10n,
     required this.initialUnreadCount,
     required this.chatTheme,
@@ -3182,6 +3200,7 @@ class _MessageListView extends ConsumerWidget {
   final DeferredBotInteraction? deferredInteraction;
   final String? activeId;
   final bool isGroup;
+  final bool showMessageViews;
   final AppLocalizations l10n;
   final int initialUnreadCount;
   final ChatTheme? chatTheme;
@@ -3261,20 +3280,35 @@ class _MessageListView extends ConsumerWidget {
                   : null,
               child: GestureDetector(
                 onLongPress: () => onLongPress(msg, isMine),
-                child: ChatMessageBubbleTile(
-                  message: msg,
-                  isMine: isMine,
-                  showTimestamp: row.showTimestamp,
-                  l10n: l10n,
-                  deliveryFooter: isMine
-                      ? _DeliveryTick(
-                          l10n: l10n,
-                          delivered: room.deliveredMessageIds.contains(msg.id),
-                          read: room.readMessageIds.contains(msg.id),
-                        )
-                      : null,
-                  content: _MessageBubbleContent(message: msg, l10n: l10n),
-                  theme: chatTheme,
+                child: MessageViewportView(
+                  key: ValueKey('view:$activeId:${msg.id}'),
+                  onVisible: () {
+                    if (showMessageViews) {
+                      return ref
+                          .read(chatRoomControllerProvider(chatId).notifier)
+                          .recordMessageView(msg.id);
+                    }
+                    return Future.value(true);
+                  },
+                  child: ChatMessageBubbleTile(
+                    message: msg,
+                    isMine: isMine,
+                    showTimestamp: row.showTimestamp,
+                    l10n: l10n,
+                    deliveryFooter: showMessageViews
+                        ? MessageViewCount(count: msg.viewCount ?? 0)
+                        : isMine && !isGroup
+                        ? _DeliveryTick(
+                            l10n: l10n,
+                            delivered: room.deliveredMessageIds.contains(
+                              msg.id,
+                            ),
+                            read: room.readMessageIds.contains(msg.id),
+                          )
+                        : null,
+                    content: _MessageBubbleContent(message: msg, l10n: l10n),
+                    theme: chatTheme,
+                  ),
                 ),
               ),
             ),

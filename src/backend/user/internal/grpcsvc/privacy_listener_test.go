@@ -104,12 +104,12 @@ func TestMessagingScheduledPresenceRequiresDedicatedPrincipal(t *testing.T) {
 	require.Equal(t, codes.Unimplemented, status.Code(err), "the ordinary User listener must not implement this RPC")
 }
 
-func TestRegisterMessagingScheduledPresenceExposesOnlyScheduledDecision(t *testing.T) {
+func TestRegisterMessagingScheduledPresenceExposesOnlyMessagingDecisions(t *testing.T) {
 	var registrar serviceDescriptorRecorder
 	RegisterMessagingScheduledPresenceServer(&registrar, &UserGRPC{})
 	require.NotNil(t, registrar.desc)
-	require.Len(t, registrar.desc.Methods, 1)
-	require.Equal(t, "GetScheduledMessageDispatchPresence", registrar.desc.Methods[0].MethodName)
+	require.Len(t, registrar.desc.Methods, 2)
+	require.ElementsMatch(t, []string{"GetScheduledMessageDispatchPresence", "GetProfileDeletionStates"}, []string{registrar.desc.Methods[0].MethodName, registrar.desc.Methods[1].MethodName})
 	require.Empty(t, registrar.desc.Streams)
 }
 

@@ -609,6 +609,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatScheduleMessage => 'Запланировать сообщение';
 
   @override
+  String get composerSendOptions => 'Параметры отправки';
+
+  @override
+  String get composerSendSilent => 'Отправить без звука';
+
+  @override
+  String get composerSendSchedule => 'Запланировать';
+
+  @override
+  String get composerSendOnline => 'Когда будет онлайн';
+
+  @override
+  String get composerSendOnlineDmOnly =>
+      '«Когда будет онлайн» доступно только в личных чатах';
+
+  @override
   String get chatSendWhenOnline => 'Отправить, когда будет в сети';
 
   @override
@@ -972,6 +988,25 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get callActive => 'Звонок активен';
+
+  @override
+  String get callMiniConnected => 'Подключено';
+
+  @override
+  String get callMiniReturn => 'Вернуться в звонок';
+
+  @override
+  String get callMiniParticipant => 'Участник';
+
+  @override
+  String callMiniSpeaking(String name) {
+    return '$name говорит';
+  }
+
+  @override
+  String callMiniParticipants(int count) {
+    return 'Участников: $count';
+  }
 
   @override
   String get callTapToEnableAudio => 'Нажмите, чтобы включить входящий звук';
@@ -2299,6 +2334,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsAccent => 'Акцент профиля';
 
   @override
+  String get settingsAccessibilityTitle => 'Доступность';
+
+  @override
+  String get settingsAccessibilityMotionText => 'Движение и текст';
+
+  @override
+  String get settingsAccessibilityVoiceCalls => 'Голосовые вызовы';
+
+  @override
+  String get settingsAccessibilityDefaultVoiceMode => 'Режим по умолчанию';
+
+  @override
   String get settingsReducedMotion => 'Уменьшить анимацию';
 
   @override
@@ -2309,6 +2356,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get settingsPttKeybindHint => 'Нажмите клавишу…';
+
+  @override
+  String get settingsPttKeybindDesktopHint => 'Настраивается на desktop';
 
   @override
   String get trayQuit => 'Выйти';
@@ -2445,6 +2495,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get subscriptionManageBilling => 'Управление подпиской';
+
+  @override
+  String get subscriptionGraceReminderPersonal => 'Оплата не прошла';
+
+  @override
+  String subscriptionGraceReminderSpace(String spaceId) {
+    return 'Оплата Space Pro не прошла ($spaceId)';
+  }
 
   @override
   String get subscriptionCancel => 'Отменить подписку';
@@ -2600,6 +2658,31 @@ class AppLocalizationsRu extends AppLocalizations {
   String verificationSelectedProfile(String profileId) {
     return 'Выбранный профиль: $profileId';
   }
+
+  @override
+  String get verificationStatusTitle => 'Статус верификации';
+
+  @override
+  String get verificationVerified => 'Верифицирован';
+
+  @override
+  String get verificationNotVerified => 'Не верифицирован';
+
+  @override
+  String get verificationPendingDnsChallenge => 'Ожидается DNS-проверка';
+
+  @override
+  String get verificationPendingDnsDomainLabel => 'Домен';
+
+  @override
+  String get verificationPendingDnsTxtRecordLabel => 'TXT-запись';
+
+  @override
+  String get verificationPendingDnsExpiresAtLabel => 'Истекает';
+
+  @override
+  String get verificationOrganizationUnavailable =>
+      'Верификация организации недоступна';
 
   @override
   String get verifiedBadgePersonal => 'Верифицирован';
@@ -3688,6 +3771,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyArchiveTitle => 'Архив сторис';
 
   @override
+  String get storyArchivePrivate => 'Только вы видите архив';
+
+  @override
+  String get storySessionChanged =>
+      'Профиль или сессия изменились. Откройте этот экран заново, чтобы продолжить.';
+
+  @override
   String get storyArchiveEmpty => 'Нет архивных сторис';
 
   @override
@@ -3884,4 +3974,44 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get matchSquadOpenChat => 'Открыть чат';
+
+  @override
+  String get addGameAddMode => 'Добавить режим';
+
+  @override
+  String get addGameRemoveMode => 'Удалить режим';
+
+  @override
+  String get addGameIcon => 'Иконка игры';
+
+  @override
+  String get addGameUploadIcon => 'Загрузить изображение';
+
+  @override
+  String get addGameIconUnavailable =>
+      'Загрузка иконок для заявок пока недоступна. Можно отправить заявку без иконки.';
+
+  @override
+  String get addGameCriteriaUnavailable =>
+      'Произвольные критерии пока недоступны. Можно отправить режимы на модерацию.';
+
+  @override
+  String get addGameNumericCriterion => 'Числовой критерий';
+
+  @override
+  String get addGameEnumCriterion => 'Критерий из списка';
+
+  @override
+  String get addGameModerationHint =>
+      'Игра появится в каталоге после проверки заявки модератором.';
+
+  @override
+  String get addGameSearchEmpty => 'Похожие игры не найдены';
+
+  @override
+  String get addGameSlotsInvalid => 'Введите положительное целое число.';
+
+  @override
+  String get addGameModeDuplicate =>
+      'У каждого режима должно быть своё название.';
 }

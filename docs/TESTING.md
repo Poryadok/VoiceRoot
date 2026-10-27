@@ -57,6 +57,14 @@ source-bound visual/runtime evidence.
 
 ## По языкам и компонентам
 
+Изменения маршрутизации CI проверяются `python scripts/ci/fast-gate-routing_test.py`,
+`python .github/ci/selected-acceptance-gate_test.py` и
+`bash scripts/ci/resolve-go-matrix_test.sh` (Python с PyYAML и `jq` для shell).
+Матрица тестов Go-потребителей и матрица Docker-сборок различаются: образы нужны
+для прямых изменений и реальных исходных зависимостей Dockerfile, общие build
+inputs расширяют проверку. Правила PR/master и сохранённые обязательства —
+[CI gate policy](../.github/ci/gate-policy.md#pr-scope-and-image-verification).
+
 ### Help: реальный browser handoff
 
 Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
@@ -103,7 +111,41 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
 - Утверждения: **`github.com/stretchr/testify`** (`require` / `assert`) — единый стиль по репозиторию для читаемости.
 - Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
+- BE-076 message views: from `src/backend/messaging`, run
+  `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
+  and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.
+  The latter builds an isolated User fixture subprocess to avoid duplicate
+  protobuf registration across service modules, then uses actual protected
+  mTLS/JWKS authority, a shared network miniredis replay store and two disposable
+  PostgreSQL databases. It covers authority outage, retry and explicit
+  soft-deletion compaction; frozen/active/missing profiles retain views. It skips
+  under `-short`; no DEV/STAGING or external providers are used.
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
+- Messaging response-loss proof: from `src/backend/messaging`, run
+  `go test ./internal/grpcsvc -run '^TestMessagingSendMessage_RetryAfterLostResponseDoesNotDuplicate$' -count=1 -v`.
+  The real Messaging service and disposable PostgreSQL commit one 4000-codepoint
+  send before a test proxy replaces its first response with `Unavailable`.
+  An explicit same-key, same-payload retry must return the committed ID; a
+  changed payload must conflict. SQL verifies one message and one unchanged
+  outbox event, and recipient history contains exactly that message. This is a
+  controlled gRPC response-loss check, not evidence of a live HTTP/edge cause or
+  an edit/friend-invitation retry contract. Use the Linux/container route below
+  when host test execution is restricted.
+- Space retained-installer regression: on an owned fresh private PostgreSQL 18
+  server, set `NATIVE_INSTALLER_TEST_ADMIN_URL`, `NATIVE_INSTALLER_TEST_MIGRATE`
+  (the pinned migrate executable) and `NATIVE_INSTALLER_TEST_BINARY` (the
+  production `cmd/native-migrate` binary built from the same checkout with its
+  normal source/migrator identities). With `psql` on PATH, run from
+  `src/backend/space`: `go test -tags=integration ./internal/nativeinstaller
+  -run '^TestProductionFreshChainAndRetainedVerify$' -count=1 -v`.
+  The test provisions an absent `space_db`, retains actual completed JSONL,
+  applies canonical runtime-role SQL, checks unchanged seal and all 24 account-ban
+  DML grants, and verifies through the production CLI. A real non-owner serving
+  login creates a native Space and reads membership authority. Dirty/unknown
+  markers, unauthorized grants, elevated runtime identity and catalog tampering
+  must HOLD; restored state verifies without migration or resealing. The test
+  drops only the exact database it created; discard the private server afterward.
+  This bounded source regression does not prove full Compose/Gateway startup.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 - Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
   затем `go test ./internal/roomlifecycle -count=1`, `go test -race
@@ -173,6 +215,20 @@ verbose log хранится как workflow artifact.
 После merge workflow можно вручную запустить с точным `source_sha` через его
 копию в default branch. Этот узкий proof не заменяет обычный CI сервиса и не
 закрывает более широкие критерии A2.
+
+### Bot durable inbound message delivery
+
+From `src/backend/bot`, run `go test ./internal/consumer -run
+'^TestMessageEventsJetStreamDurableDelivery$' -count=1 -timeout=3m -v` with
+Docker available. The component fixture owns disposable PostgreSQL 16 and
+NATS JetStream containers and provisions the documented
+`message_events/bot_message_events` push durable before starting the production
+consumer. It checks offline backlog, database-failure NAK/redelivery, signed
+webhook retry after consumer restart, polling failure replay followed by an
+actual gRPC receive, source replay deduplication and unauthorized-chat denial.
+`-short` skips this container test. The HTTP receiver is a local fixture;
+deployed webhook delivery, service credentials/ACLs and production activation
+remain separate checks.
 
 ### API Gateway
 
@@ -588,14 +644,14 @@ hosted замеров; локальный PASS или длительность �
 
 Состав tier 1 (детали) в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
 
-1. **Protobuf** (если `protos/` или global): `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
+1. **Protobuf** (если `protos/` или global): `buf lint`, `buf format`, на PR — `buf breaking` относительно immutable SHA базы из события PR. Checkout должен совпадать с SHA synthetic merge из события, а его два parent — с event base/head; несовпадение или отсутствие объекта останавливает проверку до Buf. В лог выводятся checkout/head/base и tree identities. Продвижение удалённой базовой ветки после создания события не меняет baseline. Регрессии с настоящими Git/Buf (продвижение remote, реальное удаление декларации и несовпадение базы) запускаются командой `python3 scripts/ci/buf-breaking-pr_test.py` и в job `protobuf` после установки Buf.
 2. **Compose** (если compose/deploy/global): `docker compose config`; NATS JetStream — [`scripts/ci/compose-nats-jetstream-check.sh`](../scripts/ci/compose-nats-jetstream-check.sh).
 3. **Backend Go matrix** (затронутые сервисы): `go test -short ./...`; для **gateway** — `go test -race`; **Docker build+push в GHCR** только tier 2 (push в `master`).
 4. **golangci** — только затронутые модули (`pkg` + сервисы из matrix).
 5. **Auth** — Maven test на tier 1; Docker smoke + push — tier 2 (`master`).
 6. **Flutter** — tier 1: `buf-dart-check`, analyze, test; tier 2: APK / Windows / iOS / Chrome deep-link smoke.
 7. **Admin** — tier 1: `npm ci`, **ESLint**, vitest, `tsc`/build; Docker push — tier 2 (`master`). Vitest покрывает OAuth/login, moderation, analytics pages, game catalog config editor, App shell routing smoke (`src/admin/src/test/`). Отдельный [Admin browser](../.github/workflows/admin-browser.yml) на изменениях Admin запускает настоящий Chromium поверх собранного SPA: OAuth S256/invalid state, staff queue/assignment, denied resolution с сохранением ввода, sanction Cancel/Confirm, retry resolve, appeal и logout/direct reload. HTTP fixture проверяет запросы и bearer, но не доказывает живые Auth/staff permissions или backend enforcement. Локальный запуск и exact-source JSON/PNG artifacts: [Admin README](../src/admin/README.md).
-8. **Developer Portal** — `npm ci`, test, build; Docker push — tier 2 (`master`).
+8. **Developer Portal** — `npm ci`, test, build; Docker push — tier 2 (`master`). Compose smoke selects `TestComposeDeveloperPortal_live`: real Voice authorization-code/S256 PKCE, callback state, single-use code and authenticated Bot registration/list/detail with cleanup, plus redirect/password/verifier/replay/unauthenticated denials. It uses the actual Auth/User/Bot services and delivered local email OTP; unavailable opted-in portal fails. This is HTTP protocol/persistence proof, while browser callback execution and staging OAuth remain separate. Exact command and local prerequisites: [Developer Portal README](../src/developer-portal/README.md#tests).
 8. Проверка ссылок в `docs/` — [`.github/workflows/docs-link-check.yml`](../.github/workflows/docs-link-check.yml).
 
 **Деплой на staging** — job **`deploy-staging`** в [`ci.yml`](../.github/workflows/ci.yml) вызывает [`staging-deploy.yml`](../.github/workflows/staging-deploy.yml) (`workflow_call`) после `staging-stack-lock`; ручной запуск — **Actions → Staging deploy** с обязательным git SHA. См. [DEPLOYMENT.md](DEPLOYMENT.md). Branch protection: job **`ci-gate`** + [`.github/ci/branch-protection-checklist.md`](../.github/ci/branch-protection-checklist.md).
@@ -735,3 +791,15 @@ Opt-in: `VOICE_RUN_LIVE_COMPOSE=true` в `src/backend/gateway` для analytics 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — ветки и PR
 - [DEPLOYMENT.md](DEPLOYMENT.md) — где гоняются тесты в CI и staging
 - [OPERATIONS.md](OPERATIONS.md) — canary, rollback
+
+### User catalog actor snapshot (BE085)
+
+Run `cd src/backend/user; go test ./internal/grpcsvc -run TestCatalogActor -count=1`
+for the exact ownership/deleted_at/nonmutation PostgreSQL suite and the real
+mTLS/JWKS/request-binding/shared-miniredis transport checks. Run
+`cd src/backend/pkg; go test ./socialprincipal -run TestCatalogActor -count=1`
+for the signed caller matrix and complete listener configuration checks.
+The User `-short ./...` suite keeps the protected Messaging snapshot regressions.
+PostgreSQL tests require Docker and are distinct from short tests; miniredis is
+explicitly a test dependency, not deployed Redis acceptance. Execution details:
+[catalog actor ExecPlan](testing/catalog-actor-states-exec-plan.md).

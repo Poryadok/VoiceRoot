@@ -854,6 +854,91 @@ message SearchGifsResponse {
 
 Search metadata grants no File access or send authority. `file_id` stays empty until a genuine import/binding exists; a nonempty ID may still be pending and must pass authoritative File readiness and Messaging admission. Protected source resolution/import, shared-asset provenance, E2E handling, capability-manifest wiring and selected-asset → ready File → Messaging proof remain separate prerequisites.
 
+### Protected catalog source authority (non-E2E implementation in progress)
+
+The separate `voice.chat.v1.CatalogAssetService` schema in `catalog_assets.proto`
+has no ordinary-listener or raw-header fallback. `ResolveGifAsset` accepts only a
+verified Gateway delegated active account/profile; `ValidateGifAsset` is a pure
+Messaging read of the exact admitted source/profile/File tuple.
+`AuthorizeCatalogDestination` is a pure File read: it independently checks current
+membership, authoritative chat type and plaintext state, returning the exact
+request echo, observed type and current opaque Chat actor generations. File must
+match these generations to its original import before fetching/retrying.
+
+The operation-status lookup in protected File precedes any new provider lookup.
+It preserves original import identity after a lost Chat response or CDN URL
+rotation; compacted operations deny rather than recreate an old File. Chat keeps
+only active admitted File projections, with no raw source URL, full request body
+or second permanent operation ledger. A source-generation UUID is an identity,
+never an access capability. Source URLs exist only transiently on the protected
+Chat-to-File request. The complete producer/consumer protocol and its remaining
+integration work are in [the catalog asset contract](../testing/be085-catalog-asset-contract.md).
+
+Migration `000028_catalog_assets` adds account/profile purpose-HMAC gates and
+active source bindings. Admission consults fresh protected Auth account/session
+and User ownership/deletion facts. Save locks account then profile gates, checks
+both captured generations and inserts the binding in that same transaction.
+Forward migration `000029_catalog_selection_cache` preserves unordered v1 rows
+as cleanup-only history and adds a disposable selector-slot incarnation captured
+before remote File work. File orders selections by first successful pending
+admission, not request/response time or UUID. A new admitted choice supersedes
+the prior choice even while pending or subsequently failed. Save updates only
+the captured incarnation: greater revision advances, equal requires an identical
+tuple, lower denies. Retirement/eviction deletes that incarnation; a delayed
+response cannot reinstall into a newly created slot. File retains the current
+watermark, so cache deletion never makes an older READY choice current again.
+
+Public Resolve uses envelope1 but translates only to private File protocol2.
+Protected source Validate requires protocol2 and a fresh positive File revision
+equal to the current head, then rechecks the exact cached slot; a cache miss
+fails closed. Destination-only observation remains version1. Missing/zero/v1
+ordering proof never grants admission. Only qualified asset-terminal cleanup
+may omit both generations and use both zero revisions with exact tuple and
+nonzero terminal fence; this exception grants no send/import authority.
+
+Selector metadata is bounded to 16384 slots globally and 256 per profile.
+Eviction prefers empty slots, including crashed or in-flight captures; a bounded
+reconciliation pass also evicts empty slots. Failed/cancelled requests remove
+only their own still-empty incarnation. This is disposable cache maintenance,
+not a TTL or proof about File execution. A retry obtains fresh File status.
+Purge closes the same gates and removes raw actor/catalog projections; old
+operations cannot attach to a restored generation. Gate/event aliases are
+restricted pseudonymous anti-resurrection evidence, not anonymous data or public
+lookup keys. Historical HMAC keys remain available; an unknown/changed registered
+key fails closed, and nonempty rollback refuses to erase the negative state.
+
+User snapshots are not atomic cross-service permits. `UNKNOWN` denies admission
+without authorizing erasure. The account consumer closes its local catalog gate
+before external User lookup/fanout and does not ACK failed effects. A bounded
+reconciler scans at most 100 existing File projections per 30-second pass, with a
+15-second pass budget. Only explicit owner `SOFT_DELETED` closes the scanned
+profile generation; a stale scan cannot close a newly restored generation.
+Protected File status may retire only the exact cache tuple. Compacted status
+requires the qualified `terminal_fence_id` proof; `NotFound`, unavailable or a
+generic failed precondition never proves erasure. Binding retirement does not
+delete committed messages, references or their retained File bytes.
+
+The dedicated listener is disabled when all `CHAT_CATALOG_ASSET_*` configuration
+is absent. Any recognized setting requires the complete configuration:
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`, issuer endpoints
+`GATEWAY_JWKS_URL`, `MESSAGING_JWKS_URL`, `FILE_JWKS_URL`, `JWKS_CA_FILE`,
+`JWKS_CLIENT_CERT_FILE`, `JWKS_CLIENT_KEY_FILE`, `REPLAY_REDIS_ADDR` (optional
+`REPLAY_REDIS_PASSWORD`), and `ACTOR_KEYS_FILE`. Each protected owner prefix
+`CHAT_CATALOG_ASSET_AUTH_`, `CHAT_CATALOG_ASSET_USER_` and
+`CHAT_CATALOG_ASSET_FILE_` requires `GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`,
+`TLS_CLIENT_CERT_FILE` and `TLS_CLIENT_KEY_FILE`. The actor key file is a bounded
+JSON object with `active_key_id` and `keys: [{id, secret_base64}]`; each secret is
+exactly 32 random bytes in canonical standard Base64. Historical registered keys
+cannot be removed or replaced. Startup requires the catalog migration, signing
+issuer, existing account-deletion durable and consumer dependencies. Space
+destinations require native Space membership and the protected Role
+`TEXT_CHAT_VIEW` decision; no fabricated user headers are forwarded.
+
+Runtime composition keeps the production resolver absent. Gateway selection
+transport uses the dedicated listener; physical File import and Messaging integration proof remain open at this
+source checkpoint. This does not activate a live provider, E2E GIFs or
+sticker-source admission.
+
 Gateway REST (sketch): `GET /api/v1/sticker-packs`, `POST /api/v1/sticker-packs/{id}/install`, `GET /api/v1/gifs/search?q=…&cursor=…`, `GET /api/v1/gifs/trending` — full table [api-gateway.md](api-gateway.md) § Stickers and GIF.
 
 **Send wire:** Messaging `SendMessage` + `content_type=STICKER|GIF` — full validation — [messaging-service.md](messaging-service.md) § Stickers and GIF.

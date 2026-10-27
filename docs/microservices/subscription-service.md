@@ -36,6 +36,58 @@
 
 ## API (gRPC)
 
+### GetLimits JSON benefit projection
+
+`Limits.limits_json` preserves the existing integer-valued object. Boolean
+benefits are encoded as `0` (unavailable) or `1` (available); consumers must
+ignore unknown keys. This is a benefit projection, not evidence that a consumer
+implements or activates the benefit. Personal `premium` and `grace_period`
+produce the same values; other tier strings use Free. The existing store owns
+effective tier/deadline decisions; these pure serializers add no lifecycle
+authority and do not read the A7 successor/shadow projection.
+
+| Personal key | Free | Premium / grace | Source |
+|---|---:|---:|---|
+| `file_upload_bytes` | 52428800 | 209715200 | Existing 50/200 MiB wire values; File storage |
+| `profile_count` | 2 | 5 | Subscription / Multi-profile |
+| `file_retention_days` | 90 | 0 | Subscription / File storage; **0 means unlimited** for live non-E2E references |
+| `e2e_file_retention_days` | 90 | 90 | File storage; E2E exception applies in every tier |
+| `message_reaction_count` | 1 | 3 | Subscription / Text chat; per user per message |
+| `premium_badge` | 0 | 1 | Subscription cosmetics |
+| `animated_avatar` | 0 | 1 | Subscription cosmetics |
+| `profile_banner` | 0 | 1 | Subscription cosmetics |
+| `custom_status` | 0 | 1 | Subscription cosmetics |
+| `emoji_status` | 0 | 1 | Subscription cosmetics |
+| `premium_username_count` | 0 | 1 | Subscription / Multi-profile; one clean username per account, additional names require separate purchase; no profile allocation rule implied |
+| `exclusive_stickers` | 0 | 1 | Subscription cosmetics; content availability remains separate |
+| `exclusive_emoji` | 0 | 1 | Subscription cosmetics; content availability remains separate |
+| `custom_app_icons` | 0 | 1 | Subscription cosmetics |
+| `exclusive_chat_themes` | 0 | 1 | Subscription cosmetics |
+| `file_download_priority` | 0 | 1 | Subscription CDN priority; no invented throughput guarantee |
+
+Retention days describe policy, not a fresh expiry calculated when GetLimits is
+called: reference ownership, creation/downgrade effective time, live-only renewal
+and no resurrection remain governed by the File lifecycle contract below.
+
+| Space key | Free | Space Pro | Source |
+|---|---:|---:|---|
+| `space_member_count` | 50 | 5000 | Subscription / Spaces |
+| `voice_room_participants` | 32 | 128 | Subscription / Voice |
+| `space_tree_nodes` | 50 | 500 | Subscription; text + voice nodes combined |
+| `space_banner` | 0 | 1 | Subscription Space customization |
+| `space_custom_emoji` | 0 | 1 | Subscription Space customization; no numeric emoji quota is specified |
+
+The Space response contains only Space keys; it does not grant personal benefits
+to members or purchasers. Unknown personal tiers likewise cannot grant Space Pro.
+
+**Open matrix gaps (BE-114):** this table does not silently choose between the
+conflicting Free join cap here (50 Spaces) and the feature specification (100
+Spaces + group chats combined), or between Free voice quality here (480p) and
+the feature specification (360p / 30fps). Anonymous viewing appears only in this
+service table and lacks a defined feature contract. These three entries need
+an explicit canon decision before corresponding JSON keys/consumer enforcement;
+see [backend TODO](../todo/backend.md). They are not excluded paid benefits.
+
 ```protobuf
 service SubscriptionService {
   // Подписки
