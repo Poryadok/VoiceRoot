@@ -15,6 +15,24 @@ spec.loader.exec_module(dev)
 
 
 class RuntimeBindingTest(unittest.TestCase):
+    def test_staging_actual_render_pipeline_binds_all_public_origins_offline(self):
+        script = (ROOT / 'scripts/staging/apply-app-manifests.sh').read_text(encoding='utf-8')
+        render = script.split('render() {\n', 1)[1].split('\n}', 1)[0]
+        block = script.split('if [ -f "${ROOT}/deploy/staging/flutter-web.yaml" ]; then\n', 1)[1].split('\nfi', 1)[0]
+        self.assertEqual(block.count('kubectl apply -f -'), 1)
+        block = block.replace('kubectl apply -f -', 'cat')
+        output = subprocess.check_output(['bash', '-c',
+            'nats_generation_render() { cat "$1"; };\nrender() {\n' + render + '\n}\n' + block],
+            text=True, env={**os.environ, 'ROOT': str(ROOT), 'REGISTRY': 'registry',
+                'TAG': 'a' * 40, 'S3_SIGNING_ENDPOINT': 'https://storage.stage.example',
+                'VOICE_WEB_INGRESS_HOST': 'app.stage.example',
+                'VOICE_GATEWAY_INGRESS_HOST': 'api.stage.example',
+                'VOICE_LIVEKIT_INGRESS_HOST': 'rtc.stage.example'})
+        config = next(row for row in yaml.safe_load_all(output) if row['kind'] == 'ConfigMap')
+        self.assertEqual(json.loads(config['data']['voice-runtime-config.json']),
+            dict(version=1, app_origin='https://app.stage.example',
+                 api_base_url='https://api.stage.example', livekit_url='wss://rtc.stage.example'))
+
     def test_production_web_render_substitutes_all_public_origins_offline(self):
         script = (ROOT / 'scripts/prod/apply-app-manifests.sh').read_text(encoding='utf-8')
         block = script.split('if [ -f "${MANIFEST_DIR}/flutter-web.yaml" ]; then\n', 1)[1].split('\nfi', 1)[0]
