@@ -45,6 +45,12 @@ UI-semantics; см. [matchmaking.md](matchmaking.md#verified-rank-post-v1-тол
 
 ### Source-scoped lifecycle
 
+The OAuth callback/resume target transport contract, source audit and test matrix
+are recorded in [client TODO](../todo/client.md#oauth-callbackresume-transport-contract-v1--target).
+It fixes configurable transport/security behavior without enabling providers or
+claiming callback/live acceptance. YouTube membership+verified-channel evidence
+remains an explicit qualification gap; long-upload permission is not YPP proof.
+
 - Один provider source (`twitch` или `youtube`) account может быть привязан только к одному
   профилю. Callback для другого профиля получает conflict; V1-перенос выполняется явно:
   unlink старого профиля, затем link нового.

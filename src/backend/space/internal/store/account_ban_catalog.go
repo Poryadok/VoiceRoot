@@ -7,6 +7,24 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// Serving checks permit only their own session's DML grants. The owning
+// installer additionally recognizes Compose's fixed runtime identity, qualified
+// by the same non-owner boundary as provision-space-runtime-role.sql. Naming a
+// role alone cannot make elevated, inherited or DDL-capable grants canonical.
+// This fragment is correlated with the checked relation c in both ACL checks.
+const accountBanDMLGranteesSQL = `SELECT oid FROM pg_roles WHERE rolname=session_user
+ UNION ALL SELECT r.oid FROM pg_roles r
+ WHERE r.rolname='space_runtime' AND current_user=session_user
+ AND session_user=pg_get_userbyid(c.relowner)
+ AND r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolcreatedb AND NOT r.rolcreaterole
+ AND NOT r.rolreplication AND NOT r.rolbypassrls
+ AND NOT EXISTS(SELECT 1 FROM pg_auth_members WHERE member=r.oid)
+ AND NOT EXISTS(SELECT 1 FROM pg_class WHERE relowner=r.oid)
+ AND NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspowner=r.oid)
+ AND NOT has_parameter_privilege(r.oid,'session_replication_role','SET')
+ AND NOT has_schema_privilege(r.oid,'public','CREATE')
+ AND NOT has_schema_privilege(r.oid,'native_membership_guard','CREATE')`
+
 const accountBanStructureSQL = `SELECT jsonb_build_object(
  'columns',(SELECT jsonb_agg(jsonb_build_array(c.relname,to_jsonb(a)-'attrelid',format_type(a.atttypid,a.atttypmod),pg_get_expr(d.adbin,d.adrelid)) ORDER BY c.relname,a.attnum)
  FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
@@ -18,7 +36,7 @@ const accountBanStructureSQL = `SELECT jsonb_build_object(
  'security',(SELECT jsonb_agg(jsonb_build_array(c.relname,
  c.relowner=(SELECT e.relowner FROM pg_class e JOIN pg_namespace en ON en.oid=e.relnamespace WHERE en.nspname='native_membership_guard' AND e.relname='epoch'),
  NOT EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner AND
- (a.grantee<>(SELECT oid FROM pg_roles WHERE rolname=session_user) OR a.is_grantable OR a.privilege_type NOT IN ('SELECT','INSERT','UPDATE','DELETE')))) ORDER BY c.relname)
+ (a.grantee NOT IN (` + accountBanDMLGranteesSQL + `) OR a.is_grantable OR a.privilege_type NOT IN ('SELECT','INSERT','UPDATE','DELETE')))) ORDER BY c.relname)
  FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1)),
  'triggers',(SELECT jsonb_agg(jsonb_build_array(c.relname,t.tgname,t.tgtype,t.tgenabled,t.tgdeferrable,t.tginitdeferred,encode(t.tgargs,'hex'),pn.nspname,p.proname,
  pg_get_triggerdef(t.oid,true),t.tgattr::text,pg_get_expr(t.tgqual,t.tgrelid),t.tgoldtable,t.tgnewtable,
@@ -101,7 +119,7 @@ func checkAccountBanCatalog(ctx context.Context, tx pgx.Tx) error {
  AND NOT EXISTS(SELECT 1 FROM pg_attribute a WHERE a.attrelid=c.oid AND a.attnum>0 AND a.attisdropped)
  AND c.relowner=(SELECT e.relowner FROM pg_class e JOIN pg_namespace en ON en.oid=e.relnamespace WHERE en.nspname='native_membership_guard' AND e.relname='epoch')
  AND NOT EXISTS(SELECT 1 FROM aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a WHERE a.grantee<>c.relowner AND
- (a.grantee<>(SELECT oid FROM pg_roles WHERE rolname=session_user) OR a.is_grantable OR a.privilege_type NOT IN ('SELECT','INSERT','UPDATE','DELETE')))
+ (a.grantee NOT IN (`+accountBanDMLGranteesSQL+`) OR a.is_grantable OR a.privilege_type NOT IN ('SELECT','INSERT','UPDATE','DELETE')))
  AND has_table_privilege(session_user,c.oid,'SELECT') AND has_table_privilege(session_user,c.oid,'INSERT')
  AND has_table_privilege(session_user,c.oid,'UPDATE') AND has_table_privilege(session_user,c.oid,'DELETE')
  AND NOT EXISTS(SELECT 1 FROM pg_policy WHERE polrelid=c.oid) AND NOT EXISTS(SELECT 1 FROM pg_rewrite WHERE ev_class=c.oid)

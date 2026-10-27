@@ -3872,4 +3872,43 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get matchSquadOpenChat => 'Open chat';
+
+  @override
+  String get addGameAddMode => 'Add mode';
+
+  @override
+  String get addGameRemoveMode => 'Remove mode';
+
+  @override
+  String get addGameIcon => 'Game icon';
+
+  @override
+  String get addGameUploadIcon => 'Upload image';
+
+  @override
+  String get addGameIconUnavailable =>
+      'Image uploads for game requests are not available yet. You can submit without an icon.';
+
+  @override
+  String get addGameCriteriaUnavailable =>
+      'Custom criteria are not available yet. You can submit modes for moderation.';
+
+  @override
+  String get addGameNumericCriterion => 'Numeric criterion';
+
+  @override
+  String get addGameEnumCriterion => 'List criterion';
+
+  @override
+  String get addGameModerationHint =>
+      'Your request will be reviewed before the game appears in the catalog.';
+
+  @override
+  String get addGameSearchEmpty => 'No similar games found';
+
+  @override
+  String get addGameSlotsInvalid => 'Enter a positive whole number.';
+
+  @override
+  String get addGameModeDuplicate => 'Use a different name for each mode.';
 }

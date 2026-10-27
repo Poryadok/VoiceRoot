@@ -913,7 +913,7 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	ctx := r23TestContext(t)
 	pool := startR23FilePostgres(t, ctx)
 	wantTables := []string{
-		"file_access_capabilities", "file_blobs", "file_expiry_event_outbox", "file_music_event_outbox", "file_preview_event_outbox", "file_reference_gc_receipts", "file_reference_operations", "file_references",
+		"file_access_capabilities", "file_blobs", "file_expiry_event_outbox", "file_gif_cleanup", "file_gif_jobs", "file_gif_outputs", "file_music_event_outbox", "file_preview_event_outbox", "file_reference_gc_receipts", "file_reference_operations", "file_references",
 		"file_space_deletion_manifest_chunks", "file_space_deletion_manifests", "file_space_deletion_producer_releases",
 		"file_space_lifecycle_fences", "file_space_purge_receipts",
 	}
@@ -927,7 +927,7 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	}
 	tableRows.Close()
 	require.NoError(t, tableRows.Err())
-	require.Equal(t, wantTables, gotTables, "schema fingerprint includes the expiry, music and preview outboxes and all lifecycle, purge-receipt and GC ownership tables")
+	require.Equal(t, wantTables, gotTables, "schema fingerprint includes GIF processing/cleanup, expiry, music and preview outboxes and all lifecycle, purge-receipt and GC ownership tables")
 
 	wantColumns := []string{
 		"file_access_capabilities.allowed_surfaces", "file_access_capabilities.capability_id", "file_access_capabilities.created_at", "file_access_capabilities.expires_at", "file_access_capabilities.file_id", "file_access_capabilities.issue_operation_id", "file_access_capabilities.owner_id", "file_access_capabilities.owner_type", "file_access_capabilities.request_bytes", "file_access_capabilities.request_sha256", "file_access_capabilities.scope_space_id", "file_access_capabilities.subject_profile_id", "file_access_capabilities.subresource_id",
@@ -961,8 +961,8 @@ func TestR23FileLifecycleMigration_EmptyDOWNSucceedsAndSchemaFingerprintIsExact(
 	for _, table := range wantTables {
 		var dropped *string
 		require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass($1)::text`, "public."+table).Scan(&dropped))
-		if table == "file_music_event_outbox" || table == "file_preview_event_outbox" || table == "file_expiry_event_outbox" {
-			require.NotNil(t, dropped, "the unrelated Music and preview migrations remain applied after the R23 lifecycle DOWNs")
+		if table == "file_music_event_outbox" || table == "file_preview_event_outbox" || table == "file_expiry_event_outbox" || table == "file_gif_cleanup" || table == "file_gif_jobs" || table == "file_gif_outputs" {
+			require.NotNil(t, dropped, "the unrelated GIF, expiry, Music and preview migrations remain applied after the R23 lifecycle DOWNs")
 			continue
 		}
 		require.Nil(t, dropped, "%s must be removed by an empty guarded DOWN", table)

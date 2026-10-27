@@ -64,7 +64,7 @@ func TestRuntimeUserPrivacyListenerUsesFiniteAllowlist(t *testing.T) {
 	require.Zero(t, getBulkPresenceCalls.Load(), "the unlisted GetBulkPresence handler is not called")
 }
 
-func TestRuntimeUserMessagingListenerAllowsOnlyScheduledPresence(t *testing.T) {
+func TestRuntimeUserMessagingListenerAllowsOnlyExplicitMessagingMethods(t *testing.T) {
 	serverCert, serverCAPEM, _ := ephemeralTLS(t)
 	serverRoots := x509.NewCertPool()
 	require.True(t, serverRoots.AppendCertsFromPEM(serverCAPEM))
@@ -82,6 +82,7 @@ func TestRuntimeUserMessagingListenerAllowsOnlyScheduledPresence(t *testing.T) {
 	var forbiddenProfileCalls atomic.Int32
 	server.RegisterService(&grpc.ServiceDesc{ServiceName: "voice.user.v1.UserService", HandlerType: (*interface{})(nil), Methods: []grpc.MethodDesc{
 		allowlistMethod("GetScheduledMessageDispatchPresence"),
+		allowlistMethod("GetProfileDeletionStates"),
 		allowlistMethod("GetBulkPresence"),
 		allowlistMethod("GetNotificationRoutingPresence"),
 		allowlistMethodWithCalls("GetProfile", &forbiddenProfileCalls),
@@ -94,6 +95,7 @@ func TestRuntimeUserMessagingListenerAllowsOnlyScheduledPresence(t *testing.T) {
 
 	method := "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
 	require.NoError(t, invokeSignedUserMethodWithIssuer(conn, key, "messaging", method))
+	require.NoError(t, invokeSignedUserMethodWithIssuer(conn, key, "messaging", "/voice.user.v1.UserService/GetProfileDeletionStates"))
 	for _, denied := range []string{"GetBulkPresence", "GetNotificationRoutingPresence", "GetProfile"} {
 		err := invokeSignedUserMethodWithIssuer(conn, key, "messaging", "/voice.user.v1.UserService/"+denied)
 		require.Equal(t, codes.PermissionDenied, status.Code(err), denied)

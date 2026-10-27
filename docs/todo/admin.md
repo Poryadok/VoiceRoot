@@ -17,7 +17,7 @@ Admin panel (`src/admin/`) и Developer Portal (`src/developer-portal/`).
 ### Developer Portal
 
 
-- [ ] **[Developer Portal] No E2E / live smoke for portal OAuth or bot registration — only static ingress checks in staging smoke; no compose live test, nothing in `.github/ci/e2e-features.yml`.** — `scripts/staging/smoke-staging.sh`, `.github/ci/e2e-features.yml`
+- [x] **[Developer Portal] Compose OAuth and bot-registration HTTP E2E** — `TestComposeDeveloperPortal_live` is selected by `.github/ci/e2e-features.yml` and exercises real Voice password authorization, S256 PKCE, callback state, one-use code, authenticated bot registration/list/detail and cleanup. Redirect/password/verifier/replay/unauthenticated failures are asserted; an unavailable opted-in portal fails. This proves backend protocol and persistence; browser execution, staging OAuth and live-provider acceptance remain separate. — `src/backend/gateway/compose_developer_portal_live_test.go`, `src/developer-portal/README.md`
 
 
 ## Common

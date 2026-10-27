@@ -3909,4 +3909,44 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get matchSquadOpenChat => 'Открыть чат';
+
+  @override
+  String get addGameAddMode => 'Добавить режим';
+
+  @override
+  String get addGameRemoveMode => 'Удалить режим';
+
+  @override
+  String get addGameIcon => 'Иконка игры';
+
+  @override
+  String get addGameUploadIcon => 'Загрузить изображение';
+
+  @override
+  String get addGameIconUnavailable =>
+      'Загрузка иконок для заявок пока недоступна. Можно отправить заявку без иконки.';
+
+  @override
+  String get addGameCriteriaUnavailable =>
+      'Произвольные критерии пока недоступны. Можно отправить режимы на модерацию.';
+
+  @override
+  String get addGameNumericCriterion => 'Числовой критерий';
+
+  @override
+  String get addGameEnumCriterion => 'Критерий из списка';
+
+  @override
+  String get addGameModerationHint =>
+      'Игра появится в каталоге после проверки заявки модератором.';
+
+  @override
+  String get addGameSearchEmpty => 'Похожие игры не найдены';
+
+  @override
+  String get addGameSlotsInvalid => 'Введите положительное целое число.';
+
+  @override
+  String get addGameModeDuplicate =>
+      'У каждого режима должно быть своё название.';
 }

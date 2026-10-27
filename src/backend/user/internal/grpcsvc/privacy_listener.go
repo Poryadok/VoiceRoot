@@ -88,8 +88,8 @@ func RegisterNotificationPresenceServer(server grpc.ServiceRegistrar, service *U
 	server.RegisterService(&desc, &NotificationPresenceGRPC{User: service})
 }
 
-// MessagingScheduledPresenceGRPC exposes only the scheduled-delivery
-// visibility decision to an authenticated Messaging service principal.
+// MessagingScheduledPresenceGRPC exposes scheduled-delivery decisions and
+// deletion facts to an authenticated Messaging service principal.
 type MessagingScheduledPresenceGRPC struct {
 	userv1.UnimplementedUserServiceServer
 	User *UserGRPC
@@ -110,7 +110,7 @@ func RegisterMessagingScheduledPresenceServer(server grpc.ServiceRegistrar, serv
 	desc.Methods = nil
 	desc.Streams = nil
 	for _, method := range userv1.UserService_ServiceDesc.Methods {
-		if method.MethodName == "GetScheduledMessageDispatchPresence" {
+		if method.MethodName == "GetScheduledMessageDispatchPresence" || method.MethodName == "GetProfileDeletionStates" {
 			desc.Methods = append(desc.Methods, method)
 		}
 	}

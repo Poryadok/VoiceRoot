@@ -1,0 +1,82 @@
+name: DEV candidate image publication
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/workflows/dev-candidate-publish.yml
+      - scripts/dev/publish_candidate.py
+      - scripts/dev/publish_candidate_test.py
+  workflow_dispatch:
+    inputs:
+      product_sha:
+        description: Exact selected product commit (publisher commit is separate)
+        required: true
+        default: 4e88e14e64300667e3349b08e75c4c31bf50b61e
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: dev-candidate-image-publication
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML==6.0.3
+      - run: python -B scripts/dev/publish_candidate_test.py
+
+  publish:
+    name: Publish exact DEV candidate
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'Poryadok/VoiceRoot' && github.ref == 'refs/heads/master'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          path: publisher
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.product_sha }}
+          path: product
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish and verify immutable candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRODUCT_SHA: ${{ inputs.product_sha }}
+          PUBLISHER_SHA: ${{ github.sha }}
+        run: python -B publisher/scripts/dev/publish_candidate.py --product-root product --publisher-root publisher --output evidence
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: dev-candidate-images-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14

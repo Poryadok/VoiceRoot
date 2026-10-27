@@ -102,5 +102,35 @@ class ScheduledMessageDispatchMode extends $pb.ProtobufEnum {
   const ScheduledMessageDispatchMode._(super.value, super.name);
 }
 
+/// Current User-owned deletion fact; unspecified is never a valid response state.
+class ProfileDeletionState extends $pb.ProtobufEnum {
+  static const ProfileDeletionState PROFILE_DELETION_STATE_UNSPECIFIED =
+      ProfileDeletionState._(
+          0, _omitEnumNames ? '' : 'PROFILE_DELETION_STATE_UNSPECIFIED');
+  static const ProfileDeletionState PROFILE_DELETION_STATE_NOT_DELETED =
+      ProfileDeletionState._(
+          1, _omitEnumNames ? '' : 'PROFILE_DELETION_STATE_NOT_DELETED');
+  static const ProfileDeletionState PROFILE_DELETION_STATE_SOFT_DELETED =
+      ProfileDeletionState._(
+          2, _omitEnumNames ? '' : 'PROFILE_DELETION_STATE_SOFT_DELETED');
+  static const ProfileDeletionState PROFILE_DELETION_STATE_UNKNOWN =
+      ProfileDeletionState._(
+          3, _omitEnumNames ? '' : 'PROFILE_DELETION_STATE_UNKNOWN');
+
+  static const $core.List<ProfileDeletionState> values = <ProfileDeletionState>[
+    PROFILE_DELETION_STATE_UNSPECIFIED,
+    PROFILE_DELETION_STATE_NOT_DELETED,
+    PROFILE_DELETION_STATE_SOFT_DELETED,
+    PROFILE_DELETION_STATE_UNKNOWN,
+  ];
+
+  static final $core.List<ProfileDeletionState?> _byValue =
+      $pb.ProtobufEnum.$_initByValueList(values, 3);
+  static ProfileDeletionState? valueOf($core.int value) =>
+      value < 0 || value >= _byValue.length ? null : _byValue[value];
+
+  const ProfileDeletionState._(super.value, super.name);
+}
+
 const $core.bool _omitEnumNames =
     $core.bool.fromEnvironment('protobuf.omit_enum_names');
