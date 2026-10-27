@@ -332,6 +332,7 @@ ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposab
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p a4_rollout_evidence_test.py
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
+	python3 "$(ROOT)/src/frontend/docker/runtime_config_deployment_test.py"
 	python3 "$(ROOT)/scripts/prod/verify_prod_images_test.py"
 	python3 "$(ROOT)/docker/postgres/compose-realtime-migrations_test.py"
 	python3 "$(ROOT)/scripts/staging/notification-presence-contract_test.py"
