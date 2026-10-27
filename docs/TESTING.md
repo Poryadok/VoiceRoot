@@ -104,6 +104,21 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
 - Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
+- Space retained-installer regression: on an owned fresh private PostgreSQL 18
+  server, set `NATIVE_INSTALLER_TEST_ADMIN_URL`, `NATIVE_INSTALLER_TEST_MIGRATE`
+  (the pinned migrate executable) and `NATIVE_INSTALLER_TEST_BINARY` (the
+  production `cmd/native-migrate` binary built from the same checkout with its
+  normal source/migrator identities). With `psql` on PATH, run from
+  `src/backend/space`: `go test -tags=integration ./internal/nativeinstaller
+  -run '^TestProductionFreshChainAndRetainedVerify$' -count=1 -v`.
+  The test provisions an absent `space_db`, retains actual completed JSONL,
+  applies canonical runtime-role SQL, checks unchanged seal and all 24 account-ban
+  DML grants, and verifies through the production CLI. A real non-owner serving
+  login creates a native Space and reads membership authority. Dirty/unknown
+  markers, unauthorized grants, elevated runtime identity and catalog tampering
+  must HOLD; restored state verifies without migration or resealing. The test
+  drops only the exact database it created; discard the private server afterward.
+  This bounded source regression does not prove full Compose/Gateway startup.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 - Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
   затем `go test ./internal/roomlifecycle -count=1`, `go test -race
