@@ -27,6 +27,7 @@ import '../core/voice_state_panel.dart';
 import '../social/presence_indicator.dart';
 import '../space/create_space_sheet.dart';
 import '../space/join_space_invite_sheet.dart';
+import '../space/space_catalog_screen.dart';
 import '../chat/create_group_sheet.dart';
 import '../onboarding/onboarding_anchor_keys.dart';
 import '../../state/chat_navigation_providers.dart';
@@ -51,6 +52,7 @@ class ChatListBody extends ConsumerStatefulWidget {
   static const Key createGroupKey = Key('chat_list_create_group');
   static const Key createSpaceKey = Key('chat_list_create_space');
   static const Key joinSpaceInviteKey = Key('chat_list_join_space_invite');
+  static const Key spaceCatalogKey = Key('chat_list_space_catalog');
   static Key spaceTileKey(String spaceId) => Key('chat_list_space_$spaceId');
   static Key muteActionKey(String chatId) => Key('chat_list_mute_$chatId');
   static Key pinActionKey(String chatId) => Key('chat_list_pin_$chatId');
@@ -248,6 +250,12 @@ class _ChatListBodyState extends ConsumerState<ChatListBody> {
                     ),
                   ),
                   if (inbox != 'requests') ...[
+                    IconButton(
+                      key: ChatListBody.spaceCatalogKey,
+                      icon: const Icon(Icons.explore_outlined),
+                      tooltip: l10n.spaceCatalogTitle,
+                      onPressed: () => SpaceCatalogScreen.show(context),
+                    ),
                     IconButton(
                       key: ChatListBody.createSpaceKey,
                       icon: const Icon(Icons.hub_outlined),
