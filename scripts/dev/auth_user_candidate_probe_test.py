@@ -81,6 +81,24 @@ class FakeKube:
 
 
 class CandidateContractTest(unittest.TestCase):
+    def test_owned_review_can_qualify_artifacts_only_in_prepare_without_fake_stage_advancement(self):
+        card=model_card();task={'status':'review','owner':'Dimas-16','assignee':'Dimas-16','review_required':False}
+        class Response:
+            def read(self):return json.dumps(task).encode()
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+        with patch('auth_user_adoption_runtime.resource_card',return_value=card),patch('urllib.request.urlopen',return_value=Response()):
+            self.assertEqual(probe.probe_resource_card(),card)
+            for fault in ('phase','owner','assignee','impact','in-progress'):
+                with self.subTest(fault=fault):
+                    if fault=='phase':card['phase']='deploy'
+                    if fault=='owner':task['owner']='other'
+                    if fault=='assignee':task['assignee']='other'
+                    if fault=='impact':task['review_required']=True
+                    if fault=='in-progress':task['status']='in_progress'
+                    with self.assertRaises(RecoveryRequired):probe.probe_resource_card()
+                    card['phase']='prepare';task.update(status='review',owner='Dimas-16',assignee='Dimas-16',review_required=False)
+
     def test_actual_retained_prepare_card_and_typed_version_can_prepare(self):
         fixture=json.loads((pathlib.Path(__file__).parent/'testdata/auth-user-probe-resource-prepare.json').read_text())
         card=fixture['card'];self.assertTrue(fixture['provenance']['historical_only'])

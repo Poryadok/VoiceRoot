@@ -40,8 +40,9 @@ def probe_resource_card():
     card=resource_card()
     with urllib.request.urlopen('http://192.168.0.109:30990/api/projects/voice/tasks/A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION',timeout=10) as response:
         task=json.load(response)
+    artifact_review=task.get('status')=='review' and card.get('phase')=='prepare'
     require(task.get('owner')=='Dimas-16' and task.get('assignee')=='Dimas-16' and
-            task.get('status') in ('dev_ready_for_deploy','dev_deploying') and not task.get('review_required'),
+            (artifact_review or task.get('status') in ('dev_ready_for_deploy','dev_deploying')) and not task.get('review_required'),
             'actual adoption task ownership/stage/review gate not eligible for candidate preflight')
     return card
 
