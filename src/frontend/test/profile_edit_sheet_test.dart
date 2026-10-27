@@ -75,6 +75,8 @@ void main() {
       find.byKey(ProfileEditSheet.displayNameFieldKey),
       ' ',
     );
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.pumpAndSettle();
 
@@ -141,6 +143,8 @@ void main() {
       find.byKey(ProfileEditSheet.displayNameFieldKey),
       'Updated Name',
     );
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.pumpAndSettle();
 
@@ -212,6 +216,8 @@ void main() {
 
     await tester.tap(find.byKey(ProfileEditSheet.avatarButtonKey));
     await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.pumpAndSettle();
 
@@ -278,6 +284,8 @@ void main() {
 
     await tester.tap(find.byKey(ProfileEditSheet.avatarButtonKey));
     await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.pumpAndSettle();
 
@@ -368,6 +376,8 @@ void main() {
       find.byKey(ProfileEditSheet.bioFieldKey),
       'Looking for a duo',
     );
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.tap(find.byKey(ProfileEditSheet.saveButtonKey));
     await tester.pumpAndSettle();
 
