@@ -4,6 +4,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 umask 077
+if [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all)" ]]; then
+  echo "refusing dirty source tree for live proof" >&2
+  exit 2
+fi
+source_head="$(git -C "$ROOT" rev-parse HEAD)"
 if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
   echo "refusing caller-supplied Compose project" >&2
   exit 2
@@ -78,6 +83,15 @@ export VOICE_API_BASE_URL="http://127.0.0.1:${GATEWAY_PORT}"
 export VOICE_AUTH_MAIL_STUB_URL="http://127.0.0.1:${VERIFICATION_STUB_PORT}"
 export COMPOSE_PARALLEL_LIMIT=2
 
+(cd "$ROOT/src/backend/gateway" && go test -c -o "$state_dir/gateway.test" .)
+export VOICE_STORY_TTL_DELETE_TEST_SHA256="$(sha256sum "$state_dir/gateway.test" | cut -d' ' -f1)"
+export VOICE_STORY_TTL_DELETE_SOURCE_HEAD="$source_head"
+if [[ "$(git -C "$ROOT" rev-parse HEAD)" != "$source_head" ]] ||
+   [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all)" ]]; then
+  echo "source changed during test compilation" >&2
+  exit 2
+fi
+
 # Bound each private service; the existing shared projects are never modified.
 printf 'services:\n' > "$limits_file"
 while IFS= read -r service; do
@@ -102,4 +116,23 @@ until curl --fail --silent --max-time 3 "${VOICE_API_BASE_URL}/health" >/dev/nul
   fi
   sleep 2
 done
-(cd "$ROOT/src/backend/gateway" && go test -v -count=1 -parallel 1 -timeout 8m -run '^TestComposeStoryTTLDeleteFile_live$' .)
+for service in story file gateway; do
+  container="$(compose ps -q "$service")"
+  if [[ -z "$container" ]]; then
+    echo "missing private ${service} container" >&2
+    exit 1
+  fi
+  image="$(docker inspect --format '{{.Image}}' "$container")"
+  if [[ "$image" != sha256:* ]]; then
+    echo "unbound private ${service} image" >&2
+    exit 1
+  fi
+  export "VOICE_STORY_TTL_DELETE_$(tr '[:lower:]' '[:upper:]' <<< "$service")_IMAGE_ID=$image"
+done
+if [[ "$(git -C "$ROOT" rev-parse HEAD)" != "$source_head" ]] ||
+   [[ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all)" ]] ||
+   [[ "$(sha256sum "$state_dir/gateway.test" | cut -d' ' -f1)" != "$VOICE_STORY_TTL_DELETE_TEST_SHA256" ]]; then
+  echo "proof inputs changed after private build" >&2
+  exit 1
+fi
+"$state_dir/gateway.test" -test.v -test.parallel=1 -test.timeout=8m -test.run='^TestComposeStoryTTLDeleteFile_live$'

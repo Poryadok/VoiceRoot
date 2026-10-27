@@ -48,6 +48,14 @@ def clean_head():
     return head, tree
 
 
+def require_frozen(head, tree, binary=None, test_sha=None):
+    actual_head, actual_tree = clean_head()
+    if (actual_head, actual_tree) != (head, tree):
+        raise RuntimeError("source HEAD/tree changed during private proof")
+    if binary is not None and hashlib.sha256(binary.read_bytes()).hexdigest() != test_sha:
+        raise RuntimeError("test executable changed during private proof")
+
+
 def free_ports(start):
     for port in range(start, start + 17):
         with socket.socket() as probe:
@@ -133,7 +141,9 @@ def main():
            "-e", "GOFLAGS=-mod=readonly", "golang:1.26.5-bookworm",
            "go", "test", "-c", "-o", "/out/gateway.test", ".", timeout=900)
     test_sha = hashlib.sha256(binary.read_bytes()).hexdigest()
+    require_frozen(head, tree, binary, test_sha)
     call([sys.executable, str(ROOT / "scripts/dev/generate-phase0-fixture.py"), str(fixture)], timeout=900)
+    require_frozen(head, tree, binary, test_sha)
     services = call([*compose, "--profile", "app", "config", "--services"], env=env, capture=True).splitlines()
     lines = ["services:"]
     for service in services:
@@ -148,6 +158,7 @@ def main():
     compose.extend(("-f", str(limits), "--profile", "app"))
     call([*compose, "config", "--quiet"], env=env)
     config_sha = hashlib.sha256(call([*compose, "config"], env=env, capture=True).encode()).hexdigest()
+    require_frozen(head, tree, binary, test_sha)
     receipt = {"project": project, "source_head": head, "source_tree": tree,
                "test_binary_sha256": test_sha, "compose_config_sha256": config_sha,
                "started_unix_nano": started, "run_dir": str(run_dir), "containers": {}}
@@ -170,6 +181,9 @@ def main():
         rows = owned_rows(project, started_seconds)
         if not all(service in rows for service in SERVICES):
             raise RuntimeError("private Story/File/Gateway/Postgres containers missing")
+        require_frozen(head, tree, binary, test_sha)
+        if hashlib.sha256(call([*compose, "config"], env=env, capture=True).encode()).hexdigest() != config_sha:
+            raise RuntimeError("Compose config changed after private build")
         receipt["containers"] = rows
         receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
         test_env = {

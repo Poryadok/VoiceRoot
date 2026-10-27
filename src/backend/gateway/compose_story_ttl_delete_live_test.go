@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -24,6 +26,7 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 	if !liveComposeEnabled() || os.Getenv("VOICE_STORY_TTL_DELETE_LIVE_TEST") != "true" {
 		t.Skip("requires private Story TTL Compose proof opt-in")
 	}
+	storyTTLRequireTestBinary(t)
 	project := os.Getenv("COMPOSE_PROJECT_NAME")
 	require.True(t, strings.HasPrefix(project, "voice-story-ttl-delete-"), "private Compose project required")
 	proofID := os.Getenv("VOICE_STORY_TTL_DELETE_PROOF_ID")
@@ -96,6 +99,21 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 	require.Equal(t, "0", storyTTLComposeSQL(t, postgres,
 		"SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id='"+storyID+"'::uuid AND media_file_id='"+fileID+"'::uuid;"),
 		"Story must acknowledge its File deletion operation")
+}
+
+func storyTTLRequireTestBinary(t *testing.T) {
+	t.Helper()
+	expected := os.Getenv("VOICE_STORY_TTL_DELETE_TEST_SHA256")
+	if expected == "" {
+		return // The Bash runner compiles the test through the local Go toolchain.
+	}
+	require.Len(t, expected, 64, "bound test executable SHA-256 required")
+	path, err := os.Executable()
+	require.NoError(t, err)
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	actual := sha256.Sum256(content)
+	require.Equal(t, expected, hex.EncodeToString(actual[:]), "test executable changed after preparation")
 }
 
 func storyTTLRequireImage(t *testing.T, container, expected string) {
