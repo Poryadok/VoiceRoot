@@ -211,9 +211,14 @@ The exact Auth identity catalog currently rejects additional lifetime triggers,
 and its migration-history validator requires a complete declared loader profile.
 Any additive cycle-history integration must update those compatibility proofs
 explicitly, preserving fail-closed rollback and backup behavior. The linked-OAuth
-producer owns Flyway V32/canonical 000033 and its history profile. The next A4
-migration must stack after that exact predecessor and reconcile the separate
-Subscription authority writer's reservations before choosing its own slot.
+producer owns Flyway V32/canonical 000033 and its history profile. The frozen
+Subscription authority source `ee7f2b87e9c996d26e670bd7a0a70505a0d42633`
+also contains Flyway V33/canonical 000034 subscription capture. The next A4
+migration must reconcile both exact predecessors before choosing its own slot.
+That Subscription-purpose capture uses raw account identifiers, operation IDs as
+its cycle and a separate source revision. It is not the agreed opaque-lifetime
+contract, complete User coverage or a generic MM grant. Preserve its existing
+purpose and do not silently substitute those identifiers for the A4 tuple.
 
 ## Decisions and follow-ups
 
