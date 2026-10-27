@@ -53,6 +53,8 @@ table CRUD and sequence usage/select, including default grants for future
 admin-owned tables. Migration ledgers remain unavailable to runtime mutation.
 User retains TEMP on its own database for identity-association transaction
 preparation/batch tables, and SELECT on its schema ledger for startup validation.
+Auth's identity DDL barrier retains its canonical owner plus PUBLIC SELECT ACL;
+the provisioner removes direct runtime grants from that installation primitive.
 PUBLIC CONNECT/TEMP and schema CREATE are removed only on auth_db/user_db;
 the admin owner and other services' shared credentials remain unchanged.
 Unexpected privileged/member/owning pre-existing runtime roles fail closed.

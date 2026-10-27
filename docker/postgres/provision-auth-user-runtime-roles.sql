@@ -65,6 +65,11 @@ WHERE to_regclass('public.flyway_schema_history') IS NOT NULL
 SELECT 'GRANT SELECT ON TABLE public.flyway_schema_history TO auth_runtime'
 WHERE to_regclass('public.flyway_schema_history') IS NOT NULL
 \gexec
+-- The canonical identity gate permits only owner ACLs plus PUBLIC SELECT.
+-- Runtime takes ACCESS SHARE through PUBLIC; any direct role ACL is invalid.
+SELECT 'REVOKE ALL ON TABLE public.auth_identity_ddl_barrier FROM auth_runtime'
+WHERE to_regclass('public.auth_identity_ddl_barrier') IS NOT NULL
+\gexec
 COMMIT;
 
 \connect user_db

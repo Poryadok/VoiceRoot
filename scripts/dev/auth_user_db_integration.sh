@@ -16,6 +16,8 @@ CREATE TABLE profiles(id serial PRIMARY KEY, marker text);
 INSERT INTO profiles(marker) VALUES ('preserve-user');
 CREATE TABLE schema_migrations(version bigint, dirty boolean);
 SQL
+# Use the actual installed barrier contract, not a lookalike ACL fixture.
+admin -d auth_db -1 -f /repo/src/backend/auth/src/main/resources/db/migration/V31__auth_identity_ddl_barrier.sql
 provision=/repo/docker/postgres/provision-auth-user-runtime-roles.sql
 if [ -f "$provision" ]; then admin -f "$provision"; fi
 runtime() {
@@ -25,13 +27,17 @@ runtime() {
 # This is the first baseline failure: no usable service-scoped login yet.
 test "$(runtime auth_runtime auth_db "$AUTH_DB_PASSWORD" 'SELECT marker FROM accounts WHERE id=1')" = preserve-auth
 test "$(runtime user_runtime user_db "$USER_DB_PASSWORD" 'SELECT marker FROM profiles WHERE id=1')" = preserve-user
+gate=$(PGUSER=auth_runtime PGDATABASE=auth_db PGPASSWORD="$AUTH_DB_PASSWORD" psql -X -qAt -v ON_ERROR_STOP=1 \
+ -f /repo/src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql 2>/tmp/dimas16-private-pg-error)
+printf '%s' "$gate" | grep -q '"acl_ok": true'
+printf '%s' "$gate" | grep -q '"runtime_ok": true'
 # Correct credentials are essential to distinguish authorization from password failure.
 if runtime auth_runtime user_db "$AUTH_DB_PASSWORD" 'SELECT 1' >/dev/null; then exit 1; fi
 if runtime user_runtime auth_db "$USER_DB_PASSWORD" 'SELECT 1' >/dev/null; then exit 1; fi
 runtime auth_runtime auth_db "$AUTH_DB_PASSWORD" "INSERT INTO accounts(marker) VALUES ('new'); UPDATE accounts SET marker='updated' WHERE id=2; DELETE FROM accounts WHERE id=2" >/dev/null
 runtime user_runtime user_db "$USER_DB_PASSWORD" "INSERT INTO profiles(marker) VALUES ('new'); UPDATE profiles SET marker='updated' WHERE id=2; DELETE FROM profiles WHERE id=2" >/dev/null
 runtime user_runtime user_db "$USER_DB_PASSWORD" 'BEGIN; CREATE TEMP TABLE user_identity_preparation(transaction_id bigint NOT NULL,profile_id uuid,account_id uuid,association_id uuid,kind text NOT NULL) ON COMMIT DROP; INSERT INTO pg_temp.user_identity_preparation VALUES(txid_current(),NULL,NULL,NULL,'"'"'ACTIVATE'"'"'); COMMIT; SELECT version FROM schema_migrations' >/dev/null
-for sql in 'CREATE TABLE forbidden(id int)' 'CREATE TEMP TABLE forbidden(id int)' 'TRUNCATE accounts' 'DROP TABLE accounts' 'INSERT INTO flyway_schema_history VALUES (1)' 'SET ROLE voice'; do
+for sql in 'CREATE TABLE forbidden(id int)' 'CREATE TEMP TABLE forbidden(id int)' 'TRUNCATE accounts' 'DROP TABLE accounts' 'INSERT INTO flyway_schema_history VALUES (1)' 'INSERT INTO auth_identity_ddl_barrier VALUES(true)' 'SET ROLE voice'; do
  if runtime auth_runtime auth_db "$AUTH_DB_PASSWORD" "$sql" >/dev/null; then echo AUTH_PRIVILEGE_TOO_BROAD; exit 1; fi
 done
 if runtime user_runtime user_db "$USER_DB_PASSWORD" 'UPDATE schema_migrations SET dirty=true' >/dev/null; then echo USER_LEDGER_MUTATION_ALLOWED; exit 1; fi
