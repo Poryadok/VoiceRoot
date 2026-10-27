@@ -41,7 +41,9 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
 
   Future<void> _captureInitialWebDeepLink() async {
     if (!kIsWeb) return;
-    final target = parseInitialWebDeepLinkTarget(Uri.base);
+    final target = parseInitialWebDeepLinkTarget(
+      ref.read(deepLinkBaseUriProvider),
+    );
     if (target == null) return;
     await ref.read(deepLinkControllerProvider.notifier).onIncomingLink(target);
   }
