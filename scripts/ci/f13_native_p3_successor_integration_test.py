@@ -49,16 +49,16 @@ class RealGitSuccessorTest(unittest.TestCase):
                 git('update-index', '--add', '--cacheinfo',
                     expected['mode'] + ',' + expected['oid'] + ',' + document, env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
-        expected_makefile=next(r['entry'] for r in cls.record['context'] if r['path']=='Makefile')
-        if legacy.entry(ROOT,cls.source,'Makefile')!=expected_makefile:
-            current=authority.documentation.load_context_record(ROOT)
-            reviewed=next(r['entry'] for r in current['context'] if r['path']=='Makefile')
-            legacy.require(legacy.entry(ROOT,cls.source,'Makefile')==reviewed,'v2_fixture_unreviewed_makefile')
-            with tempfile.TemporaryDirectory() as directory:
-                env=dict(os.environ,GIT_INDEX_FILE=str(Path(directory)/'index'))
-                git('read-tree',cls.source,env=env)
-                git('update-index','--add','--cacheinfo',expected_makefile['mode']+','+expected_makefile['oid']+',Makefile',env=env)
-                cls.source=cls.commit(git('write-tree',env=env),[cls.source])
+        # Current generated dependencies can advance independently of v2. Pin
+        # every historical context entry in this private fixture, including its
+        # mode; never relax the verifier or use current bytes as v2 authority.
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+            git('read-tree', cls.source, env=env)
+            entries = ''.join(row['entry']['mode'] + ' ' + row['entry']['oid']
+                              + '\t' + row['path'] + '\n' for row in cls.record['context'])
+            git('update-index', '--index-info', data=entries.encode(), env=env)
+            cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         cls.context_path = next(row['path'] for row in cls.record['context']
                                 if row['path'].startswith('src/backend/voice/internal/store/')
                                 and row['path'].endswith('.go'))
@@ -100,6 +100,11 @@ class RealGitSuccessorTest(unittest.TestCase):
         self.assertIs(verifier, successor)
         self.assertEqual(record, self.record)
 
+    def test_historical_fixture_has_complete_pinned_context(self):
+        for row in self.record['context']:
+            with self.subTest(path=row['path']):
+                self.assertEqual(legacy.entry(ROOT, self.source, row['path']), row['entry'])
+
     def test_projection_drift(self):
         with self.assertRaisesRegex(legacy.Rejected, 'projection_drift'):
             self.qualify(*self.changed('src/backend/voice/main.go'))
@@ -119,9 +124,10 @@ spec=importlib.util.spec_from_file_location('extracted_native',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 b=m.successor.qualify(*sys.argv[2:]);assert b['version']=='NATIVE-P3-SOURCE-v2'
 '''
-        subprocess.run([sys.executable,'-c',code,str(ROOT/'scripts/ci/f13_native_p3_authority.py'),
-                        str(ROOT),BASE,self.source,self.target,'pull_request','refs/pull/875/merge',
-                        self.target,'','master'],cwd='/tmp',check=True,capture_output=True)
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run([sys.executable,'-c',code,str(ROOT/'scripts/ci/f13_native_p3_authority.py'),
+                            str(ROOT),BASE,self.source,self.target,'pull_request','refs/pull/875/merge',
+                            self.target,'','master'],cwd=directory,check=True,capture_output=True)
 
     def bridge(self, historical_mutation=None):
         spec=importlib.util.spec_from_file_location('successor_f54',ROOT/'scripts/ci/f13_f54_history.py')
