@@ -20,6 +20,10 @@ import f13_native_p3_successor as successor
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = '288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
+# Catalog documentation merged after the v3 documentation authority record.
+# This pin is used only to construct the private historical test fixture.
+CATALOG_DOCUMENT_COMMIT = 'eaa4c1a30921cea1f030ee53de89c71695cbfc87'
+DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 
 
 def git(*args, data=None, env=None):
@@ -41,13 +45,33 @@ class RealGitSuccessorTest(unittest.TestCase):
             legacy.require(authority.documentation is not None, 'v2_fixture_unknown_document_source')
             current = authority.documentation.load_record(ROOT)
             reviewed = next(row['after'] for row in current['projection'] if row['path'] == document)
-            legacy.require(legacy.entry(ROOT, cls.source, document) == reviewed,
+            actual = legacy.entry(ROOT, cls.source, document)
+            catalog = legacy.entry(ROOT, CATALOG_DOCUMENT_COMMIT, document)
+            catalog_ancestor = subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 CATALOG_DOCUMENT_COMMIT, cls.source], capture_output=True).returncode == 0
+            legacy.require(actual == reviewed or (catalog_ancestor and actual == catalog),
                            'v2_fixture_unreviewed_document_source')
             with tempfile.TemporaryDirectory() as directory:
                 env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
                 git('read-tree', cls.source, env=env)
                 git('update-index', '--add', '--cacheinfo',
                     expected['mode'] + ',' + expected['oid'] + ',' + document, env=env)
+                cls.source = cls.commit(git('write-tree', env=env), [cls.source])
+        stores = 'docs/DATA_STORES.md'
+        stores_expected = next(row['after'] for row in cls.record['projection'] if row['path'] == stores)
+        if legacy.entry(ROOT, cls.source, stores) != stores_expected:
+            stores_ancestor = subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 DATA_STORES_COMMIT, cls.source], capture_output=True).returncode == 0
+            legacy.require(stores_ancestor and legacy.entry(ROOT, cls.source, stores)
+                           == legacy.entry(ROOT, DATA_STORES_COMMIT, stores),
+                           'v2_fixture_unreviewed_stores_source')
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', cls.source, env=env)
+                git('update-index', '--add', '--cacheinfo',
+                    stores_expected['mode'] + ',' + stores_expected['oid'] + ',' + stores, env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         # Current generated dependencies can advance independently of v2. Pin
         # every historical context entry in this private fixture, including its
