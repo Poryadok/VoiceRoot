@@ -14,6 +14,7 @@ import tempfile
 import hashlib
 import hmac
 import os
+from unittest.mock import patch
 import time
 import uuid
 
@@ -199,7 +200,29 @@ print(json.dumps(calls))
                       'origin_host':docker('exec',name,'hostname').stdout.strip(),'binding':{'scope':'private-fixture-only'}}
             (folder/'backup-manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
             from auth_user_adoption_restore import qualify
-            report=qualify(folder,tools,name,root)
+            real_run=subprocess.run;restore_volumes=[]
+            def capture_owned_restore_volume(command,*arguments,**options):
+                if (isinstance(command,list) and command[:3]==['docker','rm','-f']
+                        and command[-1].startswith('dimas16-adoption-restore-')):
+                    inspected=real_run(['docker','inspect',command[-1]],capture_output=True)
+                    if inspected.returncode==0:
+                        obj=json.loads(inspected.stdout)[0]
+                        assert obj['Config']['Labels'].get('voice.test.owner')=='Dimas-16'
+                        restore_volumes.extend(m['Name'] for m in obj['Mounts'] if m['Type']=='volume')
+                return real_run(command,*arguments,**options)
+            try:
+                with patch('auth_user_adoption_restore.subprocess.run',side_effect=capture_owned_restore_volume):
+                    report=qualify(folder,tools,name,root)
+                if not restore_volumes:
+                    raise RuntimeError('real owned PG16 anonymous volume was not observed')
+                if any(real_run(['docker','volume','inspect',volume],capture_output=True).returncode==0
+                       for volume in restore_volumes):
+                    raise RuntimeError('owned plaintext restore volume remains after fixture_cleanup')
+            finally:
+                # Only volumes observed on this newly created labeled restore
+                # container are eligible; never prune unattributed old data.
+                for volume in restore_volumes:
+                    real_run(['docker','volume','rm',volume],capture_output=True)
             assert report['result']=='PASS' and report['fixture_cleanup'] and report['scope']=='disposable-fixture-only'
             # Integrity corruption is rejected before pg_restore or acceptance.
             member=folder/'auth_db.enc'; member.write_bytes(member.read_bytes()+b'corrupt')
@@ -213,14 +236,15 @@ print(json.dumps(calls))
             'actual V31 gate accepted; actual disabled trigger denied; reenabled canonical contract accepted',
             'actual metadata queries evaluate; active legitimate User TEMP retains no persistent shared ownership',
             'real blocked DDL server timeout and backend closure','real client timeout leaves active server session until owned reconciliation',
-            'encrypted/HMAC archive restores to independent empty PG16 with matching owner/defaultACL/history; tampering denied (private fixture scope only)']}))
+            'encrypted/HMAC archive restores to independent empty PG16 with matching owner/defaultACL/history; tampering denied (private fixture scope only)',
+            'actual owned plaintext restore volume absent before fixture cleanup is credited']}))
         return 0
     except BaseException as exc:
         print(json.dumps({'result':'FAIL','error':str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__}))
         return 1
     finally:
         if created:
-            docker('rm', '-f', name, check=False)
+            docker('rm', '-f', '-v', name, check=False)
 
 
 if __name__ == '__main__':

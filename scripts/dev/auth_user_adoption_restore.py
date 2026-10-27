@@ -36,7 +36,7 @@ def qualify(directory,tools_image,operation,root):
     if not re.fullmatch(r'[0-9a-f]{64}',key):
         raise RuntimeError('backup key custody invalid')
     name='dimas16-adoption-restore-'+uuid.uuid4().hex[:10]
-    password=secrets.token_hex(24); created=False; exits={}
+    password=secrets.token_hex(24); created=False; exits={}; owned_volumes=[]
     def docker(*args,input=None,env=None,check=True,timeout=90):
         p=subprocess.run(['docker',*args],input=input,capture_output=True,env=env,timeout=timeout)
         if check and p.returncode:
@@ -73,6 +73,15 @@ def qualify(directory,tools_image,operation,root):
             '--memory','512m','--cpus','1','-e','POSTGRES_USER=voice','-e','POSTGRES_PASSWORD='+password,
             'postgres:16-alpine','-c','cluster_name=voice-adoption-private-restore')
         created=True
+        inspected=json.loads(docker('inspect',name).stdout)[0]
+        if inspected.get('Config',{}).get('Labels',{}).get('voice.test.owner')!='Dimas-16':
+            raise RuntimeError('owned restore fixture identity changed')
+        # No host/named/volumes-from mounts are supplied when creating this
+        # fresh container. PostgreSQL's image VOLUME is therefore anonymous
+        # and private to this creation, not any pre-existing Docker data.
+        if any(m['Type']!='volume' for m in inspected.get('Mounts',[])):
+            raise RuntimeError('unexpected shared restore fixture mount')
+        owned_volumes=[m['Name'] for m in inspected.get('Mounts',[]) if m['Type']=='volume']
         for _ in range(80):
             p=docker('exec','-e','PGPASSWORD='+password,name,'psql','-h','127.0.0.1','-X','-qAt',
                      '-U','voice','-d','postgres','-c','SELECT 1',check=False)
@@ -104,10 +113,16 @@ def qualify(directory,tools_image,operation,root):
                 'tools_image':tools_image,'fixture_cleanup':False}
     finally:
         if created:
-            result=docker('rm','-f',name,check=False)
+            result=docker('rm','-f','-v',name,check=False)
             if result.returncode:
                 raise RuntimeError('owned restore fixture cleanup incomplete')
+            # Successful daemon reads distinguish actual absence from a
+            # transport/permission failure. Never prune unrelated volumes.
+            remaining=set(docker('volume','ls','--format','{{.Name}}').stdout.decode().splitlines())
+            if remaining.intersection(owned_volumes):
+                raise RuntimeError('owned plaintext restore volume cleanup incomplete')
     report['fixture_cleanup']=True
+    report['removed_owned_anonymous_volumes']=len(owned_volumes)
     return report
 
 
