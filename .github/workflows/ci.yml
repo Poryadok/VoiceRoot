@@ -160,13 +160,12 @@ jobs:
         run: |
           go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Immutable PR Buf baseline regressions
+        run: python3 scripts/ci/buf-breaking-pr_test.py
       - name: Install Go protoc plugins
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.5
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
-      - name: Fetch base ref for buf breaking
-        if: github.event_name == 'pull_request'
-        run: git fetch --no-tags origin ${{ github.base_ref }}:${{ github.base_ref }}
       - name: Buf lint
         run: buf lint
       - name: Buf format (check)
@@ -175,7 +174,14 @@ jobs:
         run: make r23-contract-ci
       - name: Buf breaking (PR vs base)
         if: github.event_name == 'pull_request'
-        run: buf breaking protos --against ".git#branch=${{ github.base_ref }},subdir=protos"
+        env:
+          VOICE_BUF_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          VOICE_BUF_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VOICE_BUF_MERGE_SHA: ${{ github.sha }}
+        run: >-
+          python3 scripts/ci/buf-breaking-pr.py
+          --base "$VOICE_BUF_BASE_SHA" --head "$VOICE_BUF_HEAD_SHA"
+          --merge "$VOICE_BUF_MERGE_SHA"
       - name: Check Auth proto copy sync
         run: bash scripts/ci/check-auth-proto-sync.sh
       - name: Check Go pb codegen drift
