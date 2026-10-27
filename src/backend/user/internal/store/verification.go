@@ -215,23 +215,30 @@ func (s *ProfileStore) HasVerifiedUsernameConflict(ctx context.Context, normaliz
 
 // SoftDeleteProfile archives a non-primary owned profile.
 func (s *ProfileStore) SoftDeleteProfile(ctx context.Context, accountID, profileID uuid.UUID) error {
+	if s.birthCapture != nil {
+		return s.softDeleteProfileWithIdentityCapture(ctx, accountID, profileID)
+	}
 	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
-		row := tx.QueryRow(ctx, `UPDATE profiles
+		return s.softDeleteProfileTx(ctx, tx, accountID, profileID)
+	})
+}
+
+func (s *ProfileStore) softDeleteProfileTx(ctx context.Context, tx pgx.Tx, accountID, profileID uuid.UUID) error {
+	row := tx.QueryRow(ctx, `UPDATE profiles
 			SET deleted_at = now(), updated_at = now(), search_projection_revision = search_projection_revision + 1
 			WHERE id = $1 AND account_id = $2 AND is_primary = false AND deleted_at IS NULL
 			RETURNING `+profileSelectCols, profileID, accountID)
-		p, err := scanProfile(row)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return pgx.ErrNoRows
-		}
-		if err != nil {
-			return err
-		}
-		return AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
-			ProtocolVersion: 1, EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
-			ProfileId: p.ID.String(), SourceRevision: p.SearchProjectionRevision,
-			Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}},
-		})
+	p, err := scanProfile(row)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgx.ErrNoRows
+	}
+	if err != nil {
+		return err
+	}
+	return AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
+		ProtocolVersion: 1, EventId: uuid.NewString(), OccurredAt: timestamppb.Now(),
+		ProfileId: p.ID.String(), SourceRevision: p.SearchProjectionRevision,
+		Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}},
 	})
 }
 
