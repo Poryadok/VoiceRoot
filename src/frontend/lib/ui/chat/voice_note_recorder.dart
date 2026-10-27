@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:file_selector/file_selector.dart';
 import 'package:record/record.dart';
 import 'voice_note_capture.dart';
@@ -11,10 +12,57 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
   final AudioRecorder _recorder = AudioRecorder();
   final Stopwatch _clock = Stopwatch();
   String? _path;
+  bool _recording = false, _disposed = false, _readingAmplitude = false;
+  int _pollGeneration = 0;
+  Timer? _amplitudeTimer;
+  late final _amplitudeController = StreamController<double>.broadcast(
+    onListen: _beginPolling,
+    onCancel: _stopPolling,
+  );
+
+  // record 6.2 onAmplitudeChanged starts an internal timer on getter access,
+  // including while idle, and cannot synchronously stop it on listener cancel.
+  // Own the polling timer so removing the mic always releases it immediately.
   @override
-  late final Stream<double> amplitudes = _recorder
-      .onAmplitudeChanged(const Duration(milliseconds: 100))
-      .map((value) => value.current);
+  Stream<double> get amplitudes => _amplitudeController.stream;
+
+  void _beginPolling() {
+    if (!_recording ||
+        _disposed ||
+        !_amplitudeController.hasListener ||
+        _amplitudeTimer != null) {
+      return;
+    }
+    _amplitudeTimer = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) => unawaited(_readAmplitude()),
+    );
+  }
+
+  void _stopPolling() {
+    _pollGeneration++;
+    _amplitudeTimer?.cancel();
+    _amplitudeTimer = null;
+  }
+
+  Future<void> _readAmplitude() async {
+    if (_readingAmplitude || !_recording || _disposed) return;
+    final generation = _pollGeneration;
+    _readingAmplitude = true;
+    try {
+      final value = await _recorder.getAmplitude();
+      if (!_disposed &&
+          _recording &&
+          generation == _pollGeneration &&
+          _amplitudeController.hasListener) {
+        _amplitudeController.add(value.current);
+      }
+    } catch (_) {
+      // Metering failure must not discard an otherwise valid recording.
+    } finally {
+      _readingAmplitude = false;
+    }
+  }
 
   @override
   Future<bool> hasPermission() => _recorder.hasPermission();
@@ -33,10 +81,14 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
     _clock
       ..reset()
       ..start();
+    _recording = true;
+    _beginPolling();
   }
 
   @override
   Future<CapturedVoiceNote> stop() async {
+    _recording = false;
+    _stopPolling();
     _clock.stop();
     final duration = _clock.elapsed;
     final path = await _recorder.stop();
@@ -51,6 +103,8 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
 
   @override
   Future<void> cancel() async {
+    _recording = false;
+    _stopPolling();
     _clock.stop();
     await _recorder.cancel();
     final path = _path;
@@ -59,5 +113,11 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
   }
 
   @override
-  Future<void> dispose() => _recorder.dispose();
+  Future<void> dispose() async {
+    _recording = false;
+    _disposed = true;
+    _stopPolling();
+    await _amplitudeController.close();
+    await _recorder.dispose();
+  }
 }
