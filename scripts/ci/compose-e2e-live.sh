@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Full compose E2E: all gateway live tests + full Flutter live suite (feature catalog).
-# Prerequisites: docker compose --profile app up (healthy gateway and dependencies).
+# Prerequisites: generated Phase0 fixture + docker-compose.voice-space-media.yml
+# over the base app profile, with healthy Gateway and dependencies (docs/DEV_SETUP.md).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
