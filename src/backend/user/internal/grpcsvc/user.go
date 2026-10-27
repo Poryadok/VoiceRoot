@@ -322,8 +322,11 @@ func (s *UserGRPC) CreateProfile(ctx context.Context, req *userv1.CreateProfileR
 		defaultAccent := profileaccent.At(count)
 		accentColor = &defaultAccent
 	}
-	row, err := s.Profiles.CreateSecondaryProfile(ctx, accountID, dn, usernameHint, accentColor)
+	row, err := s.Profiles.CreateSecondaryProfileForTier(ctx, accountID, dn, usernameHint, accentColor, tier)
 	if err != nil {
+		if errors.Is(err, store.ErrProfileLimit) {
+			return nil, status.Error(codes.ResourceExhausted, "profile limit reached for subscription tier")
+		}
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if privacyStore := s.privacyStore(); privacyStore != nil {
