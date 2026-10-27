@@ -7,6 +7,12 @@ from unittest.mock import Mock, patch
 from auth_user_adoption import RecoveryRequired, STEPS
 from auth_user_adoption_runtime import guard_snapshot, source_config, job_plan, database_guard, Runtime, digest, validate_admission, validate_defaulted_job, validate_consumers, validate_auth_projection, QUALIFIED_TOOLS
 import base64
+import tempfile
+import shutil
+import hashlib
+import json
+from auth_user_adoption_runtime import operator_fingerprint,verify_package,prepare
+from auth_user_adoption_runtime import validate_user_projection
 
 
 class GuardTest(unittest.TestCase):
@@ -138,6 +144,56 @@ class DatabaseGuardTest(unittest.TestCase):
                    'roles': {}, 'memberships': [], 'auth_history':[{'version':str(i),'success':True,'checksum':i} for i in range(1,27)],
                    'user_history':{'version':19,'dirty':False}, 'logins':['voice','gameintegration_runtime']}
 
+    def canonical_gate(self):
+        return {'barrier_owner':'voice','relation_ok':True,'acl_ok':True,'function_owner':'voice',
+          'function_ok':True,'function_source':'\nBEGIN\n  LOCK TABLE ONLY public.auth_identity_ddl_barrier IN ACCESS EXCLUSIVE MODE NOWAIT;\n  RETURN;\nEND ',
+          'event_owner':'voice','event_enabled':'O','binding_ok':True,'major_ok':True,'runtime_ok':False,
+          'event_tags':['CREATE FUNCTION','ALTER FUNCTION','DROP FUNCTION','CREATE PROCEDURE','ALTER PROCEDURE','DROP PROCEDURE',
+                        'ALTER ROUTINE','DROP ROUTINE','CREATE EXTENSION','ALTER EXTENSION','DROP EXTENSION','CREATE LANGUAGE',
+                        'ALTER LANGUAGE','DROP LANGUAGE','ALTER SCHEMA','DROP SCHEMA','DROP OWNED','GRANT','REVOKE','ALTER DEFAULT PRIVILEGES']}
+
+    def post_v31(self):
+        current=copy.deepcopy(self.db)
+        current['auth_history'] += [{'version':str(i),'success':True,'checksum':i} for i in [28,31,32]]
+        current['event_triggers']={'auth_db':['auth_identity_ddl_gate'],'user_db':[]}
+        current['auth_ddl_gate']=self.canonical_gate()
+        return current
+
+    def test_real_guard_transition_after_v31_advances_engine_to_next_effect(self):
+        from auth_user_adoption import Journal,Operator
+        from auth_user_adoption_test import FakeBackend
+        baseline=self.db;current=self.post_v31()
+        class Backend(FakeBackend):
+            def __init__(self):
+                super().__init__();self.db=copy.deepcopy(baseline)
+            def guard(self,state): database_guard(baseline,self.db,state['steps'])
+            def execute(self,step,state):
+                if step=='migrate_auth': self.db=copy.deepcopy(current)
+                super().execute(step,state)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            journal=Journal(pathlib.Path(tmp)/'operation',{'operation':'fixture'})
+            try:
+                backend=Backend()
+                with patch('auth_user_adoption.STEPS',('migrate_auth','secret')):
+                    Operator(journal,backend).run()
+                self.assertEqual(['migrate_auth','secret'],backend.effects)
+                self.assertEqual('done',journal.state['steps']['migrate_auth']['status'])
+            finally: journal.close()
+
+    def test_only_exact_postmigration_trigger_function_contract_is_admitted(self):
+        for fault in ['unknown','before_migration','user_trigger','owner','enabled','body','tags','function']:
+            current=self.post_v31();steps={'migrate_auth':{'status':'pending'}}
+            if fault=='unknown': current['event_triggers']['auth_db'].append('foreign')
+            if fault=='before_migration': steps={}
+            if fault=='user_trigger': current['event_triggers']['user_db']=['foreign']
+            if fault=='owner': current['auth_ddl_gate']['event_owner']='foreign'
+            if fault=='enabled': current['auth_ddl_gate']['event_enabled']='D'
+            if fault=='body': current['auth_ddl_gate']['function_source']+=' altered'
+            if fault=='tags': current['auth_ddl_gate']['event_tags'].pop()
+            if fault=='function': current['auth_ddl_gate']['function_ok']=False
+            with self.subTest(fault=fault),self.assertRaises(RecoveryRequired): database_guard(self.db,current,steps)
+
     def test_original_owners_and_clean_historical_ledgers_required(self):
         for fault in ['owner','object','auth_checksum','auth_missing','user_dirty','unexpected_login','foreign_runtime']:
             current = copy.deepcopy(self.db)
@@ -152,8 +208,7 @@ class DatabaseGuardTest(unittest.TestCase):
                 database_guard(self.db, current, {})
 
     def test_pending_migration_accepts_only_attributable_expected_versions(self):
-        current = copy.deepcopy(self.db)
-        current['auth_history'] += [{'version':str(i),'success':True,'checksum':i} for i in [28,31,32]]
+        current = self.post_v31()
         database_guard(self.db, current, {'migrate_auth':{'status':'pending'}})
         with self.assertRaises(RecoveryRequired):
             database_guard(self.db, current, {})
@@ -225,6 +280,32 @@ class RuntimeControlTest(unittest.TestCase):
         with self.assertRaises(RecoveryRequired): runtime.finish()
         runtime.kube.call.assert_not_called()
 
+    def test_late_grant_catalog_or_default_change_blocks_next_effect(self):
+        from auth_user_adoption import Operator
+        from auth_user_adoption_test import FakeBackend
+        for step,db_name in [('grants_auth','auth_db'),('grants_user','user_db')]:
+            for changed in ('relations','defaults'):
+                runtime,baseline,db=self.runtime()
+                db['acls']={'auth_db':{'relations':{'accounts':'original'},'defaults':[]},
+                            'user_db':{'relations':{'profiles':'original'},'defaults':[]}}
+                state=runtime.journal.state;runtime.journal.save=Mock()
+                state['steps'][step]={'status':'done','receipt':{'uid':'grant-job','catalog_sha256':digest(db['acls'][db_name])}}
+                state['plans']={step:{'metadata':{'name':'owned-grant'},'spec':{'exact':True}}}
+                def call(*args,**kwargs):
+                    if args[:2]==('get','configmap'): return {'metadata':{'uid':'owned-lock'},'data':runtime.lock['data']}
+                    if args[:2]==('get','job'): return {'metadata':{'uid':'grant-job'},'spec':{'exact':True}}
+                    raise AssertionError('unexpected API route')
+                runtime.kube.call.side_effect=call
+                backend=FakeBackend();backend.guard=runtime.guard
+                backend.actual={name:{'status':'complete','receipt':copy.deepcopy(record['receipt'])} for name,record in state['steps'].items()}
+                db['acls'][db_name][changed]='late-foreign-change'
+                with self.subTest(step=step,changed=changed), \
+                     patch('auth_user_adoption_runtime.capture',return_value=(baseline,{},[])), \
+                     patch('auth_user_adoption_runtime.database_state',return_value=db), \
+                     patch('auth_user_adoption.STEPS',('lock',step,'next_effect')):
+                    with self.assertRaises(RecoveryRequired): Operator(runtime.journal,backend).run()
+                    self.assertEqual([],backend.effects)
+
 
 class AdmissionTest(unittest.TestCase):
     def setUp(self):
@@ -274,6 +355,28 @@ class ConsumerTest(unittest.TestCase):
 
 
 class ProjectionTest(unittest.TestCase):
+    def test_user_alias_literal_or_full_projection_of_admin_or_auth_password_refused(self):
+        own={'metadata':{'name':'own'},'data':{'USER_DATABASE_URL':base64.b64encode(b'postgres://user_runtime:'+b'b'*40+b'@voice-postgres:5432/user_db?sslmode=disable').decode()}}
+        for fault in ['volume','env','literal','configmap','auth_password']:
+            pod={'containers':[{'name':'user','env':[{'name':'DATABASE_URL','valueFrom':{'secretKeyRef':{'name':'own','key':'USER_DATABASE_URL'}}}]}],'volumes':[]}
+            kube=Mock();kube.call.return_value={'data':{'alias':base64.b64encode(b'c'*40).decode()}}
+            if fault=='volume': pod['volumes']=[{'name':'unknown','secret':{'secretName':'other'}}]
+            if fault=='env': pod['containers'][0]['env'].append({'name':'UNKNOWN','valueFrom':{'secretKeyRef':{'name':'other','key':'alias'}}})
+            if fault=='literal': pod['containers'][0]['env'].append({'name':'UNKNOWN','value':'c'*40})
+            if fault=='auth_password': pod['containers'][0]['env'].append({'name':'UNKNOWN','value':'a'*40})
+            if fault=='configmap':
+                pod['containers'][0]['envFrom']=[{'configMapRef':{'name':'other'}}];kube.call.return_value={'data':{'alias':'c'*40}}
+            with self.subTest(fault=fault),self.assertRaises(RecoveryRequired):
+                validate_user_projection(kube,{'spec':{'template':{'spec':pod}}},own,[b'c'*40,b'a'*40])
+
+    def test_user_own_url_and_legitimate_r2_nats_peer_bindings_survive(self):
+        own={'metadata':{'name':'own'},'data':{'USER_DATABASE_URL':base64.b64encode(b'postgres://user_runtime:'+b'b'*40+b'@voice-postgres:5432/user_db?sslmode=disable').decode()}}
+        pod={'containers':[{'name':'user','env':[{'name':'DATABASE_URL','valueFrom':{'secretKeyRef':{'name':'own','key':'USER_DATABASE_URL'}}}],
+               'envFrom':[{'configMapRef':{'name':'config'}}]}],
+             'volumes':[{'name':'nats','secret':{'secretName':'nats'}}]}
+        kube=Mock();kube.call.side_effect=lambda *args,**kwargs: {'data':{'POSTGRES_USER':'voice','SPACE_GRPC_ADDR':'voice-space:9090'}} if args[1]=='configmap' else {'data':{'user.creds':base64.b64encode(b'private-fixture-nats').decode()}}
+        validate_user_projection(kube,{'spec':{'template':{'spec':pod}}},own,[b'c'*40,b'a'*40])
+
     def test_aliased_or_projected_user_admin_credentials_cannot_reach_auth(self):
         own={'metadata':{'name':'own'},'data':{'AUTH_DB_PASSWORD':base64.b64encode(b'a'*40).decode()}}
         for fault in ['volume','env','literal','configmap']:
@@ -295,6 +398,47 @@ class ProjectionTest(unittest.TestCase):
              'volumes':[{'name':'jwt','secret':{'secretName':'other','items':[{'key':'jwt.key','path':'jwt.key'}]}}]}
         kube=Mock();kube.call.return_value={'data':{'jwt.key':base64.b64encode(b'private-fixture-jwt').decode(),'USER_DB_PASSWORD':base64.b64encode(b'b'*40).decode()}}
         validate_auth_projection(kube,{'spec':{'template':{'spec':pod}}},own,[b'c'*40,b'b'*40])
+
+
+class SchemaBindingTest(unittest.TestCase):
+    def test_preprepare_migration_and_catalog_tamper_is_rejected_before_live_access(self):
+        actual=pathlib.Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)/'package'
+            for relative in ['scripts/dev','docker/postgres','src/backend/auth/src/main/resources/db/migration',
+                             'src/backend/migrations/user_db','src/backend/auth/src/main/resources/roleidentityauthority']:
+                (root/relative).mkdir(parents=True,exist_ok=True)
+            for suffix in ('.py','_runtime.py','_backup.py','_smoke.py','_restore.py'):
+                relative='scripts/dev/auth_user_adoption'+suffix
+                shutil.copy2(actual/relative,root/relative)
+            for relative in ['docker/postgres/adopt-auth-user-runtime-roles.sql','docker/postgres/provision-auth-user-runtime-roles.sql']:
+                shutil.copy2(actual/relative,root/relative)
+            for folder in ['src/backend/auth/src/main/resources/db/migration','src/backend/migrations/user_db']:
+                for source in (actual/folder).glob('*.sql'): shutil.copy2(source,root/folder/source.name)
+            catalog='src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql'
+            shutil.copy2(actual/catalog,root/catalog)
+            fixture=AdmissionTest();fixture.setUp();manifest=fixture.manifest
+            original_hash=operator_fingerprint(root);manifest['operator_sha256']=original_hash
+            manifest['operation']='fixture'
+            manifest['evidence']={}
+            for kind,record in fixture.evidence.items():
+                record['operator_sha256']=original_hash
+                path=pathlib.Path(tmp)/(kind+'.json');path.write_text(json.dumps(record))
+                manifest['evidence'][kind]={'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+            verify_package(root,manifest)
+            manifest_path=pathlib.Path(tmp)/'candidate.json';manifest_path.write_text(json.dumps(manifest))
+            targets=[root/'src/backend/auth/src/main/resources/db/migration/V32__linked_oauth_transport.sql',
+                     sorted((root/'src/backend/migrations/user_db').glob('*.up.sql'))[-1],root/catalog]
+            for target in targets:
+                raw=target.read_bytes();target.write_bytes(raw+b'\n-- unqualified tamper\n')
+                resource=Mock(side_effect=AssertionError('live resource accessed before provenance rejection'))
+                kube=Mock()
+                try:
+                    with self.subTest(path=target.name):
+                        with self.assertRaises(RecoveryRequired):
+                            prepare(root,pathlib.Path(tmp)/'journal',manifest_path,kube,resource=resource)
+                        resource.assert_not_called();kube.call.assert_not_called()
+                finally: target.write_bytes(raw)
 
 
 if __name__ == '__main__':

@@ -201,7 +201,7 @@ def database_state(kube):
         cat = kube.query(db, """SELECT json_build_object('schema_owner',(SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname='public'),
           'objects',(SELECT coalesce(json_object_agg(c.relname,pg_get_userbyid(c.relowner)),'{}'::json) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN('r','p','S','v','m')),
           'relation_acls',(SELECT coalesce(json_object_agg(c.relname,c.relacl::text),'{}'::json) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN('r','p','S')),
-          'defaults',(SELECT coalesce(json_agg(json_build_object('owner',pg_get_userbyid(defaclrole),'namespace',defaclnamespace,'type',defaclobjtype,'acl',defaclacl::text)),'[]'::json) FROM pg_default_acl),
+          'defaults',(SELECT coalesce(json_agg(json_build_object('owner',pg_get_userbyid(defaclrole),'namespace',defaclnamespace,'type',defaclobjtype,'acl',defaclacl::text) ORDER BY pg_get_userbyid(defaclrole),defaclnamespace,defaclobjtype),'[]'::json) FROM pg_default_acl),
           'unexpected_schemas',(SELECT coalesce(json_agg(nspname),'[]'::json) FROM pg_namespace WHERE nspname NOT IN('public','information_schema') AND nspname NOT LIKE 'pg_%'),
           'event_triggers',(SELECT coalesce(json_agg(evtname),'[]'::json) FROM pg_event_trigger),
           'consumers',(SELECT coalesce(json_agg(json_build_object('name',r.rolname,'schema_create',has_schema_privilege(r.oid,'public','CREATE'),'read_tables',(SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN('r','p','v','m') AND has_table_privilege(r.oid,c.oid,'SELECT')),'write_tables',(SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN('r','p','v','m') AND has_table_privilege(r.oid,c.oid,'INSERT,UPDATE,DELETE')))),'[]'::json) FROM pg_roles r WHERE r.rolcanlogin AND r.rolname NOT IN('voice','auth_runtime','user_runtime')));""")
@@ -213,6 +213,10 @@ def database_state(kube):
         cluster['event_triggers'][db]=cat['event_triggers']
     cluster['auth_history'] = kube.query('auth_db', "SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM flyway_schema_history")
     cluster['user_history'] = kube.query('user_db', "SELECT json_build_object('version',max(version),'dirty',bool_or(dirty),'rows',count(*)) FROM schema_migrations")
+    cluster['auth_ddl_gate']=None
+    if 'auth_identity_ddl_gate' in cluster['event_triggers']['auth_db']:
+        root=pathlib.Path(__file__).resolve().parents[2]
+        cluster['auth_ddl_gate']=kube.query('auth_db',(root/'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql').read_text(encoding='utf-8'))
     return cluster
 
 
@@ -259,11 +263,36 @@ def metadata(name, operation):
             'annotations': {'voice.dev/adoption-operation': operation}}
 
 
-def database_guard(original, current, steps):
+def validate_ddl_gate(gate,root=None):
+    root=pathlib.Path(root) if root is not None else pathlib.Path(__file__).resolve().parents[2]
+    sql=(root/'src/backend/auth/src/main/resources/db/migration/V31__auth_identity_ddl_barrier.sql').read_text(encoding='utf-8')
+    body=re.search(r'LANGUAGE plpgsql SECURITY INVOKER AS \$\$(.*?)\$\$;',sql,re.S)
+    tags=re.search(r'WHEN TAG IN \((.*?)\)\s+EXECUTE FUNCTION public\.auth_identity_ddl_gate\(\);',sql,re.S)
+    if body is None or tags is None:
+        raise RecoveryRequired('fixed V31 canonical gate source changed')
+    expected_tags=re.findall(r"'([^']+)'",tags.group(1))
+    if (not isinstance(gate,dict) or any(gate.get(k) is not True for k in
+            ('relation_ok','acl_ok','function_ok','binding_ok','major_ok'))
+            or any(gate.get(k)!='voice' for k in ('barrier_owner','function_owner','event_owner'))
+            or gate.get('event_enabled')!='O' or gate.get('function_source')!=body.group(1)
+            or sorted(gate.get('event_tags',[]))!=sorted(expected_tags)):
+        raise RecoveryRequired('canonical V31 gate owner/function/binding/tags/ACL altered')
+
+
+def database_guard(original, current, steps,root=None):
     if current.get('admin')!=original.get('admin') or current.get('major')!=original.get('major'):
         raise RecoveryRequired('migration admin authority or PG major changed')
-    if any(current.get(key,{}).get(db,[]) for key in ('unexpected_schemas','event_triggers') for db in ('auth_db','user_db')):
-        raise RecoveryRequired('unrecognized schema or event trigger')
+    if any(current.get('unexpected_schemas',{}).get(db,[]) for db in ('auth_db','user_db')):
+        raise RecoveryRequired('unrecognized schema')
+    events=current.get('event_triggers',{})
+    if events.get('user_db',[]):
+        raise RecoveryRequired('unrecognized User event trigger')
+    auth_events=events.get('auth_db',[])
+    has_v31=any(row['version']=='31' for row in current['auth_history'])
+    if auth_events or has_v31:
+        if 'migrate_auth' not in steps or not has_v31 or auth_events!=['auth_identity_ddl_gate']:
+            raise RecoveryRequired('unexpected Auth event trigger transition')
+        validate_ddl_gate(current.get('auth_ddl_gate'),root)
     for consumers in current.get('consumers',{}).values():
         validate_consumers(consumers)
     if current['owners'] != original['owners'] or current['schemas'] != original['schemas']:
@@ -316,9 +345,11 @@ def validate_consumers(consumers):
         raise RecoveryRequired('unrecognized existing Auth/User grant consumer')
 
 
-def validate_auth_projection(kube,planned,own_secret,forbidden_values):
+def _validate_projection(kube,planned,own_secret,forbidden_values,service):
     cache={('secret',own_secret['metadata']['name']):own_secret}
-    forbidden_keys={'POSTGRES_PASSWORD','USER_DB_PASSWORD','USER_DATABASE_URL'}
+    forbidden_keys=({'POSTGRES_PASSWORD','USER_DB_PASSWORD','USER_DATABASE_URL'} if service=='Auth'
+                    else {'POSTGRES_PASSWORD','AUTH_DB_PASSWORD','AUTH_DATABASE_URL'})
+    forbidden_database=b'user_db' if service=='Auth' else b'auth_db'
     def values(kind,name):
         if (kind,name) not in cache:
             cache[kind,name]=_get(kube,kind,name)
@@ -326,8 +357,8 @@ def validate_auth_projection(kube,planned,own_secret,forbidden_values):
         return {key:base64.b64decode(value) if kind=='secret' else value.encode()
                 for key,value in data.items()}
     def check(key,value):
-        if key in forbidden_keys or b'user_db' in value.lower() or any(secret and secret in value for secret in forbidden_values):
-            raise RecoveryRequired('Auth credential exposure outside own database boundary')
+        if key in forbidden_keys or forbidden_database in value.lower() or any(secret and secret in value for secret in forbidden_values):
+            raise RecoveryRequired(service+' credential exposure outside own database boundary')
     spec=planned['spec']['template']['spec']
     for container in spec['containers']:
         for entry in container.get('env',[]):
@@ -360,6 +391,14 @@ def validate_auth_projection(kube,planned,own_secret,forbidden_values):
             for key in keys:
                 if key in data:
                     check(key,data[key])
+
+
+def validate_auth_projection(kube,planned,own_secret,forbidden_values):
+    return _validate_projection(kube,planned,own_secret,forbidden_values,'Auth')
+
+
+def validate_user_projection(kube,planned,own_secret,forbidden_values):
+    return _validate_projection(kube,planned,own_secret,forbidden_values,'User')
 
 
 def job_plan(step, operation, images, secret, sources):
@@ -481,7 +520,12 @@ class Runtime:
             if name in ('voice-auth','voice-user') and not ready and 'roll_'+name.removeprefix('voice-') not in state['steps']:
                 raise RecoveryRequired('original app became unready before its rollout')
         db = database_state(self.kube)
-        database_guard(self.intent['database'],db,state['steps'])
+        database_guard(self.intent['database'],db,state['steps'],self.root)
+        for step,database in [('grants_auth','auth_db'),('grants_user','user_db')]:
+            saved=state['steps'].get(step)
+            if saved and saved['status']=='done':
+                if digest(db['acls'][database])!=saved['receipt'].get('catalog_sha256'):
+                    raise RecoveryRequired('completed grant catalog/default privileges drifted')
         role_receipt=state['steps'].get('roles',{})
         if role_receipt.get('status')=='done':
             if {name:props['oid'] for name,props in db['roles'].items()}!=role_receipt['receipt']['role_oids']:
@@ -698,6 +742,7 @@ class Runtime:
                 raise RecoveryRequired('actual runtime credential privilege boundary invalid')
         gate = self.kube.runtime_query('auth_runtime','auth_db',self.journal.state['credentials']['auth'],
             (self.root/'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql').read_text(encoding='utf-8'))
+        validate_ddl_gate(gate,self.root)
         if not gate.get('acl_ok') or not gate.get('runtime_ok'):
             raise RecoveryRequired('canonical barrier ACL invalid')
 
@@ -762,8 +807,21 @@ def operator_fingerprint(root):
     names=['scripts/dev/auth_user_adoption'+suffix for suffix in
            ('.py','_runtime.py','_backup.py','_smoke.py','_restore.py')]
     names+=['docker/postgres/adopt-auth-user-runtime-roles.sql',
-            'docker/postgres/provision-auth-user-runtime-roles.sql']
-    return digest({name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in names})
+            'docker/postgres/provision-auth-user-runtime-roles.sql',
+            'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql']
+    for folder in ('src/backend/auth/src/main/resources/db/migration','src/backend/migrations/user_db'):
+        files=sorted((root/folder).glob('*.sql'))
+        if not files:
+            raise RecoveryRequired('frozen schema source files missing')
+        names.extend(path.relative_to(root).as_posix() for path in files)
+    records={}
+    for name in sorted(names):
+        path=root/name
+        if path.is_symlink() or not path.is_file():
+            raise RecoveryRequired('frozen source must be regular files')
+        records[name]={'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),
+                       'mode':path.stat().st_mode & 0o777}
+    return digest(records)
 
 
 def verify_package(root,manifest):
@@ -869,6 +927,11 @@ def prepare(root,directory,manifest_path,kube,resource=resource_card):
         if 'USER_DB_PASSWORD' in admin_values:
             forbidden.append(base64.b64decode(admin_values['USER_DB_PASSWORD']))
         validate_auth_projection(kube,planned_auth,own_secret,forbidden)
+        planned_user=deployment_plan(workloads['voice-user'],'user',manifest['products']['user'],own_secret['metadata']['name'])[1]
+        user_forbidden=[admin_password,journal.state['credentials']['auth'].encode()]
+        if 'AUTH_DB_PASSWORD' in admin_values:
+            user_forbidden.append(base64.b64decode(admin_values['AUTH_DB_PASSWORD']))
+        validate_user_projection(kube,planned_user,own_secret,user_forbidden)
         for service in ('auth','user'):
             patch,expected=deployment_plan(workloads['voice-'+service],service,manifest['products'][service],own_secret['metadata']['name'])
             dry=kube.call('patch','deployment','voice-'+service,'--type=json','--dry-run=server','-o','json',body=patch)

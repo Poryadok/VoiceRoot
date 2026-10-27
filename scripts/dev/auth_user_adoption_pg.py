@@ -27,8 +27,12 @@ def main():
     password, auth, user = [secrets.token_hex(24) for _ in range(3)]
     created = False
     def docker(*cmd, input=None, check=True, timeout=60):
-        result = subprocess.run(['docker', *cmd], input=input, capture_output=True,
-                                text=True, timeout=timeout)
+        # SQL runs in Linux. Native Windows text pipes otherwise rewrite LF
+        # inside dollar-quoted function bodies to CRLF, unlike the real route.
+        payload=input.encode('utf-8') if isinstance(input,str) else input
+        result = subprocess.run(['docker', *cmd], input=payload, capture_output=True, timeout=timeout)
+        result.stdout=result.stdout.decode('utf-8',errors='replace')
+        result.stderr=result.stderr.decode('utf-8',errors='replace')
         if check and result.returncode:
             safe = result.stderr
             for value in (password, auth, user):
@@ -107,6 +111,19 @@ def main():
             assert pg(sql, db, role, credential, check=False).returncode != 0
         gate = json.loads(pg((root/'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql').read_text(encoding='utf-8'), 'auth_db', 'auth_runtime', auth).stdout)
         assert gate['acl_ok'] and gate['runtime_ok']
+        validator="import json,os;from auth_user_adoption_runtime import validate_ddl_gate;validate_ddl_gate(json.loads(os.environ['FIXTURE_GATE']),'/repo')"
+        def validate_actual_gate(expect_success):
+            actual=json.loads(pg((root/'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql').read_text(encoding='utf-8'),'auth_db','auth_runtime',auth).stdout)
+            probe=docker('run','--rm','--network','none','--label','voice.test.owner=Dimas-16',
+                '--mount','type=bind,source='+str(root)+',target=/repo,readonly','-w','/repo/scripts/dev',
+                '-e','FIXTURE_GATE='+json.dumps(actual),'python:3.12-alpine','python','-c',validator,check=False)
+            if (probe.returncode==0)!=expect_success:
+                raise RuntimeError('private canonical gate mismatch: '+json.dumps(actual,sort_keys=True))
+        validate_actual_gate(True)
+        pg('ALTER EVENT TRIGGER auth_identity_ddl_gate DISABLE','auth_db')
+        validate_actual_gate(False)
+        pg('ALTER EVENT TRIGGER auth_identity_ddl_gate ENABLE','auth_db')
+        validate_actual_gate(True)
         pg('BEGIN;CREATE TEMP TABLE preparation(id int) ON COMMIT DROP;COMMIT', 'user_db', 'user_runtime', user)
         pg('CREATE TABLE future(id serial PRIMARY KEY)', 'auth_db')
         pg('INSERT INTO future DEFAULT VALUES', 'auth_db', 'auth_runtime', auth)
@@ -193,6 +210,7 @@ print(json.dumps(calls))
                 assert 'integrity mismatch' in str(error)
         print(json.dumps({'result':'PASS','fixture':name,'checks':['strict duplicate/foreign role rejection, no credential rekey',
             'independent ownDB credentials; oppositeDB denied','data/owner/default grants and barrier preserved; ledger/DDL denied',
+            'actual V31 gate accepted; actual disabled trigger denied; reenabled canonical contract accepted',
             'actual metadata queries evaluate; active legitimate User TEMP retains no persistent shared ownership',
             'real blocked DDL server timeout and backend closure','real client timeout leaves active server session until owned reconciliation',
             'encrypted/HMAC archive restores to independent empty PG16 with matching owner/defaultACL/history; tampering denied (private fixture scope only)']}))

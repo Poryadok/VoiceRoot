@@ -129,6 +129,11 @@ characters), full `source_sha`, exact `operator_sha256`, two immutable
 immutable `tools` refs (`postgres`,`flyway`,`migrate`), `recovery_mode`, and
 `evidence`. Obtain the operator digest with
 `auth_user_adoption_runtime.operator_fingerprint(package_root)` in Linux.
+The fingerprint covers regular-file modes and bytes for the complete operator,
+both role SQL sources, every actual Auth/User migration SQL file, and the
+canonical barrier catalog query. Editing SQL/catalog content or mode before
+prepare invalidates approved qualification before live reads/dry-runs; the
+first observed local source is not treated as provenance.
 Each evidence entry binds a local JSON file by `path` and SHA256 `sha256`.
 Required record kinds are `image_provenance`, `runtime_roles`, `recovery` and
 `operator_review`. Each names its kind, `status: PASS`, exact product source,
@@ -154,6 +159,9 @@ to the two candidate images. The prepare command performs actual read-only
 inventory and server dry-runs, validates defaulted Job specs, generates one
 private credential pair, and stores immutable original intent. Its output is
 sanitized; journal contents are private0700/0600 and must not be attached to TT.
+Both planned apps are checked for resolved shared-admin/opposite-service
+credentials across aliases, literals, ConfigMaps and mounted projections;
+legitimate R2/NATS/TLS material and own-role bindings remain intact.
 
 ```sh
 python3 scripts/dev/auth_user_adoption.py prepare --manifest /private/candidate.json --journal /private/operation
@@ -198,6 +206,11 @@ Jobs, migration state and attributable PostgreSQL activity must reconcile.
 Unknown/failed/dirty effects are not retried or adopted. No runtime role owns
 persistent data; User retains ownDB TEMP and ledger SELECT, and the Auth barrier
 retains owner/PUBLIC SELECT with no direct runtime ACL.
+After Auth migration, the guard admits only V31's exact owner/function/source,
+enabled binding and DDL tag contract using the canonical catalog predicates.
+Premigration state remains empty; unknown/altered triggers remain rejected.
+Completed grant receipts freeze the full canonical ACL/default digest, which
+is rechecked before later effects and lock release.
 
 Completion requires actual source-qualified runtime IDs, old Pod/ReplicaSet and
 old admin-session drain, ownDB allow/oppositeDB42501 denial with correct
