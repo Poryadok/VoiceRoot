@@ -582,6 +582,110 @@ class ConfirmUploadRequest extends $pb.GeneratedMessage {
   void clearSha256Hash() => $_clearField(2);
 }
 
+/// Facts about delivered bytes. Source provenance fields in FileMetadata remain
+/// immutable; clients resolve these variants through GetFileURL, never storage keys.
+class FileRepresentation extends $pb.GeneratedMessage {
+  factory FileRepresentation({
+    $core.String? mimeType,
+    $fixnum.Int64? sizeBytes,
+    $core.String? sha256Hash,
+    $core.String? filename,
+    $core.String? processorVersion,
+  }) {
+    final result = create();
+    if (mimeType != null) result.mimeType = mimeType;
+    if (sizeBytes != null) result.sizeBytes = sizeBytes;
+    if (sha256Hash != null) result.sha256Hash = sha256Hash;
+    if (filename != null) result.filename = filename;
+    if (processorVersion != null) result.processorVersion = processorVersion;
+    return result;
+  }
+
+  FileRepresentation._();
+
+  factory FileRepresentation.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory FileRepresentation.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'FileRepresentation',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'mimeType')
+    ..aInt64(2, _omitFieldNames ? '' : 'sizeBytes')
+    ..aOS(3, _omitFieldNames ? '' : 'sha256Hash')
+    ..aOS(4, _omitFieldNames ? '' : 'filename')
+    ..aOS(5, _omitFieldNames ? '' : 'processorVersion')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileRepresentation clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  FileRepresentation copyWith(void Function(FileRepresentation) updates) =>
+      super.copyWith((message) => updates(message as FileRepresentation))
+          as FileRepresentation;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static FileRepresentation create() => FileRepresentation._();
+  @$core.override
+  FileRepresentation createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static FileRepresentation getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<FileRepresentation>(create);
+  static FileRepresentation? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get mimeType => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set mimeType($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasMimeType() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearMimeType() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $fixnum.Int64 get sizeBytes => $_getI64(1);
+  @$pb.TagNumber(2)
+  set sizeBytes($fixnum.Int64 value) => $_setInt64(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasSizeBytes() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearSizeBytes() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get sha256Hash => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set sha256Hash($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasSha256Hash() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearSha256Hash() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get filename => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set filename($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasFilename() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearFilename() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $core.String get processorVersion => $_getSZ(4);
+  @$pb.TagNumber(5)
+  set processorVersion($core.String value) => $_setString(4, value);
+  @$pb.TagNumber(5)
+  $core.bool hasProcessorVersion() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearProcessorVersion() => $_clearField(5);
+}
+
 class FileMetadata extends $pb.GeneratedMessage {
   factory FileMetadata({
     $core.String? id,
@@ -612,6 +716,8 @@ class FileMetadata extends $pb.GeneratedMessage {
     $core.String? musicAlbum,
     $fixnum.Int64? musicMetadataRevision,
     UploadIntent? intent,
+    FileRepresentation? deliveredFull,
+    FileRepresentation? deliveredThumbnail,
   }) {
     final result = create();
     if (id != null) result.id = id;
@@ -643,6 +749,9 @@ class FileMetadata extends $pb.GeneratedMessage {
     if (musicMetadataRevision != null)
       result.musicMetadataRevision = musicMetadataRevision;
     if (intent != null) result.intent = intent;
+    if (deliveredFull != null) result.deliveredFull = deliveredFull;
+    if (deliveredThumbnail != null)
+      result.deliveredThumbnail = deliveredThumbnail;
     return result;
   }
 
@@ -698,6 +807,10 @@ class FileMetadata extends $pb.GeneratedMessage {
         defaultOrMaker: $fixnum.Int64.ZERO)
     ..aE<UploadIntent>(29, _omitFieldNames ? '' : 'intent',
         enumValues: UploadIntent.values)
+    ..aOM<FileRepresentation>(30, _omitFieldNames ? '' : 'deliveredFull',
+        subBuilder: FileRepresentation.create)
+    ..aOM<FileRepresentation>(31, _omitFieldNames ? '' : 'deliveredThumbnail',
+        subBuilder: FileRepresentation.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -979,6 +1092,28 @@ class FileMetadata extends $pb.GeneratedMessage {
   $core.bool hasIntent() => $_has(27);
   @$pb.TagNumber(29)
   void clearIntent() => $_clearField(29);
+
+  @$pb.TagNumber(30)
+  FileRepresentation get deliveredFull => $_getN(28);
+  @$pb.TagNumber(30)
+  set deliveredFull(FileRepresentation value) => $_setField(30, value);
+  @$pb.TagNumber(30)
+  $core.bool hasDeliveredFull() => $_has(28);
+  @$pb.TagNumber(30)
+  void clearDeliveredFull() => $_clearField(30);
+  @$pb.TagNumber(30)
+  FileRepresentation ensureDeliveredFull() => $_ensure(28);
+
+  @$pb.TagNumber(31)
+  FileRepresentation get deliveredThumbnail => $_getN(29);
+  @$pb.TagNumber(31)
+  set deliveredThumbnail(FileRepresentation value) => $_setField(31, value);
+  @$pb.TagNumber(31)
+  $core.bool hasDeliveredThumbnail() => $_has(29);
+  @$pb.TagNumber(31)
+  void clearDeliveredThumbnail() => $_clearField(31);
+  @$pb.TagNumber(31)
+  FileRepresentation ensureDeliveredThumbnail() => $_ensure(29);
 }
 
 /// @voice.unknown_fields=reject

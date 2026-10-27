@@ -24,6 +24,9 @@ func PreviewSnapshotTx(ctx context.Context, tx pgx.Tx, row FileRow) (*eventsv1.F
 		return nil, err
 	}
 	s := &eventsv1.FilePreviewSnapshot{ProtocolVersion: 1, FileId: row.ID.String(), MetadataRevision: revision, Status: row.Status}
+	if row.UploadIntent == "gif" {
+		s.ProtocolVersion = 2
+	}
 	if row.Status == "ready" {
 		s.FileType, s.UploadIntent, s.SizeBytes, s.ScanResult = row.FileType, row.UploadIntent, row.SizeBytes, row.ScanResult
 		s.Width, s.Height, s.DurationSeconds = row.Width, row.Height, row.DurationSeconds
