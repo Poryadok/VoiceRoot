@@ -92,6 +92,7 @@ VoiceMessage voiceMessageFromProto(messaging_pb.Message msg) {
         ? emptyToNull(msg.threadParentId)
         : null,
     isE2e: _protoBoolField(msg, () => msg.isE2e),
+    viewCount: msg.hasViewCount() ? msg.viewCount.toInt() : null,
   );
 }
 

@@ -130,12 +130,6 @@ func (s *MessagingGRPC) SendMessage(ctx context.Context, req *messagingv1.SendMe
 }
 
 func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMessageRequest, bot *botSendAdmission) (*messagingv1.SendMessageResponse, error) {
-	// P-008 establishes the wire contract first. Until the schedule handler slice
-	// owns durable creation, reject a populated arm so it cannot silently take
-	// the existing immediate insert/event path.
-	if req != nil && req.DeliverySchedule != nil {
-		return nil, status.Error(codes.Unimplemented, "scheduled delivery is not implemented")
-	}
 	if s == nil || s.Messages == nil {
 		return nil, status.Error(codes.FailedPrecondition, "messaging persistence not configured")
 	}
@@ -221,10 +215,21 @@ func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMe
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "send request cannot be bound")
 	}
+	requestHash, err = scheduledRequestFingerprint(req, requestHash)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid delivery schedule")
+	}
 	if raw := strings.TrimSpace(req.GetClientMessageId()); raw != "" {
 		clientID, err := parseUUIDField("client_message_id", raw)
 		if err != nil {
 			return nil, err
+		}
+		scheduled, replayErr := s.Messages.GetScheduledReceipt(ctx, chatID, profileID, clientID, requestRPC, requestHash)
+		if replayErr == nil {
+			return scheduledSendResponse(scheduled)
+		}
+		if !errors.Is(replayErr, pgx.ErrNoRows) {
+			return nil, scheduledRPCError(replayErr)
 		}
 		saved, err := s.Messages.GetExactSendReceipt(ctx, chatID, profileID, clientID, requestRPC, requestHash)
 		if err == nil {
@@ -355,8 +360,17 @@ func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMe
 		}
 		clientID = &parsed
 	}
+	if continuation := scheduleValidationOnly(ctx); continuation != nil {
+		return continuation(ctx)
+	}
+	if req.GetDeliverySchedule() != nil {
+		return s.createScheduledMessage(ctx, req, chatID, profileID, chatType, requestRPC, requestHash, clientID)
+	}
 
 	msgID, err := messageid.NewMessageID()
+	if scheduledID, ok := store.ScheduledDispatchMessageID(ctx); ok {
+		msgID = scheduledID
+	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -395,6 +409,12 @@ func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMe
 		if eventErr != nil {
 			return nil, status.Error(codes.Internal, "message event could not be encoded")
 		}
+		if at, scheduled := store.ScheduledDispatchTime(ctx); scheduled {
+			event, eventErr = messageevents.WithScheduledMetadata(event, at)
+			if eventErr != nil {
+				return nil, status.Error(codes.Internal, "scheduled event could not be encoded")
+			}
+		}
 		outboxEvents = append(outboxEvents, event)
 		if hasMentions {
 			ids := make([]string, 0, len(mentionTargets))
@@ -411,6 +431,9 @@ func (s *MessagingGRPC) sendMessage(ctx context.Context, req *messagingv1.SendMe
 	}
 	saved, err := s.insertMessageWithAttachments(ctx, row, outboxEvents)
 	if err != nil {
+		if errors.Is(err, store.ErrScheduledState) || store.IsSendNamespaceConflict(err) {
+			return nil, scheduledRPCError(err)
+		}
 		if errors.Is(err, store.ErrSendReceiptConflict) {
 			return nil, status.Error(codes.AlreadyExists, "client message key has a different request")
 		}
@@ -871,6 +894,11 @@ func (s *MessagingGRPC) EditMessage(ctx context.Context, req *messagingv1.EditMe
 			return nil, status.Error(codes.NotFound, "message not found")
 		}
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	// Restore current durable metadata after the content transaction commits.
+	updated, err = s.Messages.GetMessageByID(ctx, updated.ID)
+	if err != nil {
+		return nil, status.Error(codes.Unavailable, "message metadata unavailable")
 	}
 	return &messagingv1.EditMessageResponse{Message: messageRowToProto(updated, messagingv1.MessageKind_MESSAGE_KIND_UNSPECIFIED, "", false)}, nil
 }
@@ -2303,7 +2331,11 @@ func (s *MessagingGRPC) MarkRead(ctx context.Context, req *messagingv1.MarkReadR
 		}
 		event = &created
 	}
-	if err := s.Messages.UpsertReadStateAndOutbox(ctx, chatID, spaceID, profileID, lastRead, publishReceipt, event); err != nil {
+	viewIDs, err := s.qualifyingReadViews(ctx, chatID, profileID, lastRead)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.Messages.UpsertReadStateAndOutbox(ctx, chatID, spaceID, profileID, lastRead, publishReceipt, event, viewIDs...); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &messagingv1.MarkReadResponse{}, nil
@@ -2633,6 +2665,10 @@ func messageRowToProto(m *store.MessageRow, kind messagingv1.MessageKind, reacti
 	}
 	if isPinned {
 		out.IsPinned = ptrBool(true)
+	}
+	if (m.ChatType == "group" || m.ChatType == "channel") && m.DeletedAt == nil {
+		count := m.ViewCount
+		out.ViewCount = &count
 	}
 	if m.DisplayChatID != nil {
 		out.DisplayChatId = ptrString(m.DisplayChatID.String())

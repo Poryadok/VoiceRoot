@@ -52,6 +52,7 @@ func seedMessagingSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000030_send_request_receipts.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000034_file_preview.up.sql"))
 	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000036_bot_send_receipt.up.sql"))
+	applySQLFile(t, ctx, pool, filepath.Join("src", "backend", "migrations", "messaging_db", "000037_message_views.up.sql"))
 }
 
 func seedChatSchema(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {

@@ -103,6 +103,15 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
 - Утверждения: **`github.com/stretchr/testify`** (`require` / `assert`) — единый стиль по репозиторию для читаемости.
 - Интеграционные тесты с PostgreSQL/Redis: **testcontainers-go** (обёртки в [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Запускать **`go test` на хосте** при работающем Docker daemon (сокет доступен процессу теста). Не запускать Go-тесты внутри `docker run` без проброса сокета — testcontainers не поднимутся. На Windows Ryuk отключён в `integrationtest.ConfigureDockerTesting()`; после прогона — **`make testcontainers-prune`** (входит в `make build-all` / `backend-test-ci`).
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
+- BE-076 message views: from `src/backend/messaging`, run
+  `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
+  and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.
+  The latter builds an isolated User fixture subprocess to avoid duplicate
+  protobuf registration across service modules, then uses actual protected
+  mTLS/JWKS authority, a shared network miniredis replay store and two disposable
+  PostgreSQL databases. It covers authority outage, retry and explicit
+  soft-deletion compaction; frozen/active/missing profiles retain views. It skips
+  under `-short`; no DEV/STAGING or external providers are used.
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
 - Space retained-installer regression: on an owned fresh private PostgreSQL 18
   server, set `NATIVE_INSTALLER_TEST_ADMIN_URL`, `NATIVE_INSTALLER_TEST_MIGRATE`

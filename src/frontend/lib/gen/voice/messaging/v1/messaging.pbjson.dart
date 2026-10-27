@@ -1585,6 +1585,15 @@ const Message$json = {
       '6': '.voice.messaging.v1.GameActionResult',
       '10': 'gameActionResults'
     },
+    {
+      '1': 'view_count',
+      '3': 30,
+      '4': 1,
+      '5': 4,
+      '9': 10,
+      '10': 'viewCount',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_display_chat_id'},
@@ -1597,6 +1606,7 @@ const Message$json = {
     {'1': '_is_pinned'},
     {'1': '_content_type'},
     {'1': '_game_character_binding_id'},
+    {'1': '_view_count'},
   ],
   '9': [
     {'1': 3, '2': 4},
@@ -1630,10 +1640,40 @@ final $typed_data.Uint8List messageDescriptor = $convert.base64Decode(
     'IWZ2FtZUNoYXJhY3RlckJpbmRpbmdJZIgBARI5ChlnYW1lX2NhcmRfYWN0aW9uc19lbmFibGVk'
     'GBwgASgIUhZnYW1lQ2FyZEFjdGlvbnNFbmFibGVkElQKE2dhbWVfYWN0aW9uX3Jlc3VsdHMYHS'
     'ADKAsyJC52b2ljZS5tZXNzYWdpbmcudjEuR2FtZUFjdGlvblJlc3VsdFIRZ2FtZUFjdGlvblJl'
-    'c3VsdHNCEgoQX2Rpc3BsYXlfY2hhdF9pZEITChFfdGhyZWFkX3BhcmVudF9pZEISChBfZm9yd2'
-    'FyZF9mcm9tX2lkQhYKFF9mb3J3YXJkX2Zyb21fc2VuZGVyQgwKCl9lZGl0ZWRfYXRCDQoLX2Rl'
-    'bGV0ZWRfYXRCDwoNX21lc3NhZ2Vfa2luZEIMCgpfaXNfcGlubmVkQg8KDV9jb250ZW50X3R5cG'
-    'VCHAoaX2dhbWVfY2hhcmFjdGVyX2JpbmRpbmdfaWRKBAgDEARSCWNoYXRfdHlwZQ==');
+    'c3VsdHMSIgoKdmlld19jb3VudBgeIAEoBEgKUgl2aWV3Q291bnSIAQFCEgoQX2Rpc3BsYXlfY2'
+    'hhdF9pZEITChFfdGhyZWFkX3BhcmVudF9pZEISChBfZm9yd2FyZF9mcm9tX2lkQhYKFF9mb3J3'
+    'YXJkX2Zyb21fc2VuZGVyQgwKCl9lZGl0ZWRfYXRCDQoLX2RlbGV0ZWRfYXRCDwoNX21lc3NhZ2'
+    'Vfa2luZEIMCgpfaXNfcGlubmVkQg8KDV9jb250ZW50X3R5cGVCHAoaX2dhbWVfY2hhcmFjdGVy'
+    'X2JpbmRpbmdfaWRCDQoLX3ZpZXdfY291bnRKBAgDEARSCWNoYXRfdHlwZQ==');
+
+@$core.Deprecated('Use recordMessageViewRequestDescriptor instead')
+const RecordMessageViewRequest$json = {
+  '1': 'RecordMessageViewRequest',
+  '2': [
+    {'1': 'chat_id', '3': 1, '4': 1, '5': 9, '10': 'chatId'},
+    {'1': 'message_id', '3': 2, '4': 1, '5': 9, '10': 'messageId'},
+  ],
+};
+
+/// Descriptor for `RecordMessageViewRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List recordMessageViewRequestDescriptor =
+    $convert.base64Decode(
+        'ChhSZWNvcmRNZXNzYWdlVmlld1JlcXVlc3QSFwoHY2hhdF9pZBgBIAEoCVIGY2hhdElkEh0KCm'
+        '1lc3NhZ2VfaWQYAiABKAlSCW1lc3NhZ2VJZA==');
+
+@$core.Deprecated('Use recordMessageViewResponseDescriptor instead')
+const RecordMessageViewResponse$json = {
+  '1': 'RecordMessageViewResponse',
+  '2': [
+    {'1': 'view_count', '3': 1, '4': 1, '5': 4, '10': 'viewCount'},
+  ],
+};
+
+/// Descriptor for `RecordMessageViewResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List recordMessageViewResponseDescriptor =
+    $convert.base64Decode(
+        'ChlSZWNvcmRNZXNzYWdlVmlld1Jlc3BvbnNlEh0KCnZpZXdfY291bnQYASABKARSCXZpZXdDb3'
+        'VudA==');
 
 @$core.Deprecated('Use gameActionResultDescriptor instead')
 const GameActionResult$json = {
