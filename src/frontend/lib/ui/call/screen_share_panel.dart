@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import '../../backend/screen_share_capabilities.dart';
+import '../../backend/screen_share_sources.dart';
 import '../../backend/livekit_room.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
@@ -160,6 +161,8 @@ class ScreenSharePanel extends ConsumerWidget {
             child: Text(
               share.errorMessage == 'screen_share_limit'
                   ? l10n.screenShareLimitReached
+                  : share.errorMessage == 'screen_share_source_unavailable'
+                  ? l10n.screenShareSourceUnavailable
                   : commonActionErrorMessage(l10n),
               style: TextStyle(color: voice.error),
             ),
@@ -169,30 +172,102 @@ class ScreenSharePanel extends ConsumerWidget {
   }
 }
 
-Future<double?> showScreenShareQualityDialog(BuildContext context) {
+class ScreenShareStartOptions {
+  const ScreenShareStartOptions({
+    required this.maxFrameRate,
+    required this.captureSystemAudio,
+  });
+
+  final double maxFrameRate;
+  final bool captureSystemAudio;
+}
+
+Future<ScreenShareStartOptions?> showScreenShareQualityDialog(
+  BuildContext context,
+) {
   final l10n = AppLocalizations.of(context)!;
   final webHint = platformWebVoiceLimitationsTooltip(l10n);
-  return showDialog<double>(
+  var captureSystemAudio = canCaptureSystemAudioWithScreenShare;
+  return showDialog<ScreenShareStartOptions>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Text(l10n.screenShareQualityTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              title: Text(l10n.screenShareQuality720p15),
+              onTap: () => Navigator.pop(
+                context,
+                ScreenShareStartOptions(
+                  maxFrameRate: 15.0,
+                  captureSystemAudio: captureSystemAudio,
+                ),
+              ),
+            ),
+            ListTile(
+              title: Text(l10n.screenShareQuality720p30),
+              onTap: () => Navigator.pop(
+                context,
+                ScreenShareStartOptions(
+                  maxFrameRate: 30.0,
+                  captureSystemAudio: captureSystemAudio,
+                ),
+              ),
+            ),
+            SwitchListTile(
+              value: captureSystemAudio,
+              title: Text(l10n.screenShareSystemAudio),
+              onChanged: canCaptureSystemAudioWithScreenShare
+                  ? (enabled) =>
+                        setDialogState(() => captureSystemAudio = enabled)
+                  : null,
+            ),
+            if (webHint != null) ...[
+              const SizedBox(height: 8),
+              Text(webHint, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Future<String?> showScreenShareSourceDialog(
+  BuildContext context,
+  List<ScreenShareSource> sources,
+) {
+  final l10n = AppLocalizations.of(context)!;
+  return showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(l10n.screenShareQualityTitle),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            title: Text(l10n.screenShareQuality720p15),
-            onTap: () => Navigator.pop(context, 15.0),
-          ),
-          ListTile(
-            title: Text(l10n.screenShareQuality720p30),
-            onTap: () => Navigator.pop(context, 30.0),
-          ),
-          if (webHint != null) ...[
-            const SizedBox(height: 8),
-            Text(webHint, style: Theme.of(context).textTheme.bodySmall),
+      title: Text(l10n.screenShareSourceTitle),
+      content: SizedBox(
+        width: 420,
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final source in sources)
+              ListTile(
+                key: Key('screen_share_source_${source.id}'),
+                leading: Icon(
+                  source.type == ScreenShareSourceType.screen
+                      ? Icons.desktop_windows
+                      : Icons.web_asset,
+                ),
+                title: Text(source.name),
+                subtitle: Text(
+                  source.type == ScreenShareSourceType.screen
+                      ? l10n.screenShareEntireScreen
+                      : l10n.screenShareWindow,
+                ),
+                onTap: () => Navigator.pop(context, source.id),
+              ),
           ],
-        ],
+        ),
       ),
     ),
   );
@@ -222,9 +297,28 @@ class ScreenShareCallButton extends ConsumerWidget {
           await notifier.stopScreenShare();
           return;
         }
-        final fps = await showScreenShareQualityDialog(context);
-        if (fps == null) return;
-        await notifier.startScreenShare(maxFrameRate: fps);
+        String? sourceId;
+        if (canSelectDesktopScreenShareSource) {
+          final sources = await ref
+              .read(screenShareSourceCatalogProvider)
+              .listSources();
+          if (!context.mounted) return;
+          if (sources.isEmpty) {
+            ref
+                .read(screenShareControllerProvider.notifier)
+                .setError('screen_share_source_unavailable');
+            return;
+          }
+          sourceId = await showScreenShareSourceDialog(context, sources);
+          if (!context.mounted || sourceId == null) return;
+        }
+        final options = await showScreenShareQualityDialog(context);
+        if (options == null) return;
+        await notifier.startScreenShare(
+          maxFrameRate: options.maxFrameRate,
+          captureSystemAudio: options.captureSystemAudio,
+          sourceId: sourceId,
+        );
       },
       icon: Icon(
         share.isSharing ? Icons.stop_screen_share : Icons.screen_share,

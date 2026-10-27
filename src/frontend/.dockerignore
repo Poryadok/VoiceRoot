@@ -5,4 +5,5 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
+**/ephemeral/
 **/doc/api/
