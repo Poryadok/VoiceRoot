@@ -212,48 +212,61 @@ svc_bot:
 
 svc_chat:
   - src/backend/chat/**
+  - src/backend/migrations/chat_db/**
 
 svc_federation:
   - src/backend/federation/**
 
 svc_file:
   - src/backend/file/**
+  - src/backend/migrations/file_db/**
 
 svc_gameintegration:
   - src/backend/gameintegration/**
+  - src/backend/migrations/game_integration_db/**
 
 svc_controlledgame:
   - src/backend/controlledgame/**
 
 svc_gateway:
   - src/backend/gateway/**
+  - src/backend/migrations/gateway_db/**
 
 svc_matchmaking:
   - src/backend/matchmaking/**
+  - src/backend/migrations/matchmaking_db/**
 
 svc_messaging:
   - src/backend/messaging/**
+  - src/backend/migrations/messaging_db/**
 
 svc_moderation:
   - src/backend/moderation/**
+  - src/backend/migrations/moderation_db/**
 
 svc_notification:
   - src/backend/notification/**
+  - src/backend/migrations/notification_db/**
 
 svc_realtime:
   - src/backend/realtime/**
+  - src/backend/migrations/realtime_db/**
 
 svc_role:
   - src/backend/role/**
+  - src/backend/migrations/role_db/**
 
 svc_search:
   - src/backend/search/**
+  - src/backend/migrations/search_db/**
 
 svc_social:
   - src/backend/social/**
+  - src/backend/migrations/social_db/**
 
 svc_space:
   - src/backend/space/**
+  - src/backend/migrations/space_db/**
 
 svc_story:
   - src/backend/story/**
@@ -261,9 +274,11 @@ svc_story:
 
 svc_subscription:
   - src/backend/subscription/**
+  - src/backend/migrations/subscription_db/**
 
 svc_user:
   - src/backend/user/**
+  - src/backend/migrations/user_db/**
 
 svc_voice:
   - src/backend/voice/**

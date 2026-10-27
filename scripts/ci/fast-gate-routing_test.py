@@ -93,6 +93,16 @@ class FastGateRoutingTests(unittest.TestCase):
             self.assertTrue(policy.evaluate(policy.job_condition('nats-hub-config-renderer-image'), values), path)
             self.assertNotEqual(policy.run_gate(values, 'nats-hub-config-renderer-image', 'skipped').returncode, 0)
 
+    def test_database_migrations_select_their_own_service_tests(self):
+        for database in (ROOT / 'src/backend/migrations').iterdir():
+            if not database.is_dir():
+                continue
+            service = database.name.removesuffix('_db')
+            service = {'game_integration': 'gameintegration'}.get(service, service)
+            selector = 'auth' if service == 'auth' else 'svc_' + service
+            flags = self.filters_for(database.relative_to(ROOT).as_posix() + '/000999_test.up.sql')
+            self.assertEqual(flags[selector], 'true', database.name)
+
     def test_docker_matrix_retains_source_consumers_without_s2s_builds(self):
         for seed, expected in (
                 ('file', {'file'}), ('notification', {'notification'}),

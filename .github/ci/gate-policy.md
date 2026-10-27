@@ -80,7 +80,10 @@ selection on master/non-PR events and is passed to both matrix resolvers.
 PR attachment restart proof has its own input filter: unrelated database
 migrations no longer select it. File/auth/identity/message inputs, relevant
 migrations, shared runtime/Compose wiring and the proof itself retain pre-merge
-coverage. Master retains the original A1 selector. Renderer PR image verification
+coverage. Each database migration directory also selects its own service filter,
+so migration-only PRs retain that service's unit/integration checks instead of
+depending on an incidental unrelated proof. Master retains the original A1
+selector. Renderer PR image verification
 uses its actual package/generated-module/context inputs rather than `run_pkg`;
 master still publishes the renderer on every code SHA. Neither change moves a
 required selected proof after merge.
