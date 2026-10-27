@@ -27,6 +27,11 @@ DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 # The reviewed catalog/message-view documentation carried by the A1 aggregate.
 # This remains a test-fixture source tuple, never production authority.
 CATALOG_DATA_STORES_COMMIT = '04f1390e94c2285b20f2a208a55b1ee4b35facab'
+# C2 composition SOURCE CLEAR (BATCH-C2 c6): exact account/catalog union.
+# The earlier eb6e6c86 document differs; it grants no implicit tuple admission.
+C2_DATA_STORES_COMMIT = '91ec85e27774d5110a16b2082c10ae1cd970822e'
+C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
+                        'oid': '1896bde4e985be99d353d76d1f778e9dbf019c3d'}
 CATALOG_VOICE_PATHS = frozenset(
     'src/backend/voice/pb/voice/' + service + '/v1/catalog_assets' + suffix + '.pb.go'
     for service in ('chat', 'file') for suffix in ('', '_grpc'))
@@ -45,7 +50,11 @@ def reviewed_stores_source(source):
             capture_output=True).returncode == 0
         if ancestor and actual == legacy.entry(ROOT, reviewed, stores):
             return True
-    return False
+    ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', C2_DATA_STORES_COMMIT, source],
+        capture_output=True).returncode == 0
+    return (ancestor and actual == C2_DATA_STORES_ENTRY
+            and legacy.entry(ROOT, C2_DATA_STORES_COMMIT, stores) == C2_DATA_STORES_ENTRY)
 
 
 def reviewed_catalog_voice_additions(source, record):
