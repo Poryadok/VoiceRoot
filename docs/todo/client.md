@@ -216,6 +216,11 @@ those are different clients, credentials and trust boundaries.
    from the provider browser. Accept exactly one state and either one nonempty
    code or one provider error; reject duplicates, mixed code/error, missing state,
    oversized/malformed parameters. URL fragments are not sent in HTTP requests;
+   Twitch's documented singleton `scope` (success) and `error_description` (denial)
+   are bounded inert metadata: ignore them without trust, persistence, logging,
+   reflection, scope expansion or forwarding. They cannot replace required state
+   or code/error inputs; duplicated metadata and unknown keys still reject.
+   See [Twitch authorization-code callbacks](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#authorization-code-grant-flow).
    Gateway/Auth cannot inspect or reject a browser's fragment in this GET.
    Validate state, provider path, registration, bound callback and expiry before
    any token request. Also revalidate the stored original `jti` against revocation,
