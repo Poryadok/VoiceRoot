@@ -140,3 +140,39 @@ Tests use synthetic versions/hashes and run in `make ci-script-tests` or:
 ```bash
 python3 -m unittest discover -s scripts/release -p client_compatibility_test.py
 ```
+
+## A4 rollout evidence completeness
+
+`a4_rollout_evidence.py` checks that a rollout packet binds staging and
+production to one caller-supplied exact source SHA, immutable service image
+digests and the same migration content inventory with an explicit PASS result
+and portable migration evidence digest for both environments. Staging evidence
+must also declare a non-empty synthetic sample, a positive observation window,
+its operator-supplied SLO rollback condition, and a separately exercised
+rollback trigger using the same metric, comparator, and threshold, with
+updated-client compatibility evidence.
+
+The candidate manifest and evidence report contain content digests for the
+portable raw evidence. Metric names, comparators and thresholds are supplied
+by the authorized release policy; this tool does not select SLOs or inspect the
+target. Use a source SHA resolved by the protected caller, never one derived
+from the candidate itself:
+
+```bash
+python3 scripts/release/a4_rollout_evidence.py candidate.json evidence.json \
+  --expected-source-sha "$RELEASE_SOURCE_SHA"
+```
+
+Exit 0 means **offline evidence completeness only**. It does not execute or
+verify deployment, migrations, canary observations, rollback, CI, resource
+custody or acceptance. Unknown fields, duplicate JSON keys, stale source,
+mutable image tags, inventory drift, missing samples/windows and a rollback
+measurement inconsistent with its declared comparator fail closed. No real
+cluster or production authority is changed by the tool.
+
+
+Focused synthetic regression tests run in `make ci-script-tests` or directly:
+
+```bash
+python3 -m unittest discover -s scripts/release -p a4_rollout_evidence_test.py
+```

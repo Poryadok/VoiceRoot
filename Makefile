@@ -330,6 +330,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
+	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p a4_rollout_evidence_test.py
 	python3 "$(ROOT)/src/frontend/docker/version_web_assets_test.py"
 	python3 "$(ROOT)/scripts/prod/verify_prod_images_test.py"
 	python3 "$(ROOT)/docker/postgres/compose-realtime-migrations_test.py"
