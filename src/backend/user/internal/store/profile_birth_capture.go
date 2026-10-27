@@ -24,7 +24,7 @@ func NewProfileStoreWithBirthCapture(pool *pgxpool.Pool, identities *identityass
 	return &ProfileStore{pool: pool, birthCapture: &profileBirthCapture{identities: identities, parents: parents}}, nil
 }
 
-func (s *ProfileStore) createSecondaryProfileWithBirth(ctx context.Context, account uuid.UUID, displayName string, usernameHint, accentColor *string) (*ProfileRow, error) {
+func (s *ProfileStore) createSecondaryProfileWithBirth(ctx context.Context, account uuid.UUID, displayName string, usernameHint, accentColor *string, maxProfiles int) (*ProfileRow, error) {
 	boundary := s.birthCapture
 	proof, err := boundary.parents.Verify(ctx, account)
 	if err != nil {
@@ -41,7 +41,10 @@ func (s *ProfileStore) createSecondaryProfileWithBirth(ctx context.Context, acco
 		if err != nil {
 			return nil, err
 		}
-		_, err = boundary.identities.CreateBirthTx(ctx, tx, prepared, proof)
+		err = checkProfileLimitTx(ctx, tx.SQL(), account, maxProfiles)
+		if err == nil {
+			_, err = boundary.identities.CreateBirthTx(ctx, tx, prepared, proof)
+		}
 		var created *ProfileRow
 		if err == nil {
 			created, err = s.insertSecondaryProfileTx(ctx, tx.SQL(), id, account, displayName, usernameHint, accentColor)

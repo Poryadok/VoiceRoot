@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/auth_providers.dart';
 import 'deep_link_parser.dart';
 
+final deepLinkBaseUriProvider = Provider<Uri>((ref) => Uri.base);
+
 class DeepLinkState {
   const DeepLinkState({this.pending, this.resolved});
 
