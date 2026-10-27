@@ -19,48 +19,55 @@ func (s *ProfileStore) ApplyAccountDeleted(ctx context.Context, eventID, account
 	if s == nil || s.pool == nil || eventID == uuid.Nil || accountID == uuid.Nil {
 		return fmt.Errorf("invalid account deletion event")
 	}
+	if s.birthCapture != nil {
+		return s.applyAccountDeletedWithIdentity(ctx, eventID, accountID, occurredAt)
+	}
 	return s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
-		command, err := tx.Exec(ctx, `INSERT INTO user_account_lifecycle_inbox(event_id, account_id) VALUES ($1,$2) ON CONFLICT (event_id) DO NOTHING`, eventID, accountID)
-		if err != nil {
-			return err
-		}
-		if command.RowsAffected() == 0 {
-			return nil
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO user_account_lifecycle(account_id,state,source_event_id,occurred_at) VALUES ($1,'ACCOUNT_INACTIVE',$2,$3) ON CONFLICT (account_id) DO NOTHING`, accountID, eventID, occurredAt.UTC()); err != nil {
-			return err
-		}
-		rows, err := tx.Query(ctx, `UPDATE profiles SET search_projection_revision=search_projection_revision+1, updated_at=now() WHERE account_id=$1 RETURNING `+profileSelectCols, accountID)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		profiles := []*ProfileRow{}
-		for rows.Next() {
-			profile, err := scanProfile(rows)
-			if err != nil {
-				return err
-			}
-			profiles = append(profiles, profile)
-		}
-		if err := rows.Err(); err != nil {
-			return err
-		}
-		// pgx cannot execute another command while UPDATE RETURNING owns the
-		// connection. Release its cursor before appending the durable deletes;
-		// all rows and events still commit atomically in this transaction.
-		rows.Close()
-		for _, profile := range profiles {
-			childID := uuid.NewSHA1(eventID, []byte(profile.ID.String()))
-			if err := AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
-				ProtocolVersion: 1, EventId: childID.String(), OccurredAt: timestamppb.New(occurredAt.UTC()), ProfileId: profile.ID.String(), SourceRevision: profile.SearchProjectionRevision,
-				Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}},
-			}); err != nil {
-				return err
-			}
-		}
-		return nil
+		return s.applyAccountDeletedTx(ctx, tx, eventID, accountID, occurredAt)
 	})
+}
+
+func (s *ProfileStore) applyAccountDeletedTx(ctx context.Context, tx pgx.Tx, eventID, accountID uuid.UUID, occurredAt time.Time) error {
+	command, err := tx.Exec(ctx, `INSERT INTO user_account_lifecycle_inbox(event_id, account_id) VALUES ($1,$2) ON CONFLICT (event_id) DO NOTHING`, eventID, accountID)
+	if err != nil {
+		return err
+	}
+	if command.RowsAffected() == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO user_account_lifecycle(account_id,state,source_event_id,occurred_at) VALUES ($1,'ACCOUNT_INACTIVE',$2,$3) ON CONFLICT (account_id) DO NOTHING`, accountID, eventID, occurredAt.UTC()); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, `UPDATE profiles SET search_projection_revision=search_projection_revision+1, updated_at=now() WHERE account_id=$1 RETURNING `+profileSelectCols, accountID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	profiles := []*ProfileRow{}
+	for rows.Next() {
+		profile, err := scanProfile(rows)
+		if err != nil {
+			return err
+		}
+		profiles = append(profiles, profile)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// pgx cannot execute another command while UPDATE RETURNING owns the
+	// connection. Release its cursor before appending the durable deletes;
+	// all rows and events still commit atomically in this transaction.
+	rows.Close()
+	for _, profile := range profiles {
+		childID := uuid.NewSHA1(eventID, []byte(profile.ID.String()))
+		if err := AppendSearchProjection(ctx, tx, &userv1.SearchProfileProjectionEvent{
+			ProtocolVersion: 1, EventId: childID.String(), OccurredAt: timestamppb.New(occurredAt.UTC()), ProfileId: profile.ID.String(), SourceRevision: profile.SearchProjectionRevision,
+			Payload: &userv1.SearchProfileProjectionEvent_Delete{Delete: &userv1.SearchProfileDelete{}},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func accountInactive(ctx context.Context, tx pgx.Tx, accountID uuid.UUID) (bool, error) {
