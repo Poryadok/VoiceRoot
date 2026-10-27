@@ -220,6 +220,7 @@ class _PendingAttachmentUpload {
     required this.e2eKeyWire,
     required this.imagesOnly,
     required this.music,
+    this.voiceDuration,
   });
 
   final ChatAttachmentFile file;
@@ -232,6 +233,7 @@ class _PendingAttachmentUpload {
   final String? e2eKeyWire;
   final bool imagesOnly;
   final bool music;
+  final Duration? voiceDuration;
 
   _PendingAttachmentUpload withAuthorization(String value) =>
       _PendingAttachmentUpload(
@@ -245,6 +247,7 @@ class _PendingAttachmentUpload {
         e2eKeyWire: e2eKeyWire,
         imagesOnly: imagesOnly,
         music: music,
+        voiceDuration: voiceDuration,
       );
 }
 
@@ -2558,6 +2561,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   Future<void> _attachAndSend({
     bool imagesOnly = false,
     bool music = false,
+    ChatAttachmentFile? capturedFile,
+    Duration? voiceDuration,
   }) async {
     final chatId = widget.chatId;
     if (_isDmPeerDeleted()) {
@@ -2568,7 +2573,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         () => _defaultPickChatAttachment(imagesOnly: imagesOnly, music: music);
     final ChatAttachmentFile? picked;
     try {
-      picked = await picker();
+      picked = capturedFile ?? await picker();
     } on _MusicFileRejected {
       if (_isCurrentChat(chatId)) _showMusicFileRejected();
       return;
@@ -2617,7 +2622,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         if (!_isCurrentAttachmentOperation(operation, chatId)) return;
       }
       if (!_isCurrentAttachmentOperation(operation, chatId)) return;
-      if (music && uploadBytes.length > 10 * 1024 * 1024) {
+      if ((music || voiceDuration != null) &&
+          uploadBytes.length > 10 * 1024 * 1024) {
         _showMusicFileRejected();
         return;
       }
@@ -2633,6 +2639,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           e2eKeyWire: e2eKeyWire,
           imagesOnly: imagesOnly,
           music: music,
+          voiceDuration: voiceDuration,
         ),
         operation,
       );
@@ -2667,6 +2674,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       chatType: attempt.chatType,
       isE2e: attempt.isE2e,
       music: attempt.music,
+      voiceNote: attempt.voiceDuration != null,
     );
     if (!_isCurrentAttachmentOperation(operation, attempt.chatId)) return;
     if (ticket case FilesApiFailure()) {
@@ -2712,14 +2720,19 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final err = await ref
         .read(chatRoomControllerProvider(attempt.chatId).notifier)
         .sendMessage(
-          _composer.text,
+          attempt.voiceDuration == null ? _composer.text : '',
           attachments: [
             MessageAttachment(
               fileId: metadata.fileId,
-              type: attempt.music ? 'music' : metadata.fileType,
+              type: attempt.voiceDuration != null
+                  ? 'voice_message'
+                  : attempt.music
+                  ? 'music'
+                  : metadata.fileType,
               name: metadata.originalName,
               sizeBytes: metadata.sizeBytes,
               e2eKeyWire: attempt.e2eKeyWire,
+              durationSeconds: attempt.voiceDuration?.inSeconds,
             ),
           ],
         );
