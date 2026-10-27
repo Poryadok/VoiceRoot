@@ -23,6 +23,10 @@ BASE = '288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
 # Catalog documentation merged after the v3 documentation authority record.
 # This pin is used only to construct the private historical test fixture.
 CATALOG_DOCUMENT_COMMIT = 'eaa4c1a30921cea1f030ee53de89c71695cbfc87'
+# Accepted PR #973 cold-start documentation, only for private v2 fixtures.
+COLD_START_DOCUMENT_COMMIT = '9bb0f3306e04e15fffcd899df21dd4094fa11b0c'
+COLD_START_DOCUMENT_ENTRY = {'mode': '100644', 'type': 'blob',
+                             'oid': 'c188c69aadd32f189ed80cf3ab9682f589442a24'}
 DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 # The reviewed catalog/message-view documentation carried by the A1 aggregate.
 # This remains a test-fixture source tuple, never production authority.
@@ -56,6 +60,16 @@ CATALOG_VOICE_PATHS = frozenset(
 
 def git(*args, data=None, env=None):
     return subprocess.check_output(['git', '-C', str(ROOT), *args], input=data, env=env).decode().strip()
+
+
+def reviewed_cold_start_document(source):
+    document = 'docs/microservices/space-service.md'
+    ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+         COLD_START_DOCUMENT_COMMIT, source], capture_output=True).returncode == 0
+    return (ancestor and legacy.entry(ROOT, source, document) == COLD_START_DOCUMENT_ENTRY
+            and legacy.entry(ROOT, COLD_START_DOCUMENT_COMMIT, document)
+            == COLD_START_DOCUMENT_ENTRY)
 
 
 def reviewed_stores_source(source):
@@ -184,6 +198,38 @@ class C2ReviewedStoresSourceTest(unittest.TestCase):
                 self.assertFalse(reviewed_stores_source(changed))
 
 
+class ReviewedColdStartDocumentTest(unittest.TestCase):
+    def test_exact_reviewed_source_and_descendant(self):
+        source = '9bb0f3306e04e15fffcd899df21dd4094fa11b0c'
+        expected = {'mode': '100644', 'type': 'blob',
+                    'oid': 'c188c69aadd32f189ed80cf3ab9682f589442a24'}
+        document = 'docs/microservices/space-service.md'
+        self.assertEqual(legacy.entry(ROOT, source, document), expected)
+        for current in (source, git('rev-parse', 'HEAD')):
+            with self.subTest(source=current):
+                self.assertTrue(reviewed_cold_start_document(current))
+
+    def test_unknown_bytes_mode_missing_path_and_disconnected_ancestry_reject(self):
+        current = git('rev-parse', 'HEAD')
+        document = 'docs/microservices/space-service.md'
+        for variant in ('content', 'mode', 'missing', 'ancestry'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                entry = legacy.entry(ROOT, current, document)
+                if variant == 'missing':
+                    git('update-index', '--force-remove', '--', document, env=env)
+                elif variant != 'ancestry':
+                    mode = '100755' if variant == 'mode' else entry['mode']
+                    oid = entry['oid'] if variant == 'mode' else git(
+                        'hash-object', '-w', '--stdin', data=b'unreviewed cold-start document\n')
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + document, env=env)
+                changed = RealGitSuccessorTest.commit(
+                    git('write-tree', env=env), [BASE if variant == 'ancestry' else current])
+            with self.subTest(variant=variant):
+                self.assertFalse(reviewed_cold_start_document(changed))
+
+
 class RealGitSuccessorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -204,7 +250,8 @@ class RealGitSuccessorTest(unittest.TestCase):
             catalog_ancestor = subprocess.run(
                 ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
                  CATALOG_DOCUMENT_COMMIT, cls.source], capture_output=True).returncode == 0
-            legacy.require(actual == reviewed or (catalog_ancestor and actual == catalog),
+            legacy.require(actual == reviewed or (catalog_ancestor and actual == catalog)
+                           or reviewed_cold_start_document(cls.source),
                            'v2_fixture_unreviewed_document_source')
             with tempfile.TemporaryDirectory() as directory:
                 env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
@@ -306,6 +353,16 @@ class RealGitSuccessorTest(unittest.TestCase):
         expected = next(row['after'] for row in self.record['projection'] if row['path'] == stores)
         self.assertEqual(legacy.entry(ROOT, self.source, stores), expected)
         self.assertNotEqual(legacy.entry(ROOT, git('rev-parse', 'HEAD'), stores), expected)
+
+    def test_document_restoration_is_private_and_preserves_checkout(self):
+        document = 'docs/microservices/space-service.md'
+        current = git('rev-parse', 'HEAD')
+        expected = next(row['after'] for row in self.record['projection']
+                        if row['path'] == document)
+        self.assertEqual(legacy.entry(ROOT, self.source, document), expected)
+        self.assertNotEqual(legacy.entry(ROOT, current, document), expected)
+        self.assertEqual((ROOT / document).read_bytes(),
+                         legacy.git(ROOT, 'show', current + ':' + document))
 
     def test_stores_source_guard_accepts_only_exact_reviewed_entries(self):
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))

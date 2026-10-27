@@ -2,9 +2,11 @@ package audioproc
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -56,6 +58,25 @@ func TestProbeOutputLimit(t *testing.T) {
 	var b limitedBuffer
 	if _, err := b.Write(make([]byte, maxProbeBytes+1)); err == nil || !b.overflow || b.buffer.Len() != 0 {
 		t.Fatal("oversized process output was retained")
+	}
+}
+
+func TestProbeOutputCopyLimit(t *testing.T) {
+	for _, size := range []int{maxProbeBytes, maxProbeBytes + 1, 4 * maxProbeBytes} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			var out limitedBuffer
+			// exec copies stdout from its pipe with io.Copy. Hide WriterTo so
+			// this exercises the same destination-side interface dispatch.
+			source := struct{ io.Reader }{strings.NewReader(strings.Repeat("x", size))}
+			_, err := io.Copy(&out, source)
+			if size <= maxProbeBytes {
+				if err != nil || out.overflow || out.buffer.Len() != size {
+					t.Fatalf("at cap: retained=%d overflow=%v error=%v", out.buffer.Len(), out.overflow, err)
+				}
+			} else if err != ErrAudio || !out.overflow || out.buffer.Len() > maxProbeBytes {
+				t.Fatalf("above cap: retained=%d overflow=%v error=%v", out.buffer.Len(), out.overflow, err)
+			}
+		})
 	}
 }
 

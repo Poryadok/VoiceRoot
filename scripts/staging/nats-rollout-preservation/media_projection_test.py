@@ -126,10 +126,14 @@ class MediaProjectionTest(unittest.TestCase):
         function = re.search(r'^render\(\) \{.*?^\}', script, re.M | re.S).group(0)
         command = ('set -eu\nnats_generation_render() { cat "$1"; }\n'
                    'REGISTRY=example.invalid TAG=unit S3_SIGNING_ENDPOINT=https://storage.example.invalid\n'
-                   'VOICE_GATEWAY_INGRESS_HOST=gateway.example.invalid\n' + function + '\nrender "$1"')
+                   'VOICE_GATEWAY_INGRESS_HOST=gateway.example.invalid\n'
+                   'VOICE_LIVEKIT_INGRESS_HOST=livekit.example.invalid\n' + function + '\nrender "$1"')
         raw = subprocess.check_output(['bash', '-c', command, '--', str(SOURCE / 'deploy/staging/services.yaml')], text=True)
         self.assertNotIn('__GATEWAY_INGRESS_HOST__', raw)
         self.assertIn('https://gateway.example.invalid/.well-known/voice-principal-jwks.json', raw)
+        web = subprocess.check_output(['bash', '-c', command, '--', str(SOURCE / 'deploy/staging/flutter-web.yaml')], text=True)
+        self.assertNotIn('__LIVEKIT_INGRESS_HOST__', web)
+        self.assertIn('"livekit_url":"wss://livekit.example.invalid"', web)
 
     def test_private_listener_client_symmetry_and_shared_resolver_secret(self):
         rows = self.rendered()

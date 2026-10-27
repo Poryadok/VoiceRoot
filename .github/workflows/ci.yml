@@ -1429,32 +1429,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
-      - name: Resolve build args
-        id: buildargs
-        shell: bash
-        run: |
-          HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
-          if [ -z "${HOST}" ]; then
-            # shellcheck disable=SC1091
-            source deploy/staging/domains.defaults
-            HOST="${VOICE_GATEWAY_INGRESS_HOST}"
-          fi
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            if [ -z "${HOST}" ]; then
-              echo "VOICE_GATEWAY_INGRESS_HOST must be set (or deploy/staging/domains.defaults) for web image push on master." >&2
-              exit 1
-            fi
-            echo "api_base_url=https://${HOST}" >> "$GITHUB_OUTPUT"
-          else
-            echo "api_base_url=http://127.0.0.1:18080" >> "$GITHUB_OUTPUT"
-          fi
-          LIVEKIT_HOST="${{ vars.VOICE_LIVEKIT_INGRESS_HOST }}"
-          if [ -z "${LIVEKIT_HOST}" ]; then
-            # shellcheck disable=SC1091
-            source deploy/staging/domains.defaults
-            LIVEKIT_HOST="livekit.${VOICE_STAGING_BASE_DOMAIN}"
-          fi
-          echo "livekit_url=wss://${LIVEKIT_HOST}" >> "$GITHUB_OUTPUT"
       # Web image builds Flutter inside Dockerfile; no host SDK needed here.
       - uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
@@ -1482,40 +1456,10 @@ jobs:
           file: ./src/frontend/Dockerfile
           push: false
           build-args: |
-            VOICE_API_BASE_URL=${{ steps.buildargs.outputs.api_base_url }}
-            VOICE_LIVEKIT_URL=${{ steps.buildargs.outputs.livekit_url }}
+            VOICE_RUNTIME_CONFIG_REQUIRED=true
+            SOURCE_REVISION=${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max,ignore-error=true
-      - name: Build and push web image
-        if: >-
-          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
-          needs.changes.outputs.run_web == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: ./src/frontend
-          file: ./src/frontend/Dockerfile
-          push: true
-          build-args: |
-            VOICE_API_BASE_URL=${{ steps.buildargs.outputs.api_base_url }}
-            VOICE_LIVEKIT_URL=${{ steps.buildargs.outputs.livekit_url }}
-          tags: ${{ steps.image.outputs.base }}/web:${{ github.sha }}
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,scope=web,mode=max,ignore-error=true
-      - name: Build DEV web image (PR verify)
-        if: >-
-          github.event_name == 'pull_request' &&
-          (needs.changes.outputs.frontend == 'true' ||
-           needs.changes.outputs.dev_web_publish == 'true')
-        uses: docker/build-push-action@v6
-        with:
-          context: ./src/frontend
-          file: ./src/frontend/Dockerfile
-          push: false
-          build-args: |
-            VOICE_API_BASE_URL=https://api-dev.comrade.click
-            VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click
-          cache-from: type=gha,scope=dev-web
-          cache-to: type=gha,scope=dev-web,mode=max,ignore-error=true
       - name: Build and push DEV web image
         id: build-dev-web
         if: >-
@@ -1528,11 +1472,15 @@ jobs:
           file: ./src/frontend/Dockerfile
           push: true
           build-args: |
-            VOICE_API_BASE_URL=https://api-dev.comrade.click
-            VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click
-          tags: ${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}
-          cache-from: type=gha,scope=dev-web
-          cache-to: type=gha,scope=dev-web,mode=max,ignore-error=true
+            VOICE_RUNTIME_CONFIG_REQUIRED=true
+            SOURCE_REVISION=${{ github.sha }}
+          # One build result, two distribution aliases. Promote the canonical
+          # web@digest ref itself between environments, not a renamed ref.
+          tags: |
+            ${{ steps.image.outputs.base }}/web:${{ github.sha }}
+            ${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max,ignore-error=true
       - name: Write DEV web image receipt
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
@@ -1541,7 +1489,8 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
           BUILDX_DIGEST: ${{ steps.build-dev-web.outputs.digest }}
-          IMAGE_REF: ${{ steps.image.outputs.base }}/dev-web@${{ steps.build-dev-web.outputs.digest }}
+          IMAGE_REF: ${{ steps.image.outputs.base }}/web@${{ steps.build-dev-web.outputs.digest }}
+          DISTRIBUTION_ALIAS: ${{ steps.image.outputs.base }}/dev-web@${{ steps.build-dev-web.outputs.digest }}
         run: |
           python3 - <<'PY'
           import json
@@ -1550,9 +1499,9 @@ jobs:
           receipt = {
               "source_sha": os.environ["SOURCE_SHA"],
               "image": os.environ["IMAGE_REF"],
+              "distribution_alias": os.environ["DISTRIBUTION_ALIAS"],
               "buildx_digest": os.environ["BUILDX_DIGEST"],
-              "voice_api_base_url": "https://api-dev.comrade.click",
-              "voice_livekit_url": "wss://livekit-dev.comrade.click",
+              "configuration_contract": "voice-web-origin-bound-runtime-v1",
           }
           with open("dev-web-image.json", "w", encoding="utf-8") as output:
               json.dump(receipt, output, indent=2, sort_keys=True)

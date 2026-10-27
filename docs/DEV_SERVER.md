@@ -189,14 +189,19 @@ checkout репозитория, Python3 и kubeconfig нужного класт
 
 1. Собрать нужные образы и опубликовать их в registry либо импортировать в k3s
    containerd этого node. Зафиксировать registry manifest digest каждого образа.
-2. Frontend собрать с dev API и WS адресами. Staging frontend не подходит:
-   адреса API/RTC запекаются в сборку. Схемные изменения требуют отдельно
-   подготовленных dev-миграций из той же версии исходников.
-   Для CI-сборки используйте `dev-web:<git SHA>` и artifact
-   `dev-web-image-<sha>`: receipt связывает source SHA с immutable
-   `dev-web@sha256:...` ref и build args. CI публикует DEV-вариант на master
-   для frontend-изменений и изменений publisher workflow. Staging `web` image
-   имеет другие адреса API/LiveKit и для DEV не подходит.
+2. Promotable frontend uses the same canonical `web@sha256:...` reference in
+   DEV and STAGING. CI's `dev-web-image-<sha>` receipt records this canonical
+   image and a compatibility `dev-web` distribution alias from the same build;
+   do not substitute the alias when exact-ref promotion is required.
+   Environment endpoints are not baked into the release. The read-only
+   `voice-web-runtime-config` ConfigMap binds DEV's app origin
+   `https://dev.comrade.click` to its explicit `https://api-dev.comrade.click`
+   and `wss://livekit-dev.comrade.click` endpoints. Existing DEV rendering
+   rewrites the canonical STAGING document together with the ingress domain.
+   Qualify the rendered config/source/hash separately. First adoption needs an
+   authorized config/template migration; image-only updates preserve old config.
+   See [immutable web binding](DEPLOYMENT.md#immutable-web-promotion-and-environment-binding).
+   Schema changes still require separately prepared DEV migrations from the same source.
 3. Предварительно сохранить текущие image pins и выполнить preview:
 
 ```sh
