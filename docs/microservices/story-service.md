@@ -266,16 +266,21 @@ story_media_deletion_outbox
 - **File Service** — хранение медиа сторис и protected `ValidateStoryMedia`
 - **User Service** — настройки приватности (кто видит сторис)
 - **Social Service** — список друзей для фильтрации видимости
+- **Space Service** — viewer-scoped Space/member pages for feed author candidates
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
 
 ### Feed author dependency failure
 
-Production feed requests resolve the viewer's author set through Social before
-querying Story rows. A failed author lookup returns a non-sensitive `Unavailable`
-without a global scan or a partial successful feed, including when Social returns
-partial author IDs alongside its error. Recovery resumes author-scoped cursor
+Production feed requests resolve self, friends and co-members of the viewer's
+current live Spaces before querying Story rows. Space candidates come from all
+viewer-scoped `ListMySpaces` and current-member `ListMembers` pages; no public
+Space catalog or global author scan is used. Co-membership only adds candidates:
+selected-Space audiences and other privacy rules still apply to each Story.
+A failed Social or Space lookup/page returns a non-sensitive `Unavailable`
+without a global scan or partial successful feed, including when a dependency
+returns partial results alongside its error. Recovery resumes author-scoped cursor
 pagination and the existing per-Story privacy checks. An error querying the
 resolved author set is returned without retrying against all active Stories.
 
