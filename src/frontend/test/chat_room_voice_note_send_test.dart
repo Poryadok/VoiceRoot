@@ -177,6 +177,7 @@ void main() {
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'next draft');
+    await tester.pump();
     expect(
       tester
           .widget<VoiceSendButton>(find.byKey(ChatRoomPanel.sendKey))

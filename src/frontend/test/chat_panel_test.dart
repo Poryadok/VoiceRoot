@@ -705,6 +705,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Hello');
+    await tester.pump();
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pumpAndSettle();
 
