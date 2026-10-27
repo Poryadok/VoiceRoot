@@ -57,10 +57,10 @@ class CurrentDiffTests(unittest.TestCase):
         self.git('commit', '-qm', message)
         return self.git('rev-parse', 'HEAD')
 
-    def merge_commit(self, tree=None):
-        source = self.git('rev-parse', 'HEAD')
+    def merge_commit(self, tree=None, base=None, source=None):
+        source = source or self.git('rev-parse', 'HEAD')
         tree = tree or self.git('rev-parse', 'HEAD^{tree}')
-        return self.git('commit-tree', tree, '-p', self.base, '-p', source, '-m', 'PR merge')
+        return self.git('commit-tree', tree, '-p', base or self.base, '-p', source, '-m', 'PR merge')
 
     def check(self, target='HEAD', head=None, base=None, extra_env=None):
         command = ['python3' if os.name != 'nt' else 'python', str(CHECKER),
@@ -79,6 +79,36 @@ class CurrentDiffTests(unittest.TestCase):
         self.assertEqual(evidence['base'], self.base)
         self.assertEqual(evidence['pr_head'], head)
         self.assertFalse(evidence['cached'])
+
+    def test_stale_event_base_uses_exact_current_merge_first_parent(self):
+        event_base = self.base
+        self.write('README.md', 'current base\n')
+        current_base = self.commit('advance integration base')
+        self.git('checkout', '-q', event_base)
+        self.write('docs/pr.md', 'PR source\n')
+        head = self.commit('PR source')
+        self.git('checkout', '-q', current_base)
+        tree = self.git('merge-tree', '--write-tree', current_base, head).splitlines()[0]
+        merge = self.merge_commit(tree, base=current_base, source=head)
+        result = self.check(merge, head, base=event_base)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        evidence = json.loads(result.stdout)
+        self.assertEqual(evidence['event_base'], event_base)
+        self.assertEqual(evidence['base'], current_base)
+        self.assertEqual(evidence['pr_head'], head)
+
+    def test_event_base_reachable_only_through_pr_head_is_rejected(self):
+        initial = self.base
+        self.write('README.md', 'event base\n')
+        event_base = self.commit('event base on source branch')
+        self.write('docs/extra.md', 'PR source\n')
+        head = self.commit('PR source')
+        self.git('checkout', '-q', initial)
+        tree = self.git('merge-tree', '--write-tree', initial, head).splitlines()[0]
+        merge = self.merge_commit(tree, base=initial, source=head)
+        result = self.check(merge, head, base=event_base)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('base_ancestry', result.stderr)
 
     def test_forged_merge_tree_is_rejected(self):
         self.write('README.md', 'source\n')
