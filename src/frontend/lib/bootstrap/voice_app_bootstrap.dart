@@ -34,14 +34,14 @@ class _VoiceAppBootstrapState extends ConsumerState<VoiceAppBootstrap> {
   void initState() {
     super.initState();
     Future.microtask(() async {
-      await _captureInitialWebInvite();
+      await _captureInitialWebDeepLink();
       await _restoreSession();
     });
   }
 
-  Future<void> _captureInitialWebInvite() async {
+  Future<void> _captureInitialWebDeepLink() async {
     if (!kIsWeb) return;
-    final target = parseInitialWebInviteTarget(Uri.base);
+    final target = parseInitialWebDeepLinkTarget(Uri.base);
     if (target == null) return;
     await ref.read(deepLinkControllerProvider.notifier).onIncomingLink(target);
   }
