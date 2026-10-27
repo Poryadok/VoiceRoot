@@ -450,6 +450,24 @@ the closed photo/image or video/duration-1..60 predicate atomically from its
 locked File row. Its empty success response is an attestation, not metadata for
 Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 
+`ClaimStoryMedia` and `ReleaseStoryMedia` are separate protected `service:story`
+mutations. Claim rechecks that same predicate under the blob/File locks and
+acquires only `(file_id, STORY, story_id, NULL, NULL)`. The same Story cannot be
+rebound to a different File or a retired reference. Immutable operation receipts
+bind the entire request; changed operation input returns `AlreadyExists`.
+Operation and Story locks serialize concurrent retries before receipt lookup.
+Replaying an old successful claim returns its original receipt without creating
+a new reference after release. Claim/release receipt hashes use the full protobuf
+message name plus NUL and deterministic request bytes, as other File lifecycle
+operations do.
+
+Release retires that exact key even if a delayed claim has not arrived. It queues
+blob GC only when an existing live exact reference was released and zero live
+references remain across all aliases. An absent File is idempotent success;
+historical media without an exact claim does not authorize broad deletion.
+Another Story/profile/message reference continues to retain the shared blob.
+Physical GC remains File-owned and independently retried.
+
 | gRPC code | Validation outcome |
 | --- | --- |
 | `Unauthenticated` | Credential/request-ID/Phase-0 binding, raw-header, replay, JWKS or verifier failure |
@@ -465,9 +483,10 @@ The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
 `FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
 Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
 settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
-The ordinary listener returns `Unavailable` for validation and the protected
-listener rejects all other methods. See Story's deployment runbook and
-`docs/todo/backend.md` for the remaining lifecycle-binding work.
+The ordinary listener returns `Unavailable` for protected validation and
+reference mutations. The protected listener admits only its closed method and
+issuer allowlists. See Story's deployment runbook; global reference backfill,
+activation and live cleanup verification remain separate release work.
 
 ## Масштабирование
 

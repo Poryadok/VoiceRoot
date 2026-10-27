@@ -2148,3 +2148,78 @@ final $typed_data.Uint8List getSpacePurgeReceiptResponseDescriptor =
     $convert.base64Decode(
         'ChxHZXRTcGFjZVB1cmdlUmVjZWlwdFJlc3BvbnNlEjwKB3JlY2VpcHQYASABKAsyIi52b2ljZS'
         '5jb21tb24udjEuU3BhY2VQdXJnZVJlY2VpcHRSB3JlY2VpcHQ=');
+
+@$core.Deprecated('Use claimStoryMediaRequestDescriptor instead')
+const ClaimStoryMediaRequest$json = {
+  '1': 'ClaimStoryMediaRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'story_id', '3': 2, '4': 1, '5': 9, '10': 'storyId'},
+    {'1': 'file_id', '3': 3, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'author_profile_id', '3': 4, '4': 1, '5': 9, '10': 'authorProfileId'},
+    {
+      '1': 'expected_story_type',
+      '3': 5,
+      '4': 1,
+      '5': 14,
+      '6': '.voice.story.v1.StoryMediaType',
+      '10': 'expectedStoryType'
+    },
+  ],
+};
+
+/// Descriptor for `ClaimStoryMediaRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List claimStoryMediaRequestDescriptor = $convert.base64Decode(
+    'ChZDbGFpbVN0b3J5TWVkaWFSZXF1ZXN0EiEKDG9wZXJhdGlvbl9pZBgBIAEoCVILb3BlcmF0aW'
+    '9uSWQSGQoIc3RvcnlfaWQYAiABKAlSB3N0b3J5SWQSFwoHZmlsZV9pZBgDIAEoCVIGZmlsZUlk'
+    'EioKEWF1dGhvcl9wcm9maWxlX2lkGAQgASgJUg9hdXRob3JQcm9maWxlSWQSTgoTZXhwZWN0ZW'
+    'Rfc3RvcnlfdHlwZRgFIAEoDjIeLnZvaWNlLnN0b3J5LnYxLlN0b3J5TWVkaWFUeXBlUhFleHBl'
+    'Y3RlZFN0b3J5VHlwZQ==');
+
+@$core.Deprecated('Use claimStoryMediaResponseDescriptor instead')
+const ClaimStoryMediaResponse$json = {
+  '1': 'ClaimStoryMediaResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'request_sha256', '3': 3, '4': 1, '5': 12, '10': 'requestSha256'},
+  ],
+};
+
+/// Descriptor for `ClaimStoryMediaResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List claimStoryMediaResponseDescriptor = $convert.base64Decode(
+    'ChdDbGFpbVN0b3J5TWVkaWFSZXNwb25zZRIdCgpyZWNlaXB0X2lkGAEgASgJUglyZWNlaXB0SW'
+    'QSIQoMb3BlcmF0aW9uX2lkGAIgASgJUgtvcGVyYXRpb25JZBIlCg5yZXF1ZXN0X3NoYTI1NhgD'
+    'IAEoDFINcmVxdWVzdFNoYTI1Ng==');
+
+@$core.Deprecated('Use releaseStoryMediaRequestDescriptor instead')
+const ReleaseStoryMediaRequest$json = {
+  '1': 'ReleaseStoryMediaRequest',
+  '2': [
+    {'1': 'operation_id', '3': 1, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'story_id', '3': 2, '4': 1, '5': 9, '10': 'storyId'},
+    {'1': 'file_id', '3': 3, '4': 1, '5': 9, '10': 'fileId'},
+  ],
+};
+
+/// Descriptor for `ReleaseStoryMediaRequest`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseStoryMediaRequestDescriptor = $convert.base64Decode(
+    'ChhSZWxlYXNlU3RvcnlNZWRpYVJlcXVlc3QSIQoMb3BlcmF0aW9uX2lkGAEgASgJUgtvcGVyYX'
+    'Rpb25JZBIZCghzdG9yeV9pZBgCIAEoCVIHc3RvcnlJZBIXCgdmaWxlX2lkGAMgASgJUgZmaWxl'
+    'SWQ=');
+
+@$core.Deprecated('Use releaseStoryMediaResponseDescriptor instead')
+const ReleaseStoryMediaResponse$json = {
+  '1': 'ReleaseStoryMediaResponse',
+  '2': [
+    {'1': 'receipt_id', '3': 1, '4': 1, '5': 9, '10': 'receiptId'},
+    {'1': 'operation_id', '3': 2, '4': 1, '5': 9, '10': 'operationId'},
+    {'1': 'request_sha256', '3': 3, '4': 1, '5': 12, '10': 'requestSha256'},
+  ],
+};
+
+/// Descriptor for `ReleaseStoryMediaResponse`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List releaseStoryMediaResponseDescriptor = $convert.base64Decode(
+    'ChlSZWxlYXNlU3RvcnlNZWRpYVJlc3BvbnNlEh0KCnJlY2VpcHRfaWQYASABKAlSCXJlY2VpcH'
+    'RJZBIhCgxvcGVyYXRpb25faWQYAiABKAlSC29wZXJhdGlvbklkEiUKDnJlcXVlc3Rfc2hhMjU2'
+    'GAMgASgMUg1yZXF1ZXN0U2hhMjU2');

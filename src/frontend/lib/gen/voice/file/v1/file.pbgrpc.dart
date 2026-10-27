@@ -51,6 +51,22 @@ class FileServiceClient extends $grpc.Client {
     return $createUnaryCall(_$validateStoryMedia, request, options: options);
   }
 
+  /// @voice.security=protected;callers=service:story
+  $grpc.ResponseFuture<$0.ClaimStoryMediaResponse> claimStoryMedia(
+    $0.ClaimStoryMediaRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$claimStoryMedia, request, options: options);
+  }
+
+  /// @voice.security=protected;callers=service:story
+  $grpc.ResponseFuture<$0.ReleaseStoryMediaResponse> releaseStoryMedia(
+    $0.ReleaseStoryMediaRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$releaseStoryMedia, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.RequestUploadResponse> requestUpload(
     $0.RequestUploadRequest request, {
     $grpc.CallOptions? options,
@@ -216,6 +232,16 @@ class FileServiceClient extends $grpc.Client {
       '/voice.file.v1.FileService/ValidateStoryMedia',
       ($0.ValidateStoryMediaRequest value) => value.writeToBuffer(),
       $0.ValidateStoryMediaResponse.fromBuffer);
+  static final _$claimStoryMedia =
+      $grpc.ClientMethod<$0.ClaimStoryMediaRequest, $0.ClaimStoryMediaResponse>(
+          '/voice.file.v1.FileService/ClaimStoryMedia',
+          ($0.ClaimStoryMediaRequest value) => value.writeToBuffer(),
+          $0.ClaimStoryMediaResponse.fromBuffer);
+  static final _$releaseStoryMedia = $grpc.ClientMethod<
+          $0.ReleaseStoryMediaRequest, $0.ReleaseStoryMediaResponse>(
+      '/voice.file.v1.FileService/ReleaseStoryMedia',
+      ($0.ReleaseStoryMediaRequest value) => value.writeToBuffer(),
+      $0.ReleaseStoryMediaResponse.fromBuffer);
   static final _$requestUpload =
       $grpc.ClientMethod<$0.RequestUploadRequest, $0.RequestUploadResponse>(
           '/voice.file.v1.FileService/RequestUpload',
@@ -341,6 +367,24 @@ abstract class FileServiceBase extends $grpc.Service {
         ($core.List<$core.int> value) =>
             $0.ValidateStoryMediaRequest.fromBuffer(value),
         ($0.ValidateStoryMediaResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ClaimStoryMediaRequest,
+            $0.ClaimStoryMediaResponse>(
+        'ClaimStoryMedia',
+        claimStoryMedia_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ClaimStoryMediaRequest.fromBuffer(value),
+        ($0.ClaimStoryMediaResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.ReleaseStoryMediaRequest,
+            $0.ReleaseStoryMediaResponse>(
+        'ReleaseStoryMedia',
+        releaseStoryMedia_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.ReleaseStoryMediaRequest.fromBuffer(value),
+        ($0.ReleaseStoryMediaResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.RequestUploadRequest, $0.RequestUploadResponse>(
             'RequestUpload',
@@ -521,6 +565,24 @@ abstract class FileServiceBase extends $grpc.Service {
 
   $async.Future<$0.ValidateStoryMediaResponse> validateStoryMedia(
       $grpc.ServiceCall call, $0.ValidateStoryMediaRequest request);
+
+  $async.Future<$0.ClaimStoryMediaResponse> claimStoryMedia_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ClaimStoryMediaRequest> $request) async {
+    return claimStoryMedia($call, await $request);
+  }
+
+  $async.Future<$0.ClaimStoryMediaResponse> claimStoryMedia(
+      $grpc.ServiceCall call, $0.ClaimStoryMediaRequest request);
+
+  $async.Future<$0.ReleaseStoryMediaResponse> releaseStoryMedia_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.ReleaseStoryMediaRequest> $request) async {
+    return releaseStoryMedia($call, await $request);
+  }
+
+  $async.Future<$0.ReleaseStoryMediaResponse> releaseStoryMedia(
+      $grpc.ServiceCall call, $0.ReleaseStoryMediaRequest request);
 
   $async.Future<$0.RequestUploadResponse> requestUpload_Pre(
       $grpc.ServiceCall $call,

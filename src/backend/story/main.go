@@ -85,7 +85,11 @@ func main() {
 		svc.Friends = friendChecker
 		svc.Audience = friendChecker
 		svc.FeedAuthors = friendChecker
-		fileDeleter := clients.WireGRPC(logger, svc)
+		_ = clients.WireGRPC(logger, svc)
+		var fileDeleter jobs.FileDeleter
+		if mediaClient != nil {
+			fileDeleter = mediaClient
+		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
 		storyv1.RegisterStoryServiceServer(grpcSrv, svc)
 		go func() {

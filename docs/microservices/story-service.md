@@ -245,7 +245,7 @@ story_media_deletion_outbox
 
 - **Expiry worker**: каждую минуту — пометить expired stories (TTL 24h)
 - **Archive cleanup**: bounded DB-first transaction locks expired unhighlighted Stories with `FOR UPDATE SKIP LOCKED`, inserts one media-deletion outbox record per media Story, then logically deletes the Stories. Text-only Stories do not create an outbox row. Highlight membership mutations lock the same Story rows, so a committed Highlight protects the Story/media, while a purge that commits first makes Add return `NotFound`.
-- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls File Service after the Story commit, and completes only its own lease. Failures and ambiguous File outcomes back off and retry; File deletion is idempotent by immutable file ID.
+- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls protected `ReleaseStoryMedia` after the Story commit, and completes only its own lease. The immutable operation ID is the Story ID; release names `(media_file_id, STORY, story_id, NULL, NULL)`. Failures and ambiguous File outcomes back off and retry. File owns zero-reference detection and physical GC; this worker never calls broad `DeleteFile`.
 - **LFP matcher**: при создании "ищу пати" Story Service публикует `story.lfp_created` в JetStream; **потребитель Matchmaking Service (авто-заявка из LFP-стори) отложен** — Matchmaking пока не подписан на этот subject
 
 ## Публикуемые события (→ NATS)
@@ -292,8 +292,43 @@ non-sensitive `Unavailable`; File's `InvalidArgument`, `NotFound`,
 
 Until the product canon selects an LFP media kind and video policy, media-less
 LFP remains supported and any non-empty LFP `media_file_id` fails closed with
-`FailedPrecondition` before File, persistence or an event. Exact Story-ID
-claim/reference binding remains separate File-reference work.
+`FailedPrecondition` before File, persistence or an event. Read-only validation
+does not acquire a reference; the exact photo/video lifecycle is defined below.
+
+### Exact media reference lifecycle
+
+Photo/video publication additionally calls protected `ClaimStoryMedia`, with an
+immutable Story ID, File ID, author and expected media type. File repeats the
+admission predicate while holding its blob and File locks and durably acquires
+`(file_id, STORY, story_id, NULL, NULL)` before publication. Claim operation IDs
+are UUIDv5 of `voice.story.media.acquire.v1:<story UUID>` under the URL namespace;
+release operation IDs equal the Story UUID, so acquire and release never share
+an idempotency key. Each transport attempt gets a fresh signed credential and
+request ID; inbound Gateway/client authority is discarded.
+
+Migration `000007` adds a Story-owned `story_media_reference_intents` table.
+Creation saves the exact Story/File pair before File, then locks that intent
+through acquire and Story insertion. The Story and removal of the intent commit
+together. Failed or ambiguous creation leaves the intent for bounded recovery
+after one minute. Recovery locks the intent and releases its exact key; File
+durably retires even a not-yet-acquired key, so a delayed acquire cannot revive
+it. Recovery retries ambiguous releases without dropping intent ownership.
+
+Author `DeleteStory` atomically queues the same release and hides the Story.
+The same author can replay success; other authors and unknown IDs receive
+`NotFound`. A minimal Story-owned deletion receipt preserves replay for 30 days
+after successful deletion even if archive cleanup physically removes the Story;
+the worker removes expired receipts in bounded batches. Text creates no media
+intent or release. Highlights retain the original Story reference through
+expiry/archive; only explicit author deletion or eligible archive cleanup
+releases it.
+
+The production dispatcher uses the configured signed File client and remains
+pending when that protected dependency is absent. Historical unclaimed media
+is never converted into broad File deletion: releasing an absent exact reference
+retires that key but does not initiate blob GC. Deterministic owner backfills and
+the global File-reference activation gates remain prerequisites for a deployment
+cutover; this code change is not rollout or acceptance evidence.
 
 ### Protected media rollout
 

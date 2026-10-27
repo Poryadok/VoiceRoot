@@ -150,8 +150,43 @@ func stringp(value string) *string { return &value }
 
 type mediaValidatorFunc func(context.Context, uuid.UUID, uuid.UUID, storyv1.StoryMediaType) error
 
+func (f mediaValidatorFunc) ClaimStoryMedia(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, storyv1.StoryMediaType) error {
+	return nil
+}
+
 func (f mediaValidatorFunc) ValidateStoryMedia(ctx context.Context, file, author uuid.UUID, expected storyv1.StoryMediaType) error {
 	return f(ctx, file, author, expected)
+}
+
+type rejectingMediaClaim struct{ story, file, author uuid.UUID }
+
+func (*rejectingMediaClaim) ValidateStoryMedia(context.Context, uuid.UUID, uuid.UUID, storyv1.StoryMediaType) error {
+	return nil
+}
+func (f *rejectingMediaClaim) ClaimStoryMedia(_ context.Context, story, file, author uuid.UUID, _ storyv1.StoryMediaType) error {
+	f.story, f.file, f.author = story, file, author
+	return status.Error(codes.FailedPrecondition, "private File predicate detail")
+}
+
+func TestStoryMediaClaimFailureDoesNotPersistOrPublish(t *testing.T) {
+	if testing.Short() {
+		t.Skip("isolated PostgreSQL")
+	}
+	claim := &rejectingMediaClaim{}
+	client, pool, events, author := startStoryMediaRED(t, claim)
+	file := uuid.NewString()
+	expected := storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO
+	_, err := client.CreateStory(withProfile(context.Background(), uuid.New(), author), &storyv1.CreateStoryRequest{TypeEnum: &expected, MediaFileId: &file})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.NotContains(t, err.Error(), "private File")
+	require.NotEqual(t, uuid.Nil, claim.story)
+	require.Equal(t, file, claim.file.String())
+	require.Equal(t, author, claim.author)
+	require.Zero(t, storyMediaRowCount(t, pool, author))
+	require.Zero(t, events.created)
+	var pending int
+	require.NoError(t, pool.QueryRow(context.Background(), `SELECT count(*) FROM story_media_reference_intents WHERE story_id=$1 AND media_file_id=$2`, claim.story, claim.file).Scan(&pending))
+	require.Equal(t, 1, pending)
 }
 
 func TestStoryMediaAttestationFailureDoesNotPersistOrPublish(t *testing.T) {
