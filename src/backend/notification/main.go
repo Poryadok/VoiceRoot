@@ -253,6 +253,11 @@ func main() {
 		}
 		go runNotificationLifecycleRetention(consumerCtx, settingsStore, logger)
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
+			recipientAuthority, closeRecipientAuthority, err := newNotificationRecipientAuthority()
+			if err != nil {
+				log.Fatalf("notification recipient authority: %v", err)
+			}
+			defer closeRecipientAuthority()
 			consumerReadiness = newNotificationConsumerReadiness("story", "message", "matchmaking", "voice", "social", "moderation", "subscription")
 			start := func(name string, run func(context.Context) error) {
 				go runNotificationConsumerLoop(consumerCtx, consumerReadiness, name, time.Second, run, logger)
@@ -261,7 +266,7 @@ func main() {
 				return runStoryEventsConsumer(ctx, natsURL, tokenStore, storyPusher, logger)
 			})
 			start("message", func(ctx context.Context) error {
-				return runMessageEventsConsumer(ctx, natsURL, tokenStore, chatLister, msgPusher, pushEnrich, logger)
+				return runMessageEventsConsumer(ctx, natsURL, tokenStore, chatLister, msgPusher, pushEnrich, logger, recipientAuthority)
 			})
 			start("matchmaking", func(ctx context.Context) error {
 				return runMatchmakingEventsConsumer(ctx, natsURL, tokenStore, pusher, presenceChecker, policyLoader, logger)

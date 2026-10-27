@@ -63,9 +63,37 @@ import voice.backend.auth.service.LinkedAccountsService;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@org.springframework.context.annotation.Import(ProfilesVerificationIntegrationTest.LegacySourceFixture.class)
 @ActiveProfiles("integration")
 @Testcontainers(disabledWithoutDocker = true)
 class ProfilesVerificationIntegrationTest {
+  /** Test-only source lifecycle setup. Public legacy callback is blocked by LinkedOAuthControllerTest.
+   * These historical fixtures do not qualify OAuth transport or the legacy YouTube proxy.
+   */
+  @org.springframework.web.bind.annotation.RestController
+  static class LegacySourceFixture {
+    private final voice.backend.auth.service.AuthService auth;
+    private final LinkedAccountsService linked;
+    LegacySourceFixture(voice.backend.auth.service.AuthService auth, LinkedAccountsService linked) {
+      this.auth=auth; this.linked=linked;
+    }
+    @org.springframework.web.bind.annotation.PostMapping("/test-fixtures/linked-accounts/{provider}/callback")
+    Map<String,String> seed(
+        @org.springframework.web.bind.annotation.RequestHeader("Authorization") String bearer,
+        @org.springframework.web.bind.annotation.PathVariable String provider,
+        @org.springframework.web.bind.annotation.RequestBody voice.backend.auth.rest.AuthRestController.OAuthCallbackRequest body) {
+      var c=auth.validate(bearer);
+      var result=provider.equals("twitch")
+          ?linked.completeTwitchCallback(UUID.fromString(c.userId()),UUID.fromString(c.profileId()),body.code(),body.redirectUri())
+          :linked.completeYoutubeCallback(UUID.fromString(c.userId()),UUID.fromString(c.profileId()),body.code(),body.redirectUri());
+      return Map.of("verification_type",result.verificationType(),"badge",result.badge());
+    }
+    @org.springframework.web.bind.annotation.ExceptionHandler(voice.backend.auth.service.AuthException.class)
+    org.springframework.http.ResponseEntity<Map<String,String>> error(voice.backend.auth.service.AuthException failure) {
+      return new voice.backend.auth.rest.AuthRestController(auth,linked,null).authError(failure);
+    }
+  }
+
   static final TestUserGrpcService userGrpc = new TestUserGrpcService();
   static final Server userGrpcServer = startUserGrpcServer();
 
@@ -213,7 +241,7 @@ class ProfilesVerificationIntegrationTest {
 
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + access)
                   .contentType("application/json")
                   .content(
@@ -280,7 +308,7 @@ class ProfilesVerificationIntegrationTest {
       String access = registered.get("access_token").asText();
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + access)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -292,7 +320,7 @@ class ProfilesVerificationIntegrationTest {
   }
 
   @Test
-  void oauthYoutubeYppPersistsLinkedIdentity() throws Exception {
+  void legacyYoutubeProxyFixturePersistsSourceForLifecycleRegression() throws Exception {
     HttpServer mockYt = HttpServer.create(new InetSocketAddress(0), 0);
     mockYt.createContext(
         "/youtube/v3/channels",
@@ -317,7 +345,7 @@ class ProfilesVerificationIntegrationTest {
 
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/youtube/callback")
+              post("/test-fixtures/linked-accounts/youtube/callback")
                   .header("Authorization", "Bearer " + access)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -371,7 +399,7 @@ class ProfilesVerificationIntegrationTest {
 
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + access)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -421,7 +449,7 @@ class ProfilesVerificationIntegrationTest {
       String access = registered.get("access_token").asText();
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + access)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -492,7 +520,7 @@ class ProfilesVerificationIntegrationTest {
       String access = registered.get("access_token").asText();
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + access)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -601,7 +629,7 @@ class ProfilesVerificationIntegrationTest {
 
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + accessA)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -628,7 +656,7 @@ class ProfilesVerificationIntegrationTest {
 
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + accessB)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))
@@ -644,7 +672,7 @@ class ProfilesVerificationIntegrationTest {
 
       mockMvc
           .perform(
-              post("/api/v1/auth/linked-accounts/twitch/callback")
+              post("/test-fixtures/linked-accounts/twitch/callback")
                   .header("Authorization", "Bearer " + accessB)
                   .contentType("application/json")
                   .content("{\"code\":\"mock-code\",\"redirect_uri\":\"http://127.0.0.1/cb\"}"))

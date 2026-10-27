@@ -35,6 +35,14 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims tokenClaims
+	linkedOAuthPublic, linkedOAuth := linkedOAuthRoute(r.Method, r.URL.Path)
+	if linkedOAuthPublic {
+		// Provider browser callbacks carry state, never Voice bearer authority.
+		r.Header.Del("Authorization")
+	} else if linkedOAuth && !hasSingleBearerAuthorization(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_token"})
+		return
+	}
 	sdkPolicy, sdkAuthorizationRoute := sdkAuthorizationPolicy(r.Method, r.URL.Path)
 	if sdkAuthorizationRoute && sdkPolicy.principal == sdkAuthorizationCodeProof {
 		r.Header.Del("Authorization")
@@ -114,6 +122,17 @@ func (g *gateway) handleREST(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate_limited"})
 			return
 		}
+	}
+
+	if linkedOAuth {
+		// These methods terminate in Auth REST even when a gRPC Auth client exists.
+		// Missing REST configuration must not select another transport.
+		if upstream, ok := g.config.restUpstreams["auth"]; ok {
+			upstream.ServeHTTP(w, r)
+		} else {
+			http.NotFound(w, r)
+		}
+		return
 	}
 
 	if g.config.transcoder != nil {
@@ -247,6 +266,9 @@ func isPublicRESTNamespace(namespace string) bool {
 }
 
 func isPublicRESTRoute(method, path string) bool {
+	if public, matched := linkedOAuthRoute(method, path); matched {
+		return public
+	}
 	if method == http.MethodPost && (path == "/api/v1/auth/login" ||
 		path == "/api/v1/auth/register" ||
 		path == "/api/v1/auth/refresh") {
