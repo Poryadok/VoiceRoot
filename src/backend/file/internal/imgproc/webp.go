@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	thumbMaxEdge            = 320
-	maxProcessedImageBytes  = 5 * 1024 * 1024
-	defaultFullWebPQuality  = 85
-	defaultThumbWebPQuality = 80
+	thumbMaxEdge             = 320
+	maxProcessedImageBytes   = 5 * 1024 * 1024
+	maxProcessedStickerBytes = 512 * 1024
+	defaultFullWebPQuality   = 85
+	defaultThumbWebPQuality  = 80
 )
 
 // ObjectWriter uploads processed bytes to object storage.
@@ -57,6 +58,14 @@ func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
+	return p.ProcessImageBytes(ctx, row, raw)
+}
+
+// ProcessImageBytes transforms the verified upload snapshot without another GET.
+func (p Processor) ProcessImageBytes(ctx context.Context, row store.FileRow, raw []byte) (grpcsvc.ImageProcessingResult, error) {
+	if p.Writer == nil {
+		return grpcsvc.ImageProcessingResult{}, errNotConfigured
+	}
 	src, _, err := image.Decode(bytes.NewReader(raw))
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
@@ -80,12 +89,16 @@ func (p Processor) ProcessImage(ctx context.Context, row store.FileRow) (grpcsvc
 	if encoder == nil {
 		encoder = encodeWebP
 	}
-	fullBytes, err := encodeWebPWithinCap(src, defaultFullWebPQuality, maxProcessedImageBytes, encoder)
+	maxBytes := maxProcessedImageBytes
+	if row.UploadIntent == "sticker" {
+		maxBytes = maxProcessedStickerBytes
+	}
+	fullBytes, err := encodeWebPWithinCap(src, defaultFullWebPQuality, maxBytes, encoder)
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}
 	thumb := resizeThumb(src, thumbMaxEdge)
-	thumbBytes, err := encodeWebPWithinCap(thumb, defaultThumbWebPQuality, maxProcessedImageBytes, encoder)
+	thumbBytes, err := encodeWebPWithinCap(thumb, defaultThumbWebPQuality, maxBytes, encoder)
 	if err != nil {
 		return grpcsvc.ImageProcessingResult{}, err
 	}

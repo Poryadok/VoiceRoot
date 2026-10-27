@@ -23,6 +23,19 @@ import (
 
 type stickerObjects map[string][]byte
 
+type changingStickerReader struct {
+	original, replacement []byte
+	reads                 int
+}
+
+func (r *changingStickerReader) ReadObject(_ context.Context, _ string, _ int64) ([]byte, error) {
+	r.reads++
+	if r.reads == 1 {
+		return r.original, nil
+	}
+	return r.replacement, nil
+}
+
 func (s stickerObjects) ReadObject(_ context.Context, key string, _ int64) ([]byte, error) {
 	return s[key], nil
 }
@@ -142,4 +155,22 @@ func TestStaticStickerUpload(t *testing.T) {
 	var previews int
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM file_preview_event_outbox").Scan(&previews))
 	require.Zero(t, previews, "stickers do not enter the closed generic preview protocol")
+	// A reusable PUT URL can replace the object after validation. Processing must
+	// consume the exact source that was hashed and scanned, without another GET.
+	var replacement bytes.Buffer
+	replacementImage := image.NewRGBA(image.Rect(0, 0, 1024, 256))
+	draw.Draw(replacementImage, replacementImage.Bounds(), image.NewUniform(color.RGBA{B: 255, A: 255}), image.Point{}, draw.Src)
+	require.NoError(t, png.Encode(&replacement, replacementImage))
+	changing := &changingStickerReader{original: source.Bytes(), replacement: replacement.Bytes()}
+	verifiedClient := startFileGRPCFull(t, pool, grpcsvc.Deps{Presigner: &recordingPresigner{}, Reader: changing, Processor: imgproc.Processor{Reader: changing, Writer: objects}, Scanner: fakeScanner("clean")})
+	upload, err := verifiedClient.RequestUpload(authed, request())
+	require.NoError(t, err)
+	confirmed, err := verifiedClient.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{FileId: upload.GetUploadResponse().GetFileId(), Sha256Hash: sha256Hex(source.Bytes())})
+	require.NoError(t, err)
+	require.Equal(t, "ready", confirmed.GetFileMetadata().GetStatus())
+	require.Equal(t, 1, changing.reads, "processed bytes must be the verified upload snapshot")
+	processed, _, err := image.Decode(bytes.NewReader(objects[confirmed.GetFileMetadata().GetConvertedR2Key()]))
+	require.NoError(t, err)
+	red, _, blue, _ := processed.At(256, 256).RGBA()
+	require.Greater(t, red, blue)
 }

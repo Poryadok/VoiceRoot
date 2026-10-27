@@ -265,6 +265,8 @@ Normative product scope: [text-chat.md](../features/text-chat.md) § «Меди�
 
 `RequestUpload(intent=STICKER)` admits plaintext PNG/WebP with the existing uploader, optional chat ACL and upload-size policy. E2E and Story uploads are rejected. Confirmation verifies SHA-256, rejects GIF, APNG and animated WebP container bytes, scans the source and uses the existing image processor to produce a static WebP on a 512 by 512 transparent canvas, preserving aspect ratio. Invalid source, scan and processing failures cannot become ready. Processing and scanning must be configured. Sticker metadata retains its intent; the closed generic attachment preview v1/v2 serializer and resolver exclude stickers, as they exclude music. The existing legacy `file.processed` notification remains published.
 
+Processing consumes the exact source bytes validated and scanned by confirmation, without rereading the mutable upload key. Both sticker derivatives must fit the 512 KiB asset ceiling before either is written; ordinary images retain their existing 5 MiB cap.
+
 The animated sticker claims below remain an unresolved contract discrepancy: normative `text-chat.md` limits user packs to static PNG/WebP. This slice does not activate animated stickers, Chat pack operations or Messaging shared media.
 
 ### Upload flows

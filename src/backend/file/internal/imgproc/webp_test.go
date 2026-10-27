@@ -196,6 +196,40 @@ func TestProcessor_ProcessImage_RejectsOversizedDerivativesBeforeWrites(t *testi
 	require.Empty(t, mem.deletedKeys)
 }
 
+func TestProcessor_StickerDerivativeSizeBoundary(t *testing.T) {
+	var raw bytes.Buffer
+	require.NoError(t, png.Encode(&raw, image.NewRGBA(image.Rect(0, 0, 1024, 256))))
+	for _, tc := range []struct {
+		name, intent string
+		full, thumb  int
+		fails        bool
+	}{
+		{"sticker exact limit", "sticker", 512 * 1024, 512 * 1024, false},
+		{"sticker full overflow", "sticker", 512*1024 + 1, 10, true},
+		{"sticker thumbnail overflow", "sticker", 10, 512*1024 + 1, true},
+		{"ordinary image retains five MiB", "", 5 * 1024 * 1024, 5 * 1024 * 1024, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mem := &memObjectStore{objects: map[string][]byte{"source": raw.Bytes()}}
+			proc := Processor{Reader: mem, Writer: mem, Deleter: mem, encode: func(img image.Image, _ float32) ([]byte, error) {
+				if img.Bounds().Dx() <= 320 {
+					return make([]byte, tc.thumb), nil
+				}
+				return make([]byte, tc.full), nil
+			}}
+			out, err := proc.ProcessImage(context.Background(), store.FileRow{ID: uuid.New(), R2Key: "source", SizeBytes: int64(raw.Len()), UploadIntent: tc.intent})
+			if tc.fails {
+				require.ErrorIs(t, err, grpcsvc.ErrProcessedOutputTooLarge)
+				require.Empty(t, mem.putKeys)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, mem.objects[out.ConvertedR2Key], tc.full)
+			require.Len(t, mem.objects[out.ThumbnailR2Key], tc.thumb)
+		})
+	}
+}
+
 func TestProcessor_ProcessImage_CleansBothDeterministicKeysAfterPartialWrite(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
 	var raw bytes.Buffer

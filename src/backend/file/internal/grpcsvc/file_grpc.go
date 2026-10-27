@@ -63,6 +63,12 @@ type ImageProcessor interface {
 	ProcessImage(ctx context.Context, row store.FileRow) (ImageProcessingResult, error)
 }
 
+// VerifiedImageProcessor consumes the same source snapshot that confirmation
+// hashed, validated and scanned, without rereading a mutable upload object.
+type VerifiedImageProcessor interface {
+	ProcessImageBytes(ctx context.Context, row store.FileRow, source []byte) (ImageProcessingResult, error)
+}
+
 type AudioProcessor interface {
 	Extract(context.Context, []byte) (audioproc.Metadata, error)
 }
@@ -464,7 +470,7 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 		return nil, err
 	}
 	if row.UploadIntent == "sticker" {
-		if _, fallback := s.processor.(keyDerivingImageProcessor); fallback || s.scanner == nil {
+		if _, verified := s.processor.(VerifiedImageProcessor); !verified || s.scanner == nil {
 			return nil, status.Error(codes.FailedPrecondition, "sticker processing and scanning must be configured")
 		}
 		if !staticStickerSource(uploaded, row.MimeType) {
@@ -495,7 +501,12 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	}
 	originalKey := row.R2Key
 	if row.FileType == "image" && !row.IsE2E && s.processor != nil {
-		processed, err := s.processor.ProcessImage(ctx, row)
+		var processed ImageProcessingResult
+		if row.UploadIntent == "sticker" {
+			processed, err = s.processor.(VerifiedImageProcessor).ProcessImageBytes(ctx, row, uploaded)
+		} else {
+			processed, err = s.processor.ProcessImage(ctx, row)
+		}
 		if err != nil {
 			if errors.Is(err, ErrProcessedOutputTooLarge) || row.UploadIntent == "sticker" {
 				failed, updateErr := s.files.ApplyScanResult(ctx, fileID, "failed", "error")
