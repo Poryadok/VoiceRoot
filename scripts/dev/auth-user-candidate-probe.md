@@ -28,7 +28,11 @@ the executed helpers as well as the probe. A different source needs a new actual
 review and operation, not an edited approval field in an old journal.
 
 The actor is Dimas-16. The actual adoption task must be owned/assigned to that
-actor in `dev_ready_for_deploy` or `dev_deploying`, without pending impact review.
+actor without pending impact review. The credential-free artifact producer may
+run during task `review` only in resource phase `prepare`; it also accepts
+`dev_ready_for_deploy` or `dev_deploying` under its same prepare-only window.
+This does not advance task status or relax the separate application's deployment
+gates. Do not manufacture a deployment-ready stage to obtain artifact evidence.
 Use the supported TTenrec resource protocol to reconcile and claim DEV for that
 task and the exact candidate. Do not hold the resource while waiting on builds,
 source CI or review. The tool requires the actual held `prepare` phase and
