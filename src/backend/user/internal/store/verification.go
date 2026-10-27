@@ -244,6 +244,9 @@ func (s *ProfileStore) softDeleteProfileTx(ctx context.Context, tx pgx.Tx, accou
 
 // ApplyDowngradeProfileSelection unfreezes kept profiles and freezes others for free tier.
 func (s *ProfileStore) ApplyDowngradeProfileSelection(ctx context.Context, accountID uuid.UUID, kept []uuid.UUID) error {
+	if s.birthCapture != nil {
+		return s.applyDowngradeWithIdentity(ctx, accountID, kept)
+	}
 	keptSet := make(map[uuid.UUID]struct{}, len(kept))
 	for _, id := range kept {
 		keptSet[id] = struct{}{}
