@@ -139,6 +139,21 @@ Shared timeouts for Go HTTP services and Postgres bootstrap. Values are Go `time
 
 Staging overrides — `deploy/staging/configmap-app.yaml` (`GRPC_DIAL_TIMEOUT` is set; HTTP/Postgres keys are commented for optional tuning).
 
+For User/Space cold starts, the staging Space Deployment uses the private
+`voice-user-peer:9090` discovery edge; ordinary Services stay ready-gated. User
+starts initialized gRPC transports with RPC admission closed, retains the
+configured Space transport Ready deadline, and opens admission/HTTP health only
+after that deadline succeeds and all listeners start. An unavailable configured
+peer still fails startup and closes resources. A transport Ready observation is
+not a successful authority RPC or a promise of lifetime peer availability;
+privacy and protected calls retain their per-call denial behavior.
+
+The peer Service initially exposes only ordinary 9090. A profile enabling
+`SPACE_USER_CAPTURE_*` must separately qualify private discovery for its existing
+dedicated User port, explicit TLS server name, caller CA/client identity and
+complete principal runtime. Do not point protected capture at 9090, disable TLS
+verification, or activate protected configuration just to resolve discovery.
+
 The active Go PostgreSQL service bootstraps use `pkg/postgres.NewPool`, including
 Chat and Messaging's auxiliary metadata pools. `POSTGRES_MAX_CONNS` overrides
 the connection string's `pool_max_conns`, matching the existing Bot/Voice helper.

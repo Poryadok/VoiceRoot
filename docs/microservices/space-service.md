@@ -232,6 +232,14 @@ Search index hydration/update projections remain open in BE-043.
 
 ### Ban and Unban operation identity
 
+For the ordinary User/Space cold-start pair, the staging Space Deployment alone
+overrides `USER_GRPC_ADDR` to the internal `voice-user-peer:9090` Service. That
+Service publishes User's fully constructed, admission-closed transport before
+User HTTP readiness; it does not supply business authority. Space retains its
+bounded User transport Ready prerequisite, then its own local gates expose the
+ordinary ready-gated Space route so User can finish startup. Calls made before
+User admission opens remain denied. Other consumers retain ordinary Services.
+
 Space constructs the protected User account-capture client when all five
 `SPACE_USER_CAPTURE_GRPC_ADDR`, `SPACE_USER_CAPTURE_TLS_CA_FILE`,
 `SPACE_USER_CAPTURE_TLS_SERVER_NAME`, `SPACE_USER_CAPTURE_CLIENT_CERT_FILE` and

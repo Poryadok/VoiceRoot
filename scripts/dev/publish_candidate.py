@@ -15,7 +15,14 @@ import urllib.parse
 import urllib.request
 import zipfile
 
-PRODUCT = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
+PRODUCT = '31a04a471c604488bedd5b442039dfdf0434f9c3'
+AUTH_USER_PRODUCT = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
+# Each reviewed source has its own bounded consumer; never admit arbitrary SHAs.
+PRODUCT_COMPONENTS = {
+    PRODUCT: ('web', 'admin', 'developer-portal', 'auth', 'user',
+              'notification', 'realtime', 'space-native-migrate'),
+    AUTH_USER_PRODUCT: ('auth', 'user'),
+}
 REPOSITORY = 'Poryadok/VoiceRoot'
 REGISTRY = 'ghcr.io/poryadok/voiceroot'
 WORKFLOW = '.github/workflows/dev-candidate-publish.yml'
@@ -34,13 +41,12 @@ def require(condition, code):
 
 
 def build_plan(product, publisher, run_id, attempt):
-    require(product == PRODUCT, 'unselected_product')
+    require(isinstance(product, str) and product in PRODUCT_COMPONENTS, 'unselected_product')
     require(isinstance(publisher, str) and SHA.fullmatch(publisher), 'publisher_identity')
     require(all(isinstance(v, str) and re.fullmatch(r'[1-9][0-9]{0,19}', v)
                 for v in (run_id, attempt)), 'run_identity')
     components = {}
-    for name in ('web', 'admin', 'developer-portal', 'auth', 'user',
-                 'notification', 'realtime', 'space-native-migrate'):
+    for name in PRODUCT_COMPONENTS[product]:
         args = {}
         if name == 'space-native-migrate':
             context, dockerfile = '.', 'src/backend/space/Dockerfile.native-migrate'
@@ -105,12 +111,13 @@ def validate_config_identity(expected, actual):
 
 
 def verify_config_source(config, product):
-    require(product == PRODUCT and config.get('config', {}).get('Labels', {}).get(
+    require(product in PRODUCT_COMPONENTS and config.get('config', {}).get('Labels', {}).get(
         'org.opencontainers.image.revision') == product, 'pulled_config_product_source')
 
 
 def verify_output(component, files, product, expected_sql=None):
-    require(product == PRODUCT and files, 'output_source_or_inventory')
+    require(product in PRODUCT_COMPONENTS and component in {
+        'dev-' + name for name in PRODUCT_COMPONENTS[product]} and files, 'output_source_or_inventory')
     if component == 'dev-auth':
         with zipfile.ZipFile(io.BytesIO(files['auth.jar'])) as archive:
             require(archive.read('BOOT-INF/classes/voice-build-source.sha').decode().strip() == product,
@@ -220,9 +227,9 @@ def source_snapshot(root, expected):
     return {'source_sha': expected, 'git_tree_sha256': hashlib.sha256(tree).hexdigest(), 'files': files}
 
 
-def pulled_output(component, runtime_ref, config_digest, product_root, registry, repository, output):
+def pulled_output(component, runtime_ref, config_digest, product_root, registry, repository, output, *, product):
     config = registry.get(repository, 'blobs/' + config_digest)
-    verify_config_source(decode_manifest(config, config_digest), PRODUCT)
+    verify_config_source(decode_manifest(config, config_digest), product)
     command(['docker', 'pull', '--platform', 'linux/amd64', runtime_ref], log=output / (component + '-pull.log'))
     actual = command(['docker', 'image', 'inspect', runtime_ref, '--format', '{{.Id}}']).decode().strip()
     validate_config_identity(config_digest, actual)
@@ -247,7 +254,7 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
                      for p in root.rglob('*') if p.is_file()}
             sql = ({p.name: p.read_bytes() for p in (product_root / 'src/backend/migrations/space_db').glob('*.sql')}
                    if component == 'dev-space-native-migrate' else None)
-            proof = verify_output(component, files, PRODUCT, sql)
+            proof = verify_output(component, files, product, sql)
             if component == 'dev-auth':
                 # Public trust inputs only; never export a private key or credential.
                 for name in ('auth-roots.pem', 'auth-cacerts'):
@@ -264,6 +271,7 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
 
 def publish(product_root, publisher_root, output, env):
     plan = build_plan(env['PRODUCT_SHA'], env['PUBLISHER_SHA'], env['GITHUB_RUN_ID'], env['GITHUB_RUN_ATTEMPT'])
+    product = plan['product_sha']
     require(env.get('GITHUB_REPOSITORY') == REPOSITORY and env.get('GITHUB_REF') == 'refs/heads/master', 'publisher_repository_or_ref')
     publisher_source = source_snapshot(publisher_root, plan['publisher_sha'])
     product_source = source_snapshot(product_root, plan['product_sha'])
@@ -283,12 +291,12 @@ def publish(product_root, publisher_root, output, env):
     for component, row in plan['components'].items():
         metadata = output / (component + '-build-metadata.json')
         args = ['docker', 'buildx', 'build', '--platform', row['platform'], '--push', '--provenance=mode=max',
-                '--label', 'org.opencontainers.image.revision=' + PRODUCT, '--metadata-file', str(metadata),
+                '--label', 'org.opencontainers.image.revision=' + product, '--metadata-file', str(metadata),
                 '-f', str(product_root / row['dockerfile']), '-t', row['tag']]
         for key, value in row['build_args'].items():
             args += ['--build-arg', key + '=' + value]
         args.append(str(product_root / row['context']))
-        write(output / (component + '-invocation.json'), {'command': args, 'product_sha': PRODUCT, **authority})
+        write(output / (component + '-invocation.json'), {'command': args, 'product_sha': product, **authority})
         command(args, log=output / (component + '-build.log'))
         digest = json.loads(metadata.read_bytes())['containerimage.digest']
         repository, tag = row['tag'].removeprefix('ghcr.io/').rsplit(':', 1)
@@ -299,14 +307,14 @@ def publish(product_root, publisher_root, output, env):
         manifest = decode_manifest(registry.get(repository, 'manifests/' + platform), platform)
         config_digest = manifest['config']['digest']
         reference = 'ghcr.io/' + repository + '@' + platform
-        proof = pulled_output(component, reference, config_digest, product_root, registry, repository, output)
-        published.append({'component': component, 'product_sha': PRODUCT, 'tag': row['tag'],
+        proof = pulled_output(component, reference, config_digest, product_root, registry, repository, output, product=product)
+        published.append({'component': component, 'product_sha': product, 'tag': row['tag'],
             'index_digest': digest, 'platform_manifest_digest': platform, 'config_digest': config_digest,
             'reference': reference, 'build_args': row['build_args'], 'output_verification': proof, **authority})
         write(output / 'published-images.json', {'publication_complete': False, 'images': published, **authority})
-    require(source_snapshot(product_root, PRODUCT) == product_source, 'product_changed_during_build')
+    require(source_snapshot(product_root, product) == product_source, 'product_changed_during_build')
     require(source_snapshot(publisher_root, plan['publisher_sha']) == publisher_source, 'publisher_changed_during_build')
-    write(output / 'published-images.json', {'publication_complete': True, 'product_sha': PRODUCT,
+    write(output / 'published-images.json', {'publication_complete': True, 'product_sha': product,
           'images': published, 'runtime_qualified': False, 'deployment_performed': False, **authority})
 
 

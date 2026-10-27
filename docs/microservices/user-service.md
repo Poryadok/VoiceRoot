@@ -1,5 +1,26 @@
 # User Service
 
+## Space account-capture startup configuration
+
+`USER_SPACE_CAPTURE_PRINCIPAL_*` transport settings are recognized by presence,
+including an explicitly empty value. Any configured capture listener requires
+an explicit nonempty `GRPC_LISTEN`, TLS certificate/key, client CA, replay Redis
+address and JWKS client certificate/key. The optional fields are replay Redis
+password and JWKS CA override; Space's HTTPS JWKS is selected from
+`S2S_JWKS_URLS_JSON`. This reuses only the exact `user` audience and separate
+`space-account-capture` capability. Shared verifier settings alone do not enable
+capture; no default port or ordinary User listener supplies capture authority.
+
+Partial or malformed transport settings fail startup before health or gRPC
+admission. Complete transport configuration currently also fails startup with
+`qualified User capture source unavailable`: the accepted production source
+custody/reopen contract and qualified opener are still missing. No capture
+listener is started, and startup does not initialize identity keys, bootstrap a
+source or activate writer guards. Entirely absent capture settings preserve the
+existing startup behavior. This configuration correction does not implement
+canonical SQL capture, production listener activation or complete Space bans.
+The remaining owner decision is recorded in [Backend gaps](../todo/backend.md#space).
+
 ## Notification primary lookup (BE-118 prerequisite)
 
 The separate `notification-primary` capability exposes only the existing
@@ -467,6 +488,24 @@ sequence, поэтому первый новый provider update не проиг
 **`user.presence_changed`:** the event is published for a status enum transition or game-title change in `UpdatePresence` (`user/internal/userevents/jetstream.go`): its first observation uses an empty `old_status`; a game-only update uses equal `old_status` / `new_status` so consumers can refresh the viewer-filtered snapshot. The legacy `status` value remains the current status for existing consumers, and the JetStream payload carries additive `old_status` / `new_status` fields.
 
 ## Зависимости
+
+### Configured Space cold start
+
+User constructs its configured `SPACE_GRPC_ADDR` client before handlers, but
+waits for its bounded transport Ready state after starting fully initialized
+User gRPC listeners. Every ordinary, dedicated and source listener denies RPC
+admission until all startup prerequisites and listener starts succeed; HTTP
+health cannot succeed before that release. Failure or cancellation revokes
+admission and closes started resources. Transport readiness does not establish
+identity, privacy, co-membership or other business authority: existing per-RPC
+guards still apply after release and deny unavailable authority.
+
+The staging `voice-user-peer` ClusterIP publishes unready User endpoints only on
+ordinary port 9090. Only Space's `USER_GRPC_ADDR` uses it; User still waits on the
+ordinary ready-gated Space Service. Ordinary Services and shared ConfigMap
+addresses remain unchanged. This discovery edge is not authentication. Explicit
+protected capture configuration still requires its dedicated mTLS endpoint and
+complete issuer/runtime configuration, never ordinary-port fallback.
 
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
