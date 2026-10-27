@@ -59,7 +59,7 @@ catalog-v1 validator or mixed history.
 - [x] Fresh WT93 lease9fcfab70acba808a997c4b0d930dc402 and clean3835 verified.
 - [x] Exact live PR958 head/base/review/ref read; local normal merge only.
 - [x] Ten predecessor blobs materialized and byte-verified against exact sources.
-- [x] Static lineage validator PASS: all30 unique SQL SHA256/Flyway checksums, exact canonical32/33/34 profile prefixes, ten byte-identical source blobs; owned V28 function/catalog bytes unchanged. Linux compilation/compatibility tests remain separate checks.
+- [x] Static lineage validator PASS: all30 unique SQL SHA256/Flyway checksums, exact canonical32/33/34 profile prefixes, ten byte-identical source blobs; owned V28 function/catalog bytes unchanged. Linux JDK25 compatibility checks then passed10/0failure/error/skip; the initial six-test run exposed three stale baseline matrix assertions. Both test matrices now byte-match the same verified predecessor source, preserving all unknown/mixed/dirty negatives.
 - [ ] Allocate eligible successor schema/catalog and preserve actual source RED.
 - [ ] Implement source capture and focused GREEN, then independent review.
 

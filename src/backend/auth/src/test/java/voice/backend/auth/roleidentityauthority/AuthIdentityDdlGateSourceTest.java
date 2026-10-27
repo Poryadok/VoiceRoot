@@ -67,7 +67,8 @@ final class AuthIdentityDdlGateSourceTest {
     var unknown = flywayRows(); unknown.add(Map.of("version","32","script","foreign","checksum",1,"success",true,"type","SQL"));
     deny(() -> AuthIdentityMigrationHistory.validateFlyway(unknown));
     AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",32L,"dirty",false)));
-    for (long version : new long[]{29,31,33}) deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",version,"dirty",false))));
+    AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",33L,"dirty",false)));
+    for (long version : new long[]{29,31,35}) deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",version,"dirty",false))));
     deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",32L,"dirty",true))));
     deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of()));
     deny(() -> AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",32L,"dirty",false),Map.of("version",32L,"dirty",false))));
@@ -78,6 +79,31 @@ final class AuthIdentityDdlGateSourceTest {
     AuthIdentityMigrationHistory.validate(canonical,AuthIdentityDatabasePolicy.Loader.CANONICAL);
     if (canonical.calls.stream().anyMatch(sql -> sql.contains("FROM public.flyway_schema_history"))) throw new AssertionError("canonical path queried Flyway rows");
     if (!canonical.calls.get(1).equals("LOCK TABLE ONLY public.schema_migrations IN ACCESS SHARE MODE")) throw new AssertionError("history lock missing");
+  }
+  @Test void linkedOAuthProfileIsExactAndPreservesThePriorProfile() {
+    var old=flywayRows();AuthIdentityMigrationHistory.validateFlyway(old);
+    var latest=new ArrayList<Map<String,Object>>();
+    for(var expected:AuthIdentityDdlGateCatalog.json("migration-history-linked-oauth-v1.json").path("flyway"))
+      latest.add(new HashMap<>(Map.of("version",expected.path("version").asText(),"script",expected.path("script").asText(),
+          "checksum",expected.path("checksum").asInt(),"success",true,"type","SQL")));
+    if(!latest.subList(0,old.size()).equals(old))throw new AssertionError("linked OAuth release changed prior accepted migration bytes");
+    AuthIdentityMigrationHistory.validateFlyway(latest);
+    latest.getLast().put("checksum",0);deny(()->AuthIdentityMigrationHistory.validateFlyway(latest));
+  }
+  @Test void subscriptionLifecycleProfilePreservesTheExactPredecessor() {
+    var prior=new ArrayList<Map<String,Object>>();
+    for(var expected:AuthIdentityDdlGateCatalog.json("migration-history-linked-oauth-v1.json").path("flyway"))
+      prior.add(new HashMap<>(Map.of("version",expected.path("version").asText(),"script",expected.path("script").asText(),
+          "checksum",expected.path("checksum").asInt(),"success",true,"type","SQL")));
+    var latest=new ArrayList<Map<String,Object>>();
+    for(var expected:AuthIdentityDdlGateCatalog.json("migration-history-subscription-lifecycle-v1.json").path("flyway"))
+      latest.add(new HashMap<>(Map.of("version",expected.path("version").asText(),"script",expected.path("script").asText(),
+          "checksum",expected.path("checksum").asInt(),"success",true,"type","SQL")));
+    if(!latest.subList(0,prior.size()).equals(prior))throw new AssertionError("lifecycle release changed accepted predecessor bytes");
+    AuthIdentityMigrationHistory.validateFlyway(latest);
+    AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",34L,"dirty",false)));
+    latest.getLast().put("checksum",0);deny(()->AuthIdentityMigrationHistory.validateFlyway(latest));
+    deny(()->AuthIdentityMigrationHistory.validateCanonical(List.of(Map.of("version",35L,"dirty",false))));
   }
   static final class HistoryJdbc extends JdbcTemplate {
     final boolean exclusive; final List<String> calls=new ArrayList<>();
