@@ -329,6 +329,7 @@ final class _RecordingRoomController extends ChatRoomController {
     List<MessageAttachment> attachments = const [],
     List<MessageMention> mentions = const [],
     String? threadParentId,
+    bool sendSilent = false,
   }) async {
     sends.add(_SentMessage(content, List.of(attachments)));
     return null;

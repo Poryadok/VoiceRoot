@@ -80,7 +80,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
-- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
+- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; the text composer exposes silent send via the adaptive SendMenu and retains its flag, payload and UUID on explicit retry; pending media menu integration remains open. BE-077/BE-078 implement pending schedule creation and owner list/update/cancel/send-now; automatic due-time and presence dispatch remains BE-079. The client deployment gate remains disabled until the worker is qualified — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
@@ -94,8 +94,8 @@ expiring lease, publishes the stored bytes with the stable NATS message ID,
 and records only a positive JetStream PubAck. Uncertain publishes retain the
 same bytes and retry; PubAck prunes event bytes while retaining the bounded
 receipt/hash evidence. Private read-position changes do not create public read
-events. Scheduled-send handlers remain fail-closed/inactive and are not
-included as enabled producers.
+events. Scheduled creation produces no event; manual send-now uses the normal
+message/outbox transaction. Automatic scheduled dispatch remains BE-079.
 
 For managed Space-chat purge, the same chat/Space mutation lock freezes the
 eligible message rows and their exact outbox event ID/hash set. File/Search
@@ -201,7 +201,7 @@ service MessagingService {
   rpc UploadPreKeyBundle(UploadPreKeyBundleRequest) returns (UploadPreKeyBundleResponse);
   rpc GetPreKeyBundle(GetPreKeyBundleRequest) returns (GetPreKeyBundleResponse);
 
-  // Scheduled message wire contract. Handler implementations remain open.
+  // Owner-scoped scheduled message lifecycle; automatic dispatch remains open.
   rpc ListScheduledMessages(ListScheduledMessagesRequest) returns (ListScheduledMessagesResponse);
   rpc UpdateScheduledMessage(UpdateScheduledMessageRequest) returns (UpdateScheduledMessageResponse);
   rpc CancelScheduledMessage(CancelScheduledMessageRequest) returns (CancelScheduledMessageResponse);
@@ -219,12 +219,13 @@ service MessagingService {
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
 | `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM/group/channel; per-member read cursor; non-members → `PERMISSION_DENIED` |
+| `RecordMessageView` | ✓ | deduplicated group/channel view count; visibility and membership checks apply |
 | `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
-| `SendMessage.send_silent` | ✓ | durable `messages.send_silent`, `message.sent.send_silent` and Notification push consumption; composer remains open |
-| `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | partial | wire contract is present but populated options fail closed until the handler slice |
-| Scheduled RPCs | ✗ | declarations are shipped; handlers remain open |
+| `SendMessage.send_silent` | ✓ | durable `messages.send_silent`, `message.sent.send_silent` and Notification push consumption; the text composer exposes silent send via the adaptive SendMenu and retains its flag, payload and UUID on explicit retry; pending media menu integration remains open |
+| `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | partial | valid options create a pending scheduled message; automatic dispatch remains BE-079 |
+| Scheduled RPCs | partial | owner list/update/cancel/send-now implemented; automatic dispatch remains BE-079 |
 
 ### ListThreads: versioned per-viewer read model (accepted successor)
 
@@ -605,9 +606,9 @@ read_receipts
 
 **Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`, `scheduled_messages` foundation.
 
-**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs.
+**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `RecordMessageView` for group/channel counts, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id`, durable `send_silent` producer propagation and pending schedule creation on `SendMessage`, owner scheduled lifecycle RPCs, E2E pre-key RPCs.
 
-**Gaps vs full spec:** composer for `send_silent`; scheduled handlers, worker and event producer usage; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
+**Gaps vs full spec:** media SendMenu integration; automatic scheduled dispatch worker; typed `content_type` and `message_attachments` table — см. § ниже и [todo/backend.md](../todo/backend.md).
 
 **Attachment validation (code):** R3-A06 is implemented: `validateParsedAttachments` branches on `content_type`; `location` / `article` use rich-payload validation without a File row, while `sticker` / `gif` / `music` / `video_note` require rich-payload and File metadata validation. This does not establish picker, Article metadata-fetch, or Music metadata-processing completion; see [AttachMenu contract gaps](../todo/client.md#attachmenu-rich-action-contracts).
 
@@ -828,7 +829,7 @@ messages (deployed — simplified)
 | `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
-**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds `was_scheduled = 9` and `optional scheduled_at = 10`, which remain unset by the immediate producer until the schedule dispatch slice owns them. A pending create, idempotent replay, update, cancel or terminal failure must emit no `message.sent`; a successfully dispatched scheduled row must emit exactly one normal `message.sent` when that worker is implemented.
+**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds `was_scheduled = 9` and `optional scheduled_at = 10`; immediate sends leave them unset, while manual send-now persists scheduled metadata with the normal message/outbox transaction. A pending create, idempotent replay, update, cancel or terminal failure emits no `message.sent`; automatic worker dispatch remains BE-079.
 
 **`message.read`:** публикуется при `MarkRead`; Realtime fan-out как WS `message_read`. **Code-ok**.
 

@@ -216,6 +216,20 @@ verbose log хранится как workflow artifact.
 копию в default branch. Этот узкий proof не заменяет обычный CI сервиса и не
 закрывает более широкие критерии A2.
 
+### Bot durable inbound message delivery
+
+From `src/backend/bot`, run `go test ./internal/consumer -run
+'^TestMessageEventsJetStreamDurableDelivery$' -count=1 -timeout=3m -v` with
+Docker available. The component fixture owns disposable PostgreSQL 16 and
+NATS JetStream containers and provisions the documented
+`message_events/bot_message_events` push durable before starting the production
+consumer. It checks offline backlog, database-failure NAK/redelivery, signed
+webhook retry after consumer restart, polling failure replay followed by an
+actual gRPC receive, source replay deduplication and unauthorized-chat denial.
+`-short` skips this container test. The HTTP receiver is a local fixture;
+deployed webhook delivery, service credentials/ACLs and production activation
+remain separate checks.
+
 ### API Gateway
 
 - Локально: из [`src/backend/gateway/`](../src/backend/gateway/main.go) запускать `go test ./...`; для race-проверки на хосте с CGO — `CGO_ENABLED=1 go test -race ./...`.
