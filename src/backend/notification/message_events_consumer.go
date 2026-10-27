@@ -33,6 +33,7 @@ func runMessageEventsConsumer(
 	pusher *dispatch.MessagePusher,
 	enrich pushenrich.Resolver,
 	logger *slog.Logger,
+	authorities ...notificationRecipientAuthorizer,
 ) error {
 	if tokens == nil || pusher == nil || strings.TrimSpace(natsURL) == "" {
 		return fmt.Errorf("message notification consumer: missing deps")
@@ -42,6 +43,15 @@ func runMessageEventsConsumer(
 		return fmt.Errorf("nats connect: %w", err)
 	}
 	defer func() { _ = nc.Drain() }()
+	var authority notificationRecipientAuthorizer
+	if len(authorities) == 1 {
+		authority = authorities[0]
+	}
+	routingSub, err := bindMessageRoutingResponder(ctx, nc, members, pusher, enrich, authority)
+	if err != nil {
+		return fmt.Errorf("bind notification recipient routing: %w", err)
+	}
+	defer func() { _ = routingSub.Unsubscribe() }()
 
 	js, err := nc.JetStream()
 	if err != nil {

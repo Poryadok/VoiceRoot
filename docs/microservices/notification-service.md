@@ -1,5 +1,23 @@
 # Notification Service
 
+## Protected primary lookup client (BE-118 prerequisite)
+
+The existing Notification workload signer can construct a narrowly scoped
+primary-profile client for User's separate `notification-primary` mTLS listener.
+`USER_NOTIFICATION_PRIMARY_GRPC_ADDR`, `USER_NOTIFICATION_PRIMARY_TLS_SERVER_NAME`,
+`USER_NOTIFICATION_PRIMARY_TLS_CA_FILE`, `USER_NOTIFICATION_PRIMARY_CLIENT_CERT_FILE`
+and `USER_NOTIFICATION_PRIMARY_CLIENT_KEY_FILE` must be configured together.
+No ordinary-User or internal-header fallback exists. The client replaces ambient
+metadata, signs a fresh exact-method/body-bound request for one payer account,
+and uses the shorter of its caller deadline and 500ms. It accepts only the exact
+requested account mapped to one canonical nonzero primary UUID; nil, omitted,
+malformed, extra-account and unavailable responses fail closed.
+
+This is a constructor/transport prerequisite for the reminder worker, not worker
+registration, in-app insertion, provider activation or a full BE-118 delivery
+claim. The reviewed durable predecessor remains PR936 at `4a281f191`; see the
+[primary read ExecPlan](../testing/notification-primary-profile-read-exec-plan.md).
+
 ## Release capability enforcement
 
 Notification consumes the immutable, source/digest-bound
@@ -306,6 +324,34 @@ Composer label — [text-chat.md](../features/text-chat.md) § Send options; [sc
 Durable read cursor — **Messaging** `MarkRead` REST/gRPC only. WS `mark_read` / `message_read` — Realtime fan-out for same-profile tabs; **does not** replace REST persist. List unread / badges on other devices refresh after REST + `ListChats` metadata — [messaging-service.md](messaging-service.md) § MarkRead, [realtime-service.md](realtime-service.md) § Reconnect checklist, [notifications.md](../features/notifications.md) § Каналы доставки, [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md) § WS vs REST.
 
 ## Публикуемые события (→ NATS)
+
+### Live message in-app routing decision (BE-111)
+
+The message consumer also binds queue `notification_message_routing_v1` on the
+internal core-NATS subject `notification.routing.message.v1`. Realtime submits
+the exact message-event protobuf bytes; the response binds allowed recipient/type
+pairs to their SHA-256 (`version=1`, `event_sha256`, `allowed`, `failed`). It
+contains no client row payload, token, message preview or durable inbox state.
+Only canonical dedicated Realtime reply inboxes are accepted. Checked-in ACL
+intent grants exactly this request subject and response prefix; updated service
+credentials must be issued through the existing source-bound rollout process.
+
+The responder applies complete current membership, ordinary recipient Chat ACL,
+User profile/account binding, directed Social blocks and existing effective
+policy before allowing `new_message`, `message_request`, `mention` or `reaction`.
+It checks the sender's current Chat ACL too. DM checks both block directions;
+group/channel checks recipient→sender. Archive/decline suppress delivery.
+All member pages and a bounded 16-worker recipient evaluation share four seconds;
+any authority/policy failure returns a failed decision without partial targets.
+The existing `CHAT_GRPC_ADDR`, `USER_GRPC_ADDR`, and `SOCIAL_GRPC_ADDR` are required
+when message consumption is enabled. The service replaces ambient metadata for
+each recipient's ordinary Chat query, so internal privilege cannot bypass ACL.
+
+This path does not dispatch push, consume push quota or create a new domain
+stream. Realtime shapes the WS payload and delivers to all active tabs of each
+allowed profile, including members who have not subscribed to the chat. See
+[Realtime fan-out](realtime-service.md#in-app-notification-fan-out) and the
+[implementation/verification plan](../testing/notification-recipient-routing-exec-plan.md).
 
 ### Debug push recorder (disposable Compose E2E only)
 
