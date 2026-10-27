@@ -317,11 +317,26 @@ func (s *ProfileStore) updateOwnedProfileTx(ctx context.Context, tx pgx.Tx, acco
 
 // CreateSecondaryProfile inserts a non-primary profile for the account (multi-profile row).
 func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
+	return s.createSecondaryProfile(ctx, accountID, displayName, usernameHint, accentColor, 0)
+}
+
+// ErrProfileLimit means the account already owns the allowed number of profiles.
+var ErrProfileLimit = errors.New("profile limit reached for subscription tier")
+
+// CreateSecondaryProfileForTier atomically enforces the account's subscription cap.
+func (s *ProfileStore) CreateSecondaryProfileForTier(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string, tier string) (*ProfileRow, error) {
+	return s.createSecondaryProfile(ctx, accountID, displayName, usernameHint, accentColor, MaxProfilesForTier(tier))
+}
+
+func (s *ProfileStore) createSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string, maxProfiles int) (*ProfileRow, error) {
 	if s.birthCapture != nil {
-		return s.createSecondaryProfileWithBirth(ctx, accountID, displayName, usernameHint, accentColor)
+		return s.createSecondaryProfileWithBirth(ctx, accountID, displayName, usernameHint, accentColor, maxProfiles)
 	}
 	var created *ProfileRow
 	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
+		if err := checkProfileLimitTx(ctx, tx, accountID, maxProfiles); err != nil {
+			return err
+		}
 		var err error
 		created, err = s.createSecondaryProfileTx(ctx, tx, accountID, displayName, usernameHint, accentColor)
 		if err != nil {
@@ -334,6 +349,26 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 		return AppendSearchProjection(ctx, tx, event)
 	})
 	return created, err
+}
+
+func checkProfileLimitTx(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, maxProfiles int) error {
+	if maxProfiles == 0 {
+		return nil // Internal uncapped primitive retained for trusted callers.
+	}
+	// A transaction-scoped account lock works across service instances, including
+	// accounts with no profile rows. Read the count in a separate statement after
+	// acquiring the lock so READ COMMITTED sees the preceding winner's commit.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('user.profile-cap:' || $1::text, 0))`, accountID.String()); err != nil {
+		return err
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM profiles WHERE account_id = $1 AND deleted_at IS NULL`, accountID).Scan(&count); err != nil {
+		return err
+	}
+	if count >= maxProfiles {
+		return ErrProfileLimit
+	}
+	return nil
 }
 
 func (s *ProfileStore) createSecondaryProfileTx(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
