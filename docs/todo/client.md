@@ -10,6 +10,25 @@ _Пока пусто — критичные клиентские блокеры 
 
 ## High
 
+### AddGame catalog submission contract gaps
+
+- [ ] **UIV3-PANEL-MATCHMAKING-ADDGAME — generic criteria persistence** —
+  [screen-controls.md §6.8](../design/screen-controls.md#68-addgame-panel--matchmaking--addgame)
+  and [matchmaking.md](../features/matchmaking.md#добавление-новой-игры-пользователем)
+  require named integer/enum criteria and independent self/target toggles.
+  `src/backend/matchmaking/internal/config/config.go` currently accepts only
+  regions, modes, roles and ranks; `SubmitGameRequest` parses into this typed
+  configuration and `CreateWithStatus` marshals it again, discarding unknown
+  fields. Define a versioned criteria schema and persist/read it through
+  submission, moderation and catalog consumers before enabling these controls.
+  Roles/ranks cannot substitute for arbitrary criteria or self/target flags.
+- [ ] **UIV3-PANEL-MATCHMAKING-ADDGAME — game icon image upload** — the
+  submission API accepts `icon_url`, but no game catalog image upload ownership,
+  MIME/size policy or public URL lifecycle is documented. Existing avatar
+  uploads belong to profiles; chat/story file tickets are not a catalog icon
+  contract. Define and implement the upload consumer before enabling image
+  selection. The existing mode request remains usable without an icon.
+
 ### Mobile & push setup (**Вы**)
 
 - [ ] **iOS Team ID** — `Runner.entitlements` associated-domains: заменить `TEAMID`; SHA-256 в assetlinks вместо `PLACEHOLDER` ([`DEPLOYMENT.md`](../DEPLOYMENT.md)).
