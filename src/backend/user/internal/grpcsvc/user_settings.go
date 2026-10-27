@@ -177,9 +177,13 @@ func (s *UserGRPC) listProfileIDsForAccount(ctx context.Context, req *userv1.Lis
 // ResolvePrimaryProfileIDs is an internal read seam for Auth-owned account identifiers.
 // It never provisions profiles and omits accounts without an existing, non-deleted primary profile.
 func (s *UserGRPC) ResolvePrimaryProfileIDs(ctx context.Context, req *userv1.ResolvePrimaryProfileIDsRequest) (*userv1.ResolvePrimaryProfileIDsResponse, error) {
-	if !authctx.IsInternalService(ctx) {
-		return nil, status.Error(codes.PermissionDenied, "internal only")
+	if !authctx.IsExactInternalCaller(ctx, "auth") {
+		return nil, status.Error(codes.PermissionDenied, "Auth primary lookup caller required")
 	}
+	return s.resolvePrimaryProfileIDs(ctx, req)
+}
+
+func (s *UserGRPC) resolvePrimaryProfileIDs(ctx context.Context, req *userv1.ResolvePrimaryProfileIDsRequest) (*userv1.ResolvePrimaryProfileIDsResponse, error) {
 	if s.Profiles == nil {
 		return nil, status.Error(codes.FailedPrecondition, "profile store not configured")
 	}
