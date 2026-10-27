@@ -23,7 +23,7 @@ func AttachmentKind(kind string) bool {
 
 func Validate(s *eventsv1.FilePreviewSnapshot) error {
 	invalid := errors.New("invalid file preview snapshot")
-	if s == nil || len(s.ProtoReflect().GetUnknown()) != 0 || s.ProtocolVersion != 1 || s.MetadataRevision == 0 || s.MetadataRevision > math.MaxInt64 || s.IsE2E {
+	if s == nil || len(s.ProtoReflect().GetUnknown()) != 0 || (s.ProtocolVersion != 1 && s.ProtocolVersion != 2) || s.MetadataRevision == 0 || s.MetadataRevision > math.MaxInt64 || s.IsE2E {
 		return invalid
 	}
 	id, err := uuid.Parse(s.FileId)
@@ -41,8 +41,11 @@ func Validate(s *eventsv1.FilePreviewSnapshot) error {
 		default:
 			return invalid
 		}
-		// Only existing persisted intents are recognized; Music has a separate protocol.
-		if s.UploadIntent != "" {
+		// V1 remains closed to new intents; GIF producers use the versioned contract.
+		if s.ProtocolVersion == 1 && s.UploadIntent != "" {
+			return invalid
+		}
+		if s.ProtocolVersion == 2 && (s.UploadIntent != "gif" || s.FileType != "video" || !s.HasConverted || !s.HasThumbnail) {
 			return invalid
 		}
 		if s.SizeBytes <= 0 || (s.ScanResult != "clean" && s.ScanResult != "skipped") {

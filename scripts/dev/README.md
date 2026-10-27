@@ -60,6 +60,49 @@ uncertain mutation retains `voice-dev-image-update-lock`. Inspect the Deployment
 rollout and lock UID before manually resolving it; do not blindly delete it.
 The updater never resets stores, applies migrations or changes configuration.
 
+### Exact candidate publication
+
+`DEV candidate image publication` is a standalone publish-only Actions workflow.
+After normal review/integration, dispatch its default-branch publisher with the
+selected product commit:
+
+```sh
+gh workflow run dev-candidate-publish.yml --ref master \
+  -f product_sha=4e88e14e64300667e3349b08e75c4c31bf50b61e
+```
+
+This bounded consumer accepts only that product commit. It builds the eight
+required DEV variants in one serial lane: Web, Admin, Developer Portal, Auth,
+User, Notification, Realtime and the native Space installer. The source checkout
+and publisher checkout are separate, clean and byte-verified. Explicit source
+build arguments bind the four capability owners and native installer; frontend
+build arguments target the DEV API and LiveKit endpoints.
+
+Tags include the product SHA, actual run ID and attempt; existing or unavailable
+tag state fails closed. No shared `latest`, master or full-SHA tag is overwritten.
+The job independently resolves registry manifest bytes, selects exactly one
+linux/amd64 platform manifest, pulls that immutable output, checks its image
+config identity, and verifies actual JAR/binary/native SQL/frontend bytes.
+Only the publishing job receives `packages: write`; PR validation is read-only.
+No cluster credentials, SSH, deployment call or package visibility change exists.
+
+The `dev-candidate-images-<run>-<attempt>` artifact records product and publisher
+SHAs, authenticated run/attempt/job IDs, exact build arguments, source hashes,
+index/platform/config digests and output checks. It also retains the selected
+Auth image's public CA inputs. It contains no registry token or private keys.
+New digests require a new canonical package and affected source/reference/crypto
+qualification, preserving prior packages. Publication does not qualify node pull,
+migrations, runtime flows, CI/release gates, shared-writer exclusion or deployment.
+Before rollout, prove ordinary node pull for the complete app/init/migration/tool
+image closure, including `migrations.GAMEINTEGRATION_IMAGES`, under actual DEV
+custody. Keep the existing provider, storage, TLS and operation controls.
+
+Focused offline publisher checks (PyYAML6.0.3):
+
+```sh
+python3 -B scripts/dev/publish_candidate_test.py
+```
+
 The separate `repair_clickhouse_memory.py` is a fixed DEV-only maintenance
 operation for the recurring populated-store startup OOM: preview with no flags,
 then `--apply` from reviewed Linux source under the current TT DEV claim and
