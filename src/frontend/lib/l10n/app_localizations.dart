@@ -7225,6 +7225,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use a different name for each mode.'**
   String get addGameModeDuplicate;
+
+  /// No description provided for @gameCatalogAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All games'**
+  String get gameCatalogAll;
+
+  /// No description provided for @gameCatalogBrowseAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse all'**
+  String get gameCatalogBrowseAll;
+
+  /// No description provided for @gameCatalogChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The catalog changed. Restart to see the current games.'**
+  String get gameCatalogChanged;
+
+  /// No description provided for @gameCatalogClearSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get gameCatalogClearSearch;
+
+  /// No description provided for @gameCatalogLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more games'**
+  String get gameCatalogLoadMore;
+
+  /// No description provided for @gameCatalogPopular.
+  ///
+  /// In en, this message translates to:
+  /// **'Popular'**
+  String get gameCatalogPopular;
+
+  /// No description provided for @gameCatalogRecent.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get gameCatalogRecent;
+
+  /// No description provided for @gameCatalogRecentError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load recent games'**
+  String get gameCatalogRecentError;
+
+  /// No description provided for @gameCatalogSearchResults.
+  ///
+  /// In en, this message translates to:
+  /// **'Search results'**
+  String get gameCatalogSearchResults;
 }
 
 class _AppLocalizationsDelegate
