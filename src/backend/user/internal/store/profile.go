@@ -453,6 +453,9 @@ func (s *ProfileStore) GetOwnedProfile(ctx context.Context, accountID, profileID
 
 // EnsurePrimaryProfile creates or returns the primary profile for account_id (Auth bootstrap).
 func (s *ProfileStore) EnsurePrimaryProfile(ctx context.Context, accountID uuid.UUID, profileID *uuid.UUID, displayHint string, guestAccount bool) (*ProfileRow, error) {
+	if s.birthCapture != nil {
+		return s.ensurePrimaryProfileWithBirth(ctx, accountID, profileID, displayHint, guestAccount)
+	}
 	var primary *ProfileRow
 	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
 		var created bool
