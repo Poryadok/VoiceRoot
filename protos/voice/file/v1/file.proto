@@ -123,6 +123,7 @@ enum UploadIntent {
   UPLOAD_INTENT_GIF = 2;
   UPLOAD_INTENT_STICKER = 3;
   UPLOAD_INTENT_MUSIC = 6;
+  UPLOAD_INTENT_AUDIO = 7;
 }
 
 message RequestUploadRequest {

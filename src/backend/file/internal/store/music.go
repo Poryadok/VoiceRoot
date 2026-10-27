@@ -112,6 +112,32 @@ WHERE id=$1 AND status='processing' AND upload_intent='music' AND file_type='aud
 	return row, nil
 }
 
+// ApplyAudioIntentProcessing persists bounded audio metadata without publishing
+// a Music-specific stream event or consuming a Music metadata revision.
+func (s *FilesStore) ApplyAudioIntentProcessing(ctx context.Context, id uuid.UUID, title, artist, album string, duration int32) (FileRow, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return FileRow{}, err
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	tag, err := tx.Exec(ctx, `UPDATE files SET status='ready',music_title=NULLIF($2,''),music_artist=NULLIF($3,''),music_album=NULLIF($4,''),duration_seconds=$5,updated_at=now()
+WHERE id=$1 AND status='processing' AND upload_intent='audio' AND file_type='audio' AND NOT is_e2e AND scan_result IN ('clean','skipped') AND size_bytes<=10485760`, id, title, artist, album, duration)
+	if err != nil {
+		return FileRow{}, err
+	}
+	if tag.RowsAffected() != 1 {
+		return FileRow{}, pgx.ErrNoRows
+	}
+	row, err := getFileByID(ctx, tx, id, "")
+	if err != nil {
+		return FileRow{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return FileRow{}, err
+	}
+	return row, nil
+}
+
 // DispatchMusicEvent holds only one SKIP LOCKED row through a bounded PubAck.
 // A crash after PubAck can redeliver; revision checks at Messaging make that
 // harmless. Failure never marks publication successful.
