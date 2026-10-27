@@ -204,8 +204,8 @@ export VOICE_IMAGE_REGISTRY=ghcr.io/<owner>/<repo>
 | `GITHUB_TOKEN` | встроенный | Push образов в GHCR из job `gateway-image` (в `CI` выдано `packages: write`). |
 | Образ gateway | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/gateway:<git_sha>` (selective push на `master`; unchanged — promote с предыдущего SHA). |
 | Образ developer-portal | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/developer-portal:<git_sha>` (job `developer-portal`; build-args из `VOICE_GATEWAY_INGRESS_HOST`). |
-| Образ web (Flutter SPA) | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/web:<git_sha>` (job `web`; build-args `VOICE_API_BASE_URL`, `VOICE_LIVEKIT_URL`). |
-| Образ web для DEV | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/dev-web:<git_sha>` (job `web`; build-args `https://api-dev.comrade.click` и `wss://livekit-dev.comrade.click`; публикация на master для frontend-изменений и изменений publisher workflow). Artifact `dev-web-image-<sha>` содержит source SHA и immutable manifest digest. DEV image не входит в `staging-stack-lock.yaml`. |
+| Образ web (Flutter SPA) | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/web:<git_sha>` (job `web`; runtime-required build without environment endpoints). Use the canonical `web@sha256:...` ref for both DEV and STAGING. |
+| DEV distribution alias | GHCR | `dev-web:<git_sha>` aliases the same web build result. Artifact `dev-web-image-<sha>` records source SHA, canonical web ref/digest, alias and runtime config contract. Environment-specific config is qualified separately; the alias is not a different DEV build or part of `staging-stack-lock.yaml`. |
 | Образ admin | GHCR | `ghcr.io/<owner_lowercase>/<repo_lowercase>/admin:<git_sha>` (job `admin`; PKCE OAuth `voice-admin`, без staff token в bundle). |
 | Variable **`VOICE_DEVELOPER_PORTAL_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Developer Portal (Ingress host, OAuth callback origin). Подставляется в [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml) при деплое. По умолчанию — из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults) (`scripts/staging/load-staging-domains.sh`). |
 | Variable **`VOICE_WEB_INGRESS_HOST`** | Settings → Secrets and variables → **Actions** → Variables | FQDN Flutter web SPA (Ingress host). Подставляется в [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml) при деплое. По умолчанию — `app.comrade.click` из [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults). |
@@ -428,6 +428,34 @@ offline manifest checks do not prove either.
 
 ### Flutter web staging
 
+#### Immutable web promotion and environment binding
+
+Promotable web releases use one compiled artifact for DEV and STAGING. The
+environment owns `/voice-runtime-config.json`, mounted read-only outside the
+image, with exactly `version: 1`, `app_origin`, `api_base_url` and `livekit_url`.
+These are public configuration values, never credentials. `app_origin` must
+match the actual page origin exactly. API and LiveKit addresses are explicit
+complete HTTPS/WSS origins; credentials, paths, query strings and fragments are
+invalid. No backend hostname is inferred from the page hostname.
+
+Before initializing app providers or authenticated API clients, runtime-required
+web bootstrap fetches only that same-origin document without following redirects.
+Missing, malformed, foreign-origin or unsupported configuration stops bootstrap;
+the existing startup error panel immediately offers Retry loading.
+The runtime path cannot fall back to compiled DEV/STAGING endpoints. Scheduling stays off.
+Swapping a DEV document into STAGING therefore denies bootstrap. Correctness of
+the environment-owned endpoint tuple must also be qualified by the operator;
+origin binding does not authorize a guessed or deliberately misconfigured API.
+
+Record the immutable image/asset identity plus the rendered public-config SHA256,
+source revision, ConfigMap identity and effective app/API/LiveKit origins with
+each environment's evidence. Equal image digest does not imply equal environment
+configuration. Existing image-only normalization preserves live templates and
+config; first adoption needs an explicitly authorized configuration migration,
+not an unqualified image-only replacement. No tracker promotion gate is relaxed.
+Native/local explicitly configured builds retain their separate compile-time
+mode; they are not evidence for promotion of a runtime-required release.
+
 The image build binds fresh `index.html` to a SHA256-named bootstrap, whose
 generated `mainJsPath` points to SHA256-named main JavaScript. Both stay in the
 web root, preserving relative renderer/resource paths. The original files remain
@@ -460,12 +488,11 @@ current-size cache MISS that still stalled in transfer. Content addressing fixes
 release identity, not that separate network delivery failure; no DNS or TLS
 weakening is part of this contract.
 
-Deployment + Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes `ghcr.io/<owner>/<repo>/web:<git_sha>` on push to `master` with build-args:
+Deployment, public ConfigMap and Ingress: [`deploy/staging/flutter-web.yaml`](../deploy/staging/flutter-web.yaml). **CI** (job `web` in [`ci.yml`](../.github/workflows/ci.yml)) builds once and pushes the same result as `web:<git_sha>` and compatibility `dev-web:<git_sha>` on admitted master publication. Release build arg:
 
 | Build arg | Purpose |
 |-----------|---------|
-| `VOICE_API_BASE_URL` | Public Gateway URL (e.g. `https://${VOICE_GATEWAY_INGRESS_HOST}`) |
-| `VOICE_LIVEKIT_URL` | LiveKit WebSocket URL (e.g. `wss://${VOICE_LIVEKIT_INGRESS_HOST}` or default `wss://livekit.<base-domain>`) |
+| `VOICE_RUNTIME_CONFIG_REQUIRED=true` | Require the origin-bound environment config before app startup; endpoint build args must be empty. |
 
 **Staging deploy** applies `flutter-web.yaml` with the same image tag (`git SHA`) as other services. Ingress host from `VOICE_WEB_INGRESS_HOST` (repo Variable; default `app.comrade.click` in [`deploy/staging/domains.defaults`](../deploy/staging/domains.defaults)). Add DNS **A** record in Cloudflare for **`app`** → staging ingress node IP.
 
@@ -473,9 +500,17 @@ Manual build (local or one-off):
 
 ```bash
 docker build -f src/frontend/Dockerfile src/frontend \
-  --build-arg VOICE_API_BASE_URL=https://<VOICE_GATEWAY_INGRESS_HOST> \
-  --build-arg VOICE_LIVEKIT_URL=wss://<VOICE_LIVEKIT_INGRESS_HOST>
+  --build-arg VOICE_RUNTIME_CONFIG_REQUIRED=true \
+  --build-arg SOURCE_REVISION="$(git rev-parse HEAD)"
 ```
+
+For a local Compose-only compile-time build, explicitly pass
+`VOICE_RUNTIME_CONFIG_REQUIRED=false` and both `VOICE_API_BASE_URL` and
+`VOICE_LIVEKIT_URL`. Such an environment-specific image is not promotable proof.
+The release default is runtime-required and contains no endpoint fallback.
+CI supplies its exact checkout SHA as the OCI `org.opencontainers.image.revision`
+label. Manual qualification must use clean committed COPY inputs and that exact
+revision; the default `unqualified` label is only for local prototypes.
 
 Voice calls on staging: Traefik Ingress for signaling (`deploy/livekit/ingress.yaml`) + NodePort **30881/TCP** and **30882/UDP** on `voice-livekit`; `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` in `voice-app-secrets`; `LIVEKIT_URL=wss://<VOICE_LIVEKIT_INGRESS_HOST>` in ConfigMap.
 

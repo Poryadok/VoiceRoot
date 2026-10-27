@@ -85,6 +85,24 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 
 ### Web cold startup
 
+Promotable web runtime configuration: `flutter test
+test/web_gateway_config_test.dart test/gateway_config_test.dart` covers explicit
+origin binding, unsafe/missing configuration and compile-time client compatibility.
+`python3 src/frontend/docker/runtime_config_deployment_test.py` (PyYAML from
+`scripts/ci/requirements-e2e.txt`) checks the canonical ConfigMap/read-only mount,
+DEV rendering and single image producer. It is included in `ci-script-tests-runtime`.
+
+For the actual web bootstrap boundary, build the release Dockerfile once, extract
+`/usr/share/nginx/html` from that image, and run
+`node src/frontend/docker/runtime_config_browser_test.mjs <extracted-web-root>`
+in Linux with Node 24 and Chrome (`CHROME_BIN` optional). This uses the unchanged
+compiled assets under two owned loopback app/API origins. A disposable saved
+session forces the real refresh client: correct configs must send only to their
+selected API after config delivery; missing, invalid and wrong-origin configs
+must produce no API calls or first frame. External network is blocked; bundled
+CanvasKit bytes satisfy the renderer request. This does not qualify a live
+environment, its endpoint tuple, or a coherent backend image bundle.
+
 `node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
 RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
 по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture

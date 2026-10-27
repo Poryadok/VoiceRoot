@@ -20,10 +20,97 @@ C = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 PREVIOUS_C = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
 P = 'a' * 40
 A = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
+FILE = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
 DIGEST = 'sha256:' + 'b' * 64
 
 
 class PublisherTests(unittest.TestCase):
+    def test_frozen_file_candidate_is_single_source_bound_image(self):
+        plan = publisher.build_plan(FILE, P, '12345', '2')
+        self.assertEqual(set(plan['components']), {'file'})
+        row = plan['components']['file']
+        self.assertEqual(row['context'], 'src/backend')
+        self.assertEqual(row['dockerfile'], 'src/backend/file/Dockerfile')
+        self.assertEqual(row['platform'], 'linux/amd64')
+        self.assertEqual(row['build_args'], {})
+        self.assertEqual(row['tag'], publisher.REGISTRY + '/file:dev-' + FILE + '-12345-2')
+        self.assertEqual(plan['publisher_sha'], P)
+        self.assertEqual(publisher.verify_output('file', {'service': b'\x7fELFbinary'}, FILE)['files']['service'],
+                         {'sha256': hashlib.sha256(b'\x7fELFbinary').hexdigest(), 'bytes': 10})
+        for bad in ({'service': b'wrong'}, {'other': b'\x7fELFbinary'}):
+            with self.assertRaises(publisher.Refused):
+                publisher.verify_output('file', bad, FILE)
+        with self.assertRaises(publisher.Refused):
+            publisher.verify_output('file', {'service': b'\x7fELFbinary'}, A)
+
+    def test_frozen_file_builder_enforces_cgroup_caps_and_cleans_up(self):
+        calls = []
+        def command(args, **kwargs):
+            calls.append(args)
+            return b''
+        with mock.patch.object(publisher, 'command', side_effect=command):
+            with publisher.file_builder(12345, 2) as builder:
+                self.assertEqual(builder, 'voice-file-12345-2')
+        self.assertEqual(calls, [
+            ['docker', 'buildx', 'create', '--driver', 'docker-container', '--name', builder],
+            ['docker', 'buildx', 'inspect', '--builder', builder, '--bootstrap'],
+            ['docker', 'update', '--cpus', '2', '--memory', '4g', '--memory-swap', '4g',
+             'buildx_buildkit_' + builder + '0'],
+            ['docker', 'buildx', 'rm', builder],
+        ])
+        calls.clear()
+        with mock.patch.object(publisher, 'command', side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, 'fixture'):
+                with publisher.file_builder(12345, 2):
+                    raise RuntimeError('fixture')
+        self.assertEqual(calls[-1], ['docker', 'buildx', 'rm', builder])
+
+    def test_frozen_file_publication_retains_product_publisher_and_registry_receipt(self):
+        env = {'PRODUCT_SHA': FILE, 'PUBLISHER_SHA': P, 'GITHUB_RUN_ID': '12345',
+               'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_REPOSITORY': publisher.REPOSITORY,
+               'GITHUB_REF': 'refs/heads/master', 'GITHUB_ACTOR': 'fixture', 'GH_TOKEN': 'fixture'}
+        run = {'id': 12345, 'run_attempt': 2, 'head_sha': P, 'event': 'workflow_dispatch',
+               'path': publisher.WORKFLOW, 'repository': {'full_name': publisher.REPOSITORY}}
+        jobs = {'jobs': [{'id': 67890, 'run_id': 12345, 'head_sha': P, 'name': publisher.JOB_NAME}]}
+        manifest = json.dumps({'config': {'digest': DIGEST}}).encode()
+        platform = 'sha256:' + hashlib.sha256(manifest).hexdigest()
+        index = json.dumps({'manifests': [{'digest': platform,
+            'platform': {'os': 'linux', 'architecture': 'amd64'}}]}).encode()
+        digest = 'sha256:' + hashlib.sha256(index).hexdigest()
+        registry = mock.Mock()
+        registry.get.side_effect = lambda repository, path, absent=False: (
+            None if absent else manifest if path == 'manifests/' + platform else index)
+        calls = []
+        def command(args, **kwargs):
+            calls.append(args)
+            if args[0] == 'gh':
+                return json.dumps(jobs if '/jobs?' in args[-1] else run).encode()
+            if args[:3] == ['docker', 'buildx', 'build']:
+                self.assertEqual(args[3:5], ['--builder', 'voice-file-12345-2'])
+                self.assertIn('org.opencontainers.image.revision=' + FILE, args)
+                self.assertNotIn('--build-arg', args)
+                Path(args[args.index('--metadata-file') + 1]).write_text(
+                    json.dumps({'containerimage.digest': digest}))
+            return b''
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(publisher, 'source_snapshot', side_effect=lambda root, sha: {'source_sha': sha}) as snapshot, \
+                mock.patch.object(publisher, 'Registry', return_value=registry), \
+                mock.patch.object(publisher, 'command', side_effect=command), \
+                mock.patch.object(publisher, 'pulled_output', return_value={'verified': True}):
+            output = Path(folder) / 'evidence'
+            publisher.publish(Path(folder), Path(folder), output, env)
+            receipt = json.loads((output / 'published-images.json').read_bytes())
+            self.assertEqual(receipt['product_sha'], FILE)
+            self.assertEqual(receipt['publisher_sha'], P)
+            self.assertEqual(len(receipt['images']), 1)
+            image = receipt['images'][0]
+            self.assertEqual(image['component'], 'file')
+            self.assertEqual(image['config_digest'], DIGEST)
+            self.assertEqual(image['platform_manifest_digest'], platform)
+            self.assertEqual(image['reference'], publisher.REGISTRY + '/file@' + platform)
+            self.assertEqual([call.args[1] for call in snapshot.call_args_list], [P, FILE, FILE, P])
+            self.assertIn(['docker', 'buildx', 'rm', 'voice-file-12345-2'], calls)
+
     def test_auth_user_adoption_candidate_is_exact_and_component_scoped(self):
         plan = publisher.build_plan(A, P, '12345', '2')
         self.assertEqual(set(plan['components']), {'dev-auth', 'dev-user'})

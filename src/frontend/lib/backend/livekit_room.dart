@@ -110,7 +110,11 @@ abstract interface class VoiceLiveKitRoom {
     double duckedVolume,
   });
   Future<void> setVideoEnabled(bool enabled);
-  Future<void> startScreenShare({double maxFrameRate, bool captureSystemAudio});
+  Future<void> startScreenShare({
+    double maxFrameRate,
+    bool captureSystemAudio,
+    String? sourceId,
+  });
   Future<void> pauseScreenShare(bool paused);
   Future<void> stopScreenShare();
   bool get isScreenSharing;
@@ -470,6 +474,7 @@ class LiveKitVoiceRoom
   Future<void> startScreenShare({
     double maxFrameRate = 15,
     bool captureSystemAudio = false,
+    String? sourceId,
   }) async {
     final participant = _room.localParticipant;
     if (participant == null) {
@@ -479,6 +484,7 @@ class LiveKitVoiceRoom
       true,
       captureScreenAudio: captureSystemAudio,
       screenShareCaptureOptions: livekit.ScreenShareCaptureOptions(
+        sourceId: sourceId,
         maxFrameRate: maxFrameRate,
         params: livekit.VideoParametersPresets.screenShareH1080FPS15,
       ),
