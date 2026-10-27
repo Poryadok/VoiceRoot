@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** JDBC outbox repository. Claims and transitions are fenced by the exact lease expiry. */
 public final class JdbcAccountDeletionOperationRepository implements AccountDeletionOperationRepository {
@@ -28,6 +29,22 @@ public final class JdbcAccountDeletionOperationRepository implements AccountDele
   private final NamedParameterJdbcTemplate jdbc;
 
   public JdbcAccountDeletionOperationRepository(NamedParameterJdbcTemplate jdbc) { this.jdbc = jdbc; }
+
+  @Override
+  public Instant lockAccountAndReadDatabaseTime(UUID accountId) {
+    if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+      throw new IllegalStateException("deletion scheduling requires an owning transaction");
+    }
+    var locked = jdbc.query(
+        "SELECT id FROM accounts WHERE id = :accountId FOR UPDATE",
+        new MapSqlParameterSource("accountId", accountId),
+        (rs, row) -> rs.getObject(1, UUID.class));
+    if (locked.isEmpty()) throw new IllegalArgumentException("account not found");
+    Timestamp sampled = jdbc.queryForObject(
+        "SELECT clock_timestamp()", new MapSqlParameterSource(), Timestamp.class);
+    if (sampled == null) throw new IllegalStateException("database clock unavailable");
+    return sampled.toInstant();
+  }
 
   @Override
   public AccountDeletionOperation createOrResume(
