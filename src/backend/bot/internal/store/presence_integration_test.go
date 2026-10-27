@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 )
 
 func botPresenceMigrationSQL(t *testing.T) string {
@@ -26,13 +26,17 @@ func botPresenceMigrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	requestsSQL, err := os.ReadFile(filepath.Join(dir, "000006_bot_chat_create_requests.up.sql"))
 	require.NoError(t, err)
-	return string(initSQL) + "\n" + string(presenceSQL) + "\n" + string(requestsSQL)
+	outboxSQL, err := os.ReadFile(filepath.Join(dir, "000004_slash_interaction_outbox.up.sql"))
+	require.NoError(t, err)
+	epochSQL, err := os.ReadFile(filepath.Join(dir, "000009_session_epoch.up.sql"))
+	require.NoError(t, err)
+	return string(initSQL) + "\n" + string(presenceSQL) + "\n" + string(requestsSQL) + "\n" + string(outboxSQL) + "\n" + string(epochSQL)
 }
 
 func startBotStoreWithPresence(t *testing.T) *store.BotStore {
 	t.Helper()
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botdb_presence", "")
+	pool := testdb.StartPostgres(t, ctx, "botdb_presence", "")
 	_, err := pool.Exec(ctx, botPresenceMigrationSQL(t))
 	require.NoError(t, err)
 	return &store.BotStore{Pool: pool}

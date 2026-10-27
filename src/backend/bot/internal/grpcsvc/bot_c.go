@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -61,6 +62,12 @@ func (s *BotGRPC) TouchPresence(ctx context.Context, req *botv1.TouchPresenceReq
 	if err != nil {
 		return nil, err
 	}
+	return runtimeCall(ctx, s, botRow, func(call context.Context, current *store.BotRow) (*botv1.TouchPresenceResponse, error) {
+		return s.touchPresenceRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) touchPresenceRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.TouchPresenceRequest) (*botv1.TouchPresenceResponse, error) {
 	if req.GetBotId() != "" && req.GetBotId() != botRow.ID.String() {
 		return nil, status.Error(codes.PermissionDenied, "bot_id mismatch")
 	}
@@ -73,6 +80,12 @@ func (s *BotGRPC) AssignBotRole(ctx context.Context, req *botv1.AssignBotRoleReq
 	if err != nil {
 		return nil, err
 	}
+	return runtimeSpaceCall(ctx, s, botRow, req.GetSpaceId(), func(call context.Context, current *store.BotRow) (*botv1.AssignBotRoleResponse, error) {
+		return s.assignBotRoleRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) assignBotRoleRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.AssignBotRoleRequest) (*botv1.AssignBotRoleResponse, error) {
 	if err := s.requireScope(botRow, "MEMBER_ASSIGN_ROLES"); err != nil {
 		return nil, err
 	}
@@ -100,6 +113,12 @@ func (s *BotGRPC) RevokeBotRole(ctx context.Context, req *botv1.RevokeBotRoleReq
 	if err != nil {
 		return nil, err
 	}
+	return runtimeSpaceCall(ctx, s, botRow, req.GetSpaceId(), func(call context.Context, current *store.BotRow) (*botv1.RevokeBotRoleResponse, error) {
+		return s.revokeBotRoleRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) revokeBotRoleRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.RevokeBotRoleRequest) (*botv1.RevokeBotRoleResponse, error) {
 	if err := s.requireScope(botRow, "MEMBER_ASSIGN_ROLES"); err != nil {
 		return nil, err
 	}
@@ -127,6 +146,12 @@ func (s *BotGRPC) ListSpaceMembersForBot(ctx context.Context, req *botv1.ListSpa
 	if err != nil {
 		return nil, err
 	}
+	return runtimeSpaceCall(ctx, s, botRow, req.GetSpaceId(), func(call context.Context, current *store.BotRow) (*botv1.ListSpaceMembersForBotResponse, error) {
+		return s.listSpaceMembersForBotRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) listSpaceMembersForBotRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.ListSpaceMembersForBotRequest) (*botv1.ListSpaceMembersForBotResponse, error) {
 	if err := s.requireScope(botRow, "SPACE_VIEW_MEMBER_LIST"); err != nil {
 		return nil, err
 	}
@@ -161,6 +186,10 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 	if err != nil {
 		return nil, err
 	}
+	return s.createBotChatRuntime(ctx, botRow, req)
+}
+
+func (s *BotGRPC) createBotChatRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.CreateBotChatRequest) (*botv1.CreateBotChatResponse, error) {
 	if err := s.requireScope(botRow, "TEXT_CHAT_CREATE_IN_SPACE"); err != nil {
 		return nil, err
 	}
@@ -178,7 +207,6 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 		chatType = chatv1.ChatType_CHAT_TYPE_CHANNEL
 		chatTypeName = "channel"
 	}
-	chatCtx := s.botActorCtx(ctx, botRow)
 	requestID, err := parseBotChatRequestID(req.GetRequestId())
 	if err != nil {
 		return nil, err
@@ -193,9 +221,16 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 	var reservationDay time.Time
 	if requestID == nil {
 		var reserved bool
-		reservationDay, reserved, err = s.Store.ReserveDailyChatCreate(ctx, botRow.ID)
+		err = s.Store.WithSession(ctx, botRow.Authority(), uuid.Nil, func(call context.Context, _ pgx.Tx, current *store.BotRow) error {
+			if e := s.requireScope(current, "TEXT_CHAT_CREATE_IN_SPACE"); e != nil {
+				return e
+			}
+			var e error
+			reservationDay, reserved, e = s.Store.ReserveDailyChatCreate(call, current.ID)
+			return e
+		})
 		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, requestSessionError(ctx, err)
 		}
 		if !reserved {
 			return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
@@ -206,22 +241,35 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 			return nil, status.Error(codes.Internal, hashErr.Error())
 		}
 		var admitted, replayed bool
-		reservationDay, admitted, replayed, err = s.Store.ReserveDailyChatCreateForRequest(ctx, botRow.ID, *requestID, hash)
+		err = s.Store.WithSession(ctx, botRow.Authority(), uuid.Nil, func(call context.Context, _ pgx.Tx, current *store.BotRow) error {
+			if e := s.requireScope(current, "TEXT_CHAT_CREATE_IN_SPACE"); e != nil {
+				return e
+			}
+			var e error
+			reservationDay, admitted, replayed, e = s.Store.ReserveDailyChatCreateForRequest(call, current.ID, *requestID, hash)
+			return e
+		})
 		if errors.Is(err, store.ErrBotChatCreateRequestConflict) {
 			return nil, status.Error(codes.AlreadyExists, "request_id already used for a different bot chat create")
 		}
 		if err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, requestSessionError(ctx, err)
 		}
 		if !admitted && !replayed {
 			return nil, status.Error(codes.ResourceExhausted, "daily chat create limit exceeded")
 		}
 	}
-	createResp, err := s.Chat.CreateChat(chatCtx, &chatv1.CreateChatRequest{
+	createRequest := &chatv1.CreateChatRequest{
 		Type:      chatType,
 		SpaceId:   &spaceID,
 		Name:      &name,
 		RequestId: req.GetRequestId(),
+	}
+	createResp, err := runtimeSpaceCall(ctx, s, botRow, spaceID, func(call context.Context, current *store.BotRow) (*chatv1.CreateChatResponse, error) {
+		if e := s.requireScope(current, "TEXT_CHAT_CREATE_IN_SPACE"); e != nil {
+			return nil, e
+		}
+		return s.Chat.CreateChat(s.botActorCtx(call, current), createRequest)
 	})
 	if err != nil {
 		if requestID == nil {
@@ -244,7 +292,7 @@ func (s *BotGRPC) CreateBotChat(ctx context.Context, req *botv1.CreateBotChatReq
 	chat := createResp.GetChat()
 	if requestID != nil {
 		if _, err := s.Store.FinishDailyChatCreateRequestAttempt(ctx, botRow.ID, *requestID, store.BotChatCreateAttemptSucceeded); err != nil {
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, requestSessionError(ctx, err)
 		}
 	}
 	if chat == nil {
@@ -271,6 +319,12 @@ func (s *BotGRPC) GetChatMessagesForBot(ctx context.Context, req *botv1.GetChatM
 	if err != nil {
 		return nil, err
 	}
+	return runtimeChatCall(ctx, s, botRow, req.GetChat().GetId(), func(call context.Context, current *store.BotRow) (*botv1.GetChatMessagesForBotResponse, error) {
+		return s.getChatMessagesForBotRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) getChatMessagesForBotRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.GetChatMessagesForBotRequest) (*botv1.GetChatMessagesForBotResponse, error) {
 	if err := s.requireScope(botRow, store.PrivilegedScopeReadHistory); err != nil {
 		return nil, err
 	}
@@ -319,6 +373,12 @@ func (s *BotGRPC) CreateBotRole(ctx context.Context, req *botv1.CreateBotRoleReq
 	if err != nil {
 		return nil, err
 	}
+	return runtimeSpaceCall(ctx, s, botRow, req.GetSpaceId(), func(call context.Context, current *store.BotRow) (*botv1.CreateBotRoleResponse, error) {
+		return s.createBotRoleRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) createBotRoleRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.CreateBotRoleRequest) (*botv1.CreateBotRoleResponse, error) {
 	if err := s.requireScope(botRow, store.PrivilegedScopeManageRoles); err != nil {
 		return nil, err
 	}
@@ -368,11 +428,15 @@ func (s *BotGRPC) RehydrateDeferred(ctx context.Context) {
 	if s == nil || s.Hub == nil || s.Store == nil {
 		return
 	}
-	tokens, err := s.Store.ListDeferredTokens(ctx)
+	tokens, err := s.Store.ListDeferredSessions(ctx)
 	if err != nil {
 		return
 	}
 	for _, token := range tokens {
-		s.Hub.RegisterDeferred(token)
+		_ = s.Store.WithSession(ctx, store.Authority{Session: token.Session}, uuid.Nil, func(_ context.Context, _ pgx.Tx, current *store.BotRow) error {
+			s.Hub.PurgeBot(current.ID, current.SessionEpoch)
+			s.Hub.RegisterDeferred(token.Token, token.Session)
+			return nil
+		})
 	}
 }

@@ -33,7 +33,7 @@ func TestRegenerateWebhookSecret_rotatesSecret(t *testing.T) {
 	require.NoError(t, err)
 	oldSecret := row.WebhookSecret
 
-	newSecret, err := st.RegenerateWebhookSecret(ctx, row.ID)
+	newSecret, _, err := st.RotateCredential(ctx, row.ID, row.OwnerAccountID, true)
 	require.NoError(t, err)
 	require.NotEmpty(t, newSecret)
 	require.NotEqual(t, oldSecret, newSecret)

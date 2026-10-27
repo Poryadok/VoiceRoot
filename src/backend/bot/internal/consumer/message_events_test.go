@@ -19,7 +19,7 @@ import (
 	eventsv1 "voice.app/voice/events/v1"
 	"voice/backend/bot/internal/consumer"
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 )
 
 func startBotStore(t *testing.T) *store.BotStore {
@@ -30,14 +30,14 @@ func startBotStore(t *testing.T) *store.BotStore {
 	b, err := os.ReadFile(root)
 	require.NoError(t, err)
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botdb", "")
+	pool := testdb.StartPostgres(t, ctx, "botdb", "")
 	_, err = pool.Exec(ctx, string(b))
 	require.NoError(t, err)
 	migration, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", "000003_message_delivery_outbox.up.sql"))
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(migration))
 	require.NoError(t, err)
-	for _, name := range []string{"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql"} {
+	for _, name := range []string{"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql", "000009_session_epoch.up.sql"} {
 		migration, err = os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(migration))
@@ -144,7 +144,7 @@ func TestPendingMessageDeliveryStopsAfterReadScopeRevoked(t *testing.T) {
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET scopes = '[]'::jsonb WHERE id = $1`, bot.ID)
 	require.NoError(t, err)
 	posted := false
-	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error { posted = true; return nil }))
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(context.Context, string, string) error { posted = true; return nil }))
 	require.False(t, posted)
 }
 
@@ -170,7 +170,7 @@ func TestPendingMessageDeliveryDoesNotReviveAfterChatDisable(t *testing.T) {
 	require.NoError(t, st.SetChatEnabled(ctx, bot.ID, chatID, spaceID, owner, false))
 	require.NoError(t, st.SetChatEnabled(ctx, bot.ID, chatID, spaceID, owner, true))
 	posted := false
-	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error {
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(context.Context, string, string) error {
 		posted = true
 		return nil
 	}))
@@ -207,7 +207,7 @@ func TestPendingMessageDeliveryDoesNotReviveAfterUninstallAndReinstall(t *testin
 	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	posted := false
-	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error {
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(context.Context, string, string) error {
 		posted = true
 		return nil
 	}))
@@ -245,7 +245,7 @@ func TestPendingMessageDeliveryDoesNotReviveAfterInstallWhitelistReplacement(t *
 	_, err = st.InstallInSpace(ctx, bot.ID, spaceID, owner, []uuid.UUID{chatID})
 	require.NoError(t, err)
 	posted := false
-	require.NoError(t, st.DeliverMessage(ctx, delivery, func(string, string) error {
+	require.NoError(t, st.DeliverMessage(ctx, delivery, func(context.Context, string, string) error {
 		posted = true
 		return nil
 	}))

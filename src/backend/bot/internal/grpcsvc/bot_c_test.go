@@ -22,7 +22,7 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -185,6 +185,7 @@ func (f *fakeChatClient) createIDs() []string {
 }
 
 type botCDeps struct {
+	service      **grpcsvc.BotGRPC
 	user         *fakeUserClient
 	msg          messagingv1.MessagingServiceServer
 	chat         *fakeChatClient
@@ -197,7 +198,7 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 	t.Helper()
 	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botc", "")
+	pool := testdb.StartPostgres(t, ctx, "botc", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
 	require.NoError(t, err)
 
@@ -281,6 +282,9 @@ func startBotGRPCWithBotCDeps(t *testing.T, deps *botCDeps) (botv1.BotServiceCli
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
+	if deps != nil && deps.service != nil {
+		*deps.service = svc
+	}
 	return botv1.NewBotServiceClient(conn), st, hub, func() { s.Stop(); _ = conn.Close() }
 }
 
@@ -536,7 +540,7 @@ func TestPollEvents_marksEventDeliveredAfterStream(t *testing.T) {
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
 
-	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"ping": true}, "")
+	eventID, err := st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{"ping": true}, "")
 	require.NoError(t, err)
 
 	botCtx := withBotToken(context.Background(), botToken)
@@ -575,7 +579,7 @@ func TestPollEvents_rejectsWebhookModeWithoutConsumingSlashOutbox(t *testing.T) 
 	botUUID := uuid.MustParse(botID)
 	_, err := st.Pool.Exec(ctx, `UPDATE bots SET is_polling_mode = false, webhook_url = 'https://example.com/interactions' WHERE id = $1`, botUUID)
 	require.NoError(t, err)
-	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"command_name": "ping"}, uuid.NewString())
+	eventID, err := st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{"command_name": "ping"}, uuid.NewString())
 	require.NoError(t, err)
 	stream, err := client.PollEvents(withBotToken(context.Background(), botToken), &botv1.PollEventsRequest{BotId: botID})
 	require.NoError(t, err)

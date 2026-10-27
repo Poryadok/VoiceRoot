@@ -22,7 +22,7 @@ import (
 	"voice/backend/bot/internal/store"
 	"voice/backend/pkg/principal"
 
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 )
 
 func sendNativeAdmin(t *testing.T, req proto.Message, method string) installprincipal.Administrator {
@@ -59,7 +59,7 @@ func sendNativeAdmin(t *testing.T, req proto.Message, method string) installprin
 func sendMessageStore(t *testing.T) (*store.BotStore, uuid.UUID, store.MembershipRecord, uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botsend", "")
+	pool := testdb.StartPostgres(t, ctx, "botsend", "")
 	files, err := filepath.Glob("../../../migrations/bot_db/*.up.sql")
 	require.NoError(t, err)
 	for _, name := range files {
@@ -68,7 +68,7 @@ func sendMessageStore(t *testing.T) (*store.BotStore, uuid.UUID, store.Membershi
 		_, e = pool.Exec(ctx, string(raw))
 		require.NoError(t, e)
 	}
-	_, err = pool.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(8,false)")
+	_, err = pool.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(9,false)")
 	require.NoError(t, err)
 	st := &store.BotStore{Pool: pool}
 	var source uuid.UUID

@@ -21,6 +21,34 @@ type MessageDelivery struct {
 	Attempts  int
 }
 
+var ErrDeliveryClaimLost = errors.New("message delivery claim lost")
+
+type guardedMessageKey struct{}
+type guardedMessage struct {
+	tx       pgx.Tx
+	id       uuid.UUID
+	attempts int
+}
+
+func (s *BotStore) CheckMessageAttempt(ctx context.Context) error {
+	held, ok := ctx.Value(guardedMessageKey{}).(*guardedMessage)
+	if !ok {
+		return ErrDeliveryClaimLost
+	}
+	var live bool
+	err := held.tx.QueryRow(ctx, `SELECT claimed_until>clock_timestamp() FROM bot_message_deliveries WHERE id=$1 AND status='pending' AND attempts=$2`, held.id, held.attempts).Scan(&live)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrDeliveryClaimLost
+	}
+	if err != nil {
+		return err
+	}
+	if !live {
+		return ErrDeliveryClaimLost
+	}
+	return nil
+}
+
 // QueueMessageRecipients commits the complete recipient set before NATS ACK.
 // A failed transaction leaves the source message eligible for redelivery.
 func (s *BotStore) QueueMessageRecipients(ctx context.Context, chatID, messageID uuid.UUID, senderProfileID string, payload map[string]any) error {
@@ -156,7 +184,9 @@ RETURNING d.id, d.bot_id, d.message_id, d.chat_id, d.payload, d.attempts`).Scan(
 
 // DeliverMessage serializes current authorization and destination changes with
 // delivery. Revocation and secret/URL rotation wait until this transaction ends.
-func (s *BotStore) DeliverMessage(ctx context.Context, d *MessageDelivery, post func(string, string) error) error {
+func (s *BotStore) DeliverMessage(ctx context.Context, d *MessageDelivery, post func(context.Context, string, string) error) error {
+	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -193,24 +223,32 @@ FROM bots WHERE id = $1 AND status = 'live' FOR SHARE`, d.BotID).Scan(&polling, 
 			return err
 		}
 	}
-	if !authorized {
-		err = cancelMessageDelivery(ctx, tx, d.ID)
-		if err != nil {
-			return err
-		}
-		return tx.Commit(ctx)
-	}
-	if err != nil {
-		return err
-	}
 	var status string
 	var raw []byte
-	err = tx.QueryRow(ctx, `SELECT status,payload FROM bot_message_deliveries WHERE id = $1 AND bot_id=$2 AND chat_id=$3 AND message_id=$4 FOR UPDATE`, d.ID, d.BotID, d.ChatID, d.MessageID).Scan(&status, &raw)
+	var attempts int
+	var until *time.Time
+	err = tx.QueryRow(ctx, `SELECT status,payload,attempts,claimed_until FROM bot_message_deliveries WHERE id = $1 AND bot_id=$2 AND chat_id=$3 AND message_id=$4 FOR UPDATE`, d.ID, d.BotID, d.ChatID, d.MessageID).Scan(&status, &raw, &attempts, &until)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && status != "pending") {
 		return tx.Commit(ctx)
 	}
 	if err != nil {
 		return err
+	}
+	if !authorized {
+		if err = cancelMessageDelivery(ctx, tx, d.ID); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
+	if attempts != d.Attempts || until == nil {
+		return ErrDeliveryClaimLost
+	}
+	var claimLive bool
+	if err = tx.QueryRow(ctx, `SELECT $1::timestamptz>clock_timestamp()`, *until).Scan(&claimLive); err != nil {
+		return err
+	}
+	if !claimLive {
+		return ErrDeliveryClaimLost
 	}
 	if err = json.Unmarshal(raw, &d.Payload); err != nil {
 		return err
@@ -228,11 +266,15 @@ ON CONFLICT (bot_id, source_message_id) WHERE source_message_id IS NOT NULL DO N
 		if err != nil {
 			return err
 		}
-	} else if err := post(strings.TrimSpace(ptrValue(url)), secret); err != nil {
+	} else if err := post(context.WithValue(ctx, guardedMessageKey{}, &guardedMessage{tx: tx, id: d.ID, attempts: d.Attempts}), strings.TrimSpace(ptrValue(url)), secret); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'delivered', claimed_until = NULL, delivered_at = now() WHERE id = $1`, d.ID); err != nil {
+	tag, err := tx.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'delivered', claimed_until = NULL, delivered_at = clock_timestamp() WHERE id = $1 AND status='pending' AND attempts=$2 AND claimed_until>clock_timestamp()`, d.ID, d.Attempts)
+	if err != nil {
 		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrDeliveryClaimLost
 	}
 	return tx.Commit(ctx)
 }
@@ -244,13 +286,53 @@ func ptrValue(v *string) string {
 	return *v
 }
 
-func (s *BotStore) FailMessageDelivery(ctx context.Context, id uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET status = 'failed', claimed_until = NULL WHERE id = $1 AND status='pending'`, id)
-	return err
+func (s *BotStore) FailMessageDelivery(ctx context.Context, id uuid.UUID, attempts int) error {
+	return s.updateMessageClaim(ctx, id, attempts, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE bot_message_deliveries SET status='failed',claimed_until=NULL WHERE id=$1 AND status='pending' AND attempts=$2 AND claimed_until>clock_timestamp()`, id, attempts)
+		return err
+	})
 }
 
 func (s *BotStore) RetryMessageDelivery(ctx context.Context, id uuid.UUID, attempts int) error {
+	if attempts < 1 {
+		return nil
+	}
 	delay := time.Second << min(attempts-1, 6)
-	_, err := s.Pool.Exec(ctx, `UPDATE bot_message_deliveries SET claimed_until = NULL, next_attempt_at = now() + $2::interval WHERE id = $1 AND status='pending'`, id, delay.String())
-	return err
+	return s.updateMessageClaim(ctx, id, attempts, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE bot_message_deliveries SET claimed_until=NULL,next_attempt_at=clock_timestamp()+$2::interval WHERE id=$1 AND status='pending' AND attempts=$3 AND claimed_until>clock_timestamp()`, id, delay.String(), attempts)
+		return err
+	})
+}
+
+func (s *BotStore) updateMessageClaim(ctx context.Context, id uuid.UUID, attempts int, update func(pgx.Tx) error) error {
+	if attempts < 1 {
+		return nil
+	}
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer rollbackSession(tx)
+	var until *time.Time
+	err = tx.QueryRow(ctx, `SELECT claimed_until FROM bot_message_deliveries WHERE id=$1 AND status='pending' AND attempts=$2 FOR UPDATE`, id, attempts).Scan(&until)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if until == nil {
+		return nil
+	}
+	var live bool
+	if err = tx.QueryRow(ctx, `SELECT $1::timestamptz>clock_timestamp()`, *until).Scan(&live); err != nil {
+		return err
+	}
+	if !live {
+		return nil
+	}
+	if err = update(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

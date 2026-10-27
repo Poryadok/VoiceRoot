@@ -208,6 +208,29 @@ service BotService {
 
 ### Deferred interactions
 
+Credential rotation uses Bot-owned positive monotonic `session_epoch`. Both
+rotation RPCs recheck owner/live state under the bot write lock and atomically
+advance the epoch with only the named credential replacement and cancellation
+of old pending/deferred session events. Ordinary message intents survive.
+Token authentication captures bot ID, epoch and token hash in the same read;
+every final runtime admission compares that captured authority under the bot
+guard. Non-message events retain their original epoch across claims/retries.
+New credentials cannot revive old interaction tokens. Hub state and caches are
+bot/epoch-qualified cleanup, never a substitute for durable authorization.
+Lock order is actual sorted Space keys, bot, whitelist, delivery, event; never
+acquire an upstream guard while retaining an event-first claim transaction.
+Actual bounded synchronous sends stay within the healthy guard interval.
+Transport buffering and already submitted external effects are not remotely
+revocable after transaction loss; commit response loss remains an unknown
+outcome and must not trigger an automatic rotation retry.
+Drain all old Bot replicas and streams before the epoch migration/activation;
+cancel legacy unbound interaction capabilities, preserve message intents, then
+start only epoch-aware replicas. Old-binary rollback does not preserve revocation.
+The supported Bot schema is exactly version 9 (clean migration state). Native
+installation startup and mutation fences require that version; the existing
+`bot_space_membership_source.source_generation` and journal counters survive the
+additive credential migration unchanged. No receiver protocol version changes.
+
 - `DeferResponse` / webhook `deferred: true` → `bot_event_log.delivery_status = deferred`; hub держит token до `CompleteInteraction` / `SendBotMessage` follow-up.
 - `RehydrateDeferred` при старте восстанавливает tokens в hub из БД.
 - `RunDeferredTTLSweeper` (interval `BOT_DEFERRED_SWEEP_INTERVAL`, default 15m) помечает stale deferred как `abandoned` после `BOT_DEFERRED_TTL` (default 24h).
@@ -224,6 +247,7 @@ bots
 ├── slug (unique)
 ├── actor_profile_id          -- sender for bot messages
 ├── token_hash (SHA-256)
+├── session_epoch (positive monotonic BIGINT; internal authority)
 ├── webhook_url (nullable)
 ├── webhook_secret (HMAC key)
 ├── is_polling_mode (bool)
@@ -263,6 +287,8 @@ bot_presence
 bot_event_log
 ├── id (UUID)
 ├── bot_id (FK)
+├── session_epoch (nullable for ordinary message recipients; bound for capabilities)
+├── interaction_completed_at (durable final reply consumption; nullable)
 ├── event_type
 ├── payload (jsonb)
 ├── delivery_status (pending | delivered | failed | timeout | deferred)

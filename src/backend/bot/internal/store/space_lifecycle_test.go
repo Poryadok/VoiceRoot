@@ -14,19 +14,19 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	botcommonv1 "voice.app/voice/common/v1"
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 )
 
 func startBotLifecycleStore(t *testing.T) *store.BotStore {
 	t.Helper()
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botdb", "")
+	pool := testdb.StartPostgres(t, ctx, "botdb", "")
 	_, file, _, _ := runtime.Caller(0)
 	root := filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db")
 	for _, name := range []string{
 		"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql",
 		"000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql",
-		"000007_message_token_uniqueness.up.sql",
+		"000007_message_token_uniqueness.up.sql", "000009_session_epoch.up.sql",
 	} {
 		sql, err := os.ReadFile(filepath.Join(root, name))
 		require.NoError(t, err)

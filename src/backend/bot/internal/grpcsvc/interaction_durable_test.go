@@ -102,7 +102,7 @@ func TestSlashOutboxWorkerRecoversAcceptedWebhookAfterRestart(t *testing.T) {
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = $2 WHERE id = $1`, bot.ID, srv.URL)
 	require.NoError(t, err)
 	token := uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, bot.ID, "interaction", map[string]any{"interaction_token": token, "command_name": "play", "chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString()}, token)
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, bot.ID), "interaction", map[string]any{"interaction_token": token, "command_name": "play", "chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString()}, token)
 	require.NoError(t, err)
 	// A fresh service has no Hub waiter. Delivery must come from the durable row.
 	svc := grpcsvc.NewBotGRPC(st, dispatch.NewHub())

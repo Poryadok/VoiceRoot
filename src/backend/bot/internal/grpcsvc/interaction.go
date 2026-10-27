@@ -353,7 +353,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	token := uuid.NewString()
 	var options map[string]any
 	_ = json.Unmarshal([]byte(req.GetOptionsJson()), &options)
-	ch := s.Hub.Register(token)
+	ch := s.Hub.Register(token, botRow.Session())
 
 	eventPayload := map[string]any{
 		"interaction_token":  token,
@@ -363,7 +363,7 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		"chat_type":          req.GetChat().GetType().String(),
 		"invoker_profile_id": invoker.String(),
 	}
-	eventID, err := s.Store.EnqueueEvent(ctx, botID, "interaction", eventPayload, token)
+	eventID, err := s.Store.EnqueueEvent(ctx, botRow.Session(), "interaction", eventPayload, token)
 	if err != nil {
 		s.Hub.Cancel(token)
 		return nil, status.Error(codes.Unavailable, "interaction could not be accepted")
@@ -383,6 +383,11 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	reply, ok := s.Hub.Wait(ch, dispatch.DefaultTimeout())
 	if !ok || reply.Err == dispatch.ErrTimeout {
 		s.Hub.Cancel(token)
+		// A remote rotation does not notify this process's Hub. Revalidate the
+		// durable capability before reporting that the command is still queued.
+		if err := s.withInteractionSession(ctx, botRow, token, req.GetChat(), func(context.Context, pgx.Tx, *store.BotRow, *interactionAuthority) error { return nil }); err != nil {
+			return nil, err
+		}
 		code := "bot_timeout"
 		msg := "Bot did not respond in time. The accepted command is still being delivered."
 		return &botv1.ExecuteSlashInteractionResponse{
@@ -393,10 +398,18 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 	}
 	if reply.Err != nil {
 		s.Hub.Cancel(token)
+		if errors.Is(reply.Err, store.ErrSessionRevoked) {
+			return nil, status.Error(codes.NotFound, "interaction not found")
+		}
 		return nil, status.Error(codes.Unavailable, reply.Err.Error())
 	}
 	if reply.Deferred {
-		_ = s.Store.MarkEventDeferred(ctx, botID, token)
+		if err := s.withInteractionSession(ctx, botRow, token, req.GetChat(), func(call context.Context, tx pgx.Tx, _ *store.BotRow, _ *interactionAuthority) error {
+			_, err := tx.Exec(call, `UPDATE bot_event_log SET delivery_status='deferred' WHERE bot_id=$1 AND interaction_token=$2 AND delivery_status IN ('pending','delivered')`, botID, token)
+			return err
+		}); err != nil {
+			return nil, err
+		}
 		def := true
 		return &botv1.ExecuteSlashInteractionResponse{
 			InteractionToken: token,
@@ -408,7 +421,6 @@ func (s *BotGRPC) ExecuteSlashInteraction(ctx context.Context, req *botv1.Execut
 		s.Hub.Cancel(token)
 		return nil, err
 	}
-	_ = s.Store.MarkInteractionDelivered(ctx, botID, token)
 	s.Hub.Cancel(token)
 	return resp, nil
 }
@@ -419,41 +431,44 @@ func (s *BotGRPC) CompleteInteraction(ctx context.Context, req *botv1.CompleteIn
 		return nil, err
 	}
 	token := strings.TrimSpace(req.GetInteractionToken())
-	authority, err := s.authorizeInteraction(ctx, botRow, token, nil)
-	if err != nil {
-		return nil, err
-	}
 	reply := store.InteractionReply{
 		Content:   strings.TrimSpace(req.GetContent()),
 		Ephemeral: req.GetIsEphemeral(),
 		Deferred:  req.GetDeferred(),
 	}
-	if authority.state == "deferred" {
+	err = s.withInteractionSession(ctx, botRow, token, nil, func(call context.Context, tx pgx.Tx, current *store.BotRow, authority *interactionAuthority) error {
+		if authority.state == "deferred" {
+			if reply.Deferred {
+				return nil
+			}
+			if reply.Ephemeral || reply.Content == "" {
+				return status.Error(codes.FailedPrecondition, "deferred interaction requires a public content reply")
+			}
+			if _, err := s.postInteractionMessage(call, current, authority.chat, token, reply.Content, ""); err != nil {
+				return err
+			}
+			s.Hub.FinishDeferred(token)
+		} else if !s.Hub.Complete(token, current.Session(), reply) {
+			return status.Error(codes.NotFound, "unknown interaction token")
+		}
+		state := "delivered"
 		if reply.Deferred {
-			return &botv1.CompleteInteractionResponse{}, nil
+			state = "deferred"
 		}
-		if reply.Ephemeral || reply.Content == "" {
-			return nil, status.Error(codes.FailedPrecondition, "deferred interaction requires a public content reply")
-		}
-		if _, err := s.completeDeferredInteraction(ctx, botRow, token, nil, reply.Content, ""); err != nil {
-			return nil, err
-		}
-		s.Hub.FinishDeferred(token)
-		return &botv1.CompleteInteractionResponse{}, nil
+		_, err := tx.Exec(call, `UPDATE bot_event_log SET delivery_status=$3,delivered_at=clock_timestamp(),interaction_completed_at=CASE WHEN $4 THEN clock_timestamp() ELSE interaction_completed_at END WHERE bot_id=$1 AND interaction_token=$2`, botRow.ID, token, state, authority.state == "deferred" && !reply.Deferred)
+		return err
+	})
+	if err != nil {
+		return nil, err
 	}
-	if s.Hub.Complete(token, reply) {
-		if !reply.Deferred {
-			_ = s.Store.MarkInteractionDelivered(ctx, botRow.ID, token)
-		}
-		return &botv1.CompleteInteractionResponse{}, nil
-	}
-	return nil, status.Error(codes.NotFound, "unknown interaction token")
+	return &botv1.CompleteInteractionResponse{}, nil
 }
 
 type interactionAuthority struct {
 	state   string
 	chat    *chatv1.ChatRef
 	invoker uuid.UUID
+	space   *uuid.UUID
 }
 
 func (s *BotGRPC) authorizeInteraction(ctx context.Context, botRow *store.BotRow, token string, requested *chatv1.ChatRef) (*interactionAuthority, error) {
@@ -462,12 +477,13 @@ func (s *BotGRPC) authorizeInteraction(ctx context.Context, botRow *store.BotRow
 	}
 	var payload string
 	var state string
+	var space *uuid.UUID
 	err := s.Store.Pool.QueryRow(ctx, `
-SELECT payload::text, delivery_status FROM bot_event_log
+SELECT payload::text, delivery_status,space_id FROM bot_event_log
 WHERE bot_id = $1 AND interaction_token = $2 AND event_type = 'interaction'
-  AND delivery_status IN ('pending', 'deferred', 'delivered')
+	  AND delivery_status IN ('pending', 'deferred', 'delivered') AND session_epoch=$3 AND interaction_completed_at IS NULL
 ORDER BY created_at DESC LIMIT 1`,
-		botRow.ID, token).Scan(&payload, &state)
+		botRow.ID, token, botRow.SessionEpoch).Scan(&payload, &state, &space)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, status.Error(codes.NotFound, "interaction not found")
@@ -506,7 +522,7 @@ ORDER BY created_at DESC LIMIT 1`,
 	if err := s.requireInvokerMembership(ctx, chatID, invoker); err != nil {
 		return nil, err
 	}
-	return &interactionAuthority{state: state, chat: ref, invoker: invoker}, nil
+	return &interactionAuthority{state: state, chat: ref, invoker: invoker, space: space}, nil
 }
 
 // persistedInteractionChatType restores the persisted interaction destination.
@@ -538,7 +554,8 @@ func stringValue(v any) string {
 func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageRequest) (*botv1.SendBotMessageResponse, error) {
 	botRow, err := s.botFromToken(ctx)
 	if err != nil {
-		if strings.TrimSpace(req.GetInteractionToken()) != "" {
+		_, hasBotToken := authctx.BotToken(ctx)
+		if hasBotToken || strings.TrimSpace(req.GetInteractionToken()) != "" {
 			return nil, err
 		}
 		// allow owner path via bot_id for tests
@@ -570,7 +587,15 @@ func (s *BotGRPC) SendBotMessage(ctx context.Context, req *botv1.SendBotMessageR
 			return s.sendDeferredInteractionMessage(ctx, botRow, token, req.GetChat(), req.GetContent(), req.GetThreadParentId())
 		}
 		reply := store.InteractionReply{Content: req.GetContent()}
-		if s.Hub.Complete(token, reply) {
+		var completed bool
+		err = s.withInteractionSession(ctx, botRow, token, req.GetChat(), func(_ context.Context, _ pgx.Tx, current *store.BotRow, _ *interactionAuthority) error {
+			completed = s.Hub.Complete(token, current.Session(), reply)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if completed {
 			return &botv1.SendBotMessageResponse{}, nil
 		}
 		return s.sendDeferredInteractionMessage(ctx, botRow, token, req.GetChat(), req.GetContent(), req.GetThreadParentId())
@@ -615,23 +640,21 @@ func (s *BotGRPC) completeDeferredInteraction(ctx context.Context, botRow *store
 	if content == "" {
 		return nil, status.Error(codes.InvalidArgument, "content required")
 	}
-	authority, err := s.authorizeInteraction(ctx, botRow, token, requested)
-	if err != nil {
-		return nil, err
-	}
-	if authority.state != "deferred" {
-		return nil, status.Error(codes.NotFound, "interaction not deferred")
-	}
 	var message *messagingv1.Message
-	completed, err := s.Store.CompleteDeferredInteraction(ctx, botRow.ID, token, func() error {
-		message, err = s.postInteractionMessage(ctx, botRow, authority.chat, token, content, threadParentID)
+	err := s.withInteractionSession(ctx, botRow, token, requested, func(call context.Context, tx pgx.Tx, current *store.BotRow, authority *interactionAuthority) error {
+		if authority.state != "deferred" {
+			return status.Error(codes.NotFound, "interaction not deferred")
+		}
+		var err error
+		message, err = s.postInteractionMessage(call, current, authority.chat, token, content, threadParentID)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(call, `UPDATE bot_event_log SET delivery_status='delivered',delivered_at=clock_timestamp(),interaction_completed_at=clock_timestamp(),attempts=attempts+1 WHERE bot_id=$1 AND interaction_token=$2 AND delivery_status='deferred'`, botRow.ID, token)
 		return err
 	})
 	if err != nil {
 		return nil, err
-	}
-	if !completed {
-		return nil, status.Error(codes.NotFound, "interaction not found")
 	}
 	return message, nil
 }
@@ -671,6 +694,12 @@ func (s *BotGRPC) EditBotMessage(ctx context.Context, req *botv1.EditBotMessageR
 	if err != nil {
 		return nil, err
 	}
+	return runtimeCall(ctx, s, botRow, func(call context.Context, current *store.BotRow) (*botv1.EditBotMessageResponse, error) {
+		return s.editBotMessageRuntime(call, current, req)
+	})
+}
+
+func (s *BotGRPC) editBotMessageRuntime(ctx context.Context, botRow *store.BotRow, req *botv1.EditBotMessageRequest) (*botv1.EditBotMessageResponse, error) {
 	if err := s.requireScope(botRow, "TEXT_CHAT_SEND_MESSAGES"); err != nil {
 		return nil, err
 	}
@@ -700,6 +729,42 @@ func (s *BotGRPC) EditBotMessage(ctx context.Context, req *botv1.EditBotMessageR
 }
 
 func (s *BotGRPC) finishInteraction(ctx context.Context, botRow *store.BotRow, chat *chatv1.ChatRef, invoker uuid.UUID, token, content string, ephemeral bool) (*botv1.ExecuteSlashInteractionResponse, error) {
+	var result *botv1.ExecuteSlashInteractionResponse
+	effect := func(call context.Context, tx pgx.Tx, current *store.BotRow) error {
+		if err := s.requireScope(current, "TEXT_CHAT_SEND_MESSAGES"); err != nil {
+			return err
+		}
+		if chatRefIsDM(chat) {
+			if err := s.requireScope(current, "DM_SEND"); err != nil {
+				return err
+			}
+		}
+		var err error
+		result, err = s.finishInteractionResult(call, current, chat, invoker, token, content, ephemeral)
+		if err != nil {
+			return err
+		}
+		if token != "" {
+			_, err = tx.Exec(call, `UPDATE bot_event_log SET delivery_status='delivered',delivered_at=clock_timestamp(),interaction_completed_at=clock_timestamp() WHERE bot_id=$1 AND interaction_token=$2`, botRow.ID, token)
+		}
+		return err
+	}
+	var err error
+	if token != "" {
+		err = s.withInteractionSession(ctx, botRow, token, chat, func(call context.Context, tx pgx.Tx, current *store.BotRow, _ *interactionAuthority) error {
+			return effect(call, tx, current)
+		})
+	} else {
+		id, e := parseUUID("chat.id", chat.GetId())
+		if e != nil {
+			return nil, e
+		}
+		err = s.withBotSession(ctx, botRow, id, effect)
+	}
+	return result, err
+}
+
+func (s *BotGRPC) finishInteractionResult(ctx context.Context, botRow *store.BotRow, chat *chatv1.ChatRef, invoker uuid.UUID, token, content string, ephemeral bool) (*botv1.ExecuteSlashInteractionResponse, error) {
 	content = strings.TrimSpace(content)
 	if content == "" && !ephemeral {
 		return &botv1.ExecuteSlashInteractionResponse{InteractionToken: token}, nil
