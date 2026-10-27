@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package voice.chat.v1;
+
+import "voice/chat/v1/chat.proto";
+
+option go_package = "voice.app/voice/chat/v1;chatv1";
+
+// Dedicated protected listener. Never register on the ordinary Chat listener.
+service CatalogAssetService {
+  // @voice.security=protected;callers=delegated_user:gateway
+  rpc ResolveGifAsset(ResolveGifAssetRequest) returns (ResolveGifAssetResponse);
+  // @voice.security=protected;callers=service:messaging
+  rpc ValidateGifAsset(ValidateGifAssetRequest) returns (ValidateGifAssetResponse);
+  // @voice.security=protected;callers=service:file
+  rpc AuthorizeCatalogDestination(AuthorizeCatalogDestinationRequest) returns (AuthorizeCatalogDestinationResponse);
+}
+
+// @voice.unknown_fields=reject
+message ResolveGifAssetRequest {
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string provider = 3;
+  string provider_id = 4;
+  voice.chat.v1.ChatRef destination_chat = 5;
+}
+
+// Contains no source URL, storage key or authorization capability.
+message ResolveGifAssetResponse {
+  string source_id = 1;
+  string provider = 2;
+  string provider_id = 3;
+  string file_id = 4;
+  string status = 5; // File status; an import is not necessarily ready.
+}
+
+// @voice.unknown_fields=reject
+message ValidateGifAssetRequest {
+  uint32 protocol_version = 1; // Must be 2; unordered source validation is denied.
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  string file_id = 6;
+  voice.chat.v1.ChatRef destination_chat = 7;
+}
+
+// Exact source tuple only. File owns authoritative representation/readiness.
+message ValidateGifAssetResponse {
+  string source_id = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  string file_id = 6;
+  uint64 selection_revision = 7;
+  uint64 current_selection_revision = 8;
+}
+
+// Read-only independent destination observation for File's protected importer.
+// @voice.unknown_fields=reject
+message AuthorizeCatalogDestinationRequest {
+  uint32 protocol_version = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  voice.chat.v1.ChatRef destination_chat = 4;
+}
+
+message AuthorizeCatalogDestinationResponse {
+  string actor_account_id = 1;
+  string actor_profile_id = 2;
+  voice.chat.v1.ChatRef destination_chat = 3; // Exact request echo.
+  voice.chat.v1.ChatType observed_chat_type = 4;
+  string chat_account_generation = 5;
+  string chat_profile_generation = 6;
+}

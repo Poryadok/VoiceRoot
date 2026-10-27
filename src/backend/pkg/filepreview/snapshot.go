@@ -56,7 +56,10 @@ func Validate(s *eventsv1.FilePreviewSnapshot) error {
 				return invalid
 			}
 		}
-		if (s.Width != nil || s.Height != nil || s.HasThumbnail) && s.FileType != "image" && s.FileType != "video" {
+		if (s.Width != nil || s.Height != nil) && s.FileType != "image" && s.FileType != "video" {
+			return invalid
+		}
+		if s.HasThumbnail && s.FileType != "image" && s.FileType != "video" && s.FileType != "document" {
 			return invalid
 		}
 		if s.DurationSeconds != nil && s.FileType != "audio" && s.FileType != "video" {

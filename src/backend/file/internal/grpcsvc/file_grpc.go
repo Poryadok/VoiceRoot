@@ -531,6 +531,9 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 		if extractionErr != nil {
 			_ = s.events.PublishFileProcessed(ctx, row.ID.String(), row.Status, "", "")
 		}
+	} else if row.FileType == "document" && row.MimeType == "application/pdf" && !row.IsE2E && row.Status == "processing" {
+		// The durable PDF worker generates the first-page thumbnail asynchronously.
+		// Keep the original document and expose processing through the existing API.
 	} else if row.Status == "processing" {
 		row, err = s.files.ApplyScanResult(ctx, fileID, "ready", row.ScanResult)
 		if err != nil {

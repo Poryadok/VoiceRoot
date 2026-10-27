@@ -43,6 +43,7 @@ const (
 	MessagingService_GetBotPurgeChatCoverage_FullMethodName      = "/voice.messaging.v1.MessagingService/GetBotPurgeChatCoverage"
 	MessagingService_ForwardMessage_FullMethodName               = "/voice.messaging.v1.MessagingService/ForwardMessage"
 	MessagingService_MarkRead_FullMethodName                     = "/voice.messaging.v1.MessagingService/MarkRead"
+	MessagingService_RecordMessageView_FullMethodName            = "/voice.messaging.v1.MessagingService/RecordMessageView"
 	MessagingService_GetReadState_FullMethodName                 = "/voice.messaging.v1.MessagingService/GetReadState"
 	MessagingService_GetBulkReadState_FullMethodName             = "/voice.messaging.v1.MessagingService/GetBulkReadState"
 	MessagingService_GetChatListMetadata_FullMethodName          = "/voice.messaging.v1.MessagingService/GetChatListMetadata"
@@ -111,6 +112,8 @@ type MessagingServiceClient interface {
 	GetBotPurgeChatCoverage(ctx context.Context, in *GetBotPurgeChatCoverageRequest, opts ...grpc.CallOption) (*GetBotPurgeChatCoverageResponse, error)
 	ForwardMessage(ctx context.Context, in *ForwardMessageRequest, opts ...grpc.CallOption) (*ForwardMessageResponse, error)
 	MarkRead(ctx context.Context, in *MarkReadRequest, opts ...grpc.CallOption) (*MarkReadResponse, error)
+	// Idempotent first viewport view by the authenticated profile; group/channel only.
+	RecordMessageView(ctx context.Context, in *RecordMessageViewRequest, opts ...grpc.CallOption) (*RecordMessageViewResponse, error)
 	GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error)
 	GetBulkReadState(ctx context.Context, in *GetBulkReadStateRequest, opts ...grpc.CallOption) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(ctx context.Context, in *GetChatListMetadataRequest, opts ...grpc.CallOption) (*GetChatListMetadataResponse, error)
@@ -384,6 +387,16 @@ func (c *messagingServiceClient) MarkRead(ctx context.Context, in *MarkReadReque
 	return out, nil
 }
 
+func (c *messagingServiceClient) RecordMessageView(ctx context.Context, in *RecordMessageViewRequest, opts ...grpc.CallOption) (*RecordMessageViewResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RecordMessageViewResponse)
+	err := c.cc.Invoke(ctx, MessagingService_RecordMessageView_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *messagingServiceClient) GetReadState(ctx context.Context, in *GetReadStateRequest, opts ...grpc.CallOption) (*GetReadStateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetReadStateResponse)
@@ -576,6 +589,8 @@ type MessagingServiceServer interface {
 	GetBotPurgeChatCoverage(context.Context, *GetBotPurgeChatCoverageRequest) (*GetBotPurgeChatCoverageResponse, error)
 	ForwardMessage(context.Context, *ForwardMessageRequest) (*ForwardMessageResponse, error)
 	MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error)
+	// Idempotent first viewport view by the authenticated profile; group/channel only.
+	RecordMessageView(context.Context, *RecordMessageViewRequest) (*RecordMessageViewResponse, error)
 	GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error)
 	GetBulkReadState(context.Context, *GetBulkReadStateRequest) (*GetBulkReadStateResponse, error)
 	GetChatListMetadata(context.Context, *GetChatListMetadataRequest) (*GetChatListMetadataResponse, error)
@@ -680,6 +695,9 @@ func (UnimplementedMessagingServiceServer) ForwardMessage(context.Context, *Forw
 }
 func (UnimplementedMessagingServiceServer) MarkRead(context.Context, *MarkReadRequest) (*MarkReadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MarkRead not implemented")
+}
+func (UnimplementedMessagingServiceServer) RecordMessageView(context.Context, *RecordMessageViewRequest) (*RecordMessageViewResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RecordMessageView not implemented")
 }
 func (UnimplementedMessagingServiceServer) GetReadState(context.Context, *GetReadStateRequest) (*GetReadStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetReadState not implemented")
@@ -1176,6 +1194,24 @@ func _MessagingService_MarkRead_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingService_RecordMessageView_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RecordMessageViewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceServer).RecordMessageView(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingService_RecordMessageView_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceServer).RecordMessageView(ctx, req.(*RecordMessageViewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _MessagingService_GetReadState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetReadStateRequest)
 	if err := dec(in); err != nil {
@@ -1530,6 +1566,10 @@ var MessagingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MarkRead",
 			Handler:    _MessagingService_MarkRead_Handler,
+		},
+		{
+			MethodName: "RecordMessageView",
+			Handler:    _MessagingService_RecordMessageView_Handler,
 		},
 		{
 			MethodName: "GetReadState",

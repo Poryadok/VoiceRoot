@@ -130,7 +130,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE id = $1
+WHERE id = $1 AND size_bytes > 0
 `+lockClause, id).Scan(
 		&row.ID,
 		&row.UploaderProfileID,
@@ -321,7 +321,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE id = ANY($1)
+WHERE id = ANY($1) AND size_bytes > 0
 `, ids)
 	if err != nil {
 		return nil, err
@@ -386,7 +386,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE chat_id = $1
+WHERE chat_id = $1 AND size_bytes > 0
   AND status <> 'deleted'
 ORDER BY created_at DESC, id DESC
 LIMIT $2
@@ -453,7 +453,7 @@ SELECT id, uploader_profile_id, original_name, mime_type, size_bytes, sha256_has
        thumbnail_r2_key, converted_r2_key, chat_id, chat_type, is_e2e, expires_at,
        scan_result, created_at, updated_at, music_title, music_artist, music_album, music_metadata_revision, upload_intent
 FROM files
-WHERE uploader_profile_id = $1
+WHERE uploader_profile_id = $1 AND size_bytes > 0
   AND status <> 'deleted'
 ORDER BY created_at DESC, id DESC
 LIMIT $2

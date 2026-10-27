@@ -17,8 +17,10 @@ canvas pixels across frames, 120 seconds normalized duration. These are codec
 safety budgets, not account admission limits. Each output must fit 5 MiB.
 `errors.Is(err, ErrInvalid)` and `errors.Is(err, ErrTooLarge)` identify permanent
 input/output rejections; process, filesystem and context errors remain separate.
-All work has a 90 second deadline, subprocess output is bounded, and temporary
-files are removed on every return. No input URL or network protocol is used.
+All work has a 90 second deadline. Each subprocess stdout/stderr capture retains
+at most 16 KiB and drains excess bytes without retaining them, including the
+os/exec pipe-copy path. Temporary files are removed on every return. No input URL
+or network protocol is used.
 The output supervisor checks file size every 10 ms and cancels with a dedicated
 permanent size cause. Temporary disk bytes may overshoot that cap between checks;
 the pixel/frame/deadline budgets also bound this work. A final capped read covers

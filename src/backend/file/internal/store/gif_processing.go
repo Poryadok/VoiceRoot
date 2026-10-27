@@ -61,6 +61,13 @@ func (s *FilesStore) ConfirmGIFUpload(ctx context.Context, id uuid.UUID, sha str
 	if before.UploadIntent != "gif" || before.IsE2E {
 		return FileRow{}, ErrGIFConfirmationConflict
 	}
+	var catalog bool
+	if err = tx.QueryRow(ctx, `SELECT COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false) FROM files f WHERE id=$1`, id).Scan(&catalog); err != nil {
+		return FileRow{}, err
+	}
+	if catalog {
+		return FileRow{}, ErrGIFConfirmationConflict
+	}
 	if before.Status != "pending_upload" {
 		if before.SHA256Hash == nil || *before.SHA256Hash != sha {
 			return FileRow{}, ErrGIFConfirmationConflict
@@ -89,11 +96,13 @@ type GIFJob struct {
 	Row                   FileRow
 	Token                 uuid.UUID
 	FullKey, ThumbnailKey string
+	TrackedWrites         bool
 }
 
 // ClaimGIFJob fences every attempt with a fresh UUID and records its output
 // keys before the first object write. A codec/request is bounded to 120 seconds;
-// its database lease is 180 seconds and cleanup waits a further 60 seconds.
+// its database lease is180 seconds. A tracked STARTED/UNSETTLED write remains
+// pinned independently of these scheduling bounds; elapsed time is not fencing.
 func (s *FilesStore) ClaimGIFJob(ctx context.Context) (*GIFJob, error) {
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
@@ -118,6 +127,10 @@ func (s *FilesStore) ClaimGIFJob(ctx context.Context) (*GIFJob, error) {
 	token := uuid.New()
 	prefix := "processed/" + id.String() + "/gif/" + token.String()
 	job := &GIFJob{Row: row, Token: token, FullKey: prefix + "/full.mp4", ThumbnailKey: prefix + "/thumb.webp"}
+	job.TrackedWrites, err = gifTrackedModeTx(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.Exec(ctx, `UPDATE file_gif_jobs SET state='running',attempt=attempt+1,attempt_token=$2,
  lease_until=clock_timestamp()+interval '180 seconds',updated_at=clock_timestamp() WHERE file_id=$1`, id, token)
 	if err != nil {
@@ -162,6 +175,17 @@ func (s *FilesStore) FinishGIFJob(ctx context.Context, job *GIFJob, full, thumb 
 	} else {
 		if !validGIFRepresentation(full, job.FullKey, "video/mp4") || !validGIFRepresentation(thumb, job.ThumbnailKey, "image/webp") || width <= 0 || height <= 0 || duration <= 0 {
 			return false, fmt.Errorf("invalid GIF processing result")
+		}
+		if err = requireGIFTrackedResultsTx(ctx, tx, job, full, thumb); err != nil {
+			if errors.Is(err, ErrGIFPublicationLost) {
+				if _, retireErr := retireGIFPublicationTx(ctx, tx, before); retireErr != nil {
+					return false, retireErr
+				}
+				if commitErr := tx.Commit(ctx); commitErr != nil {
+					return false, commitErr
+				}
+			}
+			return false, err
 		}
 		f, err := json.Marshal(full)
 		if err != nil {
@@ -218,7 +242,8 @@ func validGIFRepresentation(r *Representation, key, mime string) bool {
 }
 
 // Terminal deletion and successful/failed processing share this authority. A
-// signed PUT remains replayable even when the normal blob GC is already complete.
+// signed PUT can finish after normal blob GC. recheck_until is a legacy original
+// marker/scheduling hint, never proof that an accepted remote PUT has drained.
 func queueGIFOriginalCleanupTx(ctx context.Context, tx pgx.Tx, row FileRow) error {
 	if row.UploadIntent != "gif" {
 		return nil
@@ -246,12 +271,25 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	var id uuid.UUID
 	var key string
-	err = tx.QueryRow(ctx, `SELECT f.id,c.object_key FROM file_gif_cleanup c JOIN files f ON f.id=c.file_id
+	var publicOriginal bool
+	ledger, err := trackedWriteLedgerExists(ctx, tx)
+	if err != nil {
+		return false, err
+	}
+	writeGuard := ""
+	if ledger {
+		writeGuard = ` AND NOT EXISTS(SELECT 1 FROM file_catalog_writes w WHERE (w.file_id=f.id OR w.object_key=c.object_key) AND w.state IN ('STARTED','UNSETTLED'))`
+	}
+	// Original rows have a trusted store-owned marker distinct from derivative
+	// attempt rows. Recover old clock-completed public originals as well: neither
+	// URL expiration nor a successful DELETE fences a previously accepted PUT.
+	publicOriginalSQL := `(c.attempt_token IS NULL AND c.recheck_until IS NOT NULL AND NOT COALESCE((to_jsonb(f)->>'catalog_asset')::boolean,false))`
+	err = tx.QueryRow(ctx, `SELECT f.id,c.object_key,`+publicOriginalSQL+` FROM file_gif_cleanup c JOIN files f ON f.id=c.file_id
  LEFT JOIN file_gif_jobs j ON j.file_id=f.id
- WHERE NOT c.retained AND c.completed_at IS NULL AND c.not_before<=clock_timestamp()
+ WHERE NOT c.retained AND (c.completed_at IS NULL OR `+publicOriginalSQL+`) AND c.not_before<=clock_timestamp()
 	AND NOT EXISTS(SELECT 1 FROM files alias WHERE alias.id<>f.id AND alias.r2_key=c.object_key AND alias.status NOT IN ('deleted','expired','failed'))
  AND (c.attempt_token IS NULL OR j.attempt_token IS DISTINCT FROM c.attempt_token OR j.state<>'running' OR j.lease_until<=clock_timestamp())
- ORDER BY c.not_before,c.object_key FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id, &key)
+ `+writeGuard+` ORDER BY c.not_before,c.object_key FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id, &key, &publicOriginal)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
@@ -268,12 +306,20 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	if shared {
 		return false, nil
 	}
+	// Recheck after the File lock with a fresh snapshot. A Start that won the
+	// lock before this cleanup may have submitted a PUT since candidate selection.
+	collect, err := CanCollectTrackedObjectTx(ctx, tx, id, key)
+	if err != nil || !collect {
+		return false, err
+	}
 	if err = deleter.DeleteObject(ctx, key); err != nil {
 		return false, err
 	}
-	// The upload URL can still recreate the original until its signed PUT TTL.
-	// Keep reconciling that key through the expiry barrier, then confirm deletion.
-	_, err = tx.Exec(ctx, `UPDATE file_gif_cleanup SET completed_at=CASE WHEN recheck_until IS NULL OR recheck_until<=clock_timestamp() THEN clock_timestamp() ELSE NULL END,not_before=clock_timestamp()+interval '1 minute' WHERE object_key=$1`, key)
+	// Public upload clients have no trusted storage completion/fence channel.
+	// Keep their original discoverable after URL expiry and repeat deletion at
+	// the existing cadence; do not claim finite erasure from an age or HEAD check.
+	// Exact catalog/derivative custody still passes the physical guards above.
+	_, err = tx.Exec(ctx, `UPDATE file_gif_cleanup SET completed_at=CASE WHEN $2 THEN NULL ELSE clock_timestamp() END,not_before=clock_timestamp()+interval '1 minute' WHERE object_key=$1`, key, publicOriginal)
 	if err != nil {
 		return false, err
 	}

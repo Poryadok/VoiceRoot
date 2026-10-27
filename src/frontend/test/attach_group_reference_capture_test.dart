@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fixnum/fixnum.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,6 +50,39 @@ String _emptyScheduledResponse() => encodeGatewayProto(
     page: common_pb.CursorPageResponse(hasMore: false, nextCursor: ''),
   ),
 );
+
+MockClient _captureClient({
+  required List<http.Request> scheduledRequests,
+  required List<http.Request> viewRequests,
+  required List<String> unexpectedRequests,
+}) => MockClient((request) async {
+  if (request.method == 'GET' &&
+      request.url.path == '/api/v1/messages/scheduled') {
+    scheduledRequests.add(request);
+    expect(request.url.queryParameters['chat_id'], _chatId);
+    expect(request.headers['authorization'], 'Bearer test-access');
+    return http.Response(_emptyScheduledResponse(), 200);
+  }
+  if (request.method == 'POST' &&
+      request.url == Uri.parse('http://api.test/api/v1/messages/views') &&
+      request.headers['authorization'] == 'Bearer test-access') {
+    final view = decodeGatewayProto(
+      messaging_pb.RecordMessageViewRequest.create,
+      request.body,
+    );
+    if (view.chatId == _chatId && view.messageId == 'reference-message') {
+      viewRequests.add(request);
+      return http.Response(
+        encodeGatewayProto(
+          messaging_pb.RecordMessageViewResponse(viewCount: Int64(7)),
+        ),
+        200,
+      );
+    }
+  }
+  unexpectedRequests.add('${request.method} ${request.url}');
+  return http.Response('{}', 404);
+});
 
 Future<ThemeData> _captureTheme(WidgetTester tester, bool capturing) async {
   if (!capturing) return voiceTestTheme();
@@ -107,6 +141,37 @@ Future<void> _capture(
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  test(
+    'capture fixture rejects unrelated traffic and wrong view targets',
+    () async {
+      final unexpectedRequests = <String>[];
+      final viewRequests = <http.Request>[];
+      final client = _captureClient(
+        scheduledRequests: [],
+        viewRequests: viewRequests,
+        unexpectedRequests: unexpectedRequests,
+      );
+      addTearDown(client.close);
+      for (final path in ['/api/v1/messages/read', '/api/v1/messages/views']) {
+        final response = await client.post(
+          Uri.parse('http://api.test$path'),
+          headers: {'authorization': 'Bearer test-access'},
+          body: encodeGatewayProto(
+            messaging_pb.RecordMessageViewRequest(
+              chatId: _chatId,
+              messageId: 'unexpected-message',
+            ),
+          ),
+        );
+        expect(response.statusCode, 404);
+      }
+      expect(viewRequests, isEmpty);
+      expect(unexpectedRequests, [
+        'POST http://api.test/api/v1/messages/read',
+        'POST http://api.test/api/v1/messages/views',
+      ]);
+    },
+  );
   test('capture scheduled response preserves the required terminal page', () {
     final decoded = decodeGatewayProto(
       messaging_pb.ListScheduledMessagesResponse.create,
@@ -134,18 +199,13 @@ void main() {
           directory != null && directory.isNotEmpty,
         );
         final scheduledRequests = <http.Request>[];
+        final viewRequests = <http.Request>[];
         final unexpectedRequests = <String>[];
-        final client = MockClient((request) async {
-          if (request.method == 'GET' &&
-              request.url.path == '/api/v1/messages/scheduled') {
-            scheduledRequests.add(request);
-            expect(request.url.queryParameters['chat_id'], _chatId);
-            expect(request.headers['authorization'], 'Bearer test-access');
-            return http.Response(_emptyScheduledResponse(), 200);
-          }
-          unexpectedRequests.add('${request.method} ${request.url}');
-          return http.Response('{}', 404);
-        });
+        final client = _captureClient(
+          scheduledRequests: scheduledRequests,
+          viewRequests: viewRequests,
+          unexpectedRequests: unexpectedRequests,
+        );
         _CaptureRealtime? hub;
         final container = ProviderContainer(
           overrides: [
@@ -225,6 +285,8 @@ void main() {
         final room = container.read(chatRoomControllerProvider(_chatId));
         expect(scheduledRequests, isEmpty);
         expect(unexpectedRequests, isEmpty);
+        expect(viewRequests, hasLength(1));
+        expect(room.messages.single.viewCount, 7);
         expect(room.isLoadingScheduledMessages, isFalse);
         expect(room.scheduledMessagesError, isNull);
         expect(

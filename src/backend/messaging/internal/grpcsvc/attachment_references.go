@@ -113,6 +113,8 @@ func (s *MessagingGRPC) insertMessageWithAttachments(ctx context.Context, row st
 	if err != nil {
 		err = messageContextStatus(err)
 		switch {
+		case errors.Is(err, store.ErrScheduledState), store.IsSendNamespaceConflict(err):
+			return nil, scheduledRPCError(err)
 		case errors.Is(err, store.ErrSendReceiptConflict):
 			return nil, status.Error(codes.AlreadyExists, "client message key has a different request")
 		case errors.Is(err, store.ErrAttachmentIntentConflict):

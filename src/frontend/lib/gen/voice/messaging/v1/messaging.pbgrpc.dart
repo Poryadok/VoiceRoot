@@ -233,6 +233,14 @@ class MessagingServiceClient extends $grpc.Client {
     return $createUnaryCall(_$markRead, request, options: options);
   }
 
+  /// Idempotent first viewport view by the authenticated profile; group/channel only.
+  $grpc.ResponseFuture<$0.RecordMessageViewResponse> recordMessageView(
+    $0.RecordMessageViewRequest request, {
+    $grpc.CallOptions? options,
+  }) {
+    return $createUnaryCall(_$recordMessageView, request, options: options);
+  }
+
   $grpc.ResponseFuture<$0.GetReadStateResponse> getReadState(
     $0.GetReadStateRequest request, {
     $grpc.CallOptions? options,
@@ -476,6 +484,11 @@ class MessagingServiceClient extends $grpc.Client {
           '/voice.messaging.v1.MessagingService/MarkRead',
           ($0.MarkReadRequest value) => value.writeToBuffer(),
           $0.MarkReadResponse.fromBuffer);
+  static final _$recordMessageView = $grpc.ClientMethod<
+          $0.RecordMessageViewRequest, $0.RecordMessageViewResponse>(
+      '/voice.messaging.v1.MessagingService/RecordMessageView',
+      ($0.RecordMessageViewRequest value) => value.writeToBuffer(),
+      $0.RecordMessageViewResponse.fromBuffer);
   static final _$getReadState =
       $grpc.ClientMethod<$0.GetReadStateRequest, $0.GetReadStateResponse>(
           '/voice.messaging.v1.MessagingService/GetReadState',
@@ -767,6 +780,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
         false,
         ($core.List<$core.int> value) => $0.MarkReadRequest.fromBuffer(value),
         ($0.MarkReadResponse value) => value.writeToBuffer()));
+    $addMethod($grpc.ServiceMethod<$0.RecordMessageViewRequest,
+            $0.RecordMessageViewResponse>(
+        'RecordMessageView',
+        recordMessageView_Pre,
+        false,
+        false,
+        ($core.List<$core.int> value) =>
+            $0.RecordMessageViewRequest.fromBuffer(value),
+        ($0.RecordMessageViewResponse value) => value.writeToBuffer()));
     $addMethod(
         $grpc.ServiceMethod<$0.GetReadStateRequest, $0.GetReadStateResponse>(
             'GetReadState',
@@ -1104,6 +1126,15 @@ abstract class MessagingServiceBase extends $grpc.Service {
 
   $async.Future<$0.MarkReadResponse> markRead(
       $grpc.ServiceCall call, $0.MarkReadRequest request);
+
+  $async.Future<$0.RecordMessageViewResponse> recordMessageView_Pre(
+      $grpc.ServiceCall $call,
+      $async.Future<$0.RecordMessageViewRequest> $request) async {
+    return recordMessageView($call, await $request);
+  }
+
+  $async.Future<$0.RecordMessageViewResponse> recordMessageView(
+      $grpc.ServiceCall call, $0.RecordMessageViewRequest request);
 
   $async.Future<$0.GetReadStateResponse> getReadState_Pre(
       $grpc.ServiceCall $call,
