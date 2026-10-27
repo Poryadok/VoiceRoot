@@ -609,6 +609,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatScheduleMessage => 'Запланировать сообщение';
 
   @override
+  String get composerSendOptions => 'Параметры отправки';
+
+  @override
+  String get composerSendSilent => 'Отправить без звука';
+
+  @override
+  String get composerSendSchedule => 'Запланировать';
+
+  @override
+  String get composerSendOnline => 'Когда будет онлайн';
+
+  @override
+  String get composerSendOnlineDmOnly =>
+      '«Когда будет онлайн» доступно только в личных чатах';
+
+  @override
   String get chatSendWhenOnline => 'Отправить, когда будет в сети';
 
   @override

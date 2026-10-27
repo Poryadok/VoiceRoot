@@ -31,6 +31,7 @@ import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/chat/chat_message_list.dart';
+import 'package:voice_frontend/ui/chat/composer_send_menu.dart';
 import 'package:voice_frontend/ui/core/voice_state_panel.dart';
 import 'package:voice_frontend/ui/core/voice_skeleton.dart';
 import 'package:voice_frontend/ui/a11y/voice_shortcuts.dart';
@@ -42,6 +43,30 @@ import 'support/test_voice_token_catalog.dart';
 import 'support/voice_test_theme.dart';
 
 void main() {
+  testWidgets('silent SendMenu action keeps exact payload on explicit retry', (
+    tester,
+  ) async {
+    final harness = _ImmediateRetryHarness();
+    addTearDown(harness.container.dispose);
+    await harness.pump(tester);
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Silent draft');
+    await tester.tap(find.byTooltip('Send options'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('composer_send_schedule')), findsNothing);
+    await tester.tap(find.byKey(const Key('composer_send_silent')));
+    await tester.pumpAndSettle();
+    expect(harness.bodies, hasLength(1));
+    final body = jsonDecode(harness.bodies.single) as Map<String, dynamic>;
+    expect(body['send_silent'], true);
+    expect(body['content'], 'Silent draft');
+    expect(harness.composer(tester).text, 'Silent draft');
+    await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'New draft');
+    await tester.tap(find.byKey(ChatRoomPanel.sendRetryKey));
+    await tester.pumpAndSettle();
+    expect(harness.bodies, hasLength(2));
+    expect(harness.bodies.last, harness.bodies.first);
+    expect(harness.composer(tester).text, 'New draft');
+  });
   testWidgets('reopens an already loaded failed-send draft from the inbox', (
     tester,
   ) async {
@@ -1458,10 +1483,10 @@ void main() {
         chatListController.state = invalidState;
         await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
         await tester.pumpAndSettle();
-        expect(find.byType(BottomSheet), findsOneWidget);
+        expect(find.byType(ComposerSendMenu), findsOneWidget);
         expect(find.text('Schedule message'), findsOneWidget);
         expect(find.text('Send when online'), findsNothing);
-        Navigator.of(tester.element(find.byType(BottomSheet))).pop();
+        Navigator.of(tester.element(find.byType(ComposerSendMenu))).pop();
         await tester.pumpAndSettle();
       }
       chatListController.state = ChatListState(
@@ -1470,7 +1495,7 @@ void main() {
       );
       await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
-      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.byType(ComposerSendMenu), findsOneWidget);
       final menuListAfterLongPress = chatRoomProviderContainer.read(
         chatListControllerProvider,
       );

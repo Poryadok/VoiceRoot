@@ -80,7 +80,7 @@ CRUD сообщений для всех типов чатов (DM, тексто�
 - Read receipts (последнее прочитанное сообщение на пользователя на чат)
 - Вложения (ссылки на File Service): photo, video, document, voice, video_note, music, article, location — см. [text-chat.md](../features/text-chat.md) § Attach menu
 - Stickers / GIF — `content_type=STICKER|GIF` + File `file_id`; composer **😊 panel only** (не 📎 attach) — § Stickers and GIF
-- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; composer remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
+- Send options: `send_silent` is shipped in `SendMessageRequest`, durable `messages` storage, `message.sent` and Notification push consumption; the text composer exposes silent send via the adaptive SendMenu and retains its flag, payload and UUID on explicit retry; pending media menu integration remains open. P-008 ships schedule wire fields, `scheduled_messages` storage and a fail-closed send gate; handlers, worker, producer usage and UI remain open — см. [todo/backend.md](../todo/backend.md)
 - Лимит 4000 кодовых точек Unicode; число UTF-8 байтов не влияет на лимит.
 - Догрузка истории после offline / reconnect: сначала глобальная сверка inbox через Chat `ListChats`, затем **per `chat_id`** через `GetMessages` с курсором (`after_message_id` / `last_message_id`) для выбранного чата; правила fallback — [ARCHITECTURE_REQUIREMENTS.md](../ARCHITECTURE_REQUIREMENTS.md). Не путать с полем **`s`** в WebSocket Gateway (Realtime) — это нумерация live-событий, не курсор БД
 
@@ -222,7 +222,7 @@ service MessagingService {
 | `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
-| `SendMessage.send_silent` | ✓ | durable `messages.send_silent`, `message.sent.send_silent` and Notification push consumption; composer remains open |
+| `SendMessage.send_silent` | ✓ | durable `messages.send_silent`, `message.sent.send_silent` and Notification push consumption; the text composer exposes silent send via the adaptive SendMenu and retains its flag, payload and UUID on explicit retry; pending media menu integration remains open |
 | `SendMessage` schedule options (`scheduled_at`, `send_when_online`) | partial | wire contract is present but populated options fail closed until the handler slice |
 | Scheduled RPCs | ✗ | declarations are shipped; handlers remain open |
 

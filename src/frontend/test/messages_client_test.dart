@@ -305,6 +305,7 @@ void main() {
       final mock = MockClient((req) async {
         expect(req.method, 'POST');
         expect(req.url.path, '/api/v1/messages/send');
+        expect((jsonDecode(req.body) as Map<String, dynamic>)['send_silent'], true);
         return http.Response(
           jsonEncode({
             'message': {
@@ -325,6 +326,7 @@ void main() {
         authorization: auth,
         chatId: 'chat-1',
         content: 'Sent',
+        sendSilent: true,
       );
       expect(r, isA<MessagesApiOk<VoiceMessage>>());
       expect((r as MessagesApiOk<VoiceMessage>).data.id, 'msg-new');

@@ -1378,6 +1378,7 @@ class _ImmediateSendAttempt {
     required List<MessageMention> mentions,
     required this.threadParentId,
     required this.isE2e,
+    required this.sendSilent,
   }) : attachments = List.unmodifiable(attachments),
        mentions = List.unmodifiable(mentions);
 
@@ -1390,6 +1391,7 @@ class _ImmediateSendAttempt {
   final List<MessageMention> mentions;
   final String? threadParentId;
   final bool isE2e;
+  final bool sendSilent;
 }
 
 class ChatRoomController extends StateNotifier<ChatRoomState> {
@@ -2172,6 +2174,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
     List<MessageAttachment> attachments = const [],
     List<MessageMention> mentions = const [],
     String? threadParentId,
+    bool sendSilent = false,
   }) async {
     final trimmed = content.trim();
     if (trimmed.isEmpty && attachments.isEmpty) return null;
@@ -2238,6 +2241,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
         mentions: retainedMentions,
         threadParentId: threadParentId,
         isE2e: isE2e,
+        sendSilent: sendSilent,
       );
       _failedImmediateSend = attempt;
       return await _submitImmediateSend(attempt);
@@ -2392,6 +2396,7 @@ class ChatRoomController extends StateNotifier<ChatRoomState> {
           mentions: attempt.mentions,
           threadParentId: attempt.threadParentId,
           isE2e: attempt.isE2e,
+          sendSilent: attempt.sendSilent,
         );
     if (!isCurrentRequest()) {
       return kChatActionStaleContext;
