@@ -12,7 +12,7 @@ on:
       product_sha:
         description: Exact selected product commit (publisher commit is separate)
         required: true
-        default: 4e88e14e64300667e3349b08e75c4c31bf50b61e
+        default: 31a04a471c604488bedd5b442039dfdf0434f9c3
         type: string
 
 permissions: {}

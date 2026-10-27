@@ -156,6 +156,7 @@ def render(snapshot, node):
         clean_meta(meta)
         obj.pop('status', None)
         separate_role_jwks_trust(obj)
+        separate_auth_database(obj)
         spec = obj.get('spec', {})
         if kind in ('Deployment', 'StatefulSet', 'Job'):
             pod = spec['template']['spec']
@@ -221,6 +222,46 @@ def render(snapshot, node):
             raise ValueError('foreign environment or private key in rendered object')
         output.append(obj)
     return output
+
+
+def separate_auth_database(obj):
+    """Fresh DEV uses a data-only Auth login; migrations retain admin custody."""
+    if obj.get('kind') != 'Deployment' or obj['metadata']['name'] != 'voice-auth':
+        return
+    pod = obj['spec']['template']['spec']
+    auth = next((c for c in pod['containers'] if c['name'] == 'auth'), None)
+    if auth is None:
+        raise ValueError('Auth container missing')
+    if any('secretRef' in e for e in auth.get('envFrom', [])):
+        raise ValueError('Auth broad Secret import forbidden')
+    env = auth.get('env', [])
+    by_name = {e['name']: e for e in env}
+    if len(by_name) != len(env) or by_name.get('AUTH_FLYWAY_ENABLED', {}).get('value') != 'false':
+        raise ValueError('Auth migrations require separate admin Job')
+    for name, key in [('SPRING_DATASOURCE_USERNAME', 'AUTH_DB_USERNAME'),
+                      ('SPRING_DATASOURCE_PASSWORD', 'AUTH_DB_PASSWORD')]:
+        if name not in by_name:
+            raise ValueError('Auth datasource configuration missing')
+        by_name[name].clear()
+        by_name[name].update({'name': name, 'valueFrom': {'secretKeyRef': {
+            'name': 'voice-app-secrets', 'key': key}}})
+    def forbidden_key(key):
+        return key in ('POSTGRES_PASSWORD', 'USER_DB_PASSWORD') or key.endswith('_DATABASE_URL')
+    if any(forbidden_key(part['secretKeyRef'].get('key', ''))
+           for part in walk(auth) if 'secretKeyRef' in part):
+        raise ValueError('Auth foreign database credential reference forbidden')
+    mounted = {m['name'] for m in auth.get('volumeMounts', [])}
+    for volume in pod.get('volumes', []):
+        if volume['name'] not in mounted:
+            continue
+        for part in walk(volume):
+            secret = part.get('secret')
+            if not isinstance(secret, dict):
+                continue
+            if secret.get('secretName', secret.get('name')) == 'voice-app-secrets':
+                items = secret.get('items')
+                if not items or any(forbidden_key(item['key']) for item in items):
+                    raise ValueError('Auth shared database credential volume forbidden')
 
 
 def main():

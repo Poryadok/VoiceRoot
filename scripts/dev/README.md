@@ -36,6 +36,50 @@ build for testing. Same physical host remains a common failure domain.
 
 ## Updating WIP
 
+### Auth/User database credential isolation for fresh installations
+
+Fresh `credentials.py` issuance uses distinct `auth_runtime` and `user_runtime`
+logins and independent passwords. The DEV renderer gives Auth only
+`AUTH_DB_USERNAME`/`AUTH_DB_PASSWORD` Secret keys and disables in-process Flyway;
+User receives its `USER_DATABASE_URL`. Auth stays Java/Spring. Neither login
+owns a database, schema or table. Existing `voice` admin credentials remain the
+bootstrap/migration authority; User migration Jobs use that authority separately
+from the application's DSN.
+
+After migrations and before app activation, bootstrap runs the fixed
+`docker/postgres/provision-auth-user-runtime-roles.sql` through a DEV-only Job.
+It grants each role CONNECT to its own database, public-schema usage, application
+table CRUD and sequence usage/select, including default grants for future
+admin-owned tables. Migration ledgers remain unavailable to runtime mutation.
+User retains TEMP on its own database for identity-association transaction
+preparation/batch tables, and SELECT on its schema ledger for startup validation.
+Auth's identity DDL barrier retains its canonical owner plus PUBLIC SELECT ACL;
+the provisioner removes direct runtime grants from that installation primitive.
+PUBLIC CONNECT/TEMP and schema CREATE are removed only on auth_db/user_db;
+the admin owner and other services' shared credentials remain unchanged.
+Unexpected privileged/member/owning pre-existing runtime roles fail closed.
+Provisioning diagnostics stay private in the Job; do not export those files or
+database role statements. The source change does not retrofit a running stand.
+
+For an existing stand, retain the actual migration/schema owner, inventory all
+shared-role and migration/backup consumers, then prepare a separately reviewed
+data-preserving credential adoption plan under its environment resource claim.
+Stage dedicated roles and credentials, bind only Auth/User after qualification,
+verify their own-database access and opposite-database denial, and run exact-image
+registration/verification/login before revoking identified superseded access.
+Do not rotate `POSTGRES_PASSWORD` globally, transfer object ownership, reset
+data or run fresh bootstrap to adopt this change. STAGING/prod require separate
+authorization and source/config evidence. Current DEV backend provenance is not
+established by a frontend build's SHA.
+
+The disposable PostgreSQL regression is `scripts/dev/auth_user_db_integration.sh`;
+it requires a caller-owned empty PostgreSQL16 fixture with admin `voice`,
+`PGHOST`, `PGPASSWORD`, independent `AUTH_DB_PASSWORD`/`USER_DB_PASSWORD`, and
+the repository mounted at `/repo`. It creates only auth_db/user_db in that
+fixture and deliberately leaves a privileged-role negative at the end. Never
+point it at an existing database server. Static coverage is
+`python3 -m unittest discover -s scripts/dev -p auth_user_db_test.py`.
+
 Build and push images first, or import them into this single node's k3s
 containerd. For local imports also register the repository@sha256 digest alias
 with k3s ctr --namespace k8s.io images tag <imported-tag> <repository@sha256:digest>
@@ -68,15 +112,28 @@ selected product commit:
 
 ```sh
 gh workflow run dev-candidate-publish.yml --ref master \
-  -f product_sha=4e88e14e64300667e3349b08e75c4c31bf50b61e
+  -f product_sha=31a04a471c604488bedd5b442039dfdf0434f9c3
 ```
 
-This bounded consumer accepts only that product commit. It builds the eight
+This bounded consumer accepts only two reviewed product selections. The default
+`31a04a471c604488bedd5b442039dfdf0434f9c3` selection builds the eight
 required DEV variants in one serial lane: Web, Admin, Developer Portal, Auth,
 User, Notification, Realtime and the native Space installer. The source checkout
 and publisher checkout are separate, clean and byte-verified. Explicit source
 build arguments bind the four capability owners and native installer; frontend
 build arguments target the DEV API and LiveKit endpoints.
+
+For the existing-data Auth/User credential adoption consumer, dispatch the same
+workflow with `product_sha=f1946355a084bed4c62a602ec1dc04e2d57e52ee`. That exact
+selection builds only `dev-auth` and `dev-user`; it does not replace or broaden
+the default eight-image candidate. Its build labels, embedded JAR/binary source,
+pulled configuration and receipts bind this selected source independently of
+the publisher commit. Fresh builds produce new image/config digests; earlier
+local f194 images and their digests are not substituted or overwritten.
+
+This selection is a fresh candidate. Earlier `4e88e14e` image/package receipts
+remain historical; they do not qualify this commit or replace its new immutable
+image closure and canonical package checks.
 
 Tags include the product SHA, actual run ID and attempt; existing or unavailable
 tag state fails closed. No shared `latest`, master or full-SHA tag is overwritten.

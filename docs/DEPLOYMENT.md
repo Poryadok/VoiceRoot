@@ -1527,6 +1527,20 @@ For the reviewed root adapter, retain both `FOWNER` and `FSETID` capabilities wh
 
 When restoring applications, reuse the existing owned User→Space startup choreography described under [NATS JWT and leaf activation](#nats-jwt-and-leaf-activation): temporarily clear only User's operation-owned `SPACE_GRPC_ADDR`, wait for User and then Space, restore the exact original User template, and verify restored User plus all required workload readiness. Recognize only the operation's own interrupted empty override; refuse foreign changes and retain cleanup on failure. Do not change Services, remove dependency checks, or waive readiness to break the cycle.
 
+New source-level cold-start support uses a separately reviewed internal
+`voice-user-peer` ClusterIP with `publishNotReadyAddresses: true`, selecting only
+User and exposing only ordinary 9090. Only Space Deployment's `USER_GRPC_ADDR`
+uses it. User starts fully guarded transports with admission closed and retains
+the configured Space Ready deadline before successful HTTP health/admission;
+ordinary Services, probes and shared ConfigMap addresses remain ready-gated and
+unchanged. This is not authority or network isolation. Protected capture, when
+enabled, needs separately qualified discovery of its existing dedicated mTLS
+port with its explicit certificate server name and full principal configuration;
+there is no ordinary-port fallback. Keep the historical recovery choreography
+for older images until a source-bound release containing this behavior and its
+matching manifest is verified and deployed; source tests alone do not supersede
+an existing operation's recovery or data-preservation guards.
+
 A terminal reset closure is **not deployment acceptance**. Preserve its original failed FULL, reset authority, completed authorization journals, receipt and old-store evidence. Retirement/idle inventory must authenticate the exact terminal reset admission before classifying its authorization journal as settled; never delete history or treat every `STARTED` journal as abandoned. The reset receipt retains `deployment_pass=false` and `rollback_eligible=false`.
 
 After independent terminal-reset readback, install the reviewed helper successor through its existing exact-predecessor upgrade path. Verify all installed manifest members/code binding, terminal receipt and parsed active-contract equality. Compare canonical JSON mappings for semantic equality and record raw-file hashes separately. Only after installation/readback succeeds, start the existing `voice-nats-preservation.path` and `.timer` units; these trigger the existing service. Do not start the triggers against the predecessor helper or substitute a new scheduler. These systemd units are separate from Codex recurring automation.

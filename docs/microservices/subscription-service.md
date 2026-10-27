@@ -19,6 +19,12 @@
 
 ## Лимиты по плану
 
+The complete version-frozen inventory, source anchors, consumer surfaces and
+server/client proof obligations are in
+[benefit matrix v1](../features/subscription-benefit-matrix-v1.md) and
+[paid-offer manifest v1](../features/subscription-offer-v1.json). The compact
+table below is not the complete paid offer or activation evidence.
+
 | Параметр               | Free    | Premium   | Space Pro |
 |------------------------|---------|-----------|-----------|
 | Размер файла           | 50 MB   | 200 MB    | —         |
@@ -80,13 +86,17 @@ and no resurrection remain governed by the File lifecycle contract below.
 The Space response contains only Space keys; it does not grant personal benefits
 to members or purchasers. Unknown personal tiers likewise cannot grant Space Pro.
 
-**Open matrix gaps (BE-114):** this table does not silently choose between the
-conflicting Free join cap here (50 Spaces) and the feature specification (100
-Spaces + group chats combined), or between Free voice quality here (480p) and
-the feature specification (360p / 30fps). Anonymous viewing appears only in this
-service table and lacks a defined feature contract. These three entries need
-an explicit canon decision before corresponding JSON keys/consumer enforcement;
-see [backend TODO](../todo/backend.md). They are not excluded paid benefits.
+**Open matrix seams (BE-114):** the feature offer specifies 100/1000 Spaces +
+group chats combined and 360p/720p at 30fps; historical 50-Space/480p values are
+not this offer's values. Combined membership counting authority and scope across
+profiles still need a contract; these inventory entries do not add JSON keys.
+Anonymous Story viewing does have semantics in
+[Stories future monetization](../features/stories.md#анонимный-просмотр-подписка),
+but its A7 offer placement needs an explicit scope decision against the later
+stories-editor planning cycle. The versioned matrix retains it and the other
+future Story monetization entries rather than silently excluding them. See
+[backend TODO](../todo/backend.md#subscription); no numeric custom-emoji quota
+or missing consumer API is inferred here.
 
 ```protobuf
 service SubscriptionService {

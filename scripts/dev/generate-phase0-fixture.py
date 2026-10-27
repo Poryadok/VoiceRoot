@@ -6,6 +6,7 @@ import base64
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -22,11 +23,37 @@ def generate(destination):
     if not destination.parent.is_dir():
         raise ValueError("fixture parent directory must exist")
 
+    def diagnostic(tool, args, stderr, exit_code):
+        values = [str(value) for value in args]
+        operation = " ".join(values[:2]) or "<no operation>"
+        targets = []
+        for index, value in enumerate(values[:-1]):
+            if value in ("-out", "-keyout", "-keystore", "-in"):
+                path = Path(values[index + 1])
+                try:
+                    targets.append(path.relative_to(root).as_posix())
+                except ValueError:
+                    targets.append(path.name)
+        detail = (stderr or b"").decode("utf-8", "replace")
+        detail = detail.replace(str(root), "<fixture>").replace(str(destination.parent), "<fixture-parent>")
+        detail = re.sub(r"(?i)(?:pass|password|passphrase)(?::|=)\S+", "<redacted-secret>", detail)
+        detail = re.sub(r"[A-Za-z]:[\\/][^\s:]+|/(?:[^\s:]+/)*[^\s:]+", "<path>", detail)
+        if "PRIVATE KEY" in detail or "USER NKEY SEED" in detail:
+            detail = "<redacted private material>"
+        detail = " ".join(detail.split())[:500] or "<empty stderr>"
+        target = ",".join(targets) if targets else "<none>"
+        print(f"Phase0 fixture command failed: tool={tool} operation={operation} target={target} exit={exit_code} stderr={detail}",
+              file=sys.stderr)
+
     def command(tool, *args):
-        # Error output is deliberately withheld: tools can echo sensitive input.
-        result = subprocess.run([binaries[tool], *map(str, args)],
-                                capture_output=True, timeout=60)
+        try:
+            result = subprocess.run([binaries[tool], *map(str, args)],
+                                    capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired as error:
+            diagnostic(tool, args, error.stderr, "timeout")
+            raise
         if result.returncode:
+            diagnostic(tool, args, result.stderr, result.returncode)
             raise ValueError(f"{tool} fixture generation failed")
 
     old_umask = os.umask(0o077)
@@ -67,11 +94,18 @@ def generate(destination):
             for issuer in ("gateway", "chat", "matchmaking"):
                 issuer_keys = []
                 for kid in ("current", "next"):
-                    der = subprocess.run(
-                        [binaries["openssl"], "pkey", "-in", str(root / issuer / f"{kid}.pem"),
-                         "-pubout", "-outform", "DER"],
-                        capture_output=True, timeout=60, check=False)
+                    try:
+                        der = subprocess.run(
+                            [binaries["openssl"], "pkey", "-in", str(root / issuer / f"{kid}.pem"),
+                             "-pubout", "-outform", "DER"],
+                            capture_output=True, timeout=60, check=False)
+                    except subprocess.TimeoutExpired as error:
+                        diagnostic("openssl", ("pkey", "-in", root / issuer / f"{kid}.pem", "-pubout", "-outform", "DER"),
+                                   error.stderr, "timeout")
+                        raise
                     if der.returncode:
+                        diagnostic("openssl", ("pkey", "-in", root / issuer / f"{kid}.pem", "-pubout", "-outform", "DER"),
+                                   der.stderr, der.returncode)
                         raise ValueError(f"{issuer} public key export failed")
                     spki, end = der_value(der.stdout, 0, 0x30)
                     if end != len(der.stdout):
@@ -278,7 +312,18 @@ def main():
     args = parser.parse_args()
     try:
         generate(args.destination)
-    except (ValueError, OSError, subprocess.TimeoutExpired):
+    except (ValueError, OSError, subprocess.TimeoutExpired) as error:
+        if isinstance(error, ValueError):
+            detail = str(error)
+        elif isinstance(error, OSError):
+            filename = Path(error.filename).name if error.filename else "<none>"
+            detail = f"errno={error.errno} filename={filename}"
+        else:
+            detail = "subprocess timeout"
+        if "PRIVATE KEY" in detail or "USER NKEY SEED" in detail:
+            detail = "<redacted private material>"
+        print(f"Phase0 fixture failure detail: type={type(error).__name__} detail={detail}",
+              file=sys.stderr)
         print("Phase0 fixture generation failed; destination must be new and crypto tools available.",
               file=sys.stderr)
         return 1

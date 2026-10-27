@@ -24,6 +24,8 @@ func Method(target string) string {
 		return "/voice.catalogactor.v1.CatalogActorAuthorityService/GetCatalogActorStates"
 	case "auth-admission":
 		return "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
+	case "space-account-capture":
+		return "/voice.user.v1.UserService/CaptureSpaceMemberAccountBindings"
 	case "user":
 		return "/voice.user.v1.UserService/GetPrivacySettings"
 	case "space":
@@ -55,7 +57,7 @@ func AllowsMethod(target, method string) bool {
 	switch target {
 	case "catalog":
 		return method == Method(target)
-	case "auth-admission":
+	case "auth-admission", "space-account-capture":
 		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
 		return method == Method(target)
@@ -317,6 +319,9 @@ func RequireSocialForMethod(ctx context.Context, target, method string, req prot
 }
 
 func expectedIssuer(target string) string {
+	if target == "space-account-capture" {
+		return "space"
+	}
 	if target == "auth-admission" {
 		return "auth"
 	}
@@ -347,7 +352,7 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "catalog" || capability == "notification-primary" || capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "catalog" || capability == "notification-primary" || capability == "auth-admission" || capability == "space-account-capture" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
 }
 
 func capabilityIssuers(capability string) []string {

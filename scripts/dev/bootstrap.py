@@ -436,6 +436,7 @@ def activate():
         raise RuntimeError('dev database creation failed')
     postgres_image = next(o for o in rendered if o['kind'] == 'StatefulSet' and o['metadata']['name'] == 'voice-postgres')['spec']['template']['spec']['containers'][0]['image']
     migrations.apply_all(ROOT, postgres_image, apply, run, get)
+    migrations.apply_auth_user_roles(ROOT, postgres_image, apply, run, get)
     for script in ('ensure-gateway-schema.sh', 'apply-clickhouse-init.sh'):
         result = run('bash', str(ROOT / 'scripts/staging' / script), env=env, timeout=1800, check=False)
         (WORK / (script + '.log')).write_bytes(result.stdout + result.stderr)
