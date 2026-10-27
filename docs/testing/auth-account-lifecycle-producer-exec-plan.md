@@ -64,6 +64,22 @@ catalog-v1 validator or mixed history.
 - [x] Implement source capture and focused GREEN: Linux JDK25.0.4/PostgreSQL16.15, session36829 terminal0 BUILD SUCCESS,21 tests/0failures/0errors/0skips (native producer9, migration source7, gate/history5). Native suite38.53s. Report-gate harness also passes all positive/negative inventory/wiring cases.
 - [ ] Independent immutable-source review; publication remains held.
 
+Frozen source9e711dec received bounded independent SOURCE CLEAR (BE-019c21).
+Advisor195 and reviewer140 agree that a committed decision uses the strict
+post-account/lifetime-lock cut, rather than later journal/WAL/response completion.
+The canonical Auth service wording now states that definition explicitly.
+The requested normal successor adds two supplemental native regressions: hold
+only the global journal row, observe the restore blocked there before D, cross D
+and commit; concurrent same-account expiry must wait and preserve RESTORED at the
+original preD cut. The rollback variant crosses the same boundary and retains no
+RESTORED fact/intent. These are new controls beyond the original21PASS receipt.
+Successor session75914 is process-terminal0 BUILD SUCCESS:23 tests/0failures/
+0errors/0skips, including native11 in46.61s plus the same12 static checks. Raw
+producer-journal-controls.log and three journal-final Surefire XML reports retain
+the result; SQL/Java implementation and catalog bytes remain unchanged from9e.
+The background scheduled worker logged SQL08006 during PostgreSQL fixture
+teardown; every test completed without error. This supplies no runtime claim.
+
 The capture change is confined to V34/canonical35, its finite history profile,
 and explicit catalog compatibility. Replace the existing account guard and
 deadline materializer from their pinned V28 definitions, retaining account →

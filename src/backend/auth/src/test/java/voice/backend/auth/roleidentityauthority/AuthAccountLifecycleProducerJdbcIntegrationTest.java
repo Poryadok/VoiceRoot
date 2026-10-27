@@ -299,6 +299,82 @@ class AuthAccountLifecycleProducerJdbcIntegrationTest {
   java.util.Optional<AuthAccountLifecycleCycleStore.Cycle> readCycle(UUID owner, UUID cycle) {
     return transactions.execute(status -> cycles.find(owner,cycle));
   }
+  @Test @Order(10) void committedPredeadlineDecisionCanFinishAfterTheJournalWait() throws Exception {
+    journalWaitThroughDeadline(true);
+  }
+
+  @Test @Order(11) void abortAfterTheJournalWaitPublishesNoRestoredDecisionOrIntent() throws Exception {
+    journalWaitThroughDeadline(false);
+  }
+
+  void journalWaitThroughDeadline(boolean commit) throws Exception {
+    Account account = account(); UUID owner = owner(account);
+    transactions.executeWithoutResult(status -> jdbc.update("UPDATE accounts SET deleted_at=clock_timestamp()-interval '720 hours'+interval '5 seconds',status='deleted' WHERE id=?",account.id()));
+    UUID cycle = currentCycle(owner);
+    var original = readCycle(owner,cycle).orElseThrow();
+    var restorePid = new java.util.concurrent.CompletableFuture<Integer>();
+    var expiryPid = new java.util.concurrent.CompletableFuture<Integer>();
+    var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
+    try (var journal = source.getConnection()) {
+      journal.setAutoCommit(false);
+      int journalPid;
+      try (var statement = journal.createStatement()) {
+        try (var row = statement.executeQuery("SELECT pg_backend_pid()")) { row.next(); journalPid=row.getInt(1); }
+        statement.executeQuery("SELECT singleton FROM role_identity_owner_state FOR UPDATE").close();
+      }
+      java.util.concurrent.Future<Boolean> restored = executor.submit(() -> transactions.execute(status -> {
+        restorePid.complete(jdbc.queryForObject("SELECT pg_backend_pid()",Integer.class));
+        Boolean result = accounts.restoreDeleted(account.id());
+        if (!commit) status.setRollbackOnly();
+        return result;
+      }));
+      int restoreBackend = restorePid.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      awaitBlockedBy(restoreBackend,journalPid);
+      // The guard has acquired account+lifetime and inserted its private fact
+      // before waiting only on journal evidence; its cut must already be < D.
+      assertThat(now()).isBefore(original.schedule().purgeAt());
+      assertThat(readCycle(owner,cycle).orElseThrow().decision()).isEmpty();
+      assertThat(count("auth_account_lifecycle_intents",owner)).isEqualTo(1);
+      jdbc.queryForObject("SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM (?::timestamptz-clock_timestamp()))+0.02))",Object.class,Timestamp.from(original.schedule().purgeAt()));
+      java.util.concurrent.Future<Long> expiry = null;
+      if (commit) {
+        expiry = executor.submit(() -> transactions.execute(status -> {
+          expiryPid.complete(jdbc.queryForObject("SELECT pg_backend_pid()",Integer.class));
+          return jdbc.queryForObject("SELECT role_identity_materialize_handle(?)",Long.class,owner);
+        }));
+        awaitBlockedBy(expiryPid.get(5,java.util.concurrent.TimeUnit.SECONDS),restoreBackend);
+      }
+      journal.commit();
+      assertThat(restored.get(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      if (expiry != null) expiry.get(5,java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(now()).isAfterOrEqualTo(original.schedule().purgeAt());
+      var recorded = readCycle(owner,cycle).orElseThrow();
+      assertThat(recorded.schedule()).isEqualTo(original.schedule());
+      if (commit) {
+        var decision = recorded.decision().orElseThrow();
+        assertThat(decision.kind()).isEqualTo(AuthAccountLifecycleCycleStore.DecisionKind.RESTORED);
+        assertThat(decision.at()).isBefore(original.schedule().purgeAt());
+        assertThat(jdbc.queryForObject("SELECT state FROM role_identity_lifetimes WHERE owner_handle=?",String.class,owner)).isEqualTo("ACTIVE");
+        assertThat(count("auth_account_lifecycle_intents",owner)).isEqualTo(2);
+      } else {
+        assertThat(recorded.decision()).isEmpty();
+        assertThat(count("auth_account_lifecycle_intents",owner)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT state FROM role_identity_lifetimes WHERE owner_handle=?",String.class,owner)).isEqualTo("RECOVERABLE");
+      }
+    } finally {
+      executor.shutdownNow();
+      assertThat(executor.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    }
+  }
+
+  void awaitBlockedBy(int waiter, int blocker) throws InterruptedException {
+    long bound = System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+    while (!Boolean.TRUE.equals(jdbc.queryForObject("SELECT ? = ANY(pg_blocking_pids(?))",Boolean.class,blocker,waiter))) {
+      if (System.nanoTime()>=bound) throw new AssertionError("expected exact database lock blocker was not observed");
+      Thread.sleep(10);
+    }
+  }
+
   int count(String table, UUID owner) {
     if (!java.util.Set.of("auth_account_lifecycle_schedules","auth_account_lifecycle_intents").contains(table)) throw new IllegalArgumentException();
     return jdbc.queryForObject("SELECT count(*) FROM "+table+" WHERE owner_handle=?",Integer.class,owner);
