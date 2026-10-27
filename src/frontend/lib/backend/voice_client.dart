@@ -47,6 +47,7 @@ class VoiceCallSession {
     this.voiceRoomId,
     this.spaceId,
     this.expiresAt,
+    this.startedAt,
     this.matchId,
     this.mediaEpoch,
   });
@@ -67,6 +68,7 @@ class VoiceCallSession {
   /// This value alone does not establish canonical room authorization.
   final String? spaceId;
   final DateTime? expiresAt;
+  final DateTime? startedAt;
 
   /// Present only for the delegated MatchSquad membership flow.
   final String? matchId;
@@ -415,7 +417,9 @@ class VoiceCallsClient {
         response.callSession.roomId != roomId ||
         response.mediaEpoch != mediaEpoch ||
         response.membershipState !=
-            calls_pb.MatchSquadMembershipState.MATCH_SQUAD_MEMBERSHIP_STATE_LEFT) {
+            calls_pb
+                .MatchSquadMembershipState
+                .MATCH_SQUAD_MEMBERSHIP_STATE_LEFT) {
       return const VoiceApiFailure(
         message: 'invalid_match_squad_leave_response',
         errorCode: 'invalid_response',

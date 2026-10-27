@@ -7,6 +7,7 @@ import '../../l10n/app_localizations.dart';
 import '../../settings/voice_input_settings.dart';
 import '../../state/auth_providers.dart';
 import '../../state/call_providers.dart';
+import '../../state/call_presentation_providers.dart';
 import '../../state/gateway_providers.dart';
 import '../../state/screen_share_providers.dart';
 import '../../state/social_providers.dart';
@@ -16,7 +17,8 @@ import 'screen_share_panel.dart';
 import 'voice_organizer_panel.dart';
 
 class ActiveCallPanel extends ConsumerStatefulWidget {
-  const ActiveCallPanel({super.key});
+  const ActiveCallPanel({super.key, this.shellHosted = false});
+  final bool shellHosted;
 
   static const Key panelKey = Key('active_call_panel');
   static const Key unlockAudioKey = Key('active_call_unlock_audio');
@@ -46,6 +48,10 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
     final call = ref.watch(callControllerProvider);
     final session = call.session;
     if (!call.isActive || session == null) {
+      return const SizedBox.shrink();
+    }
+    if (widget.shellHosted &&
+        ref.watch(callExpandedRoomProvider) != session.roomId) {
       return const SizedBox.shrink();
     }
 
@@ -85,8 +91,13 @@ class _ActiveCallPanelState extends ConsumerState<ActiveCallPanel> {
               orElse: () => null,
             )
           : null,
-      showMinimize: useExpandedMedia && !_minimized,
-      onMinimize: useExpandedMedia
+      showMinimize: widget.shellHosted || (useExpandedMedia && !_minimized),
+      onMinimize: widget.shellHosted
+          ? () {
+              ref.read(callExpandedRoomProvider.notifier).state = null;
+              ref.read(callMiniFocusRequestProvider.notifier).state++;
+            }
+          : useExpandedMedia
           ? () => setState(() => _minimized = true)
           : null,
       onExpand: useExpandedMedia && _minimized
@@ -281,8 +292,9 @@ class _CallControlsRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final voice = VoiceColors.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 8,
       children: [
         if (connecting) ...[
           const SizedBox(

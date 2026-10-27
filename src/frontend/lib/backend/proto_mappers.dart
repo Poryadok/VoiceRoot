@@ -686,6 +686,9 @@ VoiceCallSession voiceCallSessionFromProto(calls_pb.CallSession session) {
     mediaKind: voiceCallMediaKindFromProto(session.mediaKind),
     status: voiceCallStatusFromProto(session.status),
     sessionKind: kind,
+    startedAt: protoTimestampToDateTime(
+      session.hasStartedAt() ? session.startedAt : null,
+    ),
     expiresAt: protoTimestampToDateTime(
       session.hasExpiresAt() ? session.expiresAt : null,
     ),

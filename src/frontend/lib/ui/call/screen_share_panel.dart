@@ -199,7 +199,8 @@ Future<double?> showScreenShareQualityDialog(BuildContext context) {
 }
 
 class ScreenShareCallButton extends ConsumerWidget {
-  const ScreenShareCallButton({super.key});
+  const ScreenShareCallButton({super.key, this.style});
+  final ButtonStyle? style;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -212,6 +213,7 @@ class ScreenShareCallButton extends ConsumerWidget {
 
     return IconButton.filledTonal(
       key: ScreenSharePanel.shareButtonKey,
+      style: style,
       tooltip: share.isSharing
           ? l10n.screenShareStop
           : _screenShareStartTooltip(l10n),

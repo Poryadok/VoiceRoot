@@ -974,6 +974,25 @@ class AppLocalizationsRu extends AppLocalizations {
   String get callActive => 'Звонок активен';
 
   @override
+  String get callMiniConnected => 'Подключено';
+
+  @override
+  String get callMiniReturn => 'Вернуться в звонок';
+
+  @override
+  String get callMiniParticipant => 'Участник';
+
+  @override
+  String callMiniSpeaking(String name) {
+    return '$name говорит';
+  }
+
+  @override
+  String callMiniParticipants(int count) {
+    return 'Участников: $count';
+  }
+
+  @override
   String get callTapToEnableAudio => 'Нажмите, чтобы включить входящий звук';
 
   @override
