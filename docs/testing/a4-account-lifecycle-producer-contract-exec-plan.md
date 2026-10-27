@@ -4,7 +4,7 @@
 
 Define the Auth lifecycle authority and User complete-profile coverage that
 Matchmaking needs to retire old terminal routing at its original account-deletion
-deadline. This is a draft semantic target, not a shipped producer, an activated
+deadline. This is an independently agreed target, not a shipped producer, an activated
 capability, or a whole-account erasure acceptance claim.
 
 The delivery consumer is the owner of
@@ -181,8 +181,39 @@ can enumerate the complete set.
 - [x] Compare prior owning Auth/User decisions without extending the MM exception
   to User recoverable content or allocating a duplicate lifetime handle.
 - [x] Draft semantic records, manifest fixture and owner/matrix sections.
-- [ ] Validate the frozen packet and obtain both independent reviews.
-- [ ] Publish only actually agreed contract evidence to the consumer.
+- [x] Validate the frozen packet and obtain both independent reviews at
+  `6bf8e22583976363aca135c4265887f222e43936`: Anton-140 Auth/security and
+  Anton-172 User-coverage/MM. The latter independently rebuilt all three framed
+  manifest preimages and digests (`BE-020` c14).
+- [x] Publish only actually agreed contract evidence to the consumer.
+- [x] First producer component: acquire the existing account row lock before
+  sampling `clock_timestamp()` in the deletion transaction. Commit
+  `56610364b422139a11b564927340854908e4d7e0` preserves the existing outbox,
+  session-epoch floor and idempotent operation seams. A real held-row test first
+  failed with a caller clock seven days ahead; Linux/JDK 25 GREEN ran five tests
+  with no failures, errors or skips. Anton-140 independently cleared this
+  four-path component; this does not qualify the full producer.
+- [ ] Retain immutable queried-cycle schedule/decision facts and durable producer
+  intent using the existing opaque lifetime handle, cycle and revision lineage.
+- [ ] Implement protected request-bound current/terminal reconciliation and
+  complete User coverage with creation-path closure, then connect the named MM
+  consumer without borrowing a Role/User-purpose grant.
+
+## Runtime implementation findings
+
+The existing `role_identity_lifetimes` row already owns the stable opaque handle,
+cycle and current revision. Do not allocate another identity lineage. Its journal
+does not retain authoritative decision timestamps, and an ACTIVE current fact
+alone cannot prove which prior cycle restored. Historical missing decision times
+remain unavailable rather than receiving an invented timestamp.
+
+The exact Auth identity catalog currently rejects additional lifetime triggers,
+and its migration-history validator requires a complete declared loader profile.
+Any additive cycle-history integration must update those compatibility proofs
+explicitly, preserving fail-closed rollback and backup behavior. The linked-OAuth
+producer owns Flyway V32/canonical 000033 and its history profile. The next A4
+migration must stack after that exact predecessor and reconcile the separate
+Subscription authority writer's reservations before choosing its own slot.
 
 ## Decisions and follow-ups
 
