@@ -47,7 +47,7 @@ func (o *userStartup) Release() error {
 
 func (o *userStartup) fail(err error) {
 	if err == nil {
-		err = errors.New("User gRPC listener stopped")
+		err = errors.New("user gRPC listener stopped")
 	}
 	o.mu.Lock()
 	o.ready = false
