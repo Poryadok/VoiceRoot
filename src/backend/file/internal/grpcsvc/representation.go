@@ -39,6 +39,12 @@ func selectedRepresentation(row store.FileRow, variant filev1.FileURLVariant) (s
 	}
 	r := store.Representation{Key: key, MIMEType: row.MimeType, SizeBytes: row.SizeBytes, Filename: row.OriginalName}
 	if variant == filev1.FileURLVariant_FILE_URL_VARIANT_THUMBNAIL {
+		if row.FileType == "document" && row.MimeType == "application/pdf" {
+			r.MIMEType = "image/png"
+			r.SizeBytes = 1024 * 1024
+			r.Filename = "pdf-thumbnail.png"
+			return r, nil
+		}
 		r.MIMEType = "image/webp"
 		r.SizeBytes = 5 * 1024 * 1024
 		r.Filename = "thumbnail.webp"
