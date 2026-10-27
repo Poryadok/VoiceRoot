@@ -41,6 +41,7 @@ run_matrix() {
   GITHUB_OUTPUT="${out}" FILTER_JSON="${FILTER_JSON:-}" \
     FORCE_FULL="${FORCE_FULL:-}" bash "${SCRIPT}" >/dev/null
   go_services="$(grep '^go_services=' "${out}" | head -1 | cut -d= -f2-)"
+  docker_go_services="$(grep '^docker_go_services=' "${out}" | head -1 | cut -d= -f2-)"
   integration_go_services="$(grep '^integration_go_services=' "${out}" | head -1 | cut -d= -f2-)"
   run_go="$(grep '^run_go=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
@@ -53,10 +54,12 @@ assert_contains "${go_services}" file
 assert_contains "${go_services}" messaging
 assert_contains "${go_services}" gateway
 assert_exact_services "${go_services}" '["chat","file","messaging","gateway"]'
+assert_exact_services "${docker_go_services}" '["chat","messaging"]'
 [[ "${run_go}" == "true" ]] || fail "expected run_go=true for chat"
 
 echo "== file change pulls story (one-hop) =="
 FILTER_JSON='{"code":"true","svc_file":"true"}' run_matrix
+assert_exact_services "${docker_go_services}" '["file"]'
 assert_contains "${go_services}" file
 assert_contains "${go_services}" messaging
 assert_contains "${go_services}" story
@@ -98,5 +101,21 @@ unique="$(echo "${go_services}" | jq 'unique | length')"
 assert_contains "${go_services}" controlledgame
 assert_contains "${go_services}" gameintegration
 assert_exact_services "${integration_go_services}" '[]'
+
+echo "== shared build inputs retain all images and service checks =="
+FILTER_JSON='{"code":"true","go_build_shared":"true"}' run_matrix
+assert_exact_services "${docker_go_services}" "${go_services}"
+assert_contains "${docker_go_services}" gateway
+assert_contains "${docker_go_services}" voice
+
+echo "== source consumers receive a service job even without an S2S edge =="
+FILTER_JSON='{"code":"true","svc_federation":"true"}' run_matrix
+assert_contains "${go_services}" voice
+assert_exact_services "${docker_go_services}" '["federation","voice"]'
+
+echo "== docs-only selects no service checks or images =="
+FILTER_JSON='{"code":"false"}' run_matrix
+assert_exact_services "${go_services}" '[]'
+assert_exact_services "${docker_go_services}" '[]'
 
 echo "All resolve-go-matrix tests passed."

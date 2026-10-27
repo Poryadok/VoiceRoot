@@ -57,6 +57,14 @@ source-bound visual/runtime evidence.
 
 ## По языкам и компонентам
 
+Изменения маршрутизации CI проверяются `python scripts/ci/fast-gate-routing_test.py`,
+`python .github/ci/selected-acceptance-gate_test.py` и
+`bash scripts/ci/resolve-go-matrix_test.sh` (Python с PyYAML и `jq` для shell).
+Матрица тестов Go-потребителей и матрица Docker-сборок различаются: образы нужны
+для прямых изменений и реальных исходных зависимостей Dockerfile, общие build
+inputs расширяют проверку. Правила PR/master и сохранённые обязательства —
+[CI gate policy](../.github/ci/gate-policy.md#pr-scope-and-image-verification).
+
 ### Help: реальный browser handoff
 
 Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
