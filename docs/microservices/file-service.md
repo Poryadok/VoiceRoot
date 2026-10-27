@@ -527,6 +527,47 @@ while any other live reference remains. Replay, out-of-order and RED cases are
 specified in
 [subscription-lifecycle-convergence-exec-plan.md](../testing/subscription-lifecycle-convergence-exec-plan.md).
 
+## Account-erasure profile-media participant (BE-023; accepted target, not implemented)
+
+`ACCOUNT_ERASURE_V1` is a separate protected purpose. File observes only
+previously owner-bound Auth lifetime handles and authenticated lifecycle
+snapshot/journal/terminal proofs explicitly authorized for File. Public events,
+caller headers, a User credential, a terminal boolean or elapsed local time do
+not authorize irreversible release. A due job obtains Auth proof outside File
+locks, then rechecks the exact handle/cycle/revision and fresh database deadline
+inside its local transaction. Missing proof fences affected access/admission,
+records overdue cleanup and requires reconciliation; it does not prove P30D
+erasure. Restore cancels only its exact cycle and releases no reference.
+
+User must enroll every exact avatar/banner/derived-media reference before
+profile publication, including historical/archived profile media. File durably
+registers an opaque plan ID and deterministic sorted keys/chunks/count/digest,
+bound to handle/cycle/revision. Its producer/purpose is `USER_PROFILE`, separate
+from the closed P3 `SPACE`, `CHAT`, `MESSAGING` manifest producers. The same
+lifecycle/reference authority must fence replacement, backfill and late acquire
+before plan closure can claim complete inventory.
+
+Positive exact-cycle Auth terminal proof permits release of only saved
+references, capability revocation, raw owner/retention-link minimization and
+atomic operation/GC intent. Shared bytes survive while any other live reference
+exists; surviving selectors remain independent. Receipts distinguish exact
+release plus durable zero-reference GC intent from physical original/converted/
+thumbnail deletion. Retry state after P30D retains only necessary opaque
+reference/object/plan IDs and outcome, never an indefinite raw profile roster.
+User raw purge does not wait for File availability once the opaque plan exists.
+
+At the examined source `f40a7ddf`, the Auth wire has no explicit
+`ACCOUNT_ERASURE_V1` File observe/terminal contract, and the File producer ACL
+has no User profile enrollment/plan path. User's `CreateAvatarPresignedUpload`
+presigns R2 writes directly and returns a public URL/object key without a File
+reference. These are concrete implementation inputs, not existing authority.
+Auth/User owners must provide the protected handle/proof binding and exact
+media acquisition/backfill or a separately owned exact-object deletion journal.
+File cannot infer this from avatar URLs, account/uploader scans or another
+purpose's permissions. See the [BE-023 continuation plan](../testing/be023-file-account-erasure-exec-plan.md)
+and [backend gap](../todo/backend.md#auth). No destructive participant or complete
+media-erasure activation is claimed by this target contract.
+
 ## P3 reference authority, lifecycle fence and GC (accepted target)
 
 File is sole reference and binary-GC authority. Add service-owned blob,
