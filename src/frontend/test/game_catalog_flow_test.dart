@@ -94,8 +94,9 @@ void main() {
         ]) {
           final waiting = Completer<http.Response>();
           final client = MockClient((request) async {
-            if (request.url.path.endsWith('/matches'))
+            if (request.url.path.endsWith('/matches')) {
               return _json({'matches': []});
+            }
             final failedRequest =
                 !scenario.startsWith('search-') ||
                 request.url.path.endsWith('/search');
@@ -147,8 +148,9 @@ void main() {
       var historyCalls = 0;
       final client = MockClient((request) async {
         if (request.url.path.endsWith('/matches')) {
-          if (++historyCalls == 1)
+          if (++historyCalls == 1) {
             return _json({'message': 'private error'}, 503);
+          }
           return _json({
             'matches': [
               {'game_id': 'recent'},
