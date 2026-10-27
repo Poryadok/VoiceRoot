@@ -227,6 +227,10 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 	}
 	seen := map[string]bool{}
 	for _, subject := range g.Publish {
+		if strings.HasPrefix(subject, "notification.subscription_grace_reminder") &&
+			(subject != "notification.subscription_grace_reminder" || owner != "notification" || bootstrap) {
+			return false
+		}
 		if seen[subject] || subject == "" || strings.ContainsAny(subject, " \t\r\n*") || strings.HasSuffix(subject, ".>") && !validAck(subject) {
 			return false
 		}
@@ -246,6 +250,9 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 		seen[subject] = true
 	}
 	for _, subject := range g.Subscribe {
+		if strings.HasPrefix(subject, "notification.subscription_grace_reminder") {
+			return false // Realtime binds only its bootstrap-owned delivery inbox.
+		}
 		if seen[subject] || subject == "" || strings.ContainsAny(subject, " \t\r\n*") {
 			return false
 		}

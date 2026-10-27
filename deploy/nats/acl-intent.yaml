@@ -141,6 +141,8 @@ services:
   notification:
     no_response: true
     publish:
+      - notification.subscription_grace_reminder
+      - $JS.API.STREAM.INFO.notification_reminder_hints
       - analytics.notification.push_sent
       - $JS.API.STREAM.INFO.analytics_events
       - $JS.API.CONSUMER.INFO.message_events.notif_msg_v2
@@ -169,6 +171,8 @@ services:
   realtime:
     no_response: true
     publish:
+      - $JS.API.CONSUMER.INFO.notification_reminder_hints.rt_realtime1_subscription_reminder
+      - $JS.ACK.notification_reminder_hints.rt_realtime1_subscription_reminder.>
       - message.delivery_ack
       - $JS.API.STREAM.INFO.message_events
       - $JS.API.CONSUMER.INFO.message_events.rt_realtime1_msg
@@ -200,6 +204,7 @@ services:
       - _INBOX.voice.realtime1.role
       - _INBOX.voice.realtime1.voice
       - _INBOX.voice.realtime1.matchmaking
+      - _INBOX.voice.realtime1.subscription_reminder
   role:
     no_response: true
     publish: [role.created, role.updated, role.deleted, role.assigned, role.revoked, role.chat_override_set, role.chat_override_removed, role.voice_override_set, role.voice_override_removed, role.voice_policy_invalidated, $JS.API.STREAM.INFO.role_events]
@@ -299,6 +304,10 @@ services:
 bootstrap:
   no_response: true
   publish:
+    - $JS.API.STREAM.INFO.notification_reminder_hints
+    - $JS.API.STREAM.CREATE.notification_reminder_hints
+    - $JS.API.CONSUMER.INFO.notification_reminder_hints.rt_realtime1_subscription_reminder
+    - $JS.API.CONSUMER.CREATE.notification_reminder_hints.rt_realtime1_subscription_reminder
     - $JS.API.INFO
     - $JS.API.STREAM.INFO.message_events
     - $JS.API.STREAM.INFO.chat_events

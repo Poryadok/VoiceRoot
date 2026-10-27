@@ -2459,6 +2459,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subscriptionManageBilling => 'Manage subscription';
 
   @override
+  String get subscriptionGraceReminderPersonal => 'Payment failed';
+
+  @override
+  String subscriptionGraceReminderSpace(String spaceId) {
+    return 'Space Pro payment failed ($spaceId)';
+  }
+
+  @override
   String get subscriptionCancel => 'Cancel subscription';
 
   @override

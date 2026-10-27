@@ -13,6 +13,7 @@ import 'matchmaking_search_controller.dart';
 import 'push_notification_handler.dart';
 import 'social_providers.dart';
 import 'space_providers.dart';
+import 'subscription_reminder_hints.dart';
 
 /// Plays short in-app notification sounds (no FCM).
 abstract class NotificationSoundPlayer {
@@ -209,6 +210,10 @@ class InAppNotificationController {
   }) {
     if (data == null) return;
     final type = data['type'] as String?;
+    if (type == 'subscription_grace_reminder') {
+      _ref.read(subscriptionReminderHintsProvider.notifier).onData(data);
+      return;
+    }
     if (type == 'match_found') {
       _ref
           .read(matchmakingMatchControllerProvider.notifier)

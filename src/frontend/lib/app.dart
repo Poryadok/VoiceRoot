@@ -64,6 +64,7 @@ import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
 import 'ui/space/space_tree_column.dart';
 import 'ui/version/version_policy_overlay.dart';
+import 'ui/notifications/subscription_reminder_banner.dart';
 
 ThemeData _bootstrapTheme() {
   return ThemeData(
@@ -493,6 +494,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                               children: [
                                 const GuestSaveAccountReminderBanner(),
                                 const GuestRestrictedActions(),
+                                const SubscriptionReminderBannerHost(),
                                 if (reconnectBanner.visible &&
                                     selectedChatId == null &&
                                     !statusBannerInNavigation)
