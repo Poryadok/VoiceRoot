@@ -612,7 +612,7 @@ hosted замеров; локальный PASS или длительность �
 
 Состав tier 1 (детали) в [.github/workflows/ci.yml](../.github/workflows/ci.yml):
 
-1. **Protobuf** (если `protos/` или global): `buf lint`, `buf format`, на PR — `buf breaking` относительно базовой ветки.
+1. **Protobuf** (если `protos/` или global): `buf lint`, `buf format`, на PR — `buf breaking` относительно immutable SHA базы из события PR. Checkout должен совпадать с SHA synthetic merge из события, а его два parent — с event base/head; несовпадение или отсутствие объекта останавливает проверку до Buf. В лог выводятся checkout/head/base и tree identities. Продвижение удалённой базовой ветки после создания события не меняет baseline. Регрессии с настоящими Git/Buf (продвижение remote, реальное удаление декларации и несовпадение базы) запускаются командой `python3 scripts/ci/buf-breaking-pr_test.py` и в job `protobuf` после установки Buf.
 2. **Compose** (если compose/deploy/global): `docker compose config`; NATS JetStream — [`scripts/ci/compose-nats-jetstream-check.sh`](../scripts/ci/compose-nats-jetstream-check.sh).
 3. **Backend Go matrix** (затронутые сервисы): `go test -short ./...`; для **gateway** — `go test -race`; **Docker build+push в GHCR** только tier 2 (push в `master`).
 4. **golangci** — только затронутые модули (`pkg` + сервисы из matrix).
