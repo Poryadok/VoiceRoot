@@ -1678,5 +1678,8 @@
   "addGameModerationHint": "Your request will be reviewed before the game appears in the catalog.",
   "addGameSearchEmpty": "No similar games found",
   "addGameSlotsInvalid": "Enter a positive whole number.",
-  "addGameModeDuplicate": "Use a different name for each mode."
+  "addGameModeDuplicate": "Use a different name for each mode.",
+  "chatLinkPreviewLoading": "Loading link preview…",
+  "chatLinkPreviewUnavailable": "Preview unavailable",
+  "chatLinkPreviewRetry": "Retry"
 }

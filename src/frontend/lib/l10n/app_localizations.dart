@@ -7279,6 +7279,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use a different name for each mode.'**
   String get addGameModeDuplicate;
+
+  /// No description provided for @chatLinkPreviewLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading link preview…'**
+  String get chatLinkPreviewLoading;
+
+  /// No description provided for @chatLinkPreviewUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview unavailable'**
+  String get chatLinkPreviewUnavailable;
+
+  /// No description provided for @chatLinkPreviewRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatLinkPreviewRetry;
 }
 
 class _AppLocalizationsDelegate

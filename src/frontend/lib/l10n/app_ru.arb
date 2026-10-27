@@ -1580,5 +1580,8 @@
   "addGameModerationHint": "Игра появится в каталоге после проверки заявки модератором.",
   "addGameSearchEmpty": "Похожие игры не найдены",
   "addGameSlotsInvalid": "Введите положительное целое число.",
-  "addGameModeDuplicate": "У каждого режима должно быть своё название."
+  "addGameModeDuplicate": "У каждого режима должно быть своё название.",
+  "chatLinkPreviewLoading": "Загружаем предпросмотр ссылки…",
+  "chatLinkPreviewUnavailable": "Предпросмотр недоступен",
+  "chatLinkPreviewRetry": "Повторить"
 }
