@@ -23,6 +23,7 @@ import '../api_error_messages.dart';
 import '../core/voice_primary_button.dart';
 import '../matchmaking/game_catalog_screen.dart';
 import 'story_audience_picker.dart';
+import 'story_photo_editor.dart';
 import 'story_video_validation.dart';
 import 'story_visibility.dart';
 
@@ -47,10 +48,12 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
   final _imagePicker = ImagePicker();
   StoryCreateType _type = StoryCreateType.text;
   var _submitting = false;
+  var _pickingMedia = false;
   String? _error;
   String? _pickedFileName;
   List<int>? _pickedBytes;
   String? _pickedMime;
+  StoryCreateType? _pickedType;
   String _visibility = 'friends';
   final _mentionedProfileIds = <String>{};
   String? _gameTag;
@@ -111,33 +114,61 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
     setState(() {
       _type = video ? StoryCreateType.video : StoryCreateType.photo;
       _error = null;
+      _pickingMedia = true;
     });
-    final file = video
-        ? await _imagePicker.pickVideo(source: ImageSource.gallery)
-        : await _imagePicker.pickImage(source: ImageSource.gallery);
-    if (file == null) return;
+    try {
+      final file = video
+          ? await _imagePicker.pickVideo(source: ImageSource.gallery)
+          : await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (file == null || !mounted) return;
 
-    if (video) {
-      final duration = await _readVideoDuration(file);
-      if (!mounted) return;
-      if (duration == null || !isStoryVideoDurationValid(duration)) {
-        setState(() {
-          _pickedFileName = null;
-          _pickedBytes = null;
-          _pickedMime = null;
-          _error = AppLocalizations.of(context)!.storyCreateVideoTooLong;
-        });
-        return;
+      if (video) {
+        final duration = await _readVideoDuration(file);
+        if (!mounted) return;
+        if (duration == null || !isStoryVideoDurationValid(duration)) {
+          setState(() {
+            _pickedFileName = null;
+            _pickedBytes = null;
+            _pickedMime = null;
+            _pickedType = null;
+            _error = AppLocalizations.of(context)!.storyCreateVideoTooLong;
+          });
+          return;
+        }
       }
-    }
 
-    final bytes = await file.readAsBytes();
-    if (!mounted) return;
-    setState(() {
-      _pickedFileName = file.name;
-      _pickedBytes = bytes;
-      _pickedMime = video ? 'video/mp4' : 'image/jpeg';
-    });
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      final edited = video
+          ? bytes
+          : await Navigator.of(context).push<Uint8List>(
+              MaterialPageRoute(
+                builder: (_) => StoryPhotoEditor(source: bytes),
+              ),
+            );
+      if (!mounted || edited == null) return;
+      final isEdited = !video && !identical(edited, bytes);
+      setState(() {
+        _pickedFileName = isEdited
+            ? '${file.name.replaceFirst(RegExp(r'\.[^.]+$'), '')}-edited.png'
+            : file.name;
+        _pickedBytes = edited;
+        _pickedType = video ? StoryCreateType.video : StoryCreateType.photo;
+        _pickedMime = video
+            ? 'video/mp4'
+            : isEdited || file.name.toLowerCase().endsWith('.png')
+            ? 'image/png'
+            : 'image/jpeg';
+      });
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _error = AppLocalizations.of(context)!.storyCreateMediaRequired,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingMedia = false);
+    }
   }
 
   Future<void> _pickGameTag() async {
@@ -158,7 +189,11 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
     final bytes = _pickedBytes;
     final mime = _pickedMime;
     final name = _pickedFileName;
-    if (auth == null || bytes == null || mime == null || name == null) {
+    if (auth == null ||
+        bytes == null ||
+        mime == null ||
+        name == null ||
+        _pickedType != _type) {
       return null;
     }
     final files = ref.read(voiceFilesClientProvider);
@@ -392,13 +427,18 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
           if (_type != StoryCreateType.text) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: _submitting
+              onPressed: _submitting || _pickingMedia
                   ? null
                   : () => _pickMedia(video: _type == StoryCreateType.video),
               icon: const Icon(Icons.attach_file),
-              label: Text(_pickedFileName ?? l10n.storyCreatePickMedia),
+              label: Text(
+                _pickedType == _type
+                    ? _pickedFileName ?? l10n.storyCreatePickMedia
+                    : l10n.storyCreatePickMedia,
+              ),
             ),
           ],
+          if (_pickingMedia) const LinearProgressIndicator(),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: TextStyle(color: voice.error)),
@@ -407,7 +447,7 @@ class _StoryCreateScreenState extends ConsumerState<StoryCreateScreen> {
           VoicePrimaryButton(
             key: StoryCreateScreen.submitKey,
             isLoading: _submitting,
-            onPressed: _submitting ? null : _submit,
+            onPressed: _submitting || _pickingMedia ? null : _submit,
             child: Text(l10n.storyCreateSubmit),
           ),
         ],
