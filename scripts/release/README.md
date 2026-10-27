@@ -1,5 +1,9 @@
 # A4 capability evidence gate
 
+For A5 isolated Windows runner package input, see
+[`windows-test-feed/README.md`](windows-test-feed/README.md). Its disposable
+signature/feed preparation does not qualify native install/update or G1 trust.
+
 `capability_manifest.py` implements the offline package boundary from PLAN A4/G1.
 It emits a deterministic negative-suite plan and validates source-bound runner
 observations. It never executes product probes, changes flags, deploys, or attests
