@@ -1,6 +1,7 @@
 package voice.backend.auth.repository;
 
 import java.sql.Timestamp;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -8,6 +9,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.datasource.ConnectionHolder;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** JDBC outbox repository. Claims and transitions are fenced by the exact lease expiry. */
@@ -32,8 +34,21 @@ public final class JdbcAccountDeletionOperationRepository implements AccountDele
 
   @Override
   public Instant lockAccountAndReadDatabaseTime(UUID accountId) {
-    if (!TransactionSynchronizationManager.isActualTransactionActive()) {
-      throw new IllegalStateException("deletion scheduling requires an owning transaction");
+    var source = jdbc.getJdbcTemplate().getDataSource();
+    Object resource = source == null ? null : TransactionSynchronizationManager.getResource(source);
+    if (!TransactionSynchronizationManager.isActualTransactionActive()
+        || !(resource instanceof ConnectionHolder holder)) {
+      throw new IllegalStateException("deletion scheduling requires an owning Auth JDBC transaction");
+    }
+    try {
+      // An unrelated transaction may synchronize an Auth connection without
+      // beginning its JDBC transaction. Such FOR UPDATE locks do not survive
+      // the statement and cannot protect the subsequent database clock sample.
+      if (holder.getConnection().getAutoCommit()) {
+        throw new IllegalStateException("deletion scheduling requires an owning Auth JDBC transaction");
+      }
+    } catch (SQLException failure) {
+      throw new IllegalStateException("cannot verify owning Auth JDBC transaction", failure);
     }
     var locked = jdbc.query(
         "SELECT id FROM accounts WHERE id = :accountId FOR UPDATE",

@@ -193,6 +193,14 @@ can enumerate the complete set.
   failed with a caller clock seven days ahead; Linux/JDK 25 GREEN ran five tests
   with no failures, errors or skips. Anton-140 independently cleared this
   four-path component; this does not qualify the full producer.
+- [x] Qualify that clock seam against the repository's own bound JDBC connection,
+  with autocommit disabled. Linux/JDK 25 RED ran three tests: both cold and
+  prewarmed unrelated-datasource cases incorrectly returned a clock, while the
+  real held-row transaction control passed. The minimal guard's GREEN ran seven
+  tests with no failures, errors or skips, including original schedule/retry,
+  session-floor rollback and durable operation controls. A global active Spring
+  transaction flag or merely synchronized resource is insufficient. This changes
+  no schema, RPC, migration, caller grant or lifecycle activation.
 - [ ] Retain immutable queried-cycle schedule/decision facts and durable producer
   intent using the existing opaque lifetime handle, cycle and revision lineage.
 - [x] User integrity component `0c9178a92c823646924de5621e57a09671b1210a`

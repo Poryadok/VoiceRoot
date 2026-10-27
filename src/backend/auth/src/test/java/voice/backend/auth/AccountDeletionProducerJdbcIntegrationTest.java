@@ -1,6 +1,7 @@
 package voice.backend.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -15,6 +16,8 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -23,10 +26,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -124,6 +130,29 @@ class AccountDeletionProducerJdbcIntegrationTest {
     assertThat(retried.operation().restoreTokenHash()).isEqualTo(first.operation().restoreTokenHash());
     assertThat(operations.findByAccountAndEpoch(account.id(), first.account().sessionEpoch()))
         .contains(retried.operation());
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void databaseClockRejectsUnrelatedDatasourceTransaction(boolean warmAuthConnection) {
+    Account account = account();
+    var otherSource = new DriverManagerDataSource(
+        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+    var otherTransactions = new TransactionTemplate(new DataSourceTransactionManager(otherSource));
+
+    otherTransactions.executeWithoutResult(status -> {
+      assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+      if (warmAuthConnection) {
+        // Spring can synchronize this connection with an unrelated transaction
+        // without disabling JDBC autocommit: resource presence alone is insufficient.
+        assertThat(new JdbcTemplate(dataSource).queryForObject("SELECT 1", Integer.class)).isEqualTo(1);
+      }
+      assertThat(TransactionSynchronizationManager.hasResource(dataSource)).isEqualTo(warmAuthConnection);
+      assertThatThrownBy(() -> operations.lockAccountAndReadDatabaseTime(account.id()))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("owning");
+    });
+    assertThat(accounts.findById(account.id().toString()).orElseThrow().deletedAt()).isNull();
   }
 
   private Account account() {
