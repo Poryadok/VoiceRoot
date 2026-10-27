@@ -244,6 +244,22 @@ Missing historical ownership coverage therefore remains incomplete; do not
 invent a reverse mapping, declare a live scan complete or enable the capability
 without the required closed inventory/backfill proof.
 
+The bounded Anton-195 source/provenance decision confirms that `FreshSourcePin`
+binds independent creation expectations but does not itself prove whole User or
+account history. `NewFreshStore` deliberately admits retained-profile capture.
+A pre-capture raw-history loss may coexist with empty current tables, genesis
+metadata and zero recorded gaps. Qualification needs separate verifiable
+whole-origin evidence bound to the source/generation and preservation/nonreuse
+continuity, followed by continuous all-writer capture through closure. No such
+evidence was demonstrated; current and ambiguous stores remain incomplete.
+
+A private native PostgreSQL 16 probe reached RED (one failing positive candidate,
+two negative controls passing, zero skips). Its positive assumption was not
+promoted to GREEN by treating empty metadata as proof. The exact probe patch and
+log are preserved as design evidence; its own working edits were reversed after
+that decision. No probe API, schema, origin receipt or activation was published.
+The tested Auth clock and User integrity components remain unchanged.
+
 ## Decisions and follow-ups
 
 `ROUTING_ERASED` and `ACCOUNT_PURGED` are different authorities. The unresolved

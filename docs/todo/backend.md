@@ -48,6 +48,17 @@
 ### User
 
 
+- [ ] **[User / BE-020] Whole-origin coverage evidence is missing** — matching
+  `FreshSourcePin` UUIDs, current-empty scans or zero recorded gaps do not certify
+  complete historical account-profile ownership. Existing `NewFreshStore`
+  permits retained-profile capture. A complete-from-origin producer needs
+  independently verifiable whole User/account creation evidence bound to its
+  source/generation and preservation/nonreuse continuity, then all-writer
+  capture/serialization through sealing. Keep legacy, empty and erased-prehistory
+  sources incomplete until that prerequisite exists. Do not infer IDs from
+  one-way aliases, allocate an invented receipt RPC or extend raw-history
+  retention. See the [A4 producer plan](../testing/a4-account-lifecycle-producer-contract-exec-plan.md).
+
 - [x] **[User] OAuth verification goes through User Service** — Auth uses source-scoped
   `ApplyVerificationSourceState` with durable revisions/retry; direct `user_db` writes were removed.
 

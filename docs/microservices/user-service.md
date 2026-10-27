@@ -22,6 +22,17 @@ spans an Auth/User RPC.
 Coverage includes retired/deleted profiles with relevant downstream references,
 not only visible profiles. Missing historical ownership is incomplete coverage
 and a backfill/activation blocker, not a reason to trust caller-selected IDs.
+`FreshSourcePin`, matching source-generation UUIDs, an empty current profile scan,
+genesis metadata and a zero unresolved-gap counter do not establish complete
+whole-account history. `NewFreshStore` can initialize identity metadata while
+retained profiles already exist. Complete-from-origin qualification requires
+independently verifiable evidence whose scope begins at the actual whole User
+source/account origin, before any possible profile birth/import, bound to the
+exact source/generation and preservation/nonreuse continuity. Continuous capture
+and serialization of every subsequent writer through sealing are also required.
+No such whole-origin receipt is implemented or qualified by the existing pins.
+Existing, empty or erased-prehistory stores remain incomplete without that proof;
+do not invent a receipt RPC, reverse mapping or extra raw-history retention.
 The sealed record binds schema version, exact Auth fence/cycle/schedule revision
 and original `scheduled_at`/`purge_at`, positive User coverage revision, explicit
 completeness, canonical manifest hash/count and full sorted set or sealed bounded
