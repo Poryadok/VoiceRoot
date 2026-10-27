@@ -201,7 +201,8 @@ def main():
         }
         args = ["run", "--rm", "--network", "host", "--cpus=2", "--memory=1g",
                 "-v", "/var/run/docker.sock:/var/run/docker.sock:rw",
-                "-v", f"{binary}:/gateway.test:ro"]
+                "-v", f"{binary}:/gateway.test:ro", "-v", f"{ROOT}:/workspace:ro",
+                "-w", "/workspace"]
         for key, value in test_env.items():
             args.extend(("-e", f"{key}={value}"))
         docker(*args, "docker:27-cli", "/gateway.test", "-test.v",

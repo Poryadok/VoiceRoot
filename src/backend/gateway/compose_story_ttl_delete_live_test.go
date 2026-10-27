@@ -50,6 +50,7 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 	fileID := composeUploadUnscopedStoryImage(t, composeLiveObjectClient(30*time.Second), base, sess.AccessToken)
 	composeWaitForProcessedImage(t, client, base, sess.AccessToken, fileID)
 	require.Equal(t, http.StatusOK, composeGetFileMetadataStatus(t, client, base, sess.AccessToken, fileID))
+	t.Logf("private File fixture project=%s file_id=%s", project, fileID)
 	story := composeCreateStory(t, client, base, sess.AccessToken, map[string]any{
 		"type": "photo", "media_file_id": fileID, "visibility": "everyone",
 	})
