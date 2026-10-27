@@ -4,6 +4,12 @@
 
 Два независимых продукта: личная подписка и подписка спейса.
 
+Версионированный A7 inventory: [benefit matrix v1](subscription-benefit-matrix-v1.md)
+и [paid-offer manifest v1](subscription-offer-v1.json). Они фиксируют recorded
+benefits, source/consumer surfaces, открытые contract seams и обязательные
+server/client E2E для checkout/plan management; наличие строки не означает
+реализацию или live-включение.
+
 ---
 
 ## Премиум профиль — $5/мес (личная, привязана к аккаунту)

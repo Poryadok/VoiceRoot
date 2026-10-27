@@ -1442,6 +1442,7 @@ services:
       context: ./src/frontend
       dockerfile: Dockerfile
       args:
+        VOICE_RUNTIME_CONFIG_REQUIRED: "false"
         VOICE_API_BASE_URL: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
         VOICE_LIVEKIT_URL: ${VOICE_LIVEKIT_PUBLIC_URL:-ws://127.0.0.1:7880}
     ports:

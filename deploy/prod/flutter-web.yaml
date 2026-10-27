@@ -1,6 +1,14 @@
-# Flutter web SPA client. Build image with VOICE_API_BASE_URL and VOICE_LIVEKIT_URL
-# matching production gateway / LiveKit endpoints — see docs/DEPLOYMENT.md.
+# Flutter web SPA client: runtime-required release with environment-owned config.
 # Substitute __IMAGE_REGISTRY__ / __IMAGE_TAG__ / __WEB_INGRESS_HOST__ before apply.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-web-runtime-config
+  namespace: voice-prod
+data:
+  voice-runtime-config.json: |
+    {"version":1,"app_origin":"https://__WEB_INGRESS_HOST__","api_base_url":"https://__GATEWAY_INGRESS_HOST__","livekit_url":"wss://__LIVEKIT_INGRESS_HOST__"}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -20,8 +28,17 @@ spec:
         - name: web
           image: __IMAGE_REGISTRY__/web:__IMAGE_TAG__
           ports: [{containerPort: 80, name: http}]
+          volumeMounts:
+            - name: runtime-config
+              mountPath: /usr/share/nginx/html/voice-runtime-config.json
+              subPath: voice-runtime-config.json
+              readOnly: true
           readinessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /health, port: http}, periodSeconds: 15}
+      volumes:
+        - name: runtime-config
+          configMap:
+            name: voice-web-runtime-config
 ---
 apiVersion: v1
 kind: Service

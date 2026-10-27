@@ -10,6 +10,59 @@ import 'package:voice_frontend/state/deep_link_navigation.dart';
 import 'package:voice_frontend/state/space_providers.dart';
 
 void main() {
+  for (final target in const [
+    DeepLinkTarget(
+      kind: DeepLinkKind.profile,
+      username: 'vanya',
+      rawUrl: 'https://app.comrade.click/u/vanya?utm_source=notification',
+    ),
+    DeepLinkTarget(
+      kind: DeepLinkKind.dm,
+      userId: '550e8400-e29b-41d4-a716-446655440000',
+      rawUrl:
+          'https://app.comrade.click/dm/550e8400-e29b-41d4-a716-446655440000',
+    ),
+  ]) {
+    test('initial web ${target.kind.name} survives login', () async {
+      final container = ProviderContainer(
+        overrides: [
+          authSessionStorageProvider.overrideWithValue(
+            InMemoryAuthSessionStorage(),
+          ),
+          guestCredentialsStorageProvider.overrideWithValue(
+            InMemoryGuestCredentialsStorage(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final captured = parseInitialWebDeepLinkTarget(Uri.parse(target.rawUrl));
+      expect(captured, target);
+
+      final links = container.read(deepLinkControllerProvider.notifier);
+      await links.onIncomingLink(captured!);
+      expect(container.read(deepLinkControllerProvider).pending, target);
+      expect(container.read(deepLinkControllerProvider).resolved, isNull);
+
+      final auth = container.read(authControllerProvider.notifier);
+      auth.state = const AuthState(
+        session: AuthSession(
+          accessToken: 'access',
+          refreshToken: 'refresh',
+          accountId: 'acc-1',
+          activeProfileId: 'prof-1',
+          expiresInSeconds: 900,
+        ),
+      );
+      await links.flushPendingAfterAuth();
+
+      expect(container.read(deepLinkControllerProvider).pending, isNull);
+      expect(container.read(deepLinkControllerProvider).resolved, target);
+      links.clearResolved();
+      expect(container.read(deepLinkControllerProvider).resolved, isNull);
+    });
+  }
+
   test('pending invite link survives auth gate until login', () async {
     final container = ProviderContainer(
       overrides: [
@@ -64,7 +117,7 @@ void main() {
     );
     addTearDown(container.dispose);
 
-    final target = parseInitialWebInviteTarget(
+    final target = parseInitialWebDeepLinkTarget(
       Uri.parse('https://app.comrade.click/invite/join-me'),
     );
     expect(target?.inviteCode, 'join-me');

@@ -6,7 +6,7 @@ Voice client (Flutter Web/Desktop/Mobile). Full app stack UI on local `make comp
 
 - Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); mobile strip + responsive layout ([platforms.md](../../docs/features/platforms.md)).
 - Auth, social, DM/groups/spaces, matchmaking, search, voice, push hooks — чеклисты в [docs/PLAN.md](../../docs/PLAN.md).
-- API base URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod).
+- Native/local API URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod). Promotable Docker web releases instead require an environment-owned, origin-bound `/voice-runtime-config.json`; see [deployment contract](../../docs/DEPLOYMENT.md#immutable-web-promotion-and-environment-binding).
 - Riverpod + Gateway/Auth/Users/Social/Chat/Messaging/Realtime clients.
 
 ## Commands
