@@ -25,6 +25,8 @@ public final class AuthAuthorityReader implements AutoCloseable {
   private static final ObjectMapper JSON=new ObjectMapper();
   private record Migration(String script,int checksum) {}
   private final Map<String,Migration> currentFlyway;
+  private final Map<String,Migration> linkedOAuthFlyway;
+  private final Map<String,Migration> subscriptionLifecycleFlyway;
   private final Map<String,Migration> historicalFlyway;
   private final DataSource dataSource;
   private final java.util.concurrent.ExecutorService reads=new java.util.concurrent.ThreadPoolExecutor(
@@ -36,21 +38,25 @@ public final class AuthAuthorityReader implements AutoCloseable {
     // Load immutable release metadata before entering any database transaction.
     // This reader remains the authorization-only REPEATABLE_READ projection;
     // it does not invoke or qualify the separate RC-only identity-owner gate.
-    currentFlyway=sourceHistory();
+    currentFlyway=sourceHistory("migration-history-v1.json","current444-auth-identity-v1",32,false,false);
+    linkedOAuthFlyway=sourceHistory("migration-history-linked-oauth-v1.json","linked-oauth-transport-v1",33,true,false);
+    subscriptionLifecycleFlyway=sourceHistory("migration-history-subscription-lifecycle-v1.json","subscription-lifecycle-capture-v1",34,true,true);
     var historical=new HashMap<String,Migration>();
     for(int version=1;version<=26;version++) historical.put(Integer.toString(version),currentFlyway.get(Integer.toString(version)));
     historicalFlyway=Map.copyOf(historical);
   }
 
-  private static Map<String,Migration> sourceHistory() {
-    try(var input=AuthAuthorityReader.class.getResourceAsStream("/roleidentityauthority/migration-history-v1.json")) {
+  private static Map<String,Migration> sourceHistory(String resource,String name,long canonicalVersion,boolean linkedOAuth,boolean subscriptionLifecycle) {
+    try(var input=AuthAuthorityReader.class.getResourceAsStream("/roleidentityauthority/"+resource)) {
       if(input==null) throw unavailable();
       var profile=JSON.readTree(input);
-      if(!"current444-auth-identity-v1".equals(profile.path("profile").asText())
-          || profile.path("canonicalVersion").asLong()!=32 || !profile.path("flyway").isArray()) throw unavailable();
+      if(!name.equals(profile.path("profile").asText())
+          || profile.path("canonicalVersion").asLong()!=canonicalVersion || !profile.path("flyway").isArray()) throw unavailable();
       var versions=new HashSet<String>();
       for(int version=1;version<=26;version++) versions.add(Integer.toString(version));
       versions.add("28");versions.add("31");
+      if(linkedOAuth)versions.add("32");
+      if(subscriptionLifecycle)versions.add("33");
       var result=new HashMap<String,Migration>();
       for(var migration:profile.path("flyway")) {
         String version=migration.path("version").asText();
@@ -173,7 +179,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
     if(flyway) {
       var actual=new HashMap<String,Migration>();
       try(var query=statement(connection,"SELECT version,script,checksum,success,type FROM public.flyway_schema_history ORDER BY installed_rank",deadline)) {
-        query.setMaxRows(currentFlyway.size()+1);
+        query.setMaxRows(subscriptionLifecycleFlyway.size()+1);
         try(var result=query.executeQuery()) {
           while(result.next()) {
             budget(deadline);
@@ -184,13 +190,13 @@ public final class AuthAuthorityReader implements AutoCloseable {
           }
         }
       }
-      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway)) throw unavailable();
+      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway) && !actual.equals(linkedOAuthFlyway) && !actual.equals(subscriptionLifecycleFlyway)) throw unavailable();
     } else {
       // Canonical markers are not fabricated Flyway checksums. The exact source
       // catalog checks below still apply to both explicitly supported cuts.
       try(var query=statement(connection,"SELECT version,dirty FROM public.schema_migrations",deadline);var result=query.executeQuery()) {
         if(!result.next() || !(result.getObject("version") instanceof Long version)
-            || (version!=27 && version!=32) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
+            || (version!=27 && version!=32 && version!=33 && version!=34) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
       }
     }
   }
