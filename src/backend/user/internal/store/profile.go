@@ -426,6 +426,9 @@ func MaxProfilesForTier(tier string) int {
 
 // ApplyFreeTierFreeze marks profiles beyond the free cap as frozen (keeps primary + earliest secondaries).
 func (s *ProfileStore) ApplyFreeTierFreeze(ctx context.Context, accountID uuid.UUID) error {
+	if s.birthCapture != nil {
+		return s.applyFreeTierFreezeWithIdentity(ctx, accountID)
+	}
 	rows, err := s.ListByAccountID(ctx, accountID)
 	if err != nil {
 		return err
