@@ -124,7 +124,7 @@ $env:COMPOSE_FILE = 'docker-compose.yml;docker-compose.voice-space-media.yml'
 docker compose config --quiet
 make compose-app-up
 docker compose ps --all
-curl.exe --fail http://127.0.0.1:18080/health
+docker compose exec -T gateway wget -qO- http://127.0.0.1:8080/health
 ```
 
 Выберите свободные порты в `.env` перед запуском: отдельное имя project
