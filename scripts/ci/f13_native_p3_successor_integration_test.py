@@ -27,6 +27,9 @@ DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 # The reviewed catalog/message-view documentation carried by the A1 aggregate.
 # This remains a test-fixture source tuple, never production authority.
 CATALOG_DATA_STORES_COMMIT = '04f1390e94c2285b20f2a208a55b1ee4b35facab'
+CATALOG_VOICE_PATHS = frozenset(
+    'src/backend/voice/pb/voice/' + service + '/v1/catalog_assets' + suffix + '.pb.go'
+    for service in ('chat', 'file') for suffix in ('', '_grpc'))
 
 
 def git(*args, data=None, env=None):
@@ -43,6 +46,23 @@ def reviewed_stores_source(source):
         if ancestor and actual == legacy.entry(ROOT, reviewed, stores):
             return True
     return False
+
+
+def reviewed_catalog_voice_additions(source, record):
+    prefix = 'src/backend/voice/'
+    expected = {name for name in legacy.tree(str(ROOT), record['source']) if name.startswith(prefix)}
+    actual = {name for name in legacy.tree(str(ROOT), source) if name.startswith(prefix)}
+    added = actual - expected
+    legacy.require(not expected - actual, 'v2_fixture_unreviewed_voice_source')
+    if not added:
+        return added
+    ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', CATALOG_DATA_STORES_COMMIT, source],
+        capture_output=True).returncode == 0
+    legacy.require(added == CATALOG_VOICE_PATHS and ancestor and all(
+        legacy.entry(ROOT, source, name) == legacy.entry(ROOT, CATALOG_DATA_STORES_COMMIT, name)
+        for name in added), 'v2_fixture_unreviewed_voice_source')
+    return added
 
 
 class RealGitSuccessorTest(unittest.TestCase):
@@ -83,6 +103,13 @@ class RealGitSuccessorTest(unittest.TestCase):
                 git('read-tree', cls.source, env=env)
                 git('update-index', '--add', '--cacheinfo',
                     stores_expected['mode'] + ',' + stores_expected['oid'] + ',' + stores, env=env)
+                cls.source = cls.commit(git('write-tree', env=env), [cls.source])
+        additions = reviewed_catalog_voice_additions(cls.source, cls.record)
+        if additions:
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', cls.source, env=env)
+                git('update-index', '--force-remove', '--', *sorted(additions), env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         # Current generated dependencies can advance independently of v2. Pin
         # every historical context entry in this private fixture, including its
@@ -166,6 +193,41 @@ class RealGitSuccessorTest(unittest.TestCase):
         unrelated = self.commit(git('rev-parse', source + '^{tree}'), [BASE])
         self.assertEqual(legacy.entry(ROOT, unrelated, stores), legacy.entry(ROOT, source, stores))
         self.assertFalse(reviewed_stores_source(unrelated))
+
+    def test_catalog_fixture_has_exact_historical_voice_inventory(self):
+        prefix = 'src/backend/voice/'
+        expected = {name for name in legacy.tree(str(ROOT), self.record['source']) if name.startswith(prefix)}
+        actual = {name for name in legacy.tree(str(ROOT), self.source) if name.startswith(prefix)}
+        self.assertEqual(actual, expected)
+        self.assertEqual(reviewed_catalog_voice_additions(git('rev-parse', 'HEAD'), self.record),
+                         CATALOG_VOICE_PATHS)
+        unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
+        with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
+            reviewed_catalog_voice_additions(unknown, self.record)
+
+    def test_catalog_source_guard_rejects_content_mode_missing_paths_and_unrelated_ancestry(self):
+        current = git('rev-parse', 'HEAD')
+        name = sorted(CATALOG_VOICE_PATHS)[0]
+        for variant in ('content', 'mode', 'missing_catalog', 'missing_historical'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                if variant.startswith('missing_'):
+                    removed = self.context_path if variant == 'missing_historical' else name
+                    git('update-index', '--force-remove', '--', removed, env=env)
+                else:
+                    entry = legacy.entry(ROOT, current, name)
+                    mode = '100755' if variant == 'mode' else entry['mode']
+                    oid = entry['oid'] if variant == 'mode' else git(
+                        'hash-object', '-w', '--stdin', data=b'unreviewed generated fixture\n')
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + name, env=env)
+                changed = self.commit(git('write-tree', env=env), [current])
+            with self.subTest(variant=variant), self.assertRaisesRegex(
+                    legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
+                reviewed_catalog_voice_additions(changed, self.record)
+        unrelated = self.commit(git('rev-parse', current + '^{tree}'), [BASE])
+        with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
+            reviewed_catalog_voice_additions(unrelated, self.record)
 
     def test_projection_drift(self):
         with self.assertRaisesRegex(legacy.Rejected, 'projection_drift'):
