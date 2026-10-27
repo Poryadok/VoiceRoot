@@ -5738,6 +5738,36 @@ abstract class AppLocalizations {
   /// **'720p · 30 FPS'**
   String get screenShareQuality720p30;
 
+  /// No description provided for @screenShareSystemAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Include system audio'**
+  String get screenShareSystemAudio;
+
+  /// No description provided for @screenShareSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what to share'**
+  String get screenShareSourceTitle;
+
+  /// No description provided for @screenShareEntireScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Entire screen'**
+  String get screenShareEntireScreen;
+
+  /// No description provided for @screenShareWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window or application'**
+  String get screenShareWindow;
+
+  /// No description provided for @screenShareSourceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No screens or windows are available to share'**
+  String get screenShareSourceUnavailable;
+
   /// No description provided for @screenShareLimitReached.
   ///
   /// In en, this message translates to:
@@ -5753,7 +5783,7 @@ abstract class AppLocalizations {
   /// No description provided for @platformWebSystemAudioUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'System audio sharing is not available in the browser'**
+  /// **'System audio sharing is not available on this platform'**
   String get platformWebSystemAudioUnavailable;
 
   /// No description provided for @platformWebGlobalPttUnavailable.
