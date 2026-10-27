@@ -88,15 +88,21 @@ def validate(repo, base, target='HEAD', pr_head=None):
     if pr_head:
         pr_head = commit(repo, pr_head, 'pr_head')
         parents = git(repo, 'rev-list', '--parents', '-n', '1', target).decode().split()[1:]
-        if parents != [base, pr_head]:
+        if len(parents) != 2 or parents[1] != pr_head:
             raise Refused('merge_parents')
+        current_base = parents[0]
         try:
-            expected_tree = git(repo, 'merge-tree', '--write-tree', base, pr_head).decode().splitlines()[0]
+            git(repo, 'merge-base', '--is-ancestor', base, current_base)
+        except Refused as error:
+            raise Refused('base_ancestry') from error
+        try:
+            expected_tree = git(repo, 'merge-tree', '--write-tree', current_base, pr_head).decode().splitlines()[0]
         except Refused as error:
             raise Refused('merge_tree_conflict') from error
         actual_tree = git(repo, 'rev-parse', target + '^{tree}').decode().strip()
         if expected_tree != actual_tree:
             raise Refused('merge_tree_mismatch')
+        base = current_base
     before, after = entries(repo, base), entries(repo, target)
     changed = sorted(path for path in before.keys() | after.keys() if before.get(path) != after.get(path))
     # Consume the complete finite repair package, never a path-only exemption.
