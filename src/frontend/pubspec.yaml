@@ -75,6 +75,7 @@ dependencies:
   flutter_soloud: 4.1.7
   web: 1.1.1
   hive: ^2.2.3
+  record: 6.2.0
 
 dev_dependencies:
   flutter_test:

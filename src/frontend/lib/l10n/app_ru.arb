@@ -1575,5 +1575,13 @@
   "addGameModerationHint": "Игра появится в каталоге после проверки заявки модератором.",
   "addGameSearchEmpty": "Похожие игры не найдены",
   "addGameSlotsInvalid": "Введите положительное целое число.",
-  "addGameModeDuplicate": "У каждого режима должно быть своё название."
+  "addGameModeDuplicate": "У каждого режима должно быть своё название.",
+  "composerVoiceHold": "Удерживайте для записи · вверх — закрепить",
+  "composerVoicePermission": "Разрешите доступ к микрофону и повторите.",
+  "composerVoiceProcessing": "Подготовка записи…",
+  "composerVoiceTooShort": "Запишите не менее 1 секунды.",
+  "composerVoiceError": "Не удалось записать. Повторите.",
+  "composerVoiceStop": "Завершить запись",
+  "composerVoiceCancel": "Отменить запись",
+  "composerVoiceLocked": "Запись закреплена"
 }
