@@ -1102,6 +1102,14 @@
   "verificationLinkYoutube": "Привязать YouTube",
   "verificationUnlink": "Отвязать",
   "verificationSelectedProfile": "Выбранный профиль: {profileId}",
+  "verificationStatusTitle": "Статус верификации",
+  "verificationVerified": "Верифицирован",
+  "verificationNotVerified": "Не верифицирован",
+  "verificationPendingDnsChallenge": "Ожидается DNS-проверка",
+  "verificationPendingDnsDomainLabel": "Домен",
+  "verificationPendingDnsTxtRecordLabel": "TXT-запись",
+  "verificationPendingDnsExpiresAtLabel": "Истекает",
+  "verificationOrganizationUnavailable": "Верификация организации недоступна",
   "@verificationSelectedProfile": {
     "placeholders": {
       "profileId": {"type": "String"}

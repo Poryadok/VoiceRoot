@@ -4676,6 +4676,54 @@ abstract class AppLocalizations {
   /// **'Selected profile: {profileId}'**
   String verificationSelectedProfile(String profileId);
 
+  /// No description provided for @verificationStatusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification status'**
+  String get verificationStatusTitle;
+
+  /// No description provided for @verificationVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verificationVerified;
+
+  /// No description provided for @verificationNotVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Not verified'**
+  String get verificationNotVerified;
+
+  /// No description provided for @verificationPendingDnsChallenge.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS challenge pending'**
+  String get verificationPendingDnsChallenge;
+
+  /// No description provided for @verificationPendingDnsDomainLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain'**
+  String get verificationPendingDnsDomainLabel;
+
+  /// No description provided for @verificationPendingDnsTxtRecordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT record'**
+  String get verificationPendingDnsTxtRecordLabel;
+
+  /// No description provided for @verificationPendingDnsExpiresAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires'**
+  String get verificationPendingDnsExpiresAtLabel;
+
+  /// No description provided for @verificationOrganizationUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization verification unavailable'**
+  String get verificationOrganizationUnavailable;
+
   /// No description provided for @verifiedBadgePersonal.
   ///
   /// In en, this message translates to:

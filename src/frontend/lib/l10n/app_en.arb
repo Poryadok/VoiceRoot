@@ -1170,6 +1170,14 @@
   "verificationLinkYoutube": "Link YouTube",
   "verificationUnlink": "Unlink",
   "verificationSelectedProfile": "Selected profile: {profileId}",
+  "verificationStatusTitle": "Verification status",
+  "verificationVerified": "Verified",
+  "verificationNotVerified": "Not verified",
+  "verificationPendingDnsChallenge": "DNS challenge pending",
+  "verificationPendingDnsDomainLabel": "Domain",
+  "verificationPendingDnsTxtRecordLabel": "TXT record",
+  "verificationPendingDnsExpiresAtLabel": "Expires",
+  "verificationOrganizationUnavailable": "Organization verification unavailable",
   "@verificationSelectedProfile": {
     "placeholders": {
       "profileId": {"type": "String"}
