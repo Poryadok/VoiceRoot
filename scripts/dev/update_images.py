@@ -21,6 +21,9 @@ import re
 import secrets
 import subprocess
 import sys
+from pathlib import Path
+
+import resource_fencing
 
 NS = 'voice-dev'
 LABELS = {'voice.environment':'dev', 'app.kubernetes.io/managed-by':'voice-dev'}
@@ -97,10 +100,13 @@ class Client:
         return json.loads(result.stdout) if result.stdout.strip().startswith(b'{') else {}
 
 
-def acquire_lock(client):
+def acquire_lock(client, resource_context=None):
     lock = {'apiVersion':'v1','kind':'ConfigMap',
             'metadata':{'name':LOCK,'namespace':NS,'labels':dict(LABELS)},
             'data':{'operation':secrets.token_hex(16)}}
+    if resource_context is not None:
+        lock['data'].update(resource_operation=resource_context['operation_id'],
+                            resource_context=json.dumps(resource_context,sort_keys=True,separators=(',',':')))
     # Atomic CREATE, never apply/replace an existing lock.
     created = client.call('create','-f','-','-o','json',body=lock)
     if not created.get('metadata',{}).get('uid') or not created['metadata'].get('resourceVersion'):
@@ -124,16 +130,45 @@ def verify_ownership(client, lock=None):
             raise RuntimeError('dev update lock ownership changed')
 
 
-def update_images(client, images, apply=False):
+def is_ancestor(previous, candidate):
+    result=subprocess.run(['git','merge-base','--is-ancestor',previous,candidate],
+                          cwd=Path(__file__).resolve().parents[2],capture_output=True,timeout=15)
+    return result.returncode==0
+
+
+def update_images(client, images, apply=False, fence=None):
+    if apply and fence is None:
+        raise ValueError('apply requires current TT resource context')
+    wanted={'voice-'+service+'/'+SERVICES[service]:image for service,image in images.items()}
+    if apply:
+        fence.validate_candidate(wanted)
+        fence.authority()
     verify_ownership(client)
-    lock = acquire_lock(client) if apply else None
+    lock = None
+    if apply:
+        try:
+            lock=acquire_lock(client,fence.context)
+        except Exception:
+            # CREATE may have committed. Do not retry/delete it from an unknown
+            # response; its persisted request carries the complete operation ID.
+            try:
+                fence.admission_uncertain('updater lock CREATE outcome unknown or existing lock requires reconciliation')
+            except Exception:
+                print('DEV_RESOURCE_RECOVERY_REQUIRED inspect lock CREATE and TT response',file=sys.stderr)
+            raise
     mutation_started = False
+    fence_started = False
     success = False
     try:
         plans = []
+        baseline = {}
+        snapshots = {}
         for service,image in images.items():
             deployment = client.call('get','deployment','voice-'+service,'-o','json')
             patch,expected = plan_patch(service,image,deployment)
+            snapshots[service]=expected
+            baseline['voice-'+service+'/'+SERVICES[service]]=next(
+                c['image'] for c in deployment['spec']['template']['spec']['containers'] if c['name']==SERVICES[service])
             if expected['spec'] == deployment['spec']:
                 print('DEV_IMAGE_UNCHANGED service='+service)
                 continue
@@ -144,21 +179,39 @@ def update_images(client, images, apply=False):
         if not apply:
             print('DEV_IMAGE_PREVIEW_COMPLETE count='+str(len(plans)))
             return
+        fence.validate_baseline(baseline,is_ancestor)
+        verify_ownership(client,lock)
+        fence_started = True
+        fence.begin()
         for service,patch,expected in plans:
+            verify_ownership(client,lock)
+            fence.before_step('patch-'+service)
             verify_ownership(client,lock)
             mutation_started = True
             result = client.call('patch','deployment','voice-'+service,'--type=json','--patch-file=-','-o','json',body=patch)
             if result.get('spec') != expected['spec']:
                 raise RuntimeError('deployment specification changed beyond the selected image')
+        actual_images={}
+        for service,expected in snapshots.items():
+            verify_ownership(client,lock)
+            fence.authority()
             client.call('rollout','status','deployment/voice-'+service,'--timeout=600s')
-            actual = client.call('get','deployment','voice-'+service,'-o','json')
-            if actual.get('metadata',{}).get('uid') != expected['metadata']['uid'] or actual.get('spec') != expected['spec']:
-                raise RuntimeError('deployment changed during rollout')
+            actual=client.call('get','deployment','voice-'+service,'-o','json')
+            if actual.get('metadata',{}).get('uid')!=expected['metadata']['uid'] or actual.get('spec')!=expected['spec']:
+                raise RuntimeError('deployment changed before completion observation')
+            actual_images['voice-'+service+'/'+SERVICES[service]]=next(
+                c['image'] for c in actual['spec']['template']['spec']['containers'] if c['name']==SERVICES[service])
             print('DEV_IMAGE_READY service='+service+' image='+images[service])
+        fence.complete(actual_images)
         success = True
     finally:
+        if fence_started and not success:
+            try:
+                fence.uncertain('operation interrupted, transport failure or partial apply; reconcile before recovery')
+            except Exception:
+                print('DEV_RESOURCE_RECOVERY_REQUIRED reconcile fence and TT response before retry',file=sys.stderr)
         if lock is not None:
-            if success or not mutation_started:
+            if success or (not mutation_started and not fence_started):
                 release_lock(client,lock)
             else:
                 print('DEV_IMAGE_LOCK_RETAINED name='+LOCK, file=sys.stderr)
@@ -169,11 +222,21 @@ def main():
     parser.add_argument('--namespace',default=NS,choices=(NS,))
     parser.add_argument('--image',action='append',required=True,metavar='SERVICE=IMAGE')
     parser.add_argument('--apply',action='store_true')
+    parser.add_argument('--resource-context',type=Path,help='JSON with exact TT authority and immutable candidate')
+    parser.add_argument('--ttenrec-url',help='Explicit TT server endpoint for apply')
     args = parser.parse_args()
     try:
         images = parse_images(args.image)
-        update_images(Client(),images,apply=args.apply)
-    except (ValueError,KeyError,TypeError,RuntimeError):
+        client=Client(); fence=None
+        if args.apply:
+            if args.resource_context is None or not args.ttenrec_url:
+                raise ValueError('apply requires resource context and TT endpoint')
+            if args.resource_context.stat().st_size>65536: raise ValueError('resource context too large')
+            context=json.loads(args.resource_context.read_text(encoding='utf-8'))
+            check=resource_fencing.ResourceCheck(args.ttenrec_url,context)
+            fence=resource_fencing.Fence(context,check,resource_fencing.KubeLedger(client),on_uncertain=check.mark_uncertain)
+        update_images(client,images,apply=args.apply,fence=fence)
+    except (OSError,ValueError,KeyError,TypeError,RuntimeError,subprocess.TimeoutExpired):
         print('Dev image update failed; inspect dev workload and retained lock metadata',file=sys.stderr)
         return 1
     return 0
