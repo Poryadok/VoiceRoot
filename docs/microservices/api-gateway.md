@@ -1,5 +1,23 @@
 # API Gateway
 
+## Authenticated Space catalog
+
+`GET /api/v1/spaces/catalog` uses the ordinary JWT/active-profile Space read
+policy and calls `Space.SearchPublicSpaces`. Optional `q` lists all discoverable
+cards when empty, otherwise matches name/description; `cursor` and `page_size`
+map to the RPC page (default 50/max 100). Success is
+`{space_list:{spaces:[{id,name,description,icon_url?,member_count,is_verified,visibility}],next_cursor?}}`
+(catalog DTOv2);
+protobuf zero values may be absent. Cards contain no other Space fields.
+Private/deletion-frozen Spaces are omitted; pending ownership or unavailable
+authority denies the whole read. Membership comes from existing `GET /api/v1/spaces`.
+`visibility=public` selects the existing direct Join entrypoint;
+`visibility=invite_only` selects the existing invite-link flow. Missing/unknown
+visibility does not enable direct Join. This is entry-path metadata, not a
+grant of admission eligibility; the server still checks every existing rule.
+Admission remains owned by the existing public/invite join paths. No game or
+category filter is defined. See [Space catalog](space-service.md#authenticated-space-catalog).
+
 ## Обзор
 
 Единая точка входа для всех клиентских запросов. Маршрутизирует REST и WebSocket трафик к внутренним сервисам, применяет сквозные политики безопасности и rate limiting.
