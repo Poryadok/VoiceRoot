@@ -27,6 +27,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
   private final Map<String,Migration> currentFlyway;
   private final Map<String,Migration> linkedOAuthFlyway;
   private final Map<String,Migration> subscriptionLifecycleFlyway;
+  private final Map<String,Migration> accountLifecycleFlyway;
   private final Map<String,Migration> historicalFlyway;
   private final DataSource dataSource;
   private final java.util.concurrent.ExecutorService reads=new java.util.concurrent.ThreadPoolExecutor(
@@ -38,15 +39,16 @@ public final class AuthAuthorityReader implements AutoCloseable {
     // Load immutable release metadata before entering any database transaction.
     // This reader remains the authorization-only REPEATABLE_READ projection;
     // it does not invoke or qualify the separate RC-only identity-owner gate.
-    currentFlyway=sourceHistory("migration-history-v1.json","current444-auth-identity-v1",32,false,false);
-    linkedOAuthFlyway=sourceHistory("migration-history-linked-oauth-v1.json","linked-oauth-transport-v1",33,true,false);
-    subscriptionLifecycleFlyway=sourceHistory("migration-history-subscription-lifecycle-v1.json","subscription-lifecycle-capture-v1",34,true,true);
+    currentFlyway=sourceHistory("migration-history-v1.json","current444-auth-identity-v1",32,false,false,false);
+    linkedOAuthFlyway=sourceHistory("migration-history-linked-oauth-v1.json","linked-oauth-transport-v1",33,true,false,false);
+    subscriptionLifecycleFlyway=sourceHistory("migration-history-subscription-lifecycle-v1.json","subscription-lifecycle-capture-v1",34,true,true,false);
+    accountLifecycleFlyway=sourceHistory("migration-history-account-lifecycle-v1.json","account-lifecycle-source-v1",35,true,true,true);
     var historical=new HashMap<String,Migration>();
     for(int version=1;version<=26;version++) historical.put(Integer.toString(version),currentFlyway.get(Integer.toString(version)));
     historicalFlyway=Map.copyOf(historical);
   }
 
-  private static Map<String,Migration> sourceHistory(String resource,String name,long canonicalVersion,boolean linkedOAuth,boolean subscriptionLifecycle) {
+  private static Map<String,Migration> sourceHistory(String resource,String name,long canonicalVersion,boolean linkedOAuth,boolean subscriptionLifecycle,boolean accountLifecycle) {
     try(var input=AuthAuthorityReader.class.getResourceAsStream("/roleidentityauthority/"+resource)) {
       if(input==null) throw unavailable();
       var profile=JSON.readTree(input);
@@ -57,6 +59,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
       versions.add("28");versions.add("31");
       if(linkedOAuth)versions.add("32");
       if(subscriptionLifecycle)versions.add("33");
+      if(accountLifecycle)versions.add("34");
       var result=new HashMap<String,Migration>();
       for(var migration:profile.path("flyway")) {
         String version=migration.path("version").asText();
@@ -179,7 +182,7 @@ public final class AuthAuthorityReader implements AutoCloseable {
     if(flyway) {
       var actual=new HashMap<String,Migration>();
       try(var query=statement(connection,"SELECT version,script,checksum,success,type FROM public.flyway_schema_history ORDER BY installed_rank",deadline)) {
-        query.setMaxRows(subscriptionLifecycleFlyway.size()+1);
+        query.setMaxRows(accountLifecycleFlyway.size()+1);
         try(var result=query.executeQuery()) {
           while(result.next()) {
             budget(deadline);
@@ -190,13 +193,13 @@ public final class AuthAuthorityReader implements AutoCloseable {
           }
         }
       }
-      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway) && !actual.equals(linkedOAuthFlyway) && !actual.equals(subscriptionLifecycleFlyway)) throw unavailable();
+      if(!actual.equals(historicalFlyway) && !actual.equals(currentFlyway) && !actual.equals(linkedOAuthFlyway) && !actual.equals(subscriptionLifecycleFlyway) && !actual.equals(accountLifecycleFlyway)) throw unavailable();
     } else {
       // Canonical markers are not fabricated Flyway checksums. The exact source
       // catalog checks below still apply to both explicitly supported cuts.
       try(var query=statement(connection,"SELECT version,dirty FROM public.schema_migrations",deadline);var result=query.executeQuery()) {
         if(!result.next() || !(result.getObject("version") instanceof Long version)
-            || (version!=27 && version!=32 && version!=33 && version!=34) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
+            || (version!=27 && version!=32 && version!=33 && version!=34 && version!=35) || !Boolean.FALSE.equals(result.getObject("dirty")) || result.next()) throw unavailable();
       }
     }
   }

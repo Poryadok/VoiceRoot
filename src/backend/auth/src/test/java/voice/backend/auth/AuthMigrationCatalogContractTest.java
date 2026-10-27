@@ -42,9 +42,9 @@ class AuthMigrationCatalogContractTest {
   @Test
   void flywayHasOneSourcePerVersionAndKeepsCanonicalRefreshAt15() throws Exception {
     var sources = catalog(flywayDirectory(), Pattern.compile("V(\\d+)__.*\\.sql"));
-    assertThat(sources).hasSize(30);
+    assertThat(sources).hasSize(31);
     for (int version = 1; version <= 26; version++) assertThat(sources).containsKey(version);
-    assertThat(sources).containsKeys(28,31,32,33).doesNotContainKeys(27,29,30);
+    assertThat(sources).containsKeys(28,31,32,33,34).doesNotContainKeys(27,29,30);
     assertThat(sources.get(15).getFileName().toString()).isEqualTo("V15__refresh_tokens_profile_id.sql");
   }
 
@@ -52,11 +52,11 @@ class AuthMigrationCatalogContractTest {
   void golangHasOneUpAndDownPerVersionAndKeepsCanonicalRefreshAt16() throws Exception {
     var up = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.up\\.sql"));
     var down = catalog(golangDirectory(), Pattern.compile("(\\d+)_.*\\.down\\.sql"));
-    assertThat(up).hasSize(31);
-    assertThat(down).hasSize(31);
+    assertThat(up).hasSize(32);
+    assertThat(down).hasSize(32);
     var versions = new java.util.ArrayList<Integer>();
     for (int version = 1; version <= 27; version++) versions.add(version);
-    versions.addAll(java.util.List.of(29,32,33,34));
+    versions.addAll(java.util.List.of(29,32,33,34,35));
     assertThat(up).doesNotContainKeys(28,30,31);
     for (int version : versions) {
       assertThat(up).containsKey(version);
@@ -108,6 +108,16 @@ class AuthMigrationCatalogContractTest {
     assertThat(ddl.indexOf("LOCK TABLE ONLY public.auth_identity_ddl_barrier"))
         .isLessThan(ddl.indexOf("CREATE TABLE"));
     assertThat(Files.readString(golangDirectory().resolve("000034_subscription_lifecycle_capture.down.sql")))
+        .contains("ERRCODE='55000'").doesNotContain("DROP TABLE","DELETE FROM");
+  }
+
+  @Test void accountLifecyclePairPreservesAtomicSourceAndForwardOnlyHistory() throws Exception {
+    String ddl=Files.readString(flywayDirectory().resolve("V34__account_lifecycle_source.sql")).replace("\r\n","\n");
+    assertThat(Files.readString(golangDirectory().resolve("000035_account_lifecycle_source.up.sql")).replace("\r\n","\n"))
+        .isEqualTo("BEGIN;\n"+ddl+"COMMIT;\n");
+    assertThat(ddl.indexOf("LOCK TABLE ONLY public.auth_identity_ddl_barrier"))
+        .isLessThan(ddl.indexOf("CREATE TABLE"));
+    assertThat(Files.readString(golangDirectory().resolve("000035_account_lifecycle_source.down.sql")))
         .contains("ERRCODE='55000'").doesNotContain("DROP TABLE","DELETE FROM");
   }
 

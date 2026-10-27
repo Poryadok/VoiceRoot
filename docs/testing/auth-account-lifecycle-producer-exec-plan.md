@@ -60,8 +60,55 @@ catalog-v1 validator or mixed history.
 - [x] Exact live PR958 head/base/review/ref read; local normal merge only.
 - [x] Ten predecessor blobs materialized and byte-verified against exact sources.
 - [x] Static lineage validator PASS: all30 unique SQL SHA256/Flyway checksums, exact canonical32/33/34 profile prefixes, ten byte-identical source blobs; owned V28 function/catalog bytes unchanged. Linux JDK25 compatibility checks then passed10/0failure/error/skip; the initial six-test run exposed three stale baseline matrix assertions. Both test matrices now byte-match the same verified predecessor source, preserving all unknown/mixed/dirty negatives.
-- [ ] Allocate eligible successor schema/catalog and preserve actual source RED.
-- [ ] Implement source capture and focused GREEN, then independent review.
+- [x] Eligible successor V34/canonical35 allocated only after exact predecessor closure. Native producer RED (session71172): three tests, one intended failure, zero errors/skips. Actual delete then predeadline restore leaves current ACTIVE but old-cycle SQL query empty; stored-record/owning-transaction controls pass. Initial compile-only overload error is separately retained and is not causal RED.
+- [x] Implement source capture and focused GREEN: Linux JDK25.0.4/PostgreSQL16.15, session36829 terminal0 BUILD SUCCESS,21 tests/0failures/0errors/0skips (native producer9, migration source7, gate/history5). Native suite38.53s. Report-gate harness also passes all positive/negative inventory/wiring cases.
+- [ ] Independent immutable-source review; publication remains held.
+
+The capture change is confined to V34/canonical35, its finite history profile,
+and explicit catalog compatibility. Replace the existing account guard and
+deadline materializer from their pinned V28 definitions, retaining account →
+lifetime → journal ordering. On a new deletion record the existing lifetime's
+cycle/revision and original schedule/deadline; before a restore clears current
+cycle, record RESTORED with the same post-lock time used by its deadline check.
+Deadline materialization records LIFETIME_TERMINAL, never physical ACCOUNT_PURGED.
+Each new fact and immutable versioned intent commits or rolls back with the
+account mutation. Pre-capture cycles remain unrecorded. The local query is a
+persistence seam, not a protected observation or wire contract. Existing legacy
+outbox and PR958 source remain unchanged. Relevant helper bodies and metadata
+must be covered by an explicit successor catalog; catalog-v1 is not relaxed.
+
+The private source intent has protocol_version=1 and a stable event_id, kind,
+owner_handle, deletion_cycle_id, decimal-string lifecycle_revision, original
+scheduled_at/purge_at and optional decision_at, encoded as UTC microsecond JSON
+bytes with a retained SHA256. It contains no raw account/profile/provider IDs.
+Facts and intent identity/bytes reject update/delete/truncate; only bounded
+delivery bookkeeping may change. There is no publisher, worker receipt, RPC,
+subject or consumer credential in this packet; pubacked_at is not acceptance.
+
+Catalog-v2 is a complete explicit successor (9 tables,11 functions,9 triggers),
+selected only by the exact locked A4 Flyway profile or canonical35 marker.
+Catalog-v1 and both predecessor SQL versions remain byte-identical. A separate
+nonowner JDBC fixture qualifies v2, rejects a replaced capture-helper body and
+qualifies again after restoration. The first qualifier failure was the fixture's
+extra direct barrier SELECT grant; correcting the fixture preserves the exact
+PUBLIC SELECT ACL and does not relax production validation.
+
+Native controls cover actual intent-failure rollback of delete and restore,
+stable retry identity/bytes, next-cycle dominance without old-decision overwrite,
+expired restore and opaque-history survival after raw account deletion, equality
+rejection, immutable fact/intent denial, and an actual restore waiting across D
+on the owning account lock. Compressed-time fixtures are boundary controls, not
+production backfill or evidence of physical deletion exactly at D. The recorded
+decision time is the fresh database cut after account/lifetime serialization;
+it is not a claim about transaction flush completion time.
+
+Portable raw evidence is retained under tmp/swarm/anton148-auth-cycle-producer:
+producer-red.xml/log (causal missing history), producer-first-green.xml/log,
+producer-controls-final.log and three final Surefire XML reports, plus report-
+gate.log. Compile/command/setup failures remain separately retained, never
+reported as behavioral RED. Final focused runs reuse unchanged generated proto
+outputs via the plugin's documented local protoc.skip property; compilation and
+all selected tests still execute. No coverage percentage is claimed.
 
 User origin/complete coverage, protected dedicated observation/hint transport,
 terminal physical cleanup, backup/rollback activation and restore-aware Search

@@ -14,6 +14,7 @@ required_suites=(
   "voice.backend.auth.AccountDeletionEpochFloorJdbcIntegrationTest"
   "voice.backend.auth.AccountDeletionOperationRepositoryJdbcIntegrationTest"
   "voice.backend.auth.AccountDeletionProducerJdbcIntegrationTest"
+  "voice.backend.auth.roleidentityauthority.AuthAccountLifecycleProducerJdbcIntegrationTest"
   "voice.backend.auth.AuthJdbcRedisIntegrationTest"
   "voice.backend.auth.E2EKeyBackupJdbcIntegrationTest"
   "voice.backend.auth.RegistrationSessionEpochJdbcIntegrationTest"

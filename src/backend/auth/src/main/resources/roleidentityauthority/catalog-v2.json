@@ -1,0 +1,1066 @@
+{
+  "tables": [
+    {
+      "name": "accounts",
+      "columns": [
+        {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "pg_catalog.gen_random_uuid()"
+        },
+        {
+          "name": "role_identity_account_selector",
+          "type": "bytea",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "role_identity_handle",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "pg_catalog.gen_random_uuid()"
+        },
+        {
+          "name": "role_identity_keyset_revision",
+          "type": "bigint",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "role_identity_selector_version",
+          "type": "integer",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "status",
+          "type": "character varying(16)",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "type",
+          "type": "character varying(16)",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "accounts_pkey",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "accounts_role_identity_capture_shape",
+          "definition": "CHECK ((((role_identity_selector_version IS NULL) AND (role_identity_account_selector IS NULL) AND (role_identity_keyset_revision IS NULL)) OR ((role_identity_selector_version IS NOT NULL) AND (role_identity_account_selector IS NOT NULL) AND (role_identity_keyset_revision IS NOT NULL) AND (role_identity_selector_version > 0) AND (octet_length(role_identity_account_selector) = 32) AND (role_identity_keyset_revision > 0))))"
+        },
+        {
+          "name": "accounts_role_identity_handle_unique",
+          "definition": "UNIQUE (role_identity_handle)"
+        }
+      ]
+    },
+    {
+      "name": "role_identity_account_selectors",
+      "columns": [
+        {
+          "name": "key_version",
+          "type": "integer",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "owner_handle",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "selector",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "role_identity_account_selectors_key_version_fkey",
+          "definition": "FOREIGN KEY (key_version) REFERENCES role_identity_key_versions(version)"
+        },
+        {
+          "name": "role_identity_account_selectors_owner_handle_fkey",
+          "definition": "FOREIGN KEY (owner_handle) REFERENCES role_identity_lifetimes(owner_handle)"
+        },
+        {
+          "name": "role_identity_account_selectors_owner_handle_key_version_key",
+          "definition": "UNIQUE (owner_handle, key_version)"
+        },
+        {
+          "name": "role_identity_account_selectors_pkey",
+          "definition": "PRIMARY KEY (key_version, selector)"
+        },
+        {
+          "name": "role_identity_account_selectors_selector_check",
+          "definition": "CHECK ((octet_length(selector) = 32))"
+        }
+      ]
+    },
+    {
+      "name": "role_identity_key_versions",
+      "columns": [
+        {
+          "name": "fingerprint",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "version",
+          "type": "integer",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "role_identity_key_versions_fingerprint_check",
+          "definition": "CHECK ((octet_length(fingerprint) = 32))"
+        },
+        {
+          "name": "role_identity_key_versions_fingerprint_key",
+          "definition": "UNIQUE (fingerprint)"
+        },
+        {
+          "name": "role_identity_key_versions_pkey",
+          "definition": "PRIMARY KEY (version)"
+        },
+        {
+          "name": "role_identity_key_versions_version_check",
+          "definition": "CHECK ((version > 0))"
+        }
+      ]
+    },
+    {
+      "name": "role_identity_lifetimes",
+      "columns": [
+        {
+          "name": "deletion_cycle",
+          "type": "uuid",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "eligible",
+          "type": "boolean",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "erase_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "lifecycle_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "owner_handle",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "selector_complete",
+          "type": "boolean",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "false"
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "role_identity_lifetimes_check",
+          "definition": "CHECK ((((state = 'ACTIVE'::text) AND (deletion_cycle IS NULL) AND (erase_at IS NULL)) OR ((state = ANY (ARRAY['RECOVERABLE'::text, 'TERMINAL'::text])) AND (deletion_cycle IS NOT NULL) AND (erase_at IS NOT NULL))))"
+        },
+        {
+          "name": "role_identity_lifetimes_check1",
+          "definition": "CHECK (((state = 'ACTIVE'::text) OR (NOT eligible)))"
+        },
+        {
+          "name": "role_identity_lifetimes_lifecycle_revision_check",
+          "definition": "CHECK ((lifecycle_revision > 0))"
+        },
+        {
+          "name": "role_identity_lifetimes_pkey",
+          "definition": "PRIMARY KEY (owner_handle)"
+        },
+        {
+          "name": "role_identity_lifetimes_state_check",
+          "definition": "CHECK ((state = ANY (ARRAY['ACTIVE'::text, 'RECOVERABLE'::text, 'TERMINAL'::text])))"
+        }
+      ]
+    },
+    {
+      "name": "role_identity_owner_journal",
+      "columns": [
+        {
+          "name": "deletion_cycle",
+          "type": "uuid",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "digest",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "eligible",
+          "type": "boolean",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "erase_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "event_kind",
+          "type": "text",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "lifecycle_revision",
+          "type": "bigint",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "owner_handle",
+          "type": "uuid",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "previous_digest",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "selector_complete",
+          "type": "boolean",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "role_identity_owner_journal_digest_check",
+          "definition": "CHECK ((octet_length(digest) = 32))"
+        },
+        {
+          "name": "role_identity_owner_journal_pkey",
+          "definition": "PRIMARY KEY (revision)"
+        },
+        {
+          "name": "role_identity_owner_journal_previous_digest_check",
+          "definition": "CHECK ((octet_length(previous_digest) = 32))"
+        },
+        {
+          "name": "role_identity_owner_journal_revision_check",
+          "definition": "CHECK ((revision > 0))"
+        }
+      ]
+    },
+    {
+      "name": "role_identity_owner_state",
+      "columns": [
+        {
+          "name": "active_version",
+          "type": "integer",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "enforcement_enabled",
+          "type": "boolean",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "false"
+        },
+        {
+          "name": "head_digest",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "history_generation",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "pg_catalog.gen_random_uuid()"
+        },
+        {
+          "name": "keyset_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "0"
+        },
+        {
+          "name": "singleton",
+          "type": "boolean",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "true"
+        },
+        {
+          "name": "stream_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "pg_catalog.gen_random_uuid()"
+        },
+        {
+          "name": "through_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "0"
+        }
+      ],
+      "constraints": [
+        {
+          "name": "role_identity_owner_state_head_digest_check",
+          "definition": "CHECK ((octet_length(head_digest) = 32))"
+        },
+        {
+          "name": "role_identity_owner_state_keyset_revision_check",
+          "definition": "CHECK ((keyset_revision >= 0))"
+        },
+        {
+          "name": "role_identity_owner_state_pkey",
+          "definition": "PRIMARY KEY (singleton)"
+        },
+        {
+          "name": "role_identity_owner_state_singleton_check",
+          "definition": "CHECK (singleton)"
+        },
+        {
+          "name": "role_identity_owner_state_through_revision_check",
+          "definition": "CHECK ((through_revision >= 0))"
+        }
+      ]
+    },
+    {
+      "name": "auth_account_lifecycle_decisions",
+      "columns": [
+        {
+          "name": "decision",
+          "type": "text",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "decision_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "decision_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "deletion_cycle_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "intent_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "owner_handle",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "purge_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "schedule_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "scheduled_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "auth_account_lifecycle_decisi_owner_handle_deletion_cycle__fkey",
+          "deferrable": false,
+          "definition": "FOREIGN KEY (owner_handle, deletion_cycle_id, schedule_revision, scheduled_at, purge_at) REFERENCES auth_account_lifecycle_schedules(owner_handle, deletion_cycle_id, schedule_revision, scheduled_at, purge_at)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_decisions_check",
+          "deferrable": false,
+          "definition": "CHECK ((decision_revision > schedule_revision))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_decisions_check1",
+          "deferrable": false,
+          "definition": "CHECK ((isfinite(decision_at) AND (decision_at >= scheduled_at)))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_decisions_check2",
+          "deferrable": false,
+          "definition": "CHECK ((((decision = 'RESTORED'::text) AND (decision_at < purge_at)) OR ((decision = 'LIFETIME_TERMINAL'::text) AND (decision_at >= purge_at))))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_decisions_decision_check",
+          "deferrable": false,
+          "definition": "CHECK ((decision = ANY (ARRAY['RESTORED'::text, 'LIFETIME_TERMINAL'::text])))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_decisions_intent_id_key",
+          "deferrable": false,
+          "definition": "UNIQUE (intent_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_decisions_pkey",
+          "deferrable": false,
+          "definition": "PRIMARY KEY (owner_handle, deletion_cycle_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_lifecycle_decision_intent",
+          "deferrable": true,
+          "definition": "FOREIGN KEY (intent_id) REFERENCES auth_account_lifecycle_intents(event_id) DEFERRABLE INITIALLY DEFERRED",
+          "initiallyDeferred": true
+        }
+      ]
+    },
+    {
+      "name": "auth_account_lifecycle_intents",
+      "columns": [
+        {
+          "name": "attempts",
+          "type": "integer",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "0"
+        },
+        {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "clock_timestamp()"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "deletion_cycle_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "event_bytes",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "event_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "event_sha256",
+          "type": "bytea",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "kind",
+          "type": "text",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "last_error_code",
+          "type": "text",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "lease_token",
+          "type": "uuid",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "lifecycle_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "owner_handle",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "protocol_version",
+          "type": "smallint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "1"
+        },
+        {
+          "name": "pubacked_at",
+          "type": "timestamp with time zone",
+          "notNull": false,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "auth_account_lifecycle_intent_owner_handle_deletion_cycle__fkey",
+          "deferrable": false,
+          "definition": "FOREIGN KEY (owner_handle, deletion_cycle_id) REFERENCES auth_account_lifecycle_schedules(owner_handle, deletion_cycle_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intent_owner_handle_deletion_cycle_i_key",
+          "deferrable": false,
+          "definition": "UNIQUE (owner_handle, deletion_cycle_id, kind)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_attempts_check",
+          "deferrable": false,
+          "definition": "CHECK ((attempts >= 0))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_check",
+          "deferrable": false,
+          "definition": "CHECK (((octet_length(event_sha256) = 32) AND (event_sha256 = sha256(event_bytes))))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_check1",
+          "deferrable": false,
+          "definition": "CHECK (((lease_token IS NULL) = (lease_until IS NULL)))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_event_bytes_check",
+          "deferrable": false,
+          "definition": "CHECK (((octet_length(event_bytes) > 0) AND (octet_length(event_bytes) <= 16384)))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_kind_check",
+          "deferrable": false,
+          "definition": "CHECK ((kind = ANY (ARRAY['DELETE_SCHEDULED'::text, 'RESTORED'::text, 'LIFETIME_TERMINAL'::text])))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_last_error_code_check",
+          "deferrable": false,
+          "definition": "CHECK (((last_error_code IS NULL) OR (last_error_code ~ '^[A-Z0-9_]{1,64}$'::text)))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_lifecycle_revision_check",
+          "deferrable": false,
+          "definition": "CHECK ((lifecycle_revision > 0))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_pkey",
+          "deferrable": false,
+          "definition": "PRIMARY KEY (event_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_intents_protocol_version_check",
+          "deferrable": false,
+          "definition": "CHECK ((protocol_version = 1))",
+          "initiallyDeferred": false
+        }
+      ]
+    },
+    {
+      "name": "auth_account_lifecycle_schedules",
+      "columns": [
+        {
+          "name": "deletion_cycle_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "intent_id",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "owner_handle",
+          "type": "uuid",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "protocol_version",
+          "type": "smallint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": "1"
+        },
+        {
+          "name": "purge_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "schedule_revision",
+          "type": "bigint",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        },
+        {
+          "name": "scheduled_at",
+          "type": "timestamp with time zone",
+          "notNull": true,
+          "identity": "",
+          "generated": "",
+          "defaultExpression": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "auth_account_lifecycle_schedu_owner_handle_deletion_cycle__key1",
+          "deferrable": false,
+          "definition": "UNIQUE (owner_handle, deletion_cycle_id, schedule_revision, scheduled_at, purge_at)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedu_owner_handle_deletion_cycle_i_key",
+          "deferrable": false,
+          "definition": "UNIQUE (owner_handle, deletion_cycle_id, schedule_revision)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_check",
+          "deferrable": false,
+          "definition": "CHECK ((isfinite(scheduled_at) AND isfinite(purge_at)))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_check1",
+          "deferrable": false,
+          "definition": "CHECK ((purge_at = (scheduled_at + '720:00:00'::interval)))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_deletion_cycle_id_key",
+          "deferrable": false,
+          "definition": "UNIQUE (deletion_cycle_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_intent_id_key",
+          "deferrable": false,
+          "definition": "UNIQUE (intent_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_owner_handle_fkey",
+          "deferrable": false,
+          "definition": "FOREIGN KEY (owner_handle) REFERENCES role_identity_lifetimes(owner_handle)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_pkey",
+          "deferrable": false,
+          "definition": "PRIMARY KEY (owner_handle, deletion_cycle_id)",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_protocol_version_check",
+          "deferrable": false,
+          "definition": "CHECK ((protocol_version = 1))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_account_lifecycle_schedules_schedule_revision_check",
+          "deferrable": false,
+          "definition": "CHECK ((schedule_revision > 0))",
+          "initiallyDeferred": false
+        },
+        {
+          "name": "auth_lifecycle_schedule_intent",
+          "deferrable": true,
+          "definition": "FOREIGN KEY (intent_id) REFERENCES auth_account_lifecycle_intents(event_id) DEFERRABLE INITIALLY DEFERRED",
+          "initiallyDeferred": true
+        }
+      ]
+    }
+  ],
+  "version": 2,
+  "triggers": [
+    {
+      "name": "auth_lifecycle_decision_immutable",
+      "type": 27,
+      "table": "auth_account_lifecycle_decisions",
+      "function": "auth_account_lifecycle_fact_immutable",
+      "definition": "CREATE TRIGGER auth_lifecycle_decision_immutable BEFORE DELETE OR UPDATE ON public.auth_account_lifecycle_decisions FOR EACH ROW EXECUTE FUNCTION auth_account_lifecycle_fact_immutable()"
+    },
+    {
+      "name": "auth_lifecycle_decision_no_truncate",
+      "type": 34,
+      "table": "auth_account_lifecycle_decisions",
+      "function": "auth_account_lifecycle_fact_immutable",
+      "definition": "CREATE TRIGGER auth_lifecycle_decision_no_truncate BEFORE TRUNCATE ON public.auth_account_lifecycle_decisions FOR EACH STATEMENT EXECUTE FUNCTION auth_account_lifecycle_fact_immutable()"
+    },
+    {
+      "name": "auth_lifecycle_intent_immutable",
+      "type": 27,
+      "table": "auth_account_lifecycle_intents",
+      "function": "auth_account_lifecycle_intent_immutable",
+      "definition": "CREATE TRIGGER auth_lifecycle_intent_immutable BEFORE DELETE OR UPDATE ON public.auth_account_lifecycle_intents FOR EACH ROW EXECUTE FUNCTION auth_account_lifecycle_intent_immutable()"
+    },
+    {
+      "name": "auth_lifecycle_intent_no_truncate",
+      "type": 34,
+      "table": "auth_account_lifecycle_intents",
+      "function": "auth_account_lifecycle_intent_immutable",
+      "definition": "CREATE TRIGGER auth_lifecycle_intent_no_truncate BEFORE TRUNCATE ON public.auth_account_lifecycle_intents FOR EACH STATEMENT EXECUTE FUNCTION auth_account_lifecycle_intent_immutable()"
+    },
+    {
+      "name": "auth_lifecycle_schedule_immutable",
+      "type": 27,
+      "table": "auth_account_lifecycle_schedules",
+      "function": "auth_account_lifecycle_fact_immutable",
+      "definition": "CREATE TRIGGER auth_lifecycle_schedule_immutable BEFORE DELETE OR UPDATE ON public.auth_account_lifecycle_schedules FOR EACH ROW EXECUTE FUNCTION auth_account_lifecycle_fact_immutable()"
+    },
+    {
+      "name": "auth_lifecycle_schedule_no_truncate",
+      "type": 34,
+      "table": "auth_account_lifecycle_schedules",
+      "function": "auth_account_lifecycle_fact_immutable",
+      "definition": "CREATE TRIGGER auth_lifecycle_schedule_no_truncate BEFORE TRUNCATE ON public.auth_account_lifecycle_schedules FOR EACH STATEMENT EXECUTE FUNCTION auth_account_lifecycle_fact_immutable()"
+    },
+    {
+      "name": "auth_role_identity_account_created",
+      "type": 5,
+      "table": "accounts",
+      "function": "auth_role_identity_account_created",
+      "definition": "CREATE TRIGGER auth_role_identity_account_created AFTER INSERT ON public.accounts FOR EACH ROW EXECUTE FUNCTION auth_role_identity_account_created()"
+    },
+    {
+      "name": "auth_role_identity_account_guard",
+      "type": 27,
+      "table": "accounts",
+      "function": "auth_role_identity_account_guard",
+      "definition": "CREATE TRIGGER auth_role_identity_account_guard BEFORE DELETE OR UPDATE ON public.accounts FOR EACH ROW EXECUTE FUNCTION auth_role_identity_account_guard()"
+    },
+    {
+      "name": "role_identity_journal_immutable",
+      "type": 27,
+      "table": "role_identity_owner_journal",
+      "function": "role_identity_journal_immutable",
+      "definition": "CREATE TRIGGER role_identity_journal_immutable BEFORE DELETE OR UPDATE ON public.role_identity_owner_journal FOR EACH ROW EXECUTE FUNCTION role_identity_journal_immutable()"
+    }
+  ],
+  "functions": [
+    {
+      "name": "auth_account_lifecycle_decide",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "arguments": "p_owner uuid, p_cycle uuid, p_kind text, p_revision bigint, p_at timestamp with time zone",
+      "resultType": "void",
+      "sourceSha256": "0ddacd3107a58765c800fb92a746682c676f6c01906a52303b6ce0be497eb1dd"
+    },
+    {
+      "name": "auth_account_lifecycle_emit",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "arguments": "p_event uuid, p_kind text, p_owner uuid, p_cycle uuid, p_revision bigint, p_scheduled timestamp with time zone, p_purge timestamp with time zone, p_decided timestamp with time zone",
+      "resultType": "void",
+      "sourceSha256": "1455118fd421a897caacc5436d712f31bb3c7d4791d94c126de08728e1815396"
+    },
+    {
+      "name": "auth_account_lifecycle_fact_immutable",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "arguments": "",
+      "resultType": "trigger",
+      "sourceSha256": "6f3cd0930580fd44e4543b3544bea63b2677d7438f7820462db1e757ab827eec"
+    },
+    {
+      "name": "auth_account_lifecycle_intent_immutable",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "arguments": "",
+      "resultType": "trigger",
+      "sourceSha256": "e1546f8eaaf4b9dc1d467b4fd492100e3b03cee43d4215d2f7d53f2a86d65791"
+    },
+    {
+      "name": "auth_account_lifecycle_schedule",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "arguments": "p_owner uuid, p_scheduled timestamp with time zone",
+      "resultType": "void",
+      "sourceSha256": "6c4c560f59c9fc7543a4cc1125765ab27b4ee6e3042ae812f4cf93f5185cb980"
+    },
+    {
+      "name": "auth_role_identity_account_created",
+      "config": null,
+      "arguments": "",
+      "resultType": "trigger",
+      "sourceSha256": "6e1e6610dc55d39c832c080d9bcd25038fe380a31d92ccdd98ba0e049ae6f9bc"
+    },
+    {
+      "name": "auth_role_identity_account_guard",
+      "config": null,
+      "arguments": "",
+      "resultType": "trigger",
+      "sourceSha256": "76383c07bec6e9addc857397ce07321c24c7e45a70001f2a78e4ae79b7f0341d"
+    },
+    {
+      "name": "role_identity_append",
+      "config": null,
+      "arguments": "p_kind text, p_handle uuid",
+      "resultType": "bigint",
+      "sourceSha256": "cb65301e38d87acc8d344931e7267dd2b8ae672c5a18de083269563c87334995"
+    },
+    {
+      "name": "role_identity_journal_immutable",
+      "config": null,
+      "arguments": "",
+      "resultType": "trigger",
+      "sourceSha256": "493519f1cde994f30091142736b83346ab7211ba7f2927f164ecf20f2295ee15"
+    },
+    {
+      "name": "role_identity_materialize_handle",
+      "config": null,
+      "arguments": "p_handle uuid",
+      "resultType": "bigint",
+      "sourceSha256": "12206beb48a3288f95c08fc917214e6bc8afe8244178d958994a1665d7ef221e"
+    },
+    {
+      "name": "role_identity_register_keyset",
+      "config": null,
+      "arguments": "p_revision bigint, p_active integer, p_keys jsonb",
+      "resultType": "bigint",
+      "sourceSha256": "f295fdbeba93291b3c532c82e35757c35b4a75d7cfebf3ae36f382d9b4e6cf42"
+    }
+  ]
+}
