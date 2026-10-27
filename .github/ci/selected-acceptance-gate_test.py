@@ -122,18 +122,19 @@ class SelectedAcceptanceGateTests(unittest.TestCase):
         self.assertNotEqual(run_gate(values, 'a1-flutter-profile-handoff', 'skipped').returncode, 0)
 
     def test_actual_selection_matches_gate_across_filters_and_events(self):
-        flags = ('code', 'frontend', 'protos', 'global', 'ci_global',
-                 'run_flutter_tier2', 'a1_e2e', 'a1_t106_live', 'svc_analytics',
-                 'compose', 'run_pkg')
         for job in JOBS:
             self.assertTrue('      - ' + job + '\n' in GATE, 'missing gate dependency: ' + job)
             self.assertIn('${{ needs.' + job + '.result }}', ENV[
                 'JOB_' + job.upper().replace('-', '_')])
-        for event, bits in itertools.product(
-                ('pull_request', 'push'), itertools.product(('false', 'true'), repeat=len(flags))):
-            values = context(event, **dict(zip(flags, bits)))
-            for job in JOBS:
-                name = 'RUN_' + job.upper().replace('-', '_')
+        for job in JOBS:
+            name = 'RUN_' + job.upper().replace('-', '_')
+            # Exhaust every input of this job and its gate, including new flags,
+            # without multiplying by unrelated platform/service selectors.
+            flags = sorted(set(re.findall(r'needs\.changes\.outputs\.([\w-]+)',
+                                          job_condition(job) + ENV[name])))
+            for event, bits in itertools.product(
+                    ('pull_request', 'push'), itertools.product(('false', 'true'), repeat=len(flags))):
+                values = context(event, **dict(zip(flags, bits)))
                 self.assertEqual(bool(evaluate(job_condition(job), values)),
                                  bool(evaluate(ENV[name], values)), (event, bits, job))
 

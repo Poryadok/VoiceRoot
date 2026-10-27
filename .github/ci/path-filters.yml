@@ -24,6 +24,47 @@ ci_global:
   - .github/workflows/**
   - .github/ci/**
   - scripts/ci/**
+  # Audited independent jobs/diagnostics still run the complete script shards.
+  # Unknown CI files retain the conservative broad fallback above.
+  - '!.github/workflows/gateway-media-build.yml'
+  - '!.github/workflows/t31-session-events-e2e.yml'
+  - '!.github/workflows/t16-cross-service-acceptance.yml'
+  - '!.github/workflows/space-tree-proof.yml'
+  - '!.github/workflows/space-audit-read-proof.yml'
+  - '!scripts/ci/auth_session_floor_diagnostics.py'
+  - '!scripts/ci/auth_session_floor_diagnostics_test.py'
+  - '!scripts/ci/space_media_admission_diagnostics.py'
+  - '!scripts/ci/space_media_admission_diagnostics_test.py'
+  - '!scripts/ci/t31-startup-diagnostics.py'
+  - '!scripts/ci/t31-startup-diagnostics_test.py'
+  - '!scripts/ci/gate-latency.py'
+  - '!scripts/ci/gate-latency_test.py'
+
+ci_scripts:
+  - scripts/ci/**
+  - scripts/release/capability_manifest*.py
+  - scripts/release/client_compatibility*.py
+  - Makefile
+  - .golangci.yml
+  - .github/workflows/**
+  - .github/ci/**
+
+# Every image can consume generated peer modules and shared context rules.
+go_build_shared:
+  - src/backend/**/pb/**
+  - src/backend/**/go.mod
+  - src/backend/**/go.sum
+  - src/backend/.dockerignore
+  - .dockerignore
+
+# PR-only selection; master retains publishing the renderer for every code SHA.
+nats_renderer:
+  - src/backend/pkg/**
+  - src/backend/user/pb/**
+  - src/backend/analytics/pb/**
+  - src/backend/messaging/pb/**
+  - src/backend/chat/pb/**
+  - .dockerignore
 
 # Changes to the historical validator require its complete fixtures on the PR.
 # The full audit is also mandatory for release branches and master pushes.
@@ -69,6 +110,40 @@ a1_e2e:
   - scripts/ci/compose-file-attachment-restart-proof.sh
   - scripts/ci/a1-attachment-restart-ci-reachability_test.sh
   - scripts/ci/e2e-manifest*
+
+# Keep the pre-merge proof, but unrelated database migrations are not inputs.
+a1_attachment_restart:
+  - Makefile
+  - .github/workflows/ci.yml
+  - .github/ci/path-filters.yml
+  - .github/ci/e2e-features.yml
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/file/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/frontend/**
+  - src/backend/migrations/auth_db/**
+  - src/backend/migrations/user_db/**
+  - src/backend/migrations/chat_db/**
+  - src/backend/migrations/messaging_db/**
+  - src/backend/migrations/social_db/**
+  - src/backend/migrations/file_db/**
+  - src/backend/migrations/realtime_db/**
+  - src/backend/scripts/**
+  - protos/**
+  - docker/**
+  - docker-compose*.yml
+  - scripts/ci/compose-a1*
+  - scripts/ci/compose-file-attachment-restart-proof.sh
+  - scripts/ci/a1-attachment-restart-ci-reachability_test.sh
+  - scripts/ci/e2e-manifest*
+  - scripts/dev/generate-phase0-fixture.py
+  - scripts/dev/restore-phase0-fixture-owner.py
 
 staging_infra:
   - deploy/staging/infra.yaml
@@ -133,60 +208,77 @@ svc_analytics:
 
 svc_bot:
   - src/backend/bot/**
+  - src/backend/migrations/bot_db/**
 
 svc_chat:
   - src/backend/chat/**
+  - src/backend/migrations/chat_db/**
 
 svc_federation:
   - src/backend/federation/**
 
 svc_file:
   - src/backend/file/**
+  - src/backend/migrations/file_db/**
 
 svc_gameintegration:
   - src/backend/gameintegration/**
+  - src/backend/migrations/game_integration_db/**
 
 svc_controlledgame:
   - src/backend/controlledgame/**
 
 svc_gateway:
   - src/backend/gateway/**
+  - src/backend/migrations/gateway_db/**
 
 svc_matchmaking:
   - src/backend/matchmaking/**
+  - src/backend/migrations/matchmaking_db/**
 
 svc_messaging:
   - src/backend/messaging/**
+  - src/backend/migrations/messaging_db/**
 
 svc_moderation:
   - src/backend/moderation/**
+  - src/backend/migrations/moderation_db/**
 
 svc_notification:
   - src/backend/notification/**
+  - src/backend/migrations/notification_db/**
 
 svc_realtime:
   - src/backend/realtime/**
+  - src/backend/migrations/realtime_db/**
 
 svc_role:
   - src/backend/role/**
+  - src/backend/migrations/role_db/**
 
 svc_search:
   - src/backend/search/**
+  - src/backend/migrations/search_db/**
 
 svc_social:
   - src/backend/social/**
+  - src/backend/migrations/social_db/**
 
 svc_space:
   - src/backend/space/**
+  - src/backend/migrations/space_db/**
 
 svc_story:
   - src/backend/story/**
+  - src/backend/migrations/story_db/**
 
 svc_subscription:
   - src/backend/subscription/**
+  - src/backend/migrations/subscription_db/**
 
 svc_user:
   - src/backend/user/**
+  - src/backend/migrations/user_db/**
 
 svc_voice:
   - src/backend/voice/**
