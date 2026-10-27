@@ -195,6 +195,12 @@ can enumerate the complete set.
   four-path component; this does not qualify the full producer.
 - [ ] Retain immutable queried-cycle schedule/decision facts and durable producer
   intent using the existing opaque lifetime handle, cycle and revision lineage.
+- [x] User integrity component `0c9178a92c823646924de5621e57a09671b1210a`
+  reproduces all three agreed manifest digests and rejects incomplete or altered
+  records. Actual Go 1.26.2 native Windows RED failed both positive vector tests;
+  GREEN passed three tests and `go vet`. Anton-172 independently cleared the two
+  source paths (`BE-020` c17). This is integrity validation, not provenance,
+  enumeration completeness or database admission serialization.
 - [ ] Implement protected request-bound current/terminal reconciliation and
   complete User coverage with creation-path closure, then connect the named MM
   consumer without borrowing a Role/User-purpose grant.
@@ -219,6 +225,24 @@ That Subscription-purpose capture uses raw account identifiers, operation IDs as
 its cycle and a separate source revision. It is not the agreed opaque-lifetime
 contract, complete User coverage or a generic MM grant. Preserve its existing
 purpose and do not silently substitute those identifiers for the A4 tuple.
+
+Both `AuthIdentityMigrationHistory` and `AuthAuthorityReader` own finite loader
+profile compatibility. Appending a JSON resource alone does not update either
+reader's accepted exact inventory. Preserve the baseline and purpose-specific
+profiles; unknown, dirty or mixed histories must remain unavailable.
+
+User profile insertion currently occurs in `createSecondaryProfileTx` and
+`ensurePrimaryProfileTx`, while identity association capture/bootstrap uses its
+own owning transactions. `withSearchProjectionTx` is a normal local transaction,
+not an account admission mutex. A sealed manifest must join those birth/binding
+paths under the same admission closure. `ListByAccountID` filters soft-deleted
+profiles and cannot supply the required retained/retired complete set. Permanent
+profile reservations deliberately have no account or raw UUID, and retained
+association aliases are one-way selectors. No verified additional historical
+raw-profile inventory was identified by the author or the User/MM reviewer.
+Missing historical ownership coverage therefore remains incomplete; do not
+invent a reverse mapping, declare a live scan complete or enable the capability
+without the required closed inventory/backfill proof.
 
 ## Decisions and follow-ups
 
