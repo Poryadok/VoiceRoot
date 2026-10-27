@@ -2975,14 +2975,16 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final generation = _voiceSendGeneration;
     final chatId = widget.chatId;
     final controller = ref.read(chatRoomControllerProvider(chatId).notifier);
-    if (generation != null && generation != controller.immediateSendGeneration)
+    if (generation != null && generation != controller.immediateSendGeneration) {
       return;
+    }
     final generationBefore = controller.immediateSendGeneration;
     final error = generation == null
         ? await controller.sendMessage('', attachments: [attachment])
         : await controller.retryFailedMessage(expectedGeneration: generation);
-    if (!_isCurrentChat(chatId) || !identical(_pendingVoiceMessage, attachment))
+    if (!_isCurrentChat(chatId) || !identical(_pendingVoiceMessage, attachment)) {
       return;
+    }
     setState(() {
       _voiceSendError = error;
       if (error == null) {
