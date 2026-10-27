@@ -121,6 +121,16 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
   soft-deletion compaction; frozen/active/missing profiles retain views. It skips
   under `-short`; no DEV/STAGING or external providers are used.
 - HTTP: `httptest` для хендлеров Gateway без поднятия сети.
+- Messaging response-loss proof: from `src/backend/messaging`, run
+  `go test ./internal/grpcsvc -run '^TestMessagingSendMessage_RetryAfterLostResponseDoesNotDuplicate$' -count=1 -v`.
+  The real Messaging service and disposable PostgreSQL commit one 4000-codepoint
+  send before a test proxy replaces its first response with `Unavailable`.
+  An explicit same-key, same-payload retry must return the committed ID; a
+  changed payload must conflict. SQL verifies one message and one unchanged
+  outbox event, and recipient history contains exactly that message. This is a
+  controlled gRPC response-loss check, not evidence of a live HTTP/edge cause or
+  an edit/friend-invitation retry contract. Use the Linux/container route below
+  when host test execution is restricted.
 - Space retained-installer regression: on an owned fresh private PostgreSQL 18
   server, set `NATIVE_INSTALLER_TEST_ADMIN_URL`, `NATIVE_INSTALLER_TEST_MIGRATE`
   (the pinned migrate executable) and `NATIVE_INSTALLER_TEST_BINARY` (the
