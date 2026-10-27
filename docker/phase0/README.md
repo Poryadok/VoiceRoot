@@ -9,7 +9,8 @@ Phase0 fixture and its offline validation, rather than full app readiness.
 On Linux, generate the media fixture with
 `PHASE0_MATCHSQUAD_FIXTURE_UID=65532 python3 scripts/dev/generate-phase0-fixture.py <new-directory>`
 so the existing nonroot Chat, Space and Matchmaking processes can read their
-service-scoped private files. The parent directory must exist. Windows fixture
+service-scoped private files. Run as root or with working noninteractive
+`sudo -n chown` permission for that ownership setup. The parent directory must exist. Windows fixture
 generation omits that POSIX-only ownership setting. Keep all generated material
 local and use fresh credentials after its two-day lifetime.
 
