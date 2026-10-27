@@ -753,7 +753,11 @@ class CallController extends StateNotifier<CallState> {
     }
   }
 
-  Future<void> startScreenShare({double maxFrameRate = 15}) async {
+  Future<void> startScreenShare({
+    double maxFrameRate = 15,
+    bool captureSystemAudio = false,
+    String? sourceId,
+  }) async {
     if (!canStartScreenShare) return;
     final auth = _ref.read(authorizationHeaderProvider);
     final current = state.session;
@@ -768,7 +772,8 @@ class CallController extends StateNotifier<CallState> {
         try {
           await _room!.startScreenShare(
             maxFrameRate: maxFrameRate,
-            captureSystemAudio: canCaptureSystemAudioWithScreenShare,
+            captureSystemAudio: captureSystemAudio,
+            sourceId: sourceId,
           );
           _ref
               .read(screenShareControllerProvider.notifier)

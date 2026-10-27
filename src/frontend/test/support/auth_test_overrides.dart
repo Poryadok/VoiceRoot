@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:voice_frontend/backend/auth_session.dart';
+import 'package:voice_frontend/backend/screen_share_sources.dart';
 import 'package:voice_frontend/backend/auth_session_storage.dart';
 import 'package:voice_frontend/backend/discover_hint_storage.dart';
 import 'package:voice_frontend/backend/guest_credentials_storage.dart';
@@ -55,9 +56,28 @@ List<Override> voiceAppTestOverrides({required http.Client client}) => [
   versionPolicyProvider.overrideWith(
     (ref) => VersionPolicyController(ref, enablePolling: false),
   ),
+  screenShareSourceCatalogProvider.overrideWithValue(
+    _TestScreenShareSourceCatalog(),
+  ),
   voiceInputSettingsProvider.overrideWith(TestVoiceInputSettingsNotifier.new),
   windowsDesktopHostProvider.overrideWithValue(const NoopWindowsDesktopHost()),
 ];
+
+class _TestScreenShareSourceCatalog implements ScreenShareSourceCatalog {
+  @override
+  Future<List<ScreenShareSource>> listSources() async => const [
+    ScreenShareSource(
+      id: 'test-screen-id',
+      name: 'Test screen',
+      type: ScreenShareSourceType.screen,
+    ),
+    ScreenShareSource(
+      id: 'test-window-id',
+      name: 'Test window',
+      type: ScreenShareSourceType.window,
+    ),
+  ];
+}
 
 /// Onboarding already completed — avoids overlay dialogs in shell widget tests.
 class TestCompletedOnboardingController extends OnboardingController {
