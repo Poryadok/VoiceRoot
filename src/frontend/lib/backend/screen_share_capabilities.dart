@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 
 /// Desktop and web can initiate screen share; mobile is view-only per docs/features/screen-share.md.
 bool get canStartScreenShare {
@@ -9,6 +10,9 @@ bool get canStartScreenShare {
 }
 
 bool get canCaptureSystemAudioWithScreenShare {
-  if (kIsWeb) return false;
-  return canStartScreenShare;
+  return !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
 }
+
+/// The Windows desktop capturer exposes screen and window source IDs.
+bool get canSelectDesktopScreenShareSource =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;

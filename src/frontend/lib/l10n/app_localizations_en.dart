@@ -3160,6 +3160,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenShareQuality720p30 => '720p · 30 FPS';
 
   @override
+  String get screenShareSystemAudio => 'Include system audio';
+
+  @override
+  String get screenShareSourceTitle => 'Choose what to share';
+
+  @override
+  String get screenShareEntireScreen => 'Entire screen';
+
+  @override
+  String get screenShareWindow => 'Window or application';
+
+  @override
+  String get screenShareSourceUnavailable =>
+      'No screens or windows are available to share';
+
+  @override
   String get screenShareLimitReached =>
       'This voice chat already has 3 screen shares';
 
@@ -3168,7 +3184,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get platformWebSystemAudioUnavailable =>
-      'System audio sharing is not available in the browser';
+      'System audio sharing is not available on this platform';
 
   @override
   String get platformWebGlobalPttUnavailable =>
@@ -3991,6 +4007,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addGameModeDuplicate => 'Use a different name for each mode.';
+
+  @override
+  String get chatLinkPreviewLoading => 'Loading link preview…';
+
+  @override
+  String get chatLinkPreviewUnavailable => 'Preview unavailable';
+
+  @override
+  String get chatLinkPreviewRetry => 'Retry';
 
   @override
   String get composerVoiceHold => 'Hold to record · slide up to lock';

@@ -599,6 +599,7 @@ class _RecordingLiveKitRoom implements VoiceLiveKitRoom {
   Future<void> startScreenShare({
     double maxFrameRate = 15,
     bool captureSystemAudio = false,
+    String? sourceId,
   }) async {}
 
   @override
