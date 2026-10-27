@@ -65,6 +65,8 @@ import 'composer_send_menu.dart';
 import 'music_format.dart';
 import 'music_attachment_player.dart';
 import 'music_playback.dart';
+import 'voice_note_capture.dart';
+import 'voice_note_recorder.dart';
 import '../shell/side_panel.dart';
 import '../space/space_chat_slow_mode_sheet.dart';
 import '../search/in_chat_search.dart';
@@ -88,6 +90,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
     required this.chatId,
     this.onBack,
     this.attachmentPicker,
+    this.voiceNoteRecorderFactory,
     this.showReconnectBanner = true,
   });
 
@@ -99,6 +102,8 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   static const Key inputKey = Key('chat_room_input');
   static const Key sendKey = Key('chat_room_send');
   static const Key sendRetryKey = Key('chat_room_send_retry');
+  static const Key voiceSendRetryKey = Key('chat_room_voice_send_retry');
+  static const Key voiceSendCancelKey = Key('chat_room_voice_send_cancel');
   static const Key replyTargetCancelKey = Key('chat_room_reply_target_cancel');
   static const Key attachKey = Key('chat_room_attach');
   static const Key attachmentUploadFailureKey = Key(
@@ -140,6 +145,7 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
   final String chatId;
   final VoidCallback? onBack;
   final ChatAttachmentPicker? attachmentPicker;
+  final VoiceNoteRecorder Function()? voiceNoteRecorderFactory;
   final bool showReconnectBanner;
 
   @override
@@ -147,6 +153,29 @@ class ChatRoomPanel extends ConsumerStatefulWidget {
 }
 
 typedef ChatAttachmentPicker = Future<ChatAttachmentFile?> Function();
+
+class _ComposerVoiceCapture extends StatefulWidget {
+  const _ComposerVoiceCapture({
+    super.key,
+    this.recorderFactory,
+    required this.onCaptured,
+  });
+
+  final VoiceNoteRecorder Function()? recorderFactory;
+  final ValueChanged<CapturedVoiceNote> onCaptured;
+
+  @override
+  State<_ComposerVoiceCapture> createState() => _ComposerVoiceCaptureState();
+}
+
+class _ComposerVoiceCaptureState extends State<_ComposerVoiceCapture> {
+  late final VoiceNoteRecorder _recorder =
+      widget.recorderFactory?.call() ?? LocalVoiceNoteRecorder();
+
+  @override
+  Widget build(BuildContext context) =>
+      VoiceNoteCapture(recorder: _recorder, onCaptured: widget.onCaptured);
+}
 
 class _TextSendAttempt {
   _TextSendAttempt({
@@ -267,7 +296,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   );
   final _inChatSearchFocus = FocusNode(debugLabel: 'chat-room-search-field');
   var _uploadingAttachment = false;
+  var _readingVoiceNote = false;
+  var _voiceReadFailed = false;
+  int? _voiceSendGeneration;
   var _attachmentOperation = 0;
+  int? _attachmentSessionGeneration;
   _PendingAttachmentUpload? _pendingAttachmentUpload;
   FilesApiFailure? _attachmentUploadFailure;
   var _initialUnreadCount = 0;
@@ -354,6 +387,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
       _uploadingAttachment = false;
+      _readingVoiceNote = false;
+      _voiceReadFailed = false;
+      _voiceSendGeneration = null;
       _draftKey = null;
       _composer.clear();
       _initialUnreadCount = 0;
@@ -529,6 +565,20 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (!changed) return;
       if (mounted) {
         setState(() {
+          if (previous?.activeProfileId != next.activeProfileId ||
+              (_attachmentSessionGeneration != null &&
+                  _attachmentSessionGeneration !=
+                      ref
+                          .read(authControllerProvider.notifier)
+                          .sessionInstallGeneration)) {
+            _attachmentOperation++;
+            _pendingAttachmentUpload = null;
+            _attachmentUploadFailure = null;
+            _uploadingAttachment = false;
+            _readingVoiceNote = false;
+            _voiceReadFailed = false;
+            _voiceSendGeneration = null;
+          }
           _scheduledAttemptSubmissionGeneration++;
           _scheduledAttemptInFlight = false;
           _pendingScheduledSend = null;
@@ -554,6 +604,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (previous != next && next != widget.chatId) {
         setState(() {
           _cancelTextSend();
+          _attachmentOperation++;
+          _pendingAttachmentUpload = null;
+          _attachmentUploadFailure = null;
+          _uploadingAttachment = false;
+          _readingVoiceNote = false;
+          _voiceReadFailed = false;
+          _voiceSendGeneration = null;
           _scheduledRowGeneration++;
           _scheduledActionBusyIds.clear();
           _scheduledActionRetries.clear();
@@ -1525,6 +1582,42 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     ],
                   ),
                 ),
+              if (_voiceReadFailed)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(l10n.composerVoiceError),
+                  ),
+                ),
+              if (_voiceSendGeneration != null &&
+                  _voiceSendGeneration ==
+                      ref
+                          .read(
+                            chatRoomControllerProvider(widget.chatId).notifier,
+                          )
+                          .immediateSendGeneration)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(_textSendFailureMessage(l10n))),
+                      TextButton(
+                        key: ChatRoomPanel.voiceSendRetryKey,
+                        onPressed: room.isSending || composerBlocked
+                            ? null
+                            : () => unawaited(_retryVoiceSend()),
+                        child: Text(l10n.commonRetry),
+                      ),
+                      IconButton(
+                        key: ChatRoomPanel.voiceSendCancelKey,
+                        tooltip: l10n.commonCancel,
+                        onPressed: room.isSending ? null : _cancelVoiceSend,
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
               SafeArea(
                 top: false,
                 child: Padding(
@@ -1647,26 +1740,66 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      VoiceSendButton(
-                        key: ChatRoomPanel.sendKey,
-                        onPressed:
-                            room.isSending ||
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _composer,
+                        builder: (context, value, child) {
+                          if (_scheduledEdit == null &&
+                              value.text.trim().isEmpty) {
+                            if (room.isSending ||
                                 _textSendInFlight ||
-                                composerBlocked
-                            ? null
-                            : _send,
-                        onLongPress:
-                            room.isSending ||
-                                _scheduledEdit != null ||
                                 _uploadingAttachment ||
-                                _textSendInFlight ||
-                                composerBlocked
-                            ? null
-                            : _openSendMenu,
-                        isLoading: room.isSending || _textSendInFlight,
-                        tooltip: _scheduledEdit == null
-                            ? l10n.chatSendMessage
-                            : l10n.chatScheduleEdit,
+                                _readingVoiceNote ||
+                                composerBlocked) {
+                              return IconButton(
+                                tooltip: l10n.composerVoiceHold,
+                                onPressed: null,
+                                icon: const Icon(Icons.mic),
+                              );
+                            }
+                            final sessionGeneration = ref
+                                .read(authControllerProvider.notifier)
+                                .sessionInstallGeneration;
+                            final chatId = widget.chatId;
+                            return _ComposerVoiceCapture(
+                              key: ValueKey((
+                                chatId,
+                                activeId,
+                                sessionGeneration,
+                              )),
+                              recorderFactory: widget.voiceNoteRecorderFactory,
+                              onCaptured: (note) => unawaited(
+                                _sendCapturedVoiceNote(
+                                  note,
+                                  chatId,
+                                  activeId,
+                                  sessionGeneration,
+                                ),
+                              ),
+                            );
+                          }
+                          return child!;
+                        },
+                        child: VoiceSendButton(
+                          key: ChatRoomPanel.sendKey,
+                          onPressed:
+                              room.isSending ||
+                                  _textSendInFlight ||
+                                  composerBlocked
+                              ? null
+                              : _send,
+                          onLongPress:
+                              room.isSending ||
+                                  _scheduledEdit != null ||
+                                  _uploadingAttachment ||
+                                  _textSendInFlight ||
+                                  composerBlocked
+                              ? null
+                              : _openSendMenu,
+                          isLoading: room.isSending || _textSendInFlight,
+                          tooltip: _scheduledEdit == null
+                              ? l10n.chatSendMessage
+                              : l10n.chatScheduleEdit,
+                        ),
                       ),
                       IconButton(
                         key: _sendMenuAnchor,
@@ -2558,6 +2691,46 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     );
   }
 
+  Future<void> _sendCapturedVoiceNote(
+    CapturedVoiceNote note,
+    String chatId,
+    String? profileId,
+    int sessionGeneration,
+  ) async {
+    bool isCurrent() =>
+        _isCurrentChat(chatId) &&
+        (ref.read(selectedChatIdProvider) == null ||
+            ref.read(selectedChatIdProvider) == chatId) &&
+        ref.read(authControllerProvider).activeProfileId == profileId &&
+        ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
+            sessionGeneration;
+    try {
+      if (!isCurrent() || _readingVoiceNote || _uploadingAttachment) return;
+      setState(() {
+        _readingVoiceNote = true;
+        _voiceReadFailed = false;
+        _voiceSendGeneration = null;
+      });
+      final bytes = await note.file.readAsBytes();
+      if (!isCurrent()) return;
+      await _attachAndSend(
+        capturedFile: ChatAttachmentFile(
+          bytes: bytes,
+          name: note.file.name,
+          contentType: note.file.mimeType ?? 'audio/wav',
+        ),
+        voiceDuration: note.duration,
+      );
+    } catch (_) {
+      if (isCurrent()) setState(() => _voiceReadFailed = true);
+    } finally {
+      try {
+        await note.discard();
+      } catch (_) {}
+      if (isCurrent()) setState(() => _readingVoiceNote = false);
+    }
+  }
+
   Future<void> _attachAndSend({
     bool imagesOnly = false,
     bool music = false,
@@ -2588,6 +2761,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     }
     final auth = ref.read(authorizationHeaderProvider);
     if (auth == null) return;
+    _attachmentSessionGeneration = ref
+        .read(authControllerProvider.notifier)
+        .sessionInstallGeneration;
     final operation = ++_attachmentOperation;
     setState(() {
       _uploadingAttachment = true;
@@ -2624,7 +2800,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       if (!_isCurrentAttachmentOperation(operation, chatId)) return;
       if ((music || voiceDuration != null) &&
           uploadBytes.length > 10 * 1024 * 1024) {
-        _showMusicFileRejected();
+        if (voiceDuration != null) {
+          setState(() => _voiceReadFailed = true);
+        } else {
+          _showMusicFileRejected();
+        }
         return;
       }
       await _runAttachmentUpload(
@@ -2717,31 +2897,37 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     if (confirmed is! FilesApiOk<FileMetadataData>) return;
 
     final metadata = confirmed.data;
-    final err = await ref
-        .read(chatRoomControllerProvider(attempt.chatId).notifier)
-        .sendMessage(
-          attempt.voiceDuration == null ? _composer.text : '',
-          attachments: [
-            MessageAttachment(
-              fileId: metadata.fileId,
-              type: attempt.voiceDuration != null
-                  ? 'voice_message'
-                  : attempt.music
-                  ? 'music'
-                  : metadata.fileType,
-              name: metadata.originalName,
-              sizeBytes: metadata.sizeBytes,
-              e2eKeyWire: attempt.e2eKeyWire,
-              durationSeconds: attempt.voiceDuration?.inSeconds,
-            ),
-          ],
-        );
+    final controller = ref.read(
+      chatRoomControllerProvider(attempt.chatId).notifier,
+    );
+    final err = await controller.sendMessage(
+      attempt.voiceDuration == null ? _composer.text : '',
+      attachments: [
+        MessageAttachment(
+          fileId: metadata.fileId,
+          type: attempt.voiceDuration != null
+              ? 'voice_message'
+              : attempt.music
+              ? 'music'
+              : metadata.fileType,
+          name: metadata.originalName,
+          sizeBytes: metadata.sizeBytes,
+          e2eKeyWire: attempt.e2eKeyWire,
+          durationSeconds: attempt.voiceDuration?.inSeconds,
+        ),
+      ],
+    );
     if (!_isCurrentAttachmentOperation(operation, attempt.chatId)) return;
     setState(() {
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
+      if (attempt.voiceDuration != null &&
+          err != null &&
+          controller.canRetryFailedMessage) {
+        _voiceSendGeneration = controller.immediateSendGeneration;
+      }
     });
-    if (err == null) {
+    if (err == null && attempt.voiceDuration == null) {
       _composer.clear();
       final key = _draftKey;
       if (key != null) {
@@ -2749,6 +2935,30 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       }
     }
     _refocusComposer();
+  }
+
+  Future<void> _retryVoiceSend() async {
+    final generation = _voiceSendGeneration;
+    if (generation == null) return;
+    final chatId = widget.chatId;
+    final controller = ref.read(chatRoomControllerProvider(chatId).notifier);
+    final error = await controller.retryFailedMessage(
+      expectedGeneration: generation,
+    );
+    if (!_isCurrentChat(chatId) || _voiceSendGeneration != generation) return;
+    if (error == null || !controller.canRetryFailedMessage) {
+      setState(() => _voiceSendGeneration = null);
+    }
+  }
+
+  void _cancelVoiceSend() {
+    final controller = ref.read(
+      chatRoomControllerProvider(widget.chatId).notifier,
+    );
+    if (_voiceSendGeneration == controller.immediateSendGeneration) {
+      controller.discardFailedMessage();
+    }
+    setState(() => _voiceSendGeneration = null);
   }
 
   void _retainFailedAttachment(
@@ -2806,6 +3016,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
     });
+    if (pending.voiceDuration != null) {
+      _refocusComposer();
+      return;
+    }
     unawaited(_attachAndSend(imagesOnly: imagesOnly, music: pending.music));
   }
 
@@ -2824,7 +3038,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   bool _isCurrentAttachmentOperation(int operation, String chatId) =>
-      operation == _attachmentOperation && _isCurrentChat(chatId);
+      operation == _attachmentOperation &&
+      _isCurrentChat(chatId) &&
+      _attachmentSessionGeneration ==
+          ref.read(authControllerProvider.notifier).sessionInstallGeneration;
 
   String _attachmentFailureMessage(
     AppLocalizations l10n,
