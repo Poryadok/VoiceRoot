@@ -54,6 +54,7 @@ smoke_flutter:
   - test/guest_restrictions_e2e_live_test.dart
   - test/encryption_key_backup_e2e_live_test.dart
   - test/encryption_dm_e2e_live_test.dart
+  - test/profiles_verification_e2e_live_test.dart
   - test/ws_resume_e2e_live_test.dart
   - test/message_delivery_e2e_live_test.dart
   - test/in_app_notifications_e2e_live_test.dart
