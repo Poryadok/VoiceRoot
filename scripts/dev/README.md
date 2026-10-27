@@ -115,7 +115,7 @@ gh workflow run dev-candidate-publish.yml --ref master \
   -f product_sha=31a04a471c604488bedd5b442039dfdf0434f9c3
 ```
 
-This bounded consumer accepts only two reviewed product selections. The default
+This bounded consumer accepts only the reviewed product selections below. The default
 `31a04a471c604488bedd5b442039dfdf0434f9c3` selection builds the eight
 required DEV variants in one serial lane: Web, Admin, Developer Portal, Auth,
 User, Notification, Realtime and the native Space installer. The source checkout
@@ -130,6 +130,17 @@ the default eight-image candidate. Its build labels, embedded JAR/binary source,
 pulled configuration and receipts bind this selected source independently of
 the publisher commit. Fresh builds produce new image/config digests; earlier
 local f194 images and their digests are not substituted or overwritten.
+
+For the frozen `0d75a990dae5d9672f1b13e2ed346f8850e3c036` release qualification
+consumer, the same publish-only workflow selects only `file`. It builds from
+`src/backend/file/Dockerfile` with context `src/backend`, no source build args,
+and a run-specific `file:dev-<product>-<run>-<attempt>` tag. Its dedicated
+BuildKit container is capped at 2 CPU and 4 GiB, with one build in the workflow's
+serial lane. The receipt binds the separate product and publisher checkouts,
+source tree hashes, actual invocation, registry manifest/config digests and
+pulled `/service` ELF hash. The OCI revision label binds the selected product;
+the File binary has no embedded source SHA. This publication is artifact evidence
+only; File schema migration, DEV checks and STAGING acceptance remain separate.
 
 This selection is a fresh candidate. Earlier `4e88e14e` image/package receipts
 remain historical; they do not qualify this commit or replace its new immutable
