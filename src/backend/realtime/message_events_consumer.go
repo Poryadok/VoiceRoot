@@ -261,6 +261,9 @@ func runMessageEventsConsumer(ctx context.Context, hub *wsHub, natsURL, instance
 		return fmt.Errorf("nats connect: %w", err)
 	}
 	defer release()
+	// Every production message consumer uses Notification policy. A disconnected
+	// or unavailable responder fails closed; it never restores the legacy path.
+	hub.setNotificationRouter(natsMessageNotificationRouter{connection: nc})
 
 	js, err := nc.JetStream()
 	if err != nil {
