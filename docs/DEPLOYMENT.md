@@ -603,6 +603,12 @@ Provision cannot auto-resume an existing database; read-only verify requires the
 owning controller's original completed SAME image/source/executable/migrator/
 inventory/target evidence including51, followed by fresh full51 qualification.
 An old50 completed Job or DB-stored seal cannot manufacture that history.
+For Compose's retained source check, the installer recognizes the fixed
+`space_runtime` DML grantee only while that identity remains a non-owner LOGIN
+without elevated role attributes, memberships, schema creation or replication
+parameter authority. Public/unrelated grants, grant options and privileges beyond
+SELECT/INSERT/UPDATE/DELETE remain unavailable. This qualification preserves the
+compiled catalog pins and does not give the runtime login installer authority.
 Full107/307/retry effects,325 fresh catalog observations and original5s/2s budgets
 remain separate mandatory gates; no successor performance PASS is asserted.
 

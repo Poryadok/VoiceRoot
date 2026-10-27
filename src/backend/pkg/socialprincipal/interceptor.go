@@ -81,7 +81,8 @@ func AllowsMethod(target, method string) bool {
 	case "notification":
 		return method == "/voice.user.v1.UserService/GetNotificationRoutingPresence"
 	case "messaging":
-		return method == "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
+		return method == "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence" ||
+			method == "/voice.user.v1.UserService/GetProfileDeletionStates"
 	}
 	return false
 }

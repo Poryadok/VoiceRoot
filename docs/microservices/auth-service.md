@@ -861,6 +861,19 @@ their own evidence.
 
 ### Linked provider verification
 
+#### Callback/return transport v1 (target, not implemented)
+
+The [linked-account transport contract](../todo/client.md#oauth-callbackresume-transport-contract-v1--target)
+defines Auth-owned HTTPS callback processing, durable attempt/staged result,
+provider S256 plus independent client return S256, and authenticated one-time
+finalization. Bind the original access JWT account/profile/`jti`/epoch/expiry;
+refresh or profile/session replacement starts a new attempt. Defaults are
+`PT300S` attempt and `PT60S` result, capped at original access expiry. Provider
+registrations, exact origins and secrets are validated deployment configuration;
+their absence does not block implementing the default-off fixture flow.
+Provider activation and YouTube qualification remain separate. The existing
+unbound `POST .../{provider}/callback` must not bypass this target protocol.
+
 `linked_identities` хранит единственную account/provider identity вместе с owning
 `profile_id` и монотонной `source_revision`. Активную identity нельзя молча перенести на
 другой профиль: V1 требует unlink → link. `verification_source_sync_targets` — durable

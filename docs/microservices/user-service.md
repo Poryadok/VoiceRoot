@@ -487,3 +487,24 @@ Auth publish access to the exact `user.account_deleted` subject and User only
 subscribe/consumer access; the staging and production User migration job has
 applied `000017_account_lifecycle_search_tombstone`; then deploy a canary before
 enabling the consumer. No Compose manifest enables this consumer in PR A.
+
+### Messaging profile deletion-state authority (BE-076)
+
+GetProfileDeletionStates is a read-only Messaging-only method on the existing
+USER_MESSAGING_PRINCIPAL_ mTLS listener (:9096). It requires the exact
+request-bound service:messaging principal (iss=messaging, aud=user, exact
+RPC/hash/request ID), shared Redis replay admission and the existing trusted
+client certificate/JWKS identity configuration. Ordinary User, Social, Auth,
+Notification and Gateway do not expose this authority.
+
+A request contains 1..500 distinct canonical lowercase nonnil profile UUIDs.
+An empty, oversized, duplicate or malformed batch returns INVALID_ARGUMENT
+before store access. The response contains exactly one states entry per
+requested ID in request order. PROFILE_DELETION_STATE_NOT_DELETED means the
+User-owned row exists with deleted_at IS NULL; SOFT_DELETED means its
+deleted_at IS NOT NULL; an absent row is explicitly UNKNOWN. Unspecified
+is never emitted. Privacy, presence, frozen profiles and Auth account eligibility
+(including ACCOUNT_INACTIVE) are not deletion facts. A storage failure returns
+UNAVAILABLE, never a fabricated unknown/deleted result. Messaging compaction
+removes views only for explicit SOFT_DELETED; unknown profiles retain views.
+No cross-service SQL, public route, raw caller marker or fallback lookup exists.
