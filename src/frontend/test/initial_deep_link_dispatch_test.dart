@@ -18,6 +18,115 @@ import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'support/auth_test_overrides.dart';
 
 void main() {
+  for (final phase in [
+    'before callback',
+    'during resolve',
+    'during initial route',
+  ]) {
+    final duringResolve = phase != 'before callback';
+    final initialRoute = phase == 'during initial route';
+    testWidgets(
+      'newer deep link is delivered without another dependency change '
+      '($phase)',
+      (tester) async {
+        const voipChannel = MethodChannel('voice/voip');
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          voipChannel,
+          (_) async => null,
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            voipChannel,
+            null,
+          ),
+        );
+        tester.binding.platformDispatcher.defaultRouteNameTestValue =
+            initialRoute ? '/u/older' : '/';
+        addTearDown(
+          tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+        );
+        final older = parseDeepLinkUrl(
+          initialRoute
+              ? 'https://voice.gg/u/older?'
+              : 'https://voice.gg/u/older',
+        );
+        final newer = parseDeepLinkUrl('https://voice.gg/dm/newer');
+        final firstResolve = Completer<http.Response>();
+        final requested = <String>[];
+        final applied = <DeepLinkTarget>[];
+        final container = ProviderContainer(
+          overrides: [
+            ...guestShellTestOverrides(
+              client: MockClient((request) async {
+                if (request.url.path == '/api/v1/links/resolve') {
+                  requested.add(request.url.queryParameters['url']!);
+                  if (duringResolve && requested.length == 1) {
+                    return firstResolve.future;
+                  }
+                }
+                return http.Response('unavailable', 503);
+              }),
+            ),
+            deepLinkBaseUriProvider.overrideWithValue(
+              Uri.parse('https://voice.gg/'),
+            ),
+            deepLinkNavigatorProvider.overrideWith(
+              (ref) => _RecordingNavigator(
+                ref,
+                applied: applied,
+                release: Future.value(),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        await container.read(voiceMaterialThemeProvider.future);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: const VoiceApp(locale: Locale('en')),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final shell = tester.state<State>(
+          find.byWidgetPredicate(
+            (widget) => widget.runtimeType.toString() == '_AuthenticatedShell',
+          ),
+        );
+        final links = container.read(deepLinkControllerProvider.notifier);
+        if (!initialRoute) {
+          await links.onIncomingLink(older);
+          // Invoke the real lifecycle callback before pumping the queued frame.
+          // ignore: invalid_use_of_protected_member
+          shell.didChangeDependencies();
+        }
+        if (duringResolve) {
+          await tester.pumpAndSettle();
+          expect(requested, [older.rawUrl]);
+          expect(applied, isEmpty);
+        }
+        await links.onIncomingLink(newer);
+        if (duringResolve) {
+          firstResolve.complete(http.Response('unavailable', 503));
+        } else {
+          // Drive the actual lifecycle twice between frames: the older target's
+          // post-frame callback is queued, then a newer delivery arrives.
+          // ignore: invalid_use_of_protected_member
+          shell.didChangeDependencies();
+        }
+        await tester.pumpAndSettle();
+
+        expect(
+          requested,
+          duringResolve ? [older.rawUrl, newer.rawUrl] : [newer.rawUrl],
+        );
+        expect(applied, duringResolve ? [older, newer] : [newer]);
+        expect(container.read(deepLinkControllerProvider).resolved, isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   for (final path in ['/u/vanya', '/dm/profile-2', '/invite/join-me']) {
     for (final overlap in [false, true]) {
       for (final retained in [true, false]) {

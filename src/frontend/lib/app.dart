@@ -243,7 +243,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
       }
       // The authenticated route owns this delivery directly; do not also
       // enqueue it for the resolved-link lifecycle callback.
-      await resolveAndNavigateDeepLink(ref, target);
+      await _navigateDeepLink(target);
     } catch (_) {}
   }
 
@@ -271,11 +271,23 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _resolvedDeepLinkScheduled = false;
-      if (ref.read(deepLinkControllerProvider).resolved == resolved) {
-        ref.read(deepLinkControllerProvider.notifier).clearResolved();
-      }
-      await resolveAndNavigateDeepLink(ref, resolved);
+      // A newer delivery can replace the target while this frame is queued.
+      final current = ref.read(deepLinkControllerProvider).resolved;
+      if (current == null) return;
+      if (_matchesInitialRoute(current)) _initialRouteLinkHandled = true;
+      ref.read(deepLinkControllerProvider.notifier).clearResolved();
+      await _navigateDeepLink(current);
     });
+    // The continuation can queue a delivery while no frame is in progress.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _navigateDeepLink(DeepLinkTarget target) async {
+    try {
+      await resolveAndNavigateDeepLink(ref, target);
+    } finally {
+      if (mounted) _handleResolvedDeepLink();
+    }
   }
 
   bool _matchesInitialRoute(DeepLinkTarget target) {
