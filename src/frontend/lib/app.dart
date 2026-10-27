@@ -25,6 +25,7 @@ import 'theme/voice_layout.dart';
 import 'theme/voice_theme_providers.dart';
 import 'ui/auth/auth_screen.dart';
 import 'ui/call/active_call_panel.dart';
+import 'ui/call/call_mini_bar.dart';
 import 'ui/call/call_error_listener.dart';
 import 'ui/call/incoming_call_overlay.dart';
 import 'ui/call/outgoing_call_overlay.dart';
@@ -63,6 +64,7 @@ import 'ui/shell/navigation_panel.dart';
 import 'ui/shell/side_panel.dart';
 import 'ui/space/space_tree_column.dart';
 import 'ui/version/version_policy_overlay.dart';
+import 'ui/notifications/subscription_reminder_banner.dart';
 
 ThemeData _bootstrapTheme() {
   return ThemeData(
@@ -424,33 +426,57 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                                 : DesktopShellRail(
                                     onOpenSettings: _openSettingsSheet,
                                   ),
-                            navigationChild: NavigationPanel(
-                              collapsed: inSpace,
-                              statusBanner: statusBannerInNavigation
-                                  ? buildReconnectBanner(narrow: narrow)
-                                  : null,
-                              statusBannerAtListEnd:
-                                  statusBannerInNavigation && !narrow,
+                            navigationChild: Column(
+                              children: [
+                                Expanded(
+                                  child: NavigationPanel(
+                                    collapsed: inSpace,
+                                    statusBanner: statusBannerInNavigation
+                                        ? buildReconnectBanner(narrow: narrow)
+                                        : null,
+                                    statusBannerAtListEnd:
+                                        statusBannerInNavigation && !narrow,
+                                  ),
+                                ),
+                                if (!narrow && !inSpace) const CallMiniBar(),
+                              ],
                             ),
                             navigationCollapsed: inSpace,
                             middleChild: inSpace
-                                ? SpaceTreeColumn(
-                                    spaceId: selectedSpaceId,
-                                    selectedChatId: selectedChatId,
-                                    onTextChatSelected:
-                                        shellNav.selectChatInSpace,
+                                ? Column(
+                                    children: [
+                                      Expanded(
+                                        child: SpaceTreeColumn(
+                                          spaceId: selectedSpaceId,
+                                          selectedChatId: selectedChatId,
+                                          onTextChatSelected:
+                                              shellNav.selectChatInSpace,
+                                        ),
+                                      ),
+                                      if (!narrow) const CallMiniBar(),
+                                    ],
                                   )
                                 : null,
                             mainChild: selectedChatId == null
-                                ? chatInbox == 'requests' && !inSpace &&
-                                      navigationSection == NavigationSection.chats
-                                    ? VoiceStatePanel(
-                                        key: const Key('message_requests_detail_hint'),
-                                        title: l10n.chatMessageRequestsTitle,
-                                        message: l10n.chatMessageRequestsEmptyHint,
-                                        icon: Icons.mark_email_unread_outlined,
-                                      )
-                                    : Center(child: Text(l10n.chatRoomSelectPrompt))
+                                ? chatInbox == 'requests' &&
+                                          !inSpace &&
+                                          navigationSection ==
+                                              NavigationSection.chats
+                                      ? VoiceStatePanel(
+                                          key: const Key(
+                                            'message_requests_detail_hint',
+                                          ),
+                                          title: l10n.chatMessageRequestsTitle,
+                                          message:
+                                              l10n.chatMessageRequestsEmptyHint,
+                                          icon:
+                                              Icons.mark_email_unread_outlined,
+                                        )
+                                      : Center(
+                                          child: Text(
+                                            l10n.chatRoomSelectPrompt,
+                                          ),
+                                        )
                                 : ChatRoomPanel(
                                     chatId: selectedChatId,
                                     onBack: narrow ? onBackToChats : null,
@@ -468,6 +494,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                               children: [
                                 const GuestSaveAccountReminderBanner(),
                                 const GuestRestrictedActions(),
+                                const SubscriptionReminderBannerHost(),
                                 if (reconnectBanner.visible &&
                                     selectedChatId == null &&
                                     !statusBannerInNavigation)
@@ -492,6 +519,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                                   editProfileTooltip: l10n.profileEditTooltip,
                                   settingsTooltip: l10n.settingsTooltip,
                                 ),
+                                if (narrow) const CallMiniBar(mobile: true),
                                 if (_GatewayStatusBar.shouldShow(health))
                                   _GatewayStatusBar(asyncHealth: health),
                               ],
@@ -504,7 +532,7 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
                     const MatchmakingMatchOverlayHost(),
                     const MatchRatingOverlayHost(),
                     const OutgoingCallOverlay(),
-                    const SafeArea(child: ActiveCallPanel()),
+                    const SafeArea(child: ActiveCallPanel(shellHosted: true)),
                   ],
                 ),
               ),

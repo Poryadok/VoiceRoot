@@ -19,12 +19,19 @@ type gifObjectStorage interface {
 	PutObject(context.Context, string, string, []byte) error
 }
 
+type gifTrackedObjectStorage interface {
+	PutTrackedObject(context.Context, r2file.TrackedPut, []byte) error
+}
+
 // RunGIFProcessingOnce consumes one durable attempt. It never deletes its own
 // outputs directly: even an ambiguous DB commit or storage response is reconciled
 // using the persisted attempt ownership and cleanup ledger.
 func RunGIFProcessingOnce(ctx context.Context, files *store.FilesStore, objects gifObjectStorage, convert func(context.Context, []byte) (gifproc.Output, error)) (bool, error) {
 	if files == nil || objects == nil {
 		return false, nil
+	}
+	if reconciled, err := files.ReconcileRetiredGIFWritesOnce(ctx); err != nil || reconciled {
+		return reconciled, err
 	}
 	job, err := files.ClaimGIFJob(ctx)
 	if err != nil || job == nil {
@@ -60,11 +67,34 @@ func RunGIFProcessingOnce(ctx context.Context, files *store.FilesStore, objects 
 	}
 	full := gifDescriptor(job.FullKey, "video/mp4", job.Row.ID.String()+".mp4", output.Full)
 	thumb := gifDescriptor(job.ThumbnailKey, "image/webp", job.Row.ID.String()+"-thumbnail.webp", output.Thumbnail)
-	if err = objects.PutObject(attemptCtx, full.Key, full.MIMEType, output.Full); err != nil {
+	put := func(kind string, r *store.Representation, body []byte) error {
+		return objects.PutObject(attemptCtx, r.Key, r.MIMEType, body)
+	}
+	if job.TrackedWrites {
+		writer, ok := objects.(gifTrackedObjectStorage)
+		if !ok {
+			return true, store.ErrTrackedWrite
+		}
+		if err = files.PrepareGIFTrackedWrites(attemptCtx, job, full, thumb); err != nil {
+			return true, err
+		}
+		put = func(kind string, r *store.Representation, body []byte) error {
+			w, err := files.StartTrackedWrite(attemptCtx, r.Key, job.Token)
+			if err != nil {
+				return err
+			}
+			putErr := writer.PutTrackedObject(attemptCtx, r2file.TrackedPut{Key: w.Key, Kind: kind, ContentType: r.MIMEType, ExpectedSHA256: w.ExpectedSHA256, ExpectedSize: w.ExpectedSize}, body)
+			// This records physical custody even if deletion, session loss or
+			// cancellation has already removed publication authority.
+			settleErr := files.SettleTrackedWrite(ctx, w.Key, job.Token, putErr == nil)
+			return errors.Join(putErr, settleErr)
+		}
+	}
+	if err = put("gif_full", full, output.Full); err != nil {
 		_ = files.RetryGIFJob(ctx, job)
 		return true, err
 	}
-	if err = objects.PutObject(attemptCtx, thumb.Key, thumb.MIMEType, output.Thumbnail); err != nil {
+	if err = put("gif_thumbnail", thumb, output.Thumbnail); err != nil {
 		_ = files.RetryGIFJob(ctx, job)
 		return true, err
 	}

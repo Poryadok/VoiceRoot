@@ -984,6 +984,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get callActive => 'Call active';
 
   @override
+  String get callMiniConnected => 'Connected';
+
+  @override
+  String get callMiniReturn => 'Return to call';
+
+  @override
+  String get callMiniParticipant => 'Participant';
+
+  @override
+  String callMiniSpeaking(String name) {
+    return '$name is speaking';
+  }
+
+  @override
+  String callMiniParticipants(int count) {
+    return '$count participants';
+  }
+
+  @override
   String get callTapToEnableAudio => 'Tap to enable incoming audio';
 
   @override
@@ -2296,6 +2315,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAccent => 'Profile accent';
 
   @override
+  String get settingsAccessibilityTitle => 'Accessibility';
+
+  @override
+  String get settingsAccessibilityMotionText => 'Motion and text';
+
+  @override
+  String get settingsAccessibilityVoiceCalls => 'Voice calls';
+
+  @override
+  String get settingsAccessibilityDefaultVoiceMode => 'Default mode';
+
+  @override
   String get settingsReducedMotion => 'Reduced motion';
 
   @override
@@ -2306,6 +2337,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPttKeybindHint => 'Press a key…';
+
+  @override
+  String get settingsPttKeybindDesktopHint => 'Configurable on desktop';
 
   @override
   String get trayQuit => 'Quit';
@@ -2439,6 +2473,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get subscriptionManageBilling => 'Manage subscription';
+
+  @override
+  String get subscriptionGraceReminderPersonal => 'Payment failed';
+
+  @override
+  String subscriptionGraceReminderSpace(String spaceId) {
+    return 'Space Pro payment failed ($spaceId)';
+  }
 
   @override
   String get subscriptionCancel => 'Cancel subscription';
@@ -2592,6 +2634,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String verificationSelectedProfile(String profileId) {
     return 'Selected profile: $profileId';
   }
+
+  @override
+  String get verificationStatusTitle => 'Verification status';
+
+  @override
+  String get verificationVerified => 'Verified';
+
+  @override
+  String get verificationNotVerified => 'Not verified';
+
+  @override
+  String get verificationPendingDnsChallenge => 'DNS challenge pending';
+
+  @override
+  String get verificationPendingDnsDomainLabel => 'Domain';
+
+  @override
+  String get verificationPendingDnsTxtRecordLabel => 'TXT record';
+
+  @override
+  String get verificationPendingDnsExpiresAtLabel => 'Expires';
+
+  @override
+  String get verificationOrganizationUnavailable =>
+      'Organization verification unavailable';
 
   @override
   String get verifiedBadgePersonal => 'Verified';
@@ -3668,6 +3735,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get storyArchiveTitle => 'Story archive';
+
+  @override
+  String get storyArchivePrivate => 'Only you can see this archive';
+
+  @override
+  String get storySessionChanged =>
+      'Your profile or session changed. Reopen this screen to continue.';
 
   @override
   String get storyArchiveEmpty => 'No archived stories';

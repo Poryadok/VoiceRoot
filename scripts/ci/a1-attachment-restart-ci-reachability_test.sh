@@ -34,15 +34,16 @@ grep -Eq '^[[:space:]]*run:[[:space:]]+make[[:space:]]+compose-file-attachment-r
 # The proof must run on the PR's exact head when A1 paths changed; a
 # post-merge-only push cannot establish pre-merge evidence for this slice.
 grep -Fq "github.event_name == 'pull_request'" "$job_file" || fail "${JOB} must run on pull_request exact heads"
-grep -Fq "needs.changes.outputs.a1_e2e == 'true'" "$job_file" || fail "${JOB} must remain A1 path-filtered"
+grep -Fq "needs.changes.outputs.a1_attachment_restart == 'true'" "$job_file" || fail "${JOB} must remain attachment path-filtered on PRs"
+grep -Fq "needs.changes.outputs.a1_e2e == 'true'" "$job_file" || fail "${JOB} must retain master A1 coverage"
 
 awk '
-  /^a1_e2e:[[:space:]]*$/ { capture = 1; next }
+  /^a1_attachment_restart:[[:space:]]*$/ { capture = 1; next }
   capture && /^[^[:space:]][^:]*:/ { exit }
   capture { print }
 ' "$FILTERS" >"$filter_file"
 grep -Eq '^[[:space:]]*-[[:space:]]*scripts/ci/a1-attachment-restart-ci-reachability_test\.sh[[:space:]]*$' "$filter_file" || \
-  fail "a1_e2e must include the attachment CI reachability contract"
+  fail "a1_attachment_restart must include the attachment CI reachability contract"
 
 # Follow actual prerequisite edges without executing test recipes.
 make --no-print-directory -n -C "$ROOT" ci-script-tests >"$make_target_file"

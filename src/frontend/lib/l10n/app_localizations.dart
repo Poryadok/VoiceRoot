@@ -1778,6 +1778,36 @@ abstract class AppLocalizations {
   /// **'Call active'**
   String get callActive;
 
+  /// No description provided for @callMiniConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get callMiniConnected;
+
+  /// No description provided for @callMiniReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to call'**
+  String get callMiniReturn;
+
+  /// No description provided for @callMiniParticipant.
+  ///
+  /// In en, this message translates to:
+  /// **'Participant'**
+  String get callMiniParticipant;
+
+  /// No description provided for @callMiniSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is speaking'**
+  String callMiniSpeaking(String name);
+
+  /// No description provided for @callMiniParticipants.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} participants'**
+  String callMiniParticipants(int count);
+
   /// No description provided for @callTapToEnableAudio.
   ///
   /// In en, this message translates to:
@@ -4130,6 +4160,30 @@ abstract class AppLocalizations {
   /// **'Profile accent'**
   String get settingsAccent;
 
+  /// No description provided for @settingsAccessibilityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility'**
+  String get settingsAccessibilityTitle;
+
+  /// No description provided for @settingsAccessibilityMotionText.
+  ///
+  /// In en, this message translates to:
+  /// **'Motion and text'**
+  String get settingsAccessibilityMotionText;
+
+  /// No description provided for @settingsAccessibilityVoiceCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice calls'**
+  String get settingsAccessibilityVoiceCalls;
+
+  /// No description provided for @settingsAccessibilityDefaultVoiceMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Default mode'**
+  String get settingsAccessibilityDefaultVoiceMode;
+
   /// No description provided for @settingsReducedMotion.
   ///
   /// In en, this message translates to:
@@ -4153,6 +4207,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Press a key…'**
   String get settingsPttKeybindHint;
+
+  /// No description provided for @settingsPttKeybindDesktopHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Configurable on desktop'**
+  String get settingsPttKeybindDesktopHint;
 
   /// No description provided for @trayQuit.
   ///
@@ -4399,6 +4459,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage subscription'**
   String get subscriptionManageBilling;
+
+  /// No description provided for @subscriptionGraceReminderPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment failed'**
+  String get subscriptionGraceReminderPersonal;
+
+  /// No description provided for @subscriptionGraceReminderSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Space Pro payment failed ({spaceId})'**
+  String subscriptionGraceReminderSpace(String spaceId);
 
   /// No description provided for @subscriptionCancel.
   ///
@@ -4675,6 +4747,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Selected profile: {profileId}'**
   String verificationSelectedProfile(String profileId);
+
+  /// No description provided for @verificationStatusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification status'**
+  String get verificationStatusTitle;
+
+  /// No description provided for @verificationVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified'**
+  String get verificationVerified;
+
+  /// No description provided for @verificationNotVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Not verified'**
+  String get verificationNotVerified;
+
+  /// No description provided for @verificationPendingDnsChallenge.
+  ///
+  /// In en, this message translates to:
+  /// **'DNS challenge pending'**
+  String get verificationPendingDnsChallenge;
+
+  /// No description provided for @verificationPendingDnsDomainLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Domain'**
+  String get verificationPendingDnsDomainLabel;
+
+  /// No description provided for @verificationPendingDnsTxtRecordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'TXT record'**
+  String get verificationPendingDnsTxtRecordLabel;
+
+  /// No description provided for @verificationPendingDnsExpiresAtLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires'**
+  String get verificationPendingDnsExpiresAtLabel;
+
+  /// No description provided for @verificationOrganizationUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization verification unavailable'**
+  String get verificationOrganizationUnavailable;
 
   /// No description provided for @verifiedBadgePersonal.
   ///
@@ -6679,6 +6799,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Story archive'**
   String get storyArchiveTitle;
+
+  /// No description provided for @storyArchivePrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you can see this archive'**
+  String get storyArchivePrivate;
+
+  /// No description provided for @storySessionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Your profile or session changed. Reopen this screen to continue.'**
+  String get storySessionChanged;
 
   /// No description provided for @storyArchiveEmpty.
   ///

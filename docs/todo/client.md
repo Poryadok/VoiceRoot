@@ -144,6 +144,8 @@ DoD; see [PLAN.md](../PLAN.md) A6 and G1's unfinished-rich-type limitation.
 - [x] **Auth UI: delete-account** — `SecuritySettingsScreen` confirm+password → `POST /api/v1/auth/delete-account`; guest blocked; logout on success (**Batch 28b**). Restore-account UI deferred.
 - [ ] **Verification OAuth callback and client resume** — Implement the default-off [transport v1 contract](#oauth-callbackresume-transport-contract-v1--target) below across Auth/Gateway/Flutter and prove Web/Windows resume, bound state/PKCE, replay/cancel/expiry and authoritative rereads. Exact registrations/origins/secrets are deployment configuration. YouTube positive membership+verified-channel evidence remains a separate qualification gap; long-upload permission must not grant/revoke a badge. No provider is enabled by this documentation. See [verification.md](../features/verification.md).
 
+- [ ] **Organization verification eligibility and pending challenge readback** — The User/Gateway routes and payloads exist: `GET /api/v1/users/me/verification` returns only effective profile status/badge; organization `POST` starts with `domain` and returns `domain`/`txt_record`; `POST .../check` returns effective status. The settings design exposes the domain field only for Organization accounts, but Auth session type is only `guest|regular`, User Profile has no personal/organization kind, and `CreateProfileRequest.preset` only supports `personal|gaming|work`; Start currently checks profile ownership but does not enforce organization kind. Do not expose Start until an authoritative account/profile kind and eligibility enforcement are defined. GET status does not return the current pending request/domain/TXT/expiry, so pending instructions cannot be restored after leaving/reloading Settings. Define those readback semantics before persisting or presenting a restored pending state; keep organization controls unavailable meanwhile. See [verification.md](../features/verification.md), [user-service.md](../microservices/user-service.md), and [api-gateway.md](../microservices/api-gateway.md).
+
 #### OAuth callback/resume transport contract v1 — target
 
 Tracking: `UIV3-SETTINGS-OAUTH-RETURN-CONTRACT`, related to
@@ -436,6 +438,8 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **A11y: text-scale ×1.5 — расширить smoke** — `shell_text_scale_test.dart`: settings sheet, notification settings, game catalog, story archive; chat list/room remain in `chat_text_scale_test.dart` (Batch 10).
 
+- [ ] **A11y: resolve Accessibility font-scale slider contract** — `screen-controls.md` §30 specifies a 100–200% slider, while `accessibility.md` only promises adaptation to the system text scale. Decide whether the app control overrides or combines with system scaling, plus its default/current value and persistence; until then keep the system `MediaQuery` behavior and do not claim the slider is implemented.
+
 - [x] **A11y: focus return после modal** — `VoiceFocusReturn` + coach-mark `VoiceFocusTrap`; call overlay restores on dispose; `showVoiceBottomSheet` escape restores focus (Batch 10).
 
 - [ ] **A11y: pre-release TalkBack / VoiceOver** — чеклист в [accessibility.md](../features/accessibility.md) §Pre-release; ручная приёмка перед mobile release (**Вы**).
@@ -473,6 +477,15 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 - [x] **Blocked accounts UI** — Social panel Blocked tab; `VoiceFriendsClient` `listBlocked`/`unblockAccount`; gateway `GET/DELETE /api/v1/friends/blocks` — **Batch 24a**.
 - [x] **Outgoing friend request declined label** — `PendingFriendRequest.status` from API; Requests tab shows «Declined» vs «Request pending» for outgoing rows — **Batch 24b**.
 - [ ] **Windows: автоопределение игры** — process list → `game_title` + toggle; 0 кода. Post-MVP рядом с П.17.
+  CL-016: перед реализацией нужен канонический контракт распознавания:
+  источник разрешённых соответствий executable identity → название игры,
+  его владелец/обновление и выбор при нескольких запущенных играх.
+  `presence.md` задаёт список процессов, но не эти соответствия;
+  текущий `GameConfig` каталога содержит genre/platforms/regions/modes без
+  идентификаторов процессов. Имя произвольного процесса или заголовок окна
+  нельзя считать названием игры. Ограничение только foreground-игрой в каноне
+  не задано. Существующая viewer-filtered проекция `game_title` не является
+  источником распознавания процессов.
 - [ ] **E2E fingerprint + key-change banner** — [encryption.md](../features/encryption.md); П.13.
 - [ ] **Shorebird OTA или явный defer** — [updates.md](../features/updates.md).
 - [ ] **Voice: local MP3 recording; ducking via `setVolume`; in-voice overlay без кражи фокуса** — [voice-chat.md](../features/voice-chat.md).

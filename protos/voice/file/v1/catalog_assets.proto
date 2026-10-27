@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package voice.file.v1;
+
+import "voice/chat/v1/chat.proto";
+
+option go_package = "voice.app/voice/file/v1;filev1";
+
+// Protected non-E2E catalog authority protocol 2. Ordinary File APIs retain
+// their ACL. Protocol 1 has no ordered-currentness proof and cannot admit sends.
+service CatalogAssetService {
+  // @voice.security=protected;callers=service:chat
+  rpc ImportCatalogAsset(ImportCatalogAssetRequest) returns (ImportCatalogAssetResponse);
+  // @voice.security=protected;callers=service:messaging
+  rpc ValidateCatalogAsset(ValidateCatalogAssetRequest) returns (ValidateCatalogAssetResponse);
+  // @voice.security=protected;callers=service:messaging
+  rpc LookupCatalogAsset(LookupCatalogAssetRequest) returns (LookupCatalogAssetResponse);
+  // @voice.security=protected;callers=service:chat
+  rpc GetCatalogAssetStatus(GetCatalogAssetStatusRequest) returns (GetCatalogAssetStatusResponse);
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ImportCatalogAssetRequest {
+  // Must be 2; no protocol-1 admission fallback.
+  uint32 protocol_version = 1;
+  string operation_id = 2;
+  string source_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  // Protected internal data, resolved by Chat. Never a public upload parameter.
+  string source_url = 6;
+  string actor_account_id = 7;
+  string actor_profile_id = 8;
+  voice.chat.v1.ChatRef destination_chat = 9;
+  // Opaque Chat-local captures. File also enforces its own actor generations.
+  string chat_account_generation = 10;
+  string chat_profile_generation = 11;
+}
+
+// @voice.unknown_fields=accept_preserve
+message ImportCatalogAssetResponse {
+  string source_id = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  string file_id = 6;
+  // Catalog binding lifecycle; a pending File never proves READY authority.
+  string status = 7;
+  string operation_id = 8;
+  voice.chat.v1.ChatRef destination_chat = 9;
+  string chat_account_generation = 10;
+  string chat_profile_generation = 11;
+  // Positive File-owned admission order in the exact actor-generation selector.
+  // Exact retries retain their original revision; they never advance the head.
+  uint64 selection_revision = 13;
+  // Positive retained selector highwater. Equality alone is insufficient when
+  // the binding status is terminal; successful admission also requires live head.
+  uint64 current_selection_revision = 14;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ValidateCatalogAssetRequest {
+  // Must be 2.
+  uint32 protocol_version = 1;
+  string source_id = 2;
+  string provider = 3;
+  string provider_id = 4;
+  string file_id = 5;
+  string actor_account_id = 6;
+  string actor_profile_id = 7;
+}
+
+// A successful response attests a READY, non-E2E, unexpired catalog GIF only.
+// This is source validation; it grants no destination or viewer permission.
+// @voice.unknown_fields=accept_preserve
+message ValidateCatalogAssetResponse {
+  string source_id = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  string file_id = 6;
+  uint64 object_revision = 7;
+  string intent = 8;
+  string scan_result = 9;
+  string file_type = 10;
+  bytes source_sha256 = 11;
+  bytes delivered_sha256 = 12;
+  int64 delivered_size_bytes = 13;
+  string delivered_mime_type = 14;
+  // Required positive, equal revisions from an authoritative live current head.
+  uint64 selection_revision = 15;
+  uint64 current_selection_revision = 16;
+}
+
+// Server-owned classification. Client attribution does not choose the ACL path.
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message LookupCatalogAssetRequest {
+  // Must be 2, including explicit ordinary-file classification.
+  uint32 protocol_version = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string file_id = 4;
+}
+
+// Unknown/unavailable Files and unauthorized catalog actors return an error.
+// @voice.unknown_fields=accept_preserve
+message LookupCatalogAssetResponse {
+  oneof classification {
+    ValidateCatalogAssetResponse catalog = 1;
+    // True only after finding a real File with no catalog provenance.
+    bool ordinary_file = 2;
+  }
+}
+
+// The public selection identity, without a remote URL or derived source UUID.
+// @voice.unknown_fields=reject
+message CatalogImportOperationSelector {
+  string operation_id = 1;
+  string provider = 2;
+  string provider_id = 3;
+  voice.chat.v1.ChatRef destination_chat = 4;
+}
+
+// @voice.unknown_fields=reject
+message CatalogAssetSelector {
+  string source_id = 1;
+  string provider = 2;
+  string provider_id = 3;
+  string file_id = 4;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message GetCatalogAssetStatusRequest {
+  // Must be 2. Unknown operation is the only fresh-admission path.
+  uint32 protocol_version = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  oneof selector {
+    CatalogImportOperationSelector operation = 4;
+    CatalogAssetSelector asset = 5;
+  }
+}
+
+// Operation lookup precedes resolving a new source, including after response
+// loss and CDN URL rotation. Compacted operations return terminal/unavailable.
+// @voice.unknown_fields=accept_preserve
+message GetCatalogAssetStatusResponse {
+  string source_id = 1;
+  string actor_account_id = 2;
+  string actor_profile_id = 3;
+  string provider = 4;
+  string provider_id = 5;
+  string file_id = 6;
+  string status = 7;
+  // Present with the exact destination only for an operation selector.
+  string operation_id = 8;
+  voice.chat.v1.ChatRef destination_chat = 9;
+  string chat_account_generation = 10;
+  string chat_profile_generation = 11;
+  // Asset selector only: exact-tuple terminal proof, never READY admission.
+  // Both Chat generations may be absent only with this canonical opaque UUID
+  // and status failed/deleted/expired after raw terminal details were erased.
+  // Only this exact asset-cleanup proof may have both selection revisions zero.
+  string terminal_fence_id = 12;
+  // Positive for retained operation and active asset proofs. Exact operation
+  // recovery echoes its original order even after a newer admission supersedes it.
+  uint64 selection_revision = 13;
+  uint64 current_selection_revision = 14;
+}

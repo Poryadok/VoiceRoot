@@ -192,6 +192,11 @@ func main() {
 		}
 		filesStore := store.NewFilesStore(pool)
 		if presigner != nil {
+			pdfCtx, stopPDF := context.WithCancel(context.Background())
+			defer stopPDF()
+			if err := startPDFRuntime(pdfCtx, filesStore, presigner, logger); err != nil {
+				log.Fatalf("PDF runtime: %v", err)
+			}
 			jobs.StartGIFProcessingWorker(context.Background(), filesStore, presigner, logger)
 		}
 		if musicPub, ok := eventPub.(*fileevents.JetStreamPublisher); ok {

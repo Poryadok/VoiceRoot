@@ -516,6 +516,7 @@ and Voice IDs denied while history remains.
 
 ### Subscription
 
+- [ ] **BE-114 canonical matrix decision: reconcile join cap/scope, Free streaming quality and anonymous viewing.** `docs/features/subscription.md` defines 100 Free / 1000 Premium Spaces + group chats combined and 360p / 30fps Free streaming; `docs/microservices/subscription-service.md` instead lists 50 Free joined Spaces and 480p, and alone lists anonymous viewing without its feature semantics. The settled GetLimits parity table is documented in the service contract; do not infer these three JSON entries or a numeric custom-emoji quota. An explicit canon decision must precede their implementation; remaining consumer E2E/offer-manifest parity is still open.
 
 - [ ] **[Subscription] `GetLimits` far below spec — only `file_upload_bytes` + `profile_count`; missing retention, space-join cap, voice quality, cosmetic flags, space voice/tree/emoji limits** — `src/backend/subscription/internal/limits/limits.go`; `docs/microservices/subscription-service.md`; `docs/features/subscription.md`
 - [ ] **[Subscription] `GetLimitsRequest.scope_space` ignored** — `protos/voice/subscription/v1/subscription.proto`; `src/backend/subscription/internal/grpcsvc/subscription.go` (`GetLimits`)

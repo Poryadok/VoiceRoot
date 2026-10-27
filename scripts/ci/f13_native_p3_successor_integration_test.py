@@ -20,6 +20,10 @@ import f13_native_p3_successor as successor
 
 ROOT = Path(__file__).resolve().parents[2]
 BASE = '288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
+# Catalog documentation merged after the v3 documentation authority record.
+# This pin is used only to construct the private historical test fixture.
+CATALOG_DOCUMENT_COMMIT = 'eaa4c1a30921cea1f030ee53de89c71695cbfc87'
+DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 
 
 def git(*args, data=None, env=None):
@@ -41,7 +45,12 @@ class RealGitSuccessorTest(unittest.TestCase):
             legacy.require(authority.documentation is not None, 'v2_fixture_unknown_document_source')
             current = authority.documentation.load_record(ROOT)
             reviewed = next(row['after'] for row in current['projection'] if row['path'] == document)
-            legacy.require(legacy.entry(ROOT, cls.source, document) == reviewed,
+            actual = legacy.entry(ROOT, cls.source, document)
+            catalog = legacy.entry(ROOT, CATALOG_DOCUMENT_COMMIT, document)
+            catalog_ancestor = subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 CATALOG_DOCUMENT_COMMIT, cls.source], capture_output=True).returncode == 0
+            legacy.require(actual == reviewed or (catalog_ancestor and actual == catalog),
                            'v2_fixture_unreviewed_document_source')
             with tempfile.TemporaryDirectory() as directory:
                 env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
@@ -49,16 +58,31 @@ class RealGitSuccessorTest(unittest.TestCase):
                 git('update-index', '--add', '--cacheinfo',
                     expected['mode'] + ',' + expected['oid'] + ',' + document, env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
-        expected_makefile=next(r['entry'] for r in cls.record['context'] if r['path']=='Makefile')
-        if legacy.entry(ROOT,cls.source,'Makefile')!=expected_makefile:
-            current=authority.documentation.load_context_record(ROOT)
-            reviewed=next(r['entry'] for r in current['context'] if r['path']=='Makefile')
-            legacy.require(legacy.entry(ROOT,cls.source,'Makefile')==reviewed,'v2_fixture_unreviewed_makefile')
+        stores = 'docs/DATA_STORES.md'
+        stores_expected = next(row['after'] for row in cls.record['projection'] if row['path'] == stores)
+        if legacy.entry(ROOT, cls.source, stores) != stores_expected:
+            stores_ancestor = subprocess.run(
+                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+                 DATA_STORES_COMMIT, cls.source], capture_output=True).returncode == 0
+            legacy.require(stores_ancestor and legacy.entry(ROOT, cls.source, stores)
+                           == legacy.entry(ROOT, DATA_STORES_COMMIT, stores),
+                           'v2_fixture_unreviewed_stores_source')
             with tempfile.TemporaryDirectory() as directory:
-                env=dict(os.environ,GIT_INDEX_FILE=str(Path(directory)/'index'))
-                git('read-tree',cls.source,env=env)
-                git('update-index','--add','--cacheinfo',expected_makefile['mode']+','+expected_makefile['oid']+',Makefile',env=env)
-                cls.source=cls.commit(git('write-tree',env=env),[cls.source])
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', cls.source, env=env)
+                git('update-index', '--add', '--cacheinfo',
+                    stores_expected['mode'] + ',' + stores_expected['oid'] + ',' + stores, env=env)
+                cls.source = cls.commit(git('write-tree', env=env), [cls.source])
+        # Current generated dependencies can advance independently of v2. Pin
+        # every historical context entry in this private fixture, including its
+        # mode; never relax the verifier or use current bytes as v2 authority.
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+            git('read-tree', cls.source, env=env)
+            entries = ''.join(row['entry']['mode'] + ' ' + row['entry']['oid']
+                              + '\t' + row['path'] + '\n' for row in cls.record['context'])
+            git('update-index', '--index-info', data=entries.encode(), env=env)
+            cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         cls.context_path = next(row['path'] for row in cls.record['context']
                                 if row['path'].startswith('src/backend/voice/internal/store/')
                                 and row['path'].endswith('.go'))
@@ -100,6 +124,11 @@ class RealGitSuccessorTest(unittest.TestCase):
         self.assertIs(verifier, successor)
         self.assertEqual(record, self.record)
 
+    def test_historical_fixture_has_complete_pinned_context(self):
+        for row in self.record['context']:
+            with self.subTest(path=row['path']):
+                self.assertEqual(legacy.entry(ROOT, self.source, row['path']), row['entry'])
+
     def test_projection_drift(self):
         with self.assertRaisesRegex(legacy.Rejected, 'projection_drift'):
             self.qualify(*self.changed('src/backend/voice/main.go'))
@@ -119,9 +148,10 @@ spec=importlib.util.spec_from_file_location('extracted_native',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 b=m.successor.qualify(*sys.argv[2:]);assert b['version']=='NATIVE-P3-SOURCE-v2'
 '''
-        subprocess.run([sys.executable,'-c',code,str(ROOT/'scripts/ci/f13_native_p3_authority.py'),
-                        str(ROOT),BASE,self.source,self.target,'pull_request','refs/pull/875/merge',
-                        self.target,'','master'],cwd='/tmp',check=True,capture_output=True)
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.run([sys.executable,'-c',code,str(ROOT/'scripts/ci/f13_native_p3_authority.py'),
+                            str(ROOT),BASE,self.source,self.target,'pull_request','refs/pull/875/merge',
+                            self.target,'','master'],cwd=directory,check=True,capture_output=True)
 
     def bridge(self, historical_mutation=None):
         spec=importlib.util.spec_from_file_location('successor_f54',ROOT/'scripts/ci/f13_f54_history.py')

@@ -121,6 +121,7 @@ stream role_events role.created role.updated role.deleted role.assigned role.rev
 stream voice_events voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined voice.participant_joined voice.participant_left
 stream matchmaking_events mm.search_started mm.search_cancelled mm.search_nudge mm.search_timeout mm.match_found mm.match_completed mm.rating_submitted mm.player_banned
 stream analytics_events 'analytics.>'
+stream notification_reminder_hints notification.subscription_grace_reminder
 stream_with_max_age user_profile_projection 0 user.search_profile_projection
 echo 'bootstrap realtime streams ready' >&2
 consumer message_events rt_realtime1_msg 'message.>' _INBOX.voice.realtime1.message
@@ -134,3 +135,4 @@ consumer chat_events voice_space_media_chat space.voice_room_access_invalidated 
 consumer role_events voice_space_media_role role.voice_policy_invalidated _INBOX.voice.voice.space_media_role
 consumer voice_events rt_realtime1_voice 'voice.>' _INBOX.voice.realtime1.voice
 consumer matchmaking_events rt_realtime1_matchmaking 'mm.>' _INBOX.voice.realtime1.matchmaking
+consumer notification_reminder_hints rt_realtime1_subscription_reminder notification.subscription_grace_reminder _INBOX.voice.realtime1.subscription_reminder

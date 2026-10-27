@@ -48,7 +48,10 @@ jobs:
       packages: read
     outputs:
       global: ${{ steps.filter.outputs.global }}
-      ci_global: ${{ steps.filter.outputs.ci_global }}
+      ci_global: ${{ steps.scope.outputs.ci_global }}
+      ci_scripts: ${{ steps.filter.outputs.ci_scripts }}
+      nats_renderer: ${{ steps.filter.outputs.nats_renderer }}
+      a1_attachment_restart: ${{ steps.filter.outputs.a1_attachment_restart }}
       history_audit: ${{ steps.history.outputs.required }}
       match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}
       dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}
@@ -66,6 +69,7 @@ jobs:
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
       code: ${{ steps.filter.outputs.code }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
+      docker_go_services: ${{ steps.gomatrix.outputs.docker_go_services }}
       integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
@@ -90,6 +94,18 @@ jobs:
         id: filter
         with:
           filters: .github/ci/path-filters.yml
+          predicate-quantifier: some-with-excludes
+      - name: Resolve PR scope without narrowing master obligations
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CI_GLOBAL: ${{ steps.filter.outputs.ci_global }}
+          CI_SCRIPTS: ${{ steps.filter.outputs.ci_scripts }}
+        run: |
+          if [[ "$EVENT_NAME" != pull_request && "$CI_SCRIPTS" == true ]]; then
+            CI_GLOBAL=true
+          fi
+          echo "ci_global=${CI_GLOBAL}" >> "$GITHUB_OUTPUT"
       - name: Select historical provenance audit
         id: history
         env:
@@ -105,8 +121,12 @@ jobs:
         id: gomatrix
         env:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
           FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
-        run: bash scripts/ci/resolve-go-matrix.sh
+        run: |
+          FILTER_JSON="$(jq --arg value "$CI_GLOBAL" '.ci_global = $value' <<< "$FILTER_JSON")"
+          export FILTER_JSON
+          bash scripts/ci/resolve-go-matrix.sh
       - name: Log in to GHCR (promote manifest check)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@v4
@@ -118,6 +138,7 @@ jobs:
         id: stagingmatrix
         env:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
           GO_SERVICES_JSON: ${{ steps.gomatrix.outputs.go_services }}
           FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
           FILTER_CODE: ${{ steps.filter.outputs.code }}
@@ -126,7 +147,10 @@ jobs:
           STAGING_FORCE_FULL_ROLLOUT: ${{ vars.STAGING_FORCE_FULL_ROLLOUT }}
           MANIFEST_CHECK: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
           VOICE_IMAGE_REGISTRY: ghcr.io/${{ github.repository }}
-        run: bash scripts/ci/resolve-staging-matrix.sh
+        run: |
+          FILTER_JSON="$(jq --arg value "$CI_GLOBAL" '.ci_global = $value' <<< "$FILTER_JSON")"
+          export FILTER_JSON
+          bash scripts/ci/resolve-staging-matrix.sh
 
   ci-skip-gate:
     needs: changes
@@ -251,6 +275,7 @@ jobs:
       (
         needs.changes.outputs.global == 'true' ||
         needs.changes.outputs.ci_global == 'true' ||
+        needs.changes.outputs.ci_scripts == 'true' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
       )
     runs-on: ubuntu-latest
@@ -885,7 +910,7 @@ jobs:
       !cancelled() &&
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
-        (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) ||
+        (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
        (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true'))
     runs-on: ubuntu-latest
     permissions:
@@ -1006,6 +1031,7 @@ jobs:
         run: CGO_ENABLED=1 go test -race ./...
       - name: Docker build context and Dockerfile
         id: dockerctx
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.changes.outputs.docker_go_services), matrix.service)
         shell: bash
         run: |
           S="${{ matrix.service }}"
@@ -1016,8 +1042,9 @@ jobs:
           fi
           echo "file=./src/backend/$S/Dockerfile" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v4
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.changes.outputs.docker_go_services), matrix.service)
       - name: Build ${{ matrix.service }} image (PR verify)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && contains(fromJSON(needs.changes.outputs.docker_go_services), matrix.service)
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.dockerctx.outputs.context }}
@@ -1972,6 +1999,7 @@ jobs:
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
           GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
+          RUN_CI_SCRIPTS: ${{ needs.changes.outputs.ci_scripts }}
           RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
           RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true') }}
           RUN_FLUTTER_ANDROID_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
@@ -1979,10 +2007,10 @@ jobs:
           RUN_FLUTTER_IOS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_A1_E2E: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
           RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && needs.changes.outputs.a1_e2e == 'true' }}
+          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
           RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true') }}
           RUN_GRAFANA_ANALYTICS_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.compose == 'true' }}
-          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.run_pkg == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.compose == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
+          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
           JOB_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.flutter-key-backup-goldens.result }}
           JOB_FLUTTER_ANDROID_SMOKE: ${{ needs.flutter-android-smoke.result }}
           JOB_FLUTTER_WEB_INTEGRATION: ${{ needs.flutter-web-integration.result }}
@@ -2358,8 +2386,14 @@ jobs:
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||
         (
-          (github.event_name == 'pull_request' ||
-            (github.event_name == 'push' && github.ref == 'refs/heads/master')) &&
+          github.event_name == 'pull_request' &&
+          needs.changes.result == 'success' &&
+          (needs.changes.outputs.a1_attachment_restart == 'true' ||
+           needs.changes.outputs.global == 'true' ||
+           needs.changes.outputs.ci_global == 'true')
+        ) ||
+        (
+          github.event_name == 'push' && github.ref == 'refs/heads/master' &&
           needs.changes.result == 'success' &&
           needs.changes.outputs.a1_e2e == 'true'
         )

@@ -886,6 +886,20 @@ class CallController extends StateNotifier<CallState> {
           }
           state = state.copyWith(needsAudioPlaybackUnlock: needsUnlock);
         };
+        if (room is VoiceCallPresentationRoom) {
+          room.onParticipantsChanged = () {
+            if (!mounted ||
+                !identical(_room, room) ||
+                !_isConnectCurrent(connectGeneration, connectRoomId) ||
+                state.session?.matchId != session.matchId ||
+                state.session?.mediaEpoch != session.mediaEpoch) {
+              return;
+            }
+            state = state.copyWith(
+              mediaTracksVersion: state.mediaTracksVersion + 1,
+            );
+          };
+        }
         room.onTracksChanged = () {
           if (!mounted ||
               !_isConnectCurrent(connectGeneration, connectRoomId) ||

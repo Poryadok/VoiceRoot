@@ -86,7 +86,7 @@ if [[ "${EVENT_NAME}" == pull_request ]]; then
   require_job current-diff-contract "${JOB_CURRENT_DIFF_CONTRACT:-skipped}"
 fi
 check_if "${RUN_HISTORY_AUDIT:-false}" voice-history-audit
-check_if "${GLOBAL}" ci-script-tests
+check_if "$(or_true "${GLOBAL}" "${RUN_CI_SCRIPTS:-false}")" ci-script-tests
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" golangci
 check_if "$(or_true "${RUN_PKG}" "${GLOBAL}")" backend-go-pkg
 check_if "$(or_true "${RUN_GO}" "${GLOBAL}")" backend-go

@@ -211,8 +211,8 @@ echo "${gate_block}" | grep -Eq '^      - compose-e2e$' \
   || fail "ci-gate must wait for compose-e2e to finish"
 echo "${gate_block}" | grep -Eq '^      - ci-script-tests$' \
   || fail "ci-gate must require ci-script-tests"
-grep -Fq 'check_if "${GLOBAL}" ci-script-tests' "${REQUIRED_JOBS}" \
-  || fail "ci-gate must require ci-script-tests for global CI-policy paths"
+grep -Fq 'check_if "$(or_true "${GLOBAL}" "${RUN_CI_SCRIPTS:-false}")" ci-script-tests' "${REQUIRED_JOBS}" \
+  || fail "ci-gate must require ci-script-tests for global and scoped CI-policy paths"
 echo "${gate_block}" | grep -Eq '^      - flutter-windows$' \
   || fail "ci-gate must wait for the Windows desktop job"
 echo "${gate_block}" | grep -Fq 'RUN_WINDOWS_DESKTOP:' \
