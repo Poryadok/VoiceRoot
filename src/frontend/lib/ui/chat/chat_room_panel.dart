@@ -56,6 +56,7 @@ import 'scheduled_messages_strip.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
+import 'link_preview.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
@@ -291,6 +292,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _pinnedJumpGeneration = 0;
   String? _shownPinnedMessageId;
   var _highlightedMessageId = null as String?;
+  String? _pendingMessageJumpId;
+  Object? _pendingMessageJumpToken;
+  Timer? _messageHighlightTimer;
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
   _TextSendAttempt? _pendingTextSend;
@@ -308,6 +312,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   @override
   void dispose() {
+    _messageHighlightTimer?.cancel();
     _cancelTextSend();
     _pinnedJumpGeneration++;
     _attachmentOperation++;
@@ -331,6 +336,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _pendingMessageJumpId = null;
+      _pendingMessageJumpToken = null;
+      _messageHighlightTimer?.cancel();
+      _highlightedMessageId = null;
       _cancelTextSend();
       _chatInfoSearchHandoffGeneration++;
       _inChatSearchOpen = false;
@@ -506,6 +515,56 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             null;
       }
     }());
+  }
+
+  void _schedulePendingMessageJump(String messageId) {
+    if (_pendingMessageJumpId == messageId) return;
+    final token = Object();
+    final chatId = widget.chatId;
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    _pendingMessageJumpId = messageId;
+    _pendingMessageJumpToken = token;
+    bool isCancelled() =>
+        !mounted ||
+        widget.chatId != chatId ||
+        !identical(_pendingMessageJumpToken, token) ||
+        ref.read(selectedChatIdProvider) != chatId ||
+        ref.read(authControllerProvider).activeProfileId != profileId ||
+        ref.read(pendingChatMessageScrollProvider(chatId)) != messageId;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (isCancelled()) return;
+        final opened = await _scrollToMessage(
+          messageId,
+          isCancelled: isCancelled,
+        );
+        if (isCancelled()) return;
+        final currentRoom = ref.read(chatRoomControllerProvider(chatId));
+        // Token refresh can replace the initial history during a pending jump.
+        if (!opened && currentRoom.isLoading) return;
+        if (ref.read(pendingChatMessageHighlightProvider(chatId)) ==
+            messageId) {
+          if (opened) {
+            _messageHighlightTimer?.cancel();
+            setState(() => _highlightedMessageId = messageId);
+            _messageHighlightTimer = Timer(const Duration(seconds: 2), () {
+              if (mounted) setState(() => _highlightedMessageId = null);
+            });
+          }
+          ref.read(pendingChatMessageHighlightProvider(chatId).notifier).state =
+              null;
+        }
+        ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
+            null;
+      } finally {
+        if (mounted && identical(_pendingMessageJumpToken, token)) {
+          setState(() {
+            _pendingMessageJumpId = null;
+            _pendingMessageJumpToken = null;
+          });
+        }
+      }
+    });
   }
 
   @override
@@ -905,52 +964,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _unreadCaptured = true;
     }
 
-    ref.listen(pendingChatMessageScrollProvider(widget.chatId), (prev, next) {
-      if (next != null && next.isNotEmpty) {
-        unawaited(
-          _scrollToMessage(next).then((_) {
-            if (!mounted) return;
-            final pending = ref.read(
-              pendingChatMessageScrollProvider(widget.chatId),
-            );
-            if (pending == next) {
-              ref
-                      .read(
-                        pendingChatMessageScrollProvider(
-                          widget.chatId,
-                        ).notifier,
-                      )
-                      .state =
-                  null;
-            }
-          }),
-        );
-      }
-    });
+    // Navigation may publish this request before the room mounts, or while its
+    // first REST page is loading. Observe its current value on every history
+    // update rather than relying on a future provider change.
+    final pendingMessageId = ref.watch(
+      pendingChatMessageScrollProvider(widget.chatId),
+    );
+    if (pendingMessageId != null &&
+        pendingMessageId.isNotEmpty &&
+        activeId != null &&
+        historyBelongsToActiveProfile &&
+        !room.isLoading &&
+        !room.isLoadingOlder &&
+        ref.watch(selectedChatIdProvider) == widget.chatId) {
+      _schedulePendingMessageJump(pendingMessageId);
+    }
 
     ref.listen(pendingPinnedMessageJumpProvider(widget.chatId), (prev, next) {
       if (next == null) return;
       _handlePendingPinnedMessageJump(next);
-    });
-
-    ref.listen(pendingChatMessageHighlightProvider(widget.chatId), (
-      prev,
-      next,
-    ) {
-      if (next != null && next.isNotEmpty) {
-        setState(() => _highlightedMessageId = next);
-        Future<void>.delayed(const Duration(seconds: 2), () {
-          if (mounted && _highlightedMessageId == next) {
-            setState(() => _highlightedMessageId = null);
-          }
-        });
-        ref
-                .read(
-                  pendingChatMessageHighlightProvider(widget.chatId).notifier,
-                )
-                .state =
-            null;
-      }
     });
 
     ref.listen(composerFocusRequestProvider, (prev, next) {
@@ -3447,6 +3479,16 @@ class _MessageBubbleContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
+    final previewUrl =
+        !message.isE2e &&
+            !message.decryptionFailed &&
+            (message.contentType == null ||
+                message.contentType ==
+                    messaging_enums
+                        .MessageContentType
+                        .MESSAGE_CONTENT_TYPE_TEXT)
+        ? linkPreviewUrlFromContent(message.content)
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -3477,6 +3519,11 @@ class _MessageBubbleContent extends StatelessWidget {
           MentionMessageContent(
             content: message.content,
             mentions: message.mentions,
+          ),
+        if (previewUrl != null)
+          LinkPreviewCard(
+            key: ValueKey('message_link_preview_${message.id}'),
+            url: previewUrl,
           ),
         if (message.editedAt != null)
           Text(
