@@ -8,6 +8,7 @@ Credentials and database diagnostics remain memory-only; output is sanitized.
 import argparse
 import json
 import pathlib
+import re
 import secrets
 import subprocess
 import tempfile
@@ -203,10 +204,11 @@ print(json.dumps(calls))
             real_run=subprocess.run;restore_volumes=[]
             def capture_owned_restore_volume(command,*arguments,**options):
                 if (isinstance(command,list) and command[:3]==['docker','rm','-f']
-                        and command[-1].startswith('dimas16-adoption-restore-')):
+                        and re.fullmatch(r'[0-9a-f]{64}',command[-1])):
                     inspected=real_run(['docker','inspect',command[-1]],capture_output=True)
                     if inspected.returncode==0:
                         obj=json.loads(inspected.stdout)[0]
+                        assert obj['Id']==command[-1] and obj['Name'].startswith('/dimas16-adoption-restore-')
                         assert obj['Config']['Labels'].get('voice.test.owner')=='Dimas-16'
                         restore_volumes.extend(m['Name'] for m in obj['Mounts'] if m['Type']=='volume')
                 return real_run(command,*arguments,**options)

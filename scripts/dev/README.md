@@ -185,8 +185,12 @@ python3 scripts/dev/auth_user_adoption.py import-backup --journal /private/opera
 python3 scripts/dev/auth_user_adoption.py run --journal /private/operation
 ```
 
-The verifier checks encrypted copy identity before decryption, restores both
-archives and password-free owner-role metadata into an empty private cluster,
+The verifier checks encrypted copy identity before decryption and binds inspection, execution
+and cleanup to that container's immutable ID. Cleanup requires verified owner
+and private mounts; uncertain creation/ownership retains a private
+`restore-recovery-*.json` receipt and never deletes by the mutable name.
+Successful cleanup also requires the observed anonymous data volumes absent.
+It restores both archives and password-free owner-role metadata into an empty private cluster,
 and compares actual schema/object ownership, default privileges and real
 migration history. Each dump has its own consistent snapshot; this is not a
 cross-service snapshot while apps write. A backup does not authorize restoring

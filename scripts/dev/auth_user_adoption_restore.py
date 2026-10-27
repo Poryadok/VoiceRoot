@@ -36,14 +36,15 @@ def qualify(directory,tools_image,operation,root):
     if not re.fullmatch(r'[0-9a-f]{64}',key):
         raise RuntimeError('backup key custody invalid')
     name='dimas16-adoption-restore-'+uuid.uuid4().hex[:10]
-    password=secrets.token_hex(24); created=False; exits={}; owned_volumes=[]
+    password=secrets.token_hex(24); attempted=False; container_id=None
+    cleanup_authorized=False; exits={}; owned_volumes=[]
     def docker(*args,input=None,env=None,check=True,timeout=90):
         p=subprocess.run(['docker',*args],input=input,capture_output=True,env=env,timeout=timeout)
         if check and p.returncode:
             raise RuntimeError('private Docker restore operation failed')
         return p
     def psql(database,sql):
-        return docker('exec','-i','-e','PGPASSWORD='+password,name,'psql','-h','127.0.0.1',
+        return docker('exec','-i','-e','PGPASSWORD='+password,container_id,'psql','-h','127.0.0.1',
                       '-X','-qAt','-v','ON_ERROR_STOP=1','-U','voice','-d',database,input=sql.encode())
     def decrypt(member):
         path=directory/member
@@ -69,12 +70,17 @@ def qualify(directory,tools_image,operation,root):
         if role_sql.count('CREATE ROLE voice;')!=1:
             raise RuntimeError('expected migration owner restore declaration missing')
         role_sql=role_sql.replace('CREATE ROLE voice;','-- existing disposable migration owner')
-        docker('run','-d','--name',name,'--network','none','--label','voice.test.owner=Dimas-16',
+        attempted=True
+        result=docker('run','-d','--name',name,'--network','none','--label','voice.test.owner=Dimas-16',
             '--memory','512m','--cpus','1','-e','POSTGRES_USER=voice','-e','POSTGRES_PASSWORD='+password,
             'postgres:16-alpine','-c','cluster_name=voice-adoption-private-restore')
-        created=True
-        inspected=json.loads(docker('inspect',name).stdout)[0]
-        if inspected.get('Config',{}).get('Labels',{}).get('voice.test.owner')!='Dimas-16':
+        returned_id=result.stdout.decode().strip()
+        if not re.fullmatch(r'[0-9a-f]{64}',returned_id):
+            raise RuntimeError('restore fixture creation identity unknown')
+        container_id=returned_id
+        inspected=json.loads(docker('inspect',container_id).stdout)[0]
+        if (inspected.get('Id')!=container_id or
+                inspected.get('Config',{}).get('Labels',{}).get('voice.test.owner')!='Dimas-16'):
             raise RuntimeError('owned restore fixture identity changed')
         # No host/named/volumes-from mounts are supplied when creating this
         # fresh container. PostgreSQL's image VOLUME is therefore anonymous
@@ -82,8 +88,9 @@ def qualify(directory,tools_image,operation,root):
         if any(m['Type']!='volume' for m in inspected.get('Mounts',[])):
             raise RuntimeError('unexpected shared restore fixture mount')
         owned_volumes=[m['Name'] for m in inspected.get('Mounts',[]) if m['Type']=='volume']
+        cleanup_authorized=True
         for _ in range(80):
-            p=docker('exec','-e','PGPASSWORD='+password,name,'psql','-h','127.0.0.1','-X','-qAt',
+            p=docker('exec','-e','PGPASSWORD='+password,container_id,'psql','-h','127.0.0.1','-X','-qAt',
                      '-U','voice','-d','postgres','-c','SELECT 1',check=False)
             if p.returncode==0:
                 break
@@ -93,7 +100,7 @@ def qualify(directory,tools_image,operation,root):
         for db in ('auth_db','user_db'):
             psql('postgres','CREATE DATABASE '+db+' OWNER voice;')
             archive=decrypt(db+'.enc')
-            docker('exec','-i','-e','PGPASSWORD='+password,name,'pg_restore','-h','127.0.0.1','-U','voice',
+            docker('exec','-i','-e','PGPASSWORD='+password,container_id,'pg_restore','-h','127.0.0.1','-U','voice',
                    '--exit-on-error','--dbname='+db,input=archive)
             exits[db]=0
         # Get the exact verifier queries from the reviewed operator package,
@@ -112,8 +119,19 @@ def qualify(directory,tools_image,operation,root):
                 'postgres_major':16,'verifier_sha256':hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
                 'tools_image':tools_image,'fixture_cleanup':False}
     finally:
-        if created:
-            result=docker('rm','-f','-v',name,check=False)
+        if attempted and not cleanup_authorized:
+            # Creation may have succeeded despite a lost response. The name is
+            # only a recovery hint, never authority to delete a replacement.
+            recovery=directory/('restore-recovery-'+uuid.uuid4().hex+'.json')
+            fd=os.open(recovery,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+            with os.fdopen(fd,'w') as stream:
+                json.dump({'operation':operation,'container_name_hint':name,
+                    'container_id':container_id,'cleanup_authorized':False,
+                    'action':'Inspect exact creation identity and ownership; no automatic name cleanup'},stream)
+                stream.flush();os.fsync(stream.fileno())
+            raise RuntimeError('restore fixture ownership unverified; private recovery receipt retained')
+        if cleanup_authorized:
+            result=docker('rm','-f','-v',container_id,check=False)
             if result.returncode:
                 raise RuntimeError('owned restore fixture cleanup incomplete')
             # Successful daemon reads distinguish actual absence from a
