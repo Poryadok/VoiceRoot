@@ -31,7 +31,7 @@ The actor is Dimas-16. The actual adoption task must be owned/assigned to that
 actor in `dev_ready_for_deploy` or `dev_deploying`, without pending impact review.
 Use the supported TTenrec resource protocol to reconcile and claim DEV for that
 task and the exact candidate. Do not hold the resource while waiting on builds,
-source CI or review. The tool requires the actual held `preflight` phase and
+source CI or review. The tool requires the actual held `prepare` phase and
 fresh check API; it never claims, transfers, unlocks another owner, or releases
 the resource itself.
 
@@ -54,7 +54,7 @@ resource receipt. Placeholder values below are intentionally not executable:
     "claim": "ACTUAL_CLAIM",
     "generation": 0,
     "window": "ACTUAL_WINDOW",
-    "candidate": "ACTUAL_CANDIDATE"
+    "candidate_sha256": "CANONICAL_SHA256_OF_ACTUAL_TYPED_CANDIDATE"
   }
 }
 ```
@@ -62,6 +62,14 @@ resource receipt. Placeholder values below are intentionally not executable:
 The plan review alone is not a frozen executable-source review. Supply the actual
 independent reviewer result. The binding is evidence custody, not an authenticated
 identity or a replacement for live tracker/resource gates.
+
+`candidate_sha256` binds the complete actual TTenrec `ResourceVersion` object
+(including its known state, immutable material and evidence). Compute it with
+the existing `auth_user_adoption_runtime.digest` helper: SHA-256 of UTF-8
+`json.dumps(card['candidate'], sort_keys=True, separators=(',', ':'))`, with
+Python's default ASCII escaping. It is not a candidate name/version string and
+does not replace the server's typed candidate. The retained test fixture is
+historical shape evidence, never authority to reuse its old claim or pins.
 
 Run on the authorized Linux controller through the established RTK/SSH wrapper:
 

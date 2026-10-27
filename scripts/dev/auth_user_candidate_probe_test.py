@@ -10,11 +10,21 @@ from auth_user_adoption import RecoveryRequired
 import auth_user_candidate_probe as probe
 
 
+def model_card():
+    captured=json.loads((pathlib.Path(__file__).parent/'testdata/auth-user-probe-resource-prepare.json').read_text())['card']
+    captured.update(claim='claim',generation=2,window='window',revision=42)
+    return captured
+
+
+def resource_binding(card):
+    return {**{key:card[key] for key in ('claim','generation','window')},'candidate_sha256':probe.digest(card['candidate'])}
+
+
 class MemoryJournal:
     def __init__(self):
         self.state={'intent':{'protocol':probe.PROTOCOL,'operation':'a'*24,'fingerprint':'a'*64,
             'binding':{'probe_source':'b'*40},'baseline':{'unit_frame':True},
-            'resource':{'claim':'claim','generation':2,'window':'window','candidate':'candidate'}},'steps':{}}
+            'resource':resource_binding(model_card())},'steps':{}}
         self.saved=[]
     def save(self):self.saved.append(copy.deepcopy(self.state))
 
@@ -36,6 +46,7 @@ class FakeKube:
             if body['kind']=='Job':
                 result['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':'uid-Job'}}
                 result['spec']['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']='uid-Job'
+                result['spec']['template']['metadata']['creationTimestamp']=None
             created_reply=copy.deepcopy(result)
             if '--dry-run=server' not in args:
                 if self.auto_finish and body['kind']=='Pod':
@@ -70,6 +81,37 @@ class FakeKube:
 
 
 class CandidateContractTest(unittest.TestCase):
+    def test_actual_retained_prepare_card_and_typed_version_can_prepare(self):
+        fixture=json.loads((pathlib.Path(__file__).parent/'testdata/auth-user-probe-resource-prepare.json').read_text())
+        card=fixture['card'];self.assertTrue(fixture['provenance']['historical_only'])
+        self.assertEqual(card['phase'],'prepare');self.assertIsInstance(card['candidate'],dict)
+        self.assertEqual(len(card['candidate']['images']),49)
+        binding={'protocol':probe.PROTOCOL,'candidate_source':probe.PRODUCT,'namespace_uid':probe.NAMESPACE_UID,
+            'probe_source':'b'*40,'review':{'reviewer':'Dimas-8','source_sha':'b'*40,'fingerprint':'a'*64,'evidence':'http://tracker/review'},
+            'resource':{k:card[k] for k in ('claim','generation','window')}}
+        binding['resource']['candidate_sha256']=probe.digest(card['candidate'])
+        with tempfile.TemporaryDirectory() as folder,patch.object(probe,'probe_fingerprint',return_value='a'*64),\
+             patch.object(probe,'probe_baseline',return_value={'same':True}):
+            result=probe.prepare_probe(pathlib.Path(folder)/'private',binding,FakeKube(),resource=lambda:card)
+            self.assertEqual(result['result'],'PREPARED')
+        bad=copy.deepcopy(card);bad['candidate']='invented-version-label'
+        with tempfile.TemporaryDirectory() as folder,patch.object(probe,'probe_fingerprint',return_value='a'*64):
+            with self.assertRaises(RecoveryRequired):probe.prepare_probe(pathlib.Path(folder)/'private',binding,FakeKube(),resource=lambda:bad)
+
+    def test_realistic_job_null_creation_timestamp_default_is_normalized_only_when_null(self):
+        body=probe.deadline_job('a'*24);actual=copy.deepcopy(body)
+        actual['metadata'].update(uid='job',resourceVersion='1')
+        actual['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':'job'}}
+        actual['spec']['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']='job'
+        actual['spec']['template']['metadata']['creationTimestamp']=None
+        probe.admitted_job(body,actual)
+        for metadata in ({'creationTimestamp':'2026-10-27T00:00:00Z'},{'annotations':{'injected':'true'}}):
+            bad=copy.deepcopy(actual);bad['spec']['template']['metadata'].update(metadata)
+            with self.assertRaises(RecoveryRequired):probe.admitted_job(body,bad)
+        bad=copy.deepcopy(actual)
+        bad['spec']['template']['spec']['containers'].append({'name':'injected','image':'unknown','terminationMessagePath':'/dev/termination-log'})
+        with self.assertRaises(RecoveryRequired):probe.admitted_job(body,bad)
+
     def test_public_health_requires_fixed_verified_route_and_status_without_retaining_body(self):
         class Response:
             status=200
@@ -198,12 +240,11 @@ class CandidateContractTest(unittest.TestCase):
         binding={'protocol':'voice-auth-user-node-probe-v1','candidate_source':'f1946355a084bed4c62a602ec1dc04e2d57e52ee',
             'namespace_uid':probe.NAMESPACE_UID,'probe_source':'b'*40,
             'review':{'reviewer':'Dimas-8','source_sha':'b'*40,'fingerprint':'a'*64,'evidence':'http://tracker/review'},
-            'resource':{'claim':'claim','generation':2,'window':'window','candidate':'candidate'}}
+            'resource':resource_binding(model_card())}
         def forbidden():raise AssertionError('source mismatch must precede live reads')
         with tempfile.TemporaryDirectory() as folder,patch.object(probe,'probe_fingerprint',return_value='c'*64):
             with self.assertRaises(RecoveryRequired):probe.prepare_probe(pathlib.Path(folder)/'private',binding,FakeKube(),resource=forbidden)
-        card=dict(binding['resource'],state='held',owner='Dimas-16',phase='preflight',
-            tasks=['A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION'])
+        card=model_card()
         with tempfile.TemporaryDirectory() as folder,patch.object(probe,'probe_fingerprint',return_value='a'*64),\
              patch.object(probe,'probe_baseline',return_value={'unchanged':True}):
             result=probe.prepare_probe(pathlib.Path(folder)/'private',binding,FakeKube(),resource=lambda:card,clock=lambda:100)
@@ -213,24 +254,24 @@ class CandidateContractTest(unittest.TestCase):
             self.assertEqual(state['intent']['expires_at'],1000)
 
     def test_window_guard_rechecks_resource_expiry_fingerprint_and_original_baseline(self):
-        journal=MemoryJournal();card={'state':'held','owner':'Dimas-16','phase':'preflight',
-            'tasks':['A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION'],'claim':'claim','generation':2,'window':'window','candidate':'candidate'}
-        baseline={'unchanged':True};journal.state['intent'].update(resource=copy.deepcopy(card),
+        journal=MemoryJournal();card=model_card()
+        baseline={'unchanged':True};journal.state['intent'].update(resource=resource_binding(card),
             fingerprint='approved',baseline=baseline,prepared_at=100,expires_at=1000)
         with patch.object(probe,'probe_fingerprint',return_value='approved'),patch.object(probe,'probe_baseline',return_value=baseline):
             guard=probe.WindowGuard(journal,FakeKube(),resource=lambda:copy.deepcopy(card),clock=lambda:900)
             guard()
-            for fault in ('expired','source','baseline','claim','owner','phase'):
+            for fault in ('expired','source','baseline','claim','owner','phase','candidate'):
                 with self.subTest(fault=fault):
                     if fault=='expired':guard.clock=lambda:1001
                     if fault=='claim':card['claim']='other'
                     if fault=='owner':card['owner']='other'
                     if fault=='phase':card['phase']='deploy'
+                    if fault=='candidate':card['candidate']['evidence']='Changed typed candidate evidence'
                     context=(patch.object(probe,'probe_fingerprint',return_value='changed') if fault=='source' else
                              patch.object(probe,'probe_baseline',return_value={'changed':True}) if fault=='baseline' else
                              patch.object(probe,'probe_fingerprint',return_value='approved'))
                     with context,self.assertRaises(RecoveryRequired):guard()
-                    guard.clock=lambda:900;card.update(claim='claim',owner='Dimas-16',phase='preflight')
+                    guard.clock=lambda:900;card.clear();card.update(model_card())
 
     def test_observation_is_bound_to_current_uid_and_fixed_hash_command(self):
         controller,journal,kube,calls=self.controller();controller.acquire_lock();controller.create_artifact('user',[])
@@ -356,9 +397,8 @@ class CandidateContractTest(unittest.TestCase):
         with self.assertRaises(RecoveryRequired):controller.reconcile_creation('user')
 
     def test_recovery_window_refresh_keeps_original_intent_and_requires_fresh_same_claim(self):
-        journal=MemoryJournal();card={'state':'held','owner':'Dimas-16','phase':'preflight','revision':42,
-            'tasks':['A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION'],'claim':'claim','generation':2,'window':'window','candidate':'candidate'}
-        journal.state['intent'].update(resource=copy.deepcopy(card),fingerprint='approved',baseline={'same':True},prepared_at=100,expires_at=1000)
+        journal=MemoryJournal();card=model_card()
+        journal.state['intent'].update(resource=resource_binding(card),fingerprint='approved',baseline={'same':True},prepared_at=100,expires_at=1000)
         original=copy.deepcopy(journal.state['intent'])
         with patch.object(probe,'probe_fingerprint',return_value='approved'),patch.object(probe,'probe_baseline',return_value={'same':True}):
             guard=probe.WindowGuard(journal,FakeKube(),resource=lambda:copy.deepcopy(card),clock=lambda:1001)

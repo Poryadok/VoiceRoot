@@ -46,6 +46,14 @@ def probe_resource_card():
     return card
 
 
+def candidate_projection(candidate):
+    # TT validates ResourceVersion material at acquisition. Bind the complete
+    # typed server object (state/commit/images/deployment/evidence), not a
+    # locally invented version label or a second partial schema.
+    require(isinstance(candidate,dict) and candidate.get('state')=='known','actual typed known ResourceVersion candidate required')
+    return digest(candidate)
+
+
 def prepare_probe(directory,binding,kube,resource=None,clock=time.time):
     require(isinstance(binding,dict) and set(binding)=={'protocol','candidate_source','namespace_uid','probe_source','review','resource'},
             'probe binding fields invalid')
@@ -60,14 +68,17 @@ def prepare_probe(directory,binding,kube,resource=None,clock=time.time):
             review['evidence'].startswith(('http://','https://')),
             'actual independently frozen probe review binding absent or source changed')
     expected=binding['resource']
-    require(isinstance(expected,dict) and set(expected)=={'claim','generation','window','candidate'} and
+    require(isinstance(expected,dict) and set(expected)=={'claim','generation','window','candidate_sha256'} and
             type(expected['generation']) is int and expected['generation']>0 and all(
-                isinstance(expected[key],str) and 0<len(expected[key])<=200 for key in ('claim','window','candidate')),
+                isinstance(expected[key],str) and 0<len(expected[key])<=200 for key in ('claim','window')) and
+            isinstance(expected['candidate_sha256'],str) and re.fullmatch(r'[0-9a-f]{64}',expected['candidate_sha256']),
             'actual resource claim/generation/window/candidate binding required')
     resource=resource or probe_resource_card;card=resource()
-    require(card.get('state')=='held' and card.get('owner')=='Dimas-16' and card.get('phase')=='preflight' and
+    require(card.get('state')=='held' and card.get('owner')=='Dimas-16' and card.get('phase')=='prepare' and
             card.get('tasks')==['A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION'] and
-            all(card.get(key)==value for key,value in expected.items()),'actual DEV preflight claim does not match binding')
+            all(card.get(key)==expected[key] for key in ('claim','generation','window')) and
+            candidate_projection(card.get('candidate'))==expected['candidate_sha256'],
+            'actual DEV prepare claim does not match binding')
     require(not kube.call('get','configmap',LOCK,'--ignore-not-found=true','-o','json'),'common updater lock already held')
     baseline=probe_baseline(kube);now=clock()
     intent={'protocol':PROTOCOL,'operation':secrets.token_hex(12),'resource':copy.deepcopy(expected),
@@ -182,10 +193,11 @@ class WindowGuard:
         intent=self.journal.state['intent']
         require(probe_fingerprint()==intent['fingerprint'],'approved probe source changed')
         card=self.resource();expected=intent['resource']
-        require(card.get('state')=='held' and card.get('owner')=='Dimas-16' and card.get('phase')=='preflight' and
-                card.get('tasks')==['A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION'],'actual DEV preflight custody absent')
-        for key in ('claim','generation','window','candidate'):
+        require(card.get('state')=='held' and card.get('owner')=='Dimas-16' and card.get('phase')=='prepare' and
+                card.get('tasks')==['A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION'],'actual DEV prepare custody absent')
+        for key in ('claim','generation','window'):
             require(card.get(key)==expected.get(key),'DEV claim/window/candidate changed')
+        require(candidate_projection(card.get('candidate'))==expected.get('candidate_sha256'),'actual typed DEV candidate changed')
         lock=self.kube.call('get','configmap',LOCK,'--ignore-not-found=true','-o','json')
         record=self.journal.state.get('probe_lock')
         releasing=bool(self.journal.state.get('probe_finish_pending') or self.journal.state.get('probe_abort_pending'))
@@ -351,6 +363,8 @@ def admitted_job(intended,actual):
     for key,value in generated.items():
         if key in labels:require(labels.pop(key)==value,'deadline controller label changed')
     expected_template=intended['spec']['template']
+    if 'creationTimestamp' in template.get('metadata',{}):
+        require(template['metadata'].pop('creationTimestamp') is None,'non-null deadline template creation timestamp injected')
     require(template.get('metadata')==expected_template['metadata'],'deadline template metadata injected')
     pod={'apiVersion':'v1','kind':'Pod','metadata':{'namespace':'voice-dev','name':'template',
          'labels':expected_template['metadata']['labels']},'spec':expected_template['spec']}
