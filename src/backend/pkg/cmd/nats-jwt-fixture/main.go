@@ -14,6 +14,7 @@ import (
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
 	"gopkg.in/yaml.v3"
+	"voice/backend/pkg/notificationrouting"
 )
 
 var serviceNames = []string{"analytics", "auth", "bot", "chat", "file", "gateway", "matchmaking", "messaging", "moderation", "notification", "realtime", "role", "search", "social", "space", "story", "subscription", "user", "voice"}
@@ -81,6 +82,9 @@ func validateACL(acl aclDocument) error {
 			return fmt.Errorf("ACL service %s: %w", name, err)
 		}
 		for _, subject := range grant.Publish {
+			if subject == notificationrouting.ReplyPrefix+">" && name != "notification" {
+				return fmt.Errorf("ACL service %s may not publish routing replies", name)
+			}
 			if !strings.HasPrefix(subject, "$JS.API.") {
 				continue
 			}
@@ -106,6 +110,9 @@ func validateACL(acl aclDocument) error {
 		return fmt.Errorf("ACL bootstrap: %w", err)
 	}
 	for _, subject := range acl.Bootstrap.Publish {
+		if subject == notificationrouting.ReplyPrefix+">" {
+			return errors.New("bootstrap may not publish routing replies")
+		}
 		if !strings.HasPrefix(subject, "$JS.API.") {
 			continue
 		}
@@ -157,6 +164,9 @@ func validateGrant(grant serviceACL) error {
 // viable user grant: the client cannot ACK a neighbouring durable or access
 // the JetStream management API.
 func safePublishSubject(subject string) bool {
+	if subject == notificationrouting.ReplyPrefix+">" {
+		return true
+	}
 	if subject == "" || strings.ContainsAny(subject, " \t\r\n*") || subject == "$JS.API.>" {
 		return false
 	}

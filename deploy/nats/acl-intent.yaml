@@ -143,6 +143,7 @@ services:
     publish:
       - notification.subscription_grace_reminder
       - $JS.API.STREAM.INFO.notification_reminder_hints
+      - _INBOX.voice.realtime.notification.>
       - analytics.notification.push_sent
       - $JS.API.STREAM.INFO.analytics_events
       - $JS.API.CONSUMER.INFO.message_events.notif_msg_v2
@@ -160,6 +161,7 @@ services:
       - $JS.ACK.subscription_events.notif_subscription.>
       - $JS.ACK.moderation_events.notif_mod.>
     subscribe:
+      - notification.routing.message.v1
       - _INBOX.voice.notification.>
       - _INBOX.voice.notification.message
       - _INBOX.voice.notification.matchmaking
@@ -173,6 +175,7 @@ services:
     publish:
       - $JS.API.CONSUMER.INFO.notification_reminder_hints.rt_realtime1_subscription_reminder
       - $JS.ACK.notification_reminder_hints.rt_realtime1_subscription_reminder.>
+      - notification.routing.message.v1
       - message.delivery_ack
       - $JS.API.STREAM.INFO.message_events
       - $JS.API.CONSUMER.INFO.message_events.rt_realtime1_msg
