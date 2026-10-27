@@ -11,9 +11,9 @@ import 'package:voice_frontend/routing/deep_link_parser.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/deep_link_navigation.dart';
-import 'package:voice_frontend/state/shared_media_providers.dart';
 
 import '../test/support/auth_test_overrides.dart';
+import '../test/support/deep_link_message_fixture.dart';
 import '../test/support/voice_test_theme.dart';
 
 /// P3.1 A3 — Android emulator driver (custom scheme + https App Link URL shape).
@@ -50,9 +50,11 @@ void main() {
       await _pumpShellReady(tester);
 
       expect(container.read(selectedChatIdProvider), 'emu-chat');
-      expect(
-        container.read(pendingChatMessageScrollProvider('emu-chat')),
-        'emu-msg',
+      await expectDeepLinkMessageVisible(
+        tester,
+        container: container,
+        chatId: 'emu-chat',
+        messageId: 'emu-msg',
       );
     });
 
@@ -80,6 +82,10 @@ Future<ProviderContainer> _pumpAndroidShell(WidgetTester tester) async {
             client: MockClient((_) async => throw UnimplementedError()),
           ),
           connectivityWatcherProvider.overrideWith((ref) {}),
+          deepLinkMessageHistoryOverride(
+            chatId: 'emu-chat',
+            messageId: 'emu-msg',
+          ),
         ],
       ),
       child: const VoiceApp(locale: Locale('en')),

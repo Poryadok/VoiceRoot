@@ -7,10 +7,11 @@ import 'package:voice_frontend/app.dart';
 import 'package:voice_frontend/routing/deep_link_parser.dart';
 import 'package:voice_frontend/shell/three_column_shell.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/deep_link_navigation.dart';
-import 'package:voice_frontend/state/shared_media_providers.dart';
 
 import '../test/support/auth_test_overrides.dart';
+import '../test/support/deep_link_message_fixture.dart';
 import '../test/support/voice_test_theme.dart';
 
 /// deep-links/platforms (docs/features/deep-links.md): Chrome/web integration — deep link navigates to conversation.
@@ -32,6 +33,11 @@ void main() {
             ...guestShellTestOverrides(
               client: MockClient((_) async => throw UnimplementedError()),
             ),
+            connectivityWatcherProvider.overrideWith((ref) {}),
+            deepLinkMessageHistoryOverride(
+              chatId: 'integration-chat',
+              messageId: 'integration-msg',
+            ),
           ],
         ),
         child: const VoiceApp(locale: Locale('en')),
@@ -39,17 +45,21 @@ void main() {
     );
     await _pumpShellReady(tester);
 
-    await container.read(deepLinkNavigatorProvider).apply(
-      parseDeepLinkUrl(
-        'https://voice.gg/ch/integration-chat/m/integration-msg',
-      ),
-    );
+    await container
+        .read(deepLinkNavigatorProvider)
+        .apply(
+          parseDeepLinkUrl(
+            'https://voice.gg/ch/integration-chat/m/integration-msg',
+          ),
+        );
     await _pumpShellReady(tester);
 
     expect(container.read(selectedChatIdProvider), 'integration-chat');
-    expect(
-      container.read(pendingChatMessageScrollProvider('integration-chat')),
-      'integration-msg',
+    await expectDeepLinkMessageVisible(
+      tester,
+      container: container,
+      chatId: 'integration-chat',
+      messageId: 'integration-msg',
     );
 
     expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
