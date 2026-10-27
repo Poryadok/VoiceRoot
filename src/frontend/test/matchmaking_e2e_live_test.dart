@@ -39,7 +39,10 @@ void main() {
     final profileA = await _profileId(client, base, tokenA);
     final profileB = await _profileId(client, base, tokenB);
 
-    final gameId = await _findGameId(client, base, tokenA, 'MM Duo Live');
+    const composeFixtureId = String.fromEnvironment('VOICE_COMPOSE_MM_ACCEPT_GAME_ID');
+    final gameId = composeFixtureId.isNotEmpty
+        ? composeFixtureId
+        : await _findGameId(client, base, tokenA, 'MM Duo Live');
     const criteria = '{"region":"eu"}';
 
     final sessionA = await _startSearch(client, base, tokenA, gameId, criteria);
