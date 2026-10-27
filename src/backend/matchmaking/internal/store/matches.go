@@ -1225,6 +1225,9 @@ func (s *MatchStore) CompleteMatchLeaveWithOperation(ctx context.Context, matchI
 		return Match{}, false, err
 	}
 	if completedNow {
+		if err := persistCompletedMatchSearchReleasesTx(ctx, tx, m); err != nil {
+			return Match{}, false, err
+		}
 		if err := persistMatchSquadTeardownIntentTx(ctx, tx, m); err != nil {
 			return Match{}, false, err
 		}
@@ -1233,6 +1236,34 @@ func (s *MatchStore) CompleteMatchLeaveWithOperation(ctx context.Context, matchI
 		return Match{}, false, err
 	}
 	return m, completedNow, nil
+}
+
+// Completion retains matched rows for history while atomically retiring their
+// queue reservations. The terminal outbox worker retries these exact session
+// generations; Redis releases only a lock still owned by that original session.
+func persistCompletedMatchSearchReleasesTx(ctx context.Context, tx pgx.Tx, match Match) error {
+	sessions, err := loadMatchSessionsForUpdate(ctx, tx, match.ID)
+	if err != nil {
+		return err
+	}
+	for _, sess := range sessions {
+		if sess.Status != SessionStatusMatched {
+			continue
+		}
+		updated, err := scanSession(tx.QueryRow(ctx, `
+			UPDATE search_sessions
+			SET recovery_generation = recovery_generation + 1, updated_at = clock_timestamp()
+			WHERE id = $1 AND match_id = $2 AND status = $3
+			RETURNING `+sessionSelectCols+`
+		`, sess.ID, match.ID, SessionStatusMatched))
+		if err != nil {
+			return err
+		}
+		if err := insertTerminalSearchRelease(ctx, tx, updated); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func matchHasProfileID(match Match, profileID uuid.UUID) bool {
