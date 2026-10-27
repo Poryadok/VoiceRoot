@@ -1218,6 +1218,45 @@ class AppLocalizationsRu extends AppLocalizations {
   String get commonRetry => 'Попробовать снова';
 
   @override
+  String get spaceCatalogTitle => 'Каталог спейсов';
+
+  @override
+  String get spaceCatalogSearch => 'Найти спейс';
+
+  @override
+  String get spaceCatalogEmpty => 'Спейсы не найдены';
+
+  @override
+  String get spaceCatalogLoadError => 'Не удалось загрузить спейсы';
+
+  @override
+  String get spaceCatalogMembershipError => 'Не удалось загрузить ваши спейсы';
+
+  @override
+  String get spaceCatalogVerified => 'Верифицированный спейс';
+
+  @override
+  String get spaceCatalogMore => 'Загрузить ещё';
+
+  @override
+  String get spaceCatalogClose => 'Закрыть';
+
+  @override
+  String get spaceCatalogInviteRequired => 'Войти по приглашению';
+
+  @override
+  String get spaceCatalogJoinError =>
+      'Не удалось вступить в спейс. Проверьте свои спейсы или повторите попытку.';
+
+  @override
+  String get spaceCatalogClearSearch => 'Очистить поиск';
+
+  @override
+  String spaceCatalogMembers(int count) {
+    return 'Участников: $count';
+  }
+
+  @override
   String get settingsNotAuthenticated => 'Войдите, чтобы открыть эти настройки';
 
   @override

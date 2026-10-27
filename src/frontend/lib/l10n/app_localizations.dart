@@ -2186,6 +2186,78 @@ abstract class AppLocalizations {
   /// **'Try again'**
   String get commonRetry;
 
+  /// No description provided for @spaceCatalogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Space catalog'**
+  String get spaceCatalogTitle;
+
+  /// No description provided for @spaceCatalogSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Find a space'**
+  String get spaceCatalogSearch;
+
+  /// No description provided for @spaceCatalogEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No spaces found'**
+  String get spaceCatalogEmpty;
+
+  /// No description provided for @spaceCatalogLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load spaces'**
+  String get spaceCatalogLoadError;
+
+  /// No description provided for @spaceCatalogMembershipError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load your memberships'**
+  String get spaceCatalogMembershipError;
+
+  /// No description provided for @spaceCatalogVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified space'**
+  String get spaceCatalogVerified;
+
+  /// No description provided for @spaceCatalogMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get spaceCatalogMore;
+
+  /// No description provided for @spaceCatalogClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get spaceCatalogClose;
+
+  /// No description provided for @spaceCatalogInviteRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Join by invite'**
+  String get spaceCatalogInviteRequired;
+
+  /// No description provided for @spaceCatalogJoinError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not join this space. Check your memberships or try again.'**
+  String get spaceCatalogJoinError;
+
+  /// No description provided for @spaceCatalogClearSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get spaceCatalogClearSearch;
+
+  /// No description provided for @spaceCatalogMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} members'**
+  String spaceCatalogMembers(int count);
+
   /// No description provided for @settingsNotAuthenticated.
   ///
   /// In en, this message translates to:

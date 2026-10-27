@@ -1209,6 +1209,45 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonRetry => 'Try again';
 
   @override
+  String get spaceCatalogTitle => 'Space catalog';
+
+  @override
+  String get spaceCatalogSearch => 'Find a space';
+
+  @override
+  String get spaceCatalogEmpty => 'No spaces found';
+
+  @override
+  String get spaceCatalogLoadError => 'Could not load spaces';
+
+  @override
+  String get spaceCatalogMembershipError => 'Could not load your memberships';
+
+  @override
+  String get spaceCatalogVerified => 'Verified space';
+
+  @override
+  String get spaceCatalogMore => 'Load more';
+
+  @override
+  String get spaceCatalogClose => 'Close';
+
+  @override
+  String get spaceCatalogInviteRequired => 'Join by invite';
+
+  @override
+  String get spaceCatalogJoinError =>
+      'Could not join this space. Check your memberships or try again.';
+
+  @override
+  String get spaceCatalogClearSearch => 'Clear search';
+
+  @override
+  String spaceCatalogMembers(int count) {
+    return '$count members';
+  }
+
+  @override
   String get settingsNotAuthenticated => 'Sign in to view these settings';
 
   @override
