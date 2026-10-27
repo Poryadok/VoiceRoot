@@ -83,14 +83,15 @@ const UploadIntent$json = {
   '1': 'UploadIntent',
   '2': [
     {'1': 'UPLOAD_INTENT_UNSPECIFIED', '2': 0},
+    {'1': 'UPLOAD_INTENT_GIF', '2': 2},
     {'1': 'UPLOAD_INTENT_MUSIC', '2': 6},
   ],
 };
 
 /// Descriptor for `UploadIntent`. Decode as a `google.protobuf.EnumDescriptorProto`.
 final $typed_data.Uint8List uploadIntentDescriptor = $convert.base64Decode(
-    'CgxVcGxvYWRJbnRlbnQSHQoZVVBMT0FEX0lOVEVOVF9VTlNQRUNJRklFRBAAEhcKE1VQTE9BRF'
-    '9JTlRFTlRfTVVTSUMQBg==');
+    'CgxVcGxvYWRJbnRlbnQSHQoZVVBMT0FEX0lOVEVOVF9VTlNQRUNJRklFRBAAEhUKEVVQTE9BRF'
+    '9JTlRFTlRfR0lGEAISFwoTVVBMT0FEX0lOVEVOVF9NVVNJQxAG');
 
 @$core.Deprecated('Use fileURLVariantDescriptor instead')
 const FileURLVariant$json = {
@@ -361,6 +362,31 @@ final $typed_data.Uint8List confirmUploadRequestDescriptor = $convert.base64Deco
     'ChRDb25maXJtVXBsb2FkUmVxdWVzdBIXCgdmaWxlX2lkGAEgASgJUgZmaWxlSWQSHwoLc2hhMj'
     'U2X2hhc2gYAiABKAlSCnNoYTI1Nkhhc2g=');
 
+@$core.Deprecated('Use fileRepresentationDescriptor instead')
+const FileRepresentation$json = {
+  '1': 'FileRepresentation',
+  '2': [
+    {'1': 'mime_type', '3': 1, '4': 1, '5': 9, '10': 'mimeType'},
+    {'1': 'size_bytes', '3': 2, '4': 1, '5': 3, '10': 'sizeBytes'},
+    {'1': 'sha256_hash', '3': 3, '4': 1, '5': 9, '10': 'sha256Hash'},
+    {'1': 'filename', '3': 4, '4': 1, '5': 9, '10': 'filename'},
+    {
+      '1': 'processor_version',
+      '3': 5,
+      '4': 1,
+      '5': 9,
+      '10': 'processorVersion'
+    },
+  ],
+};
+
+/// Descriptor for `FileRepresentation`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List fileRepresentationDescriptor = $convert.base64Decode(
+    'ChJGaWxlUmVwcmVzZW50YXRpb24SGwoJbWltZV90eXBlGAEgASgJUghtaW1lVHlwZRIdCgpzaX'
+    'plX2J5dGVzGAIgASgDUglzaXplQnl0ZXMSHwoLc2hhMjU2X2hhc2gYAyABKAlSCnNoYTI1Nkhh'
+    'c2gSGgoIZmlsZW5hbWUYBCABKAlSCGZpbGVuYW1lEisKEXByb2Nlc3Nvcl92ZXJzaW9uGAUgAS'
+    'gJUhBwcm9jZXNzb3JWZXJzaW9u');
+
 @$core.Deprecated('Use fileMetadataDescriptor instead')
 const FileMetadata$json = {
   '1': 'FileMetadata',
@@ -520,6 +546,26 @@ const FileMetadata$json = {
       '6': '.voice.file.v1.UploadIntent',
       '10': 'intent'
     },
+    {
+      '1': 'delivered_full',
+      '3': 30,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileRepresentation',
+      '9': 13,
+      '10': 'deliveredFull',
+      '17': true
+    },
+    {
+      '1': 'delivered_thumbnail',
+      '3': 31,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.FileRepresentation',
+      '9': 14,
+      '10': 'deliveredThumbnail',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_width'},
@@ -535,6 +581,8 @@ const FileMetadata$json = {
     {'1': '_music_title'},
     {'1': '_music_artist'},
     {'1': '_music_album'},
+    {'1': '_delivered_full'},
+    {'1': '_delivered_thumbnail'},
   ],
   '9': [
     {'1': 16, '2': 17},
@@ -565,11 +613,15 @@ final $typed_data.Uint8List fileMetadataDescriptor = $convert.base64Decode(
     'ASgJSApSCm11c2ljVGl0bGWIAQESJgoMbXVzaWNfYXJ0aXN0GBogASgJSAtSC211c2ljQXJ0aX'
     'N0iAEBEiQKC211c2ljX2FsYnVtGBsgASgJSAxSCm11c2ljQWxidW2IAQESNgoXbXVzaWNfbWV0'
     'YWRhdGFfcmV2aXNpb24YHCABKARSFW11c2ljTWV0YWRhdGFSZXZpc2lvbhIzCgZpbnRlbnQYHS'
-    'ABKA4yGy52b2ljZS5maWxlLnYxLlVwbG9hZEludGVudFIGaW50ZW50QggKBl93aWR0aEIJCgdf'
-    'aGVpZ2h0QhMKEV9kdXJhdGlvbl9zZWNvbmRzQhMKEV90aHVtYm5haWxfcjJfa2V5QhMKEV9jb2'
-    '52ZXJ0ZWRfcjJfa2V5QgcKBV9jaGF0Qg0KC19leHBpcmVzX2F0Qg4KDF9zdGF0dXNfZW51bUIR'
-    'Cg9fZmlsZV90eXBlX2VudW1CEwoRX3NjYW5fcmVzdWx0X2VudW1CDgoMX211c2ljX3RpdGxlQg'
-    '8KDV9tdXNpY19hcnRpc3RCDgoMX211c2ljX2FsYnVtSgQIEBARUgljaGF0X3R5cGU=');
+    'ABKA4yGy52b2ljZS5maWxlLnYxLlVwbG9hZEludGVudFIGaW50ZW50Ek0KDmRlbGl2ZXJlZF9m'
+    'dWxsGB4gASgLMiEudm9pY2UuZmlsZS52MS5GaWxlUmVwcmVzZW50YXRpb25IDVINZGVsaXZlcm'
+    'VkRnVsbIgBARJXChNkZWxpdmVyZWRfdGh1bWJuYWlsGB8gASgLMiEudm9pY2UuZmlsZS52MS5G'
+    'aWxlUmVwcmVzZW50YXRpb25IDlISZGVsaXZlcmVkVGh1bWJuYWlsiAEBQggKBl93aWR0aEIJCg'
+    'dfaGVpZ2h0QhMKEV9kdXJhdGlvbl9zZWNvbmRzQhMKEV90aHVtYm5haWxfcjJfa2V5QhMKEV9j'
+    'b252ZXJ0ZWRfcjJfa2V5QgcKBV9jaGF0Qg0KC19leHBpcmVzX2F0Qg4KDF9zdGF0dXNfZW51bU'
+    'IRCg9fZmlsZV90eXBlX2VudW1CEwoRX3NjYW5fcmVzdWx0X2VudW1CDgoMX211c2ljX3RpdGxl'
+    'Qg8KDV9tdXNpY19hcnRpc3RCDgoMX211c2ljX2FsYnVtQhEKD19kZWxpdmVyZWRfZnVsbEIWCh'
+    'RfZGVsaXZlcmVkX3RodW1ibmFpbEoECBAQEVIJY2hhdF90eXBl');
 
 @$core.Deprecated('Use getFileURLRequestDescriptor instead')
 const GetFileURLRequest$json = {
