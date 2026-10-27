@@ -78,6 +78,7 @@ REVIEWED_TRANSITIONS = {'src/backend/migrations/auth_db/000009_guest_conversion_
 
 def validate(repo, base, target='HEAD', pr_head=None):
     base = commit(repo, base, 'base')
+    event_base = base
     target = commit(repo, target, 'target')
     try:
         git(repo, 'merge-base', '--is-ancestor', base, target)
@@ -88,8 +89,13 @@ def validate(repo, base, target='HEAD', pr_head=None):
     if pr_head:
         pr_head = commit(repo, pr_head, 'pr_head')
         parents = git(repo, 'rev-list', '--parents', '-n', '1', target).decode().split()[1:]
-        if parents != [base, pr_head]:
+        if len(parents) != 2 or parents[1] != pr_head:
             raise Refused('merge_parents')
+        base = parents[0]
+        try:
+            git(repo, 'merge-base', '--is-ancestor', event_base, base)
+        except Refused as error:
+            raise Refused('base_ancestry') from error
         try:
             expected_tree = git(repo, 'merge-tree', '--write-tree', base, pr_head).decode().splitlines()[0]
         except Refused as error:
@@ -142,7 +148,8 @@ def validate(repo, base, target='HEAD', pr_head=None):
         if (lifecycle or relative == 'database.go') and re.search(
                 r'go-redis|nats\.go|internal/(grpcsvc|livekit|s2s|store|voiceevents)', content):
             raise Refused('source_disabled_adapter: ' + path)
-    return {'schema': 'voice-current-diff-v1', 'base': base, 'target': target,
+    return {'schema': 'voice-current-diff-v1', 'event_base': event_base,
+            'base': base, 'target': target,
             'pr_head': pr_head, 'changed_paths': [p.decode('utf-8') for p in changed],
             'validator_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             'cached': False}
