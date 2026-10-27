@@ -1,5 +1,6 @@
 """Dev-only migration jobs with same-pod network readiness and SecretRefs."""
 import hashlib
+import copy
 import json
 import os
 import re
@@ -269,6 +270,37 @@ def gameintegration_runtime_role_job(postgres_image):
                                            'volumes': [{'name': 'provisioner', 'configMap': {'name': 'voice-gameintegration-runtime-role-sql'}}]}}}}
 
 
+def apply_auth_user_roles(root, postgres_image, apply, run, get):
+    """Fresh bootstrap only, after schema migration, before runtime activation."""
+    name = 'voice-provision-auth-user-runtime-roles'
+    existing = next((item for item in get('jobs') if item['metadata']['name'] == name), None)
+    if existing:
+        if existing.get('status', {}).get('active', 0):
+            raise ValueError('Auth/User runtime role Job is already active')
+        run('kubectl', '-n', 'voice-dev', 'delete', 'job', name, '--wait=true')
+    sql = (Path(root) / 'docker/postgres/provision-auth-user-runtime-roles.sql').read_text(encoding='utf-8')
+    config = {'apiVersion': 'v1', 'kind': 'ConfigMap',
+              'metadata': {'name': 'voice-auth-user-runtime-role-sql', 'namespace': 'voice-dev'},
+              'data': {'provision.sql': sql}}
+    job = copy.deepcopy(gameintegration_runtime_role_job(postgres_image))
+    job['metadata']['name'] = name
+    template = job['spec']['template']
+    template['metadata']['labels']['app'] = name
+    pod = template['spec']
+    pod['volumes'][0]['configMap']['name'] = config['metadata']['name']
+    pod['containers'][0]['env'] = [{'name': name, 'valueFrom': {'secretKeyRef': {
+        'name': 'voice-app-secrets', 'key': key}}} for name, key in (
+            ('PGPASSWORD', 'POSTGRES_PASSWORD'), ('AUTH_DB_PASSWORD', 'AUTH_DB_PASSWORD'),
+            ('USER_DB_PASSWORD', 'USER_DB_PASSWORD'))]
+    # Generated CREATE/ALTER ROLE statements contain credentials. Keep client
+    # diagnostics private inside the provisioning Pod, not Kubernetes logs.
+    pod['containers'][0]['command'][-1] = ('umask 077; psql -X -q -v ON_ERROR_STOP=1 -h voice-postgres -p 5432 -U voice -d postgres '
+        '-f /provision/provision.sql >/tmp/provision.out 2>/tmp/provision.err || { echo AUTH_USER_ROLE_PROVISION_FAILED >&2; exit 1; }')
+    apply([config, job])
+    run('kubectl', '-n', 'voice-dev', 'wait', '--for=condition=complete', 'job/' + name,
+        '--timeout=600s', timeout=660)
+
+
 def job(service, postgres_image):
     job_name, config_name = names(service)
     container = {
@@ -284,13 +316,14 @@ def job(service, postgres_image):
                     {'name': 'FLYWAY_PASSWORD', 'valueFrom': {'secretKeyRef': {'name': 'voice-app-secrets', 'key': 'POSTGRES_PASSWORD'}}},
                     {'name': 'FLYWAY_LOCATIONS', 'value': 'filesystem:/flyway/sql'}],
             'volumeMounts': [{'name': 'migrations', 'mountPath': '/flyway/sql', 'readOnly': True}]}
-    elif service == 'gameintegration':
+    elif service in ('gameintegration', 'user'):
         # Schema DDL runs with the existing Postgres migration authority. The
         # application still receives only GAME_INTEGRATION_DATABASE_URL.
+        database = 'game_integration_db' if service == 'gameintegration' else 'user_db'
         container = {
             'name': 'migrate', 'image': 'migrate/migrate:v4.18.1',
             'command': ['/bin/sh', '-ec',
-                        'exec migrate -path=/migrations -database "postgres://${POSTGRES_USER}:${PGPASSWORD}@voice-postgres:5432/game_integration_db?sslmode=disable" up'],
+                        'exec migrate -path=/migrations -database "postgres://${POSTGRES_USER}:${PGPASSWORD}@voice-postgres:5432/' + database + '?sslmode=disable" up'],
             'env': [{'name': 'POSTGRES_USER', 'valueFrom': {'configMapKeyRef': {'name': 'voice-app-config', 'key': 'POSTGRES_USER'}}},
                     {'name': 'PGPASSWORD', 'valueFrom': {'secretKeyRef': {'name': 'voice-app-secrets', 'key': 'POSTGRES_PASSWORD'}}}],
             'volumeMounts': [{'name': 'migrations', 'mountPath': '/migrations', 'readOnly': True}]}

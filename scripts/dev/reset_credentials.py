@@ -411,10 +411,17 @@ def verify_application(objects):
         password = quote(app['POSTGRES_PASSWORD'].decode(), safe='')
         if not password:
             fail('application_database')
-        for service in 'social user chat space messaging file role matchmaking search notification bot story moderation subscription gateway voice realtime'.split():
+        for service in 'social chat space messaging file role matchmaking search notification bot story moderation subscription gateway voice realtime'.split():
             expected = f'postgres://voice:{password}@voice-postgres:5432/{service}_db?sslmode=disable'.encode()
             if app[service.upper() + '_DATABASE_URL'] != expected:
                 fail('application_database')
+        auth_password = app['AUTH_DB_PASSWORD'].decode()
+        user_password = app['USER_DB_PASSWORD'].decode()
+        if (app['AUTH_DB_USERNAME'] != b'auth_runtime' or not auth_password or not user_password
+                or len({app['POSTGRES_PASSWORD'], app['AUTH_DB_PASSWORD'], app['USER_DB_PASSWORD']}) != 3
+                or app['USER_DATABASE_URL'] != ('postgres://user_runtime:' + quote(user_password, safe='')
+                    + '@voice-postgres:5432/user_db?sslmode=disable').encode()):
+            fail('application_database_isolation')
         game_password = quote(app['GAME_INTEGRATION_DB_PASSWORD'].decode(), safe='')
         if not game_password or app['GAME_INTEGRATION_DATABASE_URL'] != f'postgres://gameintegration_runtime:{game_password}@voice-postgres:5432/game_integration_db?sslmode=disable'.encode():
             fail('application_database')

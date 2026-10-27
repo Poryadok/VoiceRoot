@@ -118,6 +118,10 @@ def application_values(jwt, gateway_host):
               "GAME_INTEGRATION_DATABASE_URL":f"postgres://gameintegration_runtime:{gameintegration_db}@voice-postgres:5432/game_integration_db?sslmode=disable"}
     for service in "social user chat space messaging file role matchmaking search notification bot story moderation subscription gateway voice".split():
         values[service.upper() + "_DATABASE_URL"] = f"postgres://voice:{pg}@voice-postgres:5432/{service}_db?sslmode=disable"
+    values["AUTH_DB_USERNAME"] = "auth_runtime"
+    values["AUTH_DB_PASSWORD"] = secrets.token_hex(32)
+    values["USER_DB_PASSWORD"] = secrets.token_hex(32)
+    values["USER_DATABASE_URL"] = f"postgres://user_runtime:{values['USER_DB_PASSWORD']}@voice-postgres:5432/user_db?sslmode=disable"
     for service, bucket in (("USER", "avatars"), ("FILE", "files")):
         values.update({service + "_R2_ENDPOINT":"http://voice-minio:9000", service + "_R2_REGION":"us-east-1",
                        service + "_R2_BUCKET":"voice-dev-" + bucket})
