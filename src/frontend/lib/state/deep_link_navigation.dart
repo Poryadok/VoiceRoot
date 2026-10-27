@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../backend/deep_links_client.dart';
+import '../backend/chats_client.dart';
 import '../backend/users_client.dart';
 import '../routing/app_router.dart';
 import '../routing/deep_link_parser.dart';
@@ -127,7 +128,14 @@ Future<void> _openDmDeepLink(Ref ref, DeepLinkTarget target) async {
   final userId = target.userId;
   if (userId == null || userId.isEmpty) return;
   ref.read(navigationSectionProvider.notifier).state = NavigationSection.chats;
-  await ref.read(chatActionsProvider).openDmWithProfile(userId);
+  final result = await ref
+      .read(chatActionsProvider)
+      .openDmWithProfileResult(userId);
+  if (result case ChatsApiFailure(
+    :final statusCode,
+  ) when statusCode == 403 || statusCode == 404) {
+    await _showDeepLinkError(statusCode!);
+  }
 }
 
 Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
@@ -142,6 +150,18 @@ Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
     query: username,
     pageSize: 8,
   );
+  final current = ref.read(authControllerProvider);
+  if (!current.isAuthenticated ||
+      current.session?.accountId != auth.session!.accountId ||
+      current.session?.activeProfileId != auth.session!.activeProfileId) {
+    return;
+  }
+  if (result case UsersApiFailure(
+    :final statusCode,
+  ) when statusCode == 403 || statusCode == 404) {
+    await _showDeepLinkError(statusCode!);
+    return;
+  }
   String? profileId;
   if (result case UsersApiOk(:final data)) {
     for (final profile in data.profiles) {
@@ -150,7 +170,10 @@ Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
         break;
       }
     }
-    profileId ??= data.profiles.firstOrNull?.id;
+    if (profileId == null) {
+      await _showDeepLinkError(404);
+      return;
+    }
   }
   if (profileId == null) return;
 
@@ -163,6 +186,16 @@ Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
     builder: (sheetContext) => UncontrolledProviderScope(
       container: ProviderScope.containerOf(ctx),
       child: ProfileDetailSheet(profileId: profileId!),
+    ),
+  );
+}
+
+Future<void> _showDeepLinkError(int statusCode) async {
+  final context = rootNavigatorKey.currentContext;
+  if (context == null || !context.mounted) return;
+  await Navigator.of(context).push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => DeepLinkErrorScreen(statusCode: statusCode),
     ),
   );
 }
@@ -220,13 +253,7 @@ Future<void> resolveAndNavigateDeepLink(
   if (result case DeepLinksApiFailure(
     :final statusCode,
   ) when statusCode == 403 || statusCode == 404) {
-    final context = rootNavigatorKey.currentContext;
-    if (context == null || !context.mounted) return;
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => DeepLinkErrorScreen(statusCode: statusCode!),
-      ),
-    );
+    await _showDeepLinkError(statusCode!);
     return;
   }
   await navigator.apply(target);
