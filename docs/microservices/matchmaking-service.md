@@ -292,6 +292,11 @@ current profile eligibility. It never reconstructs erased routing. An old cycle
 cannot cancel a newer current deletion, and restored backups cannot serve from
 stale local authority alone. Protected producer adapters, writer binding and
 backup/rollback activation are still required before claiming A4 integration.
+Coverage intake refuses ambiguous unbound legacy operations. It never infers
+cycle membership from MM creation time versus Auth decision time, or upgrades a
+previously escaped unbounded projection by editing its SQL row. Only operations
+with exact lifecycle-aware writer binding enter the bounded local scope; an
+empty SQL result does not prove historical Redis cleanup.
 
 The recovery worker claims each incomplete provider operation independently and
 replays only its persisted request. Every RPC has a fresh 10-second deadline;

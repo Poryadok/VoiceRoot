@@ -25,7 +25,7 @@ Progress:
   deadline deletion (SQLSTATE55P03). Claims now commit before I/O; independent
   expiry ignores claims, deletes raw routing and clears temporary roster hash.
 - Real PostgreSQL GREEN: controlled in-flight deletion, actual database-clock
-  expiry, late coverage, restarted stale-cycle handling, restored-cycle batch
+  expiry, late exact-bound coverage, restarted stale-cycle handling, restored-cycle batch
   fairness and sweeper with Redis/session projection absent.
 - Migration20 empty DOWN/UP, concurrent writer refusal and permanent evidence
   refusal pass. Migration19 runner regression remains pinned to its exact
@@ -38,6 +38,16 @@ Progress:
   race checks and the full domain race selection pass. Final store selection
   (including migration19 runner and migration20 controls) passes in31.169s.
   Graphify and independent source/test review remain required before delivery.
+
+Independent review of historical `ce2fa8f` found three defects: a copied
+unbound dispatch could escape later binding, cross-service timestamps wrongly
+classified cycle ownership, and expired cleanup bypassed newer-generation
+comparison. The repair refuses matching unbound rows under a row lock, removes
+timestamp-based conversion/deletion entirely, and compares exact generation
+before destructive cleanup. An actual Sweeper/Redis dial barrier and expired
+older/newer-same-session requests first failed; deterministic skewed-clock fresh
+and delayed-old rows must both remain unqualified. These are safety fixes to
+the local seam, not delivery of missing exact-writer/legacy Redis integration.
 
 Evidence logs are retained under ignored `tmp/swarm/anton172-postmatch` in the
 main checkout and attached/checkpointed to the task. This plan records limits,

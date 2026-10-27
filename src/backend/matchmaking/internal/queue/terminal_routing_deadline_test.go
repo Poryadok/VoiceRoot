@@ -104,3 +104,28 @@ func TestTerminalProjectionPreservesExactInt64Generation(t *testing.T) {
 	require.ErrorIs(t, q.RecoverTerminalRelease(ctx, recovery, life), ErrQueueGeneration)
 	require.Equal(t, "9007199254740993", client.Get(ctx, q.terminalGenerationKey(recovery.SessionID)).Val())
 }
+
+func TestExpiredTerminalProjectionPreservesNewerSameSessionGeneration(t *testing.T) {
+	ctx := context.Background()
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	old, err := terminalrouting.New(terminalrouting.Schedule{FenceID: "fence", CycleID: "old", Revision: 41, ScheduledAt: start, PurgeAt: start.Add(30 * 24 * time.Hour)})
+	require.NoError(t, err)
+	newer, err := terminalrouting.New(terminalrouting.Schedule{FenceID: "fence", CycleID: "new", Revision: 43, ScheduledAt: start.Add(time.Hour), PurgeAt: start.Add(30*24*time.Hour + time.Hour)})
+	require.NoError(t, err)
+	mr := miniredis.RunT(t)
+	mr.SetTime(old.Schedule.PurgeAt.Add(time.Second))
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = client.Close() })
+	q := &RedisQueue{Client: client, Prefix: "expired-old"}
+	r := SearchRecovery{ProfileID: uuid.New(), SessionID: uuid.New(), GameID: uuid.New(), Mode: "duo", Region: "eu", Generation: 4}
+	require.NoError(t, q.RecoverTerminalRelease(ctx, r, newer))
+	require.NoError(t, q.AcquireLock(ctx, r.ProfileID, r.SessionID))
+	require.NoError(t, client.HSet(ctx, q.generationKey(), r.SessionID.String(), "4").Err())
+	require.NoError(t, client.ZAdd(ctx, q.scopedQueueKey(r.SpaceID, r.GameID, r.Mode, r.Region), redis.Z{Score: 1, Member: r.SessionID.String()}).Err())
+	r.Generation = 3
+	require.ErrorIs(t, q.RecoverTerminalRelease(ctx, r, old), ErrQueueGeneration)
+	require.Equal(t, "4", client.Get(ctx, q.terminalGenerationKey(r.SessionID)).Val())
+	require.Equal(t, r.SessionID.String(), client.Get(ctx, q.lockKey(r.ProfileID)).Val())
+	require.Equal(t, "4", client.HGet(ctx, q.generationKey(), r.SessionID.String()).Val())
+	require.Equal(t, []string{r.SessionID.String()}, client.ZRange(ctx, q.scopedQueueKey(r.SpaceID, r.GameID, r.Mode, r.Region), 0, -1).Val())
+}

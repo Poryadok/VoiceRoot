@@ -125,9 +125,10 @@ func (s *MatchStore) ObserveTerminalRouting(ctx context.Context, observation ter
 }
 
 // BindTerminalRoutingCoverage consumes the protected User attestation's exact
-// scope for existing terminal obligations. The roster is never persisted here.
-// New writers must supply the protected binding before A4 activation; legacy
-// writers and pre-existing unbounded Redis copies are not qualified by this seam.
+// scope for terminal obligations already bound by an exact lifecycle-aware
+// writer. The roster is never persisted here. Profile membership and cross-DB
+// timestamps cannot establish an operation's cycle: unbound legacy routing is
+// explicitly unqualified, including previously dispatched callbacks.
 func (s *MatchStore) BindTerminalRoutingCoverage(ctx context.Context, coverage terminalrouting.Coverage) error {
 	if err := coverage.Validate(); err != nil {
 		return err
@@ -167,6 +168,15 @@ func (s *MatchStore) BindTerminalRoutingCoverage(ctx context.Context, coverage t
 	if life.Decision == nil && (life.Current.State != terminalrouting.DeleteScheduled || life.Current.CycleID != life.Schedule.CycleID) {
 		return terminalrouting.ErrReconciliationRequired
 	}
+	var unbound int
+	err = tx.QueryRow(ctx, `SELECT 1 FROM matchmaking_terminal_search_releases
+		WHERE profile_id=ANY($1::uuid[]) AND routing_fence_id IS NULL LIMIT 1 FOR UPDATE`, coverage.Profiles).Scan(&unbound)
+	if err == nil {
+		return terminalrouting.ErrReconciliationRequired
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
 	// New verifies schedule shape; Reconcile enforces the immutable exact tuple.
 	if _, err := life.Reconcile(terminalrouting.Observation{Schedule: coverage.Schedule, Current: life.Current, Decision: life.Decision}, life.Schedule.ScheduledAt); err != nil {
 		return err
@@ -186,16 +196,11 @@ func (s *MatchStore) BindTerminalRoutingCoverage(ctx context.Context, coverage t
 		return err
 	}
 	life = life.Advance(now)
-	cutoff := life.Schedule.PurgeAt
-	if life.Decision != nil && life.Decision.Kind == terminalrouting.Restored {
-		cutoff = life.Decision.At
-	}
 	if life.RoutingErased || !now.Before(life.Schedule.PurgeAt) {
-		// A late complete scope still erases old unidentified payload before
-		// returning retired. It cannot touch fresh post-restore terminal work.
-		_, err = tx.Exec(ctx, `DELETE FROM matchmaking_terminal_search_releases WHERE profile_id=ANY($1::uuid[])
-			AND created_at<=$2 AND (routing_fence_id IS NULL OR (routing_fence_id=$3 AND routing_cycle_id=$4))`,
-			coverage.Profiles, cutoff, coverage.Schedule.FenceID, coverage.Schedule.CycleID)
+		// Erase only exact previously authorized cycle bindings. Never infer
+		// old operation ownership from a profile roster or another DB's clock.
+		_, err = tx.Exec(ctx, `DELETE FROM matchmaking_terminal_search_releases
+			WHERE routing_fence_id=$1 AND routing_cycle_id=$2`, coverage.Schedule.FenceID, coverage.Schedule.CycleID)
 		if err != nil {
 			return err
 		}
@@ -210,13 +215,6 @@ func (s *MatchStore) BindTerminalRoutingCoverage(ctx context.Context, coverage t
 	_, err = tx.Exec(ctx, `UPDATE matchmaking_terminal_routing_cycles SET coverage_revision=$3::numeric,coverage_sha256=$4
 		WHERE fence_id=$1 AND cycle_id=$2`, coverage.Schedule.FenceID, coverage.Schedule.CycleID,
 		strconv.FormatUint(coverage.Revision, 10), coverage.SHA256[:])
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(ctx, `UPDATE matchmaking_terminal_search_releases
-		SET routing_fence_id=$3,routing_cycle_id=$4,routing_purge_at=$5
-		WHERE profile_id=ANY($1::uuid[]) AND created_at<=$2 AND routing_fence_id IS NULL`,
-		coverage.Profiles, cutoff, coverage.Schedule.FenceID, coverage.Schedule.CycleID, coverage.Schedule.PurgeAt)
 	if err != nil {
 		return err
 	}

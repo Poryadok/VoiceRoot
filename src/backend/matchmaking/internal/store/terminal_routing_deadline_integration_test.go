@@ -93,6 +93,10 @@ func TestTerminalRoutingExpiryIgnoresPausedProjectionClaim(t *testing.T) {
 	coverage := terminalrouting.Coverage{Schedule: schedule, Revision: 17, Complete: true, Profiles: []uuid.UUID{profile}}
 	coverage.SHA256, err = coverage.Digest()
 	require.NoError(t, err)
+	// Exact lifecycle-aware writer provenance is an input to this local
+	// consumer fixture; User profile coverage cannot manufacture it.
+	_, err = pool.Exec(ctx, `UPDATE matchmaking_terminal_search_releases SET routing_fence_id=$2,routing_cycle_id=$3,routing_purge_at=$4 WHERE search_session_id=$1`, session, schedule.FenceID, schedule.CycleID, schedule.PurgeAt)
+	require.NoError(t, err)
 	require.NoError(t, s.BindTerminalRoutingCoverage(ctx, coverage))
 	entered, release := make(chan struct{}), make(chan struct{})
 	done := make(chan error, 1)
@@ -186,6 +190,8 @@ func TestTerminalRoutingLateCoverageErasesDurablyWithoutRedis(t *testing.T) {
 		VALUES($1,3,$2,$3,'duo','eu',$4),($5,3,$6,$3,'duo','eu',clock_timestamp())`,
 		session, profile, uuid.New(), schedule.ScheduledAt.Add(time.Hour), unrelated, uuid.New())
 	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `UPDATE matchmaking_terminal_search_releases SET routing_fence_id=$2,routing_cycle_id=$3,routing_purge_at=$4 WHERE search_session_id=$1`, session, schedule.FenceID, schedule.CycleID, schedule.PurgeAt)
+	require.NoError(t, err)
 	s := &MatchStore{Pool: pool}
 	life, err := s.ObserveTerminalRouting(ctx, terminalrouting.Observation{
 		Schedule: schedule, Current: terminalrouting.Current{Revision: 41, State: terminalrouting.DeleteScheduled, CycleID: schedule.CycleID},
@@ -266,4 +272,31 @@ func TestTerminalRoutingCoverageCannotGuessMissingOldCycleDecision(t *testing.T)
 	var unbound bool
 	require.NoError(t, pool.QueryRow(ctx, `SELECT routing_fence_id IS NULL FROM matchmaking_terminal_search_releases WHERE search_session_id=$1`, session).Scan(&unbound))
 	require.True(t, unbound)
+}
+
+func TestTerminalRoutingCoverageDoesNotInferCycleFromCrossDatabaseClock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires PostgreSQL")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	pool := StartMatchmakingDBForStoreTest(t, ctx)
+	ApplyMatchmakingMigrationsForStoreTest(t, ctx, pool)
+	schedule := terminalrouting.Schedule{FenceID: "skew", CycleID: "old", Revision: 41, ScheduledAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), PurgeAt: time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)}
+	restoredAt := schedule.PurgeAt.Add(-time.Hour)
+	s := &MatchStore{Pool: pool}
+	_, err := s.ObserveTerminalRouting(ctx, terminalrouting.Observation{Schedule: schedule, Decision: &terminalrouting.Decision{Kind: terminalrouting.Restored, Revision: 42, At: restoredAt}, Current: terminalrouting.Current{Revision: 42, State: terminalrouting.Active}})
+	require.NoError(t, err)
+	profile, fresh, delayedOld := uuid.New(), uuid.New(), uuid.New()
+	// Auth and MM clocks have no causal ordering: fresh work can have an
+	// earlier local timestamp, and delayed old completion a later one.
+	_, err = pool.Exec(ctx, `INSERT INTO matchmaking_terminal_search_releases(search_session_id,generation,profile_id,game_id,mode,region,created_at) VALUES($1,3,$2,$3,'duo','eu',$4),($5,3,$2,$3,'duo','eu',$6)`, fresh, profile, uuid.New(), restoredAt.Add(-time.Second), delayedOld, restoredAt.Add(time.Second))
+	require.NoError(t, err)
+	coverage := terminalrouting.Coverage{Schedule: schedule, Revision: 17, Complete: true, Profiles: []uuid.UUID{profile}}
+	coverage.SHA256, err = coverage.Digest()
+	require.NoError(t, err)
+	require.ErrorIs(t, s.BindTerminalRoutingCoverage(ctx, coverage), terminalrouting.ErrReconciliationRequired)
+	var count int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM matchmaking_terminal_search_releases WHERE search_session_id=ANY($1::uuid[]) AND routing_fence_id IS NULL`, []uuid.UUID{fresh, delayedOld}).Scan(&count))
+	require.Equal(t, 2, count, "ambiguous old/fresh legacy routing is unqualified, never classified or destroyed by timestamp")
 }

@@ -40,11 +40,6 @@ func (q *RedisQueue) RecoverTerminalRelease(ctx context.Context, sess SearchReco
 	  redis.call('ZREM', KEYS[1], ARGV[1])
 	  if redis.call('GET', KEYS[3]) == ARGV[1] then redis.call('DEL', KEYS[3]) end
 	end
-	if now >= deadline or ARGV[4] == '1' then
-	  removeRaw()
-	  redis.call('DEL', KEYS[4])
-	  return 2
-	end
 	local legacy = redis.call('HGET', KEYS[2], ARGV[1])
 	local bounded = redis.call('GET', KEYS[4])
 	local function valid(value)
@@ -57,6 +52,11 @@ func (q *RedisQueue) RecoverTerminalRelease(ctx context.Context, sess SearchReco
 	  return value and (#value > #ARGV[2] or (#value == #ARGV[2] and value > ARGV[2]))
 	end
 	if newer(legacy) or newer(bounded) then return 0 end
+	if now >= deadline or ARGV[4] == '1' then
+	  removeRaw()
+	  redis.call('DEL', KEYS[4])
+	  return 2
+	end
 	removeRaw()
 	redis.call('SET', KEYS[4], ARGV[2], 'PXAT', ARGV[3])
 	return 1

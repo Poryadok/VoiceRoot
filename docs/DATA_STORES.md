@@ -72,6 +72,12 @@ The separate A4 local consumer adds migration `000020`: opaque
 coverage revision/hash binds the protected complete User roster; the roster is
 not persisted by this consumer, and its hash is cleared at the original bound.
 Bound pending releases carry fence/cycle/deadline and a short projection claim.
+Only exact lifecycle-aware writer provenance can supply that binding. Complete
+profile coverage and `created_at` cannot identify an operation's cycle across
+service clocks. Matching unbound legacy rows cause an explicit reconciliation
+refusal; this consumer never converts or deletes them from roster membership.
+An absent SQL row can still have an already-ACKed unbounded Redis copy, so this
+local scope is not complete account cleanup or historical qualification.
 The claim commits before Redis I/O; database-time expiry deletes routing even
 while a projection is paused. Successful projection acknowledges by exact-token
 delete. DOWN refuses to forget lifecycle evidence; binary rollback retains it.
