@@ -3698,6 +3698,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storyArchiveTitle => 'Story archive';
 
   @override
+  String get storyArchivePrivate => 'Only you can see this archive';
+
+  @override
+  String get storySessionChanged =>
+      'Your profile or session changed. Reopen this screen to continue.';
+
+  @override
   String get storyArchiveEmpty => 'No archived stories';
 
   @override

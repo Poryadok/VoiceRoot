@@ -3732,6 +3732,13 @@ class AppLocalizationsRu extends AppLocalizations {
   String get storyArchiveTitle => 'Архив сторис';
 
   @override
+  String get storyArchivePrivate => 'Только вы видите архив';
+
+  @override
+  String get storySessionChanged =>
+      'Профиль или сессия изменились. Откройте этот экран заново, чтобы продолжить.';
+
+  @override
   String get storyArchiveEmpty => 'Нет архивных сторис';
 
   @override
