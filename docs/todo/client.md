@@ -216,6 +216,11 @@ those are different clients, credentials and trust boundaries.
    from the provider browser. Accept exactly one state and either one nonempty
    code or one provider error; reject duplicates, mixed code/error, missing state,
    oversized/malformed parameters. URL fragments are not sent in HTTP requests;
+   Twitch's documented singleton `scope` (success) and `error_description` (denial)
+   are bounded inert metadata: ignore them without trust, persistence, logging,
+   reflection, scope expansion or forwarding. They cannot replace required state
+   or code/error inputs; duplicated metadata and unknown keys still reject.
+   See [Twitch authorization-code callbacks](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#authorization-code-grant-flow).
    Gateway/Auth cannot inspect or reject a browser's fragment in this GET.
    Validate state, provider path, registration, bound callback and expiry before
    any token request. Also revalidate the stored original `jti` against revocation,
@@ -407,6 +412,8 @@ replace or block the legacy unbound POST callback so it cannot bypass the new
 flow. Keep providers unavailable outside the qualified fixture until a separate
 live-provider acceptance stage; no production switch or migration is authorized
 by this target contract.
+
+- [ ] **Organization verification destination and pending recovery** — Flutter `VoiceUsersClient` now wraps `GET /api/v1/users/me/verification`, and Settings displays its effective selected-profile status. The owner GET also returns the optional current `pending_organization_challenge` with its canonical TXT record and expiry; see [User owner-only readback](../microservices/user-service.md#owner-only-verification-challenge-readback). Authoritative organization/personal-kind mapping, client start/check actions for the existing `POST /api/v1/users/me/verification/organization` and `POST /api/v1/users/me/verification/organization/check` routes, and client recovery from the owner-backed pending challenge remain open. Profile `verificationType` / `verificationBadge` do not substitute for owner verification authority. Keep the organization destination unavailable until these remaining contract and client gaps are resolved. See [verification.md](../features/verification.md) and [screen-controls.md](../design/screen-controls.md) §28.
 
 ### Telegram-parity UX audit — Flutter (2026-08-28)
 
