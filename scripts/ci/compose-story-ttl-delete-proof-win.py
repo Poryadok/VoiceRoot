@@ -80,6 +80,15 @@ def owned_rows(project, started):
     return rows
 
 
+def diagnostic_command(args):
+    try:
+        result = subprocess.run(["docker", *args], cwd=ROOT, text=True,
+                                capture_output=True, check=False, timeout=20)
+        return {"exit": result.returncode, "output": (result.stdout + result.stderr)[-12000:]}
+    except subprocess.TimeoutExpired:
+        return {"exit": "timeout", "output": "Docker diagnostic exceeded 20 seconds"}
+
+
 def main():
     if os.name != "nt":
         raise RuntimeError("this launcher is for Windows Docker hosts")
@@ -154,6 +163,9 @@ def main():
         else:
             memory, cpu = "384m", "0.5"
         lines.extend((f"  {service}:", f"    mem_limit: {memory}", f"    cpus: \"{cpu}\""))
+        if service == "postgres":
+            # Windows Docker volume sync can outlast the base 50-second cold-init window.
+            lines.extend(("    healthcheck:", "      start_period: 90s", "      retries: 20"))
     limits.write_text("\n".join(lines) + "\n", encoding="utf-8")
     compose.extend(("-f", str(limits), "--profile", "app"))
     call([*compose, "config", "--quiet"], env=env)
@@ -161,7 +173,8 @@ def main():
     require_frozen(head, tree, binary, test_sha)
     receipt = {"project": project, "source_head": head, "source_tree": tree,
                "test_binary_sha256": test_sha, "compose_config_sha256": config_sha,
-               "started_unix_nano": started, "run_dir": str(run_dir), "containers": {}}
+               "started_unix_nano": started, "run_dir": str(run_dir), "containers": {},
+               "result": "FAIL"}
     receipt_path = run_dir / "receipt.json"
     receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
     launched = False
@@ -208,11 +221,25 @@ def main():
         docker(*args, "docker:27-cli", "/gateway.test", "-test.v",
                "-test.run=^TestComposeStoryTTLDeleteFile_live$", timeout=600)
         receipt["result"] = "PASS"
+    except Exception as error:
+        receipt["failure"] = str(error)[-4000:]
+        raise
     finally:
         if launched:
             rows = owned_rows(project, started_seconds)
             if rows:
                 receipt["containers"] = rows
+            diagnostics = {}
+            for service in SERVICES:
+                if service not in rows:
+                    continue
+                container = rows[service]["id"]
+                diagnostics[service] = {
+                    "container_id": container,
+                    "state": diagnostic_command(["inspect", "--format", "{{json .State}}", container]),
+                    "logs": diagnostic_command(["logs", "--tail", "100", container]),
+                }
+            receipt["diagnostics"] = diagnostics
             receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
             call([*compose, "down", "--remove-orphans", "--volumes"], env=env, timeout=300)
         if fixture.exists():
