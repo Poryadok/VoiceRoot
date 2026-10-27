@@ -1,5 +1,26 @@
 # User Service
 
+## Space account-capture startup configuration
+
+`USER_SPACE_CAPTURE_PRINCIPAL_*` transport settings are recognized by presence,
+including an explicitly empty value. Any configured capture listener requires
+an explicit nonempty `GRPC_LISTEN`, TLS certificate/key, client CA, replay Redis
+address and JWKS client certificate/key. The optional fields are replay Redis
+password and JWKS CA override; Space's HTTPS JWKS is selected from
+`S2S_JWKS_URLS_JSON`. This reuses only the exact `user` audience and separate
+`space-account-capture` capability. Shared verifier settings alone do not enable
+capture; no default port or ordinary User listener supplies capture authority.
+
+Partial or malformed transport settings fail startup before health or gRPC
+admission. Complete transport configuration currently also fails startup with
+`qualified User capture source unavailable`: the accepted production source
+custody/reopen contract and qualified opener are still missing. No capture
+listener is started, and startup does not initialize identity keys, bootstrap a
+source or activate writer guards. Entirely absent capture settings preserve the
+existing startup behavior. This configuration correction does not implement
+canonical SQL capture, production listener activation or complete Space bans.
+The remaining owner decision is recorded in [Backend gaps](../todo/backend.md#space).
+
 ## Notification primary lookup (BE-118 prerequisite)
 
 The separate `notification-primary` capability exposes only the existing

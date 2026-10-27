@@ -19,10 +19,121 @@ import publish_candidate as publisher
 C = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 PREVIOUS_C = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
 P = 'a' * 40
+A = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
 DIGEST = 'sha256:' + 'b' * 64
 
 
 class PublisherTests(unittest.TestCase):
+    def test_auth_user_adoption_candidate_is_exact_and_component_scoped(self):
+        plan = publisher.build_plan(A, P, '12345', '2')
+        self.assertEqual(set(plan['components']), {'dev-auth', 'dev-user'})
+        for row in plan['components'].values():
+            self.assertEqual(row['build_args'], {'VOICE_SOURCE_SHA': A})
+            self.assertIn(':dev-' + A + '-12345-2', row['tag'])
+        publisher.verify_config_source({'config': {'Labels': {'org.opencontainers.image.revision': A}}}, A)
+        with self.assertRaises(publisher.Refused):
+            publisher.verify_config_source({'config': {'Labels': {'org.opencontainers.image.revision': C}}}, A)
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w') as archive:
+            archive.writestr('BOOT-INF/classes/voice-build-source.sha', A)
+        publisher.verify_output('dev-auth', {'auth.jar': stream.getvalue()}, A)
+        publisher.verify_output('dev-user', {'service': b'\x7fELF:' + A.encode()}, A)
+        with self.assertRaises(publisher.Refused):
+            publisher.verify_output('dev-user', {'service': b'\x7fELF:' + C.encode()}, A)
+        with self.assertRaises(publisher.Refused):
+            publisher.verify_output('dev-auth', {'auth.jar': self._jar(C)}, A)
+        for component in ('dev-web', 'dev-notification', 'dev-realtime', 'dev-space-native-migrate'):
+            with self.subTest(component=component), self.assertRaises(publisher.Refused):
+                publisher.verify_output(component, {'service': b'\x7fELF:' + A.encode(),
+                    'main.dart.js': b'https://api-dev.comrade.click wss://livekit-dev.comrade.click'}, A)
+
+    @staticmethod
+    def _jar(source):
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w') as archive:
+            archive.writestr('BOOT-INF/classes/voice-build-source.sha', source)
+        return stream.getvalue()
+
+    def test_adoption_publication_threads_source_through_build_pull_and_receipt(self):
+        env = {'PRODUCT_SHA': A, 'PUBLISHER_SHA': P, 'GITHUB_RUN_ID': '12345',
+               'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_REPOSITORY': publisher.REPOSITORY,
+               'GITHUB_REF': 'refs/heads/master', 'GITHUB_ACTOR': 'fixture', 'GH_TOKEN': 'fixture'}
+        run = {'id': 12345, 'run_attempt': 2, 'head_sha': P, 'event': 'workflow_dispatch',
+               'path': publisher.WORKFLOW, 'repository': {'full_name': publisher.REPOSITORY}}
+        jobs = {'jobs': [{'id': 67890, 'run_id': 12345, 'head_sha': P, 'name': publisher.JOB_NAME}]}
+        raw_manifest = json.dumps({'config': {'digest': DIGEST}}).encode()
+        manifest_digest = 'sha256:' + hashlib.sha256(raw_manifest).hexdigest()
+        raw_index = json.dumps({'manifests': [{'digest': manifest_digest,
+            'platform': {'os': 'linux', 'architecture': 'amd64'}}]}).encode()
+        index_digest = 'sha256:' + hashlib.sha256(raw_index).hexdigest()
+        registry = mock.Mock()
+        registry.get.side_effect = lambda repository, path, absent=False: (
+            None if absent else raw_manifest if path == 'manifests/' + manifest_digest else raw_index)
+        builds = []
+        def command(args, **kwargs):
+            if args[0] == 'gh':
+                return json.dumps(jobs if '/jobs?' in args[-1] else run).encode()
+            self.assertEqual(args[:3], ['docker', 'buildx', 'build'])
+            self.assertIn('org.opencontainers.image.revision=' + A, args)
+            self.assertIn('VOICE_SOURCE_SHA=' + A, args)
+            Path(args[args.index('--metadata-file') + 1]).write_text(
+                json.dumps({'containerimage.digest': index_digest}))
+            builds.append(args)
+            return b''
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(publisher, 'source_snapshot', side_effect=lambda root, sha: {'source_sha': sha}) as snapshot, \
+                mock.patch.object(publisher, 'Registry', return_value=registry), \
+                mock.patch.object(publisher, 'command', side_effect=command), \
+                mock.patch.object(publisher, 'pulled_output', return_value={'verified': True}) as pulled:
+            output = Path(folder) / 'evidence'
+            publisher.publish(Path(folder), Path(folder), output, env)
+            receipt = json.loads((output / 'published-images.json').read_bytes())
+            self.assertTrue(receipt['publication_complete'])
+            self.assertEqual(receipt['product_sha'], A)
+            self.assertFalse(receipt['runtime_qualified'])
+            self.assertFalse(receipt['deployment_performed'])
+            self.assertEqual({row['component'] for row in receipt['images']}, {'dev-auth', 'dev-user'})
+            self.assertTrue(all(row['product_sha'] == A for row in receipt['images']))
+            self.assertEqual(len(builds), 2)
+            self.assertEqual([call.kwargs['product'] for call in pulled.call_args_list], [A, A])
+            self.assertEqual([call.args[1] for call in snapshot.call_args_list], [P, A, A, P])
+            for component in ('dev-auth', 'dev-user'):
+                self.assertEqual(json.loads((output / (component + '-invocation.json')).read_bytes())['product_sha'], A)
+
+    def test_adoption_pulled_bytes_use_selected_source_and_cleanup_on_rejection(self):
+        for component in ('dev-auth', 'dev-user'):
+            for embedded in (A, C):
+                raw = json.dumps({'config': {'Labels': {'org.opencontainers.image.revision': A}}}).encode()
+                config_digest = 'sha256:' + hashlib.sha256(raw).hexdigest()
+                registry = mock.Mock()
+                registry.get.return_value = raw
+                calls = []
+                def command(args, **kwargs):
+                    calls.append(args)
+                    if args[:3] == ['docker', 'image', 'inspect']:
+                        return config_digest.encode()
+                    if args[:2] == ['docker', 'create']:
+                        return b'c' * 64
+                    if args[:2] == ['docker', 'cp']:
+                        destination = Path(args[-1])
+                        if destination.name == 'auth.jar':
+                            destination.write_bytes(self._jar(embedded))
+                        elif destination.name == 'service':
+                            destination.write_bytes(b'\x7fELF:' + embedded.encode())
+                        else:
+                            destination.write_bytes(b'public-trust-fixture')
+                    return b''
+                with self.subTest(component=component, embedded=embedded), tempfile.TemporaryDirectory() as folder, \
+                        mock.patch.object(publisher, 'command', side_effect=command):
+                    args = (component, 'ghcr.io/fixture@' + DIGEST, config_digest, Path(folder),
+                            registry, 'fixture', Path(folder))
+                    if embedded == A:
+                        self.assertTrue(publisher.pulled_output(*args, product=A)['verified'])
+                    else:
+                        with self.assertRaises(publisher.Refused):
+                            publisher.pulled_output(*args, product=A)
+                    self.assertEqual(calls[-1], ['docker', 'rm', 'c' * 64])
+
     def test_selected_current_product_rejects_previous_candidate(self):
         self.assertEqual(publisher.build_plan(C, P, '12345', '2')['product_sha'], C)
         with self.assertRaisesRegex(publisher.Refused, 'unselected_product'):

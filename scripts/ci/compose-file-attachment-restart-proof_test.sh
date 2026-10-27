@@ -90,7 +90,9 @@ EOF
   cat >"$bin/python3" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "$1" == */scripts/dev/generate-phase0-fixture.py ]]; then
+  if [[ "$1" == "-c" && "$2" == *"os.name"* && "$2" == *"posix"* ]]; then
+    exit 0
+  elif [[ "$1" == */scripts/dev/generate-phase0-fixture.py ]]; then
   mkdir -p "$2"
   printf 'fixture=%s\n' "$2" >>"${FAKE_LOG:?}"
 elif [[ "$1" == */scripts/dev/restore-phase0-fixture-owner.py ]]; then

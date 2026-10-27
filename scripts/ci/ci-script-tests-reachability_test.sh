@@ -100,16 +100,18 @@ echo "${dev_web_filter_block}" | grep -Fq '  - .github/ci/path-filters.yml' \
 web_block="$(sed -n '/^  web:$/,/^  [[:alnum:]_-]*:$/p' "${WORKFLOW}")"
 echo "${web_block}" | grep -Fq 'Build and push DEV web image' \
   || fail "master web job must publish the DEV-configured frontend"
-echo "${web_block}" | grep -Fq 'tags: ${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}' \
+echo "${web_block}" | grep -Fq '${{ steps.image.outputs.base }}/dev-web:${{ github.sha }}' \
   || fail "DEV web image must use an immutable source-SHA tag"
-echo "${web_block}" | grep -Fq 'VOICE_API_BASE_URL=https://api-dev.comrade.click' \
-  || fail "DEV web image must target the documented DEV API"
-echo "${web_block}" | grep -Fq 'VOICE_LIVEKIT_URL=wss://livekit-dev.comrade.click' \
-  || fail "DEV web image must target the documented DEV LiveKit endpoint"
+echo "${web_block}" | grep -Fq 'VOICE_RUNTIME_CONFIG_REQUIRED=true' \
+  || fail "promotable web image must require explicit runtime binding"
+! echo "${web_block}" | grep -Eq 'VOICE_API_BASE_URL=|VOICE_LIVEKIT_URL=' \
+  || fail "promotable web image cannot embed environment endpoints"
 echo "${web_block}" | grep -Fq 'dev-web@${{ steps.build-dev-web.outputs.digest }}' \
   || fail "DEV web receipt must bind the source-SHA tag to Buildx manifest digest"
-echo "${web_block}" | grep -Fq 'tags: ${{ steps.image.outputs.base }}/web:${{ github.sha }}' \
-  || fail "staging web image publication must remain unchanged"
+echo "${web_block}" | grep -Fq 'IMAGE_REF: ${{ steps.image.outputs.base }}/web@${{ steps.build-dev-web.outputs.digest }}' \
+  || fail "DEV receipt must use the same canonical web digest as STAGING"
+echo "${web_block}" | grep -Fq '${{ steps.image.outputs.base }}/web:${{ github.sha }}' \
+  || fail "staging web image publication must retain its source-SHA tag"
 
 staging_deploy_workflow="${ROOT}/.github/workflows/staging-deploy.yml"
 image_verify_line="$(grep -n '^      - name: Verify every exact staging image before cluster access$' "${staging_deploy_workflow}" | cut -d: -f1)"

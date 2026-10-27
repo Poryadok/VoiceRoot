@@ -73,6 +73,20 @@ GoRouter createVoiceGoRouter({
         },
       ),
       GoRoute(
+        path: '/u/:username',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
+      ),
+      GoRoute(
+        path: '/dm/:userId',
+        builder: (context, state) {
+          onDeepLinkPath?.call(state);
+          return shellBuilder(context, state);
+        },
+      ),
+      GoRoute(
         path: '/bots/:slug',
         builder: (context, state) {
           onDeepLinkPath?.call(state);

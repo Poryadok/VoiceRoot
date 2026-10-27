@@ -207,6 +207,8 @@ class _AuthenticatedShell extends ConsumerStatefulWidget {
 
 class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   var _discoverHintScheduled = false;
+  var _initialRouteLinkHandled = false;
+  var _resolvedDeepLinkScheduled = false;
 
   @override
   void initState() {
@@ -220,14 +222,28 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   Future<void> _handleInitialRouteLink() async {
     final state = widget.routeState;
     if (state == null) return;
-    final uri = Uri.base.replace(path: state.uri.path, query: state.uri.query);
+    if (_initialRouteLinkHandled) {
+      // Platform initial-link discovery can replay the retained browser URL.
+      final resolved = ref.read(deepLinkControllerProvider).resolved;
+      if (resolved != null && _matchesInitialRoute(resolved)) {
+        ref.read(deepLinkControllerProvider.notifier).clearResolved();
+      }
+      return;
+    }
+    final uri = ref
+        .read(deepLinkBaseUriProvider)
+        .replace(path: state.uri.path, query: state.uri.query);
     if (state.uri.path == '/' || state.uri.path.isEmpty) return;
     try {
       final target = parseDeepLinkUrl(uri.toString());
-      await ref
-          .read(deepLinkControllerProvider.notifier)
-          .onIncomingLink(target);
-      await resolveAndNavigateDeepLink(ref, target);
+      _initialRouteLinkHandled = true;
+      final resolved = ref.read(deepLinkControllerProvider).resolved;
+      if (resolved != null && _matchesInitialRoute(resolved)) {
+        ref.read(deepLinkControllerProvider.notifier).clearResolved();
+      }
+      // The authenticated route owns this delivery directly; do not also
+      // enqueue it for the resolved-link lifecycle callback.
+      await _navigateDeepLink(target);
     } catch (_) {}
   }
 
@@ -247,12 +263,41 @@ class _AuthenticatedShellState extends ConsumerState<_AuthenticatedShell> {
   }
 
   void _handleResolvedDeepLink() {
+    if (_resolvedDeepLinkScheduled) return;
     final resolved = ref.read(deepLinkControllerProvider).resolved;
     if (resolved == null) return;
+    _resolvedDeepLinkScheduled = true;
+    if (_matchesInitialRoute(resolved)) _initialRouteLinkHandled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await resolveAndNavigateDeepLink(ref, resolved);
+      if (!mounted) return;
+      _resolvedDeepLinkScheduled = false;
+      // A newer delivery can replace the target while this frame is queued.
+      final current = ref.read(deepLinkControllerProvider).resolved;
+      if (current == null) return;
+      if (_matchesInitialRoute(current)) _initialRouteLinkHandled = true;
       ref.read(deepLinkControllerProvider.notifier).clearResolved();
+      await _navigateDeepLink(current);
     });
+    // The continuation can queue a delivery while no frame is in progress.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _navigateDeepLink(DeepLinkTarget target) async {
+    try {
+      await resolveAndNavigateDeepLink(ref, target);
+    } finally {
+      if (mounted) _handleResolvedDeepLink();
+    }
+  }
+
+  bool _matchesInitialRoute(DeepLinkTarget target) {
+    final initial = widget.routeState?.uri;
+    final incoming = Uri.tryParse(target.rawUrl);
+    if (initial == null || incoming == null) return false;
+    final path = incoming.scheme == 'voice'
+        ? '/${[incoming.host, ...incoming.pathSegments].where((part) => part.isNotEmpty).join('/')}'
+        : incoming.path;
+    return path == initial.path && incoming.query == initial.query;
   }
 
   void _scheduleDiscoverHintIfNeeded() {

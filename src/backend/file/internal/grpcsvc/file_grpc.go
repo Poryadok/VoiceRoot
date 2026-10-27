@@ -63,6 +63,12 @@ type ImageProcessor interface {
 	ProcessImage(ctx context.Context, row store.FileRow) (ImageProcessingResult, error)
 }
 
+// VerifiedImageProcessor consumes the same source snapshot that confirmation
+// hashed, validated and scanned, without rereading a mutable upload object.
+type VerifiedImageProcessor interface {
+	ProcessImageBytes(ctx context.Context, row store.FileRow, source []byte) (ImageProcessingResult, error)
+}
+
 type AudioProcessor interface {
 	Extract(context.Context, []byte) (audioproc.Metadata, error)
 }
@@ -204,6 +210,11 @@ func (s *FileGRPC) RequestUpload(ctx context.Context, req *filev1.RequestUploadR
 			return nil, status.Error(codes.InvalidArgument, "GIF processing requires plaintext image/gif upload")
 		}
 		intent = "gif"
+	case filev1.UploadIntent_UPLOAD_INTENT_STICKER:
+		if (mimeType != "image/png" && mimeType != "image/webp") || req.GetIsE2E() || req.GetContextStory() != nil {
+			return nil, status.Error(codes.InvalidArgument, "sticker processing requires plaintext PNG or WebP upload")
+		}
+		intent = "sticker"
 	case filev1.UploadIntent_UPLOAD_INTENT_MUSIC:
 		if r2file.MediaCategory(mimeType) != "audio" || req.GetContextChat() == nil || req.GetContextStory() != nil {
 			return nil, status.Error(codes.InvalidArgument, "music upload requires audio and chat context")
@@ -461,6 +472,18 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	if err := verifySHA256(uploaded, sha); err != nil {
 		return nil, err
 	}
+	if row.UploadIntent == "sticker" {
+		if _, verified := s.processor.(VerifiedImageProcessor); !verified || s.scanner == nil {
+			return nil, status.Error(codes.FailedPrecondition, "sticker processing and scanning must be configured")
+		}
+		if !staticStickerSource(uploaded, row.MimeType) {
+			failed, err := s.files.ApplyScanResult(ctx, fileID, "failed", "error")
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+			return &filev1.ConfirmUploadResponse{FileMetadata: fileRowToProto(failed)}, nil
+		}
+	}
 	row, err = s.files.ConfirmUpload(ctx, fileID, strings.ToLower(sha))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -481,9 +504,14 @@ func (s *FileGRPC) ConfirmUpload(ctx context.Context, req *filev1.ConfirmUploadR
 	}
 	originalKey := row.R2Key
 	if row.FileType == "image" && !row.IsE2E && s.processor != nil {
-		processed, err := s.processor.ProcessImage(ctx, row)
+		var processed ImageProcessingResult
+		if row.UploadIntent == "sticker" {
+			processed, err = s.processor.(VerifiedImageProcessor).ProcessImageBytes(ctx, row, uploaded)
+		} else {
+			processed, err = s.processor.ProcessImage(ctx, row)
+		}
 		if err != nil {
-			if errors.Is(err, ErrProcessedOutputTooLarge) {
+			if errors.Is(err, ErrProcessedOutputTooLarge) || row.UploadIntent == "sticker" {
 				failed, updateErr := s.files.ApplyScanResult(ctx, fileID, "failed", "error")
 				if updateErr != nil {
 					return nil, status.Error(codes.Internal, updateErr.Error())
@@ -555,7 +583,7 @@ func (s *FileGRPC) scanConfirmedFile(ctx context.Context, row store.FileRow, upl
 		}
 		return updated, nil
 	}
-	if !shouldScan(row.OriginalName, row.MimeType) {
+	if row.UploadIntent != "sticker" && !shouldScan(row.OriginalName, row.MimeType) {
 		return row, nil
 	}
 	if s.scanner == nil || s.reader == nil {
@@ -1167,6 +1195,9 @@ func fileRowToProto(row store.FileRow) *filev1.FileMetadata {
 	}
 	if row.UploadIntent == "music" {
 		meta.Intent = filev1.UploadIntent_UPLOAD_INTENT_MUSIC
+	}
+	if row.UploadIntent == "sticker" {
+		meta.Intent = filev1.UploadIntent_UPLOAD_INTENT_STICKER
 	}
 	if row.UploadIntent == "gif" {
 		meta.Intent = filev1.UploadIntent_UPLOAD_INTENT_GIF

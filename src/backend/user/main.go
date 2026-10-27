@@ -77,6 +77,15 @@ func runUser(parent context.Context) error {
 	if releaseRuntime.Policy().Profile() == releasepolicy.Alpha && (strings.TrimSpace(os.Getenv("DATABASE_URL")) == "" || strings.TrimSpace(os.Getenv("USER_REDIS_ADDR")) == "") {
 		return errors.New("user alpha requires PostgreSQL and presence Redis")
 	}
+	captureEnabled, err := validateSpaceCaptureConfig()
+	if err != nil {
+		return fmt.Errorf("user Space capture principal config: %w", err)
+	}
+	if captureEnabled {
+		// Transport configuration cannot qualify canonical identity source
+		// currentness. Until its production opener exists, deny before serving.
+		return errors.New("qualified User capture source unavailable")
+	}
 	sourceConfig, sourceEnabled, err := authoritysource.LoadRuntimeConfig(authorityv1.AuthorityOwner_AUTHORITY_OWNER_USER, ":9097")
 	if err != nil {
 		return fmt.Errorf("user authority source config: %v", err)
