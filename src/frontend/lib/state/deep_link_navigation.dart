@@ -47,7 +47,10 @@ class DeepLinkNavigator {
 
   final Ref _ref;
 
-  Future<void> apply(DeepLinkTarget target) async {
+  Future<void> apply(
+    DeepLinkTarget target, {
+    bool Function()? isCurrent,
+  }) async {
     _ensureChatsSectionForPush(_ref, target.kind);
     switch (target.kind) {
       case DeepLinkKind.invite:
@@ -107,10 +110,26 @@ class DeepLinkNavigator {
           ),
         );
       case DeepLinkKind.profile:
-        await _openProfileDeepLink(_ref, target);
+        await _openProfileDeepLink(_ref, target, _recoveryGuard(isCurrent));
       case DeepLinkKind.dm:
-        await _openDmDeepLink(_ref, target);
+        await _openDmDeepLink(_ref, target, _recoveryGuard(isCurrent));
     }
+  }
+
+  bool Function() _recoveryGuard(bool Function()? isCurrent) {
+    final generation = _deepLinkResolutionGeneration;
+    final session = _ref.read(authControllerProvider).session;
+    return () {
+      // Check caller lifetime before invoking any callback that reads its ref.
+      if (generation != _deepLinkResolutionGeneration ||
+          (isCurrent != null && !isCurrent())) {
+        return false;
+      }
+      final current = _ref.read(authControllerProvider);
+      return current.isAuthenticated &&
+          current.session?.accountId == session?.accountId &&
+          current.session?.activeProfileId == session?.activeProfileId;
+    };
   }
 }
 
@@ -124,13 +143,18 @@ int _deepLinkResolutionGeneration = 0;
 Future<void> applyDeepLinkNavigation(WidgetRef ref, DeepLinkTarget target) =>
     ref.read(deepLinkNavigatorProvider).apply(target);
 
-Future<void> _openDmDeepLink(Ref ref, DeepLinkTarget target) async {
+Future<void> _openDmDeepLink(
+  Ref ref,
+  DeepLinkTarget target,
+  bool Function() isCurrent,
+) async {
   final userId = target.userId;
   if (userId == null || userId.isEmpty) return;
   ref.read(navigationSectionProvider.notifier).state = NavigationSection.chats;
   final result = await ref
       .read(chatActionsProvider)
       .openDmWithProfileResult(userId);
+  if (!isCurrent()) return;
   if (result case ChatsApiFailure(
     :final statusCode,
   ) when statusCode == 403 || statusCode == 404) {
@@ -138,7 +162,11 @@ Future<void> _openDmDeepLink(Ref ref, DeepLinkTarget target) async {
   }
 }
 
-Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
+Future<void> _openProfileDeepLink(
+  Ref ref,
+  DeepLinkTarget target,
+  bool Function() isCurrent,
+) async {
   final username = target.username?.trim();
   if (username == null || username.isEmpty) return;
   final auth = ref.read(authControllerProvider);
@@ -150,12 +178,7 @@ Future<void> _openProfileDeepLink(Ref ref, DeepLinkTarget target) async {
     query: username,
     pageSize: 8,
   );
-  final current = ref.read(authControllerProvider);
-  if (!current.isAuthenticated ||
-      current.session?.accountId != auth.session!.accountId ||
-      current.session?.activeProfileId != auth.session!.activeProfileId) {
-    return;
-  }
+  if (!isCurrent()) return;
   if (result case UsersApiFailure(
     :final statusCode,
   ) when statusCode == 403 || statusCode == 404) {
@@ -211,21 +234,23 @@ Future<void> resolveAndNavigateDeepLink(
   final callerContext = ref.context;
   final generation = ++_deepLinkResolutionGeneration;
 
+  bool isCurrent() {
+    if (!callerContext.mounted || generation != _deepLinkResolutionGeneration) {
+      return false;
+    }
+    final currentAuth = ref.read(authControllerProvider);
+    final currentSession = currentAuth.session;
+    return currentAuth.isAuthenticated &&
+        currentSession?.accountId == session.accountId &&
+        currentSession?.activeProfileId == session.activeProfileId;
+  }
+
   final client = ref.read(voiceDeepLinksClientProvider);
   final result = await client.resolve(
     authorization: 'Bearer ${session.accessToken}',
     url: target.rawUrl,
   );
-  if (!callerContext.mounted || generation != _deepLinkResolutionGeneration) {
-    return;
-  }
-  final currentAuth = ref.read(authControllerProvider);
-  final currentSession = currentAuth.session;
-  if (!currentAuth.isAuthenticated ||
-      currentSession?.accountId != session.accountId ||
-      currentSession?.activeProfileId != session.activeProfileId) {
-    return;
-  }
+  if (!isCurrent()) return;
 
   final navigator = ref.read(deepLinkNavigatorProvider);
   if (result case DeepLinksApiOk(:final data)) {
@@ -236,6 +261,7 @@ Future<void> resolveAndNavigateDeepLink(
           inviteCode: data.inviteCode,
           rawUrl: target.rawUrl,
         ),
+        isCurrent: isCurrent,
       );
       return;
     }
@@ -246,6 +272,7 @@ Future<void> resolveAndNavigateDeepLink(
           spaceId: data.spaceId,
           rawUrl: target.rawUrl,
         ),
+        isCurrent: isCurrent,
       );
       return;
     }
@@ -256,7 +283,7 @@ Future<void> resolveAndNavigateDeepLink(
     await _showDeepLinkError(statusCode!);
     return;
   }
-  await navigator.apply(target);
+  await navigator.apply(target, isCurrent: isCurrent);
 }
 
 /// Builds a share URL for the current chat/message context.
