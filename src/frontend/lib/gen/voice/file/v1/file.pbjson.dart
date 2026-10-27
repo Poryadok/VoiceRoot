@@ -84,6 +84,7 @@ const UploadIntent$json = {
   '2': [
     {'1': 'UPLOAD_INTENT_UNSPECIFIED', '2': 0},
     {'1': 'UPLOAD_INTENT_GIF', '2': 2},
+    {'1': 'UPLOAD_INTENT_STICKER', '2': 3},
     {'1': 'UPLOAD_INTENT_MUSIC', '2': 6},
   ],
 };
@@ -91,7 +92,8 @@ const UploadIntent$json = {
 /// Descriptor for `UploadIntent`. Decode as a `google.protobuf.EnumDescriptorProto`.
 final $typed_data.Uint8List uploadIntentDescriptor = $convert.base64Decode(
     'CgxVcGxvYWRJbnRlbnQSHQoZVVBMT0FEX0lOVEVOVF9VTlNQRUNJRklFRBAAEhUKEVVQTE9BRF'
-    '9JTlRFTlRfR0lGEAISFwoTVVBMT0FEX0lOVEVOVF9NVVNJQxAG');
+    '9JTlRFTlRfR0lGEAISGQoVVVBMT0FEX0lOVEVOVF9TVElDS0VSEAMSFwoTVVBMT0FEX0lOVEVO'
+    'VF9NVVNJQxAG');
 
 @$core.Deprecated('Use fileURLVariantDescriptor instead')
 const FileURLVariant$json = {

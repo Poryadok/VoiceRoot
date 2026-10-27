@@ -177,7 +177,7 @@ file_references (дедупликация)
 | `article_thumb` | OG/thumb for Article attach | ≤2 MB |
 | `location_map` | Static map tile | ≤500 KB |
 
-**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), and `MUSIC` (6). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
+**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), `STICKER` (3, static only), and `MUSIC` (6). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
 
 ```protobuf
 enum UploadIntent {
@@ -260,6 +260,12 @@ Normative product scope: [text-chat.md](../features/text-chat.md) § «Меди�
 | GIF provider search | **Chat** (`SearchGifs` — selected provider adapter) | Resolve selection through Chat; protected File import or exact authorized source binding; cached `file_id` alone grants nothing |
 | Send payload / `content_type` | **Messaging** `SendMessage` | `file_id` references processed asset |
 | Composer picker UI | Flutter §3.6b | — |
+
+### Static sticker upload implementation (BE-086)
+
+`RequestUpload(intent=STICKER)` admits plaintext PNG/WebP with the existing uploader, optional chat ACL and upload-size policy. E2E and Story uploads are rejected. Confirmation verifies SHA-256, rejects GIF, APNG and animated WebP container bytes, scans the source and uses the existing image processor to produce a static WebP on a 512 by 512 transparent canvas, preserving aspect ratio. Invalid source, scan and processing failures cannot become ready. Processing and scanning must be configured. Sticker metadata retains its intent; the closed generic attachment preview v1/v2 serializer and resolver exclude stickers, as they exclude music. The existing legacy `file.processed` notification remains published.
+
+The animated sticker claims below remain an unresolved contract discrepancy: normative `text-chat.md` limits user packs to static PNG/WebP. This slice does not activate animated stickers, Chat pack operations or Messaging shared media.
 
 ### Upload flows
 

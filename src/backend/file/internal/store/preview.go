@@ -16,7 +16,7 @@ import (
 // PreviewSnapshotTx uses the same serializer for event and exact-reference RPC.
 // The caller owns a File row lock; expiry is a transition, never a clock-made revision.
 func PreviewSnapshotTx(ctx context.Context, tx pgx.Tx, row FileRow) (*eventsv1.FilePreviewSnapshot, error) {
-	if row.IsE2E || row.UploadIntent == "music" {
+	if row.IsE2E || row.UploadIntent == "music" || row.UploadIntent == "sticker" {
 		return nil, errors.New("preview unsupported")
 	}
 	var revision uint64
@@ -40,7 +40,7 @@ func PreviewSnapshotTx(ctx context.Context, tx pgx.Tx, row FileRow) (*eventsv1.F
 }
 
 func recordPreviewChange(ctx context.Context, tx pgx.Tx, before, after FileRow) error {
-	if after.IsE2E || after.UploadIntent == "music" {
+	if after.IsE2E || after.UploadIntent == "music" || after.UploadIntent == "sticker" {
 		return nil
 	}
 	old, err := PreviewSnapshotTx(ctx, tx, before)
