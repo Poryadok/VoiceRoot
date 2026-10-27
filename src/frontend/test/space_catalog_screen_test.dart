@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:voice_frontend/backend/space_catalog_client.dart';
 import 'package:voice_frontend/backend/spaces_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
@@ -118,6 +119,7 @@ void main() {
   testWidgets(
     'public join handles denial then opens only confirmed membership; invite uses existing sheet',
     (tester) async {
+      SharedPreferences.setMockInitialValues({});
       var joins = 0;
       await mount(
         tester,
