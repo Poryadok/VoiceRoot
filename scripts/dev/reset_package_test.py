@@ -77,7 +77,8 @@ def fixture():
                         keys.add(ref['key'])
                     keys.update(i['key'] for i in ref.get('items', []))
     secrets.setdefault('voice-app-secrets', set()).update(('LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET',
-        'POSTGRES_PASSWORD', 'AUTH_RESEND_API_KEY', 'AUTH_RESEND_FROM'))
+        'POSTGRES_PASSWORD', 'AUTH_RESEND_API_KEY', 'AUTH_RESEND_FROM',
+        'AUTH_DB_USERNAME', 'AUTH_DB_PASSWORD', 'USER_DB_PASSWORD'))
     secrets.setdefault('voice-nats-operator', set()).update(('account.public', 'account.jwt',
         'system-account.public', 'system-account.jwt'))
     objects = [{'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': name, 'namespace': 'voice-dev'},
