@@ -7216,6 +7216,183 @@ class GetSpaceAdmissionProfileEligibilityResponse extends $pb.GeneratedMessage {
   void clearFrozen() => $_clearField(6);
 }
 
+class GetProfileDeletionStatesRequest extends $pb.GeneratedMessage {
+  factory GetProfileDeletionStatesRequest({
+    $core.Iterable<$core.String>? profileIds,
+  }) {
+    final result = create();
+    if (profileIds != null) result.profileIds.addAll(profileIds);
+    return result;
+  }
+
+  GetProfileDeletionStatesRequest._();
+
+  factory GetProfileDeletionStatesRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetProfileDeletionStatesRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetProfileDeletionStatesRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPS(1, _omitFieldNames ? '' : 'profileIds')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetProfileDeletionStatesRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetProfileDeletionStatesRequest copyWith(
+          void Function(GetProfileDeletionStatesRequest) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetProfileDeletionStatesRequest))
+          as GetProfileDeletionStatesRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetProfileDeletionStatesRequest create() =>
+      GetProfileDeletionStatesRequest._();
+  @$core.override
+  GetProfileDeletionStatesRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetProfileDeletionStatesRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetProfileDeletionStatesRequest>(
+          create);
+  static GetProfileDeletionStatesRequest? _defaultInstance;
+
+  /// 1..500 distinct canonical nonnil UUIDs; invalid batches fail atomically.
+  @$pb.TagNumber(1)
+  $pb.PbList<$core.String> get profileIds => $_getList(0);
+}
+
+class ProfileDeletionStateEntry extends $pb.GeneratedMessage {
+  factory ProfileDeletionStateEntry({
+    $core.String? profileId,
+    ProfileDeletionState? state,
+  }) {
+    final result = create();
+    if (profileId != null) result.profileId = profileId;
+    if (state != null) result.state = state;
+    return result;
+  }
+
+  ProfileDeletionStateEntry._();
+
+  factory ProfileDeletionStateEntry.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ProfileDeletionStateEntry.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ProfileDeletionStateEntry',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'profileId')
+    ..aE<ProfileDeletionState>(2, _omitFieldNames ? '' : 'state',
+        enumValues: ProfileDeletionState.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProfileDeletionStateEntry clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ProfileDeletionStateEntry copyWith(
+          void Function(ProfileDeletionStateEntry) updates) =>
+      super.copyWith((message) => updates(message as ProfileDeletionStateEntry))
+          as ProfileDeletionStateEntry;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ProfileDeletionStateEntry create() => ProfileDeletionStateEntry._();
+  @$core.override
+  ProfileDeletionStateEntry createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ProfileDeletionStateEntry getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ProfileDeletionStateEntry>(create);
+  static ProfileDeletionStateEntry? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get profileId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set profileId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProfileId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProfileId() => $_clearField(1);
+
+  /// Missing rows are UNKNOWN, never evidence of deletion.
+  @$pb.TagNumber(2)
+  ProfileDeletionState get state => $_getN(1);
+  @$pb.TagNumber(2)
+  set state(ProfileDeletionState value) => $_setField(2, value);
+  @$pb.TagNumber(2)
+  $core.bool hasState() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearState() => $_clearField(2);
+}
+
+class GetProfileDeletionStatesResponse extends $pb.GeneratedMessage {
+  factory GetProfileDeletionStatesResponse({
+    $core.Iterable<ProfileDeletionStateEntry>? states,
+  }) {
+    final result = create();
+    if (states != null) result.states.addAll(states);
+    return result;
+  }
+
+  GetProfileDeletionStatesResponse._();
+
+  factory GetProfileDeletionStatesResponse.fromBuffer(
+          $core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory GetProfileDeletionStatesResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'GetProfileDeletionStatesResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.user.v1'),
+      createEmptyInstance: create)
+    ..pPM<ProfileDeletionStateEntry>(1, _omitFieldNames ? '' : 'states',
+        subBuilder: ProfileDeletionStateEntry.create)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetProfileDeletionStatesResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  GetProfileDeletionStatesResponse copyWith(
+          void Function(GetProfileDeletionStatesResponse) updates) =>
+      super.copyWith(
+              (message) => updates(message as GetProfileDeletionStatesResponse))
+          as GetProfileDeletionStatesResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static GetProfileDeletionStatesResponse create() =>
+      GetProfileDeletionStatesResponse._();
+  @$core.override
+  GetProfileDeletionStatesResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static GetProfileDeletionStatesResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<GetProfileDeletionStatesResponse>(
+          create);
+  static GetProfileDeletionStatesResponse? _defaultInstance;
+
+  /// Exactly one entry per requested ID, in request order.
+  @$pb.TagNumber(1)
+  $pb.PbList<ProfileDeletionStateEntry> get states => $_getList(0);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

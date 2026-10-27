@@ -44,6 +44,7 @@ const (
 	UserService_GetBulkPresence_FullMethodName                     = "/voice.user.v1.UserService/GetBulkPresence"
 	UserService_GetNotificationRoutingPresence_FullMethodName      = "/voice.user.v1.UserService/GetNotificationRoutingPresence"
 	UserService_GetScheduledMessageDispatchPresence_FullMethodName = "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
+	UserService_GetProfileDeletionStates_FullMethodName            = "/voice.user.v1.UserService/GetProfileDeletionStates"
 	UserService_GetSettings_FullMethodName                         = "/voice.user.v1.UserService/GetSettings"
 	UserService_UpdateSettings_FullMethodName                      = "/voice.user.v1.UserService/UpdateSettings"
 	UserService_GetOnboardingState_FullMethodName                  = "/voice.user.v1.UserService/GetOnboardingState"
@@ -114,6 +115,9 @@ type UserServiceClient interface {
 	// Internal Messaging decision for an owned scheduled dispatch.
 	// Exposed only on the dedicated authenticated Messaging principal listener.
 	GetScheduledMessageDispatchPresence(ctx context.Context, in *GetScheduledMessageDispatchPresenceRequest, opts ...grpc.CallOption) (*GetScheduledMessageDispatchPresenceResponse, error)
+	// @voice.security=protected;callers=service:messaging
+	// Deletion fact only; dedicated Messaging mTLS listener, never ordinary User or Gateway.
+	GetProfileDeletionStates(ctx context.Context, in *GetProfileDeletionStatesRequest, opts ...grpc.CallOption) (*GetProfileDeletionStatesResponse, error)
 	GetSettings(ctx context.Context, in *GetSettingsRequest, opts ...grpc.CallOption) (*GetSettingsResponse, error)
 	UpdateSettings(ctx context.Context, in *UpdateSettingsRequest, opts ...grpc.CallOption) (*UpdateSettingsResponse, error)
 	GetOnboardingState(ctx context.Context, in *GetOnboardingStateRequest, opts ...grpc.CallOption) (*GetOnboardingStateResponse, error)
@@ -396,6 +400,16 @@ func (c *userServiceClient) GetScheduledMessageDispatchPresence(ctx context.Cont
 	return out, nil
 }
 
+func (c *userServiceClient) GetProfileDeletionStates(ctx context.Context, in *GetProfileDeletionStatesRequest, opts ...grpc.CallOption) (*GetProfileDeletionStatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetProfileDeletionStatesResponse)
+	err := c.cc.Invoke(ctx, UserService_GetProfileDeletionStates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) GetSettings(ctx context.Context, in *GetSettingsRequest, opts ...grpc.CallOption) (*GetSettingsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSettingsResponse)
@@ -608,6 +622,9 @@ type UserServiceServer interface {
 	// Internal Messaging decision for an owned scheduled dispatch.
 	// Exposed only on the dedicated authenticated Messaging principal listener.
 	GetScheduledMessageDispatchPresence(context.Context, *GetScheduledMessageDispatchPresenceRequest) (*GetScheduledMessageDispatchPresenceResponse, error)
+	// @voice.security=protected;callers=service:messaging
+	// Deletion fact only; dedicated Messaging mTLS listener, never ordinary User or Gateway.
+	GetProfileDeletionStates(context.Context, *GetProfileDeletionStatesRequest) (*GetProfileDeletionStatesResponse, error)
 	GetSettings(context.Context, *GetSettingsRequest) (*GetSettingsResponse, error)
 	UpdateSettings(context.Context, *UpdateSettingsRequest) (*UpdateSettingsResponse, error)
 	GetOnboardingState(context.Context, *GetOnboardingStateRequest) (*GetOnboardingStateResponse, error)
@@ -714,6 +731,9 @@ func (UnimplementedUserServiceServer) GetNotificationRoutingPresence(context.Con
 }
 func (UnimplementedUserServiceServer) GetScheduledMessageDispatchPresence(context.Context, *GetScheduledMessageDispatchPresenceRequest) (*GetScheduledMessageDispatchPresenceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetScheduledMessageDispatchPresence not implemented")
+}
+func (UnimplementedUserServiceServer) GetProfileDeletionStates(context.Context, *GetProfileDeletionStatesRequest) (*GetProfileDeletionStatesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetProfileDeletionStates not implemented")
 }
 func (UnimplementedUserServiceServer) GetSettings(context.Context, *GetSettingsRequest) (*GetSettingsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetSettings not implemented")
@@ -1234,6 +1254,24 @@ func _UserService_GetScheduledMessageDispatchPresence_Handler(srv interface{}, c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_GetProfileDeletionStates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetProfileDeletionStatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetProfileDeletionStates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetProfileDeletionStates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetProfileDeletionStates(ctx, req.(*GetProfileDeletionStatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_GetSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSettingsRequest)
 	if err := dec(in); err != nil {
@@ -1628,6 +1666,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetScheduledMessageDispatchPresence",
 			Handler:    _UserService_GetScheduledMessageDispatchPresence_Handler,
+		},
+		{
+			MethodName: "GetProfileDeletionStates",
+			Handler:    _UserService_GetProfileDeletionStates_Handler,
 		},
 		{
 			MethodName: "GetSettings",
