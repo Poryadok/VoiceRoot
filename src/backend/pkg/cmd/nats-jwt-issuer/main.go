@@ -23,6 +23,7 @@ import (
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
 	"gopkg.in/yaml.v3"
+	"voice/backend/pkg/notificationrouting"
 )
 
 var serviceNames = []string{"analytics", "auth", "bot", "chat", "file", "gateway", "matchmaking", "messaging", "moderation", "notification", "realtime", "role", "search", "social", "space", "story", "subscription", "user", "voice"}
@@ -231,10 +232,11 @@ func validGrant(g grant, owner string, bootstrap bool) bool {
 			(subject != "notification.subscription_grace_reminder" || owner != "notification" || bootstrap) {
 			return false
 		}
-		if seen[subject] || subject == "" || strings.ContainsAny(subject, " \t\r\n*") || strings.HasSuffix(subject, ".>") && !validAck(subject) {
+		routingReply := owner == "notification" && !bootstrap && subject == notificationrouting.ReplyPrefix+">"
+		if seen[subject] || subject == "" || strings.ContainsAny(subject, " \t\r\n*") || strings.HasSuffix(subject, ".>") && !validAck(subject) && !routingReply {
 			return false
 		}
-		if strings.Contains(subject, ">") && !validAck(subject) {
+		if strings.Contains(subject, ">") && !validAck(subject) && !routingReply {
 			return false
 		}
 		if strings.HasPrefix(subject, "$JS.API.") {

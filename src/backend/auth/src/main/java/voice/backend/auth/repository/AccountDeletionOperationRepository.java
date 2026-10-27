@@ -7,6 +7,11 @@ import java.util.UUID;
 
 /** Durable, idempotent state for completing a soft deletion after the account row changed. */
 public interface AccountDeletionOperationRepository {
+  /** Persistent scheduling must lock the account before sampling its database clock. */
+  default Instant lockAccountAndReadDatabaseTime(UUID accountId) {
+    throw new UnsupportedOperationException("database-owned deletion scheduling is unavailable");
+  }
+
   AccountDeletionOperation createOrResume(
       UUID operationId, UUID accountId, long sessionEpoch, String restoreTokenHash, Instant now);
 

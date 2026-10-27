@@ -193,8 +193,10 @@ proof receipts. Runtime configuration is documented in
 | `otp_codes` | email verify / password reset |
 | `e2e_key_backups` | [encryption.md](features/encryption.md) — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
 
-Target, not an existing migration: [linked-provider OAuth attempts/results](todo/client.md#oauth-callbackresume-transport-contract-v1--target)
-belong to `auth_db` PostgreSQL. Persist state/result hashes, original JWT
+Default-off `linked_oauth_attempts` (`V32__linked_oauth_transport.sql`), implementing
+the [linked-provider OAuth attempts/results contract](todo/client.md#oauth-callbackresume-transport-contract-v1--target),
+belongs to `auth_db` PostgreSQL; the operational loader uses the byte-identical
+DDL in transactional `000033_linked_oauth_transport.up.sql`. It persists state/result hashes, original JWT
 account/profile/`jti`/epoch/expiry, configured callback/return binding and revision,
 processing/terminal state and encrypted temporary provider tokens. Result consume
 and source/sync-target writes are atomic in Auth; User receives only source

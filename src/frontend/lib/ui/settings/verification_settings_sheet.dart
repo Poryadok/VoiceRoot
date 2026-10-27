@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../backend/auth_client.dart';
+import '../../backend/auth_session.dart';
+import '../../backend/gateway_http.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
 import '../../state/auth_providers.dart';
@@ -19,6 +22,15 @@ class VerificationSettingsSheet extends ConsumerStatefulWidget {
   static const Key selectedProfileKey = Key('verification_selected_profile');
   static const Key twitchLinkKey = Key('verification_twitch_link');
   static const Key youtubeLinkKey = Key('verification_youtube_link');
+  static const Key retryKey = Key('verification_retry');
+  static const Key closeKey = Key('verification_close');
+  static const Key unlinkConfirmKey = Key('verification_unlink_confirm');
+  static const Key verificationDestinationKey = Key(
+    'linked_accounts_verification_destination',
+  );
+  static const Key organizationDestinationKey = Key(
+    'linked_accounts_organization_destination',
+  );
   static const Key verificationStatusKey = Key(
     'verification_status_destination',
   );
@@ -52,6 +64,20 @@ class VerificationSettingsSheet extends ConsumerStatefulWidget {
 
 enum _VerificationErrorSource { load, link, unlink }
 
+class _SessionActionSnapshot {
+  const _SessionActionSnapshot({
+    required this.accountId,
+    required this.profileId,
+    required this.installGeneration,
+    required this.requestIdentity,
+  });
+
+  final String accountId;
+  final String profileId;
+  final int installGeneration;
+  final GatewayRequestIdentity requestIdentity;
+}
+
 class _VerificationSettingsSheetState
     extends ConsumerState<VerificationSettingsSheet> {
   List<LinkedAccount>? _accounts;
@@ -74,11 +100,59 @@ class _VerificationSettingsSheetState
   @override
   void initState() {
     super.initState();
+    _observedSessionInstallGeneration = ref
+        .read(authControllerProvider.notifier)
+        .sessionInstallGeneration;
     _loadLinkedAccounts();
+  }
+
+  _SessionActionSnapshot? _snapshotFor(AuthSession session) {
+    if (ref.read(profileSwitchInProgressProvider)) return null;
+    final controller = ref.read(authControllerProvider.notifier);
+    final requestIdentity = controller.gatewayRequestIdentity;
+    if (requestIdentity == null ||
+        requestIdentity.accountId != session.accountId ||
+        requestIdentity.profileId != session.activeProfileId) {
+      return null;
+    }
+    return _SessionActionSnapshot(
+      accountId: session.accountId,
+      profileId: session.activeProfileId,
+      installGeneration: controller.sessionInstallGeneration,
+      requestIdentity: requestIdentity,
+    );
+  }
+
+  bool _isCurrent(_SessionActionSnapshot snapshot) {
+    if (!mounted || ref.read(profileSwitchInProgressProvider)) return false;
+    final current = ref.read(authControllerProvider).session;
+    final controller = ref.read(authControllerProvider.notifier);
+    return current != null &&
+        current.accountId == snapshot.accountId &&
+        current.activeProfileId == snapshot.profileId &&
+        controller.sessionInstallGeneration == snapshot.installGeneration &&
+        controller.gatewayRequestIdentity == snapshot.requestIdentity;
+  }
+
+  void _clearForSessionChange({required bool switching}) {
+    if (!mounted) return;
+    final session = ref.read(authControllerProvider).session;
+    setState(() {
+      _accounts = null;
+      _selectedProfileId = null;
+      _busyPlatform = null;
+      _error = session == null && !switching ? 'not_authenticated' : null;
+      _errorSource = session == null && !switching
+          ? _VerificationErrorSource.load
+          : null;
+      _loading = session != null || switching;
+    });
+    if (session != null && !switching) _loadLinkedAccounts();
   }
 
   Future<void> _loadLinkedAccounts() async {
     final session = ref.read(authControllerProvider).session;
+    if (ref.read(profileSwitchInProgressProvider)) return;
     if (session == null) {
       setState(() {
         _loading = false;
@@ -87,22 +161,20 @@ class _VerificationSettingsSheetState
       });
       return;
     }
+    final snapshot = _snapshotFor(session);
+    if (snapshot == null) return;
+    if (mounted && !_loading) {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _errorSource = null;
+      });
+    }
     final selectedProfileId = session.activeProfileId;
-    final authController = ref.read(authControllerProvider.notifier);
-    final requestIdentity = authController.gatewayRequestIdentity;
-    final installGeneration = authController.sessionInstallGeneration;
     final result = await ref
         .read(voiceAuthClientProvider)
         .listLinkedAccounts(session: session);
-    if (!mounted ||
-        requestIdentity == null ||
-        ref.read(profileSwitchInProgressProvider) ||
-        authController.sessionInstallGeneration != installGeneration ||
-        authController.gatewayRequestIdentity != requestIdentity ||
-        ref.read(authControllerProvider).session?.activeProfileId !=
-            selectedProfileId) {
-      return;
-    }
+    if (!_isCurrent(snapshot)) return;
     setState(() {
       _loading = false;
       switch (result) {
@@ -129,6 +201,8 @@ class _VerificationSettingsSheetState
   Future<void> _linkProvider(String platform) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
+    final snapshot = _snapshotFor(session);
+    if (snapshot == null) return;
     setState(() {
       _busyPlatform = platform;
       if (_errorSource == _VerificationErrorSource.link) {
@@ -143,7 +217,7 @@ class _VerificationSettingsSheetState
           platform: platform,
           redirectUri: 'https://app.voice.test/oauth/$platform',
         );
-    if (!mounted) return;
+    if (!_isCurrent(snapshot)) return;
     setState(() => _busyPlatform = null);
     switch (result) {
       case AuthApiOk(:final data):
@@ -153,43 +227,83 @@ class _VerificationSettingsSheetState
             _errorSource = null;
           });
         }
-        if (data.isNotEmpty) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('OAuth: $data')));
+        final uri = Uri.tryParse(data);
+        if (uri == null ||
+            !const {'http', 'https'}.contains(uri.scheme) ||
+            uri.host.isEmpty) {
+          _setActionError(_VerificationErrorSource.link);
+          return;
+        }
+        if (!_isCurrent(snapshot)) return;
+        var launched = false;
+        try {
+          launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } on Object {
+          launched = false;
+        }
+        if (!mounted) return;
+        if (!launched) {
+          _setActionError(_VerificationErrorSource.link);
         }
       case AuthApiFailure(:final statusCode):
-        setState(() {
-          _error = commonActionErrorMessage(
-            AppLocalizations.of(context)!,
-            statusCode: statusCode,
-          );
-          _errorSource = _VerificationErrorSource.link;
-        });
+        _setActionError(_VerificationErrorSource.link, statusCode: statusCode);
     }
   }
 
   Future<void> _unlinkProvider(String platform) async {
     final session = ref.read(authControllerProvider).session;
     if (session == null) return;
+    final snapshot = _snapshotFor(session);
+    if (snapshot == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.verificationUnlinkConfirmTitle),
+        content: Text(
+          l10n.verificationUnlinkConfirmBody(_platformName(l10n, platform)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.commonCancel),
+          ),
+          TextButton(
+            key: VerificationSettingsSheet.unlinkConfirmKey,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.verificationUnlink),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !_isCurrent(snapshot)) return;
     setState(() => _busyPlatform = platform);
     final result = await ref
         .read(voiceAuthClientProvider)
         .unlinkLinkedAccount(session: session, platform: platform);
-    if (!mounted) return;
+    if (!_isCurrent(snapshot)) return;
     switch (result) {
       case AuthApiOk<void>():
         await _loadLinkedAccounts();
       case AuthApiFailure(:final statusCode):
-        setState(() {
-          _error = commonActionErrorMessage(
-            AppLocalizations.of(context)!,
-            statusCode: statusCode,
-          );
-          _errorSource = _VerificationErrorSource.unlink;
-        });
+        _setActionError(
+          _VerificationErrorSource.unlink,
+          statusCode: statusCode,
+        );
     }
     if (mounted) setState(() => _busyPlatform = null);
+  }
+
+  void _setActionError(_VerificationErrorSource source, {int? statusCode}) {
+    if (!mounted) return;
+    setState(() {
+      _error = commonActionErrorMessage(
+        AppLocalizations.of(context)!,
+        statusCode: statusCode,
+      );
+      _errorSource = source;
+      _busyPlatform = null;
+    });
   }
 
   Future<void> _openVerificationStatus() async {
@@ -326,15 +440,20 @@ class _VerificationSettingsSheetState
           session?.activeProfileId != _observedProfileId;
       if (!changed) return;
       _syncObservedSession();
+      _clearForSessionChange(
+        switching: ref.read(profileSwitchInProgressProvider),
+      );
       _clearVerificationForSessionChange(
         reload: !ref.read(profileSwitchInProgressProvider),
       );
     });
     ref.listen<bool>(profileSwitchInProgressProvider, (previous, switching) {
       if (switching) {
+        _clearForSessionChange(switching: true);
         _clearVerificationForSessionChange(reload: false);
       } else if (previous == true) {
         _syncObservedSession();
+        _clearForSessionChange(switching: false);
         _clearVerificationForSessionChange(reload: true);
       }
     });
@@ -432,120 +551,168 @@ class _VerificationSettingsSheetState
     }
 
     return SafeArea(
-      child: Padding(
-        key: VerificationSettingsSheet.sheetKey,
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                l10n.verificationSettingsTitle,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l10n.verificationSettingsHint,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              if (_selectedProfileId != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  l10n.verificationSelectedProfile(_selectedProfileId!),
-                  key: VerificationSettingsSheet.selectedProfileKey,
-                  style: TextStyle(color: voice.textSecondary),
-                ),
-              ],
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                key: VerificationSettingsSheet.verificationStatusKey,
-                onPressed: _openVerificationStatus,
-                icon: const Icon(Icons.verified_outlined),
-                label: Text(l10n.verificationStatusTitle),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                key: VerificationSettingsSheet.organizationUnavailableKey,
-                onPressed: null,
-                icon: const Icon(Icons.business_outlined),
-                label: Text(l10n.verificationOrganizationUnavailable),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                l10n.verificationLinkedAccountsTitle,
-                style: TextStyle(color: voice.textSecondary),
-              ),
-              const SizedBox(height: 8),
-              if (_loading)
-                const Center(child: CircularProgressIndicator())
-              else if (_error != null)
-                Text(
-                  _error == 'not_authenticated'
-                      ? l10n.settingsNotAuthenticated
-                      : _error!,
-                  style: TextStyle(color: voice.error),
-                )
-              else
-                KeyedSubtree(
-                  key: VerificationSettingsSheet.linkedAccountsKey,
-                  child: _accounts!.isEmpty
-                      ? Text(
-                          l10n.verificationLinkedAccountsEmpty,
-                          style: TextStyle(color: voice.textSecondary),
-                        )
-                      : Column(
-                          children: [
-                            for (final account in _accounts!)
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(account.platform),
-                                subtitle: account.displayName != null
-                                    ? Text(account.displayName!)
-                                    : null,
-                                trailing: TextButton(
-                                  key: ValueKey(
-                                    'verification_${account.platform}_unlink',
-                                  ),
-                                  onPressed: _busyPlatform == null
-                                      ? () => _unlinkProvider(account.platform)
-                                      : null,
-                                  child: Text(l10n.verificationUnlink),
-                                ),
-                              ),
-                          ],
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Padding(
+            key: VerificationSettingsSheet.sheetKey,
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l10n.verificationLinkedAccountsTitle,
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
-                ),
-              const SizedBox(height: 16),
-              if (!(_accounts ?? const <LinkedAccount>[]).any(
-                (account) => account.platform == 'twitch',
-              ))
-                VoicePrimaryButton(
-                  key: VerificationSettingsSheet.twitchLinkKey,
-                  onPressed: _busyPlatform == null
-                      ? () => _linkProvider('twitch')
-                      : null,
-                  isLoading: _busyPlatform == 'twitch',
-                  child: Text(l10n.verificationLinkTwitch),
-                ),
-              if (!(_accounts ?? const <LinkedAccount>[]).any(
-                (account) => account.platform == 'youtube',
-              )) ...[
-                const SizedBox(height: 8),
-                VoicePrimaryButton(
-                  key: VerificationSettingsSheet.youtubeLinkKey,
-                  onPressed: _busyPlatform == null
-                      ? () => _linkProvider('youtube')
-                      : null,
-                  isLoading: _busyPlatform == 'youtube',
-                  child: Text(l10n.verificationLinkYoutube),
-                ),
-              ],
-            ],
+                      ),
+                      IconButton(
+                        key: VerificationSettingsSheet.closeKey,
+                        tooltip: MaterialLocalizations.of(
+                          context,
+                        ).closeButtonTooltip,
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    l10n.verificationSettingsHint,
+                    style: TextStyle(color: voice.textSecondary),
+                  ),
+                  if (_selectedProfileId != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.verificationSelectedProfile(_selectedProfileId!),
+                      key: VerificationSettingsSheet.selectedProfileKey,
+                      style: TextStyle(color: voice.textSecondary),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    key: VerificationSettingsSheet.verificationStatusKey,
+                    onPressed: _openVerificationStatus,
+                    icon: const Icon(Icons.verified_outlined),
+                    label: Text(l10n.verificationStatusTitle),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: VerificationSettingsSheet.organizationUnavailableKey,
+                    onPressed: null,
+                    icon: const Icon(Icons.business_outlined),
+                    label: Text(l10n.verificationOrganizationUnavailable),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_loading)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_error != null) ...[
+                    Text(
+                      _error == 'not_authenticated'
+                          ? l10n.settingsNotAuthenticated
+                          : _error!,
+                      style: TextStyle(color: voice.error),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      key: VerificationSettingsSheet.retryKey,
+                      onPressed: _busyPlatform == null
+                          ? _loadLinkedAccounts
+                          : null,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(l10n.commonRetry),
+                    ),
+                  ] else
+                    KeyedSubtree(
+                      key: VerificationSettingsSheet.linkedAccountsKey,
+                      child: _accounts!.isEmpty
+                          ? Text(
+                              l10n.verificationLinkedAccountsEmpty,
+                              style: TextStyle(color: voice.textSecondary),
+                            )
+                          : Column(
+                              children: [
+                                for (final account in _accounts!)
+                                  ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(
+                                      _platformIcon(account.platform),
+                                    ),
+                                    title: Text(
+                                      _platformName(l10n, account.platform),
+                                    ),
+                                    subtitle: account.displayName != null
+                                        ? Text(
+                                            '${account.displayName} · ${l10n.verificationConnected}',
+                                          )
+                                        : Text(l10n.verificationConnected),
+                                    trailing: TextButton(
+                                      key: ValueKey(
+                                        'verification_${account.platform}_unlink',
+                                      ),
+                                      onPressed: _busyPlatform == null
+                                          ? () => _unlinkProvider(
+                                              account.platform,
+                                            )
+                                          : null,
+                                      child: Text(l10n.verificationUnlink),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                    ),
+                  const SizedBox(height: 16),
+                  if (_accounts != null &&
+                      !(_accounts ?? const <LinkedAccount>[]).any(
+                        (account) => account.platform == 'twitch',
+                      ))
+                    VoicePrimaryButton(
+                      key: VerificationSettingsSheet.twitchLinkKey,
+                      onPressed: _busyPlatform == null
+                          ? () => _linkProvider('twitch')
+                          : null,
+                      isLoading: _busyPlatform == 'twitch',
+                      child: Text(l10n.verificationLinkTwitch),
+                    ),
+                  if (_accounts != null &&
+                      !(_accounts ?? const <LinkedAccount>[]).any(
+                        (account) => account.platform == 'youtube',
+                      )) ...[
+                    const SizedBox(height: 8),
+                    VoicePrimaryButton(
+                      key: VerificationSettingsSheet.youtubeLinkKey,
+                      onPressed: _busyPlatform == null
+                          ? () => _linkProvider('youtube')
+                          : null,
+                      isLoading: _busyPlatform == 'youtube',
+                      child: Text(l10n.verificationLinkYoutube),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
   }
+
+  IconData _platformIcon(String platform) => switch (platform) {
+    'twitch' => Icons.live_tv_outlined,
+    'youtube' => Icons.smart_display_outlined,
+    _ => Icons.link,
+  };
+
+  String _platformName(AppLocalizations l10n, String platform) =>
+      switch (platform) {
+        'twitch' => 'Twitch',
+        'youtube' => 'YouTube',
+        _ => platform,
+      };
 }
 
 class _PendingOrganizationChallengeView extends StatelessWidget {

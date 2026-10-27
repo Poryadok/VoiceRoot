@@ -4709,7 +4709,7 @@ abstract class AppLocalizations {
   /// No description provided for @verificationSettingsHint.
   ///
   /// In en, this message translates to:
-  /// **'Link platforms to earn a verified badge, or verify your organization domain.'**
+  /// **'Link Twitch or YouTube to check eligibility for a verified badge.'**
   String get verificationSettingsHint;
 
   /// No description provided for @verificationLinkedAccountsTitle.
@@ -4741,6 +4741,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unlink'**
   String get verificationUnlink;
+
+  /// No description provided for @verificationUnlinkConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect platform?'**
+  String get verificationUnlinkConfirmTitle;
+
+  /// No description provided for @verificationUnlinkConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect {platform} from this profile? This removes its verification source.'**
+  String verificationUnlinkConfirmBody(Object platform);
+
+  /// No description provided for @verificationConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get verificationConnected;
+
+  /// No description provided for @verificationStatusUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification status is unavailable'**
+  String get verificationStatusUnavailable;
 
   /// No description provided for @verificationSelectedProfile.
   ///
