@@ -20,7 +20,7 @@
 | Space Service        | `space_db`        | Social principal replay; shared signed Voice/Messaging communication-decision replay | — |
 | Role Service         | `role_db`         | Shared principal replay Redis | —                                |
 | Voice Service        | `voice_db`, including `voice_space_media_admission_owners` workflow token/epoch/DB lease and exact dispatch-fence acknowledgement | active-call compatibility projection + lifecycle admission/receipt mirror; per-admission dispatch nonce/epoch gate; `voice_match_squad_operations` and `voice_room_instances` own MatchSquad operation/resource state | Redis call/session projection; LiveKit room `match-squad-<room UUID>` |
-| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации; `files.preview_metadata_revision` and `file_preview_event_outbox` atomically retain redacted generic preview facts independently of Music; `file_expiry_event_outbox` retains exact logical-expiry envelopes until acknowledged, independently of byte GC |
+| File Service         | `file_db`         | Shared principal replay Redis | R2, воркеры конвертации; `file_gif_jobs`, `file_gif_outputs` and `file_gif_cleanup` retain fenced API GIF processing, delivered-byte facts and retryable orphan/original cleanup; `files.preview_metadata_revision` and `file_preview_event_outbox` atomically retain redacted generic preview facts independently of Music; `file_expiry_event_outbox` retains exact logical-expiry envelopes until acknowledged, independently of byte GC |
 | Notification Service | `notification_db` | grouping push, limits     | FCM, APNs, email                 |
 | Search Service       | `search_db` (target) | —                      | Meilisearch v2, Elasticsearch v3 |
 | Matchmaking Service  | `matchmaking_db`  | очереди, locks            | —                                |
@@ -135,6 +135,15 @@ proof receipts. Runtime configuration is documented in
 | `refresh_tokens` | opaque refresh, rotation; nullable `profile_id` binds new sessions to the active profile so refresh preserves profile switches; `NULL` supports legacy rows |
 | `otp_codes` | email verify / password reset |
 | `e2e_key_backups` | [encryption.md](features/encryption.md) — client-encrypted key backup blob (`V4__e2e_key_backups.sql`) |
+
+Target, not an existing migration: [linked-provider OAuth attempts/results](todo/client.md#oauth-callbackresume-transport-contract-v1--target)
+belong to `auth_db` PostgreSQL. Persist state/result hashes, original JWT
+account/profile/`jti`/epoch/expiry, configured callback/return binding and revision,
+processing/terminal state and encrypted temporary provider tokens. Result consume
+and source/sync-target writes are atomic in Auth; User receives only source
+state/revision. Logical expiry is checked on every use, with physical cleanup of
+expired/cancelled staged token material at least once per minute. This does not
+introduce a refresh-family/session lineage or a cross-service writable store.
 
 ### `chat_db` (Chat Service)
 
