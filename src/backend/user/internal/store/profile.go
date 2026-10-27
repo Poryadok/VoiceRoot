@@ -60,7 +60,8 @@ type ProfileRow struct {
 }
 
 type ProfileStore struct {
-	pool *pgxpool.Pool
+	pool         *pgxpool.Pool
+	birthCapture *profileBirthCapture
 }
 
 func NewProfileStore(pool *pgxpool.Pool) *ProfileStore {
@@ -316,6 +317,9 @@ func (s *ProfileStore) updateOwnedProfileTx(ctx context.Context, tx pgx.Tx, acco
 
 // CreateSecondaryProfile inserts a non-primary profile for the account (multi-profile row).
 func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
+	if s.birthCapture != nil {
+		return s.createSecondaryProfileWithBirth(ctx, accountID, displayName, usernameHint, accentColor)
+	}
 	var created *ProfileRow
 	err := s.withSearchProjectionTx(ctx, func(tx pgx.Tx) error {
 		var err error
@@ -333,27 +337,9 @@ func (s *ProfileStore) CreateSecondaryProfile(ctx context.Context, accountID uui
 }
 
 func (s *ProfileStore) createSecondaryProfileTx(ctx context.Context, tx pgx.Tx, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
-	dn := truncate(strings.TrimSpace(displayName), MaxDisplayNameRunes)
-	if dn == "" {
-		return nil, fmt.Errorf("display_name required")
-	}
-
-	base := sanitizeUsernameFromHint(usernameHint)
-	if base == "" {
-		base = sanitizeUsernameFromHint(&dn)
-	}
-
 	var lastErr error
 	for attempt := 0; attempt < maxDiscriminatorAttempts; attempt++ {
-		disc := randomDiscriminator()
-		id := uuid.New()
-		row := tx.QueryRow(ctx, `
-			INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color, username_search_key, display_name_search_key, search_normalization_version, search_projection_revision)
-			VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6, $7, $8, $9, 1)
-			RETURNING `+profileSelectCols,
-			id, accountID, base, disc, dn, accentColor, NormalizeUsernameKey(base), NormalizeUsernameKey(dn), searchNormalizationVersion,
-		)
-		p, err := scanProfile(row)
+		p, err := s.insertSecondaryProfileTx(ctx, tx, uuid.New(), accountID, displayName, usernameHint, accentColor)
 		if err == nil {
 			return p, nil
 		}
@@ -368,6 +354,22 @@ func (s *ProfileStore) createSecondaryProfileTx(ctx context.Context, tx pgx.Tx, 
 		return nil, fmt.Errorf("username/discriminator exhausted: %w", lastErr)
 	}
 	return nil, fmt.Errorf("username/discriminator exhausted")
+}
+
+func (s *ProfileStore) insertSecondaryProfileTx(ctx context.Context, tx pgx.Tx, id, accountID uuid.UUID, displayName string, usernameHint *string, accentColor *string) (*ProfileRow, error) {
+	dn := truncate(strings.TrimSpace(displayName), MaxDisplayNameRunes)
+	if dn == "" {
+		return nil, fmt.Errorf("display_name required")
+	}
+	base := sanitizeUsernameFromHint(usernameHint)
+	if base == "" {
+		base = sanitizeUsernameFromHint(&dn)
+	}
+	return scanProfile(tx.QueryRow(ctx, `
+		INSERT INTO profiles (id, account_id, username, discriminator, display_name, is_primary, locale, theme, verification_type, accent_color, username_search_key, display_name_search_key, search_normalization_version, search_projection_revision)
+		VALUES ($1, $2, $3, $4, $5, false, 'ru', 'dark', 'none', $6, $7, $8, $9, 1)
+		RETURNING `+profileSelectCols,
+		id, accountID, base, randomDiscriminator(), dn, accentColor, NormalizeUsernameKey(base), NormalizeUsernameKey(dn), searchNormalizationVersion))
 }
 
 func truncate(s string, max int) string {
