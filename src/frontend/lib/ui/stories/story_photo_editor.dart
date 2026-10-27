@@ -29,6 +29,7 @@ class _StoryPhotoEditorState extends State<StoryPhotoEditor> {
   final _strokes = <List<Offset>>[];
   double? _aspectRatio;
   int? _sourceLongestSide;
+  ui.Image? _sourceImage;
   _PhotoFilter _filter = _PhotoFilter.none;
   bool _sticker = false;
   bool _exporting = false;
@@ -41,19 +42,21 @@ class _StoryPhotoEditorState extends State<StoryPhotoEditor> {
   }
 
   Future<void> _readDimensions() async {
+    ui.Codec? codec;
+    ui.Image? decoded;
     try {
-      final codec = await ui.instantiateImageCodec(widget.source);
+      codec = await ui.instantiateImageCodec(widget.source);
       final frame = await codec.getNextFrame();
-      final image = frame.image;
-      final ratio = image.width / image.height;
-      final longestSide = math.max(image.width, image.height);
-      image.dispose();
-      codec.dispose();
+      decoded = frame.image;
+      final ratio = decoded.width / decoded.height;
+      final longestSide = math.max(decoded.width, decoded.height);
       if (mounted) {
         setState(() {
           _aspectRatio = ratio;
           _sourceLongestSide = longestSide;
+          _sourceImage = decoded;
         });
+        decoded = null; // The widget now owns the decoded image.
       }
     } on Object {
       if (mounted) {
@@ -64,7 +67,16 @@ class _StoryPhotoEditorState extends State<StoryPhotoEditor> {
           ),
         );
       }
+    } finally {
+      decoded?.dispose();
+      codec?.dispose();
     }
+  }
+
+  @override
+  void dispose() {
+    _sourceImage?.dispose();
+    super.dispose();
   }
 
   String _label(String en, String ru) =>
@@ -165,9 +177,14 @@ class _StoryPhotoEditorState extends State<StoryPhotoEditor> {
           _boundary.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final longest = math.max(boundary.size.width, boundary.size.height);
       final targetLongest = math.max(720, math.min(2048, _sourceLongestSide!));
-      final image = await boundary.toImage(pixelRatio: targetLongest / longest);
-      final data = await image.toByteData(format: ui.ImageByteFormat.png);
-      image.dispose();
+      ui.Image? image;
+      ByteData? data;
+      try {
+        image = await boundary.toImage(pixelRatio: targetLongest / longest);
+        data = await image.toByteData(format: ui.ImageByteFormat.png);
+      } finally {
+        image?.dispose();
+      }
       if (data == null) throw StateError('PNG encoding failed');
       if (mounted) Navigator.of(context).pop(data.buffer.asUint8List());
     } on Object {
@@ -223,8 +240,8 @@ class _StoryPhotoEditorState extends State<StoryPhotoEditor> {
                                         colorFilter: ColorFilter.matrix(
                                           _filterMatrix,
                                         ),
-                                        child: Image.memory(
-                                          widget.source,
+                                        child: RawImage(
+                                          image: _sourceImage,
                                           fit: BoxFit.fill,
                                         ),
                                       ),

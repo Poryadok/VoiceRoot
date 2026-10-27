@@ -130,14 +130,29 @@ void main() {
     final width = frame.image.width;
     final scale = width / rect.width;
     int channel(int x, int y, int c) => rgba[(y * width + x) * 4 + c];
-    // The untouched corner is gray; the drawn line is white.
-    expect(channel(0, 0, 0), closeTo(channel(0, 0, 1), 2));
-    expect(channel(0, 0, 1), closeTo(channel(0, 0, 2), 2));
+    // The source must be present below overlays, including on an immediate export.
+    expect(channel(0, 0, 0), closeTo(137, 5));
+    expect(channel(0, 0, 1), closeTo(137, 5));
+    expect(channel(0, 0, 2), closeTo(137, 5));
+    expect(channel(0, 0, 3), 255);
     final strokeX = (12 * scale).round();
     final strokeY = (12 * scale).round();
     expect(channel(strokeX, strokeY, 0), greaterThan(220));
     expect(channel(strokeX, strokeY, 1), greaterThan(220));
     expect(channel(strokeX, strokeY, 2), greaterThan(220));
+    var stickerPixels = 0;
+    for (
+      var y = frame.image.height ~/ 3;
+      y < frame.image.height * 2 ~/ 3;
+      y++
+    ) {
+      for (var x = width ~/ 3; x < width * 2 ~/ 3; x++) {
+        if (channel(x, y, 3) == 255 && (channel(x, y, 0) - 137).abs() > 40) {
+          stickerPixels++;
+        }
+      }
+    }
+    expect(stickerPixels, greaterThan(50));
     frame.image.dispose();
   });
 }
