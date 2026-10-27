@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/ui/chat/voice_note_capture.dart';
+import 'package:voice_frontend/ui/chat/voice_note_recorder.dart';
+import 'package:fake_async/fake_async.dart';
 
 class FakeRecorder implements VoiceNoteRecorder {
   @override
@@ -57,6 +59,7 @@ class FakeRecorder implements VoiceNoteRecorder {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late FakeRecorder recorder;
   late List<CapturedVoiceNote> captured;
   Future<void> mount(WidgetTester tester) async {
@@ -87,6 +90,25 @@ void main() {
   setUp(() {
     recorder = FakeRecorder();
     captured = [];
+  });
+  test('local recorder does not poll microphone amplitude while idle', () {
+    const channel = MethodChannel('com.llfbandit.record/messages');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (_) async => null);
+    try {
+      fakeAsync((time) {
+        final local = LocalVoiceNoteRecorder();
+        final subscription = local.amplitudes.listen((_) {});
+        final timers = time.periodicTimerCount;
+        unawaited(subscription.cancel());
+        unawaited(local.dispose());
+        time.flushMicrotasks();
+        expect(timers, 0);
+      });
+    } finally {
+      messenger.setMockMethodCallHandler(channel, null);
+    }
   });
   for (final activation in [
     LogicalKeyboardKey.enter,
