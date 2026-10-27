@@ -413,6 +413,8 @@ flow. Keep providers unavailable outside the qualified fixture until a separate
 live-provider acceptance stage; no production switch or migration is authorized
 by this target contract.
 
+- [ ] **Organization verification destination and pending recovery** — Flutter `VoiceUsersClient` now wraps `GET /api/v1/users/me/verification`, and Settings displays its effective selected-profile status. Authoritative organization/personal-kind mapping, start/check actions for the existing `POST /api/v1/users/me/verification/organization` and `POST /api/v1/users/me/verification/organization/check` routes, and owner-backed pending-challenge readback/recovery remain open. Optional synthetic pending JSON parsing does not establish a field absent from the frozen owner proto/backend response; profile `verificationType` / `verificationBadge` likewise do not substitute for owner verification authority. Keep the organization destination unavailable until these existing contract gaps are resolved. See [verification.md](../features/verification.md) and [screen-controls.md](../design/screen-controls.md) §28.
+
 ### Telegram-parity UX audit — Flutter (2026-08-28)
 
 Источник: `tmp/telegram-ux-audit/AUDIT.md` (R2-A03–A05, R3-A08, R3-A11). Backend RPC-хвосты — [backend.md](backend.md) § Telegram-parity audit / § Chat navigation.
