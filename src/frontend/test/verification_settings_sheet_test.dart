@@ -825,8 +825,8 @@ Future<void> _verifyLinkedAccountsGolden(
 
   expect(tester.takeException(), isNull);
   expect(find.textContaining('selected-streamer'), findsOneWidget);
-  final goldenPath = Platform.isLinux && name == 'h'
-      ? 'goldens/linux/linked_accounts_h.png'
+  final goldenPath = Platform.isLinux
+      ? 'goldens/linux/linked_accounts_$name.png'
       : 'goldens/linked_accounts_$name.png';
   await expectLater(
     find.byKey(VerificationSettingsSheet.sheetKey),
