@@ -120,3 +120,15 @@ Concurrent deletion, job takeover and response loss must never delete winner
 objects or resurrect terminal rows. Runtime/DEV/STAGING/provider activation is
 not authorized here; local isolated qualification is separate from acceptance.
 Migration DOWN must refuse to discard retained jobs/descriptor/cleanup evidence.
+## PR945 corrective review note
+
+Current-source review140 (PR945 comment6418808196, File task c26) invalidates
+the earlier assumption that signed-PUT expiry plus one minute proves original
+write quiescence. A request accepted earlier can commit after a successful
+DELETE. The PR945 repair keeps public-original reconciliation durable beyond
+URL expiry, including legacy clock-completed rows; it makes no finite physical
+erasure claim without a real storage fence. It also removes promoted
+bytes.Buffer.ReadFrom from subprocess captures so the16KiB stdout/stderr bound
+applies through os/exec. See be085-catalog-asset-import-plan.md for actual RED,
+GREEN and current-code native codec evidence; prior local qualification remains
+historical and is not an independent full-source review receipt.

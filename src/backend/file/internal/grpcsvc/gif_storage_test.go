@@ -151,7 +151,7 @@ func TestGIFDurableCleanupRetriesWithoutDeletingWinner(t *testing.T) {
 	require.NotContains(t, deleter.keys, second.ThumbnailKey)
 	var completed int
 	require.NoError(t, files.Pool.QueryRow(ctx, `SELECT count(*) FROM file_gif_cleanup WHERE file_id=$1 AND completed_at IS NOT NULL`, id).Scan(&completed))
-	require.Equal(t, 2, completed, "original must be reconciled through signed PUT expiry")
+	require.Equal(t, 2, completed, "public original stays unresolved without a storage write fence")
 }
 
 func TestGIFOriginalCleanupRechecksSignedPUTReplay(t *testing.T) {
@@ -178,7 +178,7 @@ func TestGIFOriginalCleanupRechecksSignedPUTReplay(t *testing.T) {
 	require.True(t, ok)
 	require.NotContains(t, objects.data, job.Row.R2Key)
 	require.NoError(t, files.Pool.QueryRow(ctx, `SELECT completed_at IS NULL FROM file_gif_cleanup WHERE object_key=$1`, job.Row.R2Key).Scan(&pending))
-	require.False(t, pending)
+	require.True(t, pending, "URL age does not fence an already accepted signed PUT")
 }
 
 func TestGIFDeletionReconcilesOriginalPUTReplay(t *testing.T) {

@@ -164,11 +164,11 @@ enum UploadIntent {
 message RequestUploadRequest {
   // … existing fields (original_name, mime_type, size_bytes, context_chat, is_e2e) …
   UploadIntent intent = 8;              // spec — not yet in proto
-  optional string source_url = 9;       // GIF provider import only (HTTPS); server-side fetch → R2
+  // Remote URLs are not public upload parameters; see protected catalog import.
 }
 ```
 
-**GIF provider import:** when `intent=gif` and `source_url` set, File Service (or worker) fetches from provider CDN, stores in R2, then runs GIF transcode pipeline — client does **not** presigned-PUT the remote URL directly. User-uploaded GIF uses presigned PUT without `source_url`.
+**GIF provider import:** Chat resolves the selected provider identity and calls the protected `CatalogAssetService.ImportCatalogAsset`; a public `RequestUpload` or client URL does not authorize a fetch. File stores source identity and actual byte facts, then uses its GIF pipeline. User-uploaded GIF retains presigned PUT. See the [non-E2E catalog protocol](../testing/be085-catalog-asset-contract.md) for the pending implementation and caller matrix.
 
 | Composer / attach path | Required `intent` | Wrong intent → |
 |------------------------|-------------------|----------------|
@@ -217,14 +217,14 @@ Client ──presigned URL──► R2 (upload)
 
 ## Stickers and GIF assets
 
-Normative product scope: [text-chat.md](../features/text-chat.md) § «Медиа и вложения»; wire payloads — [messaging-service.md](messaging-service.md) § Stickers and GIF; pack catalog — [chat-service.md](chat-service.md) § Sticker packs. **Zero implementation** today. Stickers/GIF are **not** 📎 attach-menu uploads — composer **😊 panel** only.
+Normative product scope: [text-chat.md](../features/text-chat.md) § «Медиа и вложения»; wire payloads — [messaging-service.md](messaging-service.md) § Stickers and GIF; pack catalog — [chat-service.md](chat-service.md) § Sticker packs. GIF processing exists; protected catalog import and sticker ingest remain separate unfinished work. Stickers/GIF are **not** 📎 attach-menu uploads — composer **😊 panel** only.
 
 ### Ownership split
 
 | Concern | Owner | File Service role |
 |---------|-------|-------------------|
 | Sticker pack catalog / install | **Chat** (`sticker_packs`, `profile_installed_packs`) | Stores per-sticker binary; returns `file_id` |
-| GIF provider search | **Chat** (`SearchGifs` — Giphy/Tenor adapter) | Import selected asset via `RequestUpload(intent=gif, source_url=…)` or reuse cached `file_id` |
+| GIF provider search | **Chat** (`SearchGifs` — selected provider adapter) | Resolve selection through Chat; protected File import or exact authorized source binding; cached `file_id` alone grants nothing |
 | Send payload / `content_type` | **Messaging** `SendMessage` | `file_id` references processed asset |
 | Composer picker UI | Flutter §3.6b | — |
 
@@ -244,8 +244,8 @@ Client → RequestUpload(intent=sticker, mime, size)  // animated: same intent; 
 ```
 Client → Chat.SearchGifs(query) → provider adapter (Giphy or Tenor — one at deploy)
       → user picks result
-      → File RequestUpload(intent=gif, source_url=…) OR reuse cached file_id
-      → ConfirmUpload → ffmpeg MP4/WebM, thumb frame
+      → Chat ResolveGifAsset (stable operation, provider identity, destination)
+      → protected File ImportCatalogAsset → GIF processing, MP4/WebM and thumb
       → Messaging SendMessage(content_type=GIF, payload { file_id, provider, provider_id, preview_url })
 ```
 
@@ -308,10 +308,16 @@ original cleanup only after the metadata commit; ambiguous storage/commit failur
 leaves durable cleanup evidence. Cleanup retries never delete a committed winner
 or another live alias's original. Normal File reference GC still owns retained
 full/thumb deletion, with existing ACL and retention ownership unchanged.
-Because the signed upload PUT can be replayed until its one-hour expiry, original
-cleanup repeats every minute through `created_at + URL TTL + 1 minute`, then
-confirms its final deletion. Processing/status/download never fall back to that
-original during the reconciliation window.
+An expired signed upload URL does not prove that a previously accepted PUT has
+finished. Public upload clients supply no trusted storage drain/revocation proof.
+Original cleanup therefore remains durable unresolved reconciliation and repeats
+deletion every minute even after URL expiry; old clock-completed original rows
+are rediscovered. The legacy `recheck_until` value is not a completion fence.
+Successful DELETE or HEAD absence cannot authorize final completion while such
+a request may still commit. No finite physical-erasure bound is claimed without
+an actual storage-side write fence. Exact tracked catalog/derivative custody
+retains its separate ACK/unsettled checks. Processing/status/download never fall
+back to the original during reconciliation.
 
 Apply File migration `000009` before the binary. DOWN refuses to discard retained
 GIF jobs, outputs or cleanup evidence. Deploy File/Messaging accepting the shared
@@ -319,6 +325,29 @@ GIF preview protocol v2 before using the new GIF upload producer. Legacy preview
 v1 remains unchanged and excludes nonempty intents. GIF v2 terminal snapshots
 remain redacted; ready snapshots require video plus converted/thumbnail variants.
 This does not advertise first-class GIF messaging or completion of A6.
+
+### Protected catalog import (non-E2E)
+
+The separate `voice.file.v1.CatalogAssetService` protocol is defined in
+`catalog_assets.proto` and the [concrete contract](../testing/be085-catalog-asset-contract.md).
+Chat alone imports and polls scoped operation/asset status; Messaging alone
+classifies File IDs and validates source-scoped READY metadata. These methods
+are unavailable on the ordinary listener. Optional client provider attribution
+never selects the authorization path. Ordinary upload/read ACL remains unchanged.
+
+Migration 10 adds private actor-generation gates, active source mappings,
+completed import details, purpose-HMAC terminal fences and declared write/GC
+work. Raw source URLs are never persisted. An internal catalog-pending File may
+have unknown size zero only in that marked pending stage; public metadata/bulk/
+list queries hide it. Actual positive size and digest precede object write and
+processing. The database rejects READY publication after the actor gate closes
+or changes generation. These gates do not fence outstanding object-store PUTs;
+unsettled writes remain reconciliation work until actual drain/fence evidence.
+
+The byte transport, protocol/caller boundaries, schema, predicate and typed
+Messaging consumer are source components. The actual import/status handlers,
+runtime wiring, actor purge/recovery consumers and complete delivery proof remain
+unfinished in this slice. No provider or E2E branch is activated by this schema.
 
 ### Messaging send payload cross-ref (R2-A32)
 

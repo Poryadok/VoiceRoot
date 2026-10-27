@@ -281,7 +281,12 @@ func background(g *gif.GIF, frame *image.Paletted) color.Color {
 	return color.Transparent
 }
 
-type limitedBuffer struct{ bytes.Buffer }
+// A named buffer prevents io.Copy from finding a promoted ReadFrom method and
+// bypassing Write. Excess bytes are drained without being retained.
+type limitedBuffer struct{ buffer bytes.Buffer }
+
+func (b *limitedBuffer) Bytes() []byte  { return b.buffer.Bytes() }
+func (b *limitedBuffer) String() string { return b.buffer.String() }
 
 func runOutput(ctx context.Context, path string, maxBytes int, args ...string) error {
 	// Do not use ffmpeg -fs: it can exit successfully with a truncated movie
@@ -329,11 +334,11 @@ func runOutput(ctx context.Context, path string, maxBytes int, args ...string) e
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
 	n := len(p)
-	if room := maxLogBytes - b.Len(); room > 0 {
+	if room := maxLogBytes - b.buffer.Len(); room > 0 {
 		if len(p) > room {
 			p = p[:room]
 		}
-		_, _ = b.Buffer.Write(p)
+		_, _ = b.buffer.Write(p)
 	}
 	return n, nil
 }

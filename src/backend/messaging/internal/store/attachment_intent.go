@@ -216,6 +216,9 @@ func (s *MessagesStore) InsertMessageWithPreparedReferencesAndOutbox(ctx context
 	if err = lockMessageMutation(ctx, commit, row.ChatID, space, &row.ID); err != nil {
 		return nil, err
 	}
+	if err = validateScheduledDispatch(ctx, commit); err != nil {
+		return nil, err
+	}
 	if row.BotSendAdmission != nil {
 		var cancel context.CancelFunc
 		ctx, cancel, err = row.BotSendAdmission(ctx)
@@ -249,6 +252,9 @@ func (s *MessagesStore) InsertMessageWithPreparedReferencesAndOutbox(ctx context
 		}
 	}
 	if _, err = commit.Exec(ctx, `UPDATE messaging_attachment_send_intents SET state='COMMITTED',completed_at=clock_timestamp() WHERE operation_id=$1`, op); err != nil {
+		return nil, err
+	}
+	if err = completeScheduledDispatch(ctx, commit, saved, events); err != nil {
 		return nil, err
 	}
 	if err = commit.Commit(ctx); err != nil {
