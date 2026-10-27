@@ -219,6 +219,7 @@ service MessagingService {
 | `UnpinMessagesBySenderInChats` | ✓ | bot cleanup |
 | `UploadPreKeyBundle` / `GetPreKeyBundle` | ✓ | DM E2E pre-keys |
 | `MarkRead` / `GetReadState` / `GetBulkReadState` | ✓ | DM/group/channel; per-member read cursor; non-members → `PERMISSION_DENIED` |
+| `RecordMessageView` | ✓ | deduplicated group/channel view count; visibility and membership checks apply |
 | `GetChatListMetadata` | ✓ | per-member unread + preview/content metadata; DM-only delivery ticks; non-members → `PERMISSION_DENIED` |
 | `ListSharedMedia` | ✓ | shared media tabs in chat info |
 | `DeleteMessage` (`DeleteScope.FOR_ME` / `FOR_EVERYONE`) | ✓ | `FOR_ME` soft-hides for caller only |
@@ -605,9 +606,9 @@ read_receipts
 
 **Migrations shipped:** `messages`, `read_receipts`, `reactions`, `pins`, `thread_parent_id`, `forward_*`, `ghost_only` (platform shadow-ban column — **DB only**, not yet on `SendMessageRequest` proto), E2E columns, `send_silent`, `scheduled_messages` foundation.
 
-**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id` and durable `send_silent` producer propagation on `SendMessage`, E2E pre-key RPCs.
+**Handlers shipped beyond basic message CRUD:** threads (`GetThreadMessages`, `ListThreads`), reactions, pins (limit **5**/chat), per-member `MarkRead`/`GetReadState`/`GetBulkReadState` for DM/group/channel, `RecordMessageView` for group/channel counts, `GetChatListMetadata` with per-member unread/preview metadata and non-member denial, `ListSharedMedia`, `DeleteMessage` with `DeleteScope.FOR_ME`, idempotent `client_message_id`, durable `send_silent` producer propagation and pending schedule creation on `SendMessage`, owner scheduled lifecycle RPCs, E2E pre-key RPCs.
 
-**Gaps vs full spec:** composer for `send_silent`; automatic scheduled dispatch worker; typed `content_type`, `message_attachments` table and `RecordMessageView` — см. § ниже и [todo/backend.md](../todo/backend.md).
+**Gaps vs full spec:** media SendMenu integration; automatic scheduled dispatch worker; typed `content_type` and `message_attachments` table — см. § ниже и [todo/backend.md](../todo/backend.md).
 
 **Attachment validation (code):** R3-A06 is implemented: `validateParsedAttachments` branches on `content_type`; `location` / `article` use rich-payload validation without a File row, while `sticker` / `gif` / `music` / `video_note` require rich-payload and File metadata validation. This does not establish picker, Article metadata-fetch, or Music metadata-processing completion; see [AttachMenu contract gaps](../todo/client.md#attachmenu-rich-action-contracts).
 
@@ -828,7 +829,7 @@ messages (deployed — simplified)
 | `message.unpinned`       | message_id, chat_id, unpinned_by             |
 | `message.forwarded`      | message_id, source_chat_id, target_chat_id   |
 
-**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds `was_scheduled = 9` and `optional scheduled_at = 10`, which remain unset by the immediate producer until the schedule dispatch slice owns them. A pending create, idempotent replay, update, cancel or terminal failure must emit no `message.sent`; a successfully dispatched scheduled row must emit exactly one normal `message.sent` when that worker is implemented.
+**`message.sent` notes:** `send_silent` drives Notification push policy and is shipped by PR #310 as `MessageSent.send_silent = 8`; the scheduling slice does not renumber or duplicate it. It adds `was_scheduled = 9` and `optional scheduled_at = 10`; immediate sends leave them unset, while manual send-now persists scheduled metadata with the normal message/outbox transaction. A pending create, idempotent replay, update, cancel or terminal failure emits no `message.sent`; automatic worker dispatch remains BE-079.
 
 **`message.read`:** публикуется при `MarkRead`; Realtime fan-out как WS `message_read`. **Code-ok**.
 
