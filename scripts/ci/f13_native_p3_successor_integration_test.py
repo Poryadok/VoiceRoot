@@ -37,6 +37,11 @@ D1_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
 C2_DATA_STORES_COMMIT = '91ec85e27774d5110a16b2082c10ae1cd970822e'
 C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
                         'oid': '1896bde4e985be99d353d76d1f778e9dbf019c3d'}
+# Exact normal C2-master/D1 documentation union. Private fixture input only;
+# neither a path exemption nor authority for a future documentation change.
+D1_C2_DATA_STORES_COMMIT = 'c8b1ae98352b3b652cff489f5d57c2e123b24ce1'
+D1_C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
+                           'oid': 'ce85c7a0de1184a4a667666cca95d7e5f304c694'}
 # Reviewed process-restart test, restored only in detached historical fixtures.
 JWKS_FIXTURE_PATH = 'src/backend/voice/jwks_recovery_test.go'
 JWKS_FIXTURE_SOURCE = 'f2fa9d02c79983ca76d3b3a84088f66b265f027f'
@@ -62,6 +67,11 @@ def reviewed_stores_source(source):
             capture_output=True).returncode == 0
         if ancestor and actual == legacy.entry(ROOT, reviewed, stores):
             return True
+    if actual == D1_C2_DATA_STORES_ENTRY and legacy.entry(
+            ROOT, D1_C2_DATA_STORES_COMMIT, stores) == D1_C2_DATA_STORES_ENTRY:
+        return subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+             D1_C2_DATA_STORES_COMMIT, source], capture_output=True).returncode == 0
     if actual == D1_DATA_STORES_ENTRY and legacy.entry(
             ROOT, D1_DATA_STORES_COMMIT, stores) == D1_DATA_STORES_ENTRY:
         return subprocess.run(
@@ -156,7 +166,7 @@ class C2ReviewedStoresSourceTest(unittest.TestCase):
                 self.assertTrue(reviewed_stores_source(source))
 
     def test_c2_tuple_rejects_unknown_bytes_mode_and_disconnected_ancestry(self):
-        current = git('rev-parse', 'HEAD')
+        current = C2_DATA_STORES_COMMIT
         stores = 'docs/DATA_STORES.md'
         for variant in ('content', 'mode', 'ancestry'):
             with tempfile.TemporaryDirectory() as directory:
@@ -300,7 +310,8 @@ class RealGitSuccessorTest(unittest.TestCase):
     def test_stores_source_guard_accepts_only_exact_reviewed_entries(self):
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
         for reviewed in (DATA_STORES_COMMIT, CATALOG_DATA_STORES_COMMIT,
-                         D1_DATA_STORES_COMMIT):
+                         D1_DATA_STORES_COMMIT, C2_DATA_STORES_COMMIT,
+                         D1_C2_DATA_STORES_COMMIT):
             with self.subTest(source=reviewed):
                 self.assertTrue(reviewed_stores_source(reviewed))
         stores = 'docs/DATA_STORES.md'
@@ -314,8 +325,34 @@ class RealGitSuccessorTest(unittest.TestCase):
     def test_d1_stores_source_matches_reviewed_full_entry(self):
         self.assertEqual(legacy.entry(ROOT, D1_DATA_STORES_COMMIT,
                                       'docs/DATA_STORES.md'), D1_DATA_STORES_ENTRY)
+        self.assertTrue(reviewed_stores_source(D1_DATA_STORES_COMMIT))
+
+    def test_d1_c2_union_matches_exact_source_and_current_entry(self):
+        self.assertEqual(legacy.entry(ROOT, D1_C2_DATA_STORES_COMMIT,
+                                      'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
         self.assertEqual(legacy.entry(ROOT, git('rev-parse', 'HEAD'),
-                                      'docs/DATA_STORES.md'), D1_DATA_STORES_ENTRY)
+                                      'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
+        self.assertTrue(reviewed_stores_source(D1_C2_DATA_STORES_COMMIT))
+
+    def test_d1_c2_union_rejects_unknown_bytes_mode_missing_and_disconnected_source(self):
+        current = git('rev-parse', 'HEAD')
+        stores = 'docs/DATA_STORES.md'
+        for variant in ('content', 'mode', 'missing', 'ancestry'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                if variant == 'missing':
+                    git('update-index', '--force-remove', '--', stores, env=env)
+                elif variant != 'ancestry':
+                    entry = D1_C2_DATA_STORES_ENTRY
+                    mode = '100755' if variant == 'mode' else entry['mode']
+                    oid = entry['oid'] if variant == 'mode' else git(
+                        'hash-object', '-w', '--stdin', data=b'unknown D1/C2 union fixture\n')
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + stores, env=env)
+                changed = self.commit(git('write-tree', env=env),
+                                      [BASE if variant == 'ancestry' else current])
+            with self.subTest(variant=variant):
+                self.assertFalse(reviewed_stores_source(changed))
 
     def test_stores_source_guard_rejects_matching_bytes_without_reviewed_ancestry(self):
         stores = 'docs/DATA_STORES.md'
