@@ -48,6 +48,19 @@ _Пока пусто — критичные клиентские блокеры 
 
 - [ ] **Commit waves A–J (Flutter client)** — один PR: state/ui/l10n/tests из аудита 2026-07-15; после merge — `make flutter-ci` на CI.
 
+### Space catalog v3 residual
+
+- [ ] **UIV3-SCREEN-SPACE-CATALOG — category/game discovery contract and full acceptance** —
+  `space_catalog_screen.dart` consumes the authenticated Space-owned card projection
+  (DTOv2: six display fields plus `visibility`) for browse, text search, preview,
+  membership-aware Open, public Join and invite-only entry. The category/game
+  controls and game search in [screen-controls.md §19](../design/screen-controls.md#19-space-catalog--discovery-screen--space--catalog)
+  remain open: existing Space metadata/API define neither taxonomy nor game
+  association/filter semantics. Agree the owning producer contract before adding
+  these filters; descriptions and verified badges must not stand in for metadata
+  or admission authority. Complete scoped CI and deployed H/V journey acceptance
+  against the qualified producer version; local widget PNGs are not live proof.
+
 ### AttachMenu rich-action contracts
 
 - [ ] **UIV3-PANEL-CHAT-ATTACHMENU — Location picker/preview contract** —
@@ -216,6 +229,7 @@ Baseline (2026-06) закрыт; хвосты UX/E2E ниже. Спека: [auth
 ### Multi-profile
 
 - [x] **[Multi-Profile] Create flow missing avatar** — `CreateProfileSheet` optional avatar pick + presigned upload after profile switch (`parallel/client-qa-rail-profiles`).
+- [ ] **[Profile Edit v3] Remaining §15 contracts and capability controls** — `UIV3-PANEL-PROFILE-EDIT` must remain open for username mutation/clean-name entitlement purchase, banner upload, additional phone binding and primary reassignment. The existing Flutter `UpdateProfile` mapper supports display name, bio, avatar, accent and locale; it has no username, banner or primary mutation input, and avatar presigning does not establish a banner-upload contract. Keep the handle read-only and do not infer phone/account type from a public profile. Deleting an active profile requires switching away; primary profiles are always blocked, while an inactive non-primary profile can be deleted directly. This follows the existing `ManageProfilesSheet` guards. Finish the documented supported flows and H/V visual/runtime proof when the corresponding API/capability contracts are available; HTML controls alone do not authorize fabricated endpoints or premium enablement. Primary API follow-up is the next item.
 - [ ] **[Multi-Profile] Change primary profile API/UI missing** — `is_primary` set at bootstrap only; no way to reassign which profile phone search returns.
 - [x] **[Multi-Profile] Accent color not choosable on create** — `CreateProfileSheet` accent swatches from token catalog; sends `accent_color` on create (**Batch 17**).
 - [x] **[Multi-Profile] Server-authoritative accent picker** — settings picker displays the active profile's `profiles.accent_color` and reflects a new choice only after `UpdateProfile` succeeds. Legacy local override/index is used only when the server profile has no accent and is cleared only after successful migration/update; late responses cannot replace the newly active profile's selection (PR #623).
