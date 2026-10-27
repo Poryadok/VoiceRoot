@@ -282,6 +282,17 @@ The exact field inventory and required owned A4 deletion-integration gap are
 recorded in [DATA_STORES.md](../DATA_STORES.md#matchmaking-terminal-search-release-outbox).
 This A3 slice does not establish A4/privacy or final acceptance.
 
+The A4 local terminal-routing consumer accepts already-verified immutable Auth
+schedule/decision/current facts and complete User coverage; it allocates no new
+RPC, subject or producer authority. It uses the original `purge_at`, database
+time after serialization, and a Redis-independent expiry pass before ordinary
+session/queue work. A delayed restore committed strictly before that deadline
+may permit fresh admission only with verified current ACTIVE authority and
+current profile eligibility. It never reconstructs erased routing. An old cycle
+cannot cancel a newer current deletion, and restored backups cannot serve from
+stale local authority alone. Protected producer adapters, writer binding and
+backup/rollback activation are still required before claiming A4 integration.
+
 The recovery worker claims each incomplete provider operation independently and
 replays only its persisted request. Every RPC has a fresh 10-second deadline;
 transient failures persist a retry time using 1-second exponential backoff,

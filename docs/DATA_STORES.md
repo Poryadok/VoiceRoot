@@ -65,6 +65,26 @@ restore and late-replay behavior while preserving exact-owner cleanup safety.
 That integration remains open; A3 functional/mixed-version proof does not claim
 privacy-purge compliance, a new escrow exception, or A4/final acceptance.
 
+The separate A4 local consumer adds migration `000020`: opaque
+`matchmaking_terminal_routing_heads` (highest current authority) and
+`matchmaking_terminal_routing_cycles` (immutable schedule, decision, original
+`purge_at`, irreversible local routing-erased outcome). The cycle's temporary
+coverage revision/hash binds the protected complete User roster; the roster is
+not persisted by this consumer, and its hash is cleared at the original bound.
+Bound pending releases carry fence/cycle/deadline and a short projection claim.
+The claim commits before Redis I/O; database-time expiry deletes routing even
+while a projection is paused. Successful projection acknowledges by exact-token
+delete. DOWN refuses to forget lifecycle evidence; binary rollback retains it.
+
+The bounded Redis terminal-generation key contains a session UUID and is
+identity-linked. It uses absolute `PXAT` at the original authority deadline;
+late projection cannot start another retention period. Exact-owner cleanup and
+integer generation comparison preserve other owners. This is a local
+already-verified-fact seam, not an authenticated producer integration. Protected
+Auth/User delivery, coverage of new/legacy writers and existing unbounded Redis
+copies, backup reconciliation and rollback capability floors remain activation
+requirements. Account/Space erasure as a whole is not established by this seam.
+
 ### Game Integration Service (`game_integration_db`): T05 ownership target
 
 The service owns this database boundary. Internal DEV/STAGE deployment is
