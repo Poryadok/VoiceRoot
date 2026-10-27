@@ -75,16 +75,21 @@ func (p Extractor) Extract(ctx context.Context, raw []byte) (Metadata, error) {
 }
 
 type limitedBuffer struct {
-	bytes.Buffer
+	buffer   bytes.Buffer
 	overflow bool
 }
+
+// Keep Buffer private: a promoted ReadFrom would let exec's io.Copy bypass
+// Write and retain unbounded probe stdout.
+func (b *limitedBuffer) Bytes() []byte { return b.buffer.Bytes() }
+func (b *limitedBuffer) Len() int      { return b.buffer.Len() }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
 	if b.Len()+len(p) > maxProbeBytes {
 		b.overflow = true
 		return 0, ErrAudio
 	}
-	return b.Buffer.Write(p)
+	return b.buffer.Write(p)
 }
 
 func parseProbe(raw []byte) (Metadata, error) {
