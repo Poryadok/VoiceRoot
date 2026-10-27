@@ -104,7 +104,164 @@ uncertain mutation retains `voice-dev-image-update-lock`. Inspect the Deployment
 rollout and lock UID before manually resolving it; do not blindly delete it.
 The updater never resets stores, applies migrations or changes configuration.
 
-### Exact candidate publication
+### Existing Auth/User credential adoption
+
+`auth_user_adoption.py` is the bounded existing-data route for the retained
+`voice-dev` namespace UID `15950fc8-0392-4053-9156-e95e78b596f9`, Auth clean
+Flyway1..26 and User clean migrate19. It is separate from fresh bootstrap,
+reset and global credential rotation. It preserves `voice` migration/object
+ownership, global `POSTGRES_PASSWORD`, existing JWT/TOTP/storage keys and all
+noncandidate workload specs. Auth stays Java. Never use this route on staging,
+production, a recreated namespace or a different schema baseline.
+
+Run the reviewed immutable operator package on the DEV host with Python3,
+OpenSSL and the existing kubeconfig. Every Kubernetes call fixes kubeconfig
+`/home/pmd/.kube/config`, context `default`, namespace `voice-dev`; transport
+errors never print raw Kubernetes/SQL/HTTP payloads. The common
+`voice-dev-image-update-lock` is atomic CREATE and is retained on uncertainty.
+There is no force-unlock, role ALTER/rekey, automatic database DOWN/restore or
+automatic rollback. The tool does not create deployment/PASS/acceptance records
+or release the tracker resource.
+
+The input manifest contains `operation` (unique lowercase name, maximum31
+characters), full `source_sha`, exact `operator_sha256`, two immutable
+`products` refs (`auth`,`user`), producer-qualified `runtime_ids` arrays, three
+immutable `tools` refs (`postgres`,`flyway`,`migrate`), `recovery_mode`, and
+`evidence`. Obtain the operator digest with
+`auth_user_adoption_runtime.operator_fingerprint(package_root)` in Linux.
+The fingerprint covers regular-file modes and bytes for the complete operator,
+both role SQL sources, every actual Auth/User migration SQL file, and the
+canonical barrier catalog query. Editing SQL/catalog content or mode before
+prepare invalidates approved qualification before live reads/dry-runs; the
+first observed local source is not treated as provenance.
+Each evidence entry binds a local JSON file by `path` and SHA256 `sha256`.
+Required record kinds are `image_provenance`, `runtime_roles`, `recovery` and
+`operator_review`. Each names its kind, `status: PASS`, exact product source,
+operator digest, products and an actual retained evidence reference. Image
+proof additionally binds exact runtime IDs, actual `node_accessibility: true`
+and scope `published_oci` or `qualified_node_import`; a local build ID alone
+is insufficient. Recovery and operator records name the actual independent
+Dimas-8 review; recovery binds the selected mode. `qualified_image_restore`
+requires original-OCI qualification. A recovered executable recipe is not that
+proof. `reviewed_forward_only` requires its own actual reviewed recovery record.
+These records are provenance references, not self-attesting booleans or new
+human permission gates: preserve the underlying executed proof/review and do
+not manufacture a PASS wrapper for missing evidence.
+The three tool refs must exactly match `QUALIFIED_TOOLS` in the reviewed
+runtime module (PostgreSQL16, Flyway11.3.0, migrate4.18.1 command-conformance
+receipt). The legacy shared admin password must be a URL-safe issuance value;
+an unexpected encoding is refused before mutation, never fixed by rotation.
+
+After the candidate and operator qualify, acquire/reconcile the actual DEV
+resource for this task and the complete mixed image package. Only Auth/User
+may differ; retain all other49-map entries and do not attribute their sources
+to the two candidate images. The prepare command performs actual read-only
+inventory and server dry-runs, validates defaulted Job specs, generates one
+private credential pair, and stores immutable original intent. Its output is
+sanitized; journal contents are private0700/0600 and must not be attached to TT.
+Both planned apps are checked for resolved shared-admin/opposite-service
+credentials across aliases, literals, ConfigMaps and mounted projections;
+legitimate R2/NATS/TLS material and own-role bindings remain intact.
+
+```sh
+python3 scripts/dev/auth_user_adoption.py prepare --manifest /private/candidate.json --journal /private/operation
+# Record the fresh baseline-observation.json under the actual resource claim,
+# advance the actual task/resource deploy gates, preserving the same window.
+python3 scripts/dev/auth_user_adoption.py run --journal /private/operation
+```
+
+The first run creates only the owned updater lock and encrypted backup set,
+then stops pending actual off-node restore qualification. Copy ciphertexts,
+`backup-manifest.json` and the separately custodied `backup.key` through the
+authorized private channel. No plaintext dumps are written by the exporter.
+AES256-CBC/PBKDF2 encryption is authenticated by a separately checked HMAC; the
+manifest binds the operation, resource/window, original catalog and source.
+Run the verifier off-node against existing immutable OpenSSL tooling and
+caller-owned Docker Linux PostgreSQL16, without ports or shared volumes:
+
+```sh
+python scripts/dev/auth_user_adoption_restore.py --backup-directory PRIVATE_COPY --operation OPERATION --tools-image sha256:TOOLS_IMAGE_ID --output PRIVATE_REPORT.json
+python3 scripts/dev/auth_user_adoption.py import-backup --journal /private/operation --backup-report /private/restored-report.json
+python3 scripts/dev/auth_user_adoption.py run --journal /private/operation
+```
+
+The verifier checks encrypted copy identity before decryption and binds inspection, execution
+and cleanup to that container's immutable ID. Cleanup requires verified owner
+and private mounts; uncertain creation/ownership retains a private
+`restore-recovery-*.json` receipt and never deletes by the mutable name.
+Successful cleanup also requires the observed anonymous data volumes absent.
+It restores both archives and password-free owner-role metadata into an empty private cluster,
+and compares actual schema/object ownership, default privileges and real
+migration history. Each dump has its own consistent snapshot; this is not a
+cross-service snapshot while apps write. A backup does not authorize restoring
+over newer user writes. Private fixture reports are explicitly ineligible for
+the actual DEV backup gate. The whole operation has a15-minute source deadline;
+expiry prevents further writes and retains recovery state. Do not begin while
+waiting for unrelated builds/publication or assume expiry releases a lock.
+
+After backup qualification, the same run resumes from terminal owned receipts
+using the exact original credentials. It creates immutable operation SQL and
+runtime Secret objects, runs real admin-owned Flyway/migrate Jobs, strictly
+creates absent runtime roles without password ALTER, applies canonical grants,
+then serially updates Auth and User through full-spec UID/resourceVersion CAS.
+Actual configured Space must remain the same Ready peer; the operator neither
+clears its address nor restarts it. A client timeout is not server completion:
+Jobs, migration state and attributable PostgreSQL activity must reconcile.
+Unknown/failed/dirty effects are not retried or adopted. No runtime role owns
+persistent data; User retains ownDB TEMP and ledger SELECT, and the Auth barrier
+retains owner/PUBLIC SELECT with no direct runtime ACL.
+After Auth migration, the guard admits only V31's exact owner/function/source,
+enabled binding and DDL tag contract using the canonical catalog predicates.
+Premigration state remains empty; unknown/altered triggers remain rejected.
+Completed grant receipts freeze the full canonical ACL/default digest, which
+is rechecked before later effects and lock release.
+
+Completion requires actual source-qualified runtime IDs, old Pod/ReplicaSet and
+old admin-session drain, ownDB allow/oppositeDB42501 denial with correct
+credentials, canonical ACL/history/ownership, and one owned public
+signup/fixture OTP/verification/fresh login/privacy/JWT-to-User-row flow. Tokens
+and OTPs are never logged; the fresh session is logged out. The bounded account
+is retained with private ownership intent for documented deletion; the tool
+does not raw-delete rows or reset shared throttles. An ambiguous public
+registration is not blindly repeated.
+
+```sh
+python3 scripts/dev/auth_user_adoption.py observe --journal /private/operation
+# Record only an actual completed rollout/check with current workflow/resource
+# guards. Green private tests do not create a DEV PASS or final acceptance.
+python3 scripts/dev/auth_user_adoption.py finish --journal /private/operation
+```
+
+`finish` freshly verifies the full state and drains before deleting only the
+exact owned lock UID/resourceVersion. A lost delete response is reconciled by
+actual absence; a later owner's lock is never removed. Then obtain another
+fresh version observation and use the supported tracker resource release.
+On partial/uncertain effects retain journal, lock and `recovery_required` and
+reconcile terminal Jobs/sessions before any recovery decision. No shared role
+revocation, global password rotation, data destruction or implicit provider
+activation is part of this route.
+Before any migration/role/rollout effect intent exists, `abort --journal ...`
+may close an unchanged-data operation only after actual owned server activity
+has stopped and original state/authority revalidate. It deletes only its exact
+owned lock; unused immutable source/Secret artifacts and the private journal
+remain attributable. An aborted journal can never start effects again. Once a
+DB/rollout intent exists, abort refuses and retains recovery state.
+
+Focused checks use Docker Linux:
+
+```sh
+docker run --rm --network none --mount type=bind,source=REPO,target=/repo,readonly -w /repo/scripts/dev python:3.12-alpine python -m unittest auth_user_adoption_test auth_user_adoption_runtime_test auth_user_adoption_backup_test auth_user_adoption_smoke_test
+python scripts/dev/auth_user_adoption_pg.py
+```
+
+The second command orchestrates only labeled disposable Linux containers. Its
+`--fresh-baseline` option intentionally reproduces the unsafe rekey when the
+fresh-only script is replayed; it must fail. The candidate path proves strict
+collision/no-rotation, data/ACL/default grants, real server versus client
+timeouts, authenticated archive restore and corruption rejection. It does not
+qualify actual DEV backup custody, old-image rollback or configured topology.
+
+### Exact candidate publication (workflow)
 
 `DEV candidate image publication` is a standalone publish-only Actions workflow.
 After normal review/integration, dispatch its default-branch publisher with the
