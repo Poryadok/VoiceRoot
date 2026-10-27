@@ -245,7 +245,7 @@ story_media_deletion_outbox
 
 - **Expiry worker**: каждую минуту — пометить expired stories (TTL 24h)
 - **Archive cleanup**: bounded DB-first transaction locks expired unhighlighted Stories with `FOR UPDATE SKIP LOCKED`, inserts one media-deletion outbox record per media Story, then logically deletes the Stories. Text-only Stories do not create an outbox row. Highlight membership mutations lock the same Story rows, so a committed Highlight protects the Story/media, while a purge that commits first makes Add return `NotFound`.
-- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls protected `ReleaseStoryMedia` after the Story commit, and completes only its own lease. The immutable operation ID is the Story ID; release names `(media_file_id, STORY, story_id, NULL, NULL)`. Failures and ambiguous File outcomes back off and retry. File owns zero-reference detection and physical GC; this worker never calls broad `DeleteFile`.
+- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls protected `ReleaseStoryMedia` after the Story commit, and completes only its own lease. The immutable operation ID is the Story ID; release names `(media_file_id, STORY, story_id, NULL, NULL)`. Failures and ambiguous File outcomes back off and retry. File owns zero-reference detection and physical GC; this worker never calls broad `DeleteFile`. Release remains pending until File has a verified global backfill/activation authority, which is not installed in production yet.
 - **LFP matcher**: при создании "ищу пати" Story Service публикует `story.lfp_created` в JetStream; **потребитель Matchmaking Service (авто-заявка из LFP-стори) отложен** — Matchmaking пока не подписан на этот subject
 
 ## Публикуемые события (→ NATS)
@@ -312,7 +312,9 @@ through acquire and Story insertion. The Story and removal of the intent commit
 together. Failed or ambiguous creation leaves the intent for bounded recovery
 after one minute. Recovery locks the intent and releases its exact key; File
 durably retires even a not-yet-acquired key, so a delayed acquire cannot revive
-it. Recovery retries ambiguous releases without dropping intent ownership.
+it after verified activation. Recovery retries failed/ambiguous releases without
+dropping intent ownership. Without File's global-ledger authority it remains
+durably pending; it cannot substitute an empty ledger or a local boolean.
 
 Author `DeleteStory` atomically queues the same release and hides the Story.
 The same author can replay success; other authors and unknown IDs receive
@@ -328,7 +330,11 @@ pending when that protected dependency is absent. Historical unclaimed media
 is never converted into broad File deletion: releasing an absent exact reference
 retires that key but does not initiate blob GC. Deterministic owner backfills and
 the global File-reference activation gates remain prerequisites for a deployment
-cutover; this code change is not rollout or acceptance evidence.
+cutover. No production `StoryReferenceReleaseAuthority` provider exists, so exact
+release/physical-GC activation is an explicit unmet BE-096 criterion. The global
+File-reference cutover owner must supply and verify that authority before this
+consumer can complete; this code change is not full lifecycle completion,
+rollout or acceptance evidence.
 
 ### Protected media rollout
 

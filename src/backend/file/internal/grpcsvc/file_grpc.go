@@ -103,6 +103,7 @@ func (realClock) Now() time.Time {
 }
 
 type Deps struct {
+	StoryReleaseAuthority    StoryReferenceReleaseAuthority
 	Files                    *store.FilesStore
 	Presigner                r2file.Presigner
 	Deleter                  r2file.ObjectDeleter
@@ -124,6 +125,7 @@ type Deps struct {
 
 type FileGRPC struct {
 	filev1.UnimplementedFileServiceServer
+	storyReleaseAuthority     StoryReferenceReleaseAuthority
 	files                     *store.FilesStore
 	presigner                 r2file.Presigner
 	deleter                   r2file.ObjectDeleter
@@ -159,6 +161,7 @@ func New(deps Deps) *FileGRPC {
 		downloadBaseURL = "/api/v1/files/download"
 	}
 	return &FileGRPC{
+		storyReleaseAuthority:     deps.StoryReleaseAuthority,
 		files:                     deps.Files,
 		presigner:                 deps.Presigner,
 		deleter:                   deps.Deleter,

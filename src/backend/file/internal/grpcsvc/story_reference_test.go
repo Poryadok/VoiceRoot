@@ -5,11 +5,13 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"path/filepath"
 	filev1 "voice.app/voice/file/v1"
 	storyv1 "voice.app/voice/story/v1"
 	"voice/backend/file/internal/store"
@@ -27,7 +29,7 @@ func TestStoryReferenceClaimReleaseReplayAndSharedBlob(t *testing.T) {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `UPDATE files SET blob_id=id WHERE id=$1`, file)
 	require.NoError(t, err)
-	svc := New(Deps{Files: store.NewFilesStore(pool)})
+	svc := New(Deps{Files: store.NewFilesStore(pool), StoryReleaseAuthority: completeStoryLedgerFixture{}})
 	claim := func(story uuid.UUID) *filev1.ClaimStoryMediaRequest {
 		return &filev1.ClaimStoryMediaRequest{OperationId: uuid.NewString(), StoryId: story.String(), FileId: file.String(), AuthorProfileId: author.String(), ExpectedStoryType: storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO}
 	}
@@ -86,6 +88,55 @@ func TestStoryReferenceClaimReleaseReplayAndSharedBlob(t *testing.T) {
 	require.Contains(t, gc.calls, original)
 	require.Contains(t, gc.calls, "story/converted")
 	require.Contains(t, gc.calls, "story/thumbnail")
+}
+
+// This test fixture creates and owns every owner/reference in its isolated
+// database. It is not a production backfill/activation implementation.
+type completeStoryLedgerFixture struct{}
+
+func (completeStoryLedgerFixture) RequireCompleteReferenceLedger(context.Context) error { return nil }
+
+func TestStoryReferenceWithoutActivationRetainsMixedLegacyOwner(t *testing.T) {
+	if testing.Short() {
+		t.Skip("isolated PostgreSQL")
+	}
+	ctx := context.Background()
+	pool := startR23FilePostgres(t, ctx)
+	file, author, legacyStory, newStory := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedStoryMediaFile(t, ctx, pool, file, author, "image", "ready", "clean", nil, false, nil, nil)
+	// The historical owner is real Story-owned SQL in a separate database. It
+	// deliberately has no File ledger reference, as before lifecycle cutover.
+	_, err := pool.Exec(ctx, `CREATE DATABASE story_legacy_owner`)
+	require.NoError(t, err)
+	cfg := pool.Config()
+	cfg.ConnConfig.Database = "story_legacy_owner"
+	stories, err := pgxpool.NewWithConfig(ctx, cfg)
+	require.NoError(t, err)
+	t.Cleanup(stories.Close)
+	applyFileGateSQL(t, ctx, stories, filepath.Join("src", "backend", "migrations", "story_db", "000001_init.up.sql"))
+	_, err = stories.Exec(ctx, `INSERT INTO stories(id,author_profile_id,type,media_file_id,visibility,expires_at,archived_until) VALUES($1,$2,'photo',$3,'everyone',now()+interval '1 hour',now()+interval '31 days')`, legacyStory, author, file)
+	require.NoError(t, err)
+	svc := New(Deps{Files: store.NewFilesStore(pool)})
+	claim := &filev1.ClaimStoryMediaRequest{OperationId: uuid.NewString(), StoryId: newStory.String(), FileId: file.String(), AuthorProfileId: author.String(), ExpectedStoryType: storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO}
+	_, err = svc.ClaimStoryMedia(catalogVerifiedContext(t, claim, filev1.FileService_ClaimStoryMedia_FullMethodName, "story"), claim)
+	require.NoError(t, err)
+	drop := &filev1.ReleaseStoryMediaRequest{OperationId: newStory.String(), StoryId: newStory.String(), FileId: file.String()}
+	_, err = svc.ReleaseStoryMedia(catalogVerifiedContext(t, drop, filev1.FileService_ReleaseStoryMedia_FullMethodName, "story"), drop)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err), "no verified global ledger authority was installed")
+	gc := &r23ScriptedDeleter{}
+	processed, err := svc.files.RunReferenceGCOnce(ctx, gc, 1)
+	require.NoError(t, err)
+	require.Zero(t, processed)
+	require.Empty(t, gc.calls)
+	var stillOwned uuid.UUID
+	require.NoError(t, stories.QueryRow(ctx, `SELECT media_file_id FROM stories WHERE id=$1`, legacyStory).Scan(&stillOwned))
+	require.Equal(t, file, stillOwned)
+	var live int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_references WHERE file_id=$1 AND owner_id=$2 AND released_at IS NULL`, file, newStory).Scan(&live))
+	require.Equal(t, 1, live, "the pending release continues retaining shared legacy media")
+	var completed int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_reference_operations WHERE caller_service='story' AND operation_id=$1`, newStory).Scan(&completed))
+	require.Zero(t, completed, "a denied release cannot acknowledge Story's durable outbox")
 }
 
 func TestStoryReferenceRechecksAdmissionAfterValidation(t *testing.T) {

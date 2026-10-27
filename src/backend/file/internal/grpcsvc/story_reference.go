@@ -13,6 +13,14 @@ import (
 	storyv1 "voice.app/voice/story/v1"
 )
 
+// StoryReferenceReleaseAuthority must prove the complete global owner backfill
+// and current File-ledger activation for this installation/restore cohort.
+// No production provider is installed yet. A configuration boolean, an empty
+// ledger or Story's own reference is not this evidence.
+type StoryReferenceReleaseAuthority interface {
+	RequireCompleteReferenceLedger(context.Context) error
+}
+
 // ClaimStoryMedia atomically attests admission and acquires the exact Story key.
 // A replay returns its original receipt, even after that key was released.
 func (s *FileGRPC) ClaimStoryMedia(ctx context.Context, req *filev1.ClaimStoryMediaRequest) (*filev1.ClaimStoryMediaResponse, error) {
@@ -163,6 +171,15 @@ func (s *FileGRPC) ReleaseStoryMedia(ctx context.Context, req *filev1.ReleaseSto
 		return nil, e
 	} else if found {
 		return response, nil
+	}
+	// Keep the reference live while global legacy owners may still be absent
+	// from File's ledger. Merely avoiding this GC enqueue would not protect
+	// against another producer's release or the independently running worker.
+	if s.storyReleaseAuthority == nil {
+		return nil, status.Error(codes.FailedPrecondition, "Story reference release awaits verified ledger activation")
+	}
+	if err = s.storyReleaseAuthority.RequireCompleteReferenceLedger(ctx); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, "Story reference release awaits verified ledger activation")
 	}
 	var blob uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT b.blob_id FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id=$1 FOR UPDATE OF b`, file).Scan(&blob)

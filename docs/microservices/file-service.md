@@ -461,7 +461,17 @@ a new reference after release. Claim/release receipt hashes use the full protobu
 message name plus NUL and deterministic request bytes, as other File lifecycle
 operations do.
 
-Release retires that exact key even if a delayed claim has not arrived. It queues
+Release requires a current `StoryReferenceReleaseAuthority` proving the complete
+global owner backfill and File-ledger activation for the installation/restore
+cohort. **No production provider exists yet.** Without that authority the RPC
+fails closed with `FailedPrecondition` before retiring any reference or creating
+a receipt; Story's durable release stays pending and its live reference continues
+retaining the blob. A boolean configuration value or an empty ledger is not this
+proof. This is an unmet activation criterion owned by the global File-reference
+cutover consumer, not a claim of lifecycle completion.
+
+After that authority is installed, release retires the exact key even if a
+delayed claim has not arrived. It queues
 blob GC only when an existing live exact reference was released and zero live
 references remain across all aliases. An absent File is idempotent success;
 historical media without an exact claim does not authorize broad deletion.

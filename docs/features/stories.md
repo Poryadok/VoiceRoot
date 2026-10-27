@@ -122,8 +122,10 @@ photo/video exact Story-ID reference ownership follows the lifecycle below.
 - **Удаление до истечения 24ч**: автор может удалить стори в любой момент; при удалении стори немедленно исчезает из всех лент
 
 Photo/video publication acquires the File-owned exact Story reference before
-visibility. Author deletion and archive cleanup release only that same reference
-through a durable Story outbox after the Story transaction commits. Another live
+visibility. Author deletion and archive cleanup queue release of that same
+reference through a durable Story outbox after the Story transaction commits.
+Release stays pending while verified global File-reference backfill/activation
+authority is absent. Another live
 owner retains shared media; File alone decides when a zero-reference blob can be
 physically collected. Lost delete responses can be replayed by the same author
 for 30 days, including after archive cleanup removes the Story row.
