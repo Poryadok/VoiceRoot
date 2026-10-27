@@ -75,6 +75,8 @@ func TestConfirmAudioPersistsMetadataWithoutMusicEvent(t *testing.T) {
 	var count int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_music_event_outbox WHERE file_id=$1`, id).Scan(&count))
 	require.Zero(t, count)
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_preview_event_outbox WHERE file_id=$1`, id).Scan(&count))
+	require.Zero(t, count, "AUDIO has no compatible versioned generic preview contract")
 	_, err = client.ConfirmUpload(authed, &filev1.ConfirmUploadRequest{FileId: id, Sha256Hash: shaHex(payload)})
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
