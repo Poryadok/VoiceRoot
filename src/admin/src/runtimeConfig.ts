@@ -22,7 +22,8 @@ function origin(value: unknown, allowLoopback = false): string {
 export function configuredApiBase(): string {
   if (apiBase) return apiBase;
   if (!attempted && (import.meta.env.DEV || import.meta.env.VITE_RUNTIME_CONFIG_REQUIRED === "false")) {
-    return origin(import.meta.env.VITE_VOICE_API_BASE || "http://127.0.0.1:18080", true);
+    const localBase = import.meta.env.VITE_VOICE_API_BASE || "http://127.0.0.1:18080";
+    return origin(localBase.replace(/\/$/, ""), true);
   }
   throw new Error("Runtime API configuration unavailable");
 }
