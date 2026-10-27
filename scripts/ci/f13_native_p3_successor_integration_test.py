@@ -24,10 +24,84 @@ BASE = '288e6a4fb963b3d5775f885e14ecfda1b603a4ff'
 # This pin is used only to construct the private historical test fixture.
 CATALOG_DOCUMENT_COMMIT = 'eaa4c1a30921cea1f030ee53de89c71695cbfc87'
 DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
+# The reviewed catalog/message-view documentation carried by the A1 aggregate.
+# This remains a test-fixture source tuple, never production authority.
+CATALOG_DATA_STORES_COMMIT = '04f1390e94c2285b20f2a208a55b1ee4b35facab'
+# C2 composition SOURCE CLEAR (BATCH-C2 c6): exact account/catalog union.
+# The earlier eb6e6c86 document differs; it grants no implicit tuple admission.
+C2_DATA_STORES_COMMIT = '91ec85e27774d5110a16b2082c10ae1cd970822e'
+C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
+                        'oid': '1896bde4e985be99d353d76d1f778e9dbf019c3d'}
+CATALOG_VOICE_PATHS = frozenset(
+    'src/backend/voice/pb/voice/' + service + '/v1/catalog_assets' + suffix + '.pb.go'
+    for service in ('chat', 'file') for suffix in ('', '_grpc'))
 
 
 def git(*args, data=None, env=None):
     return subprocess.check_output(['git', '-C', str(ROOT), *args], input=data, env=env).decode().strip()
+
+
+def reviewed_stores_source(source):
+    stores = 'docs/DATA_STORES.md'
+    actual = legacy.entry(ROOT, source, stores)
+    for reviewed in (DATA_STORES_COMMIT, CATALOG_DATA_STORES_COMMIT):
+        ancestor = subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', reviewed, source],
+            capture_output=True).returncode == 0
+        if ancestor and actual == legacy.entry(ROOT, reviewed, stores):
+            return True
+    ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', C2_DATA_STORES_COMMIT, source],
+        capture_output=True).returncode == 0
+    return (ancestor and actual == C2_DATA_STORES_ENTRY
+            and legacy.entry(ROOT, C2_DATA_STORES_COMMIT, stores) == C2_DATA_STORES_ENTRY)
+
+
+def reviewed_catalog_voice_additions(source, record):
+    prefix = 'src/backend/voice/'
+    expected = {name for name in legacy.tree(str(ROOT), record['source']) if name.startswith(prefix)}
+    actual = {name for name in legacy.tree(str(ROOT), source) if name.startswith(prefix)}
+    added = actual - expected
+    legacy.require(not expected - actual, 'v2_fixture_unreviewed_voice_source')
+    if not added:
+        return added
+    ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', CATALOG_DATA_STORES_COMMIT, source],
+        capture_output=True).returncode == 0
+    legacy.require(added == CATALOG_VOICE_PATHS and ancestor and all(
+        legacy.entry(ROOT, source, name) == legacy.entry(ROOT, CATALOG_DATA_STORES_COMMIT, name)
+        for name in added), 'v2_fixture_unreviewed_voice_source')
+    return added
+
+
+class C2ReviewedStoresSourceTest(unittest.TestCase):
+    def test_exact_reviewed_c2_tuple_and_existing_sources(self):
+        reviewed = '91ec85e27774d5110a16b2082c10ae1cd970822e'
+        expected = {'mode': '100644', 'type': 'blob',
+                    'oid': '1896bde4e985be99d353d76d1f778e9dbf019c3d'}
+        self.assertEqual(legacy.entry(ROOT, reviewed, 'docs/DATA_STORES.md'), expected)
+        for source in (reviewed, git('rev-parse', 'HEAD'),
+                       DATA_STORES_COMMIT, CATALOG_DATA_STORES_COMMIT):
+            with self.subTest(source=source):
+                self.assertTrue(reviewed_stores_source(source))
+
+    def test_c2_tuple_rejects_unknown_bytes_mode_and_disconnected_ancestry(self):
+        current = git('rev-parse', 'HEAD')
+        stores = 'docs/DATA_STORES.md'
+        for variant in ('content', 'mode', 'ancestry'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                entry = legacy.entry(ROOT, current, stores)
+                if variant != 'ancestry':
+                    mode = '100755' if variant == 'mode' else entry['mode']
+                    oid = entry['oid'] if variant == 'mode' else git(
+                        'hash-object', '-w', '--stdin', data=b'unknown C2 stores fixture\n')
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + stores, env=env)
+                changed = RealGitSuccessorTest.commit(
+                    git('write-tree', env=env), [BASE if variant == 'ancestry' else current])
+            with self.subTest(variant=variant):
+                self.assertFalse(reviewed_stores_source(changed))
 
 
 class RealGitSuccessorTest(unittest.TestCase):
@@ -61,17 +135,20 @@ class RealGitSuccessorTest(unittest.TestCase):
         stores = 'docs/DATA_STORES.md'
         stores_expected = next(row['after'] for row in cls.record['projection'] if row['path'] == stores)
         if legacy.entry(ROOT, cls.source, stores) != stores_expected:
-            stores_ancestor = subprocess.run(
-                ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
-                 DATA_STORES_COMMIT, cls.source], capture_output=True).returncode == 0
-            legacy.require(stores_ancestor and legacy.entry(ROOT, cls.source, stores)
-                           == legacy.entry(ROOT, DATA_STORES_COMMIT, stores),
+            legacy.require(reviewed_stores_source(cls.source),
                            'v2_fixture_unreviewed_stores_source')
             with tempfile.TemporaryDirectory() as directory:
                 env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
                 git('read-tree', cls.source, env=env)
                 git('update-index', '--add', '--cacheinfo',
                     stores_expected['mode'] + ',' + stores_expected['oid'] + ',' + stores, env=env)
+                cls.source = cls.commit(git('write-tree', env=env), [cls.source])
+        additions = reviewed_catalog_voice_additions(cls.source, cls.record)
+        if additions:
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', cls.source, env=env)
+                git('update-index', '--force-remove', '--', *sorted(additions), env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         # Current generated dependencies can advance independently of v2. Pin
         # every historical context entry in this private fixture, including its
@@ -128,6 +205,68 @@ class RealGitSuccessorTest(unittest.TestCase):
         for row in self.record['context']:
             with self.subTest(path=row['path']):
                 self.assertEqual(legacy.entry(ROOT, self.source, row['path']), row['entry'])
+
+    def test_stores_fixture_restores_exact_historical_projection(self):
+        stores = 'docs/DATA_STORES.md'
+        expected = next(row['after'] for row in self.record['projection'] if row['path'] == stores)
+        self.assertEqual(legacy.entry(ROOT, self.source, stores), expected)
+        self.assertNotEqual(legacy.entry(ROOT, git('rev-parse', 'HEAD'), stores), expected)
+
+    def test_stores_source_guard_accepts_only_exact_reviewed_entries(self):
+        self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
+        for reviewed in (DATA_STORES_COMMIT, CATALOG_DATA_STORES_COMMIT):
+            with self.subTest(source=reviewed):
+                self.assertTrue(reviewed_stores_source(reviewed))
+        stores = 'docs/DATA_STORES.md'
+        raw = (ROOT / stores).read_bytes()
+        for content, mode in ((raw + b'\nunreviewed fixture change\n', '100644'),
+                              (raw, '100755')):
+            source, _ = self.changed(stores, content, mode)
+            with self.subTest(mode=mode):
+                self.assertFalse(reviewed_stores_source(source))
+
+    def test_stores_source_guard_rejects_matching_bytes_without_reviewed_ancestry(self):
+        stores = 'docs/DATA_STORES.md'
+        source, _ = self.changed(stores, (ROOT / stores).read_bytes())
+        self.assertTrue(reviewed_stores_source(source))
+        unrelated = self.commit(git('rev-parse', source + '^{tree}'), [BASE])
+        self.assertEqual(legacy.entry(ROOT, unrelated, stores), legacy.entry(ROOT, source, stores))
+        self.assertFalse(reviewed_stores_source(unrelated))
+
+    def test_catalog_fixture_has_exact_historical_voice_inventory(self):
+        prefix = 'src/backend/voice/'
+        expected = {name for name in legacy.tree(str(ROOT), self.record['source']) if name.startswith(prefix)}
+        actual = {name for name in legacy.tree(str(ROOT), self.source) if name.startswith(prefix)}
+        self.assertEqual(actual, expected)
+        self.assertEqual(reviewed_catalog_voice_additions(git('rev-parse', 'HEAD'), self.record),
+                         CATALOG_VOICE_PATHS)
+        unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
+        with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
+            reviewed_catalog_voice_additions(unknown, self.record)
+
+    def test_catalog_source_guard_rejects_content_mode_missing_paths_and_unrelated_ancestry(self):
+        current = git('rev-parse', 'HEAD')
+        name = sorted(CATALOG_VOICE_PATHS)[0]
+        for variant in ('content', 'mode', 'missing_catalog', 'missing_historical'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                if variant.startswith('missing_'):
+                    removed = self.context_path if variant == 'missing_historical' else name
+                    git('update-index', '--force-remove', '--', removed, env=env)
+                else:
+                    entry = legacy.entry(ROOT, current, name)
+                    mode = '100755' if variant == 'mode' else entry['mode']
+                    oid = entry['oid'] if variant == 'mode' else git(
+                        'hash-object', '-w', '--stdin', data=b'unreviewed generated fixture\n')
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + name, env=env)
+                changed = self.commit(git('write-tree', env=env), [current])
+            with self.subTest(variant=variant), self.assertRaisesRegex(
+                    legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
+                reviewed_catalog_voice_additions(changed, self.record)
+        unrelated = self.commit(git('rev-parse', current + '^{tree}'), [BASE])
+        with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
+            reviewed_catalog_voice_additions(unrelated, self.record)
 
     def test_projection_drift(self):
         with self.assertRaisesRegex(legacy.Rejected, 'projection_drift'):

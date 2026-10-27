@@ -138,6 +138,9 @@ func rateLimitRuleFromSpec(spec rateLimitRuleSpec) rateLimitRule {
 }
 
 func rateLimitGroup(method, path string) string {
+	if _, matched := linkedOAuthRoute(method, path); matched {
+		return "AuthOAuth"
+	}
 	if policy, ok := sdkAuthorizationPolicy(method, path); ok {
 		return policy.rateGroup
 	}

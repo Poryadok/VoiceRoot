@@ -146,23 +146,39 @@ Before any delivery-ack fan-out or publish, Realtime resolves the message with M
 
 ### In-app notification fan-out
 
-Two producers may emit WS `notification` for the same message; clients **dedupe** by `(type, chat_id, message_id, recipient profile_id)`.
+Notification owns personal message notification routing; Realtime owns payload
+shaping and WebSocket delivery. Its production message consumer sends the exact
+`MessageStreamEvent` protobuf bytes to internal NATS request/reply subject
+`notification.routing.message.v1`. Notification responds with version `1`, the
+SHA-256 of those exact bytes, `failed`, and allowed `(profile_id,type)` pairs.
+Realtime rejects an unbound/malformed response or an event/type mismatch and
+never falls back to chat subscriptions or membership on failure.
 
-| Path | When | Owner |
-|------|------|-------|
-| **Fast path** | `message.sent` on NATS | Realtime emits `notification` parallel to `message_create`: `message_request` for a recipient in the requests inbox, otherwise `new_message` |
-| **Policy path** | After Notification `DecideRouting` | Notification → NATS → Realtime fan-out (presence, mute, quiet hours, `send_silent`; push vs in-app split) |
+Notification resolves complete Chat membership within one shared four-second
+deadline, then current per-recipient ordinary Chat ACL (without internal caller
+bypass), User-owned profile/account identity, Social block policy and effective
+Notification settings/presence/quiet hours. Group/channel blocks are
+recipient→sender; DM blocks are checked in both directions. Archived and
+declined members are suppressed. Any dependency uncertainty returns no partial
+allow set. Realtime bounds its request to five seconds and retains its local
+block, lifecycle admission and session-epoch enforcement.
 
-**Normative rule:** Notification Service owns **routing policy** (which channel, sound, grouping). Realtime fast path is **latency optimization** for subscribed in-app sessions — must not bypass mute/type suppress. When both paths fire, client keeps one row per dedupe key. Payload schema — § **`notification` op payload** below. Push — always Notification Service (FCM/APNs), never Realtime direct.
+Allowed connected members receive `notification` in every active profile tab
+without a chat subscription. `message_create` retains its subscription audience.
+Wire types remain `new_message`, `message_request`, `mention` and `reaction`;
+thread message in-app rows remain `new_message`. Quiet hours and `send_silent`
+retain ordinary in-app behavior; mute/type suppression cannot be bypassed.
+Clients dedupe retries by `(type, chat_id, message_id, recipient profile_id)`.
+Push remains exclusively Notification-owned.
 
-**Implementation gap:** the policy path above is a target. Notification's public
-RPCs currently expose settings and send operations, but no recipient/event-bound
-routing decision for Realtime, and no accepted decision-event transport. Existing
-fast-path delivery does not establish that policy proof. Membership-wide delivery
-must remain disabled until this contract exists: Chat `ListMembers` alone is not
-sufficient authorization to send a notification, especially after DM block,
-archive or notification-setting changes. Chat member pagination must either
-complete within its shared deadline or return an error without a partial map.
+This live request/reply path creates no inbox, durable notification stream or
+global catch-up. An unavailable responder drops only the personal notification
+for this live event; reconnect uses the existing REST reconciliation contract.
+Only Realtime may publish the request subject; only Notification may subscribe
+and publish the dedicated `_INBOX.voice.realtime.notification.<uuid>` response
+namespace. No dynamic response permission or general Realtime inbox grant is
+required. Source/configuration and isolated Linux tests do not prove rollout of
+updated NATS credentials or deployed product acceptance.
 
 Presence adapter requests use the authenticated connection's explicit account,
 profile and account type. They replace ambient authorization/identity/privilege

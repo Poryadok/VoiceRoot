@@ -480,6 +480,7 @@ func TestRunMessageEventsConsumer_InAppNotificationOnMessageSent(t *testing.T) {
 	defer cancel()
 	errCh := make(chan error, 1)
 	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-notify-inst"), "message.>")
+	bindNotificationDecisionFixture(t, nc, recipientID, "new_message")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-notify-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
@@ -694,6 +695,7 @@ func TestRunMessageEventsConsumer_InAppNotificationOnReactionAdded(t *testing.T)
 	defer cancel()
 	errCh := make(chan error, 1)
 	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-reaction-notify-inst"), "message.>")
+	bindNotificationDecisionFixture(t, nc, authorID, "reaction")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-reaction-notify-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 
@@ -793,6 +795,7 @@ func TestRunMessageEventsConsumer_MentionAdded(t *testing.T) {
 	defer cancel()
 	errCh := make(chan error, 1)
 	preprovisionRealtimeConsumer(t, js, jsStreamMessageEvents, consumerDurableName("test-mention-inst"), "message.>")
+	bindNotificationDecisionFixture(t, nc, targetID, "mention")
 	go func() { errCh <- runMessageEventsConsumer(ctx, hub, natsURL, "test-mention-inst", nil) }()
 	time.Sleep(200 * time.Millisecond)
 

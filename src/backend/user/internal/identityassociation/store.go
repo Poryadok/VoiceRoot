@@ -62,6 +62,17 @@ func NewStore(pool *pgxpool.Pool, keys *Keyset, generation uuid.UUID) (*Store, e
 	}
 	return &Store{pool: pool, keys: keys, generation: generation}, nil
 }
+
+// OwnsPool checks local transaction composition, not origin or recovery authority.
+func (s *Store) OwnsPool(pool *pgxpool.Pool) bool { return s != nil && s.pool == pool }
+
+// PrepareBirthSelectors keeps User keys local and runs before acquiring I.
+func (s *Store) PrepareBirthSelectors(profile, account uuid.UUID) (PreparedSelectors, error) {
+	if s == nil || s.keys == nil {
+		return PreparedSelectors{}, ErrIncomplete
+	}
+	return s.keys.PrepareSelectors(profile, account)
+}
 func (s *Store) Begin(ctx context.Context) (*IdentityTx, error) {
 	if s == nil {
 		return nil, ErrIncomplete

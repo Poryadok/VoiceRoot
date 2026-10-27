@@ -36,6 +36,8 @@ func Method(target string) string {
 		return "/voice.user.v1.UserService/GetSdkProfileEligibility"
 	case "notification":
 		return "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	case "notification-primary":
+		return "/voice.user.v1.UserService/ResolvePrimaryProfileIDs"
 	case "messaging":
 		return "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence"
 	case "space-voice-communication":
@@ -85,6 +87,8 @@ func AllowsMethod(target, method string) bool {
 		}
 	case "notification":
 		return method == "/voice.user.v1.UserService/GetNotificationRoutingPresence"
+	case "notification-primary":
+		return method == Method(target)
 	case "messaging":
 		return method == "/voice.user.v1.UserService/GetScheduledMessageDispatchPresence" ||
 			method == "/voice.user.v1.UserService/GetProfileDeletionStates"
@@ -259,6 +263,20 @@ func RequireNotificationPresence(ctx context.Context, method string, req proto.M
 	return nil
 }
 
+// RequireNotificationPrimary grants only the existing read-only primary lookup,
+// never profile provisioning, list enumeration or user authority.
+func RequireNotificationPrimary(ctx context.Context, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || verified.Issuer != "notification" || verified.Subject != "service:notification" {
+		return status.Error(codes.PermissionDenied, "Notification principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	if err != nil || verified.Audience != "user" || verified.RPC != Method("notification-primary") || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	return nil
+}
+
 // RequireMessagingPresence binds the scheduled-delivery decision to the exact
 // User RPC and its deterministic request body. It grants no general presence
 // or profile lookup capability.
@@ -317,7 +335,7 @@ func expectedIssuer(target string) string {
 	if target == "auth" {
 		return "auth"
 	}
-	if target == "notification" {
+	if target == "notification" || target == "notification-primary" {
 		return "notification"
 	}
 	if target == "messaging" {
@@ -329,7 +347,7 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "catalog" || capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "catalog" || capability == "notification-primary" || capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
 }
 
 func capabilityIssuers(capability string) []string {

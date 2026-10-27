@@ -16,6 +16,10 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT:6379}
 
 auth:
+  linked-oauth:
+    enabled: ${AUTH_LINKED_OAUTH_ENABLED:false}
+    attempt-ttl: ${AUTH_LINKED_OAUTH_ATTEMPT_TTL:PT300S}
+    result-ttl: ${AUTH_LINKED_OAUTH_RESULT_TTL:PT60S}
   persistence: jdbc
   jwt:
     issuer: voice-auth

@@ -1,0 +1,55 @@
+{
+  "contract": "settings-oauth-transport-v1-5f445604",
+  "implementation": "default-off Auth/Gateway transport; fixture only; no live provider acceptance",
+  "providers": ["twitch", "youtube"],
+  "start": {
+    "method": "POST",
+    "path": "/api/v1/auth/linked-accounts/{provider}/link",
+    "authorization": "original current regular-account Bearer access JWT",
+    "request": {"client_surface":"web","return_challenge":"RFC7636_BASE64URL_SHA256_OF_LOCAL_VERIFIER","return_challenge_method":"S256"},
+    "success_status": 200,
+    "response": {"attempt_id":"11111111-1111-4111-8111-111111111111","authorization_url":"https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=FIXTURE&redirect_uri=CONFIGURED_EXACT_CALLBACK&scope=user%3Aread%3Aemail&state=OPAQUE_SERVER_STATE&code_challenge_method=S256&code_challenge=INDEPENDENT_PROVIDER_CHALLENGE","expires_at":"2026-10-26T01:05:00Z"},
+    "rules": ["No arbitrary redirect_uri/state accepted from client", "Each provider and client surface is explicitly configured and default-off", "Twitch Partner criterion supported; YouTube remains unavailable pending canonical qualification", "300 second maximum capped by original JWT exp", "A new same-jti/profile/provider attempt supersedes pending predecessor"]
+  },
+  "callback": {
+    "method":"GET",
+    "path":"/api/v1/auth/linked-accounts/{provider}/oauth-callback",
+    "authorization":"none; Gateway strips supplied bearer and applies AuthOAuth by IP",
+    "query":"exactly one state and either exactly one code or one error; duplicates, mixed, unknown, malformed or oversized fields reject neutrally",
+    "response":"200 text/html neutral fragment-scrubbing bridge with no-store, no-referrer and restrictive nonce CSP",
+    "ownership":"Auth owns random state, independent provider verifier, original account/profile/jti/epoch/exp and exact registration/callback/return tuple; browser query never forwarded",
+    "source_effect":"none; callback stages encrypted one-use result only",
+    "web_return":"configured exact same-origin return route?attempt_id=11111111-1111-4111-8111-111111111111&result_handle=OPAQUE_RESULT_HANDLE#",
+    "windows_return":"configured exact voice: route with attempt_id/result_handle and empty fragment; bridge offers explicit Return to Voice action",
+    "fragment_rule":"Bridge inspects nonempty location.hash, scrubs query/hash with history.replaceState before navigation/analytics/consume/OS handoff, and rejects handoff if fragment was present. Every constructed return URL ends with explicit #. Flutter must independently reject and scrub a directly delivered nonempty fragment before telemetry/consume/navigation/OS processing. Backend fixture is not that Flutter regression."
+  },
+  "consume": {
+    "method":"POST",
+    "path":"/api/v1/auth/linked-accounts/{provider}/results/consume",
+    "authorization":"exact original current Bearer JWT; refresh or replacement cannot migrate attempt",
+    "request":{"attempt_id":"11111111-1111-4111-8111-111111111111","result_handle":"OPAQUE_RESULT_HANDLE","return_verifier":"LOCAL_RFC7636_VERIFIER_NEVER_PUT_IN_URL"},
+    "success_status":200,
+    "response":{"outcome":"success"},
+    "outcomes":["success","cancelled","denied","provider_error","unavailable"],
+    "rules":["60 second result maximum capped by attempt expiry and original JWT exp; equality is expired", "Wrong binding/proof cannot consume another valid result", "Success means source+durable sync target+consumption committed atomically; User projection may be pending", "Clear local URL handle and reread authoritative linked accounts + User verification; callback/launch never means success"]
+  },
+  "cancel": {
+    "method":"POST",
+    "path":"/api/v1/auth/linked-accounts/{provider}/attempts/{attempt_id}/cancel",
+    "authorization":"exact original current Bearer JWT",
+    "request":null,
+    "success_status":204,
+    "rules":["Cancels pending/processing/ready and discards encrypted staged tokens", "Already committed source is not undone; reread after result_consumed"]
+  },
+  "errors": [
+    {"status":400,"body":{"error":"invalid_link_attempt"},"meaning":"bad state/binding/proof/malformed request; safe generic failure"},
+    {"status":401,"body":{"error":"invalid_token"},"meaning":"authentication rejected"},
+    {"status":409,"body":{"error":"result_consumed"},"meaning":"already committed/consumed result; reread authoritative state"},
+    {"status":409,"body":{"error":"linked_account_profile_conflict"},"meaning":"active provider source belongs to another profile; explicit unlink then link"},
+    {"status":410,"body":{"error":"result_expired"},"meaning":"attempt/original credential/result expiry equality or later; restart"},
+    {"status":503,"body":{"error":"oauth_unavailable"},"meaning":"disabled/unconfigured/unqualified provider or surface; no browser launch or mock fallback"}
+  ],
+  "gateway_limits":"AuthOAuth existing 30/15m; authenticated paths keyed by verified account; callback keyed by IP; unavailable limiter fails closed",
+  "legacy":"POST /api/v1/auth/linked-accounts/{provider}/callback is blocked with oauth_unavailable after authentication; cannot mutate a source",
+  "client_session":"Retain return verifier only for original JWT/tab/session and bound attempt. Refresh/profile switch/logout/session replacement clears local proof and delayed responses. No tokens, codes, verifier or claimed outcome in app return URL."
+}
