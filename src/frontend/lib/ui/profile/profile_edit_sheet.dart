@@ -10,6 +10,11 @@ import '../../state/auth_providers.dart';
 import '../../state/social_providers.dart';
 import '../../state/subscription_providers.dart';
 import '../../theme/voice_colors.dart';
+import '../../theme/voice_theme_providers.dart';
+import '../../backend/user_privacy_client.dart';
+import '../../state/trust_providers.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import '../settings/privacy_presets.dart';
 import '../matchmaking/player_profile_sheet.dart';
 
 typedef ProfileAvatarPicker = Future<ProfileAvatarFile?> Function();
@@ -45,7 +50,21 @@ class ProfileEditSheet extends ConsumerStatefulWidget {
 class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
   late final TextEditingController _displayNameController;
   late final TextEditingController _bioController;
+  final _nameFocus = FocusNode();
+  Object? _identity;
+  String? _accent;
+  String? _preset;
+  // A preset is an explicit request to apply defaults, even if its name matches
+  // the server label of privacy rules that have since been customized.
+  bool _applyPresetDefaults = false;
+  bool _privacyLoading = true;
+  bool _privacyFailed = false;
+  late String _savedName;
+  late String _savedBio;
+  String? _savedAccent;
+  String? _uploadedAvatarUrl;
   ProfileAvatarFile? _avatar;
+  ProfileAvatarFile? _savedAvatarPreview;
   var _saving = false;
   String? _error;
 
@@ -56,12 +75,73 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
       text: widget.profile.displayName,
     );
     _bioController = TextEditingController(text: widget.profile.bio ?? '');
+    _savedName = widget.profile.displayName;
+    _savedBio = widget.profile.bio ?? '';
+    _accent = _savedAccent = widget.profile.accentColor;
+    _identity = ref
+        .read(authControllerProvider.notifier)
+        .gatewayRequestIdentity;
+    _displayNameController.addListener(_draftChanged);
+    _bioController.addListener(_draftChanged);
+    _loadPrivacy();
+  }
+
+  void _draftChanged() => setState(() {});
+
+  bool get _currentIdentity {
+    final session = ref.read(authControllerProvider).session;
+    return session?.accountId == widget.profile.accountId &&
+        session?.activeProfileId == widget.profile.id &&
+        _identity ==
+            ref.read(authControllerProvider.notifier).gatewayRequestIdentity;
+  }
+
+  bool get _profileDirty =>
+      _displayNameController.text.trim() != _savedName ||
+      _bioController.text != _savedBio ||
+      _avatar != null ||
+      _accent != _savedAccent;
+  bool get _dirty => _profileDirty || _applyPresetDefaults;
+
+  Future<void> _loadPrivacy() async {
+    final auth = ref.read(authorizationHeaderProvider);
+    if (!_currentIdentity || auth == null) {
+      if (mounted) {
+        setState(() {
+          _privacyLoading = false;
+          _privacyFailed = true;
+        });
+      }
+      return;
+    }
+    setState(() {
+      _privacyLoading = true;
+      _privacyFailed = false;
+    });
+    final result = await ref
+        .read(voiceUserPrivacyClientProvider)
+        .getPrivacy(authorization: auth);
+    if (!mounted || !_currentIdentity) return;
+    setState(() {
+      _privacyLoading = false;
+      switch (result) {
+        case UserPrivacyApiOk(:final data):
+          if (data.profileId != widget.profile.id) {
+            _privacyFailed = true;
+            break;
+          }
+          _preset = data.preset;
+        case UserPrivacyApiFailure():
+          _privacyFailed = true;
+      }
+    });
   }
 
   @override
   void dispose() {
     _displayNameController.dispose();
     _bioController.dispose();
+    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -69,120 +149,276 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final voice = VoiceColors.of(context);
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Padding(
-          key: ProfileEditSheet.sheetKey,
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                l10n.profileEditTitle,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundImage: _avatar != null
-                        ? MemoryImage(_avatar!.bytes)
-                        : (widget.profile.avatarUrl != null
-                              ? NetworkImage(widget.profile.avatarUrl!)
-                              : null),
-                    child: _avatar == null && widget.profile.avatarUrl == null
-                        ? Text(_avatarFallback)
-                        : null,
-                  ),
-                  const SizedBox(width: 16),
-                  OutlinedButton.icon(
-                    key: ProfileEditSheet.avatarButtonKey,
-                    onPressed: _saving ? null : _pickAvatar,
-                    icon: const Icon(Icons.image_outlined),
-                    label: Text(l10n.profileAvatarChange),
-                  ),
-                ],
-              ),
-              if (_avatar != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  l10n.profileAvatarSelected(_avatar!.name),
-                  style: TextStyle(color: voice.textSecondary),
-                ),
-              ],
-              const SizedBox(height: 16),
-              TextField(
-                key: ProfileEditSheet.displayNameFieldKey,
-                controller: _displayNameController,
-                maxLength: kProfileDisplayNameMaxLength,
-                enabled: !_saving,
-                decoration: InputDecoration(
-                  labelText: l10n.profileDisplayNameLabel,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: ProfileEditSheet.bioFieldKey,
-                controller: _bioController,
-                maxLength: 500,
-                maxLines: 4,
-                enabled: !_saving,
-                decoration: InputDecoration(
-                  labelText: l10n.profileBioLabel,
-                  helperText: l10n.profileBioHelper,
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
-              ],
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _saving
-                    ? null
-                    : () {
-                        showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          builder: (_) => const PlayerProfileSheet(),
-                        );
-                      },
-                icon: const Icon(Icons.sports_esports_outlined),
-                label: Text(l10n.playerProfileEntry),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _saving
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      child: Text(l10n.commonCancel),
+    ref.watch(authControllerProvider);
+    final catalog = ref.watch(voiceTokenCatalogProvider).valueOrNull;
+    final avatarPreview = _avatar ?? _savedAvatarPreview;
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+      },
+      child: Actions(
+        actions: {
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (_) {
+              if (!_saving) Navigator.of(context).maybePop();
+              return null;
+            },
+          ),
+        },
+        child: FocusTraversalGroup(
+          child: SafeArea(
+            child: SingleChildScrollView(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  child: Padding(
+                    key: ProfileEditSheet.sheetKey,
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                l10n.profileEditTitle,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: MaterialLocalizations.of(
+                                context,
+                              ).closeButtonTooltip,
+                              onPressed: _saving
+                                  ? null
+                                  : () => Navigator.of(context).maybePop(),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundImage: avatarPreview != null
+                                  ? MemoryImage(avatarPreview.bytes)
+                                  : (widget.profile.avatarUrl != null
+                                        ? NetworkImage(
+                                            widget.profile.avatarUrl!,
+                                          )
+                                        : null),
+                              child:
+                                  avatarPreview == null &&
+                                      widget.profile.avatarUrl == null
+                                  ? Text(_avatarFallback)
+                                  : null,
+                            ),
+                            const SizedBox(width: 16),
+                            Flexible(
+                              child: OutlinedButton.icon(
+                                key: ProfileEditSheet.avatarButtonKey,
+                                onPressed: _saving ? null : _pickAvatar,
+                                icon: const Icon(Icons.image_outlined),
+                                label: Text(l10n.profileAvatarChange),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_avatar != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            l10n.profileAvatarSelected(_avatar!.name),
+                            style: TextStyle(color: voice.textSecondary),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        TextField(
+                          key: ProfileEditSheet.displayNameFieldKey,
+                          controller: _displayNameController,
+                          focusNode: _nameFocus,
+                          textInputAction: TextInputAction.next,
+                          maxLength: kProfileDisplayNameMaxLength,
+                          enabled: !_saving,
+                          decoration: InputDecoration(
+                            labelText: l10n.profileDisplayNameLabel,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: l10n.profileCreateUsernameLabel,
+                          ),
+                          child: SelectableText(widget.profile.handle),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          key: ProfileEditSheet.bioFieldKey,
+                          controller: _bioController,
+                          maxLength: 500,
+                          maxLines: 4,
+                          enabled: !_saving,
+                          decoration: InputDecoration(
+                            labelText: l10n.profileBioLabel,
+                            helperText: l10n.profileBioHelper,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          l10n.settingsAccent,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (catalog != null)
+                              for (
+                                var i = 0;
+                                i < catalog.profileAccentDefaults.length;
+                                i++
+                              )
+                                Builder(
+                                  builder: (context) {
+                                    final color =
+                                        catalog.profileAccentDefaults[i];
+                                    final hex =
+                                        '#${color.toARGB32().toRadixString(16).substring(2).toUpperCase()}';
+                                    final selected =
+                                        _accent?.toUpperCase() == hex ||
+                                        (_accent == null && i == 0);
+                                    return Semantics(
+                                      selected: selected,
+                                      label: '${l10n.settingsAccent} ${i + 1}',
+                                      child: Tooltip(
+                                        message: hex,
+                                        child: OutlinedButton(
+                                          key: Key('profile_edit_accent_$i'),
+                                          style: OutlinedButton.styleFrom(
+                                            backgroundColor: color,
+                                            foregroundColor: Colors.black,
+                                            minimumSize: const Size(44, 44),
+                                            padding: EdgeInsets.zero,
+                                          ),
+                                          onPressed: _saving
+                                              ? null
+                                              : () => setState(
+                                                  () => _accent = hex,
+                                                ),
+                                          child: selected
+                                              ? const Icon(Icons.check)
+                                              : const SizedBox(width: 20),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          l10n.privacyPresetTitle,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        if (_privacyLoading)
+                          const LinearProgressIndicator()
+                        else if (_privacyFailed)
+                          Row(
+                            children: [
+                              Expanded(child: Text(l10n.privacyLoadError)),
+                              TextButton(
+                                onPressed: _saving ? null : _loadPrivacy,
+                                child: Text(l10n.commonRetry),
+                              ),
+                            ],
+                          )
+                        else
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final preset
+                                  in PrivacyPresetDefaults.presets)
+                                ChoiceChip(
+                                  label: Text(switch (preset) {
+                                    'personal' => l10n.privacyPresetPersonal,
+                                    'gaming' => l10n.privacyPresetGaming,
+                                    _ => l10n.privacyPresetWork,
+                                  }),
+                                  selected: _preset == preset,
+                                  onSelected: _saving
+                                      ? null
+                                      : (_) => setState(() {
+                                          _preset = preset;
+                                          _applyPresetDefaults = true;
+                                        }),
+                                ),
+                            ],
+                          ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              _error!,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _saving
+                              ? null
+                              : () {
+                                  showModalBottomSheet<void>(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    builder: (_) => const PlayerProfileSheet(),
+                                  );
+                                },
+                          icon: const Icon(Icons.sports_esports_outlined),
+                          label: Text(l10n.playerProfileEntry),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _saving
+                                    ? null
+                                    : () => Navigator.of(context).pop(),
+                                child: Text(l10n.commonCancel),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton(
+                                key: ProfileEditSheet.saveButtonKey,
+                                onPressed: _saving || !_dirty ? null : _save,
+                                child: _saving
+                                    ? const SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text(l10n.profileSave),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      key: ProfileEditSheet.saveButtonKey,
-                      onPressed: _saving ? null : _save,
-                      child: _saving
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(l10n.profileSave),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -197,8 +433,13 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
 
   Future<void> _pickAvatar() async {
     final l10n = AppLocalizations.of(context)!;
-    final picked = await (widget.avatarPicker ?? defaultPickProfileAvatar)
-        .call();
+    ProfileAvatarFile? picked;
+    try {
+      picked = await (widget.avatarPicker ?? defaultPickProfileAvatar).call();
+    } catch (_) {
+      if (mounted) setState(() => _error = l10n.commonActionFailed);
+      return;
+    }
     if (!mounted || picked == null) return;
     final contentType = picked.contentType.trim().toLowerCase();
     if (!kProfileAvatarContentTypes.contains(contentType)) {
@@ -215,17 +456,32 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
     }
     setState(() {
       _avatar = picked;
+      _uploadedAvatarUrl = null;
       _error = null;
     });
   }
 
   Future<void> _save() async {
+    if (_saving || !_dirty) return;
     final l10n = AppLocalizations.of(context)!;
     final displayName = _displayNameController.text.trim();
     final bio = _bioController.text;
     final validationError = _validate(l10n, displayName, bio);
     if (validationError != null) {
       setState(() => _error = validationError);
+      if (displayName.isEmpty ||
+          displayName.length > kProfileDisplayNameMaxLength) {
+        _nameFocus.requestFocus();
+      }
+      return;
+    }
+    final auth = ref.read(authorizationHeaderProvider);
+    if (auth == null || !_currentIdentity) {
+      setState(
+        () => _error = auth == null
+            ? l10n.profileEditSaveError('not_authenticated')
+            : l10n.commonActionFailed,
+      );
       return;
     }
 
@@ -234,35 +490,97 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
       _error = null;
     });
 
-    String? avatarUrl;
-    if (_avatar != null) {
-      final uploaded = await _uploadAvatar(l10n, _avatar!);
-      if (!mounted) return;
-      if (uploaded == null) {
-        setState(() => _saving = false);
+    try {
+      String? avatarUrl = _uploadedAvatarUrl;
+      if (_avatar != null && avatarUrl == null) {
+        final uploaded = await _uploadAvatar(l10n, _avatar!);
+        if (!mounted) return;
+        if (uploaded == null) {
+          setState(() {
+            _saving = false;
+            _error ??= l10n.commonActionFailed;
+          });
+          return;
+        }
+        avatarUrl = uploaded;
+        _uploadedAvatarUrl = uploaded;
+      }
+      if (!_currentIdentity) {
+        _saveFailed(l10n);
         return;
       }
-      avatarUrl = uploaded;
+      if (_profileDirty) {
+        final result = await ref
+            .read(voiceUsersClientProvider)
+            .updateProfile(
+              authorization: ref.read(authorizationHeaderProvider)!,
+              displayName: displayName,
+              bio: bio,
+              avatarUrl: avatarUrl,
+              accentColor: _accent != _savedAccent ? _accent : null,
+            );
+        if (!mounted) return;
+        if (!_currentIdentity) {
+          _saveFailed(l10n);
+          return;
+        }
+        if (result is! UsersApiOk<VoiceProfile> ||
+            result.data.id != widget.profile.id ||
+            result.data.accountId != widget.profile.accountId) {
+          _saveFailed(l10n);
+          return;
+        }
+        _savedName = displayName;
+        _savedBio = bio;
+        _savedAccent = _accent;
+        // The sheet keeps its original widget.profile after a partial save.
+        // Keep the committed image visible while the remaining privacy write
+        // is retried, without marking the avatar as an unsaved draft again.
+        _savedAvatarPreview = _avatar ?? _savedAvatarPreview;
+        _avatar = null;
+        _uploadedAvatarUrl = null;
+        ref.invalidate(profileProvider(widget.profile.id));
+        ref.invalidate(activeProfileProvider);
+        ref.invalidate(myProfilesProvider);
+        ref.invalidate(profileAccentColorProvider(widget.profile.id));
+      }
+      if (_preset != null && _applyPresetDefaults) {
+        if (!_currentIdentity) {
+          _saveFailed(l10n);
+          return;
+        }
+        final result = await ref
+            .read(voiceUserPrivacyClientProvider)
+            .updatePrivacy(
+              authorization: ref.read(authorizationHeaderProvider)!,
+              settings: PrivacyPresetDefaults.forPreset(
+                _preset!,
+                profileId: widget.profile.id,
+              ),
+            );
+        if (!mounted) return;
+        if (!_currentIdentity ||
+            result is! UserPrivacyApiOk<VoicePrivacySettings> ||
+            result.data.profileId != widget.profile.id) {
+          _saveFailed(l10n);
+          return;
+        }
+        _applyPresetDefaults = false;
+      }
+      if (!mounted || !_currentIdentity) return;
+      Navigator.of(context).pop();
+    } catch (_) {
+      _saveFailed(l10n);
     }
+  }
 
-    final err = await ref
-        .read(profileActionsProvider)
-        .updateBasicProfile(
-          displayName: displayName,
-          bio: bio,
-          avatarUrl: avatarUrl,
-        );
-    if (!mounted) return;
-    if (err != null) {
+  void _saveFailed(AppLocalizations l10n) {
+    if (mounted) {
       setState(() {
         _saving = false;
-        _error = err == 'not_authenticated'
-            ? l10n.profileEditSaveError(err)
-            : l10n.commonActionFailed;
+        _error = l10n.commonActionFailed;
       });
-      return;
     }
-    Navigator.of(context).pop();
   }
 
   String? _validate(AppLocalizations l10n, String displayName, String bio) {
@@ -289,6 +607,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
       contentType: avatar.contentType,
       contentLength: avatar.bytes.length,
     );
+    if (!mounted || !_currentIdentity) return null;
     switch (presignResult) {
       case UsersApiFailure():
         setState(() => _error = l10n.commonActionFailed);
@@ -299,6 +618,7 @@ class _ProfileEditSheetState extends ConsumerState<ProfileEditSheet> {
           requiredHeaders: data.requiredHeaders,
           bytes: avatar.bytes,
         );
+        if (!mounted || !_currentIdentity) return null;
         switch (uploadResult) {
           case UsersApiFailure():
             setState(() => _error = l10n.commonActionFailed);
@@ -314,8 +634,8 @@ Future<ProfileAvatarFile?> defaultPickProfileAvatar() async {
   final file = await openFile(
     acceptedTypeGroups: [
       XTypeGroup(
-        label: 'Static images',
-        extensions: const ['jpg', 'jpeg', 'png', 'webp'],
+        label: 'Images',
+        extensions: const ['jpg', 'jpeg', 'png', 'webp', 'gif'],
         mimeTypes: kProfileAvatarContentTypes.toList(),
       ),
     ],
@@ -334,5 +654,6 @@ String _contentTypeFromName(String name) {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
   if (lower.endsWith('.png')) return 'image/png';
   if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
   return 'application/octet-stream';
 }
