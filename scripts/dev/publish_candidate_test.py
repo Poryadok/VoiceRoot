@@ -16,12 +16,21 @@ import yaml
 import publish_candidate as publisher
 
 
-C = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
+C = '31a04a471c604488bedd5b442039dfdf0434f9c3'
+PREVIOUS_C = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
 P = 'a' * 40
 DIGEST = 'sha256:' + 'b' * 64
 
 
 class PublisherTests(unittest.TestCase):
+    def test_selected_current_product_rejects_previous_candidate(self):
+        self.assertEqual(publisher.build_plan(C, P, '12345', '2')['product_sha'], C)
+        with self.assertRaisesRegex(publisher.Refused, 'unselected_product'):
+            publisher.build_plan(PREVIOUS_C, P, '12345', '2')
+        with self.assertRaises(publisher.Refused):
+            publisher.verify_config_source(
+                {'config': {'Labels': {'org.opencontainers.image.revision': PREVIOUS_C}}}, C)
+
     def test_plan_has_only_eight_required_variants_and_distinct_identities(self):
         plan = publisher.build_plan(C, P, '12345', '2')
         self.assertEqual(plan['product_sha'], C)
@@ -211,6 +220,7 @@ class WorkflowTests(unittest.TestCase):
     def test_publication_is_manual_only_with_no_deployment_consumer(self):
         path = Path(__file__).resolve().parents[2] / publisher.WORKFLOW
         workflow = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+        self.assertEqual(workflow['on']['workflow_dispatch']['inputs']['product_sha']['default'], C)
         self.assertEqual(set(workflow['on']), {'pull_request', 'workflow_dispatch'})
         self.assertEqual(workflow['permissions'], {})
         self.assertEqual(set(workflow['jobs']), {'validate', 'publish'})
