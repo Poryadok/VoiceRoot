@@ -83,10 +83,13 @@ def owned_rows(project, started):
 def diagnostic_command(args):
     try:
         result = subprocess.run(["docker", *args], cwd=ROOT, text=True,
+                                encoding="utf-8", errors="replace",
                                 capture_output=True, check=False, timeout=20)
         return {"exit": result.returncode, "output": (result.stdout + result.stderr)[-12000:]}
     except subprocess.TimeoutExpired:
         return {"exit": "timeout", "output": "Docker diagnostic exceeded 20 seconds"}
+    except (OSError, subprocess.SubprocessError, UnicodeError) as error:
+        return {"exit": "error", "output": str(error)[-1000:]}
 
 
 def main():
@@ -227,21 +230,23 @@ def main():
     finally:
         if launched:
             rows = owned_rows(project, started_seconds)
-            if rows:
-                receipt["containers"] = rows
-            diagnostics = {}
-            for service in SERVICES:
-                if service not in rows:
-                    continue
-                container = rows[service]["id"]
-                diagnostics[service] = {
-                    "container_id": container,
-                    "state": diagnostic_command(["inspect", "--format", "{{json .State}}", container]),
-                    "logs": diagnostic_command(["logs", "--tail", "100", container]),
-                }
-            receipt["diagnostics"] = diagnostics
-            receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
-            call([*compose, "down", "--remove-orphans", "--volumes"], env=env, timeout=300)
+            try:
+                if rows:
+                    receipt["containers"] = rows
+                diagnostics = {}
+                for service in SERVICES:
+                    if service not in rows:
+                        continue
+                    container = rows[service]["id"]
+                    diagnostics[service] = {
+                        "container_id": container,
+                        "state": diagnostic_command(["inspect", "--format", "{{json .State}}", container]),
+                        "logs": diagnostic_command(["logs", "--tail", "100", container]),
+                    }
+                receipt["diagnostics"] = diagnostics
+                receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+            finally:
+                call([*compose, "down", "--remove-orphans", "--volumes"], env=env, timeout=300)
         if fixture.exists():
             if run_dir.resolve().parent != RUNS.resolve() or fixture.resolve().parent != run_dir.resolve():
                 raise RuntimeError("refusing fixture cleanup outside private run directory")
