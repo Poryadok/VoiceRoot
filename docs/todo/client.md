@@ -438,6 +438,8 @@ Baseline onboarding/deep-links/a11y — [PLAN.md](../PLAN.md); остаток vs
 
 - [x] **A11y: text-scale ×1.5 — расширить smoke** — `shell_text_scale_test.dart`: settings sheet, notification settings, game catalog, story archive; chat list/room remain in `chat_text_scale_test.dart` (Batch 10).
 
+- [ ] **A11y: resolve Accessibility font-scale slider contract** — `screen-controls.md` §30 specifies a 100–200% slider, while `accessibility.md` only promises adaptation to the system text scale. Decide whether the app control overrides or combines with system scaling, plus its default/current value and persistence; until then keep the system `MediaQuery` behavior and do not claim the slider is implemented.
+
 - [x] **A11y: focus return после modal** — `VoiceFocusReturn` + coach-mark `VoiceFocusTrap`; call overlay restores on dispose; `showVoiceBottomSheet` escape restores focus (Batch 10).
 
 - [ ] **A11y: pre-release TalkBack / VoiceOver** — чеклист в [accessibility.md](../features/accessibility.md) §Pre-release; ручная приёмка перед mobile release (**Вы**).
