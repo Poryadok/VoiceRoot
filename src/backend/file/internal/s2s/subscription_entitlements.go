@@ -25,7 +25,7 @@ func NewSubscriptionEntitlements(client subscriptionEntitlementsClient) *Subscri
 	return &SubscriptionEntitlements{client: client}
 }
 
-func (s *SubscriptionEntitlements) Premium(ctx context.Context, accountID uuid.UUID, _ time.Time) (bool, error) {
+func (s *SubscriptionEntitlements) Premium(ctx context.Context, accountID uuid.UUID, now time.Time) (bool, error) {
 	if s == nil || s.client == nil || accountID == uuid.Nil {
 		return false, nil
 	}
@@ -37,10 +37,18 @@ func (s *SubscriptionEntitlements) Premium(ctx context.Context, accountID uuid.U
 	if sub == nil || strings.TrimSpace(sub.GetPlan()) != "premium" {
 		return false, nil
 	}
+	// The legacy subscription response carries the entitled-until boundary in
+	// the period field corresponding to its status. Never extend it locally.
+	deadline := sub.GetCurrentPeriodEnd()
 	switch strings.TrimSpace(sub.GetStatus()) {
-	case "active", "grace_period":
-		return true, nil
+	case "active":
+	case "grace_period":
+		deadline = sub.GetGracePeriodEnd()
 	default:
 		return false, nil
 	}
+	if deadline == nil || deadline.CheckValid() != nil {
+		return false, nil
+	}
+	return now.Before(deadline.AsTime()), nil
 }
