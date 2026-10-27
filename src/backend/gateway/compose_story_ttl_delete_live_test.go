@@ -44,7 +44,7 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	sess := registerComposeUser(t, client, base, formatComposeEmail("story-ttl-delete", time.Now().UnixNano()), "VoiceQaTest1!")
-	fileID := composeUploadUnscopedStoryImage(t, client, base, sess.AccessToken)
+	fileID := composeUploadUnscopedStoryImage(t, composeLiveObjectClient(30*time.Second), base, sess.AccessToken)
 	composeWaitForProcessedImage(t, client, base, sess.AccessToken, fileID)
 	require.Equal(t, http.StatusOK, composeGetFileMetadataStatus(t, client, base, sess.AccessToken, fileID))
 	story := composeCreateStory(t, client, base, sess.AccessToken, map[string]any{
@@ -54,9 +54,18 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 	require.NotEmpty(t, storyID)
 	postgres := storyTTLComposeContainer(t, project, "postgres")
 	storyContainer := storyTTLComposeContainer(t, project, "story")
+	fileContainer := storyTTLComposeContainer(t, project, "file")
+	gatewayContainer := storyTTLComposeContainer(t, project, "gateway")
 	storyTTLRequireOwnedContainer(t, postgres, project, "postgres", startedNano)
 	storyTTLRequireOwnedContainer(t, storyContainer, project, "story", startedNano)
-	t.Logf("private fixture project=%s postgres=%s story=%s story_id=%s file_id=%s", project, postgres, storyContainer, storyID, fileID)
+	storyTTLRequireOwnedContainer(t, fileContainer, project, "file", startedNano)
+	storyTTLRequireOwnedContainer(t, gatewayContainer, project, "gateway", startedNano)
+	for service, container := range map[string]string{"story": storyContainer, "file": fileContainer, "gateway": gatewayContainer} {
+		storyTTLRequireImage(t, container, os.Getenv("VOICE_STORY_TTL_DELETE_"+strings.ToUpper(service)+"_IMAGE_ID"))
+	}
+	t.Logf("private fixture project=%s source=%s test_sha=%s postgres=%s story=%s file=%s gateway=%s story_id=%s file_id=%s",
+		project, os.Getenv("VOICE_STORY_TTL_DELETE_SOURCE_HEAD"), os.Getenv("VOICE_STORY_TTL_DELETE_TEST_SHA256"),
+		postgres, storyContainer, fileContainer, gatewayContainer, storyID, fileID)
 	require.Equal(t, "1", storyTTLComposeSQL(t, postgres,
 		"SELECT count(*) FROM stories WHERE id='"+storyID+"'::uuid AND media_file_id='"+fileID+"'::uuid AND expired_at IS NULL AND archived_until > now();"))
 
@@ -87,6 +96,16 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 	require.Equal(t, "0", storyTTLComposeSQL(t, postgres,
 		"SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id='"+storyID+"'::uuid AND media_file_id='"+fileID+"'::uuid;"),
 		"Story must acknowledge its File deletion operation")
+}
+
+func storyTTLRequireImage(t *testing.T, container, expected string) {
+	t.Helper()
+	require.True(t, strings.HasPrefix(expected, "sha256:"), "bound image ID required")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{.Image}}", container).Output()
+	require.NoError(t, err)
+	require.Equal(t, expected, strings.TrimSpace(string(raw)), "container image changed before private fixture mutation")
 }
 
 func storyTTLRequireOwnedContainer(t *testing.T, id, project, service string, startedNano int64) {
