@@ -4028,4 +4028,13 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get addGameModeDuplicate =>
       'У каждого режима должно быть своё название.';
+
+  @override
+  String get chatLinkPreviewLoading => 'Загружаем предпросмотр ссылки…';
+
+  @override
+  String get chatLinkPreviewUnavailable => 'Предпросмотр недоступен';
+
+  @override
+  String get chatLinkPreviewRetry => 'Повторить';
 }

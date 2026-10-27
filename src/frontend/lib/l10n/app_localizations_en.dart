@@ -3991,4 +3991,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addGameModeDuplicate => 'Use a different name for each mode.';
+
+  @override
+  String get chatLinkPreviewLoading => 'Loading link preview…';
+
+  @override
+  String get chatLinkPreviewUnavailable => 'Preview unavailable';
+
+  @override
+  String get chatLinkPreviewRetry => 'Retry';
 }
