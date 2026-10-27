@@ -34,6 +34,14 @@ END $fixture$;
     if action == 'archive':
         return f"""DO $fixture$
 BEGIN
+  -- A missing row may mean create is still delayed after a lost transport.
+  -- Reserve this exact UUID as terminal. The unique key also waits for an
+  -- already-inserting create; a later INSERT cannot reactivate this row.
+  INSERT INTO games(id,name,external_id,config,status)
+    VALUES('{game_id}','{name}','{marker}',
+      COALESCE((SELECT config FROM games WHERE lower(name)=lower('MM Duo Live')
+        AND status='active'), '{{}}'::jsonb), 'archived')
+    ON CONFLICT(id) DO NOTHING;
   IF EXISTS(SELECT 1 FROM games WHERE id='{game_id}'
     AND (name IS DISTINCT FROM '{name}' OR external_id IS DISTINCT FROM '{marker}')) THEN
     RAISE EXCEPTION 'fixture ownership mismatch';

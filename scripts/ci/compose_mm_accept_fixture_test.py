@@ -108,11 +108,34 @@ class Postgres(unittest.TestCase):
         self.assertEqual(self.conn.execute('SELECT count(*) FROM games WHERE id=%s', (GAME,)).fetchone()[0], 0)
 
     def test_cleanup_after_uncertain_creation_cannot_archive_foreign_row(self):
-        self.conn.execute(fixture.fixture_sql('archive', GAME))
         self.conn.execute("INSERT INTO games(id,name,config,status) VALUES(%s,'foreign','{}','active')", (GAME,))
         with self.assertRaises(Exception):
             self.conn.execute(fixture.fixture_sql('archive', GAME))
         self.assertEqual(self.conn.execute('SELECT status FROM games WHERE id=%s', (GAME,)).fetchone()[0], 'active')
+
+    def test_cleanup_before_delayed_create_fences_late_activation(self):
+        import psycopg
+        self.conn.execute(fixture.fixture_sql('archive', GAME))
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            self.conn.execute(fixture.fixture_sql('create', GAME))
+        self.assertEqual(self.conn.execute('SELECT status FROM games WHERE id=%s', (GAME,)).fetchone()[0], 'archived')
+
+    def test_cleanup_cannot_pass_an_uncommitted_create(self):
+        import psycopg
+        other = psycopg.connect(os.environ['MM_ACCEPT_FIXTURE_TEST_DSN'], autocommit=True)
+        try:
+            other.execute('SET search_path TO ' + self.schema)
+            other.execute("SET lock_timeout TO '100ms'")
+            self.conn.execute('BEGIN')
+            self.conn.execute(fixture.fixture_sql('create', GAME))
+            with self.assertRaises(psycopg.errors.LockNotAvailable):
+                other.execute(fixture.fixture_sql('archive', GAME))
+            self.conn.execute('COMMIT')
+            other.execute(fixture.fixture_sql('archive', GAME))
+            self.assertEqual(other.execute('SELECT status FROM games WHERE id=%s', (GAME,)).fetchone()[0], 'archived')
+        finally:
+            self.conn.execute('ROLLBACK')
+            other.close()
 
 
 if __name__ == '__main__':
