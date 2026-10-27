@@ -336,7 +336,7 @@ func TestMatchSquadRecoveryDownRunnerPreservesCompensationAndDirtyMarker(t *test
 	defer cancel()
 	directory := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db")
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, directory)
-	fixture.Run(true, "up")
+	fixture.Run(true, "up", "19")
 	matchID, _, _ := seedActiveDuoMatch(t, ctx, fixture.Pool)
 	hash := make([]byte, 32)
 	chatOperationID := uuid.New()
@@ -416,7 +416,7 @@ func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing
 	defer cancel()
 	directory := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db")
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, directory)
-	fixture.Run(true, "up")
+	fixture.Run(true, "up", "19")
 	matchID, _, _ := seedActiveDuoMatch(t, ctx, fixture.Pool)
 	hash := make([]byte, 32)
 	_, err := fixture.Pool.Exec(ctx, `

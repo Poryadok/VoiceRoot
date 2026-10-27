@@ -26,7 +26,17 @@ type Sweeper struct {
 
 // RunOnce processes due nudges and expired searching sessions.
 func (s *Sweeper) RunOnce(ctx context.Context) error {
-	if s == nil || s.Sessions == nil {
+	if s == nil {
+		return nil
+	}
+	// Terminal payload erasure uses database time and must run even when Redis
+	// or the ordinary search-session projection is unavailable.
+	if s.Matches != nil {
+		if err := s.Matches.ExpireTerminalRouting(ctx, 100); err != nil {
+			return err
+		}
+	}
+	if s.Sessions == nil {
 		return nil
 	}
 	now := time.Now().UTC()
@@ -140,10 +150,14 @@ func (s *Sweeper) expirePendingAccept(ctx context.Context) error {
 	})
 	// Independent streams both get a bounded attempt even if one projection fails.
 	terminalErr := s.Matches.ApplyPendingTerminalSearchReleases(ctx, 100, func(projectionCtx context.Context, release store.TerminalSearchRelease) error {
-		return s.Queue.RecoverRelease(projectionCtx, queue.SearchRecovery{
+		recovery := queue.SearchRecovery{
 			SpaceID: release.SpaceID, GameID: release.GameID, Mode: release.Mode, Region: release.Region,
 			SessionID: release.SessionID, ProfileID: release.ProfileID, Generation: release.Generation,
-		})
+		}
+		if release.RoutingLifecycle != nil {
+			return s.Queue.RecoverTerminalRelease(projectionCtx, recovery, *release.RoutingLifecycle)
+		}
+		return s.Queue.RecoverRelease(projectionCtx, recovery)
 	})
 	return errors.Join(recoveryErr, terminalErr)
 }

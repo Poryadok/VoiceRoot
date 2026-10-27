@@ -60,7 +60,9 @@ func TestTerminalSearchReleaseDownRunnerPreservesPendingAndDirtyMarker(t *testin
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db"))
-	fixture.Run(true, "up")
+	// This regression exercises migration 19's refusal, independently of newer
+	// additive migrations with their own rollback contracts.
+	fixture.Run(true, "up", "19")
 	_, err := fixture.Pool.Exec(ctx, `INSERT INTO matchmaking_terminal_search_releases
 	(search_session_id,generation,profile_id,game_id,mode,region) VALUES($1,1,$2,$3,'duo','eu')`, uuid.New(), uuid.New(), uuid.New())
 	require.NoError(t, err)
