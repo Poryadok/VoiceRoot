@@ -9,9 +9,9 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 [ -f "$CI_WORKFLOW" ] || fail "CI workflow missing"
 [ -f "$MAKEFILE" ] || fail "Makefile missing"
 dispatch="$(sed -n '/^  workflow_dispatch:/,/^permissions:/p' "$WORKFLOW")"
-printf '%s\n' "$dispatch" | grep -Fq '      nats_probe_only:' || fail "missing nats_probe_only input"
-printf '%s\n' "$dispatch" | grep -Fq '        type: boolean' || fail "probe input must be boolean"
-printf '%s\n' "$dispatch" | grep -Fq '        default: false' || fail "probe input must default false"
+grep -Fq '      nats_probe_only:' <<<"$dispatch" || fail "missing nats_probe_only input"
+grep -Fq '        type: boolean' <<<"$dispatch" || fail "probe input must be boolean"
+grep -Fq '        default: false' <<<"$dispatch" || fail "probe input must default false"
 deploy="$(sed -n '/^  deploy:$/,/^  nats-search-jetstream-probe:$/p' "$WORKFLOW")"
 grep -Fq -- "!inputs.accept_provisional_operation && (github.event_name != 'workflow_dispatch' || (inputs.nats_probe_only != true && inputs.validate_app_secret_only != true && inputs.mail_only != true))" <<<"$deploy" \
   || fail "deploy must skip acceptance/diagnostics-only dispatches and preserve workflow_call"
@@ -28,13 +28,13 @@ awk '
 ' "$WORKFLOW" >"$SOURCE_STEP"
 [[ -s "$SOURCE_STEP" ]] || fail "inline pre-checkout source acquisition missing"
 deploy_source_line="$(printf '%s\n' "$deploy" | grep -nF 'Download exact staging source archive' | cut -d: -f1)"
-deploy_checkout_line="$(printf '%s\n' "$deploy" | grep -nF 'uses: actions/checkout@' | head -n 1 | cut -d: -f1 || true)"
+deploy_checkout_line="$(grep -nF -m 1 'uses: actions/checkout@' <<<"$deploy" | cut -d: -f1 || true)"
 [[ -n "$deploy_source_line" && -z "$deploy_checkout_line" ]] || fail "deploy must acquire its source archive without git checkout"
 source_line="$(printf '%s\n' "$probe" | grep -nF 'Download exact staging source archive' | cut -d: -f1)"
-probe_checkout_line="$(printf '%s\n' "$probe" | grep -nF 'uses: actions/checkout@' | head -n 1 | cut -d: -f1 || true)"
+probe_checkout_line="$(grep -nF -m 1 'uses: actions/checkout@' <<<"$probe" | cut -d: -f1 || true)"
 [[ -n "$source_line" && -z "$probe_checkout_line" ]] || fail "probe must acquire its source archive without git checkout"
-printf '%s\n' "$probe" | grep -Fq 'STAGING_SOURCE_SHA: ${{ github.sha }}' || fail "probe must use its immutable workflow commit"
-printf '%s\n' "$deploy" | grep -Fq 'STAGING_SOURCE_SHA: ${{ inputs.image_tag }}' || fail "deploy must use the selected source image tag"
+grep -Fq 'STAGING_SOURCE_SHA: ${{ github.sha }}' <<<"$probe" || fail "probe must use its immutable workflow commit"
+grep -Fq 'STAGING_SOURCE_SHA: ${{ inputs.image_tag }}' <<<"$deploy" || fail "deploy must use the selected source image tag"
 for requirement in \
   'source_sha" =~ ^[[:xdigit:]]{40}$' \
   'api="https://api.github.com/repos/Poryadok/VoiceRoot"' \
@@ -54,7 +54,7 @@ if grep -Eq -- '--location|--proto-redir' "$SOURCE_STEP"; then fail "archive acq
 if grep -Eqi 'secrets\.GITHUB_TOKEN|Authorization:|github_pat_|gh[pousr]_' "$SOURCE_STEP"; then
   fail "source acquisition must not attach credentials to API/archive redirects"
 fi
-if printf '%s\n%s\n' "$deploy" "$probe" | grep -Eq 'uses: actions/checkout@' || grep -Fq 'https://github.com/' "$SOURCE_STEP"; then
+if grep -Eq 'uses: actions/checkout@' <<<"$deploy"$'\n'"$probe" || grep -Fq 'https://github.com/' "$SOURCE_STEP"; then
   fail "staging jobs must not require blocked github.com git transport"
 fi
 CONNECTIVITY="$test_bin/check-source-connectivity.sh"
@@ -102,9 +102,9 @@ CURL_STUB
 chmod +x "$test_bin/curl"
 optional_output="$(PATH="$test_bin:$PATH" CURL_TEST_MODE=optional-fails GITHUB_SHA=0123456789012345678901234567890123456789 bash "$CONNECTIVITY")" \
   || fail "blocked github.com must remain informational when the archive endpoint works"
-printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_ENDPOINT_GITHUB_DEFAULT=FAIL_TCP_CONNECT' \
+grep -Fq 'STAGING_RUNNER_ENDPOINT_GITHUB_DEFAULT=FAIL_TCP_CONNECT' <<<"$optional_output" \
   || fail "blocked github.com route failure must remain visible"
-printf '%s\n' "$optional_output" | grep -Fq 'STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=PASS' \
+grep -Fq 'STAGING_RUNNER_SOURCE_ARCHIVE_CONNECTIVITY=PASS' <<<"$optional_output" \
   || fail "reachable immutable archive route must pass"
 if PATH="$test_bin:$PATH" CURL_TEST_MODE=required-fails GITHUB_SHA=0123456789012345678901234567890123456789 bash "$CONNECTIVITY" >/dev/null 2>&1; then
   fail "required source archive route failure must block acquisition"
@@ -113,13 +113,13 @@ if PATH="$test_bin:$PATH" CURL_TEST_MODE=api-fails GITHUB_SHA=012345678901234567
   fail "required source API route failure must block acquisition"
 fi
 ci_target="$(make --no-print-directory -n -C "${ROOT}" ci-script-tests)"
-printf '%s\n' "$ci_target" | grep -Fq 'staging-source-acquisition-workflow_test.sh' \
+grep -Fq 'staging-source-acquisition-workflow_test.sh' <<<"$ci_target" \
   || fail "CI script test target does not run source acquisition fixtures"
-printf '%s\n' "$probe" | grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" \
+grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.nats_probe_only == true" <<<"$probe" \
   || fail "diagnostic job gate is too broad"
-printf '%s\n' "$probe" | grep -Fq 'timeout-minutes: 15' || fail "job timeout missing"
-printf '%s\n' "$probe" | grep -Fq 'kctl() { kubectl --request-timeout=8s "$@"; }' || fail "kubectl timeout wrapper missing"
-if printf '%s\n' "$probe" | grep -Eq 'kubectl (get|create|delete|logs) '; then fail "unbounded direct Kubernetes request"; fi
+grep -Fq 'timeout-minutes: 15' <<<"$probe" || fail "job timeout missing"
+grep -Fq 'kctl() { kubectl --request-timeout=8s "$@"; }' <<<"$probe" || fail "kubectl timeout wrapper missing"
+if grep -Eq 'kubectl (get|create|delete|logs) ' <<<"$probe"; then fail "unbounded direct Kubernetes request"; fi
 for required in \
   'environment: staging' \
   'voice-nats-service-credentials' \
@@ -136,11 +136,11 @@ for required in \
   'PERMISSION_DENIED' \
   'TIMEOUT' \
   'OTHER'; do
-  printf '%s\n' "$probe" | grep -Fq "$required" || fail "probe job missing $required"
+  grep -Fq "$required" <<<"$probe" || fail "probe job missing $required"
 done
-printf '%s\n' "$probe" | grep -Fq 'app: voice-nats-search-bootstrap' \
+grep -Fq 'app: voice-nats-search-bootstrap' <<<"$probe" \
   || fail "probe label must be admitted on hub client port"
-if printf '%s\n' "$probe" | grep -Fq 'app: voice-search'; then
+if grep -Fq 'app: voice-search' <<<"$probe"; then
   fail "probe must not match the live Search Service selector"
 fi
 for forbidden in \
@@ -151,17 +151,17 @@ for forbidden in \
   'kubectl rollout' \
   'kubectl scale' \
   'kubectl apply -f deploy/'; do
-  printf '%s\n' "$probe" | grep -Fq "$forbidden" && fail "diagnostic job contains forbidden access/mutation: $forbidden"
+  grep -Fq "$forbidden" <<<"$probe" && fail "diagnostic job contains forbidden access/mutation: $forbidden"
 done
 for raw_output in \
   'echo "$response"' \
   'echo "$probe_output"' \
   'printf "%s" "$response"' \
   'printf "%s" "$stderr"'; do
-  printf '%s\n' "$probe" | grep -Fq "$raw_output" && fail "diagnostic job may print raw output: $raw_output"
+  grep -Fq "$raw_output" <<<"$probe" && fail "diagnostic job may print raw output: $raw_output"
 done
 ci_target="$(make --no-print-directory -n -C "${ROOT}" ci-script-tests)"
-printf '%s\n' "$ci_target" | grep -Fq 'nats-search-jetstream-workflow-contract_test.sh' \
+grep -Fq 'nats-search-jetstream-workflow-contract_test.sh' <<<"$ci_target" \
   || fail "CI script test target does not run workflow contract"
 grep -Fq "vars.STAGING_DEPLOY_ENABLED == 'true'" "$CI_WORKFLOW" \
   || fail "automatic staging deployment must remain behind its explicit repository switch"
