@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package voice.catalogactor.v1;
+
+option go_package = "voice/backend/pkg/pb/voice/catalogactor/v1;catalogactorv1";
+
+// Internal read-only User authority, registered only on its catalog mTLS listener.
+// A response is a snapshot, never a cross-service permit, lease or Auth decision.
+service CatalogActorAuthorityService {
+  // @voice.security=protected;callers=service:chat,service:file
+  rpc GetCatalogActorStates(GetCatalogActorStatesRequest) returns (GetCatalogActorStatesResponse);
+}
+
+message CatalogActor {
+  string account_id = 1;
+  string profile_id = 2;
+}
+
+enum CatalogActorState {
+  CATALOG_ACTOR_STATE_UNSPECIFIED = 0;
+  CATALOG_ACTOR_STATE_UNKNOWN = 1;
+  CATALOG_ACTOR_STATE_NOT_DELETED = 2;
+  CATALOG_ACTOR_STATE_SOFT_DELETED = 3;
+}
+
+// @voice.unknown_fields=reject
+message GetCatalogActorStatesRequest {
+  uint32 protocol_version = 1;
+  // 1..100 canonical nonnil UUID pairs; profile IDs must be distinct.
+  repeated CatalogActor actors = 2;
+}
+
+message CatalogActorStateEntry {
+  // Exact request echo; never reveals the actual owner of a mismatched profile.
+  CatalogActor actor = 1;
+  CatalogActorState state = 2;
+}
+
+message GetCatalogActorStatesResponse {
+  uint32 protocol_version = 1;
+  // Exactly one entry per input, in input order. UNKNOWN is never deletion proof.
+  repeated CatalogActorStateEntry states = 2;
+}

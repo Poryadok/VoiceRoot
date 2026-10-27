@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"voice/backend/user/internal/authctx"
 	"voice/backend/user/internal/profilemutation"
@@ -45,7 +46,18 @@ func (s *UserGRPC) GetVerificationStatus(ctx context.Context, req *userv1.GetVer
 	if row == nil {
 		return nil, status.Error(codes.NotFound, "profile not found")
 	}
-	return &userv1.GetVerificationStatusResponse{VerificationStatus: verificationStatusFromRow(row)}, nil
+	pending, err := s.Profiles.GetOwnedPendingOrgChallenge(ctx, accountID, profileID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	out := &userv1.GetVerificationStatusResponse{VerificationStatus: verificationStatusFromRow(row)}
+	if pending != nil {
+		out.PendingOrganizationChallenge = &userv1.PendingOrganizationChallenge{
+			Domain: pending.Domain, TxtRecord: pending.TXTRecord,
+			ExpiresAt: timestamppb.New(pending.ExpiresAt),
+		}
+	}
+	return out, nil
 }
 
 // SetVerification is S2S from Auth after OAuth checks.

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -19,6 +20,8 @@ import (
 
 func Method(target string) string {
 	switch target {
+	case "catalog":
+		return "/voice.catalogactor.v1.CatalogActorAuthorityService/GetCatalogActorStates"
 	case "auth-admission":
 		return "/voice.user.v1.UserService/GetSpaceAdmissionProfileEligibility"
 	case "user":
@@ -48,6 +51,8 @@ func Method(target string) string {
 // whole service merely because it has a verified Social principal.
 func AllowsMethod(target, method string) bool {
 	switch target {
+	case "catalog":
+		return method == Method(target)
 	case "auth-admission":
 		return method == Method(target)
 	case "space-voice-communication", "space-messaging-communication":
@@ -212,7 +217,7 @@ func StrictUnaryInterceptor(verifier PrincipalVerifier) grpc.UnaryServerIntercep
 			}
 			return nil, status.Error(codes.Unauthenticated, "invalid principal")
 		}
-		if !AllowsMethod(typedCapability(verifier, verified.Audience), info.FullMethod) || verified.Kind != "service" || verified.Issuer != expectedIssuer(typedCapability(verifier, verified.Audience)) || verified.Subject != "service:"+expectedIssuer(typedCapability(verifier, verified.Audience)) {
+		if !AllowsMethod(typedCapability(verifier, verified.Audience), info.FullMethod) || verified.Kind != "service" || !allowsIssuer(typedCapability(verifier, verified.Audience), verified.Issuer) || verified.Subject != "service:"+verified.Issuer {
 			return nil, status.Error(codes.PermissionDenied, "Social principal required")
 		}
 		return handler(principal.WithVerified(ctx, verified), req)
@@ -324,7 +329,38 @@ func expectedIssuer(target string) string {
 // RequiresMutualTLS preserves legacy listener settings while requiring both
 // transport identities for newly migrated protected authority capabilities.
 func RequiresMutualTLS(capability string) bool {
-	return capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+	return capability == "catalog" || capability == "auth-admission" || capability == "messaging" || capability == "space-voice-communication" || capability == "space-messaging-communication"
+}
+
+func capabilityIssuers(capability string) []string {
+	if capability == "catalog" {
+		return []string{"chat", "file"}
+	}
+	return []string{expectedIssuer(capability)}
+}
+
+func allowsIssuer(capability, issuer string) bool {
+	for _, allowed := range capabilityIssuers(capability) {
+		if allowed == issuer {
+			return true
+		}
+	}
+	return false
+}
+
+// RequireCatalogActor repeats the request-bound pure-service check at storage's
+// domain boundary. It grants no user impersonation or generic profile lookup.
+func RequireCatalogActor(ctx context.Context, req proto.Message) error {
+	verified, ok := principal.FromContext(ctx)
+	if !ok || verified.Kind != "service" || !allowsIssuer("catalog", verified.Issuer) || verified.Subject != "service:"+verified.Issuer {
+		return status.Error(codes.PermissionDenied, "catalog service principal required")
+	}
+	hash, err := principal.RequestHash(req)
+	requestID, idErr := uuid.Parse(verified.RequestID)
+	if err != nil || idErr != nil || requestID == uuid.Nil || verified.RequestID != requestID.String() || verified.Audience != "user" || verified.RPC != Method("catalog") || verified.RequestHash != hash || verified.AccountID != "" || verified.ProfileID != "" || verified.SessionEpoch != 0 {
+		return status.Error(codes.Unauthenticated, "invalid principal binding")
+	}
+	return nil
 }
 
 // CheckDomain preserves separately migrated ordinary callers while enforcing
