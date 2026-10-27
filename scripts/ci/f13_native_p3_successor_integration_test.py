@@ -32,6 +32,13 @@ CATALOG_DATA_STORES_COMMIT = '04f1390e94c2285b20f2a208a55b1ee4b35facab'
 C2_DATA_STORES_COMMIT = '91ec85e27774d5110a16b2082c10ae1cd970822e'
 C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
                         'oid': '1896bde4e985be99d353d76d1f778e9dbf019c3d'}
+# Reviewed process-restart test, restored only in detached historical fixtures.
+JWKS_FIXTURE_PATH = 'src/backend/voice/jwks_recovery_test.go'
+JWKS_FIXTURE_SOURCE = 'f2fa9d02c79983ca76d3b3a84088f66b265f027f'
+JWKS_CURRENT_ENTRY = {'mode': '100644', 'type': 'blob',
+                      'oid': '40eddc5f7b9f5091fb56173d0a37078b3cdb1548'}
+JWKS_HISTORICAL_ENTRY = {'mode': '100644', 'type': 'blob',
+                         'oid': '54c87f1450650038b561dd109c034bbc78b7b6ba'}
 CATALOG_VOICE_PATHS = frozenset(
     'src/backend/voice/pb/voice/' + service + '/v1/catalog_assets' + suffix + '.pb.go'
     for service in ('chat', 'file') for suffix in ('', '_grpc'))
@@ -72,6 +79,59 @@ def reviewed_catalog_voice_additions(source, record):
         legacy.entry(ROOT, source, name) == legacy.entry(ROOT, CATALOG_DATA_STORES_COMMIT, name)
         for name in added), 'v2_fixture_unreviewed_voice_source')
     return added
+
+
+def historical_jwks_fixture_entry(source, record):
+    rows = [row for row in record['projection'] if row['path'] == JWKS_FIXTURE_PATH]
+    legacy.require(len(rows) == 1 and rows[0]['after'] == JWKS_HISTORICAL_ENTRY
+                   and legacy.entry(ROOT, record['source'], JWKS_FIXTURE_PATH)
+                   == JWKS_HISTORICAL_ENTRY, 'v2_fixture_unreviewed_jwks_projection')
+    actual = legacy.entry(ROOT, source, JWKS_FIXTURE_PATH)
+    if actual == JWKS_HISTORICAL_ENTRY:
+        reviewed = record['source']
+    else:
+        legacy.require(actual == JWKS_CURRENT_ENTRY
+                       and legacy.entry(ROOT, JWKS_FIXTURE_SOURCE, JWKS_FIXTURE_PATH)
+                       == JWKS_CURRENT_ENTRY, 'v2_fixture_unreviewed_jwks_source')
+        reviewed = JWKS_FIXTURE_SOURCE
+    ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', reviewed, source],
+        capture_output=True).returncode == 0
+    legacy.require(ancestor, 'v2_fixture_unreviewed_jwks_source')
+    return JWKS_HISTORICAL_ENTRY
+
+
+class ReviewedJWKSFixtureTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.record = successor.load_record(ROOT)
+
+    def test_reviewed_current_and_historical_entries_are_exact(self):
+        for source in (git('rev-parse', 'HEAD'), JWKS_FIXTURE_SOURCE, self.record['source']):
+            with self.subTest(source=source):
+                self.assertEqual(historical_jwks_fixture_entry(source, self.record),
+                                 JWKS_HISTORICAL_ENTRY)
+
+    def test_unknown_content_mode_missing_path_and_disconnected_sources_are_rejected(self):
+        current = git('rev-parse', 'HEAD')
+        for variant in ('content', 'mode', 'missing', 'ancestry', 'historical_ancestry'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                if variant == 'missing':
+                    git('update-index', '--force-remove', '--', JWKS_FIXTURE_PATH, env=env)
+                elif variant != 'ancestry':
+                    entry = JWKS_HISTORICAL_ENTRY if variant == 'historical_ancestry' else JWKS_CURRENT_ENTRY
+                    mode = '100755' if variant == 'mode' else entry['mode']
+                    oid = git('hash-object', '-w', '--stdin', data=b'unknown JWKS fixture\n') \
+                        if variant == 'content' else entry['oid']
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + JWKS_FIXTURE_PATH,
+                        env=env)
+                changed = RealGitSuccessorTest.commit(git('write-tree', env=env),
+                    [BASE if variant in ('ancestry', 'historical_ancestry') else current])
+            with self.subTest(variant=variant), self.assertRaisesRegex(
+                    legacy.Rejected, '^v2_fixture_unreviewed_jwks_source$'):
+                historical_jwks_fixture_entry(changed, self.record)
 
 
 class C2ReviewedStoresSourceTest(unittest.TestCase):
@@ -143,6 +203,14 @@ class RealGitSuccessorTest(unittest.TestCase):
                 git('update-index', '--add', '--cacheinfo',
                     stores_expected['mode'] + ',' + stores_expected['oid'] + ',' + stores, env=env)
                 cls.source = cls.commit(git('write-tree', env=env), [cls.source])
+        jwks_expected = historical_jwks_fixture_entry(cls.source, cls.record)
+        if legacy.entry(ROOT, cls.source, JWKS_FIXTURE_PATH) != jwks_expected:
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', cls.source, env=env)
+                git('update-index', '--cacheinfo', jwks_expected['mode'] + ','
+                    + jwks_expected['oid'] + ',' + JWKS_FIXTURE_PATH, env=env)
+                cls.source = cls.commit(git('write-tree', env=env), [cls.source])
         additions = reviewed_catalog_voice_additions(cls.source, cls.record)
         if additions:
             with tempfile.TemporaryDirectory() as directory:
@@ -200,6 +268,13 @@ class RealGitSuccessorTest(unittest.TestCase):
         verifier, record = authority.verified_record(ROOT, binding)
         self.assertIs(verifier, successor)
         self.assertEqual(record, self.record)
+
+    def test_jwks_projection_restores_only_private_tree_and_preserves_checkout(self):
+        current = git('rev-parse', 'HEAD')
+        self.assertEqual(legacy.entry(ROOT, self.source, JWKS_FIXTURE_PATH), JWKS_HISTORICAL_ENTRY)
+        self.assertEqual(legacy.entry(ROOT, current, JWKS_FIXTURE_PATH), JWKS_CURRENT_ENTRY)
+        self.assertEqual((ROOT / JWKS_FIXTURE_PATH).read_bytes(),
+                         legacy.git(ROOT, 'show', current + ':' + JWKS_FIXTURE_PATH))
 
     def test_historical_fixture_has_complete_pinned_context(self):
         for row in self.record['context']:
