@@ -1,5 +1,18 @@
 # Phase0 local fixture
 
+For the complete local app startup, follow section 4 of [DEV_SETUP](../../docs/DEV_SETUP.md).
+The base app profile alone omits required protected Role client settings.
+Use the generated fixture with `docker-compose.voice-space-media.yml`, as the
+isolated attachment restart proof does. The commands below describe the narrower
+Phase0 fixture and its offline validation, rather than full app readiness.
+
+On Linux, generate the media fixture with
+`PHASE0_MATCHSQUAD_FIXTURE_UID=65532 python3 scripts/dev/generate-phase0-fixture.py <new-directory>`
+so the existing nonroot Chat, Space and Matchmaking processes can read their
+service-scoped private files. The parent directory must exist. Windows fixture
+generation omits that POSIX-only ownership setting. Keep all generated material
+local and use fresh credentials after its two-day lifetime.
+
 This opt-in Compose overlay prepares the signed-principal test environment for
 Space ownership, GIS game-session grant mutations, Voice grant checks, and the
 existing Auth proof listener. Fixture generation and offline tests validate the
