@@ -1,5 +1,40 @@
 # Linked accounts golden provenance
 
+## BATCH-C2 composed destination capture
+
+The current references represent the explicit composition of #906's linked-account
+panel and #913's implemented verification-status destination. The former disabled
+status placeholder becomes an enabled action with its status label; organization
+verification remains unavailable. Actual and isolated-diff inspection on Windows
+and Linux showed the changed destination labels/control rendering, preserving
+the panel bounds, profile label, linked account, unlink and connect controls.
+
+Captured locally in owned WT96 at composed source `d4486634a589` plus the reviewed
+composition delta, using Flutter 3.41.7. Windows uses the local SDK; Linux uses
+`ghcr.io/cirruslabs/flutter:3.41.7`. Both retain actual MaterialIcons/Noto Sans
+loading. Root H/V and Linux H/V were captured separately, not copied across hosts.
+The exact comparator, test assertions and timeouts remain unchanged.
+
+Before updating references, the four-file Windows run passed 75 checks and failed
+only the two screenshots. Original actual/expected/isolated images and raw logs
+are preserved in `tmp/swarm/anton148-batch-c2/windows-golden-red/` and
+`linux-golden-red/`. The Linux full focused run subsequently passed all 77 tests;
+Windows H/V capture passed both tests. These are component results, not aggregate
+CI, provider or runtime acceptance.
+
+| Current reference | SHA-256 |
+| --- | --- |
+| `linked_accounts_h.png` | `0b16c31bfb40af1245d23133479c1b5c7e2581876568988a17a6f0291226ea5c` |
+| `linked_accounts_v.png` | `328777943f8e2f3af06ad9a6deabc085106b0b639e726899430e9e43a4a66052` |
+| `linux/linked_accounts_h.png` | `db77c8f5bc5700122cd04d52737a23c8f0b6cccab7421102c66f2747b2ab7b23` |
+| `linux/linked_accounts_v.png` | `87bc8c7c0b67e25b97bee7a5519aa7e33abf31be951d7b861e7559956a07a215` |
+
+## Historical predecessor captures (superseded references)
+
+The following records describe the original #906 platform qualification. Their
+hashes identify historical references, not the composed current images above.
+
+
 The root horizontal and vertical references remain unchanged; this evidence does
 not establish their capture host. Linux comparisons use explicitly captured
 `linux/linked_accounts_h.png` and `linux/linked_accounts_v.png`. Their observed
