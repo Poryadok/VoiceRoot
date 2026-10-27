@@ -98,7 +98,9 @@ if [ -f "${MANIFEST_DIR}/developer-portal.yaml" ]; then
 fi
 if [ -f "${MANIFEST_DIR}/flutter-web.yaml" ]; then
   render "${MANIFEST_DIR}/flutter-web.yaml" | \
-    sed -e "s|__WEB_INGRESS_HOST__|${VOICE_WEB_INGRESS_HOST}|g" | \
+    sed -e "s|__WEB_INGRESS_HOST__|${VOICE_WEB_INGRESS_HOST}|g" \
+        -e "s|__GATEWAY_INGRESS_HOST__|${VOICE_GATEWAY_INGRESS_HOST}|g" \
+        -e "s|__LIVEKIT_INGRESS_HOST__|${VOICE_LIVEKIT_INGRESS_HOST}|g" | \
     kubectl apply -f -
 fi
 if [ -f "${MANIFEST_DIR}/admin.yaml" ]; then

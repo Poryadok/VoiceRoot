@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -63,11 +64,14 @@ func TestComposeFileAttachmentRestartProof_live(t *testing.T) {
 type composeFileAttachmentRestartState struct {
 	ChatID               string `json:"chat_id"`
 	FileID               string `json:"file_id"`
+	ImageFileID          string `json:"image_file_id"`
 	SingletonFileID      string `json:"singleton_file_id"`
 	MessageID            string `json:"message_id"`
 	RecipientAccessToken string `json:"recipient_access_token"`
 	UploaderAccessToken  string `json:"uploader_access_token"`
 	SHA256               string `json:"sha256"`
+	ImageSHA256          string `json:"image_sha256"`
+	ImageSize            int    `json:"image_size"`
 	Content              string `json:"content"`
 	ProofID              string `json:"proof_id"`
 	CreatedAtUnixNano    int64  `json:"created_at_unix_nano"`
@@ -96,16 +100,35 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 	objectClient := composeRestartProofDownloadClient()
 	t.Cleanup(objectClient.CloseIdleConnections)
 	fileID, fileType := composeUploadTextFile(t, objectClient, base, sessA.AccessToken, chatID, "restart-proof.txt", content)
-	attachments, err := json.Marshal([]map[string]string{{"file_id": fileID, "type": fileType}})
+	imageInput := restartProofPNG()
+	imageFileID, imageType := composeUploadImageFile(t, objectClient, base, sessA.AccessToken, chatID, "restart-proof.png", imageInput)
+	imageMetadata := composeWaitForProcessedImage(t, client, base, sessA.AccessToken, imageFileID)
+	require.Equal(t, "image", imageType)
+	require.Equal(t, "ready", imageMetadata.Status)
+	require.NotEmpty(t, imageMetadata.ConvertedR2Key)
+	require.NotEmpty(t, imageMetadata.ThumbnailR2Key)
+	attachments, err := json.Marshal([]map[string]string{
+		{"file_id": fileID, "type": fileType},
+		{"file_id": imageFileID, "type": imageType},
+	})
 	require.NoError(t, err)
 	messageID := sendComposeMessageWithAttachmentsJSON(t, client, base, sessA.AccessToken, chatID, string(attachments))
+	composeRequireAttachmentInCursorHistory(t, client, base, sessB.AccessToken, chatID, messageID, imageFileID)
+	status, imageURL := composeGetFileURL(t, client, base, sessB.AccessToken, imageFileID)
+	require.Equal(t, http.StatusOK, status, "DM recipient must receive an image URL after processing")
+	preRestartImage, imageContentType := composeDownloadProofObject(t, objectClient, imageURL)
+	mediaType, _, err := mime.ParseMediaType(imageContentType)
+	require.NoError(t, err)
+	require.Equal(t, "image/webp", mediaType)
+	require.True(t, len(preRestartImage) >= 12 && string(preRestartImage[:4]) == "RIFF" && string(preRestartImage[8:12]) == "WEBP", "download must contain a WebP object")
+	imageDigest := sha256.Sum256(preRestartImage)
 	// A distinct, unattached upload exercises zero-reference terminal deletion
 	// after restart without attempting to revoke a surviving message reference.
 	singletonID, _ := composeUploadTextFile(t, objectClient, base, sessA.AccessToken, chatID, "restart-singleton.txt", []byte("unattached-restart-proof: distinct singleton bytes\n"))
 	require.NotEqual(t, fileID, singletonID)
 
 	// File ACL remains fail-closed even before the restart proof resumes.
-	status, _ := composeGetFileURL(t, client, base, stranger.AccessToken, fileID)
+	status, _ = composeGetFileURL(t, client, base, stranger.AccessToken, fileID)
 	require.Equal(t, http.StatusForbidden, status, "unrelated profile must not receive a file URL")
 	require.Equal(t, http.StatusForbidden,
 		composeDeleteFileStatus(t, client, base, stranger.AccessToken, fileID),
@@ -124,11 +147,14 @@ func prepareComposeFileAttachmentRestartProof(t *testing.T, client *http.Client,
 	state := composeFileAttachmentRestartState{
 		ChatID:               chatID,
 		FileID:               fileID,
+		ImageFileID:          imageFileID,
 		SingletonFileID:      singletonID,
 		MessageID:            messageID,
 		RecipientAccessToken: sessB.AccessToken,
 		UploaderAccessToken:  sessA.AccessToken,
 		SHA256:               hex.EncodeToString(sum[:]),
+		ImageSHA256:          hex.EncodeToString(imageDigest[:]),
+		ImageSize:            len(preRestartImage),
 		Content:              string(content),
 		ProofID:              proofID,
 		CreatedAtUnixNano:    time.Now().UnixNano(),
@@ -149,6 +175,7 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	require.NoError(t, json.Unmarshal(encoded, &state))
 	require.NotEmpty(t, state.ChatID)
 	require.NotEmpty(t, state.FileID)
+	require.NotEmpty(t, state.ImageFileID)
 	require.NotEmpty(t, state.SingletonFileID)
 	require.NotEqual(t, state.FileID, state.SingletonFileID)
 	require.NotEmpty(t, state.MessageID)
@@ -165,6 +192,7 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	require.Len(t, decodedHash, sha256.Size, "state SHA-256 must have exactly 32 bytes")
 
 	composeRequireAttachmentInCursorHistory(t, client, base, state.RecipientAccessToken, state.ChatID, state.MessageID, state.FileID)
+	composeRequireAttachmentInCursorHistory(t, client, base, state.RecipientAccessToken, state.ChatID, state.MessageID, state.ImageFileID)
 	status, downloadURL := composeGetFileURL(t, client, base, state.RecipientAccessToken, state.FileID)
 	require.Equal(t, http.StatusOK, status, "DM recipient must receive a fresh URL after File restart")
 	require.NotEmpty(t, downloadURL)
@@ -179,6 +207,18 @@ func verifyComposeFileAttachmentRestartProof(t *testing.T, client *http.Client, 
 	sum := sha256.Sum256(downloaded)
 	require.Equal(t, state.SHA256, hex.EncodeToString(sum[:]), "download must retain original SHA-256")
 	require.Equal(t, state.Content, string(downloaded), "download must retain exact deterministic bytes")
+	status, imageURL := composeGetFileURL(t, client, base, state.RecipientAccessToken, state.ImageFileID)
+	require.Equal(t, http.StatusOK, status, "DM recipient must receive a processed-image URL after File restart")
+	imageClient := composeRestartProofDownloadClient()
+	t.Cleanup(imageClient.CloseIdleConnections)
+	imageBytes, imageContentType := composeDownloadProofObject(t, imageClient, imageURL)
+	mediaType, _, err := mime.ParseMediaType(imageContentType)
+	require.NoError(t, err)
+	require.Equal(t, "image/webp", mediaType)
+	require.True(t, len(imageBytes) >= 12 && string(imageBytes[:4]) == "RIFF" && string(imageBytes[8:12]) == "WEBP", "download must contain WebP bytes after restart")
+	require.Len(t, imageBytes, state.ImageSize, "processed image size must survive restart")
+	imageDigest := sha256.Sum256(imageBytes)
+	require.Equal(t, state.ImageSHA256, hex.EncodeToString(imageDigest[:]), "processed image bytes must retain SHA-256 across restart")
 
 	// A live message reference remains authoritative across File restart. Legacy
 	// uploader deletion must not invalidate the recipient's attachment.
@@ -229,6 +269,126 @@ func writeComposeFileAttachmentRestartState(t *testing.T, statePath string, enco
 	require.NoError(t, temporary.Sync())
 	require.NoError(t, temporary.Close())
 	require.NoError(t, os.Rename(temporaryName, statePath), "atomically publish restart-proof state")
+}
+
+func restartProofPNG() []byte {
+	return []byte{
+		0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+		0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+		0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+		0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+		0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
+		0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+		0x42, 0x60, 0x82,
+	}
+}
+
+func composeUploadImageFile(t *testing.T, client *http.Client, base, accessToken, chatID, originalName string, content []byte) (fileID, fileType string) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"original_name": originalName,
+		"mime_type":     "image/png",
+		"size_bytes":    len(content),
+		"context_chat":  map[string]string{"id": chatID, "type": "CHAT_TYPE_DM"},
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/files/upload", bytes.NewReader(payload))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, "image upload request body=%s", string(body))
+	var ticket struct {
+		UploadResponse struct {
+			FileID          string `json:"file_id"`
+			PresignedPutURL string `json:"presigned_put_url"`
+		} `json:"upload_response"`
+	}
+	require.NoError(t, json.Unmarshal(body, &ticket))
+	require.NotEmpty(t, ticket.UploadResponse.FileID)
+	require.NotEmpty(t, ticket.UploadResponse.PresignedPutURL)
+	putReq, err := http.NewRequest(http.MethodPut, ticket.UploadResponse.PresignedPutURL, bytes.NewReader(content))
+	require.NoError(t, err)
+	putReq.Header.Set("Content-Type", "image/png")
+	putResp, err := client.Do(putReq)
+	require.NoError(t, err)
+	putBody, err := io.ReadAll(putResp.Body)
+	putResp.Body.Close()
+	require.NoError(t, err)
+	require.True(t, putResp.StatusCode >= 200 && putResp.StatusCode < 300, "image PUT status=%d body=%s", putResp.StatusCode, string(putBody))
+	confirmPayload, err := json.Marshal(map[string]string{"sha256_hash": sha256Hex(content)})
+	require.NoError(t, err)
+	confirmReq, err := http.NewRequest(http.MethodPost, base+"/api/v1/files/"+url.PathEscape(ticket.UploadResponse.FileID)+"/confirm", bytes.NewReader(confirmPayload))
+	require.NoError(t, err)
+	confirmReq.Header.Set("Authorization", "Bearer "+accessToken)
+	confirmReq.Header.Set("Content-Type", "application/json")
+	confirmResp, err := client.Do(confirmReq)
+	require.NoError(t, err)
+	confirmBody, err := io.ReadAll(confirmResp.Body)
+	confirmResp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, confirmResp.StatusCode, "image confirm body=%s", string(confirmBody))
+	var confirmed struct {
+		FileMetadata struct {
+			FileType string `json:"file_type"`
+		} `json:"file_metadata"`
+	}
+	require.NoError(t, json.Unmarshal(confirmBody, &confirmed))
+	return ticket.UploadResponse.FileID, strings.TrimSpace(confirmed.FileMetadata.FileType)
+}
+
+type composeProcessedImageMetadata struct {
+	Status         string `json:"status"`
+	ConvertedR2Key string `json:"converted_r2_key"`
+	ThumbnailR2Key string `json:"thumbnail_r2_key"`
+}
+
+func composeWaitForProcessedImage(t *testing.T, client *http.Client, base, accessToken, fileID string) composeProcessedImageMetadata {
+	t.Helper()
+	type response struct {
+		FileMetadata composeProcessedImageMetadata `json:"file_metadata"`
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequest(http.MethodGet, base+"/api/v1/files/"+url.PathEscape(fileID), nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		require.NoError(t, readErr)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "image metadata body=%s", string(body))
+		var current response
+		require.NoError(t, json.Unmarshal(body, &current))
+		if current.FileMetadata.Status == "failed" {
+			t.Fatalf("image processing failed: %s", string(body))
+		}
+		if current.FileMetadata.Status == "ready" && current.FileMetadata.ConvertedR2Key != "" && current.FileMetadata.ThumbnailR2Key != "" {
+			return current.FileMetadata
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("image processing did not reach ready with full and thumbnail WebP keys before timeout")
+	return composeProcessedImageMetadata{}
+}
+
+func composeDownloadProofObject(t *testing.T, client *http.Client, downloadURL string) ([]byte, string) {
+	t.Helper()
+	resp, err := client.Get(downloadURL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.True(t, resp.StatusCode >= 200 && resp.StatusCode < 300, "download status=%d body=%s", resp.StatusCode, string(body))
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
+	return body, resp.Header.Get("Content-Type")
 }
 
 // File reaches the isolated MinIO from its container through
