@@ -23,6 +23,21 @@
 - [ ] **[Protos/Pkg] Split NATS wire format vs `jetstream_events.proto`** — `protos/voice/events/v1/jetstream_events.proto` defines protobuf envelopes, but publishers diverge:
 ### Space
 
+- [ ] **[User/Space / A2-USER-SPACE-CAPTURE-RUNTIME] Define known-live source
+  custody and reopen contract** — the capture runtime lacks an accepted issuer
+  and invalidation protocol for independent User H/U lineage and current-source
+  qualification. Select bounded custodian-attested continuity with restore/clone
+  closed (explicit undeclared-rollback limitation), or a specified independent
+  anti-rollback witness. Name actual creation/migration caller, mount custodian,
+  physical source binding and restart/replacement invalidation. Reconcile the
+  current documented exact21 qualification with generated exact22 identity
+  catalog using real writer/catalog/baseline evidence; do not relax either gate.
+  Existing production key parsing and private fresh receipt do not qualify
+  currentness. Retained-NOW does not require full Auth history repair, but guard
+  activation requires complete participating-writer proof. Configuration denial
+  may ship separately; qualified runtime remains unfinished. See TT task
+  A2-USER-SPACE-CAPTURE-RUNTIME and BE010-SPACE-BAN-LIFETIME-PR875 c3-c6/c18.
+
 
 - [ ] **[Space / BE-245] Owner lifecycle/product surfaces partial** — BE-116 now blocks the obsolete hard `DeleteSpace` at the database boundary so it cannot cascade away Space audit/outbox evidence. BE-245 must replace it with the password/2FA-confirmed 7-day hidden/frozen schedule, owner-only `RestoreSpace`, terminal same-transaction P3 aggregate purge and idempotent cross-service purge/attachment GC; the disabled legacy RPC's public gRPC status mapping remains undefined and must be frozen with that vertical. Emit scheduled/restored/deleted-at-purge events only from the documented lifecycle. Compensated `TransferOwnership` (T-011) and gRPC `GetAuditLog` shipped; Gateway/Flutter leave-as-owner/delete/restore/audit flows remain open. The source-disabled `space/internal/recoveryread` adapter and locked recorded-owner minimal read are implemented; protected production transport and Gateway/Flutter disclosure activation remain part of this vertical. — `protos/voice/space/v1/space.proto`; `src/backend/space/internal/grpcsvc/`; `src/backend/gateway/`; `src/frontend/`; [spaces.md](../features/spaces.md).
 - [ ] **[R23 Chat/Proto / BE-007] Verify proof-bound terminal Chat purge before activation** — the transport, binding, issuance and retry contract is already accepted in [chat-service.md](../microservices/chat-service.md#p3-terminal-purge-prerequisite-proof-contract-accepted). Verify the actual Chat implementation and non-skipped Messaging/File owner-receipt, generation/hash, restart and lost-response cases against that contract before destructive cleanup; generic Space purge authority alone never proves prerequisite completion. The accepted decision is not a pending owner input. — `protos/voice/chat/v1/chat.proto`; `protos/voice/messaging/v1/messaging.proto`; `protos/voice/file/v1/file.proto`.
