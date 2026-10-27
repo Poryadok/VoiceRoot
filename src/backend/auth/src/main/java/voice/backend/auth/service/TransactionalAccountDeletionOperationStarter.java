@@ -29,11 +29,12 @@ public final class TransactionalAccountDeletionOperationStarter implements Accou
 
   @Override
   public AccountDeletionStartResult startOrResume(
-      Account account, UUID proposedOperationId, String tokenHash, Instant now) {
+      Account account, UUID proposedOperationId, String tokenHash, Instant ignoredCallerTime) {
     AccountDeletionStartResult result =
         transactions.execute(
             ignored -> {
               try {
+                Instant now = operations.lockAccountAndReadDatabaseTime(account.id());
                 long epoch = accounts.markDeletedAndIncrementSessionEpoch(account.id(), now);
                 Account deleted =
                     accounts.findById(account.id().toString()).orElseThrow();

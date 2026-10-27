@@ -35,7 +35,7 @@ class AuthAuthoritySourceMigrationJdbcIntegrationTest {
       assertThat(revision(jdbc)).isEqualTo(2);
       assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts", Long.class)).isZero();
       assertThat(Flyway.configure().dataSource(dataSource).locations("classpath:db/migration")
-          .load().migrate().migrationsExecuted).isEqualTo(1);
+          .load().migrate().migrationsExecuted).isEqualTo(2);
       assertThat(revision(jdbc)).isEqualTo(2);
       var account = UUID.randomUUID();
       jdbc.update("INSERT INTO accounts(id,password_hash,type,status) VALUES(?,'fixture','regular','active')", account);
