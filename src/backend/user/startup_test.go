@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -91,6 +92,21 @@ func TestStartupFailureAfterReleaseRevokesWithoutHandlerCall(t *testing.T) {
 	_, err := o.unary(context.Background(), nil, &grpc.UnaryServerInfo{}, func(context.Context, any) (any, error) { called = true; return nil, nil })
 	require.Equal(t, codes.Unavailable, status.Code(err))
 	require.False(t, called)
+}
+
+func TestStartupNotificationPrimaryPartialConfigReturnsError(t *testing.T) {
+	if os.Getenv("VOICE_USER_STARTUP_CONFIG_CHILD") == "1" {
+		t.Setenv("VOICE_RELEASE_PROFILE", "development")
+		t.Setenv("USER_NOTIFICATION_PRIMARY_PRINCIPAL_TLS_CERT_FILE", "/missing")
+		require.ErrorContains(t, runUser(context.Background()), "user Notification primary principal config")
+		return
+	}
+	// A fatal exit would skip runUser's cleanup. Isolate that regression so its
+	// RED is a failed assertion instead of terminating the whole component suite.
+	cmd := exec.Command(os.Args[0], "-test.run=^TestStartupNotificationPrimaryPartialConfigReturnsError$")
+	cmd.Env = append(os.Environ(), "VOICE_USER_STARTUP_CONFIG_CHILD=1")
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", output)
 }
 
 // Actual mTLS transport readiness must neither bypass startup admission nor
