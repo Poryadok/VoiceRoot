@@ -283,6 +283,19 @@ spec:
   selector: {app: voice-user}
   ports: [{name: http, port: 8080}, {name: grpc, port: 9090}, {name: principal-grpc, port: 9091}, {name: file-principal-grpc, port: 9092}, {name: search-projection-grpc, port: 9093}, {name: notif-presence, port: 9095}]
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-user-peer
+  namespace: voice-staging
+spec:
+  type: ClusterIP
+  # Startup transport discovery only. User still denies every RPC until its
+  # configured peer transport and all local startup prerequisites are ready.
+  publishNotReadyAddresses: true
+  selector: {app: voice-user}
+  ports: [{name: grpc, port: 9090, targetPort: 9090}]
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -402,6 +415,9 @@ spec:
           image: __IMAGE_REGISTRY__/space:__IMAGE_TAG__
           ports: [{containerPort: 8080}, {containerPort: 9090}, {containerPort: 9091}, {containerPort: 8443}, {containerPort: 9094}, {containerPort: 9099}]
           env:
+            # Only Space uses readiness-independent User transport discovery.
+            # Keep the shared USER_GRPC_ADDR and ordinary Services unchanged.
+            - {name: USER_GRPC_ADDR, value: "voice-user-peer:9090"}
             - {name: SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_KEY_FILE, value: "/etc/voice/media/client/tls.key"}
             - {name: SPACE_VOICE_COMMUNICATION_JWKS_CLIENT_CERT_FILE, value: "/etc/voice/media/client/tls.crt"}
             - {name: SPACE_VOICE_COMMUNICATION_JWKS_CA_FILE, value: "/etc/voice/media/ca/jwks-ca.crt"}

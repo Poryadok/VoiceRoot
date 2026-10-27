@@ -445,6 +445,24 @@ sequence, поэтому первый новый provider update не проиг
 
 ## Зависимости
 
+### Configured Space cold start
+
+User constructs its configured `SPACE_GRPC_ADDR` client before handlers, but
+waits for its bounded transport Ready state after starting fully initialized
+User gRPC listeners. Every ordinary, dedicated and source listener denies RPC
+admission until all startup prerequisites and listener starts succeed; HTTP
+health cannot succeed before that release. Failure or cancellation revokes
+admission and closes started resources. Transport readiness does not establish
+identity, privacy, co-membership or other business authority: existing per-RPC
+guards still apply after release and deny unavailable authority.
+
+The staging `voice-user-peer` ClusterIP publishes unready User endpoints only on
+ordinary port 9090. Only Space's `USER_GRPC_ADDR` uses it; User still waits on the
+ordinary ready-gated Space Service. Ordinary Services and shared ConfigMap
+addresses remain unchanged. This discovery edge is not authentication. Explicit
+protected capture configuration still requires its dedicated mTLS endpoint and
+complete issuer/runtime configuration, never ordinary-port fallback.
+
 - **Auth Service** — account_id валидация
 - **Subscription Service** — проверка лимитов (мульти-профили, кастомный статус)
 - **Space Service** — `AreCoMembers` для проверки privacy-аудитории `space_members` (User подключает S2S-клиент через `SPACE_GRPC_ADDR`)
