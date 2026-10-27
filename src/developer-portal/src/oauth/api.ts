@@ -1,6 +1,7 @@
 import { getAccessToken, clearSession } from './session';
+import { configuredApiBase } from '../runtimeConfig';
 
-export const apiBase = import.meta.env.VITE_VOICE_API_BASE ?? 'http://127.0.0.1:18080';
+export const apiBaseUrl = configuredApiBase;
 export const oauthClientId = import.meta.env.VITE_OAUTH_CLIENT_ID ?? 'voice-developer-portal';
 export const oauthDisabled = import.meta.env.VITE_OAUTH_DISABLED === 'true';
 
@@ -13,7 +14,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json');
   }
-  const res = await fetch(`${apiBase.replace(/\/$/, '')}${path}`, { ...init, headers });
+  const res = await fetch(`${apiBaseUrl().replace(/\/$/, '')}${path}`, { ...init, headers });
   if (res.status === 401) {
     clearSession();
   }
@@ -32,7 +33,7 @@ export async function exchangeAuthorizationCode(params: {
     client_id: oauthClientId,
     code_verifier: params.codeVerifier,
   });
-  const res = await fetch(`${apiBase.replace(/\/$/, '')}/api/v1/auth/oauth2/token`, {
+  const res = await fetch(`${apiBaseUrl().replace(/\/$/, '')}/api/v1/auth/oauth2/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
