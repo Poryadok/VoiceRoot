@@ -17,8 +17,10 @@ import 'package:voice_frontend/gen/voice/file/v1/file.pb.dart' as file_pb;
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
+import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_room_panel.dart';
 import 'package:voice_frontend/ui/chat/voice_note_capture.dart';
+import 'package:voice_frontend/ui/core/voice_send_button.dart';
 
 import 'support/auth_test_overrides.dart';
 
@@ -61,12 +63,82 @@ void main() {
       for (final request in script.uploads) {
         expect(request.intent, file_pb.UploadIntent.UPLOAD_INTENT_AUDIO);
         expect(request.mimeType, 'audio/wav');
+        expect(request.originalName, 'voice.wav');
         expect(request.sizeBytes.toInt(), _voiceBytes.length);
         expect(request.contextChat.id, 'chat-abc');
       }
       expect(script.putBodies, everyElement(_voiceBytes));
     });
   }
+
+  testWidgets('text in flight retains confirmed voice without replaying text', (
+    tester,
+  ) async {
+    final recorder = _Recorder();
+    final script = _UploadScript(null)
+      ..ticketGate = Completer<void>()
+      ..textGate = Completer<void>();
+    final sends = <MessageAttachment>[];
+    final container = await _mount(tester, recorder, script, sends);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('voice_note_mic'))),
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 100));
+    final textSend = container
+        .read(chatRoomControllerProvider('chat-abc').notifier)
+        .sendMessage('other text');
+    await tester.pump();
+    script.ticketGate!.complete();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(sends, isEmpty);
+    expect(find.byKey(ChatRoomPanel.voiceSendRetryKey), findsOneWidget);
+    script.textGate!.complete();
+    await textSend;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ChatRoomPanel.voiceSendRetryKey));
+    await tester.pumpAndSettle();
+    expect(sends, hasLength(1));
+    expect(script.uploads, hasLength(1));
+    expect(
+      script.messageBodies.where((body) => body['content'] == 'other text'),
+      hasLength(1),
+    );
+    expect(
+      script.messageBodies.where(
+        (body) => body['content_type'] == 'MESSAGE_CONTENT_TYPE_VOICE',
+      ),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('offline flip retains confirmed voice for retry without upload', (
+    tester,
+  ) async {
+    final recorder = _Recorder();
+    final script = _UploadScript(null)..ticketGate = Completer<void>();
+    final sends = <MessageAttachment>[];
+    final container = await _mount(tester, recorder, script, sends);
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('voice_note_mic'))),
+    );
+    await tester.pump();
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 100));
+    container.read(_offlineProvider.notifier).state = true;
+    script.ticketGate!.complete();
+    await tester.pumpAndSettle();
+    expect(sends, isEmpty);
+    expect(find.byKey(ChatRoomPanel.voiceSendRetryKey), findsOneWidget);
+    container.read(_offlineProvider.notifier).state = false;
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ChatRoomPanel.voiceSendRetryKey));
+    await tester.pumpAndSettle();
+    expect(sends, hasLength(1));
+    expect(script.uploads, hasLength(1));
+    expect(sends.single.fileId, 'confirmed-file');
+  });
 
   testWidgets('chat navigation invalidates an in-flight voice upload', (
     tester,
@@ -105,6 +177,12 @@ void main() {
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'next draft');
+    expect(
+      tester
+          .widget<VoiceSendButton>(find.byKey(ChatRoomPanel.sendKey))
+          .onPressed,
+      isNull,
+    );
     script.ticketGate!.complete();
     await tester.pumpAndSettle();
     expect(sends, hasLength(1));
@@ -177,6 +255,7 @@ void main() {
 }
 
 final _voiceBytes = _waveBytes();
+final _offlineProvider = StateProvider<bool>((ref) => false);
 
 Uint8List _waveBytes() {
   const dataLength = 16000 * 2 * 7 ~/ 2;
@@ -210,6 +289,9 @@ Future<ProviderContainer> _mount(
   final container = ProviderContainer(
     overrides: [
       ...voiceAppTestOverrides(client: MockClient(script.handle)),
+      isDeviceOfflineProvider.overrideWith(
+        (ref) => ref.watch(_offlineProvider),
+      ),
       voiceMessagesClientProvider.overrideWith(
         (ref) =>
             VoiceMessagesClient(gateway: ref.watch(gatewayHttpClientProvider)),
@@ -284,10 +366,27 @@ class _UploadScript {
   List<MessageAttachment> sends = [];
   final messageBodies = <Map<String, dynamic>>[];
   Completer<void>? ticketGate;
+  Completer<void>? textGate;
   Future<http.Response> handle(http.Request request) async {
     if (request.url.path == '/api/v1/messages/send') {
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       messageBodies.add(body);
+      if (body['content'] == 'other text') {
+        await textGate?.future;
+        return http.Response(
+          jsonEncode({
+            'message': {
+              'id': 'text-message',
+              'chat': {'id': 'chat-abc'},
+              'sender_profile_id': 'prof-test',
+              'content': 'other text',
+              'created_at': '2026-10-28T00:00:00Z',
+            },
+          }),
+          200,
+          headers: const {'content-type': 'application/json'},
+        );
+      }
       expect(body['content_type'], 'MESSAGE_CONTENT_TYPE_VOICE');
       expect(body['content'] ?? '', isEmpty);
       expect(body['client_message_id'], isNotEmpty);

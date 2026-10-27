@@ -300,6 +300,10 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _readingVoiceNote = false;
   var _voiceReadFailed = false;
   int? _voiceSendGeneration;
+  MessageAttachment? _pendingVoiceMessage;
+  String? _voiceSendError;
+  bool get _voiceSubmissionBusy =>
+      _readingVoiceNote || _uploadingAttachment || _pendingVoiceMessage != null;
   var _attachmentOperation = 0;
   int? _attachmentSessionGeneration;
   _PendingAttachmentUpload? _pendingAttachmentUpload;
@@ -391,6 +395,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _readingVoiceNote = false;
       _voiceReadFailed = false;
       _voiceSendGeneration = null;
+      _pendingVoiceMessage = null;
+      _voiceSendError = null;
       _draftKey = null;
       _composer.clear();
       _initialUnreadCount = 0;
@@ -579,6 +585,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             _readingVoiceNote = false;
             _voiceReadFailed = false;
             _voiceSendGeneration = null;
+            _pendingVoiceMessage = null;
+            _voiceSendError = null;
           }
           _scheduledAttemptSubmissionGeneration++;
           _scheduledAttemptInFlight = false;
@@ -612,6 +620,8 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
           _readingVoiceNote = false;
           _voiceReadFailed = false;
           _voiceSendGeneration = null;
+          _pendingVoiceMessage = null;
+          _voiceSendError = null;
           _scheduledRowGeneration++;
           _scheduledActionBusyIds.clear();
           _scheduledActionRetries.clear();
@@ -1591,21 +1601,32 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                     child: Text(l10n.composerVoiceError),
                   ),
                 ),
-              if (_voiceSendGeneration != null &&
-                  _voiceSendGeneration ==
-                      ref
-                          .read(
-                            chatRoomControllerProvider(widget.chatId).notifier,
-                          )
-                          .immediateSendGeneration)
+              if (_pendingVoiceMessage != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     children: [
-                      Expanded(child: Text(_textSendFailureMessage(l10n))),
+                      Expanded(
+                        child: Text(
+                          _voiceSendError == null
+                              ? _textSendFailureMessage(l10n)
+                              : _roomErrorText(l10n, _voiceSendError!),
+                        ),
+                      ),
                       TextButton(
                         key: ChatRoomPanel.voiceSendRetryKey,
-                        onPressed: room.isSending || composerBlocked
+                        onPressed:
+                            room.isSending ||
+                                composerBlocked ||
+                                (_voiceSendGeneration != null &&
+                                    _voiceSendGeneration !=
+                                        ref
+                                            .read(
+                                              chatRoomControllerProvider(
+                                                widget.chatId,
+                                              ).notifier,
+                                            )
+                                            .immediateSendGeneration)
                             ? null
                             : () => unawaited(_retryVoiceSend()),
                         child: Text(l10n.commonRetry),
@@ -1632,6 +1653,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                           tooltip: l10n.composerEmojiPanelTitle,
                           onPressed:
                               room.isSending ||
+                                  _voiceSubmissionBusy ||
                                   composerBlocked ||
                                   _scheduledEdit != null
                               ? null
@@ -1692,6 +1714,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             if (!_slashMenuOpen &&
                                 !_executingSlash &&
                                 !composerBlocked &&
+                                !_voiceSubmissionBusy &&
                                 (value == '/' || value.endsWith(' /'))) {
                               _slashMenuOpen = true;
                               unawaited(
@@ -1706,6 +1729,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                           onSend:
                               room.isSending ||
                                   _textSendInFlight ||
+                                  _voiceSubmissionBusy ||
                                   composerBlocked
                               ? null
                               : _send,
@@ -1724,7 +1748,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                           tooltip: l10n.chatAttachFile,
                           onPressed:
                               room.isSending ||
-                                  _uploadingAttachment ||
+                                  _voiceSubmissionBusy ||
                                   _scheduledEdit != null ||
                                   composerBlocked
                               ? null
@@ -1748,8 +1772,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               value.text.trim().isEmpty) {
                             if (room.isSending ||
                                 _textSendInFlight ||
-                                _uploadingAttachment ||
-                                _readingVoiceNote ||
+                                _voiceSubmissionBusy ||
                                 composerBlocked) {
                               return IconButton(
                                 tooltip: l10n.composerVoiceHold,
@@ -1785,13 +1808,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                           onPressed:
                               room.isSending ||
                                   _textSendInFlight ||
+                                  _voiceSubmissionBusy ||
                                   composerBlocked
                               ? null
                               : _send,
                           onLongPress:
                               room.isSending ||
                                   _scheduledEdit != null ||
-                                  _uploadingAttachment ||
+                                  _voiceSubmissionBusy ||
                                   _textSendInFlight ||
                                   composerBlocked
                               ? null
@@ -1810,7 +1834,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             room.isSending ||
                                 _textSendInFlight ||
                                 _scheduledEdit != null ||
-                                _uploadingAttachment ||
+                                _voiceSubmissionBusy ||
                                 composerBlocked
                             ? null
                             : _openSendMenu,
@@ -2489,6 +2513,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _send({bool sendSilent = false}) async {
+    if (_voiceSubmissionBusy) return;
     if (_textSendInFlight) return;
     if (ref.read(chatRoomControllerProvider(widget.chatId)).isDmPeerDeleted) {
       return;
@@ -2706,11 +2731,13 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
         ref.read(authControllerProvider.notifier).sessionInstallGeneration ==
             sessionGeneration;
     try {
-      if (!isCurrent() || _readingVoiceNote || _uploadingAttachment) return;
+      if (!isCurrent() || _voiceSubmissionBusy) return;
       setState(() {
         _readingVoiceNote = true;
         _voiceReadFailed = false;
         _voiceSendGeneration = null;
+        _pendingVoiceMessage = null;
+        _voiceSendError = null;
       });
       final bytes = await note.file.readAsBytes();
       if (!isCurrent()) return;
@@ -2901,31 +2928,35 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     final controller = ref.read(
       chatRoomControllerProvider(attempt.chatId).notifier,
     );
+    final generationBefore = controller.immediateSendGeneration;
+    final attachment = MessageAttachment(
+      fileId: metadata.fileId,
+      type: attempt.voiceDuration != null
+          ? 'voice_message'
+          : attempt.music
+          ? 'music'
+          : metadata.fileType,
+      name: metadata.originalName,
+      sizeBytes: metadata.sizeBytes,
+      e2eKeyWire: attempt.e2eKeyWire,
+      durationSeconds: attempt.voiceDuration?.inSeconds,
+    );
     final err = await controller.sendMessage(
       attempt.voiceDuration == null ? _composer.text : '',
-      attachments: [
-        MessageAttachment(
-          fileId: metadata.fileId,
-          type: attempt.voiceDuration != null
-              ? 'voice_message'
-              : attempt.music
-              ? 'music'
-              : metadata.fileType,
-          name: metadata.originalName,
-          sizeBytes: metadata.sizeBytes,
-          e2eKeyWire: attempt.e2eKeyWire,
-          durationSeconds: attempt.voiceDuration?.inSeconds,
-        ),
-      ],
+      attachments: [attachment],
     );
     if (!_isCurrentAttachmentOperation(operation, attempt.chatId)) return;
     setState(() {
       _pendingAttachmentUpload = null;
       _attachmentUploadFailure = null;
-      if (attempt.voiceDuration != null &&
-          err != null &&
-          controller.canRetryFailedMessage) {
-        _voiceSendGeneration = controller.immediateSendGeneration;
+      if (attempt.voiceDuration != null && err != null) {
+        _pendingVoiceMessage = attachment;
+        _voiceSendError = err;
+        _voiceSendGeneration =
+            controller.immediateSendGeneration > generationBefore &&
+                controller.canRetryFailedMessage
+            ? controller.immediateSendGeneration
+            : null;
       }
     });
     if (err == null && attempt.voiceDuration == null) {
@@ -2939,17 +2970,30 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   }
 
   Future<void> _retryVoiceSend() async {
+    final attachment = _pendingVoiceMessage;
+    if (attachment == null) return;
     final generation = _voiceSendGeneration;
-    if (generation == null) return;
     final chatId = widget.chatId;
     final controller = ref.read(chatRoomControllerProvider(chatId).notifier);
-    final error = await controller.retryFailedMessage(
-      expectedGeneration: generation,
-    );
-    if (!_isCurrentChat(chatId) || _voiceSendGeneration != generation) return;
-    if (error == null || !controller.canRetryFailedMessage) {
-      setState(() => _voiceSendGeneration = null);
-    }
+    if (generation != null && generation != controller.immediateSendGeneration)
+      return;
+    final generationBefore = controller.immediateSendGeneration;
+    final error = generation == null
+        ? await controller.sendMessage('', attachments: [attachment])
+        : await controller.retryFailedMessage(expectedGeneration: generation);
+    if (!_isCurrentChat(chatId) || !identical(_pendingVoiceMessage, attachment))
+      return;
+    setState(() {
+      _voiceSendError = error;
+      if (error == null) {
+        _pendingVoiceMessage = null;
+        _voiceSendGeneration = null;
+      } else if (generation == null &&
+          controller.immediateSendGeneration > generationBefore &&
+          controller.canRetryFailedMessage) {
+        _voiceSendGeneration = controller.immediateSendGeneration;
+      }
+    });
   }
 
   void _cancelVoiceSend() {
@@ -2959,7 +3003,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     if (_voiceSendGeneration == controller.immediateSendGeneration) {
       controller.discardFailedMessage();
     }
-    setState(() => _voiceSendGeneration = null);
+    setState(() {
+      _voiceSendGeneration = null;
+      _pendingVoiceMessage = null;
+      _voiceSendError = null;
+    });
   }
 
   void _retainFailedAttachment(
