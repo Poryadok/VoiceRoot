@@ -7,6 +7,7 @@ import re
 import stat
 import sys
 import uuid
+from contextlib import nullcontext
 
 class BridgeError(RuntimeError):pass
 
@@ -42,10 +43,14 @@ def prepare_error(error):
     return 'unexpected'
 
 def validate(row):
-    optional={'run_attempt','report_run_id','report_source_sha'}
+    optional={'run_attempt','report_run_id','report_source_sha','resource_context'}
     if isinstance(row,dict) and row.get('action') in ('prepare','prepare-repair'):
         optional.update(('provisional_staging','gis_first_install'))
     if not isinstance(row,dict) or row.get('action') not in FIELDS or set(row)-optional!={'action','nonce'}|FIELDS[row['action']]:raise BridgeError('bridge_request_invalid')
+    if 'resource_context' in row:
+        import resource_claim
+        try:resource_claim.validate(row['resource_context'])
+        except (ValueError,TypeError,AttributeError):raise BridgeError('bridge_resource_context_invalid') from None
     if 'provisional_staging' in row and (type(row['provisional_staging']) is not bool or row['mode']!='images-only'):raise BridgeError('bridge_target_invalid')
     if 'gis_first_install' in row and (type(row['gis_first_install']) is not bool or row['gis_first_install'] is not True
         or row['action']!='prepare' or row['mode'] not in ('full','app-only')):
@@ -81,13 +86,14 @@ def _save(path,row):
     finally:
         if scratch.exists():scratch.unlink()
 
-def dispatch(directory,request,execute,recover,execute_observed=None,reporter=None):
+def dispatch(directory,request,execute,recover,execute_observed=None,reporter=None,admit=None):
     """Never rerun an interrupted mutation unless checkpoint proves completion.
 
     Tokens are excluded from the durable journal. The request hash includes
     all noncredential fields, so refreshed short-lived credentials may retry.
     """
     validate(request);directory=Path(directory)
+    if admit is not None:admit(request)
     import deployment_report
     def publish(**values):
         if reporter is not None:
@@ -201,7 +207,15 @@ def drain(installed):
                     digest=hashlib.sha256(json.dumps(binding,sort_keys=True,separators=(',',':')).encode()).hexdigest() if binding is not None else None
                     row=deployment_report.build(request,snapshot,binding=digest,**{k:v for k,v in latest.items() if k!='checkpoint'})
                     deployment_report.persist(installed/'responses'/(request['nonce']+'.report.json'),row,grp.getgrnam('pmd').gr_gid)
-                result=dispatch(installed/'journal',request,actions.execute,actions.recover,execute_observed=actions.execute_observed,reporter=reporter)
+                # Admission covers cached COMPLETE and recover as well as execute.
+                scope=nullcontext(None) if request['action']=='status' else actions.resource_scope(request)
+                with scope as resource:
+                    result=dispatch(installed/'journal',request,actions.execute,actions.recover,
+                        execute_observed=actions.execute_observed,reporter=reporter,
+                        admit=None if resource is None else resource.admit_request)
+                    if resource is not None:
+                        import resource_claim
+                        resource_claim.finish_request(resource,actions,request,result)
             except Exception as error:result={'status':'BLOCKED','error':safe_error(error)}
             _save(response,result)
             import grp

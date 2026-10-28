@@ -200,7 +200,7 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -330,6 +330,10 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     try:
         nonnats_plan.revalidate(kube,state['nonnats_binding'])
         if before_fence is not None:before_fence()
+        if resource_session is not None:
+            resource_session.bind_target(state['target']['tag'],state['target']['images'],stage.old_images,canonical(state['target']))
+            state['resource_fence']=resource_session.binding()
+            save(base/'checkpoint.json',state)
         stage.runtime_base=base
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
         save(base/'checkpoint.json',state)
@@ -556,6 +560,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         if state.get('provisional') is not None:
             import provisional
             receipt['provisional']=copy.deepcopy(provisional.validate(state['provisional']))
+        if 'resource_fence' in state:receipt['resource_fence']=copy.deepcopy(state['resource_fence'])
         if authorization_deadline is not None:
             current_deadline()
             receipt['expires_at']=(authorization_deadline if expired_authority is not None else

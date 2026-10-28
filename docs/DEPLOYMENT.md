@@ -62,6 +62,57 @@ only. Actual effective-config validation, runtime disabled guards and executed
 negative checks remain separate prerequisites; this tool changes no deployment
 admission or activation authority.
 
+## STAGING resource fencing (source contract)
+
+Every mutating protected workflow requires the JSON string input
+`resource_context` (forwarded as `VOICE_TTENREC_CONTEXT`). Its exact fields are
+`project`, `resource`, `actor`, `claim`, `generation`, `window`, `revision`,
+`operation_id`, `commit`, and `images`. Use project `voice`, resource `STAGING`,
+canonical claim/window UUIDs, integer generation/resource revision, the external
+operation ID, full commit and complete immutable workload/container image map.
+The trusted installed helper chooses the TT endpoint; callers cannot supply it.
+No workflow automatically acquires, recovers or releases a resource as safe.
+
+The root bridge checks current held/deploy authority and pinned candidate before
+admitting a request, including cached responses and interrupted-request recovery.
+It persists `installed/tt-resource-fence.json` under the existing root operation
+flock. Fresh actual images must match the claim's current observation before the
+first workload fence. The captured runner checks its protected receipt, helper,
+target and live journal before claiming the existing Kubernetes lock and before
+each subprocess. `render-and-apply.sh` also selects that root-captured runner;
+the target checkout cannot replace its executor. Existing source/CI, marker,
+expiry, Kubernetes locks and staging admission limits remain required.
+
+Keep the exact resource revision/context through prepare, authorization, apply,
+finish and provisional acceptance. A resource checkpoint, observation, handoff
+or other revision change invalidates continuation; reconcile instead of silently
+refreshing the context. A provisional restart leaves the journal active through
+CI acceptance. Only verified actual `PASS` closes it. Repair-forward permits a
+strictly higher generation, different claim and external operation ID only for
+the exactly bound released `PROVISIONAL_READY` parent. Root archives the previous
+journal, parent checkpoint digest and new authority in
+`installed/tt-resource-supersessions/` before replacing the high-water journal.
+Existing live-parent, source, CI and fresh-backup guards still run.
+
+This is cooperative fencing. A pause after the final check or an already admitted
+subprocess/API request cannot be atomically revoked by TT. Settle the old
+executor, controller/Job and submitted effects before recovery or safe handoff;
+never remove existing locks because a TTL expired. Unknown responses and partial
+apply keep reconciliation required, separately from product verification FAIL.
+The runner cannot close the root journal; root failures persist uncertainty.
+
+Repository merge does not activate an older installed root helper. The source
+installer route `rollout-root.sh --install --upgrade-idle-tt-resource-fencing-v1`
+accepts only the closed 85-member predecessor derived from commit
+`f8624086f71d2d4baf1d1ae6cf6461246254960f`, unchanged binary pins and the fixed
+82-source cohort digest; it installs the 86-member successor under existing idle,
+custody, inbox and operation-lock checks. It preserves completed resource history
+and refuses active, uncertain or unknown journals. A different actual installed
+manifest needs a separately reviewed transition. Activation requires legitimate
+root execution and actual old-process/API reconciliation; this source change
+grants neither. Coordinated real-stand competing-writer, late-process, handoff,
+partial-apply and lost-response acceptance remains a separate gate.
+
 ## Explicit provisional staging (implementation contract)
 
 An explicit master `workflow_dispatch` may opt into `provisional_staging=true`

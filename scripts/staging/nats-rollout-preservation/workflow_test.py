@@ -17,8 +17,9 @@ class WorkflowCaptureTest(unittest.TestCase):
         self.code=self.base/'code';self.code.mkdir(parents=True,mode=0o750)
         entry=self.code/'nats-rollout-preservation/workflow_entry.py';entry.parent.mkdir(mode=0o750)
         entry.write_text("print('CAPTURED_ENTRY_EXECUTED')\n")
+        fence=entry.with_name('resource_claim.py');fence.write_text('# Capture-custody fixture only; no executor implementation.\n')
         self.dependency=self.code/'dependency.py';self.dependency.write_text('SAFE=True\n')
-        hashes={str(p.relative_to(self.code)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (entry,self.dependency)}
+        hashes={str(p.relative_to(self.code)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (entry,self.dependency,fence)}
         (self.code/'capture-manifest.json').write_text(json.dumps(hashes))
         text=(Path(__file__).resolve().parents[3]/'.github/workflows/staging-deploy.yml').read_text()
         python=text.split("          python3 -I -S - <<'PY'\n",1)[1].split('          PY\n',1)[0]
@@ -32,6 +33,12 @@ class WorkflowCaptureTest(unittest.TestCase):
     def test_dependency_tamper_denies_before_entry_execution(self):
         self.dependency.write_text('CHANGED=True\n');result=self.run_bootstrap()
         self.assertNotEqual(result.returncode,0);self.assertNotIn('CAPTURED_ENTRY_EXECUTED',result.stdout)
+    def test_legacy_capture_without_resource_fence_module_is_refused(self):
+        path=self.code/'capture-manifest.json';manifest=json.loads(path.read_text())
+        del manifest['nats-rollout-preservation/resource_claim.py'];path.write_text(json.dumps(manifest))
+        result=self.run_bootstrap()
+        self.assertNotEqual(result.returncode,0);self.assertIn('RESOURCE_FENCE_UPGRADE_REQUIRED',result.stderr)
+        self.assertNotIn('CAPTURED_ENTRY_EXECUTED',result.stdout)
     def test_group_writable_code_denies_before_entry_execution(self):
         self.dependency.chmod(0o664);result=self.run_bootstrap()
         self.assertNotEqual(result.returncode,0);self.assertNotIn('CAPTURED_ENTRY_EXECUTED',result.stdout)
@@ -47,7 +54,8 @@ class WorkflowCaptureTest(unittest.TestCase):
         code=installed/'code';entry=code/'nats-rollout-preservation/bridge_client.py'
         entry.parent.mkdir(parents=True,mode=0o750)
         entry.write_text('import json,sys\nprint(json.dumps(sys.argv[1:]))\n')
-        (code/'capture-manifest.json').write_text(json.dumps({'nats-rollout-preservation/bridge_client.py':hashlib.sha256(entry.read_bytes()).hexdigest()}))
+        fence=entry.with_name('resource_claim.py');fence.write_text('# Capture-custody fixture only.\n')
+        (code/'capture-manifest.json').write_text(json.dumps({str(p.relative_to(code)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (entry,fence)}))
         for changed,full,wanted in [('web,admin','false','images-only'),('gateway','false','app-only'),('web','true','app-only'),('','false','app-only')]:
             with self.subTest(changed=changed,full=full):
                 result=subprocess.run([sys.executable,'-I','-S','-'],input=self.python,text=True,capture_output=True,timeout=10,
