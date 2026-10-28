@@ -208,7 +208,7 @@ class ObserveTest(unittest.TestCase):
     def test_wrong_database_or_restarted_container_is_refused(self):
         identity = {'namespace': 'voice-dev', 'namespace_uid': 'namespace', 'pod_name': 'voice-postgres-0',
                     'pod_uid': 'pod', 'pod_rv': '1', 'container_name': 'postgres',
-                    'container_id': 'container', 'restart_count': 0, 'pvc_uid': 'pvc', 'pvc_rv': '1',
+                    'container_id': 'container', 'restart_count': 0, 'pvc_uid': 'pvc', 'pvc_rv': '1', 'pv_uid': 'pv', 'pv_rv': '1',
                     'service_uid': 's', 'service_rv': '1', 'service_ip': '10.1.0.1', 'pod_ip': '10.0.0.1', 'endpoints_uid': 'e', 'endpoints_rv': '1', 'slices_identity': 'slice:1'}
         response = {'database': 'user_db', 'database_oid': 12, 'role': 'voice',
                     'pid': 123, 'server_start': 'start', 'read_only': 'on', 'data_directory': '/var/lib/postgresql/data',
@@ -246,7 +246,7 @@ class ObserveTest(unittest.TestCase):
     def test_flyway_rejects_unrepresented_version_and_mixed_ledger(self):
         identity = {'namespace': 'voice-dev', 'namespace_uid': 'n', 'pod_name': 'voice-postgres-0',
                     'pod_uid': 'p', 'pod_rv': '1', 'container_name': 'postgres', 'container_id': 'c',
-                    'restart_count': 0, 'pvc_uid': 'v', 'pvc_rv': '1', 'service_uid': 's',
+                    'restart_count': 0, 'pvc_uid': 'v', 'pvc_rv': '1', 'pv_uid': 'pv', 'pv_rv': '1', 'service_uid': 's',
                     'service_rv': '1', 'service_ip': '10.1.0.1', 'pod_ip': '10.0.0.1', 'endpoints_uid': 'e', 'endpoints_rv': '1', 'slices_identity': 'slice:1'}
         binding = {'database': 'auth_db', 'state': 'resolved', 'addresses': ['10.1.0.1'], 'binding': {'namespace': 'voice-dev', 'namespace_uid': 'n'}}
         row = {'database': 'auth_db', 'database_oid': 1, 'role': 'voice', 'pid': 1,
@@ -270,7 +270,7 @@ class ObserveTest(unittest.TestCase):
         source = subject.catalog(snapshot)
         identity = {'namespace': 'voice-dev', 'namespace_uid': 'n', 'pod_name': 'voice-postgres-0',
                     'pod_uid': 'p', 'pod_rv': '1', 'container_name': 'postgres', 'container_id': 'c',
-                    'restart_count': 0, 'pvc_uid': 'v', 'pvc_rv': '1', 'service_uid': 's', 'service_rv': '1',
+                    'restart_count': 0, 'pvc_uid': 'v', 'pvc_rv': '1', 'pv_uid': 'pv', 'pv_rv': '1', 'service_uid': 's', 'service_rv': '1',
                     'service_ip': '10.1.0.1', 'pod_ip': '10.0.0.1', 'endpoints_uid': 'e', 'endpoints_rv': '1',
                     'slices_identity': 'slice:1'}
         binding = {'database': 'voice_db', 'state': 'resolved', 'addresses': ['10.1.0.1'],
@@ -437,7 +437,8 @@ class SnapshotTest(unittest.TestCase):
                  'spec': {'containers': [{'name': 'postgres', 'volumeMounts': [{'name': 'pgdata', 'mountPath': '/var/lib/postgresql/data'}]}],
                           'volumes': [{'name': 'pgdata', 'persistentVolumeClaim': {'claimName': 'pgdata-voice-postgres-0'}}]},
                  'status': {'podIP': '10.0.0.1', 'containerStatuses': [{'name': 'postgres', 'containerID': 'c', 'restartCount': 0, 'state': {'running': {}}}]}},
-            ('persistentvolumeclaim', 'pgdata-voice-postgres-0'): {'metadata': {'uid': 'v', 'resourceVersion': '3'}},
+            ('persistentvolumeclaim', 'pgdata-voice-postgres-0'): {'metadata': {'name': 'pgdata-voice-postgres-0', 'namespace': 'voice-dev', 'uid': 'v', 'resourceVersion': '3'}, 'spec': {'volumeName': 'pv-one'}, 'status': {'phase': 'Bound'}},
+            ('persistentvolume', 'pv-one'): {'metadata': {'name': 'pv-one', 'uid': 'pv', 'resourceVersion': '3'}, 'spec': {'claimRef': {'name': 'pgdata-voice-postgres-0', 'namespace': 'voice-dev', 'uid': 'v'}}, 'status': {'phase': 'Bound'}},
             ('service', 'voice-postgres'): {'metadata': {'uid': 'svc', 'resourceVersion': '4'},
                                             'spec': {'type': 'ClusterIP', 'clusterIP': '10.1.0.1', 'selector': {'app': 'voice-postgres'}, 'ports': [{'port': 5432, 'targetPort': 5432}]}},
             ('endpoints', 'voice-postgres'): {'metadata': {'uid': 'ep', 'resourceVersion': '5'}, 'subsets': [
@@ -450,6 +451,10 @@ class SnapshotTest(unittest.TestCase):
             return json.dumps(objects[(args[9], args[10])]).encode()
         snapshot = subject.kube_engine_snapshot(runner, lambda: None)
         self.assertEqual(snapshot()['pvc_uid'], 'v')
+        objects[('persistentvolume', 'pv-one')]['spec']['claimRef']['uid'] = 'other'
+        with self.assertRaises(subject.Hold):
+            snapshot()
+        objects[('persistentvolume', 'pv-one')]['spec']['claimRef']['uid'] = 'v'
         spec = objects[('service', 'voice-postgres')]['spec']
         spec['type'] = 'ExternalName'
         with self.assertRaises(subject.Hold):

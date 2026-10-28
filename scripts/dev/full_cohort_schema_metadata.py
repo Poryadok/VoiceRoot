@@ -47,7 +47,7 @@ IDENTITY = ('namespace', 'namespace_uid', 'deployment', 'deployment_uid', 'deplo
             'pod_rv', 'container_id', 'restart_count', 'container_name')
 SAFE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]{0,62}\Z')
 ENGINE_IDENTITY = ('namespace', 'namespace_uid', 'pod_name', 'pod_uid', 'pod_rv',
-                   'container_name', 'container_id', 'restart_count', 'pvc_uid', 'pvc_rv',
+                   'container_name', 'container_id', 'restart_count', 'pvc_uid', 'pvc_rv', 'pv_uid', 'pv_rv',
                    'service_uid', 'service_rv', 'service_ip', 'pod_ip', 'endpoints_uid', 'endpoints_rv', 'slices_identity')
 PSQL_SCRIPT = ('export PGPASSWORD="$POSTGRES_PASSWORD"; export PGAPPNAME=voice-cohort-observe; '
                'export PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=3000"; '
@@ -338,7 +338,19 @@ def kube_engine_snapshot(run_bytes, guard):
             volumes = [v for v in pod['spec']['volumes'] if v.get('name') == mounts[0]['name']]
             if len(volumes) != 1 or volumes[0].get('persistentVolumeClaim', {}).get('claimName') != 'pgdata-voice-postgres-0':
                 raise Hold('engine_pvc_invalid')
-            pvc = get('persistentvolumeclaim', 'pgdata-voice-postgres-0')['metadata']
+            pvc_object = get('persistentvolumeclaim', 'pgdata-voice-postgres-0')
+            pvc = pvc_object['metadata']
+            volume_name = pvc_object['spec']['volumeName']
+            if (pvc.get('name') != 'pgdata-voice-postgres-0' or pvc.get('namespace') != namespace or
+                    pvc_object.get('status', {}).get('phase') != 'Bound' or not isinstance(volume_name, str) or
+                    not re.fullmatch(r'[a-z0-9][a-z0-9.-]*', volume_name)):
+                raise Hold('engine_pvc_invalid')
+            volume = get('persistentvolume', volume_name)
+            pv, claim = volume['metadata'], volume['spec']['claimRef']
+            if (pv.get('name') != volume_name or volume.get('status', {}).get('phase') != 'Bound' or
+                    claim.get('uid') != pvc['uid'] or claim.get('name') != pvc['name'] or
+                    claim.get('namespace') != namespace):
+                raise Hold('engine_pv_claim_mismatch')
             service_object = get('service', 'voice-postgres')
             service, service_spec = service_object['metadata'], service_object['spec']
             service_ports = [p for p in service_spec.get('ports', [])
@@ -391,7 +403,7 @@ def kube_engine_snapshot(run_bytes, guard):
             return {'namespace': namespace, 'namespace_uid': ns['uid'], 'pod_name': pm['name'],
                     'pod_uid': pm['uid'], 'pod_rv': pm['resourceVersion'], 'container_name': 'postgres',
                     'container_id': status['containerID'], 'restart_count': status['restartCount'],
-                    'pvc_uid': pvc['uid'], 'pvc_rv': pvc['resourceVersion'],
+                    'pvc_uid': pvc['uid'], 'pvc_rv': pvc['resourceVersion'], 'pv_uid': pv['uid'], 'pv_rv': pv['resourceVersion'],
                     'service_uid': service['uid'], 'service_rv': service['resourceVersion'],
                     'service_ip': service_spec['clusterIP'], 'pod_ip': pod['status']['podIP'],
                     'endpoints_uid': ep['uid'], 'endpoints_rv': ep['resourceVersion'],
