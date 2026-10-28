@@ -142,8 +142,12 @@ func (s *StoryStore) CreateStory(ctx context.Context, in CreateStoryInput) (*Sto
 	}
 	expiresAt := now.Add(ttl)
 	archivedUntil := expiresAt.Add(archiveRetention())
-
-	_, err := s.Pool.Exec(ctx, `
+	tx, err := s.beginInventoryTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, `
 INSERT INTO stories (
   id, author_profile_id, type, media_file_id, text_content, text_style,
   game_tag, is_looking_for_party, lfp_criteria, mention_profile_ids,
@@ -157,6 +161,12 @@ INSERT INTO stories (
 		in.Visibility, nullableJSON(in.VisibilityAudienceJSON), expiresAt, archivedUntil, now,
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{id}); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 	return s.GetStory(ctx, id)
@@ -284,16 +294,45 @@ func (s *StoryStore) DeleteStory(ctx context.Context, storyID, authorProfileID u
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
-UPDATE stories SET deleted_at = now()
-WHERE id = $1 AND author_profile_id = $2 AND deleted_at IS NULL`, storyID, authorProfileID)
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer func() { _ = tx.Rollback(ctx) }()
+	var media *uuid.UUID
+	var deleted *time.Time
+	err = tx.QueryRow(ctx, `SELECT media_file_id,deleted_at FROM stories WHERE id=$1 AND author_profile_id=$2 FOR UPDATE`, storyID, authorProfileID).Scan(&media, &deleted)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var replay bool
+		if checkErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM story_deletion_receipts WHERE story_id=$1 AND author_profile_id=$2 AND completed_at>now()-interval '30 days')`, storyID, authorProfileID).Scan(&replay); checkErr != nil {
+			return checkErr
+		}
+		if replay {
+			return nil
+		}
 		return ErrNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO story_deletion_receipts(story_id,author_profile_id) VALUES($1,$2) ON CONFLICT(story_id) DO NOTHING`, storyID, authorProfileID); err != nil {
+		return err
+	}
+	if deleted != nil {
+		return tx.Commit(ctx)
+	}
+	if media != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO story_media_deletion_outbox(operation_id,story_id,media_file_id,available_at,created_at,updated_at) VALUES($1,$1,$2,now(),now(),now()) ON CONFLICT(operation_id) DO NOTHING`, storyID, *media); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(ctx, `UPDATE stories SET deleted_at=now() WHERE id=$1`, storyID); err != nil {
+		return err
+	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{storyID}); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // MarkViewed records a view; anonymous views omit viewer from author list.
@@ -786,7 +825,7 @@ func (s *StoryStore) DeleteHighlight(ctx context.Context, highlightID, profileID
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -822,6 +861,9 @@ func (s *StoryStore) DeleteHighlight(ctx context.Context, highlightID, profileID
 	if _, err = tx.Exec(ctx, `DELETE FROM highlights WHERE id=$1`, highlightID); err != nil {
 		return err
 	}
+	if err = recordInventory(ctx, tx, ids, highlightID); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -830,7 +872,7 @@ func (s *StoryStore) AddToHighlight(ctx context.Context, highlightID, profileID,
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -874,6 +916,9 @@ ON CONFLICT (highlight_id, story_id) DO NOTHING`, highlightID, storyID)
 	if err != nil {
 		return err
 	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{storyID}, highlightID); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 
@@ -882,7 +927,7 @@ func (s *StoryStore) RemoveFromHighlight(ctx context.Context, highlightID, profi
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return err
 	}
@@ -908,6 +953,9 @@ func (s *StoryStore) RemoveFromHighlight(ctx context.Context, highlightID, profi
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
+	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{storyID}, highlightID); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -970,7 +1018,7 @@ func (s *StoryStore) stageArchivePurgeBatch(ctx context.Context, limit int, cuto
 	if limit <= 0 {
 		limit = 100
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return ArchivePurgeBatch{}, err
 	}
@@ -1014,6 +1062,15 @@ ORDER BY s.archived_until, s.id LIMIT $1 FOR UPDATE OF s SKIP LOCKED`, limit, cu
 			return ArchivePurgeBatch{}, fmt.Errorf("archive purge eligibility changed for %s", c.id)
 		}
 	}
+	if len(cs) > 0 {
+		ids := make([]uuid.UUID, 0, len(cs))
+		for _, c := range cs {
+			ids = append(ids, c.id)
+		}
+		if err = recordInventory(ctx, tx, ids); err != nil {
+			return ArchivePurgeBatch{}, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return ArchivePurgeBatch{}, err
 	}
@@ -1053,8 +1110,35 @@ func (s *StoryStore) CompleteMediaDeletion(ctx context.Context, operationID, tok
 	if s == nil || s.Pool == nil {
 		return false, ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `DELETE FROM story_media_deletion_outbox WHERE operation_id=$1 AND lease_token=$2`, operationID, token)
-	return tag.RowsAffected() == 1, err
+	tx, err := s.beginInventoryTx(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	var story, file uuid.UUID
+	err = tx.QueryRow(ctx, `DELETE FROM story_media_deletion_outbox WHERE operation_id=$1 AND lease_token=$2 RETURNING story_id,media_file_id`, operationID, token).Scan(&story, &file)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	installed, err := inventoryInstalled(ctx, tx)
+	if err != nil {
+		return false, err
+	}
+	if installed {
+		if _, err = tx.Exec(ctx, `INSERT INTO story_reference_inventory_retirements(story_id,media_file_id,operation_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, story, file, operationID); err != nil {
+			return false, err
+		}
+	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{story}); err != nil {
+		return false, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 func (s *StoryStore) FailMediaDeletion(ctx context.Context, operationID, token uuid.UUID, cause error) (bool, error) {
 	if s == nil || s.Pool == nil {

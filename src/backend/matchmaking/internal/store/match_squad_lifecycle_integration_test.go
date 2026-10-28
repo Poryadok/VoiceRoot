@@ -336,7 +336,7 @@ func TestMatchSquadRecoveryDownRunnerPreservesCompensationAndDirtyMarker(t *test
 	defer cancel()
 	directory := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db")
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, directory)
-	fixture.Run(true, "up")
+	fixture.Run(true, "up", "19")
 	matchID, _, _ := seedActiveDuoMatch(t, ctx, fixture.Pool)
 	hash := make([]byte, 32)
 	chatOperationID := uuid.New()
@@ -356,6 +356,7 @@ func TestMatchSquadRecoveryDownRunnerPreservesCompensationAndDirtyMarker(t *test
 	`, aggregateID, matchID, uuid.New(), hash, []byte("chat teardown"))
 	require.NoError(t, err)
 
+	fixture.Run(true, "down", "1") // Remove the empty terminal-search outbox.
 	fixture.Run(false, "down", "1")
 	var version int64
 	var dirty bool
@@ -415,7 +416,7 @@ func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing
 	defer cancel()
 	directory := filepath.Join(repoRoot(t), "src", "backend", "migrations", "matchmaking_db")
 	fixture := integrationtest.NewSourceMigrationFixture(t, ctx, directory)
-	fixture.Run(true, "up")
+	fixture.Run(true, "up", "19")
 	matchID, _, _ := seedActiveDuoMatch(t, ctx, fixture.Pool)
 	hash := make([]byte, 32)
 	_, err := fixture.Pool.Exec(ctx, `
@@ -429,6 +430,7 @@ func TestMatchSquadLifecycleDownRunnerPreservesEvidenceAndDirtyMarker(t *testing
 
 	// Exercise the real pinned migration runner and let its normal failed-Down
 	// path record the dirty version. Do not force or clear the marker.
+	fixture.Run(true, "down", "1")  // Remove the empty terminal-search outbox.
 	fixture.Run(true, "down", "1")  // Remove the empty 000017 recovery extension.
 	fixture.Run(false, "down", "1") // 000016 then refuses the live provisioning evidence.
 	var version int64

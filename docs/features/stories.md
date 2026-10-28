@@ -37,8 +37,8 @@ photo requires image and video requires video with duration 1..60 seconds.
 
 LFP remains a text Story. Media-less LFP is supported. Because the product canon
 does not yet select its media kind or video duration policy, non-empty LFP
-media fails closed rather than being inferred from a MIME type. Exact Story-ID
-reference claiming is separate lifecycle work.
+media fails closed rather than being inferred from a MIME type. Ordinary
+photo/video exact Story-ID reference ownership follows the lifecycle below.
 
 ---
 
@@ -120,6 +120,15 @@ reference claiming is separate lifecycle work.
 - Архив — только для автора, если не вынесена в Highlights
 - Лимиты медиафайлов стори — те же что в [file-storage.md](file-storage.md)
 - **Удаление до истечения 24ч**: автор может удалить стори в любой момент; при удалении стори немедленно исчезает из всех лент
+
+Photo/video publication acquires the File-owned exact Story reference before
+visibility. Author deletion and archive cleanup queue release of that same
+reference through a durable Story outbox after the Story transaction commits.
+Release stays pending while verified global File-reference backfill/activation
+authority is absent. Another live
+owner retains shared media; File alone decides when a zero-reference blob can be
+physically collected. Lost delete responses can be replayed by the same author
+for 30 days, including after archive cleanup removes the Story row.
 
 ---
 

@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../backend/search_client.dart';
 import '../../backend/users_client.dart';
 import '../../l10n/app_localizations.dart';
+import '../../routing/deep_link_parser.dart';
 import '../../state/auth_providers.dart';
-import '../../state/chat_providers.dart';
+import '../../state/deep_link_navigation.dart';
 import '../../state/search_providers.dart';
 import '../../state/shell_providers.dart';
 import '../../state/social_providers.dart';
@@ -197,16 +198,18 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
             ListTile(
               title: _SnippetText(snippet: hit.snippet),
               subtitle: Text(hit.messageId),
-              onTap: () {
-                final chatId = hit.chatId.isNotEmpty
-                    ? hit.chatId
-                    : (_results!.matchedChatIds.isNotEmpty
-                          ? _results!.matchedChatIds.first
-                          : null);
-                if (chatId != null) {
-                  ref.read(selectedChatIdProvider.notifier).state = chatId;
-                }
-              },
+              onTap: hit.chatId.isEmpty || hit.messageId.isEmpty
+                  ? null
+                  : () => ref
+                        .read(deepLinkNavigatorProvider)
+                        .apply(
+                          DeepLinkTarget(
+                            kind: DeepLinkKind.chatMessage,
+                            chatId: hit.chatId,
+                            messageId: hit.messageId,
+                            rawUrl: '',
+                          ),
+                        ),
             )
         else if (_results != null)
           Text(

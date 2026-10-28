@@ -20,6 +20,12 @@ def deployment():
 
 
 class UpdateTests(unittest.TestCase):
+    def test_apply_requires_resource_fence_before_any_kubernetes_call(self):
+        client=SimpleNamespace(call=unittest.mock.Mock())
+        with self.assertRaises(ValueError):
+            update.update_images(client,{'user':'registry/user@sha256:'+'c'*64},apply=True)
+        client.call.assert_not_called()
+
     def test_kubectl_patch_uses_argument_not_unsupported_stdin_filename(self):
         operations=[{'op':'replace','path':'/spec/template/spec/containers/0/image',
                      'value':'registry/user@sha256:'+'c'*64}]
@@ -122,12 +128,22 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(any(a[0] in ('create','delete') for a,b in client.calls))
         self.assertTrue(all('--dry-run=server' in a for a,b in client.calls if a[0]=='patch'))
         client=Fake();before=copy.deepcopy(client.dep)
-        update.update_images(client,{'user':image},apply=True)
+        fence=unittest.mock.Mock()
+        fence.context={'operation_id':'fixture-operation'}
+        update.update_images(client,{'user':image},apply=True,fence=fence)
+        fence.begin.assert_called_once()
+        fence.before_step.assert_called_once_with('patch-user')
+        fence.complete.assert_called_once_with({'voice-user/user':image})
+        self.assertEqual(fence.validate_baseline.call_args.args[0],{'voice-user/user':'registry/user@sha256:'+'b'*64})
         before['spec']['template']['spec']['containers'][1]['image']=image
         self.assertEqual(client.dep['spec'],before['spec'])
         self.assertTrue(any(a[0]=='delete' for a,b in client.calls))
         client=Fake();client.fail_rollout=True
-        with self.assertRaises(RuntimeError): update.update_images(client,{'user':image},apply=True)
+        fence=unittest.mock.Mock()
+        fence.context={'operation_id':'fixture-operation'}
+        with self.assertRaises(RuntimeError): update.update_images(client,{'user':image},apply=True,fence=fence)
+        fence.uncertain.assert_called_once()
+        fence.complete.assert_not_called()
         self.assertFalse(any(a[0]=='delete' for a,b in client.calls))
 
 

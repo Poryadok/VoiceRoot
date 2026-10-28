@@ -201,6 +201,11 @@ checkout репозитория, Python3 и kubeconfig нужного класт
    Qualify the rendered config/source/hash separately. First adoption needs an
    authorized config/template migration; image-only updates preserve old config.
    See [immutable web binding](DEPLOYMENT.md#immutable-web-promotion-and-environment-binding).
+    Admin and Developer Portal likewise require separate read-only runtime config
+    projections, binding `admin-dev.comrade.click` and
+    `developers-dev.comrade.click` respectively to `api-dev.comrade.click`.
+    Their images must be the same immutable refs later used in STAGING; the
+    initial config/template adoption is a separate authorized migration.
    Schema changes still require separately prepared DEV migrations from the same source.
 3. Предварительно сохранить текущие image pins и выполнить preview:
 
@@ -214,7 +219,7 @@ python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/use
 создан из актуальных staging workload inputs и dev credentials):
 
 ```sh
-python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply
+python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply --ttenrec-url http://192.168.0.109:30990 --resource-context /private/dev-operation.json
 kubectl -n voice-dev get deploy,sts,pvc
 curl --fail https://api-dev.comrade.click/health
 ```
@@ -226,10 +231,30 @@ dry-run. Apply меняет только образы основных app conta
 Namespace ownership, ConfigMap lock и UID/resourceVersion CAS защищают target
 и конкурентные обновления.
 
+Apply также требует актуальный TT `voice/DEV` claim/generation/window/revision,
+внешний operation ID и точный immutable candidate из JSON context. Формат и
+порядок observe → deploy → apply описаны в
+[операторском контракте updater](../scripts/dev/README.md#updating-wip).
+Свежие Kubernetes image pins сверяются с наблюдением текущего claim; известный
+source commit наблюдения должен быть предком candidate. Если provenance текущих
+образов неизвестен, сначала нужна отдельная квалификация, а не выдуманный commit.
+Постоянный ConfigMap `voice-dev-image-update-fence` хранит поколение и результат
+executor, не удаляется при снятии обычного updater lock и запрещает replay либо
+запись поверх незавершённой операции. TT и журнал проверяются перед каждым
+write stage; неизвестный/частичный результат удерживает lock и требует recovery.
+Уже отправленный Kubernetes request нельзя отозвать изменением TT claim: перед
+recover/confirm-safe необходимо сверить старый процесс и фактическое завершение
+его запросов. Прямой kubectl и другие operator scripts этим updater не fenced.
+Успех команды не освобождает TT окно и не создаёт deployment/check записи:
+оператор регистрирует только фактический rollout, затем удерживает ресурс через
+проверки либо передаёт через offer/accept отдельно от task ownership.
+
 При неудаче lock `voice-dev-image-update-lock` сохраняется. Сначала проверить
 rollout, Deployment и UID lock, затем решать причину; автоматического force/unlock
-и отката нет. Для отката image-only изменения повторно применить прежние
-digest через updater. Это не откатывает схему БД или уже записанные данные.
+и отката нет. Повторное применение прежних digest для отката image-only изменения
+требует отдельного reviewed compatibility/reconciliation packet; обычный
+updater отклоняет candidate, который откатывает известный source commit.
+Это не откатывает схему БД или уже записанные данные.
 
 Первые web/admin/portal images собраны из
 `e0d875ba612517cd7aac3b184a2deff41cb0fec3` и импортированы локально, без публикации
@@ -249,6 +274,40 @@ Wildcard и staging-записи не менялись. Ранее proxied-ма�
 `voice-dev/voice-dev-signaling-tls`. HTTP-01 challenges идут в dev web через
 отдельные Ingress; HTTPS — в соответствующие dev Services. LiveKit использует
 TCP31081 / UDP31082 для media; доступность страницы не доказывает работу UDP.
+
+The File bucket uses separately owned companion resources: Ingress
+`voice-dev-file-storage-https`, rendered by
+`python3 scripts/dev/file_storage_https.py render`. It reuses the existing
+`api-dev.comrade.click` host, `websecure` entrypoint and
+`voice-dev-signaling-tls` Secret. Exact `/voice-dev-files` and Prefix
+`/voice-dev-files/` route to `voice-minio:9000` without changing the signed
+host or object path. The pair is intentional: the observed Traefik3.6.6
+controller has `strictPrefixMatching=false`, so a bare bucket prefix would
+also capture sibling names such as `/voice-dev-files-other`.
+
+NetworkPolicy `voice-dev-file-storage-edge` adds only TCP9000 into Pods
+selected by `app=voice-minio`, from the `traefik` namespace **and** its observed
+controller Pod labels (`name=traefik`, `instance=traefik-traefik` under
+`app.kubernetes.io`). Both peer selectors must match. The existing isolation
+policy admits the controller only on web/API ports; read-only probes showed
+Gateway8080 reachable and MinIO9000 refused from Traefik while MinIO was healthy
+inside DEV. The companion leaves existing policies, console9001, other Pods,
+ports, namespaces and all egress permissions unchanged.
+
+The certificate operator continues to own only its ten derived Ingress names
+and fixed TLS Secret. Its canonical renewal path publishes those named objects
+without listing/pruning other Ingresses; it does not select this companion.
+The issuer source and protected installed copy are unchanged by this route
+repair. Other HTTPS/ACME routes and TLS issuance remain with their current
+owners. Any future change to the renewal selection/pruning contract must
+requalify the companion's persistence.
+
+Rendering has no live effects. Apply/recovery requires a reviewed source-bound
+operation packet, fresh DEV resource claim and baseline, create-only ownership
+and UID/resourceVersion guards. Verify actual controller routing, signed URL
+PUT/GET, TLS and unchanged Gateway/other hosts before recording qualification.
+The installed root-only renewal copy was not readable by the DEV actor;
+source-based no-prune evidence is separate from an actual renewal exercise.
 
 Root-only ACME state: `/home/voice-dev/tls/` (0700). Установленный операторский
 скрипт: `/home/voice-dev/operator/signal_tls.py`. Daily systemd timer

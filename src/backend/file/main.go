@@ -83,6 +83,13 @@ func main() {
 			return
 		}
 	}
+	storyInventorySource, err := loadStoryInventorySource(filePrincipal)
+	if err != nil {
+		log.Fatalf("Story inventory source: %v", err)
+	}
+	if storyInventorySource != nil {
+		defer func() { _ = storyInventorySource.Close() }()
+	}
 	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
 	if err != nil {
 		log.Fatalf("file principal config: %v", err)
@@ -192,6 +199,15 @@ func main() {
 		}
 		filesStore := store.NewFilesStore(pool)
 		if presigner != nil {
+			deleter = filesStore.InventoryGuardedDeleter(presigner)
+			processor = imgproc.Processor{Reader: presigner, Writer: presigner, Deleter: deleter}
+		}
+		inventoryCtx, stopInventory := context.WithCancel(context.Background())
+		defer stopInventory()
+		if err := startStoryInventoryWorker(inventoryCtx, filesStore, storyInventorySource, logger); err != nil {
+			log.Fatalf("Story inventory worker: %v", err)
+		}
+		if presigner != nil {
 			pdfCtx, stopPDF := context.WithCancel(context.Background())
 			defer stopPDF()
 			if err := startPDFRuntime(pdfCtx, filesStore, presigner, logger); err != nil {
@@ -255,6 +271,9 @@ func main() {
 			}
 		}()
 	} else {
+		if storyInventorySource != nil {
+			log.Fatal("DATABASE_URL required for Story reference inventory")
+		}
 		if principalEnabled {
 			log.Fatal("DATABASE_URL required for protected File listener")
 		}

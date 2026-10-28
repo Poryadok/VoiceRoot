@@ -8,6 +8,7 @@ import 'package:http/testing.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
 import 'package:voice_frontend/backend/gateway_config.dart';
 import 'package:voice_frontend/backend/livekit_room.dart';
+import 'package:voice_frontend/backend/screen_share_sources.dart';
 import 'package:voice_frontend/backend/voice_client.dart';
 import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/call_providers.dart';
@@ -21,6 +22,8 @@ import 'support/voice_test_theme.dart';
 class _ScreenShareRoom extends Fake implements VoiceLiveKitRoom {
   bool failFirstCapture = false;
   final captureRates = <double>[];
+  final captureAudioOptions = <bool>[];
+  final captureSourceIds = <String?>[];
   int stopCalls = 0;
 
   @override
@@ -49,8 +52,11 @@ class _ScreenShareRoom extends Fake implements VoiceLiveKitRoom {
   Future<void> startScreenShare({
     double maxFrameRate = 15,
     bool captureSystemAudio = false,
+    String? sourceId,
   }) async {
     captureRates.add(maxFrameRate);
+    captureAudioOptions.add(captureSystemAudio);
+    captureSourceIds.add(sourceId);
     if (failFirstCapture && captureRates.length == 1) {
       throw StateError('private-screen-detail-6ab');
     }
@@ -62,85 +68,195 @@ class _ScreenShareRoom extends Fake implements VoiceLiveKitRoom {
   }
 }
 
+void _testWindowsWidgets(String description, WidgetTesterCallback callback) {
+  testWidgets(
+    description,
+    callback,
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+}
+
+class _EmptySourceCatalog implements ScreenShareSourceCatalog {
+  @override
+  Future<List<ScreenShareSource>> listSources() async => const [];
+}
+
+Future<ProviderContainer> _pumpSourcePicker(
+  WidgetTester tester, {
+  bool emptySources = false,
+}) async {
+  final container = ProviderContainer(
+    overrides: [
+      ...voiceAppTestOverrides(
+        client: MockClient((_) async => http.Response('{}', 200)),
+      ),
+      if (emptySources)
+        screenShareSourceCatalogProvider.overrideWithValue(
+          _EmptySourceCatalog(),
+        ),
+    ],
+  );
+  addTearDown(container.dispose);
+  container.read(callControllerProvider.notifier).state = const CallState(
+    phase: CallPhase.active,
+    session: VoiceCallSession(
+      roomId: 'room-1',
+      livekitRoomName: 'lk-room',
+      chatId: 'chat-1',
+      initiatorProfileId: 'prof-test',
+      calleeProfileId: 'prof-peer',
+      mediaKind: VoiceCallMediaKind.audio,
+      status: VoiceCallStatus.active,
+    ),
+  );
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: voiceTestTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(
+          body: Column(children: [ScreenSharePanel(), ScreenShareCallButton()]),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return container;
+}
+
 void main() {
-  testWidgets('dual screen share shows both streams with local self preview', (
+  _testWindowsWidgets('unavailable desktop sources show a safe error', (
     tester,
   ) async {
-    const selfProfileId = 'prof-self';
-    const peerProfileId = 'prof-peer';
-    final container = ProviderContainer(
-      overrides: [
-        ...voiceAppTestOverrides(
-          client: MockClient((_) async => http.Response('{}', 200)),
-        ),
-        gatewayConfigProvider.overrideWithValue(
-          const GatewayConfig(baseUrl: 'http://api.test'),
-        ),
-        screenShareControllerProvider.overrideWith((ref) {
-          final controller = ScreenShareController(ref);
-          controller.state = const ScreenShareUiState(
-            streams: [
-              ActiveScreenShare(
-                roomId: 'room-1',
-                profileId: selfProfileId,
-                streamId: 'stream-self',
-              ),
-              ActiveScreenShare(
-                roomId: 'room-1',
-                profileId: peerProfileId,
-                streamId: 'stream-peer',
-              ),
-            ],
-            selectedProfileId: selfProfileId,
-            localStreamId: 'stream-self',
-            isSharing: true,
-          );
-          return controller;
-        }),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    container.read(callControllerProvider.notifier).state = const CallState(
-      phase: CallPhase.active,
-      session: VoiceCallSession(
-        roomId: 'room-1',
-        livekitRoomName: 'lk-room',
-        chatId: 'chat-1',
-        initiatorProfileId: selfProfileId,
-        calleeProfileId: peerProfileId,
-        mediaKind: VoiceCallMediaKind.video,
-        status: VoiceCallStatus.active,
-      ),
-    );
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: voiceTestTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: const Scaffold(body: ScreenSharePanel()),
-        ),
-      ),
-    );
+    final container = await _pumpSourcePicker(tester, emptySources: true);
+    await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
     await tester.pumpAndSettle();
-
-    expect(find.byKey(ScreenSharePanel.streamPickerKey), findsOneWidget);
-    expect(find.byKey(const Key('screen_share_local_preview')), findsOneWidget);
-    expect(find.textContaining('Waiting for video'), findsNothing);
-    expect(
-      find.byKey(Key('screen_share_remote_$peerProfileId')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.text('prof-pee'));
-    await tester.pump();
-    expect(find.byKey(const Key('screen_share_local_preview')), findsNothing);
+    final l10n = AppLocalizations.of(
+      tester.element(find.byKey(ScreenSharePanel.panelKey)),
+    )!;
+    expect(find.text(l10n.screenShareSourceUnavailable), findsOneWidget);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(container.read(screenShareControllerProvider).isSharing, isFalse);
   });
 
-  testWidgets('screen share shows waiting text and limit error', (
+  _testWindowsWidgets(
+    'cancelling source selection does not open quality or share',
+    (tester) async {
+      final container = await _pumpSourcePicker(tester);
+      await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Test screen'), findsOneWidget);
+      expect(find.text('Test window'), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(container.read(screenShareControllerProvider).isSharing, isFalse);
+      expect(
+        container.read(screenShareControllerProvider).errorMessage,
+        isNull,
+      );
+    },
+  );
+
+  testWidgets(
+    'unsupported desktop audio stays disabled and skips source picker',
+    (tester) async {
+      await _pumpSourcePicker(tester);
+      await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
+      await tester.pumpAndSettle();
+      expect(find.text('Test screen'), findsNothing);
+      expect(find.text('Test window'), findsNothing);
+      final toggle = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(toggle.value, isFalse);
+      expect(toggle.onChanged, isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.macOS),
+  );
+
+  _testWindowsWidgets(
+    'dual screen share shows both streams with local self preview',
+    (tester) async {
+      const selfProfileId = 'prof-self';
+      const peerProfileId = 'prof-peer';
+      final container = ProviderContainer(
+        overrides: [
+          ...voiceAppTestOverrides(
+            client: MockClient((_) async => http.Response('{}', 200)),
+          ),
+          gatewayConfigProvider.overrideWithValue(
+            const GatewayConfig(baseUrl: 'http://api.test'),
+          ),
+          screenShareControllerProvider.overrideWith((ref) {
+            final controller = ScreenShareController(ref);
+            controller.state = const ScreenShareUiState(
+              streams: [
+                ActiveScreenShare(
+                  roomId: 'room-1',
+                  profileId: selfProfileId,
+                  streamId: 'stream-self',
+                ),
+                ActiveScreenShare(
+                  roomId: 'room-1',
+                  profileId: peerProfileId,
+                  streamId: 'stream-peer',
+                ),
+              ],
+              selectedProfileId: selfProfileId,
+              localStreamId: 'stream-self',
+              isSharing: true,
+            );
+            return controller;
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(callControllerProvider.notifier).state = const CallState(
+        phase: CallPhase.active,
+        session: VoiceCallSession(
+          roomId: 'room-1',
+          livekitRoomName: 'lk-room',
+          chatId: 'chat-1',
+          initiatorProfileId: selfProfileId,
+          calleeProfileId: peerProfileId,
+          mediaKind: VoiceCallMediaKind.video,
+          status: VoiceCallStatus.active,
+        ),
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: voiceTestTheme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(body: ScreenSharePanel()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(ScreenSharePanel.streamPickerKey), findsOneWidget);
+      expect(
+        find.byKey(const Key('screen_share_local_preview')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Waiting for video'), findsNothing);
+      expect(
+        find.byKey(Key('screen_share_remote_$peerProfileId')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('prof-pee'));
+      await tester.pump();
+      expect(find.byKey(const Key('screen_share_local_preview')), findsNothing);
+    },
+  );
+
+  _testWindowsWidgets('screen share shows waiting text and limit error', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -199,7 +315,9 @@ void main() {
     expect(find.textContaining('3 screen shares'), findsOneWidget);
   });
 
-  testWidgets('screen share pause button toggles pause state', (tester) async {
+  _testWindowsWidgets('screen share pause button toggles pause state', (
+    tester,
+  ) async {
     final container = ProviderContainer(
       overrides: [
         ...voiceAppTestOverrides(
@@ -260,7 +378,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('screen share stop button and generic error message', (
+  _testWindowsWidgets('screen share stop button and generic error message', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -330,7 +448,7 @@ void main() {
       ('capture', 200),
       ('limit', 429),
     ]) {
-      testWidgets(
+      _testWindowsWidgets(
         'ScreenSharePanel $language ${failure.$1} safely recovers on explicit retry',
         (tester) async {
           final room = _ScreenShareRoom()
@@ -445,6 +563,8 @@ void main() {
           Future<void> startShare() async {
             await tester.tap(find.byKey(ScreenSharePanel.shareButtonKey));
             await tester.pumpAndSettle();
+            await tester.tap(find.text('Test window'));
+            await tester.pumpAndSettle();
             await tester.tap(find.text(l10n.screenShareQuality720p15));
             await tester.pumpAndSettle();
           }
@@ -499,6 +619,16 @@ void main() {
             room.captureRates,
             failure.$1 == 'capture' ? [15.0, 15.0] : [15.0],
           );
+          expect(
+            room.captureAudioOptions,
+            failure.$1 == 'capture' ? [true, true] : [true],
+          );
+          expect(
+            room.captureSourceIds,
+            failure.$1 == 'capture'
+                ? ['test-window-id', 'test-window-id']
+                : ['test-window-id'],
+          );
           for (final request in requests) {
             expect(request.method, 'POST');
             expect(request.headers['Authorization'], 'Bearer test-access');
@@ -531,10 +661,10 @@ void main() {
     }
   }
 
-  testWidgets('screen share quality dialog returns selected fps', (
+  _testWindowsWidgets('screen share quality dialog returns selected fps', (
     tester,
   ) async {
-    double? selectedFps;
+    ScreenShareStartOptions? selectedOptions;
     await tester.pumpWidget(
       MaterialApp(
         theme: voiceTestTheme(),
@@ -544,7 +674,7 @@ void main() {
           builder: (context) => Scaffold(
             body: FilledButton(
               onPressed: () async {
-                selectedFps = await showScreenShareQualityDialog(context);
+                selectedOptions = await showScreenShareQualityDialog(context);
               },
               child: const Text('open-quality'),
             ),
@@ -556,9 +686,49 @@ void main() {
 
     await tester.tap(find.text('open-quality'));
     await tester.pumpAndSettle();
+    final l10n = AppLocalizations.of(
+      tester.element(find.text('open-quality')),
+    )!;
+    expect(find.text(l10n.screenShareSystemAudio), findsOneWidget);
     await tester.tap(find.text('720p · 15 FPS'));
     await tester.pumpAndSettle();
 
-    expect(selectedFps, 15.0);
+    expect(selectedOptions?.maxFrameRate, 15.0);
+    expect(selectedOptions?.captureSystemAudio, isTrue);
   });
+
+  _testWindowsWidgets(
+    'screen share quality dialog allows opting out of system audio',
+    (tester) async {
+      ScreenShareStartOptions? selectedOptions;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: voiceTestTheme(),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: FilledButton(
+                onPressed: () async {
+                  selectedOptions = await showScreenShareQualityDialog(context);
+                },
+                child: const Text('open-quality'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open-quality'));
+      await tester.pumpAndSettle();
+      final l10n = AppLocalizations.of(
+        tester.element(find.text('open-quality')),
+      )!;
+      await tester.tap(find.text(l10n.screenShareSystemAudio));
+      await tester.tap(find.text('720p · 30 FPS'));
+      await tester.pumpAndSettle();
+
+      expect(selectedOptions?.maxFrameRate, 30.0);
+      expect(selectedOptions?.captureSystemAudio, isFalse);
+    },
+  );
 }

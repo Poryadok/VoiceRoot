@@ -16,7 +16,6 @@ import (
 	"voice/backend/pkg/grpcclient"
 	"voice/backend/pkg/privacy"
 	"voice/backend/story/internal/grpcsvc"
-	"voice/backend/story/internal/jobs"
 	"voice/backend/story/internal/storyevents"
 
 	chatv1 "voice.app/voice/chat/v1"
@@ -27,7 +26,7 @@ import (
 )
 
 // WireGRPC attaches optional upstream clients to StoryGRPC and returns a FileDeleter for purge jobs.
-func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) jobs.FileDeleter {
+func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) *FileDeleter {
 	if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 		pub, err := storyevents.NewJetStreamPublisher(natsURL)
 		if err != nil {
@@ -74,7 +73,7 @@ func WireGRPC(logger *slog.Logger, svc *grpcsvc.StoryGRPC) jobs.FileDeleter {
 		}
 	}
 
-	var deleter jobs.FileDeleter
+	var deleter *FileDeleter
 	if addr := strings.TrimSpace(os.Getenv("FILE_GRPC_ADDR")); addr != "" {
 		if conn, err := dialWithBreaker(addr); err == nil {
 			fileClient := filev1.NewFileServiceClient(conn)

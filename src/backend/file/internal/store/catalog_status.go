@@ -29,7 +29,7 @@ func (s *FilesStore) CatalogStatus(ctx context.Context, r *filev1.GetCatalogAsse
 		return nil, catalogasset.ErrAdmission
 	}
 	actor := catalogasset.ActorPair{AccountID: account, ProfileID: profile}
-	tx, e := s.Pool.Begin(ctx)
+	tx, e := BeginInventoryMutation(ctx, s.Pool, true)
 	if e != nil {
 		return nil, e
 	}

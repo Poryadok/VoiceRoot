@@ -84,6 +84,20 @@ func TestSecondaryProfileBirthCaptureAtomic(t *testing.T) {
 	require.Equal(t, 1, outbox)
 }
 
+func TestSecondaryProfileBirthCaptureSubscriptionCap(t *testing.T) {
+	db, profiles, _ := capturedBirthFixture(t, true)
+	ctx := context.Background()
+	account := db.Accounts[db.Profiles[0]]
+	created, err := profiles.CreateSecondaryProfileForTier(ctx, account, "Last free slot", nil, nil, "free")
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	before := birthCaptureState(t, db.Pool)
+	created, err = profiles.CreateSecondaryProfileForTier(ctx, account, "Over free cap", nil, nil, "free")
+	require.ErrorIs(t, err, ErrProfileLimit)
+	require.Nil(t, created)
+	require.Equal(t, before, birthCaptureState(t, db.Pool), "rejected create must leave no BIRTH or search effects")
+}
+
 func birthCaptureState(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 	var state string

@@ -1,6 +1,7 @@
 """Real client/dispatcher/action composition; filesystem/readback proofs are separate."""
 import copy
 import datetime as dt
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -20,6 +21,8 @@ class ActionsTests(unittest.TestCase):
             'contract':{'scripts':[]},'service_actor_services':['story'],
             'service_actor_authority':{'root':'captured'}}
         env={'GITHUB_RUN_ID':'37910000000','GITHUB_RUN_ATTEMPT':'2','GITHUB_JOB':'deploy','GITHUB_SHA':'f'*40,'GITHUB_TOKEN':'synthetic'}
+        from resource_claim_test import context
+        env['VOICE_TTENREC_CONTEXT']=json.dumps(context())
         prepare=bridge_client.request(['resume-cipher-upload',preserved_upload.OPERATION,env['GITHUB_RUN_ID']],env)
         request=bridge_client.request(['authorize-preserved-upload',preserved_upload.OPERATION,'123',prepare['nonce'],env['GITHUB_RUN_ID']],env)
         run={'id':37910000000,'repository':{'full_name':'Poryadok/VoiceRoot'},'head_repository':{'full_name':'Poryadok/VoiceRoot'},

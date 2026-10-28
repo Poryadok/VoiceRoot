@@ -5,15 +5,16 @@ import { setAccessToken } from "../oauth/session";
 describe("api client", () => {
   beforeEach(() => {
     sessionStorage.clear();
-    vi.stubEnv("VITE_VOICE_API_BASE", "http://api.test");
+    vi.stubEnv("VITE_VOICE_API_BASE", "https://api.test");
     vi.stubEnv("VITE_OAUTH_DISABLED", "false");
     vi.stubEnv("VITE_STAFF_TOKEN", "");
     vi.stubGlobal("fetch", vi.fn());
   });
 
   it("apiUrl normalizes path and base trailing slash", () => {
-    expect(apiUrl("/api/v1/foo")).toBe("http://api.test/api/v1/foo");
-    expect(apiUrl("api/v1/bar")).toBe("http://api.test/api/v1/bar");
+    vi.stubEnv("VITE_VOICE_API_BASE", "https://api.test/");
+    expect(apiUrl("/api/v1/foo")).toBe("https://api.test/api/v1/foo");
+    expect(apiUrl("api/v1/bar")).toBe("https://api.test/api/v1/bar");
   });
 
   it("apiFetch attaches session access token", async () => {
@@ -23,7 +24,7 @@ describe("api client", () => {
     await apiFetch("/api/v1/admin/moderation/reports");
 
     expect(fetch).toHaveBeenCalledWith(
-      "http://api.test/api/v1/admin/moderation/reports",
+      "https://api.test/api/v1/admin/moderation/reports",
       expect.objectContaining({
         headers: expect.any(Headers),
       }),

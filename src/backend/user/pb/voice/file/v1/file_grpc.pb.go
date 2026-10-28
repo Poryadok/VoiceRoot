@@ -21,6 +21,8 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	FileService_ResolveMessageAttachmentPreview_FullMethodName        = "/voice.file.v1.FileService/ResolveMessageAttachmentPreview"
 	FileService_ValidateStoryMedia_FullMethodName                     = "/voice.file.v1.FileService/ValidateStoryMedia"
+	FileService_ClaimStoryMedia_FullMethodName                        = "/voice.file.v1.FileService/ClaimStoryMedia"
+	FileService_ReleaseStoryMedia_FullMethodName                      = "/voice.file.v1.FileService/ReleaseStoryMedia"
 	FileService_RequestUpload_FullMethodName                          = "/voice.file.v1.FileService/RequestUpload"
 	FileService_ConfirmUpload_FullMethodName                          = "/voice.file.v1.FileService/ConfirmUpload"
 	FileService_GetFileURL_FullMethodName                             = "/voice.file.v1.FileService/GetFileURL"
@@ -51,6 +53,10 @@ type FileServiceClient interface {
 	ResolveMessageAttachmentPreview(ctx context.Context, in *ResolveMessageAttachmentPreviewRequest, opts ...grpc.CallOption) (*ResolveMessageAttachmentPreviewResponse, error)
 	// @voice.security=protected;callers=service:story
 	ValidateStoryMedia(ctx context.Context, in *ValidateStoryMediaRequest, opts ...grpc.CallOption) (*ValidateStoryMediaResponse, error)
+	// @voice.security=protected;callers=service:story
+	ClaimStoryMedia(ctx context.Context, in *ClaimStoryMediaRequest, opts ...grpc.CallOption) (*ClaimStoryMediaResponse, error)
+	// @voice.security=protected;callers=service:story
+	ReleaseStoryMedia(ctx context.Context, in *ReleaseStoryMediaRequest, opts ...grpc.CallOption) (*ReleaseStoryMediaResponse, error)
 	RequestUpload(ctx context.Context, in *RequestUploadRequest, opts ...grpc.CallOption) (*RequestUploadResponse, error)
 	ConfirmUpload(ctx context.Context, in *ConfirmUploadRequest, opts ...grpc.CallOption) (*ConfirmUploadResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
@@ -106,6 +112,26 @@ func (c *fileServiceClient) ValidateStoryMedia(ctx context.Context, in *Validate
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ValidateStoryMediaResponse)
 	err := c.cc.Invoke(ctx, FileService_ValidateStoryMedia_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) ClaimStoryMedia(ctx context.Context, in *ClaimStoryMediaRequest, opts ...grpc.CallOption) (*ClaimStoryMediaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClaimStoryMediaResponse)
+	err := c.cc.Invoke(ctx, FileService_ClaimStoryMedia_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *fileServiceClient) ReleaseStoryMedia(ctx context.Context, in *ReleaseStoryMediaRequest, opts ...grpc.CallOption) (*ReleaseStoryMediaResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseStoryMediaResponse)
+	err := c.cc.Invoke(ctx, FileService_ReleaseStoryMedia_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -302,6 +328,10 @@ type FileServiceServer interface {
 	ResolveMessageAttachmentPreview(context.Context, *ResolveMessageAttachmentPreviewRequest) (*ResolveMessageAttachmentPreviewResponse, error)
 	// @voice.security=protected;callers=service:story
 	ValidateStoryMedia(context.Context, *ValidateStoryMediaRequest) (*ValidateStoryMediaResponse, error)
+	// @voice.security=protected;callers=service:story
+	ClaimStoryMedia(context.Context, *ClaimStoryMediaRequest) (*ClaimStoryMediaResponse, error)
+	// @voice.security=protected;callers=service:story
+	ReleaseStoryMedia(context.Context, *ReleaseStoryMediaRequest) (*ReleaseStoryMediaResponse, error)
 	RequestUpload(context.Context, *RequestUploadRequest) (*RequestUploadResponse, error)
 	ConfirmUpload(context.Context, *ConfirmUploadRequest) (*ConfirmUploadResponse, error)
 	// @voice.security=public_gateway;callers=service:gateway
@@ -348,6 +378,12 @@ func (UnimplementedFileServiceServer) ResolveMessageAttachmentPreview(context.Co
 }
 func (UnimplementedFileServiceServer) ValidateStoryMedia(context.Context, *ValidateStoryMediaRequest) (*ValidateStoryMediaResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ValidateStoryMedia not implemented")
+}
+func (UnimplementedFileServiceServer) ClaimStoryMedia(context.Context, *ClaimStoryMediaRequest) (*ClaimStoryMediaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClaimStoryMedia not implemented")
+}
+func (UnimplementedFileServiceServer) ReleaseStoryMedia(context.Context, *ReleaseStoryMediaRequest) (*ReleaseStoryMediaResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReleaseStoryMedia not implemented")
 }
 func (UnimplementedFileServiceServer) RequestUpload(context.Context, *RequestUploadRequest) (*RequestUploadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestUpload not implemented")
@@ -456,6 +492,42 @@ func _FileService_ValidateStoryMedia_Handler(srv interface{}, ctx context.Contex
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(FileServiceServer).ValidateStoryMedia(ctx, req.(*ValidateStoryMediaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_ClaimStoryMedia_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClaimStoryMediaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ClaimStoryMedia(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ClaimStoryMedia_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ClaimStoryMedia(ctx, req.(*ClaimStoryMediaRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FileService_ReleaseStoryMedia_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseStoryMediaRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).ReleaseStoryMedia(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_ReleaseStoryMedia_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).ReleaseStoryMedia(ctx, req.(*ReleaseStoryMediaRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -798,6 +870,14 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateStoryMedia",
 			Handler:    _FileService_ValidateStoryMedia_Handler,
+		},
+		{
+			MethodName: "ClaimStoryMedia",
+			Handler:    _FileService_ClaimStoryMedia_Handler,
+		},
+		{
+			MethodName: "ReleaseStoryMedia",
+			Handler:    _FileService_ReleaseStoryMedia_Handler,
 		},
 		{
 			MethodName: "RequestUpload",

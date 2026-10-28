@@ -5,14 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
-	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -68,7 +65,7 @@ func TestMediaClientSignsExactStoryPrincipalAndDiscardsIncomingAuthority(t *test
 }
 
 func TestStoryMediaPrincipalPartialConfigurationFails(t *testing.T) {
-	for _, name := range []string{"FILE_PRINCIPAL_GRPC_ADDR", "FILE_PRINCIPAL_TLS_CA_FILE", "FILE_PRINCIPAL_TLS_SERVER_NAME", "STORY_PRINCIPAL_SIGNING_KEYS_DIR", "STORY_PRINCIPAL_ACTIVE_KID", "S2S_SIGNING_KEY_PEM", "S2S_SIGNING_KID"} {
+	for _, name := range []string{"FILE_PRINCIPAL_GRPC_ADDR", "FILE_PRINCIPAL_TLS_CA_FILE", "FILE_PRINCIPAL_TLS_SERVER_NAME", "FILE_PRINCIPAL_CLIENT_CERT_FILE", "FILE_PRINCIPAL_CLIENT_KEY_FILE", "STORY_PRINCIPAL_SIGNING_KEYS_DIR", "STORY_PRINCIPAL_ACTIVE_KID", "S2S_SIGNING_KEY_PEM", "S2S_SIGNING_KID"} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(name, "")
 			_, _, _, err := loadSignedStoryMediaClientFromEnv()
@@ -86,16 +83,22 @@ func TestStoryMediaPrincipalLoadsTwoKeysAndPublishesOnlySortedPublicKeys(t *test
 		keys[kid] = key
 		writeStoryTestKey(t, filepath.Join(dir, kid+".pem"), key)
 	}
-	caPath := filepath.Join(t.TempDir(), "ca.pem")
-	cert := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "file"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
-	der, err := x509.CreateCertificate(rand.Reader, cert, cert, &keys["z-current"].PublicKey, keys["z-current"])
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600))
+	ca, caKey, caPEM := storyMediaTestCA(t)
+	_, clientPEM, clientKeyPEM := storyMediaTestLeaf(t, ca, caKey, x509.ExtKeyUsageClientAuth, nil)
+	fixtureDir := t.TempDir()
+	caPath := filepath.Join(fixtureDir, "ca.pem")
+	clientCertPath := filepath.Join(fixtureDir, "client.crt")
+	clientKeyPath := filepath.Join(fixtureDir, "client.key")
+	require.NoError(t, os.WriteFile(caPath, caPEM, 0600))
+	require.NoError(t, os.WriteFile(clientCertPath, clientPEM, 0600))
+	require.NoError(t, os.WriteFile(clientKeyPath, clientKeyPEM, 0600))
 	t.Setenv("STORY_PRINCIPAL_SIGNING_KEYS_DIR", dir)
 	t.Setenv("STORY_PRINCIPAL_ACTIVE_KID", "z-current")
 	t.Setenv("FILE_PRINCIPAL_GRPC_ADDR", "localhost:9091")
 	t.Setenv("FILE_PRINCIPAL_TLS_CA_FILE", caPath)
 	t.Setenv("FILE_PRINCIPAL_TLS_SERVER_NAME", "file")
+	t.Setenv("FILE_PRINCIPAL_CLIENT_CERT_FILE", clientCertPath)
+	t.Setenv("FILE_PRINCIPAL_CLIENT_KEY_FILE", clientKeyPath)
 	client, conn, public, err := loadSignedStoryMediaClientFromEnv()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
@@ -116,7 +119,7 @@ func TestStoryMediaPrincipalLoadsTwoKeysAndPublishesOnlySortedPublicKeys(t *test
 		require.NotContains(t, key, "p")
 		require.NotContains(t, key, "q")
 	}
-	for _, name := range []string{"FILE_PRINCIPAL_TLS_CA_FILE", "FILE_PRINCIPAL_TLS_SERVER_NAME", "STORY_PRINCIPAL_ACTIVE_KID"} {
+	for _, name := range []string{"FILE_PRINCIPAL_TLS_CA_FILE", "FILE_PRINCIPAL_TLS_SERVER_NAME", "FILE_PRINCIPAL_CLIENT_CERT_FILE", "FILE_PRINCIPAL_CLIENT_KEY_FILE", "STORY_PRINCIPAL_ACTIVE_KID"} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(name, "")
 			_, _, _, err := loadSignedStoryMediaClientFromEnv()

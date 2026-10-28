@@ -821,7 +821,7 @@ profile_installed_packs
 rpc ListInstalledStickerPacks(ListInstalledStickerPacksRequest) returns (ListInstalledStickerPacksResponse);
 rpc GetStickerPack(GetStickerPackRequest) returns (GetStickerPackResponse);
 rpc InstallStickerPack(InstallStickerPackRequest) returns (InstallStickerPackResponse);
-rpc UninstallStickerPack(UninstallStickerPackRequest) returns (InstallStickerPackResponse);
+rpc UninstallStickerPack(UninstallStickerPackRequest) returns (UninstallStickerPackResponse);
 // CreateUserStickerPack/AddStickersToUserPack follow the File ingest slice and are not part of this catalog contract.
 
 // GIF provider search — owner: ChatService (HTTP adapter to Giphy or Tenor)

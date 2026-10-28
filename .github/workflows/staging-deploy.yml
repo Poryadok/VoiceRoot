@@ -1,8 +1,16 @@
 name: Staging deploy
 
+env:
+  VOICE_TTENREC_CONTEXT: ${{ inputs.resource_context }}
+
 on:
   workflow_call:
     inputs:
+      resource_context:
+        description: Exact current voice/STAGING claim generation window revision candidate and external operation JSON
+        required: false
+        type: string
+        default: ""
       expired_native_operation:
         description: Exact reviewed expired native recovery operation, new closed proof and dual custody
         required: false
@@ -67,6 +75,11 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      resource_context:
+        description: Exact current voice/STAGING authority and pinned candidate JSON; required for mutation
+        required: false
+        type: string
+        default: ""
       provisional_staging:
         description: Explicit images-only staging while exact master CI is pending; not final acceptance
         type: boolean
@@ -418,7 +431,8 @@ jobs:
                   return raw
               finally:os.close(fd)
           manifest=json.loads(read(code/'capture-manifest.json',65536))
-          if not isinstance(manifest,dict) or not 1<=len(manifest)<=85:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          if not isinstance(manifest,dict) or not 1<=len(manifest)<=86:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          if 'nats-rollout-preservation/resource_claim.py' not in manifest:raise SystemExit('NATS_ROLLOUT=RESOURCE_FENCE_UPGRADE_REQUIRED')
           for relative,wanted in manifest.items():
               part=pathlib.Path(relative)
               if part.is_absolute() or '..' in part.parts or not isinstance(wanted,str) or not re.fullmatch(r'[a-f0-9]{64}',wanted):raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')

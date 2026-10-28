@@ -208,7 +208,7 @@ class WorkflowLauncherTests(unittest.TestCase):
                     elif failure=='parent':manifest['../outside']='a'*64
                     elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
                     elif failure=='overbound':
-                        for index in range(86-len(manifest)):manifest['extra'+str(index)]='a'*64
+                        for index in range(87-len(manifest)):manifest['extra'+str(index)]='a'*64
                     elif failure=='directory-mode':code.chmod(0o720)
                     elif failure=='member-mode':target.chmod(0o420)
                     elif failure=='member-owner':os.chown(target,1000,0)

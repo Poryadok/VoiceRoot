@@ -3160,6 +3160,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenShareQuality720p30 => '720p · 30 FPS';
 
   @override
+  String get screenShareSystemAudio => 'Include system audio';
+
+  @override
+  String get screenShareSourceTitle => 'Choose what to share';
+
+  @override
+  String get screenShareEntireScreen => 'Entire screen';
+
+  @override
+  String get screenShareWindow => 'Window or application';
+
+  @override
+  String get screenShareSourceUnavailable =>
+      'No screens or windows are available to share';
+
+  @override
   String get screenShareLimitReached =>
       'This voice chat already has 3 screen shares';
 
@@ -3168,7 +3184,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get platformWebSystemAudioUnavailable =>
-      'System audio sharing is not available in the browser';
+      'System audio sharing is not available on this platform';
 
   @override
   String get platformWebGlobalPttUnavailable =>
@@ -3991,4 +4007,69 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addGameModeDuplicate => 'Use a different name for each mode.';
+
+  @override
+  String get chatLinkPreviewLoading => 'Loading link preview…';
+
+  @override
+  String get chatLinkPreviewUnavailable => 'Preview unavailable';
+
+  @override
+  String get chatLinkPreviewRetry => 'Retry';
+
+  @override
+  String get gameCatalogAll => 'All games';
+
+  @override
+  String get gameCatalogBrowseAll => 'Browse all';
+
+  @override
+  String get gameCatalogChanged =>
+      'The catalog changed. Restart to see the current games.';
+
+  @override
+  String get gameCatalogClearSearch => 'Clear search';
+
+  @override
+  String get gameCatalogLoadMore => 'Load more games';
+
+  @override
+  String get gameCatalogPopular => 'Popular';
+
+  @override
+  String get gameCatalogRecent => 'Recent';
+
+  @override
+  String get gameCatalogRecentError => 'Could not load recent games';
+
+  @override
+  String get gameCatalogSearchResults => 'Search results';
+
+  @override
+  String get composerVoiceHold => 'Hold to record · slide up to lock';
+
+  @override
+  String get composerVoicePermission =>
+      'Microphone access is required. Allow access and try again.';
+
+  @override
+  String get composerVoiceProcessing => 'Preparing recording…';
+
+  @override
+  String get composerVoiceTooShort => 'Record at least 1 second.';
+
+  @override
+  String get composerVoiceError => 'Recording failed. Try again.';
+
+  @override
+  String get composerVoiceStop => 'Finish recording';
+
+  @override
+  String get composerVoiceCancel => 'Cancel recording';
+
+  @override
+  String get composerVoiceLocked => 'Recording locked';
+
+  @override
+  String get queueSearchNoRolePreference => 'No role preference';
 }

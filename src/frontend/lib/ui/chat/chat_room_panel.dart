@@ -56,6 +56,7 @@ import 'scheduled_messages_strip.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
+import 'link_preview.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
@@ -259,6 +260,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   final _sendMenuAnchor = GlobalKey();
   final _emojiFocus = FocusNode();
   final _scrollController = ScrollController();
+  final _messageRowKeys = <String, GlobalKey>{};
   final _inChatSearchTriggerFocus = FocusNode(
     debugLabel: 'chat-room-search-trigger',
   );
@@ -291,6 +293,9 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   var _pinnedJumpGeneration = 0;
   String? _shownPinnedMessageId;
   var _highlightedMessageId = null as String?;
+  String? _pendingMessageJumpId;
+  Object? _pendingMessageJumpToken;
+  Timer? _messageHighlightTimer;
   var _liveMessageAnnouncement = '';
   ChatDraftKey? _draftKey;
   _TextSendAttempt? _pendingTextSend;
@@ -308,6 +313,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
 
   @override
   void dispose() {
+    _messageHighlightTimer?.cancel();
     _cancelTextSend();
     _pinnedJumpGeneration++;
     _attachmentOperation++;
@@ -331,6 +337,11 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
   void didUpdateWidget(covariant ChatRoomPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chatId != widget.chatId) {
+      _messageRowKeys.clear();
+      _pendingMessageJumpId = null;
+      _pendingMessageJumpToken = null;
+      _messageHighlightTimer?.cancel();
+      _highlightedMessageId = null;
       _cancelTextSend();
       _chatInfoSearchHandoffGeneration++;
       _inChatSearchOpen = false;
@@ -436,6 +447,14 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     bool Function()? isCancelled,
   }) async {
     final generation = ++_pinnedJumpGeneration;
+    final chatId = widget.chatId;
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    bool cancelled() =>
+        !mounted ||
+        widget.chatId != chatId ||
+        generation != _pinnedJumpGeneration ||
+        ref.read(authControllerProvider).activeProfileId != profileId ||
+        (isCancelled?.call() ?? false);
     final controller = ref.read(
       chatRoomControllerProvider(widget.chatId).notifier,
     );
@@ -443,51 +462,97 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
     if (!room.messages.any((message) => message.id == messageId)) {
       final found = await controller.loadHistoryUntilMessage(
         messageId,
-        isCancelled: () =>
-            !mounted ||
-            generation != _pinnedJumpGeneration ||
-            (isCancelled?.call() ?? false),
+        isCancelled: cancelled,
       );
       if (!found) return false;
       room = ref.read(chatRoomControllerProvider(widget.chatId));
     }
-    if (!mounted ||
-        generation != _pinnedJumpGeneration ||
-        (isCancelled?.call() ?? false)) {
-      return false;
-    }
+    if (cancelled()) return false;
     final index = room.messages.indexWhere(
       (message) => message.id == messageId,
     );
     if (index < 0) return false;
     final completed = Completer<bool>();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted ||
-          generation != _pinnedJumpGeneration ||
-          (isCancelled?.call() ?? false) ||
-          !_scrollController.hasClients) {
+      if (cancelled() || !_scrollController.hasClients) {
         completed.complete(false);
         return;
       }
       final max = _scrollController.position.maxScrollExtent;
       final count = room.messages.length;
-      final target = count <= 1 ? max : max * (index / (count - 1));
       try {
-        await _scrollController.animateTo(
-          target,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-        );
-        completed.complete(
-          mounted &&
-              generation == _pinnedJumpGeneration &&
-              !(isCancelled?.call() ?? false),
-        );
+        // Stop a history-update auto-scroll before locating the requested row.
+        // Index/extent is only a seek hint: unequal row heights require the
+        // actual target context before a jump can be considered successful.
+        final hint = _messageRowKeys[messageId]?.currentContext == null
+            ? (count <= 1 ? max : max * (index / (count - 1)))
+            : _scrollController.offset;
+        _scrollController.jumpTo(hint);
+        await _nextMessageLayoutFrame();
+        final visitedOffsets = <double>{};
+        while (!cancelled() && _scrollController.hasClients) {
+          final targetContext = _messageRowKeys[messageId]?.currentContext;
+          if (targetContext != null && targetContext.mounted) {
+            await Scrollable.ensureVisible(
+              targetContext,
+              alignment: 0.15,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut,
+            );
+            completed.complete(!cancelled());
+            return;
+          }
+          final position = _scrollController.position;
+          if (!visitedOffsets.add(position.pixels)) break;
+          final messages = ref
+              .read(chatRoomControllerProvider(chatId))
+              .messages;
+          final targetIndex = messages.indexWhere((m) => m.id == messageId);
+          if (targetIndex < 0) break;
+          int? firstVisibleIndex;
+          for (var i = 0; i < messages.length; i++) {
+            final rowContext = _messageRowKeys[messages[i].id]?.currentContext;
+            if (rowContext == null || !rowContext.mounted) continue;
+            final rowBox = rowContext.findRenderObject();
+            if (rowBox is! RenderBox || !rowBox.hasSize) {
+              continue;
+            }
+            final scrollable = Scrollable.of(rowContext);
+            if (!scrollable.mounted) continue;
+            final viewportBox = scrollable.context.findRenderObject();
+            if (viewportBox is! RenderBox || !viewportBox.hasSize) continue;
+            final top = rowBox
+                .localToGlobal(Offset.zero, ancestor: viewportBox)
+                .dy;
+            if (top + rowBox.size.height > 0 && top < viewportBox.size.height) {
+              firstVisibleIndex = i;
+              break;
+            }
+          }
+          final direction = firstVisibleIndex == null
+              ? (position.pixels > position.minScrollExtent ? -1 : 1)
+              : (targetIndex < firstVisibleIndex ? -1 : 1);
+          final next =
+              (position.pixels + direction * position.viewportDimension * 0.8)
+                  .clamp(position.minScrollExtent, position.maxScrollExtent)
+                  .toDouble();
+          if (next == position.pixels) break;
+          _scrollController.jumpTo(next);
+          await _nextMessageLayoutFrame();
+        }
+        completed.complete(false);
       } catch (_) {
         completed.complete(false);
       }
     });
     return completed.future;
+  }
+
+  Future<void> _nextMessageLayoutFrame() {
+    final frame = Completer<void>();
+    WidgetsBinding.instance.addPostFrameCallback((_) => frame.complete());
+    WidgetsBinding.instance.scheduleFrame();
+    return frame.future;
   }
 
   void _handlePendingPinnedMessageJump(PendingPinnedMessageJump request) {
@@ -506,6 +571,56 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
             null;
       }
     }());
+  }
+
+  void _schedulePendingMessageJump(String messageId) {
+    if (_pendingMessageJumpId == messageId) return;
+    final token = Object();
+    final chatId = widget.chatId;
+    final profileId = ref.read(authControllerProvider).activeProfileId;
+    _pendingMessageJumpId = messageId;
+    _pendingMessageJumpToken = token;
+    bool isCancelled() =>
+        !mounted ||
+        widget.chatId != chatId ||
+        !identical(_pendingMessageJumpToken, token) ||
+        ref.read(selectedChatIdProvider) != chatId ||
+        ref.read(authControllerProvider).activeProfileId != profileId ||
+        ref.read(pendingChatMessageScrollProvider(chatId)) != messageId;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (isCancelled()) return;
+        final opened = await _scrollToMessage(
+          messageId,
+          isCancelled: isCancelled,
+        );
+        if (isCancelled()) return;
+        final currentRoom = ref.read(chatRoomControllerProvider(chatId));
+        // Token refresh can replace the initial history during a pending jump.
+        if (!opened && currentRoom.isLoading) return;
+        if (ref.read(pendingChatMessageHighlightProvider(chatId)) ==
+            messageId) {
+          if (opened) {
+            _messageHighlightTimer?.cancel();
+            setState(() => _highlightedMessageId = messageId);
+            _messageHighlightTimer = Timer(const Duration(seconds: 2), () {
+              if (mounted) setState(() => _highlightedMessageId = null);
+            });
+          }
+          ref.read(pendingChatMessageHighlightProvider(chatId).notifier).state =
+              null;
+        }
+        ref.read(pendingChatMessageScrollProvider(chatId).notifier).state =
+            null;
+      } finally {
+        if (mounted && identical(_pendingMessageJumpToken, token)) {
+          setState(() {
+            _pendingMessageJumpId = null;
+            _pendingMessageJumpToken = null;
+          });
+        }
+      }
+    });
   }
 
   @override
@@ -905,52 +1020,25 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
       _unreadCaptured = true;
     }
 
-    ref.listen(pendingChatMessageScrollProvider(widget.chatId), (prev, next) {
-      if (next != null && next.isNotEmpty) {
-        unawaited(
-          _scrollToMessage(next).then((_) {
-            if (!mounted) return;
-            final pending = ref.read(
-              pendingChatMessageScrollProvider(widget.chatId),
-            );
-            if (pending == next) {
-              ref
-                      .read(
-                        pendingChatMessageScrollProvider(
-                          widget.chatId,
-                        ).notifier,
-                      )
-                      .state =
-                  null;
-            }
-          }),
-        );
-      }
-    });
+    // Navigation may publish this request before the room mounts, or while its
+    // first REST page is loading. Observe its current value on every history
+    // update rather than relying on a future provider change.
+    final pendingMessageId = ref.watch(
+      pendingChatMessageScrollProvider(widget.chatId),
+    );
+    if (pendingMessageId != null &&
+        pendingMessageId.isNotEmpty &&
+        activeId != null &&
+        historyBelongsToActiveProfile &&
+        !room.isLoading &&
+        !room.isLoadingOlder &&
+        ref.watch(selectedChatIdProvider) == widget.chatId) {
+      _schedulePendingMessageJump(pendingMessageId);
+    }
 
     ref.listen(pendingPinnedMessageJumpProvider(widget.chatId), (prev, next) {
       if (next == null) return;
       _handlePendingPinnedMessageJump(next);
-    });
-
-    ref.listen(pendingChatMessageHighlightProvider(widget.chatId), (
-      prev,
-      next,
-    ) {
-      if (next != null && next.isNotEmpty) {
-        setState(() => _highlightedMessageId = next);
-        Future<void>.delayed(const Duration(seconds: 2), () {
-          if (mounted && _highlightedMessageId == next) {
-            setState(() => _highlightedMessageId = null);
-          }
-        });
-        ref
-                .read(
-                  pendingChatMessageHighlightProvider(widget.chatId).notifier,
-                )
-                .state =
-            null;
-      }
     });
 
     ref.listen(composerFocusRequestProvider, (prev, next) {
@@ -1405,6 +1493,7 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                               key: ChatRoomPanel.messagesKey,
                               chatId: widget.chatId,
                               scrollController: _scrollController,
+                              messageRowKeys: _messageRowKeys,
                               room: room,
                               ephemeralMessages: ephemeralMessages,
                               deferredInteraction: deferredInteraction,
@@ -1438,7 +1527,24 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             chatId: widget.chatId,
                             controller: _inChatSearchController,
                             showSearchField: false,
-                            onActiveMessageChanged: _scrollToMessage,
+                            onActiveMessageChanged: (messageId) {
+                              ref
+                                      .read(
+                                        pendingChatMessageScrollProvider(
+                                          widget.chatId,
+                                        ).notifier,
+                                      )
+                                      .state =
+                                  messageId;
+                              ref
+                                      .read(
+                                        pendingChatMessageHighlightProvider(
+                                          widget.chatId,
+                                        ).notifier,
+                                      )
+                                      .state =
+                                  messageId;
+                            },
                             onDismiss: _closeInChatSearch,
                           ),
                         ),
@@ -3179,6 +3285,7 @@ class _MessageListView extends ConsumerWidget {
     super.key,
     required this.chatId,
     required this.scrollController,
+    required this.messageRowKeys,
     required this.room,
     required this.ephemeralMessages,
     this.deferredInteraction,
@@ -3195,6 +3302,7 @@ class _MessageListView extends ConsumerWidget {
 
   final String chatId;
   final ScrollController scrollController;
+  final Map<String, GlobalKey> messageRowKeys;
   final ChatRoomState room;
   final List<EphemeralBotMessage> ephemeralMessages;
   final DeferredBotInteraction? deferredInteraction;
@@ -3217,9 +3325,21 @@ class _MessageListView extends ConsumerWidget {
     final hasOlderControl = room.hasMore || room.isLoadingOlder;
     final ephemeralCount = ephemeralMessages.length;
     final deferredCount = deferredInteraction != null ? 1 : 0;
+    final messageIds = rows.map((row) => row.message.id).toSet();
+    messageRowKeys.removeWhere((id, _) => !messageIds.contains(id));
+    final rowIndices = <Key, int>{};
+    for (var i = 0; i < rows.length; i++) {
+      final id = rows[i].message.id;
+      final key = messageRowKeys.putIfAbsent(
+        id,
+        () => GlobalKey(debugLabel: 'message-row:$chatId:$id'),
+      );
+      rowIndices[key] = i + (hasOlderControl ? 1 : 0);
+    }
     return ListView.builder(
       controller: scrollController,
       padding: const EdgeInsets.all(12),
+      findChildIndexCallback: (key) => rowIndices[key],
       itemCount:
           rows.length +
           ephemeralCount +
@@ -3263,6 +3383,7 @@ class _MessageListView extends ConsumerWidget {
         final isHighlighted = highlightedMessageId == msg.id;
         final isKeyboardSelected = keyboardSelectedMessageId == msg.id;
         return Column(
+          key: messageRowKeys[msg.id],
           children: [
             if (row.unreadSeparator)
               ChatUnreadSeparator(label: l10n.chatUnreadSeparator),
@@ -3447,6 +3568,16 @@ class _MessageBubbleContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
+    final previewUrl =
+        !message.isE2e &&
+            !message.decryptionFailed &&
+            (message.contentType == null ||
+                message.contentType ==
+                    messaging_enums
+                        .MessageContentType
+                        .MESSAGE_CONTENT_TYPE_TEXT)
+        ? linkPreviewUrlFromContent(message.content)
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -3477,6 +3608,11 @@ class _MessageBubbleContent extends StatelessWidget {
           MentionMessageContent(
             content: message.content,
             mentions: message.mentions,
+          ),
+        if (previewUrl != null)
+          LinkPreviewCard(
+            key: ValueKey('message_link_preview_${message.id}'),
+            url: previewUrl,
           ),
         if (message.editedAt != null)
           Text(
