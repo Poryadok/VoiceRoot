@@ -2,6 +2,7 @@ import hashlib
 import multiprocessing
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -69,6 +70,40 @@ class MigrationInputsTest(unittest.TestCase):
 
 
 class CleanupTest(unittest.TestCase):
+    def test_unknown_create_response_is_never_cleaned_by_name_or_replayed(self):
+        class Journal:
+            def __init__(self): self.events = []
+            def begin(self, kind, name, labels): self.events.append(('begin', kind)); return 'a' * 32
+            def uncertain(self, kind, nonce): self.events.append(('uncertain', kind, nonce))
+        journal = Journal(); calls = []; resources = []
+        def docker(*args, **kwargs):
+            calls.append(args)
+            raise subprocess.TimeoutExpired('docker', 120)
+        with patch.object(restore, '_docker', side_effect=docker):
+            with self.assertRaises(restore.RestoreUncertain):
+                restore._create(journal, resources, 'postgres', 'sha256:' + 'b' * 64, [])
+        self.assertEqual([args[0] for args in calls], ['create'])
+        self.assertEqual(resources, [])
+        self.assertEqual(journal.events[-1], ('uncertain', 'postgres', 'a' * 32))
+
+    def test_failed_remove_remains_uncertain_and_never_reports_absent(self):
+        class Journal:
+            def __init__(self): self.events = []
+            def begin_remove(self, kind, cid): self.events.append(('remove', cid))
+            def removed(self, kind, cid, absent): self.events.append(('removed', cid))
+            def uncertain(self, kind, nonce): self.events.append(('uncertain', nonce))
+        journal = Journal(); calls = []; cid = 'a' * 64
+        def docker(*args, **kwargs):
+            calls.append(args)
+            if args[0] == 'inspect':
+                return json.dumps([{'Id': cid, 'Config': {'Labels': {'voice.test.owner': 'owned'}}}]).encode()
+            raise subprocess.TimeoutExpired('docker', 120)
+        with patch.object(restore, '_docker', side_effect=docker):
+            with self.assertRaises(restore.RestoreUncertain):
+                restore._cleanup(journal, [('postgres', 'nonce', cid, 'owned', [])])
+        self.assertEqual([args[0] for args in calls], ['inspect', 'rm'])
+        self.assertEqual(journal.events, [('remove', cid), ('uncertain', 'nonce')])
+
     def test_startup_wait_requires_an_authenticated_sql_probe(self):
         with patch.object(restore, '_docker', side_effect=[restore.RestoreError('starting'), b'160014']) as docker, \
              patch.object(restore.time, 'sleep'):
