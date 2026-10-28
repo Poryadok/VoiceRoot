@@ -33,11 +33,23 @@ the central operation must separately establish any applicable external-I/O
 invariant. None of these sampled checks revokes a request already submitted.
 
 After migrations, call `resume(targets)` with the separately admitted current
-target objects, not the old objects. The full target UID/RV/spec must match,
+target objects, not the old objects. The target UID/generation/full spec must match,
 targets and predecessor Pods must be retired, and the CAS restores only each
 original replica count. A failed or unknown effect poisons the invocation,
 marks the fence uncertain when possible, and requires operator reconciliation;
 do not replay, auto-rollback or release the lock from absence alone.
+
+Target preflight binds UID, generation and full spec to the caller's admitted
+target; status-only resourceVersion changes are allowed. The subsequent patch
+uses the fresh observed resourceVersion as an exact CAS test. Reobservation
+requires the same UID/full spec and the precise expected generation transition,
+even if status advances resourceVersion. `resume` returns the invocation and an
+effects map keyed by `writer-resume-<kindlower>-<name>`: each entry has kind,
+name, restored replicas, nonce, receipt hash, UID, spec hash, response and fresh
+resourceVersions, and generation. The consumer must verify those against the
+private journal, complete owned ledger map and its authenticated image target.
+Full specifications remain private. Before each next effect and at completion,
+the implementation compares the entire writer effect map with its journal.
 
 Linux focused checks: `python3 scripts/dev/writer_cut_test.py`, followed by
 `python3 scripts/dev/media_operation_guard_test.py` and

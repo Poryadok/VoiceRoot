@@ -41,9 +41,10 @@ class Client:
         if (patch[0]['value'] != current['metadata']['uid'] or patch[1]['value'] != current['metadata']['resourceVersion']
                 or patch[2]['value'] != current['spec']):
             raise RuntimeError('CAS conflict')
+        changed = current['spec']['replicas'] != patch[3]['value']
         current['spec']['replicas'] = patch[3]['value']
         current['metadata']['resourceVersion'] = str(int(current['metadata']['resourceVersion']) + 1)
-        current['metadata']['generation'] += 1
+        current['metadata']['generation'] += int(changed)
         current['status'] = {'observedGeneration': current['metadata']['generation'],
                              'replicas': current['spec']['replicas'], 'readyReplicas': current['spec']['replicas']}
         if self.lost: raise OSError('response lost after commit')
@@ -159,7 +160,7 @@ class WriterCutTest(unittest.TestCase):
     def test_stale_resume_target_never_restores_any(self):
         self.cut.drain()
         targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
-        self.client.workloads[('StatefulSet', 'voice-b')]['metadata']['resourceVersion'] = '9'
+        self.client.workloads[('StatefulSet', 'voice-b')]['spec']['template']['spec']['containers'][0]['image'] = 'foreign'
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
         self.assertEqual(len(self.client.patches), 2)
 
@@ -183,6 +184,98 @@ class WriterCutTest(unittest.TestCase):
         self.cut.resume(targets)
         self.assertEqual(current['spec']['replicas'], 2)
         self.assertEqual(current['spec']['template']['spec']['containers'][0]['image'], 'target-image')
+
+    def test_resume_accepts_status_only_rv_and_returns_generation_receipts(self):
+        self.cut.drain()
+        targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
+        self.client.workloads[('Deployment', 'voice-a')]['metadata']['resourceVersion'] = '18'
+        result = self.cut.resume(targets)
+        entry = result['effects']['writer-resume-deployment-voice-a']
+        self.assertEqual(entry['replicas'], 2)
+        self.assertEqual(entry['generation'], self.client.workloads[('Deployment', 'voice-a')]['metadata']['generation'])
+        self.assertEqual(self.client.patches[2][1]['value'], '18')
+        self.assertEqual(entry['receipt_sha256'], writer_cut.digest(
+            self.journal.state['steps']['writer-resume-deployment-voice-a']['receipt']))
+
+    def test_resume_rejects_generation_drift_before_mutation(self):
+        self.cut.drain()
+        targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
+        self.client.workloads[('Deployment', 'voice-a')]['metadata']['generation'] += 1
+        self.client.workloads[('Deployment', 'voice-a')]['status']['observedGeneration'] += 1
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.assertEqual(len(self.client.patches), 2)
+
+    def test_resume_rejects_target_terminating_after_admission(self):
+        self.cut.drain()
+        targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
+        current = self.client.workloads[('Deployment', 'voice-a')]
+        current['metadata']['deletionTimestamp'] = '2026-10-29T00:00:00Z'
+        current['metadata']['resourceVersion'] = '20'
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.assertEqual(len(self.client.patches), 2)
+
+    def test_completed_effect_removed_from_ledger_blocks_next_patch(self):
+        before = self.cut._complete
+        def alter_after_first(name, record, receipt):
+            before(name, record, receipt)
+            if name == 'writer-drain-deployment-voice-a':
+                del self.ledger.row['writer_cut_effects'][name]
+                self.ledger.version += 1
+        with mock.patch.object(self.cut, '_complete', side_effect=alter_after_first):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.drain()
+        self.assertEqual(len(self.client.patches), 1)
+
+    def test_previous_effect_lost_after_final_guard_never_submits_next_patch(self):
+        guard = self.cut._guard
+        def drift_after_guard():
+            guard()
+            effects = self.ledger.row.get('writer_cut_effects', {})
+            if (effects.get('writer-drain-statefulset-voice-b', {}).get('status') == 'pending'
+                    and 'writer-drain-deployment-voice-a' in effects):
+                del effects['writer-drain-deployment-voice-a']
+                self.ledger.version += 1
+        with mock.patch.object(self.cut, '_guard', side_effect=drift_after_guard):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.drain()
+        self.assertEqual(len(self.client.patches), 1)
+
+    def test_status_only_reobservation_preserves_success_receipt(self):
+        self.cut.drain()
+        targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
+        original = self.client.patch
+        def status_update(kind, name, patch):
+            result = original(kind, name, patch)
+            obj = self.client.workloads[(kind, name)]
+            obj['metadata']['resourceVersion'] = str(int(obj['metadata']['resourceVersion']) + 1)
+            return result
+        self.cut._patch = status_update
+        entry = self.cut.resume(targets)['effects']['writer-resume-deployment-voice-a']
+        self.assertNotEqual(entry['responseResourceVersion'], entry['resourceVersion'])
+        self.assertEqual(entry['generation'], self.client.workloads[('Deployment', 'voice-a')]['metadata']['generation'])
+
+    def test_generation_change_after_commit_holds(self):
+        self.cut.drain()
+        targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
+        original = self.client.patch
+        def changed(kind, name, patch):
+            result = original(kind, name, patch)
+            self.client.workloads[(kind, name)]['metadata']['generation'] += 1
+            return result
+        self.cut._patch = changed
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.assertEqual(len(self.client.patches), 3)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_resource_version_changed_after_preflight_refuses_cas(self):
+        self.cut.drain()
+        targets = [copy.deepcopy(self.client.workloads[(o['kind'], o['metadata']['name'])]) for o in self.sources]
+        original = self.client.patch
+        def drift(kind, name, patch):
+            self.client.workloads[(kind, name)]['metadata']['resourceVersion'] = '30'
+            return original(kind, name, patch)
+        self.cut._patch = drift
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.assertEqual(self.client.workloads[('Deployment', 'voice-a')]['spec']['replicas'], 0)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
 
     def test_old_rs_pod_remains_detected_after_rs_deletion(self):
         self.client.rs = [{'metadata': {'uid': 'rs-old', 'ownerReferences': [

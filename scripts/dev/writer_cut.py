@@ -101,6 +101,7 @@ class WriterCut:
             if (obj['kind'] not in ('Deployment', 'StatefulSet') or meta['namespace'] != 'voice-dev' or
                     not isinstance(name, str) or not re.fullmatch(r'[a-z0-9]([-a-z0-9]*[a-z0-9])?', name) or
                     len(name) > 253 or not meta['uid'] or not meta['resourceVersion'] or meta.get('deletionTimestamp') or
+                    type(meta.get('generation')) is not int or meta['generation'] < 1 or
                     type(spec['replicas']) is not int or spec['replicas'] < 0):
                 raise RecoveryRequired('invalid writer identity')
         except (KeyError, TypeError):
@@ -111,7 +112,25 @@ class WriterCut:
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
         if self.started:
             row, _ = self.fence.ledger.read()
-            if not self._owned(row): raise RecoveryRequired('writer invocation ownership changed')
+            if not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map():
+                raise RecoveryRequired('writer invocation or effect map changed')
+
+    def _effect_map(self, exclude=None):
+        effects = {}
+        for name, entry in self.journal.state['steps'].items():
+            if not (name.startswith('writer-drain-') or name.startswith('writer-resume-') or name == 'writer-cut-drained'):
+                continue
+            if name == exclude: continue
+            if (not isinstance(entry, dict) or entry.get('status') not in ('pending', 'done') or
+                    not isinstance(entry.get('nonce'), str) or not re.fullmatch(r'[0-9a-f]{32}', entry['nonce']) or
+                    entry.get('details_sha256') != digest(entry.get('details'))):
+                raise RecoveryRequired('private writer effect record changed')
+            record = {k: entry[k] for k in ('status', 'nonce', 'details_sha256')}
+            if entry['status'] == 'done':
+                if 'receipt' not in entry: raise RecoveryRequired('writer receipt missing')
+                record['receipt_sha256'] = digest(entry['receipt'])
+            effects[name] = record
+        return effects
 
     def _uncertain(self):
         self.poisoned = True
@@ -133,7 +152,8 @@ class WriterCut:
         self.journal.save()
         self.fence.authority()
         row, revision = self.fence.ledger.read()
-        if not self.fence.owned(row) or row.get('status') != 'active' or 'writer_cut_invocation' in row:
+        if (not self.fence.owned(row) or row.get('status') != 'active' or 'writer_cut_invocation' in row or
+                row.get('writer_cut_effects', {})):
             raise RecoveryRequired('writer invocation already owned')
         row['writer_cut_invocation'] = {'nonce': self.invocation, 'operation_id': self.fence.context['operation_id']}
         self.fence.ledger.write(revision, row)
@@ -154,6 +174,7 @@ class WriterCut:
         row, rev = self.fence.ledger.read()
         effects = row.get('writer_cut_effects', {})
         if (not self._owned(row) or not isinstance(effects, dict) or name in effects or
+                effects != self._effect_map(exclude=name) or
                 any(not isinstance(v, dict) or v.get('status') != 'done' for v in effects.values())):
             raise RecoveryRequired('writer effect already pending')
         row['writer_cut_effects'] = copy.deepcopy(effects) | {name: record}
@@ -168,7 +189,8 @@ class WriterCut:
     def _complete(self, name, record, receipt):
         self._guard()
         row, revision = self.fence.ledger.read()
-        if not self._owned(row) or row.get('writer_cut_effects', {}).get(name) != record:
+        if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
+                row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed')
         self.journal.state['steps'][name].update(status='done', receipt=copy.deepcopy(receipt))
         self.journal.save()
@@ -233,7 +255,8 @@ class WriterCut:
         self._guards()
         self._guard()
         row, _ = self.fence.ledger.read()
-        if not self._owned(row) or row.get('writer_cut_effects', {}).get(name) != record:
+        if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
+                row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed before submission')
         result = self._patch(kind, meta['name'], patch)
         actual = self._get(kind, meta['name'])
@@ -241,11 +264,14 @@ class WriterCut:
             if (item.get('kind') != kind or item.get('metadata', {}).get('uid') != meta['uid'] or
                     item.get('metadata', {}).get('namespace') != 'voice-dev' or
                     item.get('metadata', {}).get('name') != meta['name'] or
+                    item.get('metadata', {}).get('deletionTimestamp') or
                     not item.get('metadata', {}).get('resourceVersion') or
                     type(item.get('metadata', {}).get('generation')) is not int or item.get('spec') != target):
                 raise RecoveryRequired('writer effect identity mismatch')
         if result['metadata']['generation'] != actual['metadata']['generation']:
             raise RecoveryRequired('writer generation changed before reobservation')
+        if actual['metadata']['generation'] != meta['generation'] + (original['replicas'] != replicas):
+            raise RecoveryRequired('unexpected writer generation transition')
         receipt = {'uid': meta['uid'], 'spec_sha256': digest(target),
                    'responseResourceVersion': result['metadata']['resourceVersion'],
                    'resourceVersion': actual['metadata']['resourceVersion'], 'generation': actual['metadata']['generation']}
@@ -332,6 +358,7 @@ class WriterCut:
             self.journal.save()
             for source in self.admission['controllers']:
                 current = self._get(source['kind'], source['metadata']['name'])
+                self._workload(current)
                 if (current.get('metadata', {}).get('uid') != source['metadata']['uid'] or
                         current.get('metadata', {}).get('resourceVersion') != source['metadata']['resourceVersion'] or
                         current.get('spec') != source['spec']):
@@ -359,7 +386,7 @@ class WriterCut:
             self._guard()
             self._guards()
             original = {(x['kind'], x['metadata']['name']): x for x in self.admission['controllers']}
-            seen = set()
+            seen, fresh = set(), []
             for target in targets:
                 self._workload(target)
                 key = (target['kind'], target['metadata']['name'])
@@ -367,8 +394,12 @@ class WriterCut:
                     raise RecoveryRequired('target scope or paused replica count invalid')
                 seen.add(key)
                 current = self._get(*key)
-                if (current.get('metadata', {}).get('uid') != target['metadata']['uid'] or
-                        current.get('metadata', {}).get('resourceVersion') != target['metadata']['resourceVersion'] or
+                self._workload(current)
+                if (current.get('kind') != target['kind'] or current.get('metadata', {}).get('name') != key[1] or
+                        current.get('metadata', {}).get('namespace') != 'voice-dev' or
+                        current.get('metadata', {}).get('uid') != target['metadata']['uid'] or
+                        current.get('metadata', {}).get('generation') != target['metadata']['generation'] or
+                        not current.get('metadata', {}).get('resourceVersion') or
                         current.get('spec') != target['spec']):
                     raise RecoveryRequired('current target changed')
                 generation = current.get('metadata', {}).get('generation')
@@ -377,12 +408,20 @@ class WriterCut:
                         status['observedGeneration'] < generation or status.get('replicas', 0) != 0 or
                         status.get('readyReplicas', 0) != 0):
                     raise RecoveryRequired('current target not retired')
+                fresh.append(current)
             if not self._pods_drained() or not self._pods_drained(targets):
                 raise RecoveryRequired('current or predecessor writer pods remain')
-            for target in targets:
+            effects = {}
+            for target in fresh:
                 key = (target['kind'], target['metadata']['name'])
-                self._effect('resume', target, original[key]['spec']['replicas'])
+                receipt = self._effect('resume', target, original[key]['spec']['replicas'])
+                step = 'writer-resume-' + target['kind'].lower() + '-' + target['metadata']['name']
+                saved = self.journal.state['steps'][step]
+                effects[step] = {'kind': key[0], 'name': key[1], 'replicas': original[key]['spec']['replicas'],
+                                 'nonce': saved['nonce'], 'receipt_sha256': digest(receipt), **receipt}
+            self._guard()
             self.drained = False
-            return {'status': 'replicas-restored', 'count': len(seen)}
+            return {'status': 'replicas-restored', 'count': len(seen), 'effects': effects,
+                    'invocation': {'nonce': self.invocation, 'operation_id': self.fence.context['operation_id']}}
         except BaseException:
             self._uncertain()
