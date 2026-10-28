@@ -9,6 +9,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import guard
 from controller import Blocked
+TT_FENCE_VERSION=1
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -42,7 +43,7 @@ def paused_documents(documents,receipt):
         meta.pop('resourceVersion',None)
     return result
 
-def main():
+def _main():
     receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
     guard.validate(receipt,os.environ['VOICE_IMAGE_REGISTRY'],os.environ['VOICE_IMAGE_TAG'],os.environ['DEPLOY_MODE'],[s for s in os.environ.get('CHANGED_SERVICES','').split(',') if s],guard.source_root())
     rv=os.environ['VOICE_NATS_ROLLOUT_CLAIM_RV'];guard.anchor(receipt,'rollout-applying',rv)
@@ -66,6 +67,15 @@ def main():
         guard.kubectl(['apply','-f','/dev/stdin','-o','name'],{'apiVersion':'v1','kind':'List','items':paused})
     guard.anchor(receipt,'rollout-applying',rv)
     print('NATS_ROLLOUT_APPLY=PAUSED_COMPLETE')
+
+
+def main():
+    import resource_claim
+    from root_cli import code_binding
+    receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
+    # Direct execution has the same mandatory boundary as runner.main.
+    with resource_claim.runner_scope(receipt,guard.ROOT,code_binding(Path(__file__).resolve().parents[1])):
+        return _main()
 
 if __name__=='__main__':
     try:main()

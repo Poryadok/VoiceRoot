@@ -19,6 +19,7 @@ import 'package:voice_frontend/l10n/app_localizations.dart';
 import 'package:voice_frontend/state/auth_providers.dart';
 import 'package:voice_frontend/state/chat_providers.dart';
 import 'package:voice_frontend/state/gateway_providers.dart';
+import 'package:voice_frontend/state/shared_media_providers.dart';
 import 'package:voice_frontend/theme/voice_theme_providers.dart';
 import 'package:voice_frontend/ui/chat/chat_info_panel.dart';
 import 'package:voice_frontend/ui/chat/pinned_messages_panel.dart';
@@ -34,6 +35,179 @@ void main() {
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     await _loadCaptureFonts();
+  });
+
+  for (final (targetIndex, size) in [
+    (8, const Size(900, 900)),
+    (31, const Size(900, 900)),
+    (8, const Size(390, 844)),
+    (31, const Size(390, 844)),
+  ]) {
+    testWidgets('message jump places unequal-height target inside the viewport '
+        '($targetIndex at ${size.width})', (tester) async {
+      await _setViewport(tester, size);
+      final messages = List.generate(
+        40,
+        (index) => <String, Object?>{
+          'id': index == targetIndex ? 'exact-target' : 'unequal-$index',
+          'chat': {'id': 'chat-pins'},
+          'sender_profile_id': 'profile-b',
+          'content': index == targetIndex
+              ? 'Exact target message'
+              : index > 12
+              ? List.filled(
+                  28,
+                  'A tall paragraph in message $index.',
+                ).join('\n\n')
+              : 'Short message $index',
+          'type': 'regular',
+          'content_type': 'MESSAGE_CONTENT_TYPE_TEXT',
+          'created_at': DateTime.utc(2024, 1, 1, 0, 0, index).toIso8601String(),
+        },
+      );
+      await tester.pumpWidget(
+        _pinnedRoomApp(
+          initialMessageJump: 'exact-target',
+          historyMessages: messages,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatRoomPanel)),
+      );
+      final profileId = container.read(authControllerProvider).activeProfileId;
+      final room = container.read(chatRoomControllerProvider('chat-pins'));
+      expect(room.messages, hasLength(40));
+      expect(
+        room.messages.any((message) => message.id == 'exact-target'),
+        isTrue,
+      );
+      expect(
+        container.read(pendingChatMessageScrollProvider('chat-pins')),
+        isNull,
+      );
+      final target = find.byKey(ValueKey('view:$profileId:exact-target'));
+      expect(target, findsOneWidget);
+      final targetBox = tester.renderObject<RenderBox>(target);
+      final targetRect = targetBox.localToGlobal(Offset.zero) & targetBox.size;
+      final viewportRect = tester.getRect(
+        find.byKey(ChatRoomPanel.messagesKey),
+      );
+      expect(targetRect.top, greaterThanOrEqualTo(viewportRect.top));
+      expect(targetRect.bottom, lessThanOrEqualTo(viewportRect.bottom));
+      await tester.pump(const Duration(seconds: 2));
+    });
+  }
+
+  testWidgets('message jump queued before mount waits for initial history', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final initialHistory = Completer<void>();
+    final cursors = <String?>[];
+    await tester.pumpWidget(
+      _pinnedRoomApp(
+        initialMessageJump: 'pin-0',
+        holdInitialHistory: initialHistory,
+        pageHistoryForPinnedTarget: true,
+        onOlderHistoryRequest: cursors.add,
+      ),
+    );
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatRoomPanel)),
+    );
+    expect(cursors, isEmpty);
+    expect(
+      container.read(pendingChatMessageScrollProvider('chat-pins')),
+      'pin-0',
+    );
+
+    initialHistory.complete();
+    await tester.pumpAndSettle();
+
+    expect(cursors, ['older-pins']);
+    expect(
+      container.read(pendingChatMessageScrollProvider('chat-pins')),
+      isNull,
+    );
+    expect(
+      container
+          .read(chatRoomControllerProvider('chat-pins'))
+          .messages
+          .any((message) => message.id == 'pin-0'),
+      isTrue,
+    );
+  });
+
+  testWidgets('message link flashes only after its historic page arrives', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final olderHistory = Completer<void>();
+    await tester.pumpWidget(
+      _pinnedRoomApp(
+        contentType: 'MESSAGE_CONTENT_TYPE_TEXT',
+        initialMessageJump: 'pin-0',
+        holdFirstOlderHistoryRequest: olderHistory,
+        pageHistoryForPinnedTarget: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 3));
+    olderHistory.complete();
+    await tester.pumpAndSettle();
+
+    final target = find.descendant(
+      of: find.byKey(ChatRoomPanel.messagesKey),
+      matching: find.text('Pinned announcement 0', findRichText: true),
+    );
+    final highlight = find
+        .ancestor(of: target, matching: find.byType(AnimatedContainer))
+        .first;
+    expect(tester.widget<AnimatedContainer>(highlight).decoration, isNotNull);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(tester.widget<AnimatedContainer>(highlight).decoration, isNull);
+  });
+
+  testWidgets('replaced historic jump cannot consume the newer target', (
+    tester,
+  ) async {
+    await _setDesktopViewport(tester);
+    final olderHistory = Completer<void>();
+    await tester.pumpWidget(
+      _pinnedRoomApp(
+        initialMessageJump: 'pin-0',
+        holdFirstOlderHistoryRequest: olderHistory,
+        pageHistoryForPinnedTarget: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChatRoomPanel)),
+    );
+    container
+            .read(pendingChatMessageScrollProvider('chat-pins').notifier)
+            .state =
+        'newest';
+    container
+            .read(pendingChatMessageHighlightProvider('chat-pins').notifier)
+            .state =
+        'newest';
+    await tester.pump();
+    olderHistory.complete();
+    await tester.pumpAndSettle();
+    expect(
+      container.read(pendingChatMessageScrollProvider('chat-pins')),
+      isNull,
+    );
+    expect(
+      container.read(pendingChatMessageHighlightProvider('chat-pins')),
+      isNull,
+    );
+    await tester.pump(const Duration(seconds: 2));
   });
 
   testWidgets('pinned bar exposes a distinct open-list action', (tester) async {
@@ -530,6 +704,9 @@ Future<void> _setDesktopViewport(WidgetTester tester) async {
 }
 
 Widget _pinnedRoomApp({
+  List<Map<String, Object?>>? historyMessages,
+  String? initialMessageJump,
+  Completer<void>? holdInitialHistory,
   String? contentType,
   int pinCount = 1,
   double textScale = 1,
@@ -590,6 +767,7 @@ Widget _pinnedRoomApp({
           }),
         );
       }
+      await holdInitialHistory?.future;
       return utf8JsonResponse(
         jsonEncode({
           'message_list': pageHistoryForPinnedTarget
@@ -611,7 +789,7 @@ Widget _pinnedRoomApp({
                   'next_cursor': 'older-pins',
                   'has_more': true,
                 }
-              : {'messages': pinned},
+              : {'messages': historyMessages ?? pinned},
         }),
       );
     }
@@ -673,6 +851,14 @@ Widget _pinnedRoomApp({
       return hub;
     }),
     selectedChatIdProvider.overrideWith((ref) => 'chat-pins'),
+    if (initialMessageJump != null)
+      pendingChatMessageScrollProvider(
+        'chat-pins',
+      ).overrideWith((ref) => initialMessageJump),
+    if (initialMessageJump != null)
+      pendingChatMessageHighlightProvider(
+        'chat-pins',
+      ).overrideWith((ref) => initialMessageJump),
   ];
   final app = MaterialApp(
     theme: voiceTestTheme().copyWith(

@@ -62,6 +62,57 @@ only. Actual effective-config validation, runtime disabled guards and executed
 negative checks remain separate prerequisites; this tool changes no deployment
 admission or activation authority.
 
+## STAGING resource fencing (source contract)
+
+Every mutating protected workflow requires the JSON string input
+`resource_context` (forwarded as `VOICE_TTENREC_CONTEXT`). Its exact fields are
+`project`, `resource`, `actor`, `claim`, `generation`, `window`, `revision`,
+`operation_id`, `commit`, and `images`. Use project `voice`, resource `STAGING`,
+canonical claim/window UUIDs, integer generation/resource revision, the external
+operation ID, full commit and complete immutable workload/container image map.
+The trusted installed helper chooses the TT endpoint; callers cannot supply it.
+No workflow automatically acquires, recovers or releases a resource as safe.
+
+The root bridge checks current held/deploy authority and pinned candidate before
+admitting a request, including cached responses and interrupted-request recovery.
+It persists `installed/tt-resource-fence.json` under the existing root operation
+flock. Fresh actual images must match the claim's current observation before the
+first workload fence. The captured runner checks its protected receipt, helper,
+target and live journal before claiming the existing Kubernetes lock and before
+each subprocess. `render-and-apply.sh` also selects that root-captured runner;
+the target checkout cannot replace its executor. Existing source/CI, marker,
+expiry, Kubernetes locks and staging admission limits remain required.
+
+Keep the exact resource revision/context through prepare, authorization, apply,
+finish and provisional acceptance. A resource checkpoint, observation, handoff
+or other revision change invalidates continuation; reconcile instead of silently
+refreshing the context. A provisional restart leaves the journal active through
+CI acceptance. Only verified actual `PASS` closes it. Repair-forward permits a
+strictly higher generation, different claim and external operation ID only for
+the exactly bound released `PROVISIONAL_READY` parent. Root archives the previous
+journal, parent checkpoint digest and new authority in
+`installed/tt-resource-supersessions/` before replacing the high-water journal.
+Existing live-parent, source, CI and fresh-backup guards still run.
+
+This is cooperative fencing. A pause after the final check or an already admitted
+subprocess/API request cannot be atomically revoked by TT. Settle the old
+executor, controller/Job and submitted effects before recovery or safe handoff;
+never remove existing locks because a TTL expired. Unknown responses and partial
+apply keep reconciliation required, separately from product verification FAIL.
+The runner cannot close the root journal; root failures persist uncertainty.
+
+Repository merge does not activate an older installed root helper. The source
+installer route `rollout-root.sh --install --upgrade-idle-tt-resource-fencing-v1`
+accepts only the closed 85-member predecessor derived from commit
+`f8624086f71d2d4baf1d1ae6cf6461246254960f`, unchanged binary pins and the fixed
+82-source cohort digest; it installs the 86-member successor under existing idle,
+custody, inbox and operation-lock checks. It preserves completed resource history
+and refuses active, uncertain or unknown journals. A different actual installed
+manifest needs a separately reviewed transition. Activation requires legitimate
+root execution and actual old-process/API reconciliation; this source change
+grants neither. Coordinated real-stand competing-writer, late-process, handoff,
+partial-apply and lost-response acceptance remains a separate gate.
+
 ## Explicit provisional staging (implementation contract)
 
 An explicit master `workflow_dispatch` may opt into `provisional_staging=true`
@@ -370,18 +421,19 @@ PKCE OAuth for the Developer Portal is enabled in local compose (`developer-port
 
 Compose reference: [`docker-compose.yml`](../docker-compose.yml) `auth` service; template [`.env.example`](../.env.example) (`DEVELOPER_PORTAL_OAUTH_*`).
 
-### Developer Portal build
+### Developer Portal build and runtime binding
 
 | Build arg / env | Purpose |
 |-----------------|---------|
-| `VITE_VOICE_API_BASE` | Public Gateway URL (baked at build time) |
+| `VITE_RUNTIME_CONFIG_REQUIRED` | `true` for promotable releases; default in Dockerfile |
+| `VITE_VOICE_API_BASE` | Local compile-time mode only, with `VITE_RUNTIME_CONFIG_REQUIRED=false` |
 | `VITE_OAUTH_CLIENT_ID` | Must match `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_ID` |
 | `VITE_OAUTH_DISABLED` | `true` — paste-JWT fallback UI (dev only) |
 
 ### Production checklist
 
 1. Register OAuth client in Auth with **HTTPS** redirect URIs only.
-2. Build and deploy portal static assets with matching `VITE_*` values.
+2. Build the runtime-required portal image with fixed OAuth client ID, then mount the environment's public runtime config described below.
 3. Ensure Gateway `GATEWAY_CORS_ALLOWED_ORIGINS` includes the portal origin.
 4. Verify PKCE flow: authorize → callback → `POST /api/v1/auth/oauth2/token` with `code_verifier`.
 5. Bot runtime (bot token, webhook) is independent of portal OAuth; portal OAuth is for **developer account** login only.
@@ -398,13 +450,13 @@ Staging manifests wire Developer Portal OAuth on **voice-auth** via ConfigMap `v
 | `AUTH_OAUTH_DEVELOPER_PORTAL_REDIRECT_URIS` | HTTPS callback(s), e.g. `https://${VOICE_DEVELOPER_PORTAL_INGRESS_HOST}/callback` |
 | `AUTH_OAUTH_DEVELOPER_PORTAL_CLIENT_SECRET` | Optional Secret override (PKCE public client may omit) |
 
-Portal Deployment + Ingress: [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml). **CI** (job `developer-portal` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes the image on every push to `master` with `VITE_VOICE_API_BASE=https://${VOICE_GATEWAY_INGRESS_HOST}` and `VITE_OAUTH_CLIENT_ID=voice-developer-portal`. **Staging deploy** applies the portal manifest with the same image tag (`git SHA`) as other services.
+Portal Deployment + Ingress: [`deploy/staging/developer-portal.yaml`](../deploy/staging/developer-portal.yaml). **CI** (job `developer-portal` in [`ci.yml`](../.github/workflows/ci.yml)) builds and pushes the runtime-required image on selected pushes to `master` with `VITE_OAUTH_CLIENT_ID=voice-developer-portal`; no API origin is a build input. **Staging deploy** applies the portal manifest with the same image tag (`git SHA`) as other services.
 
 Manual build (local or one-off):
 
 ```bash
 docker build -f src/developer-portal/Dockerfile src/developer-portal \
-  --build-arg VITE_VOICE_API_BASE=https://<VOICE_GATEWAY_INGRESS_HOST> \
+  --build-arg VITE_RUNTIME_CONFIG_REQUIRED=true \
   --build-arg VITE_OAUTH_CLIENT_ID=voice-developer-portal
 ```
 
@@ -517,6 +569,39 @@ Voice calls on staging: Traefik Ingress for signaling (`deploy/livekit/ingress.y
 ### Moderation Admin staging
 
 Deployment + Ingress: [`deploy/staging/admin.yaml`](../deploy/staging/admin.yaml). **CI** job `admin` pushes `ghcr.io/.../admin:<git_sha>`. Auth OAuth client `voice-admin` (PKCE); **не** вшивать `STAGING_STAFF_TOKEN` в образ. Local compose: `VITE_OAUTH_DISABLED=true` + `ADMIN_STAFF_TOKEN`. DNS **A** for **`admin`** → staging node IP.
+
+#### Admin and Developer Portal immutable promotion
+
+Each app uses one immutable release image across DEV and STAGING. Each environment
+owns a separate read-only `/voice-runtime-config.json` ConfigMap projection for
+each app. The exact document keys are `version: 1`, `app_origin`, and
+`api_base_url`; values are public and contain no staff token, OAuth secret or
+credential. The application fetches this same-origin document with redirects
+disabled and no cache before importing the authenticated application. The page
+origin must equal `app_origin` exactly. Both origins must be complete HTTPS
+origins without credentials, paths, query or fragment. HTTP loopback is allowed
+only for isolated local/browser fixtures. Missing, malformed, unsupported,
+redirected or foreign-origin config blocks app startup and API/OAuth traffic;
+the error panel offers Retry loading. The release build has no compiled API
+fallback and never derives the Gateway from Host. OAuth client IDs remain fixed
+per app; Auth redirect URI registration and PKCE/session behavior are unchanged.
+
+STAGING binds Admin `https://admin.comrade.click` and Portal
+`https://developers.comrade.click` to `https://voice.comrade.click`. DEV renders
+those separate documents as `https://admin-dev.comrade.click` and
+`https://developers-dev.comrade.click`, both with
+`https://api-dev.comrade.click`. The operator must qualify the actual rendered
+document, ConfigMap UID, SHA256, source revision, image digest and browser
+request target separately. Origin matching alone cannot verify that an explicit
+API origin is the intended environment endpoint. First adoption requires an
+authorized config/template migration; image-only updates preserve the old live
+templates and cannot activate this contract. Local Compose explicitly uses
+`VITE_RUNTIME_CONFIG_REQUIRED=false` with its loopback API build arg and is not
+promotion evidence. Production uses the same runtime contract with its own
+explicit environment-owned values.
+Post-deploy staging and production smoke fetch each app's served runtime JSON
+and require the exact app/API origin tuple; a baked endpoint in JavaScript is
+not evidence for this release mode.
 
 ---
 

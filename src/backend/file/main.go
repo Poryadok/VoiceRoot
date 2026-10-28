@@ -22,6 +22,7 @@ import (
 	"voice/backend/file/internal/fileevents"
 	grpcsvc "voice/backend/file/internal/grpcsvc"
 	"voice/backend/file/internal/imgproc"
+	"voice/backend/file/internal/inventory"
 	"voice/backend/file/internal/jobs"
 	"voice/backend/file/internal/principalgrpc"
 	"voice/backend/file/internal/principalruntime"
@@ -82,6 +83,20 @@ func main() {
 			}
 			return
 		}
+	}
+	storyInventorySource, err := loadStoryInventorySource(filePrincipal)
+	if err != nil {
+		log.Fatalf("Story inventory source: %v", err)
+	}
+	if storyInventorySource != nil {
+		defer func() { _ = storyInventorySource.Close() }()
+	}
+	messagingInventorySource, err := loadMessagingInventorySource(filePrincipal)
+	if err != nil {
+		log.Fatalf("Messaging inventory source: %v", err)
+	}
+	if messagingInventorySource != nil {
+		defer func() { _ = messagingInventorySource.Close() }()
 	}
 	principalConfig, principalEnabled, err := principalruntime.LoadFromEnv()
 	if err != nil {
@@ -192,6 +207,22 @@ func main() {
 		}
 		filesStore := store.NewFilesStore(pool)
 		if presigner != nil {
+			deleter = filesStore.InventoryGuardedDeleter(presigner)
+			processor = imgproc.Processor{Reader: presigner, Writer: presigner, Deleter: deleter}
+		}
+		inventoryCtx, stopInventory := context.WithCancel(context.Background())
+		defer stopInventory()
+		inventoryRouter := &inventory.OwnerRouter{}
+		if storyInventorySource != nil {
+			inventoryRouter.Story = storyInventorySource
+		}
+		if messagingInventorySource != nil {
+			inventoryRouter.Messaging = messagingInventorySource
+		}
+		if err := startInventoryWorker(inventoryCtx, filesStore, inventoryRouter, logger); err != nil {
+			log.Fatalf("reference inventory worker: %v", err)
+		}
+		if presigner != nil {
 			pdfCtx, stopPDF := context.WithCancel(context.Background())
 			defer stopPDF()
 			if err := startPDFRuntime(pdfCtx, filesStore, presigner, logger); err != nil {
@@ -255,6 +286,9 @@ func main() {
 			}
 		}()
 	} else {
+		if storyInventorySource != nil || messagingInventorySource != nil {
+			log.Fatal("DATABASE_URL required for reference inventory")
+		}
 		if principalEnabled {
 			log.Fatal("DATABASE_URL required for protected File listener")
 		}

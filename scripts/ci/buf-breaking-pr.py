@@ -36,16 +36,22 @@ def identities(repo, base, head, merge):
     if checkout != merge:
         raise Refused('checkout_identity')
     parents = git(repo, 'rev-list', '--parents', '-n', '1', merge).split()[1:]
-    if parents != [base, head]:
+    if len(parents) != 2 or parents[1] != head:
         raise Refused('merge_parents')
+    current_base = parents[0]
+    try:
+        git(repo, 'merge-base', '--is-ancestor', base, current_base)
+    except Refused as error:
+        raise Refused('base_ancestry') from error
     return {
-        'checkout': checkout, 'base': base, 'head': head, 'merge': merge,
+        'checkout': checkout, 'event_base': base, 'base': current_base,
+        'head': head, 'merge': merge,
         'parents': parents,
         'checkout_tree': git(repo, 'rev-parse', merge + '^{tree}'),
-        'base_tree': git(repo, 'rev-parse', base + '^{tree}'),
+        'base_tree': git(repo, 'rev-parse', current_base + '^{tree}'),
         'head_tree': git(repo, 'rev-parse', head + '^{tree}'),
         'checkout_protos_tree': git(repo, 'rev-parse', merge + ':protos'),
-        'base_protos_tree': git(repo, 'rev-parse', base + ':protos'),
+        'base_protos_tree': git(repo, 'rev-parse', current_base + ':protos'),
     }
 
 

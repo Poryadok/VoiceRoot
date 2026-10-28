@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
 	"log/slog"
 	"reflect"
 	"sync"
@@ -14,7 +15,7 @@ import (
 
 // FileDeleter removes story media from object storage (File Service).
 type FileDeleter interface {
-	DeleteFile(ctx context.Context, fileID string) error
+	ReleaseStoryMedia(ctx context.Context, storyID, fileID string) error
 }
 
 const defaultArchivePurgeFileTimeout = 15 * time.Second
@@ -40,6 +41,15 @@ func RunArchivePurgeOnceWithFileTimeout(ctx context.Context, st *store.StoryStor
 	if fileTimeout <= 0 {
 		fileTimeout = defaultArchivePurgeFileTimeout
 	}
+	if err := st.PruneDeletionReceipts(ctx); err != nil {
+		return 0, err
+	}
+	var recoveryErr error
+	if deleter != nil {
+		_, recoveryErr = st.RecoverAbandonedMedia(ctx, func(recoveryCtx context.Context, story, file uuid.UUID) error {
+			return deleteFileWithinDeadline(recoveryCtx, deleter, story.String(), file.String(), fileTimeout)
+		})
+	}
 	batch, err := st.StageArchivePurgeBatch(ctx, 100)
 	if err != nil {
 		return 0, err
@@ -55,7 +65,7 @@ func RunArchivePurgeOnceWithFileTimeout(ctx context.Context, st *store.StoryStor
 		return 0, err
 	}
 	for _, op := range ops {
-		if err := deleteFileWithinDeadline(ctx, deleter, op.MediaFileID.String(), fileTimeout); err != nil {
+		if err := deleteFileWithinDeadline(ctx, deleter, op.StoryID.String(), op.MediaFileID.String(), fileTimeout); err != nil {
 			// A File implementation can ignore cancellation. The dispatcher must
 			// still return at its deadline and release the lease for a later tick.
 			if _, failErr := st.FailMediaDeletion(context.WithoutCancel(ctx), op.OperationID, op.LeaseToken, err); failErr != nil {
@@ -68,10 +78,10 @@ func RunArchivePurgeOnceWithFileTimeout(ctx context.Context, st *store.StoryStor
 			return 0, err
 		}
 	}
-	return batch.Stories, nil
+	return batch.Stories, recoveryErr
 }
 
-func deleteFileWithinDeadline(ctx context.Context, deleter FileDeleter, fileID string, timeout time.Duration) error {
+func deleteFileWithinDeadline(ctx context.Context, deleter FileDeleter, storyID, fileID string, timeout time.Duration) error {
 	fileCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	select {
@@ -93,7 +103,7 @@ func deleteFileWithinDeadline(ctx context.Context, deleter FileDeleter, fileID s
 	result := make(chan error, 1)
 	go func() {
 		defer func() { <-gate }()
-		result <- deleter.DeleteFile(fileCtx, fileID)
+		result <- deleter.ReleaseStoryMedia(fileCtx, storyID, fileID)
 	}()
 	select {
 	case err := <-result:

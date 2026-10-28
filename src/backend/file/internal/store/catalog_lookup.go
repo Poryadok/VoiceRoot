@@ -18,7 +18,7 @@ func (s *FilesStore) LookupCatalogFile(ctx context.Context, actor catalogasset.A
 	if actor.AccountID == uuid.Nil || actor.ProfileID == uuid.Nil || id == uuid.Nil {
 		return nil, catalogasset.ErrAdmission
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return nil, err
 	}

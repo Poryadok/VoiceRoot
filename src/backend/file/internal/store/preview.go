@@ -16,7 +16,7 @@ import (
 // PreviewSnapshotTx uses the same serializer for event and exact-reference RPC.
 // The caller owns a File row lock; expiry is a transition, never a clock-made revision.
 func PreviewSnapshotTx(ctx context.Context, tx pgx.Tx, row FileRow) (*eventsv1.FilePreviewSnapshot, error) {
-	if row.IsE2E || row.UploadIntent == "music" {
+	if row.IsE2E || row.UploadIntent == "music" || row.UploadIntent == "audio" || row.UploadIntent == "sticker" {
 		return nil, errors.New("preview unsupported")
 	}
 	var revision uint64
@@ -40,7 +40,7 @@ func PreviewSnapshotTx(ctx context.Context, tx pgx.Tx, row FileRow) (*eventsv1.F
 }
 
 func recordPreviewChange(ctx context.Context, tx pgx.Tx, before, after FileRow) error {
-	if after.IsE2E || after.UploadIntent == "music" {
+	if after.IsE2E || after.UploadIntent == "music" || after.UploadIntent == "audio" || after.UploadIntent == "sticker" {
 		return nil
 	}
 	old, err := PreviewSnapshotTx(ctx, tx, before)
@@ -70,7 +70,7 @@ func recordPreviewChange(ctx context.Context, tx pgx.Tx, before, after FileRow) 
 }
 
 func (s *FilesStore) withPreviewMutation(ctx context.Context, id uuid.UUID, mutate func(pgx.Tx) (FileRow, error)) (FileRow, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return FileRow{}, err
 	}
@@ -95,7 +95,7 @@ func (s *FilesStore) withPreviewMutation(ctx context.Context, id uuid.UUID, muta
 func (s *FilesStore) DispatchPreviewEvent(ctx context.Context, publish func(context.Context, []byte) error) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}

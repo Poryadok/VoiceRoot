@@ -183,6 +183,7 @@ auth:
 
 developer-portal:
   - src/developer-portal/**
+  - src/admin/browser/runtime-config.mjs
 
 admin:
   - src/admin/**

@@ -1464,6 +1464,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_VOICE_API_BASE: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
+        VITE_RUNTIME_CONFIG_REQUIRED: "false"
         VITE_OAUTH_CLIENT_ID: ${DEVELOPER_PORTAL_OAUTH_CLIENT_ID:-voice-developer-portal}
         VITE_OAUTH_DISABLED: ${DEVELOPER_PORTAL_OAUTH_DISABLED:-false}
     ports:
@@ -1485,6 +1486,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_VOICE_API_BASE: ${VOICE_API_PUBLIC_URL:-http://127.0.0.1:18080}
+        VITE_RUNTIME_CONFIG_REQUIRED: "false"
         VITE_OAUTH_DISABLED: "true"
         VITE_STAFF_TOKEN: ${ADMIN_STAFF_TOKEN:-compose-staff-token}
     ports:

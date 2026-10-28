@@ -1,6 +1,7 @@
 """Exact workflow argument-selection AST and real bridge request identity."""
 import ast
 import copy
+import json
 import os
 from pathlib import Path
 import unittest
@@ -29,10 +30,12 @@ class Tests(unittest.TestCase):
 
     def test_actual_client_full_nonce_and_exact_run_identity(self):
         env={'GITHUB_RUN_ID':'123','GITHUB_RUN_ATTEMPT':'1','GITHUB_JOB':'deploy','GITHUB_TOKEN':'synthetic-token','GITHUB_SHA':'a'*40}
+        from resource_claim_test import context
+        env['VOICE_TTENREC_CONTEXT']=json.dumps(context())
         args=['resume-cold-backup',paused_recovery.OPERATION,'123']
         first=bridge_client.request(args,env)
         self.assertEqual(first,bridge_client.request(args,env))
-        self.assertEqual(set(first),{'action','operation','run_id','nonce','token','run_attempt','report_run_id','report_source_sha'})
+        self.assertEqual(set(first),{'action','operation','run_id','nonce','token','run_attempt','report_run_id','report_source_sha','resource_context'})
         self.assertEqual((first['run_attempt'],first['report_run_id'],first['report_source_sha']),(1,123,'a'*40))
         self.assertEqual(len(first['nonce']),64)
         self.assertNotEqual(first['nonce'][:12],paused_recovery.OPERATION)

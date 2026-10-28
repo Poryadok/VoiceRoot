@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package voice.common.v1;
+
+option go_package = "voice.app/voice/common/v1;commonv1";
+option java_multiple_files = true;
+option java_package = "app.voice.common.v1";
+
+// Dedicated migration coverage; these are not Space deletion producer IDs.
+enum ReferenceInventoryOwnerType {
+  REFERENCE_INVENTORY_OWNER_TYPE_UNSPECIFIED = 0;
+  REFERENCE_INVENTORY_OWNER_TYPE_MESSAGE = 1;
+  REFERENCE_INVENTORY_OWNER_TYPE_STORY = 2;
+  REFERENCE_INVENTORY_OWNER_TYPE_PROFILE_AVATAR = 3;
+  REFERENCE_INVENTORY_OWNER_TYPE_CHAT_AVATAR = 4;
+  REFERENCE_INVENTORY_OWNER_TYPE_SPACE_AVATAR = 5;
+  REFERENCE_INVENTORY_OWNER_TYPE_STICKER = 6;
+  REFERENCE_INVENTORY_OWNER_TYPE_GIF_ASSET = 7;
+  REFERENCE_INVENTORY_OWNER_TYPE_UPLOAD_SESSION = 8;
+}
+
+enum ReferenceInventoryProtectionReason {
+  REFERENCE_INVENTORY_PROTECTION_REASON_UNSPECIFIED = 0;
+  REFERENCE_INVENTORY_PROTECTION_REASON_RETAINED = 1;
+  REFERENCE_INVENTORY_PROTECTION_REASON_CREATE_PENDING = 2;
+  REFERENCE_INVENTORY_PROTECTION_REASON_RELEASE_PENDING = 3;
+}
+
+enum ReferenceInventoryIssueKind {
+  REFERENCE_INVENTORY_ISSUE_KIND_UNSPECIFIED = 0;
+  REFERENCE_INVENTORY_ISSUE_KIND_HISTORICAL_MEDIA_ANOMALY = 1;
+  REFERENCE_INVENTORY_ISSUE_KIND_HIGHLIGHT_COVER_UNRESOLVED = 2;
+  REFERENCE_INVENTORY_ISSUE_KIND_CONFLICTING_BINDING = 3;
+}
+
+message ReferenceInventoryIdentity {
+  uint32 protocol_version = 1;
+  string installation_id = 2;
+  string restore_cohort_id = 3;
+  string migration_id = 4;
+  string file_incarnation_id = 5;
+  string source_service = 6;
+  string source_component = 7;
+  string owner_incarnation_id = 8;
+  uint32 writer_protocol_version = 9;
+  string snapshot_id = 10;
+}
+
+message ReferenceInventoryKey {
+  string file_id = 1;
+  ReferenceInventoryOwnerType owner_type = 2;
+  string owner_id = 3;
+  optional string subresource_id = 4;
+  optional string scope_space_id = 5;
+}
+
+// Private protective evidence, never an access capability or a readable ref.
+message ReferenceInventoryEntry {
+  ReferenceInventoryKey key = 1;
+  uint64 owner_revision = 2;
+  repeated ReferenceInventoryProtectionReason reasons = 3;
+  repeated string source_operation_ids = 4;
+  optional string author_profile_id = 5;
+  string media_type = 6;
+  optional string issue_id = 7;
+  ReferenceInventoryIssueKind issue_kind = 8;
+  bool retired = 9;
+  // Known File for an unmappable issue; never invent an owner key for it.
+  optional string observed_file_id = 10;
+  // Persisted owner context only; not File upload context or Space authority.
+  optional string owner_chat_id = 11;
+}
+
+message ReferenceInventoryPage {
+  ReferenceInventoryIdentity identity = 1;
+  uint64 boundary_revision = 2;
+  uint32 page_index = 3;
+  repeated ReferenceInventoryEntry entries = 4;
+}
+
+message InventoryPageCommitment {
+  uint32 index = 1;
+  uint32 count = 2;
+  bytes page_sha256 = 3;
+}
+
+message InventoryManifest {
+  ReferenceInventoryIdentity identity = 1;
+  uint64 boundary_revision = 2;
+  uint64 total_count = 3;
+  uint64 unresolved_count = 4;
+  repeated InventoryPageCommitment commitments = 5;
+}
+
+message ReferenceInventoryDescriptor {
+  InventoryManifest manifest = 1;
+  bytes manifest_sha256 = 2;
+}
+
+message BeginReferenceInventoryRequest {
+  string operation_id = 1;
+  ReferenceInventoryIdentity identity = 2;
+}
+
+message BeginReferenceInventoryResponse {
+  ReferenceInventoryDescriptor descriptor = 1;
+}
+
+message ReadReferenceInventoryPageRequest {
+  ReferenceInventoryIdentity identity = 1;
+  uint32 page_index = 2;
+}
+
+message ReadReferenceInventoryPageResponse {
+  ReferenceInventoryPage page = 1;
+}
+
+// Each revision is complete; its count is checked before advancing a cursor.
+message ReferenceInventoryRevision {
+  uint64 revision = 1;
+  uint32 final_count = 2;
+  repeated ReferenceInventoryEntry entries = 3;
+}
+
+message ReadReferenceInventoryChangesRequest {
+  ReferenceInventoryIdentity identity = 1;
+  uint64 after_revision = 2;
+  uint32 limit = 3;
+}
+
+message ReadReferenceInventoryChangesResponse {
+  ReferenceInventoryIdentity identity = 1;
+  uint64 retained_floor = 2;
+  uint64 high_watermark = 3;
+  repeated ReferenceInventoryRevision revisions = 4;
+}
+
+message SealReferenceInventoryRequest {
+  string operation_id = 1;
+  ReferenceInventoryIdentity identity = 2;
+}
+
+message SealReferenceInventoryResponse {
+  ReferenceInventoryIdentity identity = 1;
+  uint64 cutover_revision = 2;
+  bytes writer_coverage_sha256 = 3;
+}

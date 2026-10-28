@@ -50,7 +50,7 @@ func (s *FilesStore) CaptureCatalogActor(ctx context.Context, actor catalogasset
 	if e != nil {
 		return result, e
 	}
-	tx, e := s.Pool.Begin(ctx)
+	tx, e := BeginInventoryMutation(ctx, s.Pool, true)
 	if e != nil {
 		return result, e
 	}
@@ -169,7 +169,7 @@ func (s *FilesStore) BeginCatalogImport(ctx context.Context, r *filev1.ImportCat
 	if e != nil {
 		return result, false, e
 	}
-	tx, e := s.Pool.Begin(ctx)
+	tx, e := BeginInventoryMutation(ctx, s.Pool, true)
 	if e != nil {
 		return result, false, e
 	}

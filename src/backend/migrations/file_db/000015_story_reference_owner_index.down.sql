@@ -1,0 +1,1 @@
+DROP INDEX file_references_story_owner_idx;

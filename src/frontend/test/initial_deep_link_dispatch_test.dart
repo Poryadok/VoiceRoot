@@ -269,7 +269,10 @@ class _RecordingNavigator extends DeepLinkNavigator {
   final Future<void> release;
 
   @override
-  Future<void> apply(DeepLinkTarget target) async {
+  Future<void> apply(
+    DeepLinkTarget target, {
+    bool Function()? isCurrent,
+  }) async {
     applied.add(target);
     await release;
   }

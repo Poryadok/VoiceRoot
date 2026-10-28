@@ -27,7 +27,7 @@ else
 fi
 MOCK
 chmod +x "$tmp/bin/kubectl"
-export PATH="$tmp/bin:$PATH" MUTATIONS="$tmp/mutations" VOICE_IMAGE_TAG=next-version
+export PATH="$tmp/bin:$PATH" MUTATIONS="$tmp/mutations" VOICE_IMAGE_TAG=cccccccccccccccccccccccccccccccccccccccc
 export VOICE_NATS_ACL_PROOF_SHA="$(sha256sum "$tmp/repo/deploy/nats/acl-intent.yaml" | cut -d' ' -f1)"
 export VOICE_NATS_ACL_PROOF_GENERATION=r20260930a4
 failures=0
@@ -50,13 +50,19 @@ echo 'NATS_ROLLOUT_PRESERVATION=PASS missing-receipt-zero-mutations-all-modes'
 # Root-owned paths below exist only inside this disposable Linux test container.
 # Exercise real guard, claim, generation check and paused apply subprocesses.
 export TEST_SOURCE="$tmp/repo" TEST_STATE="$tmp/state.json" TEST_APPLIED="$tmp/applied.json"
+export TEST_EXECUTOR_SOURCE="$ROOT/scripts/staging" TEST_RESOURCE_STATE="$tmp/resource.json"
 export VOICE_NATS_PRESERVATION_RECEIPT=/var/lib/voice-nats-preservation/rollout-1a2b3c4d5e6f/apply-authorization.json
 cat > "$tmp/bin/kubectl" <<'MOCK'
 #!/usr/bin/env python3
 import json,os,sys
 from pathlib import Path
 p=Path(os.environ['TEST_STATE']);s=json.loads(p.read_bytes());a=sys.argv[1:]
-if a[0]=='get':print(json.dumps(s[a[1]]));sys.exit(0)
+if a[0]=='get':
+    print(json.dumps(s[a[1]]))
+    if os.environ.get('TEST_LATE_CLAIM')=='1' and a[1]=='configmap':
+        card=Path(os.environ['TEST_RESOURCE_STATE']);row=json.loads(card.read_text())
+        row['claim']='33333333-3333-4333-8333-333333333333';card.write_text(json.dumps(row))
+    sys.exit(0)
 if a[0]=='create' and '--dry-run=client' in a:
     raw=sys.stdin.read();name=next(line.split(':',1)[1].strip() for line in raw.splitlines() if line.strip().startswith('name:'))
     print(json.dumps({'kind':'ConfigMap','metadata':{'name':name},'data':{'bootstrap.sh':'SAFE_FIXTURE\n'}}));sys.exit(0)
@@ -76,13 +82,13 @@ chmod +x "$tmp/bin/kubectl"
 for mode in full app-only images-only; do
  export DEPLOY_MODE="$mode"
  python3 - <<'FIXTURE'
-import datetime as dt,hashlib,json,os
+import datetime as dt,hashlib,json,os,shutil,sys
 from pathlib import Path
 uid=lambda c:c*8+'-'+c*4+'-'+c*4+'-'+c*4+'-'+c*12
 source=Path(os.environ['TEST_SOURCE']);path=Path(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
 path.parent.mkdir(parents=True,exist_ok=True);path.parent.parent.chmod(0o750);path.parent.chmod(0o750)
 claim='voice-nats-jsdata-d202610040049430b';pvpath='/var/lib/rancher/k3s/storage/pvc-'+uid('b')+'_voice-staging_'+claim
-image='example.invalid/gateway:next-version@sha256:'+'1'*64
+image='example.invalid/gateway:'+os.environ['VOICE_IMAGE_TAG']+'@sha256:'+'1'*64
 template={'spec':{'containers':[{'name':'gateway','image':image}]}}
 rows=[{'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-gateway','namespace':'voice-staging'},'spec':{'replicas':1,'template':template}}]
 raw=json.dumps(rows).encode();manifest=path.parent/'apply-manifests.json';manifest.write_bytes(raw);manifest.chmod(0o640)
@@ -92,6 +98,7 @@ state={'namespace':{'metadata':{'uid':uid('d')}},'configmap':{'metadata':{'uid':
  'pv':{'metadata':{'uid':uid('c')},'spec':{'claimRef':{'uid':uid('b')},'local':{'path':pvpath},'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}},
  'deployment':{'spec':{'replicas':0,'template':{'spec':{'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':claim}}]}}}}}
 Path(os.environ['TEST_STATE']).write_text(json.dumps(state))
+Path(os.environ['TEST_STATE']+'.baseline').write_text(json.dumps(state))
 sha=lambda b:hashlib.sha256(b).hexdigest()
 scripts=[];source_hashes={'deploy/nats/acl-intent.yaml':sha((source/'deploy/nats/acl-intent.yaml').read_bytes())}
 for part in ('realtime','notification','search','analytics-chat'):
@@ -103,11 +110,57 @@ for part in ('realtime','notification','search','analytics-chat'):
 receipt={'schema':'nats-rollout-preservation-v1','operation':'1a2b3c4d5e6f','namespace_uid':uid('d'),
  'marker':{'uid':uid('a'),'resourceVersion':'100',**{k:data[k] for k in ('generation','previousGeneration','dataPVC')}},
  'pvc':{'name':claim,'uid':uid('b'),'pv_name':'pvc-'+uid('b')},'pv':{'uid':uid('c'),'kind':'local','path':pvpath,'node':'pmdebook'},
- 'target':{'registry':'ghcr.io/voiceroot/voiceroot','tag':'next-version','mode':os.environ['DEPLOY_MODE'],'changed_services':[],
+ 'target':{'registry':'ghcr.io/voiceroot/voiceroot','tag':os.environ['VOICE_IMAGE_TAG'],'mode':os.environ['DEPLOY_MODE'],'changed_services':[],
  'source_hashes':source_hashes,
  'template_hashes':{'voice-gateway':sha(json.dumps(template,sort_keys=True,separators=(',',':')).encode())},'input_template_hashes':{'voice-gateway':sha(json.dumps(template,sort_keys=True,separators=(',',':')).encode())},'images':{'voice-gateway/gateway':image},'manifest_sha256':sha(raw),'nonnats_sha256':'4'*64,'migration_sha256':sha(b'[]')},
  'backup':{'archive_sha256':'1'*64,'manifest_sha256':'2'*64,'census_sha256':'3'*64,'off_node_verified':True},
  'expires_at':(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat()}
+# Root capture is synthetic test custody around the actual runtime source
+# closure. Unused ELF helpers are not executed or qualified by this fixture.
+runtime=Path(os.environ['TEST_EXECUTOR_SOURCE']);sys.path.insert(0,str(runtime/'nats-rollout-preservation'))
+import bundle
+code=path.parent/'code'
+if code.exists():shutil.rmtree(code)
+code.mkdir(mode=0o750)
+captured={}
+for directory,names in (('nats-known-baseline',bundle.KNOWN),('nats-rollout-preservation',bundle.ROLLOUT)):
+    for name in names:
+        relative=directory+'/'+name;raw=(runtime/relative).read_bytes()
+        if relative=='nats-known-baseline/deployed-contract.json':
+            raw=(source/'scripts/staging'/relative).read_bytes()
+        if relative=='nats-rollout-preservation/resource_claim.py':
+            # Replace only HTTP transport in the protected fixture copy. Real
+            # typed checks, journal fencing and subprocess guards still execute.
+            raw+=b'''
+def _fixture_request(self,suffix,body=None):
+    card=json.loads(Path(os.environ['TEST_RESOURCE_STATE']).read_text())
+    if suffix.startswith('check?'):
+        return {'valid':card['claim']==self.context['claim'],'resource':card}
+    assert suffix=='actions' and body['safety']=='uncertain'
+    return {}
+Check.request=_fixture_request
+'''
+        target=code/relative;target.parent.mkdir(parents=True,exist_ok=True,mode=0o750)
+        target.write_bytes(raw);target.chmod(0o440);captured[relative]=sha(raw)
+(code/'capture-manifest.json').write_text(json.dumps(captured));(code/'capture-manifest.json').chmod(0o440)
+digest=lambda value:sha(json.dumps(value,sort_keys=True,separators=(',',':')).encode())
+context={'project':'voice','resource':'STAGING','actor':'fixture',
+    'claim':'11111111-1111-4111-8111-111111111111','generation':1,
+    'window':'22222222-2222-4222-8222-222222222222','revision':1,
+    'operation_id':'shell-fixture-'+os.environ['DEPLOY_MODE'],
+    'commit':receipt['target']['tag'],'images':receipt['target']['images']}
+binding={'schema':'voice-staging-resource-fence-v1','context':context,'operation':receipt['operation'],
+    'helper_sha256':digest(captured),'target_sha256':digest(receipt['target'])}
+receipt['resource_fence']=binding
+installed=path.parent.parent/'installed';installed.mkdir(mode=0o750,exist_ok=True)
+journal=installed/'tt-resource-fence.json'
+journal.write_text(json.dumps({**binding,'status':'active','phase':'apply-ready'}));journal.chmod(0o440)
+card={'code':'STAGING','environment':'stg','state':'held','phase':'deploy','owner':context['actor'],
+    **{key:context[key] for key in ('claim','generation','window','revision')},
+    'candidate':{'state':'known','commit':context['commit'],'images':context['images']}}
+Path(os.environ['TEST_RESOURCE_STATE']).write_text(json.dumps(card))
+# The target checkout must never supply the executor, even when its path exists.
+(source/'scripts/staging/nats-rollout-preservation/runner.py').write_text("raise RuntimeError('target_checkout_executor_forbidden')\n")
 path.write_text(json.dumps(receipt));path.chmod(0o640)
 FIXTURE
  : > "$MUTATIONS"
@@ -115,6 +168,23 @@ FIXTURE
   echo 'FAIL mismatched ACL proof accepted'; exit 1
  fi
  [[ ! -s "$MUTATIONS" ]] || { echo 'FAIL mismatched ACL proof consumed marker before read-only preflight'; exit 1; }
+ # A separately reset synthetic case changes the claim after the marker read.
+ # The next real command boundary must deny the old writer before marker CAS.
+ : > "$MUTATIONS"
+ if TEST_LATE_CLAIM=1 bash "$tmp/repo/scripts/staging/render-and-apply.sh" > "$tmp/output" 2>&1; then
+  echo 'FAIL late TT claim accepted'; exit 1
+ fi
+ [[ ! -s "$MUTATIONS" ]] || { echo 'FAIL old TT claim mutated marker/workloads'; exit 1; }
+ python3 - <<'RESET_FIXTURE'
+import json,os
+from pathlib import Path
+path=Path(os.environ['TEST_RESOURCE_STATE']);row=json.loads(path.read_text())
+assert row['claim']=='33333333-3333-4333-8333-333333333333'
+marker=Path(os.environ['TEST_STATE']);baseline=Path(os.environ['TEST_STATE']+'.baseline').read_bytes()
+assert marker.read_bytes()==baseline
+marker.write_bytes(baseline)
+row['claim']='11111111-1111-4111-8111-111111111111';path.write_text(json.dumps(row))
+RESET_FIXTURE
  bash "$tmp/repo/scripts/staging/render-and-apply.sh" > "$tmp/output" 2>&1 || { cat "$tmp/output"; exit 1; }
  [[ "$(cat "$MUTATIONS")" == $'MARKER_CAS\nAPPLY_LIST' ]] || { echo 'FAIL legacy mutation path executed'; exit 1; }
  python3 - <<'CHECK'

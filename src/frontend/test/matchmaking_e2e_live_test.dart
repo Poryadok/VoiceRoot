@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import 'support/live_gateway_harness.dart';
+import 'support/matchmaking_live_diagnostics.dart';
 
 /// Live compose e2e: two users match → accept → active squad with chat + voice ids.
 ///
@@ -35,8 +36,13 @@ void main() {
     final userB = await ctx.registerUser('mm-match-b-$n');
     final tokenA = userA.accessToken;
     final tokenB = userB.accessToken;
+    final profileA = await _profileId(client, base, tokenA);
+    final profileB = await _profileId(client, base, tokenB);
 
-    final gameId = await _findGameId(client, base, tokenA, 'MM Duo Live');
+    const composeFixtureId = String.fromEnvironment('VOICE_COMPOSE_MM_ACCEPT_GAME_ID');
+    final gameId = composeFixtureId.isNotEmpty
+        ? composeFixtureId
+        : await _findGameId(client, base, tokenA, 'MM Duo Live');
     const criteria = '{"region":"eu"}';
 
     final sessionA = await _startSearch(client, base, tokenA, gameId, criteria);
@@ -58,9 +64,23 @@ void main() {
 
     final matchA = await _getMatch(client, base, tokenA, matchId!);
     expect(matchA['status'], 'pending_accept');
+    final observedA = await _searchStatus(client, base, tokenA, sessionA);
+    final observedB = await _searchStatus(client, base, tokenB, sessionB);
+    // Log finite relationships without IDs, tokens or upstream payloads.
+    // ignore: avoid_print
+    print(matchmakingCohortDiagnostic(
+      profileA: profileA,
+      profileB: profileB,
+      selectedMatchId: matchId,
+      sessionA: observedA,
+      sessionB: observedB,
+      match: matchA,
+    ));
 
-    await _respond(client, base, tokenA, matchId, accept: true);
-    final active = await _respond(client, base, tokenB, matchId, accept: true);
+    await _respond(client, base, tokenA, matchId, accept: true, actorA: true);
+    final active = await _respond(
+      client, base, tokenB, matchId, accept: true, actorA: false,
+    );
     final match = active['match'] as Map<String, dynamic>? ??
         active['Match'] as Map<String, dynamic>;
     expect(match['status'], 'active');
@@ -309,6 +329,7 @@ Future<Map<String, dynamic>> _respond(
   String token,
   String matchId, {
   required bool accept,
+  required bool actorA,
 }) async {
   final resp = await client.post(
     Uri.parse('$base/api/v1/matchmaking/matches/$matchId/respond'),
@@ -318,6 +339,7 @@ Future<Map<String, dynamic>> _respond(
     },
     body: jsonEncode({'accept': accept}),
   );
-  expect(resp.statusCode, 200, reason: resp.body);
+  expect(resp.statusCode, 200,
+      reason: matchmakingAcceptFailureReason(resp, actorA: actorA));
   return jsonDecode(resp.body) as Map<String, dynamic>;
 }

@@ -4217,10 +4217,22 @@ class ChatActions {
   final Ref _ref;
 
   Future<String?> openDmWithProfile(String otherProfileId) async {
+    return switch (await openDmWithProfileResult(otherProfileId)) {
+      ChatsApiOk() => null,
+      ChatsApiFailure(:final message) => message,
+    };
+  }
+
+  /// Opens a DM while preserving domain status for canonical link recovery.
+  Future<ChatsApiResult<void>> openDmWithProfileResult(
+    String otherProfileId,
+  ) async {
     final session = _ref.read(authControllerProvider).session;
-    if (session == null) return 'not_authenticated';
+    if (session == null) {
+      return const ChatsApiFailure(message: 'not_authenticated');
+    }
     if (_ref.read(profileSwitchInProgressProvider)) {
-      return kChatActionStaleContext;
+      return const ChatsApiFailure(message: kChatActionStaleContext);
     }
     final result = await _ref
         .read(voiceChatsClientProvider)
@@ -4233,17 +4245,19 @@ class ChatActions {
         current?.accountId != session.accountId ||
         current?.activeProfileId != session.activeProfileId ||
         current?.authorizationHeader != session.authorizationHeader) {
-      return kChatActionStaleContext;
+      return const ChatsApiFailure(message: kChatActionStaleContext);
     }
-    return switch (result) {
-      ChatsApiOk(:final data) => () {
+    switch (result) {
+      case ChatsApiOk(:final data):
         final reconciler = _ref.read(inboxReconcilerProvider.notifier);
         final error = _selectDmChat(data.id, otherProfileId);
         if (error == null) unawaited(reconciler.reconcile());
-        return error;
-      }(),
-      ChatsApiFailure(:final message) => message,
-    };
+        return error == null
+            ? const ChatsApiOk<void>(null)
+            : ChatsApiFailure(message: error);
+      case final ChatsApiFailure failure:
+        return failure;
+    }
   }
 
   /// Creates a standalone group and invites members (min 2 invitees per API).

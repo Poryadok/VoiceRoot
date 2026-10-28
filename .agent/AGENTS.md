@@ -52,6 +52,9 @@ Voice is a Discord-like messenger with voice chat and built-in matchmaking. Prod
   WIP. Keep it queued or combine it with its consumer.
 - In Codex, use subagent tools for internal work. Create a user-visible task only
   when the user explicitly requests one. Keep inter-agent messages readable.
+- Every subagent name (`task_name`) must include its actual model and reasoning
+  effort, for example `pr998_gpt6_1_terra_high`. Record both in its brief too;
+  do not guess inherited settings or use an unlabelled name.
 
 ## Development Workflow
 

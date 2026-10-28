@@ -177,7 +177,7 @@ file_references (дедупликация)
 | `article_thumb` | OG/thumb for Article attach | ≤2 MB |
 | `location_map` | Static map tile | ≤500 KB |
 
-**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), and `MUSIC` (6). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
+**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), `STICKER` (3, static only), `MUSIC` (6), and `AUDIO` (7). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music and Audio require chat context and ≤10 MiB stored bytes, including encrypted overhead. Audio admits MP3, FLAC, Ogg, and WAVE MIME types. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. Audio metadata uses the File metadata fields and generic processed notification; only Music emits the Music stream event. The remaining intended values are:
 
 ```protobuf
 enum UploadIntent {
@@ -196,7 +196,7 @@ enum UploadIntent {
 
 message RequestUploadRequest {
   // … existing fields (original_name, mime_type, size_bytes, context_chat, is_e2e) …
-  UploadIntent intent = 8;              // spec — not yet in proto
+  UploadIntent intent = 8;
   // Remote URLs are not public upload parameters; see protected catalog import.
 }
 ```
@@ -260,6 +260,14 @@ Normative product scope: [text-chat.md](../features/text-chat.md) § «Меди�
 | GIF provider search | **Chat** (`SearchGifs` — selected provider adapter) | Resolve selection through Chat; protected File import or exact authorized source binding; cached `file_id` alone grants nothing |
 | Send payload / `content_type` | **Messaging** `SendMessage` | `file_id` references processed asset |
 | Composer picker UI | Flutter §3.6b | — |
+
+### Static sticker upload implementation (BE-086)
+
+`RequestUpload(intent=STICKER)` admits plaintext PNG/WebP with the existing uploader, optional chat ACL and upload-size policy. E2E and Story uploads are rejected. Confirmation verifies SHA-256, rejects GIF, APNG and animated WebP container bytes, scans the source and uses the existing image processor to produce a static WebP on a 512 by 512 transparent canvas, preserving aspect ratio. Invalid source, scan and processing failures cannot become ready. Processing and scanning must be configured. Sticker metadata retains its intent; the closed generic attachment preview v1/v2 serializer and resolver exclude stickers, as they exclude music. The existing legacy `file.processed` notification remains published.
+
+Processing consumes the exact source bytes validated and scanned by confirmation, without rereading the mutable upload key. Both sticker derivatives must fit the 512 KiB asset ceiling before either is written; ordinary images retain their existing 5 MiB cap.
+
+The animated sticker claims below remain an unresolved contract discrepancy: normative `text-chat.md` limits user packs to static PNG/WebP. This slice does not activate animated stickers, Chat pack operations or Messaging shared media.
 
 ### Upload flows
 
@@ -450,6 +458,34 @@ the closed photo/image or video/duration-1..60 predicate atomically from its
 locked File row. Its empty success response is an attestation, not metadata for
 Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 
+`ClaimStoryMedia` and `ReleaseStoryMedia` are separate protected `service:story`
+mutations. Claim rechecks that same predicate under the blob/File locks and
+acquires only `(file_id, STORY, story_id, NULL, NULL)`. The same Story cannot be
+rebound to a different File or a retired reference. Immutable operation receipts
+bind the entire request; changed operation input returns `AlreadyExists`.
+Operation and Story locks serialize concurrent retries before receipt lookup.
+Replaying an old successful claim returns its original receipt without creating
+a new reference after release. Claim/release receipt hashes use the full protobuf
+message name plus NUL and deterministic request bytes, as other File lifecycle
+operations do.
+
+Release requires a current `StoryReferenceReleaseAuthority` proving the complete
+global owner backfill and File-ledger activation for the installation/restore
+cohort. **No production provider exists yet.** Without that authority the RPC
+fails closed with `FailedPrecondition` before retiring any reference or creating
+a receipt; Story's durable release stays pending and its live reference continues
+retaining the blob. A boolean configuration value or an empty ledger is not this
+proof. This is an unmet activation criterion owned by the global File-reference
+cutover consumer, not a claim of lifecycle completion.
+
+After that authority is installed, release retires the exact key even if a
+delayed claim has not arrived. It queues
+blob GC only when an existing live exact reference was released and zero live
+references remain across all aliases. An absent File is idempotent success;
+historical media without an exact claim does not authorize broad deletion.
+Another Story/profile/message reference continues to retain the shared blob.
+Physical GC remains File-owned and independently retried.
+
 | gRPC code | Validation outcome |
 | --- | --- |
 | `Unauthenticated` | Credential/request-ID/Phase-0 binding, raw-header, replay, JWKS or verifier failure |
@@ -460,14 +496,18 @@ Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 | `Unavailable` | Listener or persistence is unavailable |
 
 The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
-`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE` and
+`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE`,
+`FILE_PRINCIPAL_CLIENT_CA_FILE` to verify Story's client certificate, and
 `FILE_PRINCIPAL_REPLAY_REDIS_ADDR` (optional password via
 `FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
-Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
+Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root, and
+`S2S_JWKS_CLIENT_CERT_FILE`/`S2S_JWKS_CLIENT_KEY_FILE` present File's client
+certificate to that endpoint. Cache
 settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
-The ordinary listener returns `Unavailable` for validation and the protected
-listener rejects all other methods. See Story's deployment runbook and
-`docs/todo/backend.md` for the remaining lifecycle-binding work.
+The ordinary listener returns `Unavailable` for protected validation and
+reference mutations. The protected listener admits only its closed method and
+issuer allowlists. See Story's deployment runbook; global reference backfill,
+activation and live cleanup verification remain separate release work.
 
 ## Масштабирование
 
@@ -565,3 +605,36 @@ Activation requires sealed deterministic backfills from every owner, dual-write
 catch-up, a `LIVE` fence for every Space-scoped reference and zero remaining
 file_id-only callers. Full lifecycle/operation receipts retain 30 days after
 completion; permanent compact PURGED fence state survives identifier reuse.
+
+### Protective historical inventory importer
+
+The dedicated Story inventory protocol is consumed only by File's private worker.
+Trusted controller composition must first commit `CreateInventoryOperation` with
+the full identity. Migration `000016_reference_inventory` then blocks destructive
+work before any remote snapshot call. The worker pulls signed/mTLS Story pages
+outside File transactions and atomically records immutable receipts, cursor,
+counted issues and private blob holds under the cohort/File/blob locks. Exact
+replay is idempotent; changed bytes or identity block the operation. The compiled
+coverage commitment includes service, component, closed owner kinds and writer
+version; unknown catalog/pending-write key shapes and all other owners stay
+MISSING. No caller can select a smaller coverage set or activate a cohort.
+
+Holds protect bytes without creating a readable reference/capability, admitting
+historical media or reviving terminal Files. Unknown/missing/terminal/processing,
+wrong-context or conflicting rows remain issues. Negative journal state cannot
+drop final protection during migration. GC claim and pre-DELETE, alias mutation,
+uploader/error/catalog/derivative cleanup use the same barrier. Non-GC storage
+deletes durably record STARTED before I/O; ambiguous requests retain STARTED or
+UNSETTLED and prohibit a new proof window. A local transaction lock does not
+pretend to drain an already submitted object-store request.
+
+Optional `FILE_STORY_REFERENCE_INVENTORY_` client settings are complete-or-absent:
+`GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `TLS_CERT_FILE`, `TLS_KEY_FILE`.
+They reuse File's actual signing principal and process only durable DB operations;
+configuration does not invent installation/restore IDs or authority.
+
+The global release provider remains nil. All-owner inventory/seals, writer and
+reader cutover, Space fences, immutable storage-key generations and external
+non-rollback restore/drain control remain prerequisites. Incomplete/unacknowledged
+receipts/holds cannot expire merely after P30; completion-based compaction is not
+implemented here. See the [execution plan](../testing/be096-reference-inventory-exec-plan.md).

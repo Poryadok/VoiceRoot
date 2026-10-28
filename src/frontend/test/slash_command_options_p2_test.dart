@@ -84,6 +84,7 @@ class _ScriptedFilesClient extends VoiceFilesClient {
     String? storyId,
     bool isE2e = false,
     bool music = false,
+    bool voiceNote = false,
   }) async {
     final failure = _failure('ticket');
     if (failure != null) return failure;

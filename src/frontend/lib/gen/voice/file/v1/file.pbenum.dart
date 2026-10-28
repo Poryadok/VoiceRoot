@@ -130,13 +130,19 @@ class UploadIntent extends $pb.ProtobufEnum {
       UploadIntent._(0, _omitEnumNames ? '' : 'UPLOAD_INTENT_UNSPECIFIED');
   static const UploadIntent UPLOAD_INTENT_GIF =
       UploadIntent._(2, _omitEnumNames ? '' : 'UPLOAD_INTENT_GIF');
+  static const UploadIntent UPLOAD_INTENT_STICKER =
+      UploadIntent._(3, _omitEnumNames ? '' : 'UPLOAD_INTENT_STICKER');
   static const UploadIntent UPLOAD_INTENT_MUSIC =
       UploadIntent._(6, _omitEnumNames ? '' : 'UPLOAD_INTENT_MUSIC');
+  static const UploadIntent UPLOAD_INTENT_AUDIO =
+      UploadIntent._(7, _omitEnumNames ? '' : 'UPLOAD_INTENT_AUDIO');
 
   static const $core.List<UploadIntent> values = <UploadIntent>[
     UPLOAD_INTENT_UNSPECIFIED,
     UPLOAD_INTENT_GIF,
+    UPLOAD_INTENT_STICKER,
     UPLOAD_INTENT_MUSIC,
+    UPLOAD_INTENT_AUDIO,
   ];
 
   static final $core.Map<$core.int, UploadIntent> _byValue =

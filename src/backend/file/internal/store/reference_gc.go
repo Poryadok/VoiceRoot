@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,11 +13,12 @@ import (
 )
 
 type referenceGCCandidate struct {
-	id               uuid.UUID
-	original         string
-	converted, thumb *string
-	operation        uuid.UUID
-	attempt          int
+	id                  uuid.UUID
+	original            string
+	converted, thumb    *string
+	operation           uuid.UUID
+	attempt             int
+	inventoryGeneration int64
 }
 
 // RunReferenceGCOnce processes at most limit durable zero-reference blobs.
@@ -55,12 +57,18 @@ func (s *FilesStore) RunReferenceGCOnce(ctx context.Context, deleter r2file.Obje
 }
 
 func (s *FilesStore) claimReferenceGC(ctx context.Context, onlyBlob ...uuid.UUID) (referenceGCCandidate, bool, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
+	if errors.Is(err, ErrInventoryBarrier) {
+		return referenceGCCandidate{}, false, nil
+	}
 	if err != nil {
 		return referenceGCCandidate{}, false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var candidate referenceGCCandidate
+	if candidate.inventoryGeneration, err = LockInventoryGuardTx(ctx, tx, true); err != nil {
+		return referenceGCCandidate{}, false, err
+	}
 	var operation *uuid.UUID
 	var target *uuid.UUID
 	if len(onlyBlob) > 0 {
@@ -84,6 +92,9 @@ LIMIT 1`, target).Scan(&candidate.id, &candidate.original, &candidate.converted,
 	}
 	if err != nil {
 		return referenceGCCandidate{}, false, err
+	}
+	if held, e := inventoryBlobHeldTx(ctx, tx, candidate.id); e != nil || held {
+		return referenceGCCandidate{}, false, e
 	}
 	if operation == nil {
 		candidate.operation = uuid.New()
@@ -117,11 +128,21 @@ RETURNING gc_attempt`, candidate.id, candidate.operation, candidate.attempt, 300
 }
 
 func (s *FilesStore) deleteClaimedReferenceGC(ctx context.Context, deleter r2file.ObjectDeleter, candidate referenceGCCandidate) (bool, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
+	if errors.Is(err, ErrInventoryBarrier) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	generation, err := LockInventoryGuardTx(ctx, tx, true)
+	if err != nil {
+		return false, err
+	}
+	if generation != candidate.inventoryGeneration {
+		return false, nil
+	}
 	var locked uuid.UUID
 	err = tx.QueryRow(ctx, `
 SELECT b.blob_id
@@ -138,6 +159,9 @@ FOR UPDATE OF b`, candidate.id, candidate.operation, candidate.attempt).Scan(&lo
 	if err != nil {
 		return false, err
 	}
+	if held, e := inventoryBlobHeldTx(ctx, tx, candidate.id); e != nil || held {
+		return false, e
+	}
 	keys := []string{candidate.original}
 	if candidate.converted != nil {
 		keys = append(keys, *candidate.converted)
@@ -145,7 +169,9 @@ FOR UPDATE OF b`, candidate.id, candidate.operation, candidate.attempt).Scan(&lo
 	if candidate.thumb != nil {
 		keys = append(keys, *candidate.thumb)
 	}
-	if err := r2file.DeleteKeys(ctx, deleter, keys...); err != nil {
+	deleteCtx, cancel := context.WithTimeout(guardedInventoryDeleteContext(ctx), 15*time.Second)
+	defer cancel()
+	if err := r2file.DeleteKeys(deleteCtx, deleter, keys...); err != nil {
 		return false, err
 	}
 	tag, err := tx.Exec(ctx, `UPDATE file_blobs SET state='GC_COMPLETE',deleted_at=clock_timestamp(),next_attempt_at=NULL WHERE blob_id=$1 AND state='GC_PENDING' AND gc_operation_id=$2 AND gc_attempt=$3`, candidate.id, candidate.operation, candidate.attempt)

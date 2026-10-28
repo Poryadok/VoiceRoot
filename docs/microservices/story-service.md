@@ -245,7 +245,7 @@ story_media_deletion_outbox
 
 - **Expiry worker**: каждую минуту — пометить expired stories (TTL 24h)
 - **Archive cleanup**: bounded DB-first transaction locks expired unhighlighted Stories with `FOR UPDATE SKIP LOCKED`, inserts one media-deletion outbox record per media Story, then logically deletes the Stories. Text-only Stories do not create an outbox row. Highlight membership mutations lock the same Story rows, so a committed Highlight protects the Story/media, while a purge that commits first makes Add return `NotFound`.
-- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls File Service after the Story commit, and completes only its own lease. Failures and ambiguous File outcomes back off and retry; File deletion is idempotent by immutable file ID.
+- **Media deletion dispatcher**: at startup and at a short interval claims ready/expired outbox leases with a token, calls protected `ReleaseStoryMedia` after the Story commit, and completes only its own lease. The immutable operation ID is the Story ID; release names `(media_file_id, STORY, story_id, NULL, NULL)`. Failures and ambiguous File outcomes back off and retry. File owns zero-reference detection and physical GC; this worker never calls broad `DeleteFile`. Release remains pending until File has a verified global backfill/activation authority, which is not installed in production yet.
 - **LFP matcher**: при создании "ищу пати" Story Service публикует `story.lfp_created` в JetStream; **потребитель Matchmaking Service (авто-заявка из LFP-стори) отложен** — Matchmaking пока не подписан на этот subject
 
 ## Публикуемые события (→ NATS)
@@ -297,23 +297,80 @@ non-sensitive `Unavailable`; File's `InvalidArgument`, `NotFound`,
 
 Until the product canon selects an LFP media kind and video policy, media-less
 LFP remains supported and any non-empty LFP `media_file_id` fails closed with
-`FailedPrecondition` before File, persistence or an event. Exact Story-ID
-claim/reference binding remains separate File-reference work.
+`FailedPrecondition` before File, persistence or an event. Read-only validation
+does not acquire a reference; the exact photo/video lifecycle is defined below.
+
+### Exact media reference lifecycle
+
+Photo/video publication additionally calls protected `ClaimStoryMedia`, with an
+immutable Story ID, File ID, author and expected media type. File repeats the
+admission predicate while holding its blob and File locks and durably acquires
+`(file_id, STORY, story_id, NULL, NULL)` before publication. Claim operation IDs
+are UUIDv5 of `voice.story.media.acquire.v1:<story UUID>` under the URL namespace;
+release operation IDs equal the Story UUID, so acquire and release never share
+an idempotency key. Each transport attempt gets a fresh signed credential and
+request ID; inbound Gateway/client authority is discarded.
+
+Migration `000007` adds a Story-owned `story_media_reference_intents` table.
+Creation saves the exact Story/File pair before File, then locks that intent
+through acquire and Story insertion. The Story and removal of the intent commit
+together. Failed or ambiguous creation leaves the intent for bounded recovery
+after one minute. Recovery locks the intent and releases its exact key; File
+durably retires even a not-yet-acquired key, so a delayed acquire cannot revive
+it after verified activation. Recovery retries failed/ambiguous releases without
+dropping intent ownership. Without File's global-ledger authority it remains
+durably pending; it cannot substitute an empty ledger or a local boolean.
+
+Author `DeleteStory` atomically queues the same release and hides the Story.
+The same author can replay success; other authors and unknown IDs receive
+`NotFound`. A minimal Story-owned deletion receipt preserves replay for 30 days
+after successful deletion even if archive cleanup physically removes the Story;
+the worker removes expired receipts in bounded batches. Text creates no media
+intent or release. Highlights retain the original Story reference through
+expiry/archive; only explicit author deletion or eligible archive cleanup
+releases it.
+
+The production dispatcher uses the configured signed File client and remains
+pending when that protected dependency is absent. Historical unclaimed media
+is never converted into broad File deletion: releasing an absent exact reference
+retires that key but does not initiate blob GC. Deterministic owner backfills and
+the global File-reference activation gates remain prerequisites for a deployment
+cutover. No production `StoryReferenceReleaseAuthority` provider exists, so exact
+release/physical-GC activation is an explicit unmet BE-096 criterion. The global
+File-reference cutover owner must supply and verify that authority before this
+consumer can complete; this code change is not full lifecycle completion,
+rollout or acceptance evidence.
 
 ### Protected media rollout
 
 Story loads exactly two distinct PKCS#8 RSA keys from
 `STORY_PRINCIPAL_SIGNING_KEYS_DIR`; `STORY_PRINCIPAL_ACTIVE_KID` selects the
 signer. Its HTTP server exposes sorted public keys at `GET /.well-known/jwks.json`.
-`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE` and
-`FILE_PRINCIPAL_TLS_SERVER_NAME` are all required when this path is configured.
+`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE`,
+`FILE_PRINCIPAL_TLS_SERVER_NAME`, `FILE_PRINCIPAL_CLIENT_CERT_FILE` and
+`FILE_PRINCIPAL_CLIENT_KEY_FILE` are all required when this path is configured.
+The Story client presents a certificate with client-auth usage signed by the
+existing CA in File's `FILE_PRINCIPAL_CLIENT_CA_FILE`; an absent, unreadable or
+mismatched certificate/key fails startup. TLS trust and the signed request-bound
+`service:story` credential are both required; neither replaces the other.
 Partial configuration is a startup error; no configuration keeps media admission
 unavailable. Text and media-less LFP remain usable.
+
+For direct service-to-service HTTPS JWKS, set all three of
+`STORY_PRINCIPAL_JWKS_HTTPS_LISTEN`, `STORY_PRINCIPAL_JWKS_TLS_CERT_FILE` and
+`STORY_PRINCIPAL_JWKS_TLS_KEY_FILE`. The dedicated TLS listener serves the same
+public key set at `/.well-known/jwks.json`; partial settings, an invalid or
+currently unusable server certificate, or a failed bind stop startup. Without
+these settings, the existing HTTP endpoint can be served through an independently
+configured HTTPS ingress. The File consumer always verifies the TLS chain and
+server name; no plaintext fallback is introduced.
 
 Deployment owners provision Secret `voice-story-principal-keys` with exactly two
 `<kid>.pem` keys; `voice-file-principal-tls` with `tls.crt`/`tls.key` and SAN
 `voice-file-principal.<namespace>.svc`; `voice-principal-trust` with `ca.crt`
-trusting both File and Story HTTPS JWKS certificates; `voice-story-jwks-tls` for
+trusting both File and Story HTTPS JWKS certificates; `voice-story-file-client-tls`
+with `tls.crt`/`tls.key` issued by that existing trust authority for Story's
+client-auth connection to File; `voice-story-jwks-tls` for
 the HTTPS ingress; and `voice-file-replay` with Redis `password` (empty only for
 an intentionally unauthenticated isolated Redis). Never put private keys into
 ConfigMaps or Git.
@@ -355,3 +412,35 @@ require reconciliation and current negative subject/object/operation/cohort
 admission. Terminal-erased must differ from ordinary MM NotFound; absent history
 cannot authorize fresh Register. Local SQL scrub, physical copies and installed
 admission need separate proofs. See the [producer ExecPlan](../testing/be011-lfp-consent-producer-exec-plan.md).
+
+### Private reference inventory export
+
+`StoryReferenceInventoryService` is a separate File-only mTLS and signed-principal
+listener. Begin materializes immutable, deterministically hashed pages of at most
+1000 entries; Page and Changes bind the complete installation/restore/migration,
+File/owner incarnation, component, writer version and snapshot identity. It never
+uses viewer listings or forwarded Gateway identity. Seal remains fail-closed.
+
+Migration `000008_reference_inventory` installs a transactional owner gate and
+counter. Ownership mutations always lock that gate before Story rows and advance
+the counter. Before the first committed snapshot no identifier journal/cache is
+collected. Begin derives all retained, creation-pending, release-pending and
+unresolved entries from authoritative rows at cut B, initializes tuple state and
+enables capture atomically. Every later committed revision has a complete ordered
+absolute-state journal assignment, including empty revisions. Rollback consumes no
+revision; retries replay the original snapshot. Capture persists independently of
+exporter configuration, and later snapshots do not erase earlier consumer ranges.
+Historical invalid bindings and independent covers without a retained Story pin
+are counted unresolved. No historical export invokes `ClaimStoryMedia`.
+
+The optional `STORY_REFERENCE_INVENTORY_` configuration is complete-or-absent:
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`,
+`REPLAY_REDIS_ADDR`, `FILE_JWKS_URL`, `JWKS_CA_FILE`; optional
+`REPLAY_REDIS_PASSWORD` and paired `JWKS_CLIENT_CERT_FILE`/`JWKS_CLIENT_KEY_FILE`.
+Missing trust/replay or an ordinary listener cannot serve inventory. No public
+admin endpoint or environment value creates a migration authority.
+
+Incomplete/unacknowledged snapshots and journal evidence have no 30-day expiry;
+P30 starts only on completion/ack and dependency-safe compaction is separate work.
+This protective export is not a global writer seal or release activation. See the
+[execution plan](../testing/be096-reference-inventory-exec-plan.md).

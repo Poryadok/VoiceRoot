@@ -92,6 +92,7 @@ class VoiceFilesClient {
     String? storyId,
     bool isE2e = false,
     bool music = false,
+    bool voiceNote = false,
   }) async {
     final result = await _gateway.postProto(
       uri: _gateway.resolve('/api/v1/files/upload'),
@@ -105,6 +106,7 @@ class VoiceFilesClient {
         storyId: storyId,
         isE2e: isE2e,
         music: music,
+        voiceNote: voiceNote,
       ),
       createEmpty: file_pb.RequestUploadResponse.create,
     );
