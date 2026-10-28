@@ -2,11 +2,11 @@
 // Usage: node src/admin/browser/runtime-config.mjs <dist directory> <admin|portal>
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
+import { startChrome } from './runtime-config-startup.mjs';
 
 const root = resolve(process.argv[2]);
 const app = process.argv[3];
@@ -59,19 +59,17 @@ const webs = await Promise.all(['dev', 'stage'].map(async (env, number) => {
 }));
 
 const profile = await mkdtemp(join(tmpdir(), `voice-${app}-config-`));
-const chrome = spawn(process.env.CHROME_BIN || (process.platform === 'win32'
+const chrome = startChrome(process.env.CHROME_BIN || (process.platform === 'win32'
   ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe' : 'google-chrome'), [
   '--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--no-first-run',
   '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank',
-], { stdio: 'ignore' });
+], profile);
 let socket;
+let startupFailed = true;
 try {
-  let port;
-  for (let i = 0; i < 150; i++) {
-    try { port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); break; }
-    catch { await sleep(100); }
-  }
+  const port = await chrome.port();
   assert.ok(port, 'Chrome did not publish a DevTools port');
+  startupFailed = false;
   const pages = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
   const page = pages.find(row => row.type === 'page');
   assert.ok(page);
@@ -157,7 +155,13 @@ try {
   console.log(JSON.stringify({ app, asset, assetSha, result: 'PASS', cases: ['dev', 'stage', ...negatives.map(x => x[0]), 'retry'] }));
 } finally {
   socket?.close();
-  chrome.kill();
-  await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch(() => {});
-  await Promise.all(servers.map(server => new Promise(done => server.close(done))));
+  try {
+    let removeProfile;
+    try { removeProfile = await chrome.close(); }
+    finally { if (startupFailed) console.error(JSON.stringify({ chrome_startup: chrome.diagnostic() })); }
+    if (removeProfile) await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    else console.error('Chrome profile retained: descendant observation unavailable');
+  } finally {
+    await Promise.all(servers.map(server => new Promise(done => server.close(done))));
+  }
 }
