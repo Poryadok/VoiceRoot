@@ -123,5 +123,29 @@ class CloneJournalTest(unittest.TestCase):
             adapter.AuthFlywayJournal(self.base.phase,lambda:None,self.base.binding,self.manifest_sha,
                                       forged,digest(self.restore),self.plan_sha,self.metadata)
 
+    def test_early_failure_can_cleanup_only_verified_owned_resources(self):
+        journal=self.create(); journal.state['flyway_clone']={'status':'starting','resources':[]}; journal.save()
+        resources=journal.state['flyway_clone']['resources']
+        resource={'name_hint':'voice-auth-flyway-'+'1'*32,'image':runtime.QUALIFIED_TOOLS['postgres'],
+                  'image_id':'sha256:'+'a'*64,'state':'creating'}
+        resources.append(copy.deepcopy(resource)); journal.save()
+        resource.update(id='1'*64,state='created'); resources[0]=copy.deepcopy(resource); journal.save()
+        resource.update(volumes=['fixture-volume'],state='owned'); resources[0]=copy.deepcopy(resource); journal.save()
+        resources[0]['state']='removing'; journal.save()
+        resources[0]['state']='removed'; journal.save()
+        self.assertEqual(self.base.base.ledger.row['cohort_auth_flyway']['resources'][0]['state'],'removed')
+        with self.assertRaises(adapter.CloneJournalError): journal.uncertain()
+        self.assertEqual(self.base.base.ledger.row['status'],'uncertain')
+
+    def test_unknown_created_resource_cannot_be_cleaned(self):
+        journal=self.create(); journal.state['flyway_clone']={'status':'starting','resources':[]}; journal.save()
+        resource={'name_hint':'voice-auth-flyway-'+'1'*32,'image':runtime.QUALIFIED_TOOLS['postgres'],
+                  'image_id':'sha256:'+'a'*64,'state':'creating'}
+        journal.state['flyway_clone']['resources'].append(resource); journal.save()
+        resource.update(id='1'*64,state='created'); journal.save()
+        resource.update(volumes=[],state='removing')
+        with self.assertRaises(adapter.CloneJournalError): journal.save()
+        self.assertEqual(self.base.base.ledger.row['status'],'uncertain')
+
 
 if __name__ == '__main__': unittest.main()

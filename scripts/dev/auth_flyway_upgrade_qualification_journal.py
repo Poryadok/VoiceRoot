@@ -261,4 +261,5 @@ def _transition(previous,resources,stage):
     if allowed.get(old['state']) != new['state']: raise ValueError()
     if {k:v for k,v in new.items() if k not in ('state','id','volumes')} != {k:v for k,v in old.items() if k not in ('state','id','volumes')}: raise ValueError()
     if 'id' in old and old['id'] != new.get('id') or 'volumes' in old and old['volumes'] != new.get('volumes'): raise ValueError()
-    if new['state'] in ('removing','removed') and (len(resources) != 4 or stage != 'done' or any(r['state'] != 'removed' for r in resources[i+1:])): raise ValueError()
+    if new['state'] in ('removing','removed') and (any(r['state'] != 'owned' for r in resources[:i])
+            or any(r['state'] != 'removed' for r in resources[i+1:])): raise ValueError()
