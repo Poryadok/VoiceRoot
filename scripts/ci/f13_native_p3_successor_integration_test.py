@@ -46,6 +46,12 @@ C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
 D1_C2_DATA_STORES_COMMIT = 'c8b1ae98352b3b652cff489f5d57c2e123b24ce1'
 D1_C2_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
                            'oid': 'ce85c7a0de1184a4a667666cca95d7e5f304c694'}
+# PR #1016's exact merged Story/File inventory documentation, for this private
+# historical fixture only. Neither subsequent content nor disconnected history
+# is admitted by this tuple.
+INVENTORY_DATA_STORES_COMMIT = '0a65f54010e834fcdea5ee0d0d64844c1889f158'
+INVENTORY_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
+                               'oid': 'c5b521a5919ce7f513b1ca3161c8dab4be657771'}
 # Reviewed process-restart test, restored only in detached historical fixtures.
 JWKS_FIXTURE_PATH = 'src/backend/voice/jwks_recovery_test.go'
 JWKS_FIXTURE_SOURCE = 'f2fa9d02c79983ca76d3b3a84088f66b265f027f'
@@ -75,6 +81,11 @@ def reviewed_cold_start_document(source):
 def reviewed_stores_source(source):
     stores = 'docs/DATA_STORES.md'
     actual = legacy.entry(ROOT, source, stores)
+    if actual == INVENTORY_DATA_STORES_ENTRY and legacy.entry(
+            ROOT, INVENTORY_DATA_STORES_COMMIT, stores) == INVENTORY_DATA_STORES_ENTRY:
+        return subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+             INVENTORY_DATA_STORES_COMMIT, source], capture_output=True).returncode == 0
     for reviewed in (DATA_STORES_COMMIT, CATALOG_DATA_STORES_COMMIT):
         ancestor = subprocess.run(
             ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', reviewed, source],
@@ -169,6 +180,27 @@ class ReviewedJWKSFixtureTest(unittest.TestCase):
 
 
 class C2ReviewedStoresSourceTest(unittest.TestCase):
+    def test_inventory_tuple_and_unknown_content_mode_missing_and_ancestry(self):
+        stores = 'docs/DATA_STORES.md'
+        current = INVENTORY_DATA_STORES_COMMIT
+        self.assertEqual(legacy.entry(ROOT, current, stores), INVENTORY_DATA_STORES_ENTRY)
+        self.assertTrue(reviewed_stores_source(current))
+        for variant in ('content', 'mode', 'missing', 'ancestry'):
+            with tempfile.TemporaryDirectory() as directory:
+                env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                git('read-tree', current, env=env)
+                if variant == 'missing':
+                    git('update-index', '--force-remove', '--', stores, env=env)
+                elif variant != 'ancestry':
+                    mode = '100755' if variant == 'mode' else '100644'
+                    oid = INVENTORY_DATA_STORES_ENTRY['oid'] if variant == 'mode' else git(
+                        'hash-object', '-w', '--stdin', data=b'unreviewed inventory fixture\n')
+                    git('update-index', '--cacheinfo', mode + ',' + oid + ',' + stores, env=env)
+                changed = RealGitSuccessorTest.commit(
+                    git('write-tree', env=env), [BASE if variant == 'ancestry' else current])
+            with self.subTest(variant=variant):
+                self.assertFalse(reviewed_stores_source(changed))
+
     def test_exact_reviewed_c2_tuple_and_existing_sources(self):
         reviewed = '91ec85e27774d5110a16b2082c10ae1cd970822e'
         expected = {'mode': '100644', 'type': 'blob',
