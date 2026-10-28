@@ -37,6 +37,69 @@ void main() {
     await _loadCaptureFonts();
   });
 
+  for (final (targetIndex, size) in [
+    (8, const Size(900, 900)),
+    (31, const Size(900, 900)),
+    (8, const Size(390, 844)),
+    (31, const Size(390, 844)),
+  ]) {
+    testWidgets('message jump places unequal-height target inside the viewport '
+        '($targetIndex at ${size.width})', (tester) async {
+      await _setViewport(tester, size);
+      final messages = List.generate(
+        40,
+        (index) => <String, Object?>{
+          'id': index == targetIndex ? 'exact-target' : 'unequal-$index',
+          'chat': {'id': 'chat-pins'},
+          'sender_profile_id': 'profile-b',
+          'content': index == targetIndex
+              ? 'Exact target message'
+              : index > 12
+              ? List.filled(
+                  28,
+                  'A tall paragraph in message $index.',
+                ).join('\n\n')
+              : 'Short message $index',
+          'type': 'regular',
+          'content_type': 'MESSAGE_CONTENT_TYPE_TEXT',
+          'created_at': DateTime.utc(2024, 1, 1, 0, 0, index).toIso8601String(),
+        },
+      );
+      await tester.pumpWidget(
+        _pinnedRoomApp(
+          initialMessageJump: 'exact-target',
+          historyMessages: messages,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(ChatRoomPanel)),
+      );
+      final profileId = container.read(authControllerProvider).activeProfileId;
+      final room = container.read(chatRoomControllerProvider('chat-pins'));
+      expect(room.messages, hasLength(40));
+      expect(
+        room.messages.any((message) => message.id == 'exact-target'),
+        isTrue,
+      );
+      expect(
+        container.read(pendingChatMessageScrollProvider('chat-pins')),
+        isNull,
+      );
+      final target = find.byKey(ValueKey('view:$profileId:exact-target'));
+      expect(target, findsOneWidget);
+      final targetBox = tester.renderObject<RenderBox>(target);
+      final targetRect = targetBox.localToGlobal(Offset.zero) & targetBox.size;
+      final viewportRect = tester.getRect(
+        find.byKey(ChatRoomPanel.messagesKey),
+      );
+      expect(targetRect.top, greaterThanOrEqualTo(viewportRect.top));
+      expect(targetRect.bottom, lessThanOrEqualTo(viewportRect.bottom));
+      await tester.pump(const Duration(seconds: 2));
+    });
+  }
+
   testWidgets('message jump queued before mount waits for initial history', (
     tester,
   ) async {
@@ -641,6 +704,7 @@ Future<void> _setDesktopViewport(WidgetTester tester) async {
 }
 
 Widget _pinnedRoomApp({
+  List<Map<String, Object?>>? historyMessages,
   String? initialMessageJump,
   Completer<void>? holdInitialHistory,
   String? contentType,
@@ -725,7 +789,7 @@ Widget _pinnedRoomApp({
                   'next_cursor': 'older-pins',
                   'has_more': true,
                 }
-              : {'messages': pinned},
+              : {'messages': historyMessages ?? pinned},
         }),
       );
     }

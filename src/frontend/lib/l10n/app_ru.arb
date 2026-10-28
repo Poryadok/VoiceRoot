@@ -1591,5 +1591,6 @@
   "composerVoiceError": "Не удалось записать. Повторите.",
   "composerVoiceStop": "Завершить запись",
   "composerVoiceCancel": "Отменить запись",
-  "composerVoiceLocked": "Запись закреплена"
+  "composerVoiceLocked": "Запись закреплена",
+  "queueSearchNoRolePreference": "Без предпочтения роли"
 }

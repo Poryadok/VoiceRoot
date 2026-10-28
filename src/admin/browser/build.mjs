@@ -10,7 +10,7 @@ for (const [file, args] of [
 ]) {
   const result = spawnSync(process.execPath, [file, ...args], {
     stdio: 'inherit',
-    env: { ...process.env, VITE_VOICE_API_BASE: apiBase.origin, VITE_OAUTH_DISABLED: 'false',
+    env: { ...process.env, VITE_RUNTIME_CONFIG_REQUIRED: 'false', VITE_VOICE_API_BASE: apiBase.origin, VITE_OAUTH_DISABLED: 'false',
       VITE_STAFF_TOKEN: '', VITE_OAUTH_CLIENT_ID: 'voice-admin' },
   });
   if (result.error) throw result.error;

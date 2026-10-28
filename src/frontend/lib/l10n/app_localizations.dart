@@ -7345,6 +7345,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recording locked'**
   String get composerVoiceLocked;
+
+  /// No description provided for @queueSearchNoRolePreference.
+  ///
+  /// In en, this message translates to:
+  /// **'No role preference'**
+  String get queueSearchNoRolePreference;
 }
 
 class _AppLocalizationsDelegate

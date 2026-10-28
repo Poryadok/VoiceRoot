@@ -105,10 +105,21 @@ fail closed. No registry login/Secret mutation is provided by this route.
 
 The artifact receipt requires actual node/container/image IDs, terminal exit0,
 and the exact published file hash and size. The Job uses the same fixed User
-image with `sleep 60`, backoff0 and a five-second active deadline. A deadline
-result requires the actual container to have started, a terminal failed Job
-with `DeadlineExceeded`, and the exact owned terminal Pod/container chain.
-Pending/image-pull failures and client timeouts cannot satisfy it.
+image with `sleep 60`, backoff0 and a fifteen-second active deadline. This leaves
+time for guarded polling to observe actual start; an image-pull timeout still
+cannot qualify. The controller durably records the first exact child identity
+and its actual started container/image/node before the Job becomes terminal.
+It refuses replacement children, changed container identity and restarts.
+
+A deadline result requires the same terminal failed Job with `DeadlineExceeded`
+and either the exact owned terminal Pod/container chain, or the previously
+recorded start followed by actual named-child absence. Kubernetes may remove
+the failed Job's child before the terminal Job poll. The absence route requires
+the actual Job failure timestamp after the recorded container start, records
+`child_terminal_evidence: absent_after_deadline`, and never invents a container
+`finishedAt`. A Job condition without the prior durable start, an unknown or
+still-present/replaced child, pending/image-pull failure or client timeout cannot
+satisfy this route. Cleanup still requires exact Job/child UID absence.
 
 Cleanup uses UID and current resourceVersion preconditions and requires actual
 Pod, Job/child garbage-collection and common-lock absence. A DELETE acknowledgement

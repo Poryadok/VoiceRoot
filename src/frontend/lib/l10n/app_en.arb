@@ -1689,5 +1689,6 @@
   "composerVoiceError": "Recording failed. Try again.",
   "composerVoiceStop": "Finish recording",
   "composerVoiceCancel": "Cancel recording",
-  "composerVoiceLocked": "Recording locked"
+  "composerVoiceLocked": "Recording locked",
+  "queueSearchNoRolePreference": "No role preference"
 }
