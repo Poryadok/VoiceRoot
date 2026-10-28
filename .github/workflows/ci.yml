@@ -67,7 +67,8 @@ jobs:
       compose: ${{ steps.filter.outputs.compose }}
       staging_infra: ${{ steps.filter.outputs.staging_infra }}
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
-      code: ${{ steps.filter.outputs.code }}
+      code: ${{ steps.filter.outputs.code == 'true' || steps.fullrequest.outputs.requested == 'true' }}
+      full_application_request: ${{ steps.fullrequest.outputs.requested }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       docker_go_services: ${{ steps.gomatrix.outputs.docker_go_services }}
       integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
@@ -95,6 +96,10 @@ jobs:
         with:
           filters: .github/ci/path-filters.yml
           predicate-quantifier: some-with-excludes
+      - name: Validate source-owned full application build request
+        id: fullrequest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && steps.filter.outputs.full_application_request == 'true'
+        run: python3 scripts/ci/full_application_request.py
       - name: Resolve PR scope without narrowing master obligations
         id: scope
         env:
@@ -122,7 +127,7 @@ jobs:
         env:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
-          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
+          FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' }}
         run: |
           FILTER_JSON="$(jq --arg value "$CI_GLOBAL" '.ci_global = $value' <<< "$FILTER_JSON")"
           export FILTER_JSON
@@ -140,8 +145,8 @@ jobs:
           FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
           GO_SERVICES_JSON: ${{ steps.gomatrix.outputs.go_services }}
-          FORCE_FULL: ${{ github.event_name == 'workflow_dispatch' && inputs.profile == 'full' }}
-          FILTER_CODE: ${{ steps.filter.outputs.code }}
+          FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' }}
+          FILTER_CODE: ${{ steps.filter.outputs.code == 'true' || steps.fullrequest.outputs.requested == 'true' }}
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
           STAGING_FORCE_FULL_ROLLOUT: ${{ vars.STAGING_FORCE_FULL_ROLLOUT }}
@@ -289,6 +294,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Verify compiled source build contract
+        if: matrix.shard == 'policy'
+        run: python3 scripts/ci/compiled_source_build_test.py
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -1100,6 +1108,8 @@ jobs:
         service: ${{ fromJSON(needs.changes.outputs.build_go_services) }}
     steps:
       - uses: actions/checkout@v5
+      - name: Verify compiled source build contract
+        run: python3 scripts/ci/compiled_source_build_test.py
       - name: Docker build context and Dockerfile
         id: dockerctx
         shell: bash
@@ -1127,6 +1137,7 @@ jobs:
           context: ${{ steps.dockerctx.outputs.context }}
           file: ${{ steps.dockerctx.outputs.file }}
           push: true
+          build-args: ${{ contains(fromJSON('["user","realtime","notification"]'), matrix.service) && format('VOICE_SOURCE_SHA={0}', github.sha) || '' }}
           tags: ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
@@ -2532,6 +2543,7 @@ jobs:
       github.ref == 'refs/heads/master' &&
       needs.changes.outputs.code == 'true' &&
       needs.changes.outputs.ci_only_change != 'true' &&
+      needs.changes.outputs.full_application_request != 'true' &&
       vars.STAGING_DEPLOY_ENABLED == 'true' &&
       needs.staging-stack-lock.result == 'success'
     permissions:
