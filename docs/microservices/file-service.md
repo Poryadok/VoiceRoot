@@ -468,10 +468,13 @@ Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 | `Unavailable` | Listener or persistence is unavailable |
 
 The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
-`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE` and
+`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE`,
+`FILE_PRINCIPAL_CLIENT_CA_FILE` to verify Story's client certificate, and
 `FILE_PRINCIPAL_REPLAY_REDIS_ADDR` (optional password via
 `FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
-Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
+Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root, and
+`S2S_JWKS_CLIENT_CERT_FILE`/`S2S_JWKS_CLIENT_KEY_FILE` present File's client
+certificate to that endpoint. Cache
 settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
 The ordinary listener returns `Unavailable` for validation and the protected
 listener rejects all other methods. See Story's deployment runbook and
