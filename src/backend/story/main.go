@@ -44,6 +44,18 @@ func main() {
 	if mediaConn != nil {
 		defer func() { _ = mediaConn.Close() }()
 	}
+	jwksHTTPS, jwksHTTPSEnabled, err := newStoryJWKSHTTPSServer(os.LookupEnv, publicJWKS)
+	if err != nil {
+		log.Fatalf("story HTTPS JWKS config: %v", err)
+	}
+	var jwksListener net.Listener
+	if jwksHTTPSEnabled {
+		jwksListener, err = listenStoryJWKSHTTPS(jwksHTTPS)
+		if err != nil {
+			log.Fatalf("story HTTPS JWKS listen: %v", err)
+		}
+		defer func() { _ = jwksListener.Close() }()
+	}
 	serviceCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	addr := ":8080"
@@ -150,8 +162,18 @@ func main() {
 	go func() {
 		errCh <- server.ListenAndServe()
 	}()
+	var jwksErrors <-chan error
+	if jwksHTTPSEnabled {
+		ch := make(chan error, 1)
+		jwksErrors = ch
+		go func() { ch <- jwksHTTPS.ServeTLS(jwksListener, "", "") }()
+	}
 
 	select {
+	case err := <-jwksErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("story HTTPS JWKS serve: %v", err)
+		}
 	case err := <-inventoryErrors:
 		if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			log.Fatalf("story reference inventory serve: %v", err)
@@ -166,6 +188,11 @@ func main() {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
 		defer cancel()
+		if jwksHTTPS != nil {
+			if err := jwksHTTPS.Shutdown(ctx); err != nil {
+				log.Fatal(err)
+			}
+		}
 		if err := server.Shutdown(ctx); err != nil {
 			log.Fatal(err)
 		}
