@@ -20,6 +20,7 @@ from stage_runtime import pv_storage_path
 
 ROOT=Path('/var/lib/voice-nats-preservation')
 NS='voice-staging'
+TT_FENCE_VERSION=1
 MARKER='voice-nats-generation'
 UUID=re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 SHA=re.compile(r'[a-f0-9]{64}')
@@ -115,6 +116,15 @@ def recovery_at_use(receipt):
 
 def validate(receipt, registry, tag, mode, changed, source_root):
     fields={'schema','operation','namespace_uid','marker','pvc','pv','target','backup','expires_at'}
+    if 'resource_fence' in receipt:
+        import resource_claim
+        binding=receipt['resource_fence']
+        if (not isinstance(binding,dict) or set(binding)!={'schema','context','operation','helper_sha256','target_sha256'}
+            or binding.get('operation')!=receipt.get('operation')
+            or binding.get('target_sha256')!=resource_claim.digest(receipt.get('target'))):
+            raise Blocked('rollout_resource_fence_invalid')
+        resource_claim.validate(binding['context'])
+        fields.add('resource_fence')
     if 'provisional' in receipt:
         import provisional
         value=provisional.validate(receipt['provisional'])

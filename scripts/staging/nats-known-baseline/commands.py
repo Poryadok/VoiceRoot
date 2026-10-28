@@ -8,6 +8,8 @@ import time
 
 from controller import Blocked
 diagnostic_observer=None
+authority_guard=None
+TT_FENCE_VERSION=1
 _current_action='command'
 ACTIONS=frozenset(('get','patch','wait','scale','rollout','apply','create','delete','exec','run','inspect','stop','rm','image','info'))
 
@@ -29,6 +31,7 @@ def capture(argv, *, body=b'', timeout=30, limit=2<<20, env=None, pass_fds=()):
     if len(body)>2<<20: raise Blocked('command_input_limit')
     action=action_id(argv)
     _current_action=action
+    if authority_guard is not None:authority_guard(argv)
     if diagnostic_observer is not None:diagnostic_observer(action,'STARTED')
     try:
         child=subprocess.Popen(argv,stdin=subprocess.PIPE,stdout=subprocess.PIPE,

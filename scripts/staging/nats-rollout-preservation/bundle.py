@@ -24,6 +24,7 @@ ROLLOUT+=('operator_reset.py',)
 ROLLOUT+=('deployment_report.py',)
 ROLLOUT+=('provisional.py',)
 ROLLOUT+=('release_policy_wiring.py',)
+ROLLOUT+=('resource_claim.py',)
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

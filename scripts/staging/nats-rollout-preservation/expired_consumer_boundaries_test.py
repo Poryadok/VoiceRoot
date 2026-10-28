@@ -221,10 +221,12 @@ class ApplyProducerCompositionTests(unittest.TestCase):
         import tempfile,hashlib,os,datetime as dt
         from contextlib import ExitStack
         from unittest.mock import patch
-        import transaction,guard,runner,apply,expired_transport as transport
+        import transaction,guard,runner,apply,resource_claim,commands,expired_transport as transport
+        from resource_claim_test import context as resource_context,card as resource_card
         from expired_transport_test import TransportTests
         from guard_test import ClaimTest
-        for late in (None,'claim','apply','native-publication','projection-drift-claim','projection-drift-apply'):
+        for late in (None,'claim','apply','native-publication','projection-drift-claim','projection-drift-apply',
+                     'tt-context-drift-claim','tt-helper-drift-apply','tt-context-drift-apply','tt-journal-drift-apply'):
             with self.subTest(late=late),tempfile.TemporaryDirectory() as folder,ExitStack() as stack:
                 fixture=TransportTests();fixture.setup_files(folder);state=fixture.state
                 kube=ClaimTest();kube.setUp();kube.marker['data']['knownRolloutOperation']=state['operation']
@@ -236,6 +238,13 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                     'source_hashes':{'scripts/fixed':hashlib.sha256(b'bound').hexdigest()},'template_hashes':{'voice-story':'a'*64},
                     'input_template_hashes':{'voice-story':'a'*64},'images':{'voice-story/story':'registry/story@sha256:'+'b'*64},
                     'manifest_sha256':hashlib.sha256(raw).hexdigest(),'migration_sha256':transport.upload.digest([]),'nonnats_sha256':'e'*64}
+                # Synthetic captured source, with the real version-bearing
+                # modules and exact helper/context/target journal bindings.
+                helper_binding={name:'a'*64 for name in (
+                    'nats-rollout-preservation/resource_claim.py','nats-rollout-preservation/runner.py',
+                    'nats-rollout-preservation/apply.py','nats-rollout-preservation/guard.py',
+                    'nats-rollout-preservation/bridge.py','nats-rollout-preservation/bridge_root.py',
+                    'nats-known-baseline/commands.py')}
                 # The real runner derives bootstrap pins from the root-bound target YAML.
                 repository=Path(__file__).resolve().parents[3]
                 (source/'deploy/templates').mkdir(parents=True)
@@ -244,6 +253,18 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                     bootstrap=(repository/relative).read_bytes()
                     (source/relative).write_bytes(bootstrap)
                     state['target']['source_hashes'][relative]=hashlib.sha256(bootstrap).hexdigest()
+                tt_context=resource_context();tt_context.update(commit=state['target']['tag'],images=copy.deepcopy(state['target']['images']))
+                tt_card=resource_card(tt_context);tracker_requests=[]
+                state['code_capture']=copy.deepcopy(helper_binding)
+                state['resource_fence']=dict(schema='voice-staging-resource-fence-v1',context=tt_context,
+                    operation=state['operation'],helper_sha256=resource_claim.digest(helper_binding),
+                    target_sha256=resource_claim.digest(state['target']))
+                def tracker(suffix,body=None):
+                    tracker_requests.append((suffix,body))
+                    if suffix.startswith('check?'):
+                        return {'valid':tt_card['claim']==tt_context['claim'],'resource':copy.deepcopy(tt_card)}
+                    self.assertEqual(suffix,'actions');self.assertEqual(body['safety'],'uncertain')
+                    return {}
                 state['events']=[]
                 state['context']['expected']={'namespace_uid':kube.r['namespace_uid'],'source_claim_uid':kube.r['pvc']['uid']}
                 for path in (fixture.base/'checkpoint.json',fixture.base/'expired-recovery-adopted-checkpoint.json'):
@@ -264,7 +285,8 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                 def migrate(base,current,actual,journal,**kwargs):
                     kwargs['before_selected_start']();kwargs['mutation_guard']();journal({'kind':'fixture-native-complete'})
                     return {'verified':True,'cut':copy.deepcopy(state['cut'])}
-                for adapter in [patch('guard.ROOT',fixture.base.parent),patch('root_cli.code_binding',return_value={}),
+                for adapter in [patch('guard.ROOT',fixture.base.parent),patch('root_cli.code_binding',return_value=helper_binding),
+                    patch.object(resource_claim.Check,'request',side_effect=tracker),
                     patch('expired_recovery.verify_adopted_binding'),patch.object(transaction,'reconstruct',return_value=stage),
                     patch.object(transaction,'context',return_value=context),patch.object(transaction,'file_sha',return_value=state['cut']['manifest_sha256']),
                     patch.object(transaction,'verify_archive',return_value=True),patch.object(transaction,'revalidate_inputs'),
@@ -273,6 +295,8 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                     patch.object(transaction.migrations,'execute',return_value=[]),patch.object(transaction.space_safeguards,'before_migrate'),
                     patch.object(transaction.space_safeguards,'after_migrate',return_value=None)]:stack.enter_context(adapter)
                 (fixture.base.parent/'installed').mkdir(mode=0o700)
+                tt_journal=fixture.base.parent/'installed'/resource_claim.JOURNAL
+                transaction.save(tt_journal,{**state['resource_fence'],'status':'active','phase':'apply-ready'})
                 receipt=transaction.authorize(None,fixture.base,state,state['cut']['manifest']['archive_sha256'],state['cut']['manifest_sha256'],{},
                     authorization_deadline=dt.datetime.fromisoformat(authority['expires_at']),expired_authority=authority)
                 manifest=fixture.base/'apply-manifests.json';manifest.write_bytes(raw);manifest.chmod(0o440)
@@ -293,8 +317,14 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                 stack.enter_context(patch('guard.dt.datetime',Clock))
                 applies=[]
                 def wire(args,body=None):
+                    # This fake replaces commands.capture, so preserve its
+                    # immediate authority callback before each synthetic call.
+                    self.assertIsNotNone(commands.authority_guard)
+                    commands.authority_guard(['kubectl',*args])
                     if args[0]=='apply':applies.append(body);return b'configmap/fixed'
                     result=kube.kube(args,body)
+                    if late=='tt-context-drift-claim' and args[:2]==['get','configmap']:
+                        tt_card['claim']='33333333-3333-4333-8333-333333333333'
                     if late=='claim' and args[:2]==['get','configmap']:current[0]=real_datetime.fromisoformat(authority['expires_at'])
                     if late=='apply' and args[:2]==['get','configmap'] and kube.marker['data']['phase']=='rollout-applying':current[0]=real_datetime.fromisoformat(authority['expires_at'])
                     if (late=='projection-drift-claim' and args[:2]==['get','configmap'] or
@@ -305,14 +335,23 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                         projection_path.write_text(json.dumps(projected));projection_path.chmod(0o440)
                     return result
                 stack.enter_context(patch('guard.kubectl',side_effect=wire))
-                if late in ('claim','projection-drift-claim'):
-                    with self.assertRaises(Blocked):runner.preflight();guard.claim(receipt)
+                stack.enter_context(resource_claim.runner_scope(receipt,fixture.base.parent,helper_binding))
+                if late in ('claim','projection-drift-claim','tt-context-drift-claim'):
+                    expected=RuntimeError if late=='tt-context-drift-claim' else Blocked
+                    with self.assertRaises(expected):runner.preflight();guard.claim(receipt)
                     self.assertFalse(any(args[0]=='patch' for args,_ in kube.calls));self.assertEqual(applies,[])
                 else:
                     self.assertEqual(runner.preflight(),receipt);rv=guard.claim(receipt)
                     os.environ['VOICE_NATS_ROLLOUT_CLAIM_RV']=rv
+                    if late=='tt-helper-drift-apply':helper_binding['nats-rollout-preservation/resource_claim.py']='0'*64
+                    if late=='tt-context-drift-apply':tt_card['claim']='33333333-3333-4333-8333-333333333333'
+                    if late=='tt-journal-drift-apply':
+                        row=json.loads(tt_journal.read_text());row['status']='uncertain';transaction.save(tt_journal,row)
                     if late in ('apply','projection-drift-apply'):
                         with self.assertRaises(Blocked):apply.main()
+                        self.assertEqual(applies,[])
+                    elif late in ('tt-helper-drift-apply','tt-context-drift-apply','tt-journal-drift-apply'):
+                        with self.assertRaises(RuntimeError):apply.main()
                         self.assertEqual(applies,[])
                     else:
                         apply.main();self.assertEqual(len(applies),1);self.assertEqual(applies[0]['items'],documents)
@@ -337,6 +376,7 @@ class ApplyProducerCompositionTests(unittest.TestCase):
                             with self.assertRaises(Blocked):actions.execute({'action':'prepare-rollback','operation':state['operation']})
                             actions._prepare.assert_not_called()
 
+                self.assertTrue(tracker_requests)
                 self.assertEqual(state['nats_contract_expires_at'],authority['original_expires_at'])
 
 class FinishPublicationCompositionTests(unittest.TestCase):
