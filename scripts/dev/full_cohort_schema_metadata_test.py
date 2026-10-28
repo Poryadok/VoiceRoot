@@ -2,6 +2,7 @@ import json
 import hashlib
 import sys
 import subprocess
+import shutil
 from unittest import mock
 from pathlib import Path
 import unittest
@@ -133,6 +134,24 @@ class ResolveTest(unittest.TestCase):
                             lambda: self.fail('unexpected engine read'), 'voice',
                             lambda _: self.fail('unexpected query'), lambda: None)
 
+    def test_auth_requires_known_spring_runtime_and_explicit_no_flyway(self):
+        self.pod.update(deployment='voice-auth', container_name='auth', pod_name='voice-auth-abc', spring_config_safe=True)
+        url = 'jdbc:postgresql://voice-postgres:5432/auth_db'
+        self.pod['env'] = [{'name': 'SPRING_DATASOURCE_URL', 'value': url},
+                           {'name': 'SPRING_DATASOURCE_USERNAME', 'value': 'auth_runtime'}]
+        values = {'SPRING_DATASOURCE_URL': url, 'SPRING_DATASOURCE_USERNAME': 'auth_runtime',
+                  'AUTH_FLYWAY_ENABLED': 'false'}
+        runtime = bound(lambda key: values.get(key))
+        runtime.workload, runtime.pod_name = 'auth', 'voice-auth-abc'
+        runtime.auth_policy = lambda: True
+        lookup = bound(lambda _: ['10.1.0.1'])
+        lookup.workload, lookup.pod_name = 'auth', 'voice-auth-abc'
+        result = subject.resolve('auth', lambda: self.pod.copy(), bound(self.read), runtime, lookup, lambda: None)
+        self.assertEqual((result['database'], result['role']), ('auth_db', 'auth_runtime'))
+        values['SPRING_APPLICATION_JSON'] = '{"spring":{}}'
+        with self.assertRaises(subject.Hold):
+            subject.resolve('auth', lambda: self.pod.copy(), bound(self.read), runtime, lookup, lambda: None)
+
 
 class CatalogTest(unittest.TestCase):
     def snapshot(self):
@@ -232,12 +251,39 @@ class ObserveTest(unittest.TestCase):
         binding = {'database': 'auth_db', 'state': 'resolved', 'addresses': ['10.1.0.1'], 'binding': {'namespace': 'voice-dev', 'namespace_uid': 'n'}}
         row = {'database': 'auth_db', 'database_oid': 1, 'role': 'voice', 'pid': 1,
                'server_start': 'start', 'read_only': 'on', 'data_directory': '/var/lib/postgresql/data', 'version': 1, 'dirty': False,
-               'ledger_rows': 1, 'bad_versions': 0, 'other_ledger': False}
-        for field, value in [('bad_versions', 1), ('other_ledger', True)]:
+               'ledger_rows': 1, 'bad_versions': 0, 'ledger_kind': 'flyway'}
+        for field, value in [('bad_versions', 1), ('ledger_kind', 'ambiguous')]:
             with self.subTest(field=field), self.assertRaises(subject.Hold):
                 subject.observe(subject.catalog(CatalogTest().snapshot()), binding, lambda: identity,
                                 'voice', lambda _: json.dumps(dict(row, **{field: value})), lambda: None)
-        self.assertIn("version !~ '^[0-9]+$'", subject.FLYWAY_SQL)
+        self.assertIn("version !~ ''^[0-9]+$''", subject.AUTH_SQL)
+        good = subject.observe(subject.catalog(CatalogTest().snapshot()), binding, lambda: identity,
+                               'voice', lambda _: json.dumps(dict(row, ledger_kind='canonical')), lambda: None)
+        self.assertEqual(good['ledger_kind'], 'canonical')
+        with self.assertRaises(subject.Hold):
+            subject.observe(subject.catalog(CatalogTest().snapshot()), binding, lambda: identity, 'voice',
+                            lambda _: json.dumps(dict(row, ledger_kind='canonical', version=999)), lambda: None)
+
+    def test_voice_source_backed_readiness_table_check(self):
+        snapshot = CatalogTest().snapshot()
+        snapshot['files'].update(subject.VOICE_LIFECYCLE_SOURCE)
+        source = subject.catalog(snapshot)
+        identity = {'namespace': 'voice-dev', 'namespace_uid': 'n', 'pod_name': 'voice-postgres-0',
+                    'pod_uid': 'p', 'pod_rv': '1', 'container_name': 'postgres', 'container_id': 'c',
+                    'restart_count': 0, 'pvc_uid': 'v', 'pvc_rv': '1', 'service_uid': 's', 'service_rv': '1',
+                    'service_ip': '10.1.0.1', 'pod_ip': '10.0.0.1', 'endpoints_uid': 'e', 'endpoints_rv': '1',
+                    'slices_identity': 'slice:1'}
+        binding = {'database': 'voice_db', 'state': 'resolved', 'addresses': ['10.1.0.1'],
+                   'binding': {'namespace': 'voice-dev', 'namespace_uid': 'n'}}
+        row = {'database': 'voice_db', 'database_oid': 1, 'role': 'voice', 'pid': 1,
+               'server_start': 'start', 'read_only': 'on', 'data_directory': '/var/lib/postgresql/data',
+               'version': 1, 'dirty': False, 'ledger_rows': 1, 'voice_lifecycle_tables_present': True}
+        result = subject.observe(source, binding, lambda: identity, 'voice', lambda _: json.dumps(row), lambda: None)
+        self.assertEqual(result['source_checks']['voice_lifecycle_tables'], 'present')
+        self.assertFalse(result['startup_qualified'])
+        row['voice_lifecycle_tables_present'] = False
+        with self.assertRaises(subject.Hold):
+            subject.observe(source, binding, lambda: identity, 'voice', lambda _: json.dumps(row), lambda: None)
 
 
 class PrivateReaderTest(unittest.TestCase):
@@ -273,10 +319,24 @@ class PrivateReaderTest(unittest.TestCase):
         if sys.platform != 'linux':
             self.skipTest('Linux-only shell')
         script = subject.ENV_SCRIPT.replace('/proc/1/environ', '/dev/stdin')
-        result = subprocess.run(['sh', '-ec', script, '--', 'DATABASE_URL'],
+        shell = shutil.which('bash') or 'sh'
+        result = subprocess.run([shell, '-ec', script, '--', 'DATABASE_URL'],
                                 input=b'OTHER=hidden\0DATABASE_URL=expected\0', capture_output=True)
         self.assertEqual(result.returncode, 0)
-        self.assertEqual(result.stdout, b'expected')
+        self.assertEqual(result.stdout, b'Pexpected')
+
+    def test_auth_env_policy_rejects_relaxed_property_names(self):
+        if not shutil.which('bash'):
+            self.skipTest('requires bash')
+        script = subject.AUTH_ENV_POLICY.replace('/proc/1/environ', '/dev/stdin')
+        for key in ('spring_datasource_url', 'spring_flyway_enabled', 'spring_config_location',
+                    'voice.auth.jdbc.url', 'spring.datasource.url'):
+            with self.subTest(key=key):
+                result = subprocess.run(['bash', '-ec', script], input=(key + '=private\0').encode(), capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn(b'private', result.stdout + result.stderr)
+        result = subprocess.run(['bash', '-ec', script], input=b'SPRING_DATASOURCE_URL=private\0', capture_output=True)
+        self.assertEqual(result.stdout, b'ok')
 
 
 class SnapshotTest(unittest.TestCase):

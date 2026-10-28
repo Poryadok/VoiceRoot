@@ -13,6 +13,7 @@ import os
 import selectors
 import time
 import ipaddress
+import shlex
 from urllib.parse import unquote, urlsplit, parse_qsl
 
 OWNERS = dict((name, name + '_db') for name in (
@@ -25,6 +26,15 @@ CONTAINERS.update(analytics='analytics', gateway='gateway', web='web', admin='ad
                   **{'developer-portal': 'portal'})
 SECONDARY = {'chat': {'SPACE_DATABASE_URL': 'space_db'},
              'messaging': {'CHAT_DATABASE_URL': 'chat_db', 'SPACE_DATABASE_URL': 'space_db'}}
+AUTH_OVERRIDE_VARS = ('VOICE_AUTH_JDBC_URL', 'voice.auth.jdbc.url', 'SPRING_APPLICATION_JSON',
+                      'SPRING_CONFIG_LOCATION', 'SPRING_CONFIG_ADDITIONAL_LOCATION', 'SPRING_CONFIG_NAME',
+                      'SPRING_CONFIG_IMPORT', 'SPRING_PROFILES_ACTIVE', 'SPRING_FLYWAY_URL',
+                      'SPRING_FLYWAY_ENABLED', 'JDK_JAVA_OPTIONS', '_JAVA_OPTIONS')
+VOICE_LIFECYCLE_SOURCE = {
+    'src/backend/voice/main.go': 'e12135163d53d2abf3636b54a16a9b3167621e75fe6c0efdb6b01745924f04de',
+    'src/backend/voice/database.go': '25bdcd5d85f93e27c269fcd60e2e433ab9203d1d68d6139cd1b3f22763714580',
+    'src/backend/voice/internal/roomlifecycle/postgres_store.go': 'a8fa8db25582ea44c7f00bbd3fad647c89e753423bc2ccb750476ec559b85b03',
+}
 IDENTITY = ('namespace', 'namespace_uid', 'deployment', 'deployment_uid', 'deployment_rv', 'pod_name', 'pod_uid',
             'pod_rv', 'container_id', 'restart_count', 'container_name')
 SAFE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]{0,62}\Z')
@@ -34,19 +44,49 @@ ENGINE_IDENTITY = ('namespace', 'namespace_uid', 'pod_name', 'pod_uid', 'pod_rv'
 PSQL_SCRIPT = ('export PGPASSWORD="$POSTGRES_PASSWORD"; export PGAPPNAME=voice-cohort-observe; '
                'export PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=3000"; '
                'exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1" -c "$2"')
-ENV_SCRIPT = ("n=0; result=; while IFS= read -r -d '' line; do "
+ENV_SCRIPT = ("printf 'x\\000' | (IFS= read -r -d '' probe && [ \"$probe\" = x ]) || exit 1; "
+              "n=0; result=; while IFS= read -r -d '' line; do "
               "case \"$line\" in \"$1\"=*) n=$((n+1)); result=${line#*=};; esac; "
-              "done </proc/1/environ; [ \"$n\" = 1 ] || exit 1; printf '%s' \"$result\"")
+              "done </proc/1/environ; [ \"$n\" -le 1 ] || exit 1; "
+              "if [ \"$n\" = 0 ]; then printf M; else printf 'P%s' \"$result\"; fi")
+AUTH_ENV_POLICY = ("while IFS= read -r -d '' line; do key=${line%%=*}; case \"$key\" in "
+                   "SPRING_DATASOURCE_URL|SPRING_DATASOURCE_USERNAME|SPRING_DATASOURCE_PASSWORD) continue;; esac; "
+                   "key=${key,,}; key=${key//./_}; key=${key//-/_}; case \"$key\" in "
+                   "spring_config*|spring_application_json|spring_profiles*|spring_datasource*|spring_flyway*|"
+                   "voice_auth_jdbc*) exit 1;; esac; done </proc/1/environ; printf ok")
 COMMON_SQL = ("'database',current_database(),'database_oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),"
               "'role',current_user,'pid',pg_backend_pid(),'server_start',pg_postmaster_start_time(),"
               "'read_only',current_setting('transaction_read_only'),'data_directory',current_setting('data_directory')")
 MIGRATE_SQL = ("SELECT json_build_object(" + COMMON_SQL +
                ",'version',max(version),'dirty',bool_or(dirty),'ledger_rows',count(*)) FROM public.schema_migrations")
+VOICE_SQL = MIGRATE_SQL.replace("'ledger_rows',count(*)", "'ledger_rows',count(*),"
+    "'voice_lifecycle_tables_present',(SELECT bool_and(to_regclass(table_name) IS NOT NULL) FROM unnest(ARRAY["
+    "'voice_room_instances','voice_room_memberships','voice_lifecycle_operations','voice_lifecycle_effects',"
+    "'voice_media_epoch_denials','voice_event_outbox']) AS table_name)")
 FLYWAY_SQL = ("SELECT json_build_object(" + COMMON_SQL +
               ",'version',max(CASE WHEN version ~ '^[0-9]+$' THEN version::bigint END),"
               "'dirty',bool_or(NOT success),'ledger_rows',count(*),"
               "'bad_versions',count(*) FILTER (WHERE version IS NOT NULL AND version !~ '^[0-9]+$'),"
               "'other_ledger',to_regclass('public.schema_migrations') IS NOT NULL) FROM public.flyway_schema_history")
+_AUTH_FLYWAY_INNER = ("SELECT row_to_json(t) AS payload FROM (SELECT 'flyway' AS ledger_kind, "
+                      "max(CASE WHEN version ~ '^[0-9]+$' THEN version::bigint END) AS version, "
+                      "bool_or(NOT success) AS dirty, count(*) AS ledger_rows, "
+                      "count(*) FILTER (WHERE version IS NOT NULL AND version !~ '^[0-9]+$') AS bad_versions "
+                      "FROM public.flyway_schema_history) t")
+_AUTH_CANONICAL_INNER = ("SELECT row_to_json(t) AS payload FROM (SELECT 'canonical' AS ledger_kind, "
+                         "max(version) AS version, bool_or(dirty) AS dirty, count(*) AS ledger_rows, "
+                         "0 AS bad_versions FROM public.schema_migrations) t")
+def _xml_json_query(inner):
+    escaped = inner.replace("'", "''")
+    return "(xpath('string(/row/payload)',query_to_xml('" + escaped + "',false,true,'')))[1]::text::jsonb"
+
+
+AUTH_SQL = ("SELECT json_build_object(" + COMMON_SQL + ")::jsonb || CASE "
+            "WHEN to_regclass('public.flyway_schema_history') IS NOT NULL AND to_regclass('public.schema_migrations') IS NULL THEN " +
+            _xml_json_query(_AUTH_FLYWAY_INNER) +
+            " WHEN to_regclass('public.schema_migrations') IS NOT NULL AND to_regclass('public.flyway_schema_history') IS NULL THEN " +
+            _xml_json_query(_AUTH_CANONICAL_INNER) +
+            " ELSE jsonb_build_object('ledger_kind','ambiguous') END")
 
 
 class Hold(ValueError):
@@ -133,23 +173,44 @@ def kube_runtime_reader(workload, pod_name, run_bytes, namespace='voice-dev'):
     def read(variable):
         if variable not in ('DATABASE_URL', 'VOICE_DATABASE_URL', 'GATEWAY_DATABASE_URL',
                             'CHAT_DATABASE_URL', 'SPACE_DATABASE_URL',
-                            'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME'):
+                            'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME',
+                            'AUTH_FLYWAY_ENABLED', 'JAVA_TOOL_OPTIONS', *AUTH_OVERRIDE_VARS):
             raise Hold('runtime_variable_not_allowed')
         executable = '/gateway' if workload == 'gateway' else '/service'
-        script = '[ "$(readlink /proc/1/exe)" = "' + executable + '" ] || exit 1; ' + ENV_SCRIPT
+        if workload == 'auth':
+            script = ("[ \"$(readlink /proc/1/exe)\" = /opt/java/openjdk/bin/java ] || exit 1; "
+                      "set -- \"$1\"; i=0; while IFS= read -r -d '' arg; do "
+                      "i=$((i+1)); case $i:$arg in 1:java|2:-jar|3:/auth.jar) ;; *) exit 1;; esac; "
+                      "done </proc/1/cmdline; [ \"$i\" = 3 ] || exit 1; " + ENV_SCRIPT)
+        else:
+            script = '[ "$(readlink /proc/1/exe)" = "' + executable + '" ] || exit 1; ' + ENV_SCRIPT
         args = ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',
                 '--namespace', namespace, '--request-timeout=15s', 'exec', pod_name,
-                '-c', CONTAINERS[workload], '--', 'sh', '-ec', script, '--', variable]
+                '-c', CONTAINERS[workload], '--', 'bash' if workload == 'auth' else 'sh', '-ec', script, '--', variable]
         try:
             value = _external(run_bytes, args)
             if not isinstance(value, bytes) or len(value) > 65536:
                 raise Hold('runtime_response_invalid')
-            return value.decode('utf-8')
+            if value == b'M':
+                return None
+            if not value.startswith(b'P'):
+                raise Hold('runtime_response_invalid')
+            return value[1:].decode('utf-8')
         except Exception:
             raise Hold('runtime_read_failed') from None
+    def auth_policy():
+        if workload != 'auth':
+            raise Hold('runtime_target_invalid')
+        args = ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',
+                '--namespace', namespace, '--request-timeout=15s', 'exec', pod_name,
+                '-c', 'auth', '--', 'bash', '-ec', AUTH_ENV_POLICY]
+        if _external(run_bytes, args) != b'ok':
+            raise Hold('auth_external_config_unknown')
+        return True
     read.namespace = namespace
     read.workload = workload
     read.pod_name = pod_name
+    read.auth_policy = auth_policy
     return read
 
 
@@ -220,10 +281,14 @@ def kube_workload_snapshot(workload, pod_name, run_bytes, guard, namespace='voic
                     containers[0].get('command') or containers[0].get('args')):
                 raise Hold('workload_container_invalid')
             c, status = containers[0], statuses[0]
+            unsafe_mounts = ('/', '/config', '/application.yml', '/application.yaml', '/application.properties')
+            safe_spring = all(not any(m.get('mountPath', '') == p or m.get('mountPath', '').startswith(p + '/')
+                                      for p in unsafe_mounts) for m in c.get('volumeMounts', []))
             return {'namespace': namespace, 'namespace_uid': ns['uid'], 'deployment': dm['name'], 'deployment_uid': dm['uid'],
                     'deployment_rv': dm['resourceVersion'], 'pod_name': pm['name'], 'pod_uid': pm['uid'],
                     'pod_rv': pm['resourceVersion'], 'container_name': name, 'container_id': status['containerID'],
-                    'restart_count': status['restartCount'], 'env': c.get('env', []), 'envFrom': c.get('envFrom', [])}
+                    'restart_count': status['restartCount'], 'env': c.get('env', []), 'envFrom': c.get('envFrom', []),
+                    'spring_config_safe': safe_spring}
         except Hold:
             raise
         except Exception:
@@ -390,7 +455,8 @@ def observe(source_catalog, binding, engine_snapshot, expected_engine_role, run,
                 not SAFE.fullmatch(expected_engine_role) or
                 before['namespace_uid'] != binding['binding']['namespace_uid']):
             raise Hold('engine_identity_invalid')
-        query = FLYWAY_SQL if entry['kind'] == 'flyway' else MIGRATE_SQL
+        voice_check = database == 'voice_db' and entry.get('voice_lifecycle_policy_recognized') is True
+        query = AUTH_SQL if entry['kind'] == 'flyway' else VOICE_SQL if voice_check else MIGRATE_SQL
         args = ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',
                 '--namespace', 'voice-dev', '--request-timeout=15s', 'exec', 'voice-postgres-0',
                 '-c', 'postgres', '--', 'sh', '-ec', PSQL_SCRIPT, '--', database, query]
@@ -408,27 +474,34 @@ def observe(source_catalog, binding, engine_snapshot, expected_engine_role, run,
                 not isinstance(response.get('server_start'), str) or not response['server_start'] or
                 type(response.get('version')) is not int or type(response.get('dirty')) is not bool or
                 type(response.get('ledger_rows')) is not int or response['ledger_rows'] < 1 or
-                (entry['kind'] != 'flyway' and response['ledger_rows'] != 1)):
+                ((entry['kind'] != 'flyway' or response.get('ledger_kind') == 'canonical') and response['ledger_rows'] != 1)):
             raise Hold('metadata_response_invalid')
         target_ip = before['pod_ip'] if before['service_ip'] == 'None' else before['service_ip']
         if binding.get('addresses') != [target_ip]:
             raise Hold('database_dns_binding_mismatch')
         if response['dirty']:
             raise Hold('dirty_ledger')
-        if entry['kind'] == 'flyway' and (response.get('other_ledger') is not False or
+        if entry['kind'] == 'flyway' and (response.get('ledger_kind') not in ('flyway', 'canonical') or
                                           response.get('bad_versions') != 0):
             raise Hold('auth_mixed_or_unknown_ledger')
-        if response['version'] not in entry['versions']:
+        versions = (entry['canonical_versions'] if entry['kind'] == 'flyway' and response['ledger_kind'] == 'canonical'
+                    else entry['versions'])
+        if response['version'] not in versions:
             raise Hold('unknown_ledger_version')
+        if voice_check and response.get('voice_lifecycle_tables_present') is not True:
+            raise Hold('voice_lifecycle_tables_missing')
         return {'source_sha': source_catalog['source_sha'], 'database': database,
                 'engine': {k: before[k] for k in ENGINE_IDENTITY},
                 'session': {k: response[k] for k in ('database_oid', 'role', 'pid', 'server_start')},
                 'ledger': {k: response[k] for k in ('version', 'dirty', 'ledger_rows')},
+                'ledger_kind': response.get('ledger_kind', entry['kind']),
+                'source_checks': {'voice_lifecycle_tables': 'present' if voice_check else 'not_evaluated'},
                 'startup_qualified': False,
                 'limits': ['source_authority_and_kubernetes_routing_supplied_by_caller',
                            'ledger_does_not_prove_migration_content_or_startup_compatibility',
                            'dns_observation_does_not_prove_existing_application_connection_peer',
-                           'getent_may_not_return_all_address_families']}
+                           'getent_may_not_return_all_address_families',
+                           'voice_table_lookup_uses_observer_search_path_and_does_not_prove_other_readiness_checks']}
     except Hold:
         raise
     except Exception:
@@ -476,6 +549,9 @@ def catalog(snapshot):
             databases[database] = {'kind': 'flyway' if auth else
                                    'space-native' if database == 'space_db' else 'golang-migrate',
                                    'versions': versions}
+            if database == 'voice_db':
+                databases[database]['voice_lifecycle_policy_recognized'] = all(
+                    snapshot['files'].get(path) == digest for path, digest in VOICE_LIFECYCLE_SOURCE.items())
             if auth:
                 canonical_prefix = 'src/backend/migrations/auth_db/'
                 canonical = {p[len(canonical_prefix):]: h for p, h in snapshot['files'].items()
@@ -484,6 +560,7 @@ def catalog(snapshot):
                                         not re.fullmatch(r'[0-9a-f]{64}', h) for n, h in canonical.items()):
                     raise Hold('auth_canonical_inventory_incomplete')
                 databases[database]['canonical_files'] = dict(sorted(canonical.items()))
+                databases[database]['canonical_versions'] = sorted({int(n.split('_', 1)[0]) for n in canonical if n.endswith('.up.sql')})
         return {'source_sha': snapshot['source_sha'], 'tree_sha256': snapshot['git_tree_sha256'],
                 'databases': databases, 'live_schema_qualified': False}
     except Hold:
@@ -650,11 +727,36 @@ def resolve(workload, snapshot, read_key, runtime_env, runtime_dns, guard, *, va
             if runtime_env(variable) != value:
                 raise Hold('runtime_environment_mismatch')
             actual_value = value
+            auth_runtime = {}
             if workload == 'auth':
-                # Spring/JVM/system-property precedence is not established here.
-                raise Hold('auth_effective_configuration_unverified')
+                if before.get('spring_config_safe') is not True:
+                    raise Hold('auth_external_config_unknown')
+                policy = getattr(raw_runtime, 'auth_policy', None)
+                if not callable(policy) or guarded(policy) is not True:
+                    raise Hold('auth_external_config_unknown')
+                for key in (*AUTH_OVERRIDE_VARS, 'AUTH_FLYWAY_ENABLED', 'JAVA_TOOL_OPTIONS'):
+                    auth_runtime[key] = runtime_env(key)
+                if any(auth_runtime[key] not in (None, '') for key in AUTH_OVERRIDE_VARS):
+                    raise Hold('auth_external_config_unknown')
+                if (auth_runtime['AUTH_FLYWAY_ENABLED'] or '').lower() != 'false':
+                    raise Hold('auth_flyway_runtime_not_disabled')
+                options = shlex.split(auth_runtime['JAVA_TOOL_OPTIONS'] or '')
+                if any(not (option.startswith('-XX:') or option.startswith('-Djavax.net.ssl.trustStore=') or
+                            option.startswith('-Djavax.net.ssl.trustStorePassword=') or
+                            option.startswith('-Djavax.net.ssl.trustStoreType=')) for option in options):
+                    raise Hold('auth_jvm_options_unknown')
+                if not value.startswith('jdbc:'):
+                    raise Hold('database_url_invalid')
+                value = value[5:]
+                role, more = _env(workload, before, 'SPRING_DATASOURCE_USERNAME', read_key)
+                refs += more
+                if role is None:
+                    role = 'voice'  # application.yml default
+                if runtime_env('SPRING_DATASOURCE_USERNAME') not in (role, None if role == 'voice' else role):
+                    raise Hold('runtime_environment_mismatch')
             host, database, parsed_role = _url(value, before['namespace'])
-            role = parsed_role
+            if workload != 'auth':
+                role = parsed_role
             if not isinstance(role, str) or not SAFE.fullmatch(role):
                 raise Hold('database_role_invalid')
             expected_db = SECONDARY.get(workload, {}).get(variable, OWNERS.get(workload, OPTIONAL_DATABASES.get(workload)))
@@ -670,11 +772,19 @@ def resolve(workload, snapshot, read_key, runtime_env, runtime_dns, guard, *, va
         if workload in OWNERS or workload == 'gateway':
             if runtime_env(variable) != actual_value:
                 raise Hold('runtime_environment_changed')
+            if workload == 'auth':
+                if (after.get('spring_config_safe') is not True or
+                        guarded(policy) is not True or
+                        any(runtime_env(key) != expected for key, expected in auth_runtime.items()) or
+                        runtime_env('SPRING_DATASOURCE_USERNAME') not in (role, None if role == 'voice' else role)):
+                    raise Hold('runtime_environment_changed')
             if runtime_dns(host) != result['addresses']:
                 raise Hold('database_dns_changed')
             final = snapshot()
             _identity(workload, final)
             if any(before[k] != final[k] for k in IDENTITY) or before.get('env') != final.get('env') or before.get('envFrom') != final.get('envFrom'):
+                raise Hold('pod_changed')
+            if workload == 'auth' and final.get('spring_config_safe') is not True:
                 raise Hold('pod_changed')
         for kind, name, key, old in refs:
             current = read_key(kind, name, key)
