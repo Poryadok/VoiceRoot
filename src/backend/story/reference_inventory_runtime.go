@@ -30,7 +30,7 @@ func startReferenceInventory(ctx context.Context, cfg inventorygrpc.Config, enab
 	}
 	source, ok := store.(inventorygrpc.Store)
 	if !ok || source == nil {
-		return nil, errors.New("Story reference inventory Store unavailable")
+		return nil, errors.New("story reference inventory store unavailable")
 	}
 	auth, err := inventorygrpc.NewRuntime(ctx, cfg)
 	if err != nil {
