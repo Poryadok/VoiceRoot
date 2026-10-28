@@ -20,6 +20,37 @@ on:
       - scripts/dev/media_operation_guard_test.py
       - scripts/dev/media_backup_phase.py
       - scripts/dev/media_backup_phase_test.py
+      - scripts/dev/media_backup_upload_phase.py
+      - scripts/dev/media_backup_upload_phase_test.py
+      - scripts/dev/media_backup_upload_run.py
+      - scripts/dev/media_backup_upload_run_test.py
+      - scripts/dev/media_backup_upload_runner.py
+      - scripts/dev/media_backup_upload_runner_test.py
+      - scripts/dev/media_backup_capture_operation.py
+      - scripts/dev/media_backup_capture_operation_test.py
+      - scripts/dev/media_backup_readback.py
+      - scripts/dev/media_backup_readback_test.py
+      - scripts/dev/media_restore_journal.py
+      - scripts/dev/media_restore_journal_test.py
+      - scripts/dev/frontend_runtime_adoption.py
+      - scripts/dev/frontend_runtime_adoption_test.py
+      - scripts/dev/frontend_runtime_executor.py
+      - scripts/dev/frontend_runtime_executor_test.py
+      - scripts/dev/cohort_backup_phases.py
+      - scripts/dev/cohort_backup_phases_test.py
+      - scripts/dev/cohort_backup_operation.py
+      - scripts/dev/cohort_backup_operation_test.py
+      - scripts/dev/cohort_upload_phase.py
+      - scripts/dev/cohort_upload_phase_test.py
+      - scripts/dev/cohort_upload_run.py
+      - scripts/dev/cohort_upload_run_test.py
+      - scripts/dev/cohort_upload_runner.py
+      - scripts/dev/cohort_upload_runner_test.py
+      - .github/workflows/dev-cohort-backup-upload.yml
+      - scripts/dev/story_media_backup_cohort_finalize.py
+      - scripts/dev/story_media_backup_cohort_finalize_test.py
+      - .github/workflows/dev-media-backup-upload.yml
+      - scripts/dev/story_media_backup_custody.py
       - scripts/dev/resource_fencing.py
       - scripts/dev/update_images.py
       - deploy/templates/story-media-*.yaml
@@ -60,6 +91,20 @@ jobs:
           python -B scripts/dev/media_operation_journal_test.py
           python -B scripts/dev/media_operation_guard_test.py
           python -B scripts/dev/media_backup_phase_test.py
+          python -B scripts/dev/media_backup_upload_phase_test.py
+          python -B scripts/dev/media_backup_upload_run_test.py
+          python -B scripts/dev/media_backup_upload_runner_test.py
+          python -B scripts/dev/media_backup_capture_operation_test.py
+          python -B scripts/dev/media_backup_readback_test.py
+          python -B scripts/dev/media_restore_journal_test.py
+          python -B scripts/dev/frontend_runtime_adoption_test.py
+          python -B scripts/dev/frontend_runtime_executor_test.py
+          python -B scripts/dev/cohort_backup_phases_test.py
+          python -B scripts/dev/cohort_backup_operation_test.py
+          python -B scripts/dev/cohort_upload_phase_test.py
+          python -B scripts/dev/cohort_upload_run_test.py
+          python -B scripts/dev/cohort_upload_runner_test.py
+          python -B scripts/dev/story_media_backup_cohort_finalize_test.py
 
   publish:
     name: Publish exact DEV candidate
