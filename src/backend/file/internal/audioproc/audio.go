@@ -71,20 +71,22 @@ func (p Extractor) Extract(ctx context.Context, raw []byte) (Metadata, error) {
 	if err := cmd.Run(); err != nil || out.overflow {
 		return Metadata{}, ErrAudio
 	}
-	return parseProbe(out.Bytes())
+	return parseProbe(out.buffer.Bytes())
 }
 
 type limitedBuffer struct {
-	bytes.Buffer
+	// Keep Buffer's ReadFrom out of the method set: exec's stdout copy must
+	// always pass through Write to enforce the capture limit.
+	buffer   bytes.Buffer
 	overflow bool
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	if b.Len()+len(p) > maxProbeBytes {
+	if b.buffer.Len()+len(p) > maxProbeBytes {
 		b.overflow = true
 		return 0, ErrAudio
 	}
-	return b.Buffer.Write(p)
+	return b.buffer.Write(p)
 }
 
 func parseProbe(raw []byte) (Metadata, error) {

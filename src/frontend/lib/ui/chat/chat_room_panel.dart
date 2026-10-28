@@ -56,6 +56,7 @@ import 'scheduled_messages_strip.dart';
 import 'message_reactions_row.dart';
 import 'forward_message_sheet.dart';
 import 'mention_message_content.dart';
+import 'link_preview.dart';
 import 'e2e_attachment_actions.dart';
 import 'e2e_chat_settings.dart';
 import 'e2e_identity_change_banner.dart';
@@ -3567,6 +3568,16 @@ class _MessageBubbleContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voice = VoiceColors.of(context);
+    final previewUrl =
+        !message.isE2e &&
+            !message.decryptionFailed &&
+            (message.contentType == null ||
+                message.contentType ==
+                    messaging_enums
+                        .MessageContentType
+                        .MESSAGE_CONTENT_TYPE_TEXT)
+        ? linkPreviewUrlFromContent(message.content)
+        : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -3597,6 +3608,11 @@ class _MessageBubbleContent extends StatelessWidget {
           MentionMessageContent(
             content: message.content,
             mentions: message.mentions,
+          ),
+        if (previewUrl != null)
+          LinkPreviewCard(
+            key: ValueKey('message_link_preview_${message.id}'),
+            url: previewUrl,
           ),
         if (message.editedAt != null)
           Text(

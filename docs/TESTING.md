@@ -85,6 +85,24 @@ Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOUR
 
 ### Web cold startup
 
+Promotable web runtime configuration: `flutter test
+test/web_gateway_config_test.dart test/gateway_config_test.dart` covers explicit
+origin binding, unsafe/missing configuration and compile-time client compatibility.
+`python3 src/frontend/docker/runtime_config_deployment_test.py` (PyYAML from
+`scripts/ci/requirements-e2e.txt`) checks the canonical ConfigMap/read-only mount,
+DEV rendering and single image producer. It is included in `ci-script-tests-runtime`.
+
+For the actual web bootstrap boundary, build the release Dockerfile once, extract
+`/usr/share/nginx/html` from that image, and run
+`node src/frontend/docker/runtime_config_browser_test.mjs <extracted-web-root>`
+in Linux with Node 24 and Chrome (`CHROME_BIN` optional). This uses the unchanged
+compiled assets under two owned loopback app/API origins. A disposable saved
+session forces the real refresh client: correct configs must send only to their
+selected API after config delivery; missing, invalid and wrong-origin configs
+must produce no API calls or first frame. External network is blocked; bundled
+CanvasKit bytes satisfy the renderer request. This does not qualify a live
+environment, its endpoint tuple, or a coherent backend image bundle.
+
 `node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
 RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
 по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
@@ -725,6 +743,24 @@ live smoke duration, provider coverage or product acceptance.
   production record, producer map or history ledger. Focused tests run through
   `make ci-script-tests`; no ACTIVE A3/v6/MM/provider deployment is implied or
   required for this dormant/restrictive source unit.
+
+### Space Voice leave failure diagnostics
+
+The real public leave helper adds a locally generated `X-Request-Id` and emits
+`VOICE503_DIAGNOSTIC` only before a non-204 failure. Its strict HTTP 204 assertion,
+received-RTP assertions and SDK-close/deferred-leave order remain unchanged.
+The diagnostic reads at most 4,097 bytes and emits only closed public error/message
+inventory and the validated local request ID; arbitrary bodies, headers, JWTs,
+DSNs and reader errors are never logged.
+
+From `src/backend/gateway`, run `go test -run
+'^TestComposeSpaceLeaveDiagnostic(AllowsOnlyPublicInventory|RejectsUnsafeInput|BoundsBodyRead)$' .`
+for the ordinary privacy checks. The offline real-helper probe is
+`CGO_ENABLED=1 go test -tags=live -run
+'^TestComposeSpaceLeaveDiagnosticPreservesStrictStatus$' .` on Linux with the
+existing LiveKit native build dependencies. It uses a private loopback HTTP
+fixture and subprocess to verify HTTP 204 success, strict HTTP 503 failure, request correlation
+and redaction; it does not run a service stack or reproduce a historical CI cause.
 
 ### E2E по фичам
 

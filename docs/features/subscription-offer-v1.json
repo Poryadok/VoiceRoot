@@ -1,0 +1,48 @@
+{
+  "manifest_version": "voice.subscription-offer.v1",
+  "contract_status": "frozen_inventory",
+  "source_baseline": "f40a7ddf5ad1f9d22441635773f7abdf2e7baaf2",
+  "matrix": "subscription-benefit-matrix-v1.md",
+  "runtime_activation": false,
+  "products": [
+    {
+      "id": "premium",
+      "entitlement_scope": "account",
+      "applies_to": "all_account_profiles",
+      "monthly_price_usd": 5,
+      "annual_discount_percent": 20,
+      "trial": false,
+      "benefits": [
+        "premium_badge", "animated_avatar", "profile_banner", "custom_status",
+        "emoji_status", "premium_username_count", "exclusive_stickers",
+        "exclusive_emoji", "custom_app_icons", "exclusive_chat_themes",
+        "message_reaction_count", "file_download_priority", "file_upload_bytes",
+        "joined_spaces_and_groups", "stream_quality", "profile_count",
+        "file_retention_days", "e2e_file_retention_days", "profile_downgrade",
+        "personal_grace_reminders"
+      ]
+    },
+    {
+      "id": "space_pro",
+      "entitlement_scope": "space",
+      "payer": "space_owner",
+      "monthly_price_usd": 5,
+      "annual_discount_percent": 20,
+      "trial": false,
+      "benefits": [
+        "space_member_count", "voice_room_participants", "space_tree_nodes",
+        "space_banner", "space_custom_emoji", "space_downgrade",
+        "space_grace_reminders"
+      ]
+    }
+  ],
+  "lifecycle_contract": "../testing/subscription-lifecycle-convergence-exec-plan.md",
+  "entitled_states": ["ACTIVE", "GRACE_PERIOD"],
+  "additional_purchase": ["additional_premium_usernames"],
+  "recorded_scope_decisions": [
+    "story_anonymous_view", "story_extended_effects", "story_extended_video",
+    "story_custom_sticker_packs"
+  ],
+  "excluded_benefits": [],
+  "provider_market_contract": "subscription.md#платёжные-провайдеры"
+}

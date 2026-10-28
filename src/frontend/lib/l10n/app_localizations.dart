@@ -5738,6 +5738,36 @@ abstract class AppLocalizations {
   /// **'720p · 30 FPS'**
   String get screenShareQuality720p30;
 
+  /// No description provided for @screenShareSystemAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Include system audio'**
+  String get screenShareSystemAudio;
+
+  /// No description provided for @screenShareSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose what to share'**
+  String get screenShareSourceTitle;
+
+  /// No description provided for @screenShareEntireScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Entire screen'**
+  String get screenShareEntireScreen;
+
+  /// No description provided for @screenShareWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window or application'**
+  String get screenShareWindow;
+
+  /// No description provided for @screenShareSourceUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No screens or windows are available to share'**
+  String get screenShareSourceUnavailable;
+
   /// No description provided for @screenShareLimitReached.
   ///
   /// In en, this message translates to:
@@ -5753,7 +5783,7 @@ abstract class AppLocalizations {
   /// No description provided for @platformWebSystemAudioUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'System audio sharing is not available in the browser'**
+  /// **'System audio sharing is not available on this platform'**
   String get platformWebSystemAudioUnavailable;
 
   /// No description provided for @platformWebGlobalPttUnavailable.
@@ -7249,6 +7279,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use a different name for each mode.'**
   String get addGameModeDuplicate;
+
+  /// No description provided for @chatLinkPreviewLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading link preview…'**
+  String get chatLinkPreviewLoading;
+
+  /// No description provided for @chatLinkPreviewUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview unavailable'**
+  String get chatLinkPreviewUnavailable;
+
+  /// No description provided for @chatLinkPreviewRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get chatLinkPreviewRetry;
+
+  /// No description provided for @composerVoiceHold.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to record · slide up to lock'**
+  String get composerVoiceHold;
+
+  /// No description provided for @composerVoicePermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access is required. Allow access and try again.'**
+  String get composerVoicePermission;
+
+  /// No description provided for @composerVoiceProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing recording…'**
+  String get composerVoiceProcessing;
+
+  /// No description provided for @composerVoiceTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Record at least 1 second.'**
+  String get composerVoiceTooShort;
+
+  /// No description provided for @composerVoiceError.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording failed. Try again.'**
+  String get composerVoiceError;
+
+  /// No description provided for @composerVoiceStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish recording'**
+  String get composerVoiceStop;
+
+  /// No description provided for @composerVoiceCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel recording'**
+  String get composerVoiceCancel;
+
+  /// No description provided for @composerVoiceLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording locked'**
+  String get composerVoiceLocked;
 }
 
 class _AppLocalizationsDelegate

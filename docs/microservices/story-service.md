@@ -266,16 +266,21 @@ story_media_deletion_outbox
 - **File Service** — хранение медиа сторис и protected `ValidateStoryMedia`
 - **User Service** — настройки приватности (кто видит сторис)
 - **Social Service** — список друзей для фильтрации видимости
+- **Space Service** — viewer-scoped Space/member pages for feed author candidates
 - **Matchmaking Service** — (через NATS, **deferred**) автоматическая заявка "ищу пати" из `story.lfp_created`
 - **Notification Service** — (через NATS) уведомления об упоминаниях
 - **Subscription Service** — проверка Premium (анонимный просмотр)
 
 ### Feed author dependency failure
 
-Production feed requests resolve the viewer's author set through Social before
-querying Story rows. A failed author lookup returns a non-sensitive `Unavailable`
-without a global scan or a partial successful feed, including when Social returns
-partial author IDs alongside its error. Recovery resumes author-scoped cursor
+Production feed requests resolve self, friends and co-members of the viewer's
+current live Spaces before querying Story rows. Space candidates come from all
+viewer-scoped `ListMySpaces` and current-member `ListMembers` pages; no public
+Space catalog or global author scan is used. Co-membership only adds candidates:
+selected-Space audiences and other privacy rules still apply to each Story.
+A failed Social or Space lookup/page returns a non-sensitive `Unavailable`
+without a global scan or partial successful feed, including when a dependency
+returns partial results alongside its error. Recovery resumes author-scoped cursor
 pagination and the existing per-Story privacy checks. An error querying the
 resolved author set is returned without retrying against all active Stories.
 
@@ -300,15 +305,22 @@ claim/reference binding remains separate File-reference work.
 Story loads exactly two distinct PKCS#8 RSA keys from
 `STORY_PRINCIPAL_SIGNING_KEYS_DIR`; `STORY_PRINCIPAL_ACTIVE_KID` selects the
 signer. Its HTTP server exposes sorted public keys at `GET /.well-known/jwks.json`.
-`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE` and
-`FILE_PRINCIPAL_TLS_SERVER_NAME` are all required when this path is configured.
+`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE`,
+`FILE_PRINCIPAL_TLS_SERVER_NAME`, `FILE_PRINCIPAL_CLIENT_CERT_FILE` and
+`FILE_PRINCIPAL_CLIENT_KEY_FILE` are all required when this path is configured.
+The Story client presents a certificate with client-auth usage signed by the
+existing CA in File's `FILE_PRINCIPAL_CLIENT_CA_FILE`; an absent, unreadable or
+mismatched certificate/key fails startup. TLS trust and the signed request-bound
+`service:story` credential are both required; neither replaces the other.
 Partial configuration is a startup error; no configuration keeps media admission
 unavailable. Text and media-less LFP remain usable.
 
 Deployment owners provision Secret `voice-story-principal-keys` with exactly two
 `<kid>.pem` keys; `voice-file-principal-tls` with `tls.crt`/`tls.key` and SAN
 `voice-file-principal.<namespace>.svc`; `voice-principal-trust` with `ca.crt`
-trusting both File and Story HTTPS JWKS certificates; `voice-story-jwks-tls` for
+trusting both File and Story HTTPS JWKS certificates; `voice-story-file-client-tls`
+with `tls.crt`/`tls.key` issued by that existing trust authority for Story's
+client-auth connection to File; `voice-story-jwks-tls` for
 the HTTPS ingress; and `voice-file-replay` with Redis `password` (empty only for
 an intentionally unauthenticated isolated Redis). Never put private keys into
 ConfigMaps or Git.

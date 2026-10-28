@@ -6,7 +6,7 @@ Voice client (Flutter Web/Desktop/Mobile). Full app stack UI on local `make comp
 
 - Three-column shell ([docs/features/navigation.md](../../docs/features/navigation.md)); mobile strip + responsive layout ([platforms.md](../../docs/features/platforms.md)).
 - Auth, social, DM/groups/spaces, matchmaking, search, voice, push hooks — чеклисты в [docs/PLAN.md](../../docs/PLAN.md).
-- API base URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod).
+- Native/local API URL: `--dart-define=VOICE_API_BASE_URL=https://your-gateway` (empty = offline / tests inject via Riverpod). Promotable Docker web releases instead require an environment-owned, origin-bound `/voice-runtime-config.json`; see [deployment contract](../../docs/DEPLOYMENT.md#immutable-web-promotion-and-environment-binding).
 - Riverpod + Gateway/Auth/Users/Social/Chat/Messaging/Realtime clients.
 
 ## Commands
@@ -23,6 +23,22 @@ flutter test
 Из корня репозитория (нужен Flutter на `PATH`): **`make flutter-ci`** — те же шаги ([Makefile](../../Makefile)).
 
 CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — tier 1 job `flutter` (analyze+test); tier 2 on `master` push: `flutter-windows`, Android/iOS smoke. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
+
+## Voice-note capture component
+
+Voice-note capture is a reusable `VoiceNoteCapture` control with a stable
+`LocalVoiceNoteRecorder` per keyed widget lifetime. It emits a local
+`CapturedVoiceNote` (`XFile`, measured `Duration`, `discard()`); the callback
+recipient owns the file and must discard it after consumption. Key the control
+by conversation and viewer. Capture owns recorder cancellation/disposal.
+File upload and Messaging send are the separate CL-014 composer integration.
+
+The pinned [record 6.2.0](https://pub.dev/packages/record/versions/6.2.0)
+dependency supports WAV on web, Windows, Android, iOS, macOS and Linux. Local
+output is `voice.wav` / `audio/wav`; it is not an upload format promise.
+Linux recording requires `parecord`, `pactl` and `ffmpeg` (Ubuntu:
+`pulseaudio-utils ffmpeg`); microphone permission and platform capability errors
+stay inline in the control. macOS includes the audio-input sandbox capability.
 
 ## Windows desktop release
 

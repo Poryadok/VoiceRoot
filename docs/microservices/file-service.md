@@ -177,7 +177,7 @@ file_references (дедупликация)
 | `article_thumb` | OG/thumb for Article attach | ≤2 MB |
 | `location_map` | Static map tile | ≤500 KB |
 
-**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), and `MUSIC` (6). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
+**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), `STICKER` (3, static only), `MUSIC` (6), and `AUDIO` (7). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music and Audio require chat context and ≤10 MiB stored bytes, including encrypted overhead. Audio admits MP3, FLAC, Ogg, and WAVE MIME types. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. Audio metadata uses the File metadata fields and generic processed notification; only Music emits the Music stream event. The remaining intended values are:
 
 ```protobuf
 enum UploadIntent {
@@ -196,7 +196,7 @@ enum UploadIntent {
 
 message RequestUploadRequest {
   // … existing fields (original_name, mime_type, size_bytes, context_chat, is_e2e) …
-  UploadIntent intent = 8;              // spec — not yet in proto
+  UploadIntent intent = 8;
   // Remote URLs are not public upload parameters; see protected catalog import.
 }
 ```
@@ -260,6 +260,14 @@ Normative product scope: [text-chat.md](../features/text-chat.md) § «Меди�
 | GIF provider search | **Chat** (`SearchGifs` — selected provider adapter) | Resolve selection through Chat; protected File import or exact authorized source binding; cached `file_id` alone grants nothing |
 | Send payload / `content_type` | **Messaging** `SendMessage` | `file_id` references processed asset |
 | Composer picker UI | Flutter §3.6b | — |
+
+### Static sticker upload implementation (BE-086)
+
+`RequestUpload(intent=STICKER)` admits plaintext PNG/WebP with the existing uploader, optional chat ACL and upload-size policy. E2E and Story uploads are rejected. Confirmation verifies SHA-256, rejects GIF, APNG and animated WebP container bytes, scans the source and uses the existing image processor to produce a static WebP on a 512 by 512 transparent canvas, preserving aspect ratio. Invalid source, scan and processing failures cannot become ready. Processing and scanning must be configured. Sticker metadata retains its intent; the closed generic attachment preview v1/v2 serializer and resolver exclude stickers, as they exclude music. The existing legacy `file.processed` notification remains published.
+
+Processing consumes the exact source bytes validated and scanned by confirmation, without rereading the mutable upload key. Both sticker derivatives must fit the 512 KiB asset ceiling before either is written; ordinary images retain their existing 5 MiB cap.
+
+The animated sticker claims below remain an unresolved contract discrepancy: normative `text-chat.md` limits user packs to static PNG/WebP. This slice does not activate animated stickers, Chat pack operations or Messaging shared media.
 
 ### Upload flows
 
@@ -460,10 +468,13 @@ Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 | `Unavailable` | Listener or persistence is unavailable |
 
 The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
-`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE` and
+`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE`,
+`FILE_PRINCIPAL_CLIENT_CA_FILE` to verify Story's client certificate, and
 `FILE_PRINCIPAL_REPLAY_REDIS_ADDR` (optional password via
 `FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
-Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
+Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root, and
+`S2S_JWKS_CLIENT_CERT_FILE`/`S2S_JWKS_CLIENT_KEY_FILE` present File's client
+certificate to that endpoint. Cache
 settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
 The ordinary listener returns `Unavailable` for validation and the protected
 listener rejects all other methods. See Story's deployment runbook and
