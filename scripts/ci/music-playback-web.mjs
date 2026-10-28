@@ -35,8 +35,24 @@ function appendChromeStderr(previous, chunk) {
   // Keep a raw bounded prefix; sanitize once after all chunks have arrived.
   return boundedText(previous + chunk, 8192);
 }
+function selectInitialPage(targets) {
+  const pages = Array.isArray(targets)
+    ? targets.filter(target => target?.type === 'page' && target.url === 'about:blank') : [];
+  if (pages.length !== 1 || typeof pages[0].webSocketDebuggerUrl !== 'string' || !pages[0].webSocketDebuggerUrl) {
+    throw new Error('initial page missing or ambiguous');
+  }
+  return pages[0];
+}
 if (diagnosticSelfTest) {
   const checks = [
+    ['unique initial page', () => {
+      const page = { type: 'page', url: 'about:blank', webSocketDebuggerUrl: 'ws://127.0.0.1/devtools/page/1' };
+      assert.equal(selectInitialPage([page, { type: 'service_worker' }]), page);
+      assert.throws(() => selectInitialPage([]), /initial page/);
+      assert.throws(() => selectInitialPage([page, page]), /initial page/);
+      assert.throws(() => selectInitialPage([{ ...page, webSocketDebuggerUrl: undefined }]), /initial page/);
+      assert.throws(() => selectInitialPage([{ ...page, url: 'https://example.test/' }]), /initial page/);
+    }],
     ['split Authorization header', () => {
       const header = 'Authorization: Bearer SECRET_SENTINEL';
       for (let split = 1; split < header.length; split++) {
@@ -114,13 +130,14 @@ try {
     try { port = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); }
     catch { await new Promise(r => setTimeout(r, 100)); }
   }
-  setupStage = 'devtools_page_create';
-  const response = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT', signal: AbortSignal.timeout(5000) });
+  setupStage = 'devtools_page_select';
+  const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(5000) });
   diagnostics.page_http_status = response.status;
   const pageBody = await response.text();
   diagnostics.page_body = diagnosticText(pageBody, 2048);
   diagnostics.page_body_truncated = Buffer.byteLength(pageBody) > 2048;
-  const page = JSON.parse(pageBody);
+  if (!response.ok) throw new Error('initial page listing failed');
+  const page = selectInitialPage(JSON.parse(pageBody));
   setupStage = 'cdp_websocket';
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolveOpen, reject) => { socket.addEventListener('open', resolveOpen, { once: true }); socket.addEventListener('error', reject, { once: true }); });
