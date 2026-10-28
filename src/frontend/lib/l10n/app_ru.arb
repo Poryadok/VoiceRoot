@@ -1583,5 +1583,13 @@
   "addGameModeDuplicate": "У каждого режима должно быть своё название.",
   "chatLinkPreviewLoading": "Загружаем предпросмотр ссылки…",
   "chatLinkPreviewUnavailable": "Предпросмотр недоступен",
-  "chatLinkPreviewRetry": "Повторить"
+  "chatLinkPreviewRetry": "Повторить",
+  "composerVoiceHold": "Удерживайте для записи · вверх — закрепить",
+  "composerVoicePermission": "Разрешите доступ к микрофону и повторите.",
+  "composerVoiceProcessing": "Подготовка записи…",
+  "composerVoiceTooShort": "Запишите не менее 1 секунды.",
+  "composerVoiceError": "Не удалось записать. Повторите.",
+  "composerVoiceStop": "Завершить запись",
+  "composerVoiceCancel": "Отменить запись",
+  "composerVoiceLocked": "Запись закреплена"
 }

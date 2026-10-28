@@ -4053,4 +4053,29 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get chatLinkPreviewRetry => 'Повторить';
+
+  @override
+  String get composerVoiceHold => 'Удерживайте для записи · вверх — закрепить';
+
+  @override
+  String get composerVoicePermission =>
+      'Разрешите доступ к микрофону и повторите.';
+
+  @override
+  String get composerVoiceProcessing => 'Подготовка записи…';
+
+  @override
+  String get composerVoiceTooShort => 'Запишите не менее 1 секунды.';
+
+  @override
+  String get composerVoiceError => 'Не удалось записать. Повторите.';
+
+  @override
+  String get composerVoiceStop => 'Завершить запись';
+
+  @override
+  String get composerVoiceCancel => 'Отменить запись';
+
+  @override
+  String get composerVoiceLocked => 'Запись закреплена';
 }

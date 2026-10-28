@@ -2,6 +2,7 @@
 """Publish the selected DEV candidate only; never contacts a cluster or deployer."""
 import argparse
 import base64
+from contextlib import contextmanager, nullcontext
 import hashlib
 import io
 import json
@@ -17,11 +18,13 @@ import zipfile
 
 PRODUCT = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 AUTH_USER_PRODUCT = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
+FROZEN_FILE_PRODUCT = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
 # Each reviewed source has its own bounded consumer; never admit arbitrary SHAs.
 PRODUCT_COMPONENTS = {
     PRODUCT: ('web', 'admin', 'developer-portal', 'auth', 'user',
               'notification', 'realtime', 'space-native-migrate'),
     AUTH_USER_PRODUCT: ('auth', 'user'),
+    FROZEN_FILE_PRODUCT: ('file',),
 }
 REPOSITORY = 'Poryadok/VoiceRoot'
 REGISTRY = 'ghcr.io/poryadok/voiceroot'
@@ -48,7 +51,9 @@ def build_plan(product, publisher, run_id, attempt):
     components = {}
     for name in PRODUCT_COMPONENTS[product]:
         args = {}
-        if name == 'space-native-migrate':
+        if name == 'file':
+            context, dockerfile = 'src/backend', 'src/backend/file/Dockerfile'
+        elif name == 'space-native-migrate':
             context, dockerfile = '.', 'src/backend/space/Dockerfile.native-migrate'
             args = {'SOURCE_REVISION': product}
         elif name == 'auth':
@@ -64,7 +69,7 @@ def build_plan(product, publisher, run_id, attempt):
                      'VOICE_LIVEKIT_URL': 'wss://livekit-dev.comrade.click'} if name == 'web' else
                     {'VITE_VOICE_API_BASE': 'https://api-dev.comrade.click',
                      'VITE_OAUTH_CLIENT_ID': 'voice-' + name, 'VITE_OAUTH_DISABLED': 'false'})
-        component = 'dev-' + name
+        component = name if product == FROZEN_FILE_PRODUCT else 'dev-' + name
         components[component] = {'context': context, 'dockerfile': dockerfile,
             'build_args': args, 'platform': 'linux/amd64',
             'tag': REGISTRY + '/' + component + ':dev-' + product + '-' + run_id + '-' + attempt}
@@ -116,9 +121,13 @@ def verify_config_source(config, product):
 
 
 def verify_output(component, files, product, expected_sql=None):
-    require(product in PRODUCT_COMPONENTS and component in {
-        'dev-' + name for name in PRODUCT_COMPONENTS[product]} and files, 'output_source_or_inventory')
-    if component == 'dev-auth':
+    require(product in PRODUCT_COMPONENTS, 'output_source_or_inventory')
+    selected = {'file'} if product == FROZEN_FILE_PRODUCT else {
+        'dev-' + name for name in PRODUCT_COMPONENTS[product]}
+    require(component in selected and files, 'output_source_or_inventory')
+    if component == 'file':
+        require(set(files) == {'service'} and files['service'].startswith(b'\x7fELF'), 'file_binary_missing')
+    elif component == 'dev-auth':
         with zipfile.ZipFile(io.BytesIO(files['auth.jar'])) as archive:
             require(archive.read('BOOT-INF/classes/voice-build-source.sha').decode().strip() == product,
                     'auth_embedded_source')
@@ -242,7 +251,7 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
             if component == 'dev-auth':
                 paths = {'auth.jar': '/auth.jar', 'auth-roots.pem': '/etc/ssl/certs/ca-certificates.crt',
                          'auth-cacerts': '/opt/java/openjdk/lib/security/cacerts'}
-            elif component in ('dev-user', 'dev-notification', 'dev-realtime'):
+            elif component in ('file', 'dev-user', 'dev-notification', 'dev-realtime'):
                 paths = {'service': '/service'}
             elif component == 'dev-space-native-migrate':
                 paths = {'native-migrate': '/usr/local/bin/native-migrate', 'migrations': '/migrations'}
@@ -267,6 +276,20 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
                 log=output / 'native-help.log')
         proof['native_help_exit_code'] = 0
     return proof
+
+
+@contextmanager
+def file_builder(run_id, attempt):
+    # The dedicated BuildKit container is the only executor for this one image.
+    builder = 'voice-file-' + str(run_id) + '-' + str(attempt)
+    command(['docker', 'buildx', 'create', '--driver', 'docker-container', '--name', builder])
+    try:
+        command(['docker', 'buildx', 'inspect', '--builder', builder, '--bootstrap'])
+        command(['docker', 'update', '--cpus', '2', '--memory', '4g', '--memory-swap', '4g',
+                 'buildx_buildkit_' + builder + '0'])
+        yield builder
+    finally:
+        command(['docker', 'buildx', 'rm', builder])
 
 
 def publish(product_root, publisher_root, output, env):
@@ -296,8 +319,12 @@ def publish(product_root, publisher_root, output, env):
         for key, value in row['build_args'].items():
             args += ['--build-arg', key + '=' + value]
         args.append(str(product_root / row['context']))
-        write(output / (component + '-invocation.json'), {'command': args, 'product_sha': product, **authority})
-        command(args, log=output / (component + '-build.log'))
+        with (file_builder(plan['run_id'], plan['run_attempt'])
+              if product == FROZEN_FILE_PRODUCT else nullcontext(None)) as builder:
+            if builder:
+                args[3:3] = ['--builder', builder]
+            write(output / (component + '-invocation.json'), {'command': args, 'product_sha': product, **authority})
+            command(args, log=output / (component + '-build.log'))
         digest = json.loads(metadata.read_bytes())['containerimage.digest']
         repository, tag = row['tag'].removeprefix('ghcr.io/').rsplit(':', 1)
         raw = registry.get(repository, 'manifests/' + digest)

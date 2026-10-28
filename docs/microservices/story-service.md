@@ -346,15 +346,22 @@ rollout or acceptance evidence.
 Story loads exactly two distinct PKCS#8 RSA keys from
 `STORY_PRINCIPAL_SIGNING_KEYS_DIR`; `STORY_PRINCIPAL_ACTIVE_KID` selects the
 signer. Its HTTP server exposes sorted public keys at `GET /.well-known/jwks.json`.
-`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE` and
-`FILE_PRINCIPAL_TLS_SERVER_NAME` are all required when this path is configured.
+`FILE_PRINCIPAL_GRPC_ADDR`, `FILE_PRINCIPAL_TLS_CA_FILE`,
+`FILE_PRINCIPAL_TLS_SERVER_NAME`, `FILE_PRINCIPAL_CLIENT_CERT_FILE` and
+`FILE_PRINCIPAL_CLIENT_KEY_FILE` are all required when this path is configured.
+The Story client presents a certificate with client-auth usage signed by the
+existing CA in File's `FILE_PRINCIPAL_CLIENT_CA_FILE`; an absent, unreadable or
+mismatched certificate/key fails startup. TLS trust and the signed request-bound
+`service:story` credential are both required; neither replaces the other.
 Partial configuration is a startup error; no configuration keeps media admission
 unavailable. Text and media-less LFP remain usable.
 
 Deployment owners provision Secret `voice-story-principal-keys` with exactly two
 `<kid>.pem` keys; `voice-file-principal-tls` with `tls.crt`/`tls.key` and SAN
 `voice-file-principal.<namespace>.svc`; `voice-principal-trust` with `ca.crt`
-trusting both File and Story HTTPS JWKS certificates; `voice-story-jwks-tls` for
+trusting both File and Story HTTPS JWKS certificates; `voice-story-file-client-tls`
+with `tls.crt`/`tls.key` issued by that existing trust authority for Story's
+client-auth connection to File; `voice-story-jwks-tls` for
 the HTTPS ingress; and `voice-file-replay` with Redis `password` (empty only for
 an intentionally unauthenticated isolated Redis). Never put private keys into
 ConfigMaps or Git.

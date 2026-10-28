@@ -23,12 +23,14 @@ Future<String?> resolveProfileIdForUsername(
         return profile.id;
       }
     }
-    return data.profiles.firstOrNull?.id;
   }
   return null;
 }
 
-Future<String?> resolveProfileIdFromDeepLinkText(WidgetRef ref, String raw) async {
+Future<String?> resolveProfileIdFromDeepLinkText(
+  WidgetRef ref,
+  String raw,
+) async {
   try {
     final target = parseDeepLinkUrl(raw.trim());
     if (target.kind != DeepLinkKind.profile) return null;

@@ -131,7 +131,7 @@ type storyPrincipalJWKS struct {
 }
 
 func loadSignedStoryMediaClientFromEnv() (*signedStoryMediaClient, *grpc.ClientConn, []byte, error) {
-	names := []string{"FILE_PRINCIPAL_GRPC_ADDR", "FILE_PRINCIPAL_TLS_CA_FILE", "FILE_PRINCIPAL_TLS_SERVER_NAME", "STORY_PRINCIPAL_SIGNING_KEYS_DIR", "STORY_PRINCIPAL_ACTIVE_KID"}
+	names := []string{"FILE_PRINCIPAL_GRPC_ADDR", "FILE_PRINCIPAL_TLS_CA_FILE", "FILE_PRINCIPAL_TLS_SERVER_NAME", "FILE_PRINCIPAL_CLIENT_CERT_FILE", "FILE_PRINCIPAL_CLIENT_KEY_FILE", "STORY_PRINCIPAL_SIGNING_KEYS_DIR", "STORY_PRINCIPAL_ACTIVE_KID"}
 	enabled := false
 	for _, name := range names {
 		if _, ok := os.LookupEnv(name); ok {
@@ -148,8 +148,9 @@ func loadSignedStoryMediaClientFromEnv() (*signedStoryMediaClient, *grpc.ClientC
 		return nil, nil, nil, nil
 	}
 	addr, dir, kid := strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_GRPC_ADDR")), strings.TrimSpace(os.Getenv("STORY_PRINCIPAL_SIGNING_KEYS_DIR")), strings.TrimSpace(os.Getenv("STORY_PRINCIPAL_ACTIVE_KID"))
-	if addr == "" || dir == "" || kid == "" || strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_CA_FILE")) == "" || strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_SERVER_NAME")) == "" {
-		return nil, nil, nil, errors.New("story media address and Story principal key directory/active kid are required")
+	clientCertFile, clientKeyFile := strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_CLIENT_CERT_FILE")), strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_CLIENT_KEY_FILE"))
+	if addr == "" || dir == "" || kid == "" || strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_CA_FILE")) == "" || strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_SERVER_NAME")) == "" || clientCertFile == "" || clientKeyFile == "" {
+		return nil, nil, nil, errors.New("story media address, TLS client certificate/key and Story principal key directory/active kid are required")
 	}
 	keys, err := loadStorySigningKeys(dir)
 	if err != nil {
@@ -173,7 +174,11 @@ func loadSignedStoryMediaClientFromEnv() (*signedStoryMediaClient, *grpc.ClientC
 			return nil, nil, nil, errors.New("invalid File principal TLS CA")
 		}
 	}
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_SERVER_NAME"))}
+	clientCert, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+	if err != nil {
+		return nil, nil, nil, errors.New("invalid File principal TLS client certificate/key")
+	}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_SERVER_NAME")), Certificates: []tls.Certificate{clientCert}}
 	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)), grpc.WithDisableRetry())
 	if err != nil {
 		return nil, nil, nil, err

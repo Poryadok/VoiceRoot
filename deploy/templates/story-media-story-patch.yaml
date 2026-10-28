@@ -10,9 +10,13 @@ spec:
             - {name: FILE_PRINCIPAL_GRPC_ADDR, value: "voice-file-principal:9091"}
             - {name: FILE_PRINCIPAL_TLS_CA_FILE, value: /run/principal-trust/ca.crt}
             - {name: FILE_PRINCIPAL_TLS_SERVER_NAME, value: "voice-file-principal.__K_NAMESPACE__.svc"}
+            - {name: FILE_PRINCIPAL_CLIENT_CERT_FILE, value: /run/story-file-client/tls.crt}
+            - {name: FILE_PRINCIPAL_CLIENT_KEY_FILE, value: /run/story-file-client/tls.key}
           volumeMounts:
             - {name: story-principal-keys, mountPath: /run/story-principal, readOnly: true}
             - {name: principal-trust, mountPath: /run/principal-trust, readOnly: true}
+            - {name: story-file-client-tls, mountPath: /run/story-file-client, readOnly: true}
       volumes:
         - {name: story-principal-keys, secret: {secretName: voice-story-principal-keys}}
         - {name: principal-trust, secret: {secretName: voice-principal-trust}}
+        - {name: story-file-client-tls, secret: {secretName: voice-story-file-client-tls}}
