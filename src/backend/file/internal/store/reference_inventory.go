@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"math"
 	"sort"
@@ -16,9 +17,55 @@ import (
 	inv "voice/backend/pkg/referenceinventory"
 )
 
-// RequiredInventoryComponents is compiled coverage, never a caller-selected set.
-// Unspecified catalog/local key shapes intentionally remain missing.
-var requiredInventoryComponents = []string{"story.media.v1", "user.profile-avatar.v1", "chat.chat-avatar.v1", "space.space-avatar.v1", "messaging.message.v1", "messaging.sticker-usage.v1", "messaging.gif-usage.v1", "file.upload-session.v1", "file.catalog-retention.v1", "file.pending-writes.v1"}
+type inventoryCoverageComponent struct {
+	Service, Component string
+	Owners             []commonv1.ReferenceInventoryOwnerType
+	WriterVersion      uint32
+	KeyShapeKnown      bool
+}
+
+// This compiled registry is not a seal or a caller-selected declaration set.
+// Enum coverage does not settle catalog retention or outstanding storage keys.
+// In particular the catalog source role remains unknown, rather than being
+// inferred from a component label or from Messaging's usage tuple ownership.
+var requiredInventoryRegistry = []inventoryCoverageComponent{
+	{"story", "story.media.v1", []commonv1.ReferenceInventoryOwnerType{2}, 1, true},
+	{"user", "user.profile-avatar.v1", []commonv1.ReferenceInventoryOwnerType{3}, 1, true},
+	{"chat", "chat.chat-avatar.v1", []commonv1.ReferenceInventoryOwnerType{4}, 1, true},
+	{"space", "space.space-avatar.v1", []commonv1.ReferenceInventoryOwnerType{5}, 1, true},
+	{"messaging", "messaging.message.v1", []commonv1.ReferenceInventoryOwnerType{1}, 1, true},
+	{"messaging", "messaging.sticker-usage.v1", []commonv1.ReferenceInventoryOwnerType{6}, 1, true},
+	{"messaging", "messaging.gif-usage.v1", []commonv1.ReferenceInventoryOwnerType{7}, 1, true},
+	{"file", "file.upload-session.v1", []commonv1.ReferenceInventoryOwnerType{8}, 1, true},
+	{"", "file.catalog-retention.v1", nil, 1, false},
+	{"file", "file.pending-writes.v1", nil, 1, false},
+}
+
+func inventoryRegistryEncoding(registry []inventoryCoverageComponent) []byte {
+	var b bytes.Buffer
+	b.WriteString("voice.file.reference-inventory.coverage.v1\x00")
+	var n [4]byte
+	for _, c := range registry {
+		b.WriteString(c.Service)
+		b.WriteByte(0)
+		b.WriteString(c.Component)
+		b.WriteByte(0)
+		binary.BigEndian.PutUint32(n[:], c.WriterVersion)
+		b.Write(n[:])
+		binary.BigEndian.PutUint32(n[:], uint32(len(c.Owners)))
+		b.Write(n[:])
+		for _, owner := range c.Owners {
+			binary.BigEndian.PutUint32(n[:], uint32(owner))
+			b.Write(n[:])
+		}
+		if c.KeyShapeKnown {
+			b.WriteByte(1)
+		} else {
+			b.WriteByte(0)
+		}
+	}
+	return b.Bytes()
+}
 
 type InventoryOperation struct {
 	OperationID uuid.UUID
@@ -88,12 +135,12 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 	if conflicting {
 		return inv.ErrConflict
 	}
-	digest := sha256.Sum256([]byte(joinComponents()))
+	digest := sha256.Sum256(inventoryRegistryEncoding(requiredInventoryRegistry))
 	if _, err = tx.Exec(ctx, `INSERT INTO file_reference_inventory_cohorts(migration_id,installation_id,restore_cohort_id,file_incarnation_id,state,registry_sha256) VALUES($1,$2,$3,$4,'MIGRATING',$5) ON CONFLICT DO NOTHING`, id.MigrationId, id.InstallationId, id.RestoreCohortId, id.FileIncarnationId, digest[:]); err != nil {
 		return err
 	}
-	for _, component := range requiredInventoryComponents {
-		if _, err = tx.Exec(ctx, `INSERT INTO file_reference_inventory_components(migration_id,component) VALUES($1,$2) ON CONFLICT DO NOTHING`, id.MigrationId, component); err != nil {
+	for _, component := range requiredInventoryRegistry {
+		if _, err = tx.Exec(ctx, `INSERT INTO file_reference_inventory_components(migration_id,component) VALUES($1,$2) ON CONFLICT DO NOTHING`, id.MigrationId, component.Component); err != nil {
 			return err
 		}
 	}
@@ -104,15 +151,6 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 		return err
 	}
 	return tx.Commit(ctx)
-}
-
-func joinComponents() string {
-	var b bytes.Buffer
-	for _, c := range requiredInventoryComponents {
-		b.WriteString(c)
-		b.WriteByte(0)
-	}
-	return b.String()
 }
 
 func (s *FilesStore) LoadInventoryOperation(ctx context.Context, op uuid.UUID) (InventoryOperation, error) {

@@ -21,6 +21,9 @@ Baseline `54927c5344f94a6be02bb6aba1f48852944588e1` combines PR982
 `f3d6ef4b6da649837cfe08476b4639e1d4f0b870`, retaining both signed reference calls
 and the mTLS client certificate. Author Dimas-43 uses a fresh managed lease and
 `feature/be096-story-inventory-import`; the reviewed branches remain immutable.
+Normal merge `a6cf7cdb` subsequently consumes D90's coherent assembly
+`5a57863f3f9f3e6bab601e25c2c7d205c4933717`: AUDIO=7, sticker13,
+AUDIO14, Story15 and both mTLS certificate and retry policy are preserved.
 
 ## Scope
 
@@ -44,10 +47,11 @@ remain MISSING. Independent highlight-cover ownership is counted unresolved.
   immutable pages and complete absolute-state journal revisions.
 - [x] File-only protected exporter; D118 source integrated, real TLS/JWKS/Redis
   transport tests passed. Request-bound File pull client is D117's slice.
-- [ ] File barrier, immutable import/cursors/conflicts and protective holds;
+- [x] File barrier, immutable import/cursors/conflicts and protective holds;
   actual GC claim/pre-DELETE and alternate destructive paths respect them.
-- [ ] Real PostgreSQL concurrency, replay, migration rollback and protected
-  transport checks, followed by independent frozen-diff review.
+- [x] Real PostgreSQL concurrency, replay, migration rollback and protected
+  transport checks, including concrete Story process → File importer/GC.
+- [ ] Final combined frozen-diff review and hosted required CI.
 
 ## Detailed Steps
 
@@ -58,8 +62,13 @@ remain MISSING. Independent highlight-cover ownership is counted unresolved.
    protobuf/domain hashes. Unknown nested fields, invalid UUIDs, enum values,
    duplicate reasons/operations, reordered tuples or changed replay bytes deny.
 2. Lock Story's singleton gate before ownership rows in every relevant mutation.
-   Advance its transactional counter with complete indexed journal revisions in
-   that transaction; rollback consumes no committed revision. Materialize under
+   Advance its transactional counter in that transaction; rollback consumes no
+   committed revision. D116 c21 / attachment `31633d05931cefacd47a5d64dba84c3d`
+   accepts lazy pre-cut capture: no raw-ID journal/cache before first snapshot.
+   At cut B materialize authoritative rows, initialize state and enable capture
+   atomically; every committed revision B+1 onward has a complete indexed journal,
+   even when empty. Capture persists across config removal and later snapshots.
+   Materialize under
    the same gate, then serve immutable stored pages rather than moving tables.
    Union extant logically retained Story media, creation intents and release
    obligations; include every reason and operation. Count historical text/LFP
@@ -105,6 +114,23 @@ Contract and first source boundary accepted by D116; no new product retention or
 role authority is inferred. The ctx-only release provider stays nil; eventual
 activation requires a caller-transaction cohort lock and all-owner/read/fence
 proof. Snapshot import is protective, not current-publication ClaimStoryMedia.
+
+D118 transport `2b6a2608`, D117 File `f4f1b17d` and unknown-delete repair
+`67a72640` are integrated; contributor worktrees are returned. D43 owns final
+combined review routing directly on an immutable pushed head, independently of
+the graph refresh.
+
+Observed PostgreSQL checks: Story Store63.090s/Jobs47.868s; final lazy capture
+plus all inventory cases race37.170s. Lazy capture RED observed pre-cut journal
+count1, GREEN checks authoritative B, post-B revisions and overlapping consumers.
+Concurrent DOWN refuses retained evidence and unused DOWN succeeds. File deferred
+rollback RED observed a nil transaction panic after cancellation; race GREEN
+14.252s checks no storage call and durable NOT_SENT. Concrete Story Store/process
+and mTLS/JWKS/Redis → File importer/real GC race17.379s checks two historical
+highlighted aliases sharing a pending-GC blob, two private holds, zero readable
+references, zero issues and zero physical deletion. Other coverage remains
+MISSING. D117 scoped race/short/lint/vet packet is TT c19 attachment
+`d5ba799d2b4d361c4fe0929ad56c45f3`; D118 passed167 transport/root cases and vet.
 
 ## Risks and Follow-Ups
 

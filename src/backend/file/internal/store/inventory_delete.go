@@ -43,7 +43,8 @@ func (d *inventoryObjectDeleter) DeleteObject(ctx context.Context, key string) e
 	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+	admissionTx := tx
+	defer func() { _ = admissionTx.Rollback(context.Background()) }()
 	// An absent migration schema preserves pre-reference legacy cleanup; no
 	// inventory holds can exist in that older schema.
 	if inventory, e := inventoryHoldsExistTx(ctx, tx); e != nil {

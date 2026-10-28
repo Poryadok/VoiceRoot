@@ -257,6 +257,16 @@ func recordInventory(ctx context.Context, tx pgx.Tx, owners []uuid.UUID, changed
 	if err != nil || !installed {
 		return err
 	}
+	var revision uint64
+	var capture bool
+	if err = tx.QueryRow(ctx, `UPDATE story_reference_inventory_gate SET revision=revision+1 WHERE singleton RETURNING revision,capture_started`).Scan(&revision, &capture); err != nil {
+		return err
+	}
+	// The gate/counter precede the first snapshot, but raw identifier history
+	// starts only at its committed cut. Capture cannot be disabled by config.
+	if !capture {
+		return nil
+	}
 	rows, err := tx.Query(ctx, `SELECT DISTINCT highlight_id FROM highlight_stories WHERE story_id=ANY($1::uuid[]) UNION SELECT unnest($2::uuid[])`, owners, changedHighlights)
 	if err != nil {
 		return err
@@ -309,10 +319,6 @@ func recordInventory(ctx context.Context, tx pgx.Tx, owners []uuid.UUID, changed
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return err
-	}
-	var revision uint64
-	if err = tx.QueryRow(ctx, `UPDATE story_reference_inventory_gate SET revision=revision+1 WHERE singleton RETURNING revision`).Scan(&revision); err != nil {
 		return err
 	}
 	change := &commonv1.ReferenceInventoryRevision{Revision: revision}
@@ -441,6 +447,11 @@ func (s *StoryStore) BeginReferenceInventory(ctx context.Context, req *commonv1.
 		if err = saveInventoryState(ctx, tx, e); err != nil {
 			return nil, err
 		}
+	}
+	// Baseline state derives from authoritative rows at B, never a pre-cut
+	// cache. The same writer gate makes capture of every B+1 revision atomic.
+	if _, err = tx.Exec(ctx, `UPDATE story_reference_inventory_gate SET capture_started=true WHERE singleton`); err != nil {
+		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err

@@ -475,3 +475,19 @@ message is terminated/moved to DLQ with an alert, never ACKed as successfully
 applied. Billing/provider records keep their separate legal retention only in
 the pseudonymized/minimized form allowed by the account-deletion contract; that
 policy overrides generic `P400D` raw-payload retention.
+
+## Protective File reference inventory (first source slice)
+
+Story migration8 adds `story_reference_inventory_gate` (owner incarnation,
+transactional revision, durable capture flag), immutable `snapshots`/`pages`,
+complete `journal`, tuple `state` and proven `retirements` tables with that prefix.
+The gate serializes writers before the first snapshot; identifier capture begins
+atomically at its cut. Creation intents retain immutable author/media binding.
+
+File migration16 adds the `file_reference_inventory_` gate, cohorts, required
+components, imports, page/revision receipts, items/issues, private blob holds and
+durable physical-delete attempt records. These are File-owned protective evidence,
+not owner references or read grants. Both DOWN migrations lock before checking
+and refuse retained evidence. No ACTIVE cohort/provider is installed. Incomplete
+or unacknowledged evidence is retained; P30 begins at completion/ack, not table
+installation. See [BE-096 plan](testing/be096-reference-inventory-exec-plan.md).

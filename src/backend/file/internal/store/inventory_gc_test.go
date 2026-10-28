@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	commonv1 "voice.app/voice/common/v1"
@@ -47,6 +48,45 @@ func inventoryGCPool(t *testing.T) (context.Context, *pgxpool.Pool, *FilesStore,
 }
 func inventoryGCIdentity() *commonv1.ReferenceInventoryIdentity {
 	return &commonv1.ReferenceInventoryIdentity{ProtocolVersion: 1, InstallationId: uuid.NewString(), RestoreCohortId: uuid.NewString(), MigrationId: uuid.NewString(), FileIncarnationId: uuid.NewString(), SourceService: "story", SourceComponent: "story.media.v1", OwnerIncarnationId: uuid.NewString(), WriterProtocolVersion: 1, SnapshotId: uuid.NewString()}
+}
+
+func TestInventoryDeleteCancellationBetweenAdmissionAndPhysicalTx(t *testing.T) {
+	ctx, pool, _, _ := inventoryGCPool(t)
+	call, cancel := context.WithCancel(ctx)
+	defer cancel()
+	config := pool.Config().Copy()
+	config.MaxConns = 1
+	var armed atomic.Bool
+	released := make(chan struct{}, 1)
+	config.AfterRelease = func(*pgx.Conn) bool {
+		if armed.CompareAndSwap(true, false) {
+			cancel()
+		}
+		select {
+		case released <- struct{}{}:
+		default:
+		}
+		return true
+	}
+	controlled, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(controlled.Close)
+	require.NoError(t, controlled.Ping(ctx))
+	select {
+	case <-released:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	armed.Store(true)
+	var calls atomic.Int32
+	deleter := NewFilesStore(controlled).InventoryGuardedDeleter(inventoryDeleteFunc(func(context.Context, string) error { calls.Add(1); return nil }))
+	require.NotPanics(t, func() { err = deleter.DeleteObject(call, "inventory/original") }, "second transaction failure must not dereference its nil result in the first transaction's defer")
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, calls.Load(), "cancellation after durable admission occurs before storage submission")
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM file_reference_inventory_deletes WHERE object_key='inventory/original'`).Scan(&state))
+	require.Equal(t, "NOT_SENT", state)
+	require.NoError(t, NewFilesStore(pool).CreateInventoryOperation(ctx, uuid.New(), inventoryGCIdentity()), "a proven-not-submitted call does not pretend to be an unsettled remote DELETE")
 }
 
 func TestInventoryGCRechecksBarrierAfterDurableClaim(t *testing.T) {

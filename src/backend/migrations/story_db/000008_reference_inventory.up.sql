@@ -4,7 +4,8 @@ ALTER TABLE story_media_reference_intents ADD COLUMN media_type TEXT NULL;
 CREATE TABLE story_reference_inventory_gate (
     singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK (singleton),
     owner_incarnation_id UUID NOT NULL DEFAULT gen_random_uuid(),
-    revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0)
+    revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    capture_started BOOLEAN NOT NULL DEFAULT false
 );
 INSERT INTO story_reference_inventory_gate(singleton) VALUES(true);
 CREATE TABLE story_reference_inventory_snapshots (

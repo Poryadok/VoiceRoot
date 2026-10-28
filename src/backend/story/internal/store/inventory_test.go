@@ -25,6 +25,46 @@ func inventoryStore(t *testing.T) (*store.StoryStore, *commonv1.ReferenceInvento
 	return st, id
 }
 
+func TestStoryInventoryCaptureStartsAtFirstCommittedSnapshot(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	st, id := inventoryStore(t)
+	author, media := uuid.New(), uuid.New()
+	s, err := st.CreateStory(ctx, store.CreateStoryInput{AuthorProfileID: author, Type: "photo", MediaFileID: &media, Visibility: "everyone"})
+	require.NoError(t, err)
+	var journal, state int
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_reference_inventory_journal`).Scan(&journal))
+	require.Zero(t, journal, "unrequested migration must not accumulate pre-cut identifier history")
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT count(*) FROM story_reference_inventory_state`).Scan(&state))
+	require.Zero(t, state)
+	req := &commonv1.BeginReferenceInventoryRequest{OperationId: uuid.NewString(), Identity: id}
+	d, err := st.BeginReferenceInventory(ctx, req)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, d.Manifest.BoundaryRevision)
+	require.EqualValues(t, 1, d.Manifest.TotalCount, "the first snapshot derives from authoritative rows")
+	require.NoError(t, st.DeleteStory(ctx, s.ID, author))
+	changes, err := st.ReadReferenceInventoryChanges(ctx, id, 1, 10)
+	require.NoError(t, err)
+	require.Len(t, changes.Revisions, 1)
+	require.EqualValues(t, 2, changes.Revisions[0].Revision)
+	require.Len(t, changes.Revisions[0].Entries, 1)
+	_, err = st.ReadReferenceInventoryChanges(ctx, id, 0, 10)
+	require.Error(t, err, "a consumer cannot request pre-cut history")
+	// A new consumer must neither reset capture nor erase the first range.
+	next := proto.Clone(id).(*commonv1.ReferenceInventoryIdentity)
+	next.SnapshotId = uuid.NewString()
+	_, err = st.BeginReferenceInventory(ctx, &commonv1.BeginReferenceInventoryRequest{OperationId: uuid.NewString(), Identity: next})
+	require.NoError(t, err)
+	replayed, err := st.BeginReferenceInventory(ctx, req)
+	require.NoError(t, err)
+	require.True(t, proto.Equal(d, replayed))
+	changes, err = st.ReadReferenceInventoryChanges(ctx, id, 1, 10)
+	require.NoError(t, err)
+	require.Len(t, changes.Revisions, 1)
+}
+
 func TestStoryInventoryMaterializesRetainedPendingAndUnresolved(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -228,7 +268,9 @@ func TestStoryInventoryDownWaitsForWriterAndPreservesPendingOwnership(t *testing
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	st, _ := inventoryStore(t)
+	st, id := inventoryStore(t)
+	_, err := st.BeginReferenceInventory(ctx, &commonv1.BeginReferenceInventoryRequest{OperationId: uuid.NewString(), Identity: id})
+	require.NoError(t, err)
 	_, file, _, _ := runtime.Caller(0)
 	down, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "story_db", "000008_reference_inventory.down.sql"))
 	require.NoError(t, err)
