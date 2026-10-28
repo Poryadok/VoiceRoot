@@ -1,6 +1,6 @@
 """Guarded Space v25 feature probe. No runtime values are returned or logged.
 
-The caller must first authenticate the P1 source snapshot and candidate image,
+The caller must first authenticate the immutable source reference and candidate image,
 own the short prepare-only guard, and verify its workload and DB binding. This
 probe never proves Space's source catalog, startup, or migration eligibility.
 """
@@ -201,7 +201,7 @@ def run_prepare(source_root, source_sha, source_authority, pods, expected_engine
     """Run only under the caller's already-owned prepare-only TT claim.
 
     claim_guard checks the actual actor/claim/revision/generation/window. Caller
-    verifies canonical source authority, exact candidate images and complete
+    authenticates the immutable source reference, exact candidate images and complete
     Pod inventory. This is not a deploy lock or permission to mutate anything.
     """
     from publish_candidate import source_snapshot
@@ -248,7 +248,9 @@ def run_prepare(source_root, source_sha, source_authority, pods, expected_engine
     if common._external(source_snapshot, Path(source_root), source_sha) != snapshot:
         raise Hold('source_snapshot_changed')
     common._fence(guard)
-    return {'source_sha': source_sha, 'cohort': cohort, 'space': space, 'status': 'HOLD'}
+    return {'source_sha': source_sha, 'source_qualification': 'authenticated_reference_only',
+            'cohort': cohort, 'space': space, 'status': 'HOLD',
+            'limits': ['source_reference_is_not_release_or_rollout_authority']}
 
 
 def run_guarded(source_root, source_sha, source_authority, pods, expected_engine_role,

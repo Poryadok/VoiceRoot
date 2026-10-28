@@ -151,6 +151,10 @@ class ResolveTest(unittest.TestCase):
         values['SPRING_APPLICATION_JSON'] = '{"spring":{}}'
         with self.assertRaises(subject.Hold):
             subject.resolve('auth', lambda: self.pod.copy(), bound(self.read), runtime, lookup, lambda: None)
+        values.pop('SPRING_APPLICATION_JSON')
+        values['AUTH_PERSISTENCE'] = 'memory'
+        with self.assertRaises(subject.Hold):
+            subject.resolve('auth', lambda: self.pod.copy(), bound(self.read), runtime, lookup, lambda: None)
 
 
 class CatalogTest(unittest.TestCase):

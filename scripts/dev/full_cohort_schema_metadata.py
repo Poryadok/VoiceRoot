@@ -58,10 +58,10 @@ ENV_SCRIPT = ("printf 'x\\000' | (IFS= read -r -d '' probe && [ \"$probe\" = x ]
               "done </proc/1/environ; [ \"$n\" -le 1 ] || exit 1; "
               "if [ \"$n\" = 0 ]; then printf M; else printf 'P%s' \"$result\"; fi")
 AUTH_ENV_POLICY = ("while IFS= read -r -d '' line; do key=${line%%=*}; case \"$key\" in "
-                   "SPRING_DATASOURCE_URL|SPRING_DATASOURCE_USERNAME|SPRING_DATASOURCE_PASSWORD) continue;; esac; "
+                   "SPRING_DATASOURCE_URL|SPRING_DATASOURCE_USERNAME|SPRING_DATASOURCE_PASSWORD|AUTH_PERSISTENCE) continue;; esac; "
                    "key=${key,,}; key=${key//./_}; key=${key//-/_}; case \"$key\" in "
                    "spring_config*|spring_application_json|spring_profiles*|spring_datasource*|spring_flyway*|"
-                   "voice_auth_jdbc*) exit 1;; esac; done </proc/1/environ; printf ok")
+                   "voice_auth_jdbc*|auth_persistence*) exit 1;; esac; done </proc/1/environ; printf ok")
 COMMON_SQL = ("'database',pg_catalog.current_database(),'database_oid',(SELECT oid::bigint FROM pg_catalog.pg_database WHERE datname=pg_catalog.current_database()),"
               "'role',current_user,'pid',pg_catalog.pg_backend_pid(),'server_start',pg_catalog.pg_postmaster_start_time(),"
               "'read_only',pg_catalog.current_setting('transaction_read_only'),'data_directory',pg_catalog.current_setting('data_directory')")
@@ -183,7 +183,7 @@ def kube_runtime_reader(workload, pod_name, run_bytes, namespace='voice-dev'):
         if variable not in ('DATABASE_URL', 'VOICE_DATABASE_URL', 'GATEWAY_DATABASE_URL',
                             'CHAT_DATABASE_URL', 'SPACE_DATABASE_URL',
                             'SPRING_DATASOURCE_URL', 'SPRING_DATASOURCE_USERNAME',
-                            'AUTH_FLYWAY_ENABLED', 'JAVA_TOOL_OPTIONS', *AUTH_OVERRIDE_VARS):
+                            'AUTH_FLYWAY_ENABLED', 'AUTH_PERSISTENCE', 'JAVA_TOOL_OPTIONS', *AUTH_OVERRIDE_VARS):
             raise Hold('runtime_variable_not_allowed')
         executable = '/gateway' if workload == 'gateway' else '/service'
         if workload == 'auth':
@@ -532,7 +532,7 @@ def observe(source_catalog, binding, engine_snapshot, expected_engine_role, run,
 def catalog(snapshot):
     """Project a caller-authorized source_snapshot, without asserting authority.
 
-    The consumer must obtain it via the canonical source authority and
+    The consumer must obtain it via the authenticated source-reference authority and
     publish_candidate.source_snapshot on the selected exact clean checkout.
     No ledger or startup compatibility is implied by the source inventory.
     """
@@ -600,8 +600,9 @@ def catalog(snapshot):
 def catalog_from_source(root, expected_sha, authority):
     """Check exact clean source through the existing source-snapshot helper.
 
-    The consumer's canonical authority must independently authorize expected_sha;
-    the callback must raise on a missing, revoked or mismatched authority.
+    The caller's authority independently authenticates the immutable reference;
+    it must raise or return False when that reference is unavailable or mismatched.
+    This does not establish P1, release, CI, migration or rollout authority.
     """
     try:
         from pathlib import Path
@@ -766,12 +767,14 @@ def resolve(workload, snapshot, read_key, runtime_env, runtime_dns, guard, *, va
                 policy = getattr(raw_runtime, 'auth_policy', None)
                 if not callable(policy) or guarded(policy) is not True:
                     raise Hold('auth_external_config_unknown')
-                for key in (*AUTH_OVERRIDE_VARS, 'AUTH_FLYWAY_ENABLED', 'JAVA_TOOL_OPTIONS'):
+                for key in (*AUTH_OVERRIDE_VARS, 'AUTH_FLYWAY_ENABLED', 'AUTH_PERSISTENCE', 'JAVA_TOOL_OPTIONS'):
                     auth_runtime[key] = runtime_env(key)
                 if any(auth_runtime[key] not in (None, '') for key in AUTH_OVERRIDE_VARS):
                     raise Hold('auth_external_config_unknown')
                 if (auth_runtime['AUTH_FLYWAY_ENABLED'] or '').lower() != 'false':
                     raise Hold('auth_flyway_runtime_not_disabled')
+                if auth_runtime['AUTH_PERSISTENCE'] not in (None, 'jdbc'):
+                    raise Hold('auth_persistence_mode_unknown')
                 options = shlex.split(auth_runtime['JAVA_TOOL_OPTIONS'] or '')
                 if any(not (option.startswith('-XX:') or option.startswith('-Djavax.net.ssl.trustStore=') or
                             option.startswith('-Djavax.net.ssl.trustStorePassword=') or
