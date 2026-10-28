@@ -9,7 +9,12 @@ import 'voice_note_file_io.dart'
 /// WAV is supported on every record 6.2 target, including browser encoders.
 /// This is a local source format, not a File Service upload contract.
 class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
-  final AudioRecorder _recorder = AudioRecorder();
+  AudioRecorder? _recorder;
+  AudioRecorder get _backend {
+    if (_disposed) throw StateError('Recorder disposed');
+    return _recorder ??= AudioRecorder();
+  }
+
   final Stopwatch _clock = Stopwatch();
   String? _path;
   bool _recording = false, _disposed = false, _readingAmplitude = false;
@@ -46,11 +51,13 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
   }
 
   Future<void> _readAmplitude() async {
-    if (_readingAmplitude || !_recording || _disposed) return;
+    final recorder = _recorder;
+    if (recorder == null || _readingAmplitude || !_recording || _disposed)
+      return;
     final generation = _pollGeneration;
     _readingAmplitude = true;
     try {
-      final value = await _recorder.getAmplitude();
+      final value = await recorder.getAmplitude();
       if (!_disposed &&
           _recording &&
           generation == _pollGeneration &&
@@ -65,12 +72,13 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
   }
 
   @override
-  Future<bool> hasPermission() => _recorder.hasPermission();
+  Future<bool> hasPermission() async => _backend.hasPermission();
 
   @override
   Future<void> start() async {
+    if (_disposed) throw StateError('Recorder disposed');
     _path = await files.newVoiceNotePath();
-    await _recorder.start(
+    await _backend.start(
       const RecordConfig(
         encoder: AudioEncoder.wav,
         numChannels: 1,
@@ -87,11 +95,15 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
 
   @override
   Future<CapturedVoiceNote> stop() async {
+    final recorder = _recorder;
+    if (_disposed || recorder == null || !_recording) {
+      throw StateError('Recorder not started');
+    }
     _recording = false;
     _stopPolling();
     _clock.stop();
     final duration = _clock.elapsed;
-    final path = await _recorder.stop();
+    final path = await recorder.stop();
     if (path == null || path.isEmpty) throw StateError('No recorded audio');
     _path = null;
     return CapturedVoiceNote(
@@ -103,10 +115,11 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
 
   @override
   Future<void> cancel() async {
+    if (_disposed) return;
     _recording = false;
     _stopPolling();
     _clock.stop();
-    await _recorder.cancel();
+    await _recorder?.cancel();
     final path = _path;
     _path = null;
     if (path != null && path.isNotEmpty) await files.discardVoiceNote(path);
@@ -114,10 +127,11 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
 
   @override
   Future<void> dispose() async {
+    if (_disposed) return;
     _recording = false;
     _disposed = true;
     _stopPolling();
     await _amplitudeController.close();
-    await _recorder.dispose();
+    await _recorder?.dispose();
   }
 }

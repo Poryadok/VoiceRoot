@@ -357,6 +357,12 @@ void main() {
       );
       expect(composer.readOnly, isTrue);
       expect(composer.onSend, isNull);
+      final microphone = find.widgetWithIcon(IconButton, Icons.mic);
+      expect(tester.widget<IconButton>(microphone).onPressed, isNull);
+      await tester.tap(microphone);
+      // A restored draft changes the right control to Send; both modes stay blocked.
+      composer.controller.text = 'blocked draft';
+      await tester.pump();
       expect(
         tester
             .widget<VoiceSendButton>(find.byKey(ChatRoomPanel.sendKey))
@@ -799,6 +805,7 @@ class _UiFilesClient extends VoiceFilesClient {
     String? storyId,
     bool isE2e = false,
     bool music = false,
+    bool voiceNote = false,
   }) async {
     requestUploadCalls++;
     return const FilesApiFailure(message: 'unexpected_upload_request');
