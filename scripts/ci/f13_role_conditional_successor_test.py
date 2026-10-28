@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import f13_role_conditional as legacy
@@ -17,6 +18,69 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def git(*args,data=None,env=None):
     return subprocess.check_output(['git','--no-replace-objects','-C',str(ROOT),*args],input=data,env=env).decode().strip()
+
+
+def reviewed_current_compiled_entry(source,path):
+    """Return only a fully source-qualified v5 context entry for this fixture."""
+    try:
+        import f13_release_source as release
+    except ModuleNotFoundError as error:
+        if error.name!='f13_release_source':raise
+        return None
+    if not release.applicable(ROOT,source):return None
+    production=release.production_record(ROOT);native=release.load_native(ROOT)
+    reviewed=release.FOUNDATION_BASE
+    legacy.require(native['version']==release.NATIVE_VERSION and production['source']==native['source']==reviewed,
+        'fixture_v5_source_binding')
+    legacy.require(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',reviewed,source],
+        capture_output=True).returncode==0,'fixture_v5_source_ancestry')
+    rows=[row for row in native['context'] if row['path']==path]
+    legacy.require(path in native['compiled_closure'] and len(rows)==1,'fixture_v5_compiled_context')
+    expected=rows[0]['entry']
+    legacy.require(isinstance(expected,dict) and set(expected)=={'mode','type','oid'}
+        and expected['mode']=='100644' and expected['type']=='blob'
+        and legacy.entry(ROOT,reviewed,path)==expected and legacy.entry(ROOT,source,path)==expected,
+        'fixture_v5_compiled_entry')
+    return expected
+
+
+class ReviewedCurrentCompiledFixtureTest(unittest.TestCase):
+    def test_v5_context_requires_exact_compiled_entry_and_ancestry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo=Path(directory); path='src/backend/user/pb/voice/common/v1/reference_inventory.pb.go'
+            def g(*args,data=None):
+                return subprocess.check_output(['git','-C',str(repo),*args],input=data).decode().strip()
+            g('init','-q');g('config','user.name','fixture');g('config','user.email','fixture@example.invalid')
+            (repo/path).parent.mkdir(parents=True);(repo/path).write_text('reviewed\n')
+            g('add','.');g('commit','-qm','reviewed');h=g('rev-parse','HEAD');entry=legacy.entry(repo,h,path)
+            native=dict(version='NATIVE-P3-SOURCE-v5',source=h,compiled_closure=[path],context=[dict(path=path,entry=entry)])
+            release=SimpleNamespace(FOUNDATION_BASE=h,NATIVE_VERSION='NATIVE-P3-SOURCE-v5',
+                applicable=lambda r,s:subprocess.run(['git','-C',str(r),'merge-base','--is-ancestor',h,s],capture_output=True).returncode==0,
+                production_record=lambda r:dict(source=h),load_native=lambda r:native)
+            with patch(__name__+'.ROOT',repo),patch.dict(sys.modules,{'f13_release_source':release}):
+                self.assertEqual(reviewed_current_compiled_entry(h,path),entry)
+                for kind in ('content','mode','type','missing','disconnected'):
+                    index=repo/('index-'+kind);env=dict(os.environ,GIT_INDEX_FILE=str(index))
+                    subprocess.check_call(['git','-C',str(repo),'read-tree',h],env=env)
+                    if kind=='missing':
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--force-remove','--',path],env=env)
+                    elif kind!='disconnected':
+                        oid=entry['oid'] if kind in ('mode','type') else g('hash-object','-w','--stdin',data=b'unreviewed\n')
+                        mode='100755' if kind=='mode' else '120000' if kind=='type' else '100644'
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--cacheinfo',mode+','+oid+','+path],env=env)
+                    tree=subprocess.check_output(['git','-C',str(repo),'write-tree'],env=env).decode().strip()
+                    child=g('commit-tree',tree,*([] if kind=='disconnected' else ['-p',h]),'-m','fixture')
+                    with self.subTest(kind=kind):
+                        if kind=='disconnected':self.assertIsNone(reviewed_current_compiled_entry(child,path))
+                        else:
+                            with self.assertRaises(legacy.Rejected):reviewed_current_compiled_entry(child,path)
+                for invalid in (dict(native,version='NATIVE-P3-SOURCE-v4'),dict(native,source='0'*40),
+                                dict(native,compiled_closure=[]),dict(native,context=[]),
+                                dict(native,context=native['context']*2)):
+                    with patch.object(release,'load_native',return_value=invalid),self.assertRaises(legacy.Rejected):
+                        reviewed_current_compiled_entry(h,path)
+                with patch.object(release,'production_record',side_effect=legacy.Rejected('unreviewed')):
+                    with self.assertRaisesRegex(legacy.Rejected,'unreviewed'):reviewed_current_compiled_entry(h,path)
 
 
 class RoleSuccessorTest(unittest.TestCase):
@@ -119,6 +183,8 @@ class RoleSuccessorTest(unittest.TestCase):
             with self.subTest(path=path):
                 expected = {'mode':'100644','type':'blob','oid':oid}
                 self.assertEqual(legacy.entry(ROOT,inventory_source,path),expected)
+                if path=='src/backend/user/pb/voice/common/v1/reference_inventory.pb.go':
+                    expected=reviewed_current_compiled_entry(self.actual_head,path) or expected
                 self.assertEqual(legacy.entry(ROOT,self.actual_head,path),expected)
         self.assertEqual(git('rev-list','--parents','-n','1',self.target).split(),
                          [self.target,self.actual_head])

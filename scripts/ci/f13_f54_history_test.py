@@ -14,6 +14,7 @@ import tempfile
 import threading
 import time
 import unittest
+from types import SimpleNamespace
 from contextlib import contextmanager, ExitStack
 import copy
 from unittest.mock import patch
@@ -31,6 +32,135 @@ def module():
     spec = importlib.util.spec_from_file_location('f54', HELPER)
     value = importlib.util.module_from_spec(spec); spec.loader.exec_module(value)
     return value
+
+
+class MasterHistoryFrameContract(unittest.TestCase):
+    def test_v5_j_requires_v4_historical_reconstruction(self):
+        m=module(); doc=SimpleNamespace(CONTEXT_EVENT_BASE='old-event',CONTEXT_VERSION='NATIVE-P3-SOURCE-v4',
+            CONTEXT_SOURCE='old-source',CONTEXT_RECORD_COMMIT='old-record',CONTEXT_RECORD_SHA256='old-hash')
+        old=dict(base='content',projection=[dict(path='unit')],version=doc.CONTEXT_VERSION,source=doc.CONTEXT_SOURCE)
+        verifier=SimpleNamespace(predecessor_record=lambda repo,binding:(doc,old))
+        native=SimpleNamespace(documentation=doc,verified_record=lambda repo,binding:(verifier,{}))
+        current=dict(version='NATIVE-P3-SOURCE-v5',source='carrier',snapshot='source')
+        with patch.object(m,'current_author_J_context_applicability',side_effect=m.Rejected('v4 reconstruction failed'),create=True) as reconstruct:
+            with self.assertRaisesRegex(m.Rejected,'v4 reconstruction failed'):
+                m.current_author_J_native_applicability(ROOT,native,{},current)
+            reconstruct.assert_called_once()
+
+    def test_exact132_boundary_uses_qualified_collection_scope_only_for_v11(self):
+        m=module();unit=dict(merge='merge',parents=['first','source'],history_boundary='nested',best_bases=['nested'])
+        production=dict(type='F13-PRODUCTION-SOURCE-v11',base='event',collection_base='history',source='carrier',
+            admission=False,runtime_pass=False,current_or_future_path_authority=False)
+        with patch.object(m,'source_132_unit',return_value=unit),patch.object(m,'production_applicability',return_value=production):
+            value=m.boundary_132_capability(ROOT,'merge','first','source','history','carrier')
+            self.assertEqual(value['collector_scope']['base'],'history')
+            with self.assertRaisesRegex(m.Rejected,'exact132_actual_production_outer_scope'):
+                m.boundary_132_capability(ROOT,'merge','first','source','event','carrier')
+            production['type']='F13-PRODUCTION-SOURCE-v10'
+            self.assertEqual(m.boundary_132_capability(ROOT,'merge','first','source','event','carrier')['collector_scope']['base'],'event')
+            with self.assertRaisesRegex(m.Rejected,'exact132_actual_production_outer_scope'):
+                m.boundary_132_capability(ROOT,'merge','first','source','history','carrier')
+
+    def test_shell_uses_only_verified_collection_base_and_keeps_event_parity(self):
+        functions = dict(re.findall(r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n(.*?)^\}\n',
+            SHELL.read_text(encoding='utf8')))
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary); repo = folder / 'repo'; repo.mkdir()
+            git(repo, 'init', '-q'); git(repo, 'config', 'user.name', 'fixture')
+            git(repo, 'config', 'user.email', 'fixture@example.invalid')
+            (repo/'one').write_text('one'); git(repo,'add','.'); git(repo,'commit','-qm','collection')
+            collection=git(repo,'rev-parse','HEAD')
+            (repo/'two').write_text('two'); git(repo,'add','.'); git(repo,'commit','-qm','event')
+            event=git(repo,'rev-parse','HEAD')
+            (repo/'three').write_text('three'); git(repo,'add','.'); git(repo,'commit','-qm','source')
+            source=git(repo,'rev-parse','HEAD')
+            target=git(repo,'commit-tree',source+'^{tree}','-p',event,'-p',source,'-m','result')
+            git(repo,'checkout','--detach','-q',target)
+            script=folder/'run.sh'
+            function='f13_collect_master_release_pr_contributions() {\n'+functions['f13_collect_master_release_pr_contributions']+'}\n'
+            script.write_text('set -u\n'+function+
+                'f13_collect_failure() { printf "%s\\n" "$2" > "$1"; }\n'
+                'game_checkpoint_aggregate_authorized() { return 1; }\n'
+                'f13_collect_develop_contributions() { printf "%s\\n" "$2" > "$OBSERVED"; : > "$4"; }\n'
+                'python3() { [[ "$2" == collection-base && "$4" == good ]] || return 1; printf "%s\\n" "$QUALIFIED"; }\n'
+                'f13_collect_master_release_pr_contributions "$REPO" "$EVENT" "$TARGET" "$MAP" "$CATEGORY" "$BINDING"\n')
+            env=dict(os.environ,ROOT=str(ROOT),REPO=str(repo),EVENT=event,TARGET=target,MAP=str(folder/'map'),
+                CATEGORY=str(folder/'category'),OBSERVED=str(folder/'observed'),QUALIFIED=collection,BINDING='good',
+                collection_base='0'*40)
+            result=subprocess.run(['bash',str(script)],env=env,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((folder/'observed').read_text().strip(),collection)
+            for change in ({'BINDING':'forged'}, {'EVENT':collection}):
+                with self.subTest(change=change):
+                    result=subprocess.run(['bash',str(script)],env=dict(env,**change),capture_output=True,text=True)
+                    self.assertNotEqual(result.returncode,0)
+            # An absent binding preserves the original event-base traversal even
+            # when an ambient variable tries to supply a different base.
+            result=subprocess.run(['bash',str(script)],env=dict(env,BINDING=''),capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual((folder/'observed').read_text().strip(),event)
+            git(repo,'checkout','-q','--detach',event)
+            (repo/'result-only').write_text('drift');git(repo,'add','.');git(repo,'commit','-qm','drift tree')
+            drift=git(repo,'commit-tree','HEAD^{tree}','-p',event,'-p',source,'-m','drift result')
+            git(repo,'checkout','-q','--detach',drift)
+            result=subprocess.run(['bash',str(script)],env=dict(env,TARGET=drift),capture_output=True,text=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertEqual((folder/'category').read_text().strip(),'release_pr_delta_mismatch')
+
+    def test_new_entry_requires_qualified_collection_root_and_old_entry_keeps_event_root(self):
+        m = module()
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
+            folder = Path(temporary); repo = folder / 'repo'; repo.mkdir()
+            git(repo, 'init', '-q'); git(repo, 'config', 'user.name', 'fixture')
+            git(repo, 'config', 'user.email', 'fixture@example.invalid')
+            (repo / 'one').write_text('one'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'collection base')
+            collection = git(repo, 'rev-parse', 'HEAD')
+            (repo / 'two').write_text('two'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'event base')
+            event = git(repo, 'rev-parse', 'HEAD')
+            (repo / 'three').write_text('three'); git(repo, 'add', '.'); git(repo, 'commit', '-qm', 'source')
+            source = git(repo, 'rev-parse', 'HEAD')
+            authority = {'fixture': 'qualified by independent master_context'}
+            entry = dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1', base=event,
+                collection_base=collection, source=source,
+                capability=m.raw_binding(m.canonical(authority)), native_binding=m.raw_binding('{}'), context={})
+            patches.enter_context(patch.object(m, 'checked_capability_value', return_value=authority))
+            patches.enter_context(patch.object(m, 'master_context', side_effect=lambda *args: entry))
+            entry_path = folder / 'entry'; mapping = folder / 'map'; mapping.write_bytes(b'')
+            def check(frame_base, expected):
+                trace = folder / 'trace'; trace.unlink(missing_ok=True)
+                entry_path.write_text(json.dumps(entry))
+                m.append(trace, 'master_entry', '', '', repo, [str(entry_path)])
+                m.append(trace, 'frame_enter', '', '', repo,
+                         ['', frame_base, source, 'true', 'true', str(mapping), ''])
+                with self.assertRaisesRegex(m.Rejected, expected):
+                    m.validate_trace(repo, trace, m.sha(trace.read_bytes()))
+            check(event, 'genuine_original_master_source_frame')
+            check(collection, 'closed_frames')  # Real frame admitted; unfinished trace cannot pass.
+            entry.clear(); entry.update(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1', base=event,
+                source=source, capability=m.raw_binding(m.canonical(authority)),
+                native_binding=m.raw_binding('{}'), context={})
+            check(collection, 'genuine_original_master_source_frame')
+            check(event, 'closed_frames')
+
+    def test_empty_master_trace_and_forged_entry_are_rejected(self):
+        m=module()
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
+            folder=Path(temporary); repo=folder/'repo'; repo.mkdir()
+            git(repo,'init','-q'); git(repo,'config','user.name','fixture'); git(repo,'config','user.email','fixture@example.invalid')
+            (repo/'a').write_text('a'); git(repo,'add','.'); git(repo,'commit','-qm','base')
+            base=git(repo,'rev-parse','HEAD'); authority={'fixture':True}
+            entry=dict(type='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1',base=base,collection_base=base,
+                source=base,capability=m.raw_binding(m.canonical(authority)),native_binding=m.raw_binding('{}'),context={})
+            patches.enter_context(patch.object(m,'checked_capability_value',return_value=authority))
+            patches.enter_context(patch.object(m,'master_context',return_value=copy.deepcopy(entry)))
+            trace=folder/'trace'; entry_path=folder/'entry'; entry_path.write_text(json.dumps(entry))
+            m.append(trace,'master_entry','','',repo,[str(entry_path)])
+            with self.assertRaisesRegex(m.Rejected,'nonempty_producer_frames'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
+            entry['collection_base']='0'*40;entry_path.write_text(json.dumps(entry));trace.unlink()
+            m.append(trace,'master_entry','','',repo,[str(entry_path)])
+            with self.assertRaisesRegex(m.Rejected,'independent_actual_master_origin'):
+                m.validate_trace(repo,trace,m.sha(trace.read_bytes()))
 
 
 class R23Owner132Contract(unittest.TestCase):

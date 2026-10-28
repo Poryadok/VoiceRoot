@@ -410,7 +410,8 @@ def boundary_132_capability(repo, merge, first, source, collector_base, collecto
     unit=source_132_unit(repo)
     require([merge,first,source]==[unit['merge'],*unit['parents']],'exact132_literal_tuple')
     production=production_applicability(repo)
-    require([collector_base,collector_target]==[production['base'],production['source']],
+    production_base=production['collection_base'] if production.get('type')=='F13-PRODUCTION-SOURCE-v11' else production['base']
+    require([collector_base,collector_target]==[production_base,production['source']],
             'exact132_actual_production_outer_scope')
     require(production['admission'] is False and production['runtime_pass'] is False
         and production['current_or_future_path_authority'] is False,'exact132_no_production_grant')
@@ -559,32 +560,64 @@ def validate_3071_packet(repo, directory):
     return packet
 
 
+def current_author_J_context_applicability(repo,native,historical,current,new):
+    """Reconstruct the pinned v4 record; event qualification remains with caller."""
+    verifier=native.documentation
+    previous=verifier.load_record(repo)
+    predecessor=dict(current,version=previous['version'],content_base=previous['base'],
+        snapshot=previous['source'],record=verifier.PINNED_RECORD_COMMIT,
+        record_sha256=verifier.PINNED_RECORD_SHA256,paths=[r['path'] for r in previous['projection']])
+    predecessor.pop('source_applicability',None)
+    preserved=current_author_J_native_applicability(repo,native,historical,predecessor)
+    require(current['content_base']==new['base'] and current['snapshot']==new['source']
+        and current['paths']==predecessor['paths'],'current_J_context_complete_projection')
+    git(repo,'merge-base','--is-ancestor',predecessor['record'],new['source'])
+    git(repo,'merge-base','--is-ancestor',current['record'],current['source'])
+    raw=git(repo,'show',current['record']+':'+verifier.CONTEXT_RECORD_PATH)
+    require(sha(raw)==current['record_sha256'],'current_J_context_record_hash')
+    return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',historical=preserved['historical'],
+        current=dict(**{k:current[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
+            **({'source_applicability':current['source_applicability']} if 'source_applicability' in current else {}),
+            classification=new['classification'],record_raw=raw_binding(raw)),
+        predecessor=preserved['current'],predecessor_applicability=preserved,successor_lineage=new['predecessor'],
+        added_paths=preserved['added_paths'],path_entries=[dict(path=name,
+            historical_entry=entry_binding(repo,historical['snapshot'],name),current_entry=entry_binding(repo,current['snapshot'],name),
+            membership='HISTORICAL_AND_CURRENT' if name in historical['paths'] else 'CURRENT_RECORD_ONLY; ORIGINAL_GATES_REQUIRED')
+            for name in current['paths']],admission=False,runtime_pass=False)
+
+
 def current_author_J_native_applicability(repo, native, historical, current):
     """Preserve old reviewed facts; independently derive current source authority."""
-    if current.get('version') == 'NATIVE-P3-SOURCE-v4':
+    if current.get('version') == 'NATIVE-P3-SOURCE-v5':
         verifier,new=native.verified_record(repo,current)
-        require(verifier is native.documentation,'current_J_context_identity')
-        previous=verifier.load_record(repo)
-        predecessor=dict(current,version=previous['version'],content_base=previous['base'],
-            snapshot=previous['source'],record=verifier.PINNED_RECORD_COMMIT,
-            record_sha256=verifier.PINNED_RECORD_SHA256,paths=[r['path'] for r in previous['projection']])
-        predecessor.pop('source_applicability',None)  # Historical v3 reconstruction is not a current bridge.
-        preserved=current_author_J_native_applicability(repo,native,historical,predecessor)
+        documentation,previous=verifier.predecessor_record(repo,current)
+        require(documentation is native.documentation,'current_J_release_predecessor_identity')
+        predecessor=dict(version=documentation.CONTEXT_VERSION,base=documentation.CONTEXT_EVENT_BASE,
+            content_base=previous['base'],snapshot=previous['source'],record=documentation.CONTEXT_RECORD_COMMIT,
+            record_sha256=documentation.CONTEXT_RECORD_SHA256,paths=[r['path'] for r in previous['projection']],
+            source=current['snapshot'])
+        preserved=current_author_J_context_applicability(repo,native,historical,predecessor,previous)
         require(current['content_base']==new['base'] and current['snapshot']==new['source']
-            and current['paths']==predecessor['paths'],'current_J_context_complete_projection')
-        git(repo,'merge-base','--is-ancestor',predecessor['record'],new['source'])
-        git(repo,'merge-base','--is-ancestor',current['record'],current['source'])
-        raw=git(repo,'show',current['record']+':'+verifier.CONTEXT_RECORD_PATH)
-        require(sha(raw)==current['record_sha256'],'current_J_context_record_hash')
+            and current['paths']==[r['path'] for r in new['projection']]
+            and set(predecessor['paths'])<=set(current['paths']),'current_J_release_complete_projection')
+        git(repo,'merge-base','--is-ancestor',documentation.CONTEXT_RECORD_COMMIT,current['snapshot'])
+        raw_previous=git(repo,'show',documentation.CONTEXT_RECORD_COMMIT+':'+documentation.CONTEXT_RECORD_PATH)
+        require(sha(raw_previous)==documentation.CONTEXT_RECORD_SHA256,'current_J_release_predecessor_hash')
+        raw=git(repo,'show',current['record']+':'+verifier.RECORD_PATH)
+        require(sha(raw)==current['record_sha256'],'current_J_release_record_hash')
         return dict(type='F54_CURRENT_AUTHOR_J_NATIVE_SOURCE_APPLICABILITY',historical=preserved['historical'],
             current=dict(**{k:current[k] for k in ('base','content_base','snapshot','record','record_sha256','paths')},
-                **({'source_applicability':current['source_applicability']} if 'source_applicability' in current else {}),
                 classification=new['classification'],record_raw=raw_binding(raw)),
-            predecessor=preserved['current'],predecessor_applicability=preserved,successor_lineage=new['predecessor'],
-            added_paths=preserved['added_paths'],path_entries=[dict(path=name,
+            predecessor=preserved['current'],predecessor_applicability=preserved,
+            successor_lineage=new['release_record']['predecessor'],
+            added_paths=sorted(set(current['paths'])-set(historical['paths'])),path_entries=[dict(path=name,
                 historical_entry=entry_binding(repo,historical['snapshot'],name),current_entry=entry_binding(repo,current['snapshot'],name),
                 membership='HISTORICAL_AND_CURRENT' if name in historical['paths'] else 'CURRENT_RECORD_ONLY; ORIGINAL_GATES_REQUIRED')
                 for name in current['paths']],admission=False,runtime_pass=False)
+    if current.get('version') == 'NATIVE-P3-SOURCE-v4':
+        verifier,new=native.verified_record(repo,current)
+        require(verifier is native.documentation,'current_J_context_identity')
+        return current_author_J_context_applicability(repo,native,historical,current,new)
     if current.get('version') == 'NATIVE-P3-SOURCE-v3':
         require(hasattr(native,'verified_record'),'current_J_documentation_dispatcher')
         verifier,new=native.verified_record(repo,current)
@@ -5112,7 +5145,12 @@ def prepare_corrected_F_production_capability(repo,unit_path):
     current=native.qualify(repo,binding['base'],binding['source'],binding['target'],event['GITHUB_EVENT_NAME'],
         event['GITHUB_REF'],event['GITHUB_SHA'],event['VOICE_CI_PUSH_BEFORE_SHA'],event['GITHUB_BASE_REF'])
     verifier,native_record=native.verified_record(repo,current)
-    if binding['type']=='F13-PRODUCTION-SOURCE-v10':
+    if binding['type']=='F13-PRODUCTION-SOURCE-v11':
+        require(current['version']=='NATIVE-P3-SOURCE-v5' and
+            verifier.production_record(repo)['native_record']==dict(version=current['version'],
+                source=current['snapshot'],path=verifier.RECORD_PATH,sha256=current['record_sha256']),
+            'production_F_exact_release_native_dependency')
+    elif binding['type']=='F13-PRODUCTION-SOURCE-v10':
         fixture=module.load_bootstrap_fix(repo)[0]
         require(fixture['native_record']==dict(version=current['version'],source=current['snapshot'],
             record=current['record'],path=verifier.CONTEXT_RECORD_PATH,sha256=current['record_sha256'])
@@ -5795,8 +5833,16 @@ def master_context(repo, capability, binding_raw, context):
     require(source_delta==git(repo,'diff','--name-only',binding['base'],binding['target']),'actual_master_source_result_delta_parity')
     entries={name:entry_binding(repo,binding['source'],name) for name in source_delta.decode().splitlines()}
     require(all(entry_binding(repo,binding['target'],name)==value for name,value in entries.items()),'actual_master_source_result_entry_parity')
-    return dict(type='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1' if production_roles is not None else
+    history_base=None
+    if production_roles is not None and current['type']=='F13-PRODUCTION-SOURCE-v11':
+        require(binding['version']=='NATIVE-P3-SOURCE-v5','production_history_exact_native_version')
+        verifier,_=native.verified_record(repo,binding)
+        history_base=verifier.collection_base(repo,binding)
+        require(history_base==current['collection_base'] and history_base==binding['collection_base'],
+            'production_history_qualified_collection_base')
+    return dict(type=('F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1' if history_base is not None else 'F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1') if production_roles is not None else
         ('F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY' if author_roles is not None else 'F54_EXPLICIT_MASTER_PROTOTYPE_ENTRY'),
+        **(dict(collection_base=history_base) if history_base is not None else {}),
         **(dict(author_base_roles=author_roles) if author_roles is not None else {}),native_binding=raw_binding(binding_raw),context=context,
         **(dict(production_base_roles=production_roles) if production_roles is not None else {}),
         capability=raw_binding(canonical(capability)),base=binding['base'],source=binding['source'],target=binding['target'],
@@ -5885,8 +5931,8 @@ def span_origin(repo, original_path, original_native_path, current_native_path, 
             require(capability['type']=='F54_FIXED_CURRENT_AUTHOR_CAPABILITIES','current_author_span_explicit_capability_type')
         context={key:os.environ.get(key,'') for key in ('GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_SHA','VOICE_CI_PUSH_BEFORE_SHA','GITHUB_BASE_REF')}
         entry=master_context(repo,capability,current_raw,context)
-        require(entry['type']==('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1' if is_production else
-            'F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY'),'current_author_span_actual_master_entry')
+        require(entry['type'] in (('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1','F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1') if is_production else
+            ('F54_EXPLICIT_MASTER_CURRENT_AUTHOR_ENTRY',)),'current_author_span_actual_master_entry')
         spec=importlib.util.spec_from_file_location('current_author_span_native',ROOT/('scripts/ci/f13_native_p3_authority.py' if (ROOT/'scripts/ci/f13_native_p3_authority.py').is_file() else 'scripts/ci/f13_native_p3_source.py'))
         native=importlib.util.module_from_spec(spec);spec.loader.exec_module(native)
         native_applicability=current_author_J_native_applicability(repo,native,old,current)
@@ -6747,6 +6793,12 @@ def dc0_residual_source(repo):
         merge=DC0_MERGE,ordered_parents=unit['ordered_parents'],bases=unit['bases'],paths=paths,entry=entry,admission=False)
 
 
+def master_frame_base(entry):
+    if entry['type']=='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1':
+        return entry['collection_base']
+    return entry['base']
+
+
 def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None, exact_J_checkpoint=None, finite_J_checkpoint=False, dc0_checkpoint=None, dc0_context=None, r23_132_checkpoint=False):
     global _TRACE_USED
     _TRACE_USED = True
@@ -6818,7 +6870,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         require(committed.get(operation,[])==value['paths'],'complete_ordered_path_commits')
         if frames[operation.split('/')[0]]['partition_source_history']=='true' and value['classification']=='merge':
             require(children.get(operation)==[(value['boundary'],value['source_head'],'true','false')],'complete_real_child_frame')
-        if value['commit']==DC0_MERGE and master_entry is not None and master_entry.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1':
+        if value['commit']==DC0_MERGE and master_entry is not None and master_entry.get('type') in ('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1','F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1'):
             manual=operation.rsplit('/',1)[0]+'/manual-result'
             require(manual in dc0_closed or allow_manual_pending,'dc0_residual_required_before_next_operation')
         if value['commit']==F_CORRECTED_TUPLE['merge']:
@@ -6840,7 +6892,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(operation in I_ready and I_consumed.get(operation,[])==value['paths'],'fixed3071_I_complete_ledger_consumed_before_collapse')
     def dc0_state(phase, gate_context=None):
         require(phase in ('begin','append','end') and master_entry is not None
-            and master_entry.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1'
+            and master_entry.get('type') in ('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1','F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1')
             and stack and not failures,'dc0_actual_production_checkpoint')
         identity=stack[-1];context=frames[identity];original=identity+'/'+DC0_MERGE+'/2'
         require([context[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
@@ -6915,7 +6967,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         frame=operation.split('/')[0];value=operations[operation]
         require(stack and stack[-1]==frame and seen_operations[frame][-1]==(M,2),'exact_live_M_checkpoint')
         if len(stack)>1:
-            require(master_entry is not None and frames[stack[0]]['base']==master_entry['base'] and frames[stack[0]]['target']==master_entry['source'], 'M_real_master_ancestor_context')
+            require(master_entry is not None and frames[stack[0]]['base']==master_frame_base(master_entry) and frames[stack[0]]['target']==master_entry['source'], 'M_real_master_ancestor_context')
             for child in stack[1:]:
                 parent_op=frames[child]['parent_operation'];attempt=attempts[parent_op]
                 require(frames[child]['parent']==parent_op.split('/')[0] and frames[child]['target']==attempt['source_head'], 'M_actual_recursive_ancestor_operation')
@@ -7048,7 +7100,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             actual=git(repo,'rev-list','--first-parent','--reverse',v['base']+'..'+v['target']).decode().splitlines()
             require(v['first_parent_operations']==actual,'actual_frame_operations');frames[identity]=v;stack.append(identity)
             if len(frames)==1 and master_entry is not None:
-                require([v[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[master_entry['base'],master_entry['source'],'true','true'],'genuine_original_master_source_frame')
+                require([v[k] for k in ('base','target','allow_direct_followup','partition_source_history')]==[master_frame_base(master_entry),master_entry['source'],'true','true'],'genuine_original_master_source_frame')
             maps[identity]=[];seen_operations[identity]=[];expected_operations[identity]=[]
             for commit in actual:
                 parents=git(repo,'rev-list','--parents','-n','1',commit).decode().split()[1:]
@@ -7109,11 +7161,11 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         if kind=='history_132_capability':
             require(op in attempts and op not in operations and op not in capabilities_132,
                     'exact132_capability_after_unique_actual_attempt')
-            require(master_entry is not None and master_entry.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1',
+            require(master_entry is not None and master_entry.get('type') in ('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1','F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1'),
                     'exact132_actual_production_master_entry')
             actual=frames[frame];attempt=attempts[op]
             require(frame==next(iter(frames)) and [actual[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
-                ==[master_entry['base'],master_entry['source'],'true','true'],'exact132_actual_outer_frame')
+                ==[master_frame_base(master_entry),master_entry['source'],'true','true'],'exact132_actual_outer_frame')
             expected=boundary_132_capability(repo,attempt['commit'],attempt['first_parent'],attempt['source_head'],actual['base'],actual['target'])
             require(v==expected and op==frame+'/'+MERGE_132+'/2','exact132_independent_complete_capability')
             capabilities_132[op]=v;continue
@@ -7587,6 +7639,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         r23_permission=r23_132_owner_evidence(repo,r23_132_state(item['op'],name,file_digest(raw)))
     dc0_value=dc0_state(dc0_checkpoint,dc0_context) if dc0_checkpoint else None
     checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else r23_permission or dc0_value or range_state or I_state or J_history_state or J_state or deletion_state_value or manual_state or manual_end_value or manual_append_value or exact_J_permission or finite_state
+    require(frames,'nonempty_producer_frames')
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
     coverage=dag_dispositions(repo,events) if complete else []
