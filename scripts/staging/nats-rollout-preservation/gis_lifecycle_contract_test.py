@@ -22,6 +22,7 @@ import preserve
 import resource_claim
 import resource_claim_test
 import runtime_stage
+import source_plan
 import source_authority
 import transaction
 
@@ -177,6 +178,7 @@ class GISLifecycleContract(unittest.TestCase):
         stage.wait_ready = Mock()
         stage.kube = Mock()
         stage.save = Mock()
+        stage.gis_start_guard = lambda _stage: None
         stage.kube.cas.return_value = {'data': {'phase': 'active'}}
         for fault in ('runtime', 'extra-env', 'extra-volume', 'host-network', 'service-account',
                       'foreign-endpoint', 'stale-replicaset', 'terminating-pod', 'terminating-deployment'):
@@ -212,6 +214,49 @@ class GISLifecycleContract(unittest.TestCase):
         stage.gis_ready_proof = lambda _: existing.verify_ready(binding, kube, account)
         stage.release_marker()
         stage.kube.cas.assert_called_once()
+
+    def test_release_rechecks_target_service_account_immediately_before_gis_scale(self):
+        target = copy.deepcopy(self.old)
+        target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
+        binding = existing.bind_target(self.binding, target)
+        for fault in ('none', 'missing_guard', 'uid', 'resourceVersion'):
+            with self.subTest(fault=fault):
+                kube = copy.deepcopy(self.kube)
+                kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
+                kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
+                account = existing.service_account_preflight(kube, target['spec']['template']['spec'])
+                if fault == 'uid':
+                    kube.service_account['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                elif fault == 'resourceVersion':
+                    kube.service_account['metadata']['resourceVersion'] = '2'
+                stage = object.__new__(runtime_stage.RolloutStage)
+                stage.snapshots = {'voice-gameintegration': {}}
+                stage.expected = {'source_claim': 'selected'}
+                stage.owned_marker = Mock(return_value={'data': {'phase': 'rollout-verified'}})
+                stage.scale = Mock()
+                stage.wait_ready = Mock()
+                stage.kube = Mock()
+                stage.kube.cas.return_value = {'data': {'phase': 'active'}}
+                stage.save = Mock()
+                stage.gis_ready_proof = Mock()
+                if fault != 'missing_guard':
+                    def start_guard(_stage):
+                        self.assertIs(_stage, stage)
+                        existing.verify_phase(binding, kube, 'paused-target')
+                        if existing.service_account_preflight(kube, binding['target']['spec']['template']['spec']) != account:
+                            raise gis.Blocked('gis_existing_service_account_changed')
+                    stage.gis_start_guard = start_guard
+                if fault == 'none':
+                    stage.release_marker()
+                    stage.scale.assert_called_once_with('voice-gameintegration', 1)
+                    stage.kube.cas.assert_called_once()
+                else:
+                    expected = ('gis_existing_start_guard_missing' if fault == 'missing_guard'
+                                else 'gis_existing_service_account_changed')
+                    with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
+                        stage.release_marker()
+                    stage.scale.assert_not_called()
+                    stage.kube.cas.assert_not_called()
 
     def test_unproved_wiring_finish_cannot_destroy_first_install_anchor(self):
         kube, state, receipt = fixtures.first_install()
@@ -424,6 +469,61 @@ class GISLifecycleContract(unittest.TestCase):
             with self.subTest(fault=fault):
                 self.check_transaction_captures_qualified_gis_and_normalizes_before_fence('images-only', fault)
 
+    def test_pre_fence_rechecks_target_service_account_before_blocker(self):
+        _, first, receipt = fixtures.first_install()
+        for fault in ('none', 'uid', 'resourceVersion'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / 'installed').mkdir()
+                original = root / ('rollout-' + first['operation'])
+                original.mkdir()
+                (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
+                (root / 'installed' / 'active-release.json').write_text(json.dumps({
+                    'gis_first_install_transition': {'operation': first['operation'],
+                        'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+                def read(path, **kwargs):
+                    return json.loads(Path(path).read_text(encoding='utf-8'))
+                kube = copy.deepcopy(self.kube)
+                original_get = kube.get
+                def get(kind, name):
+                    row = original_get(kind, name)
+                    if kind == 'pvc':
+                        row['status'] = {'capacity': {'storage': '1Gi'}}
+                    return row
+                kube.get = get
+                stage = runtime_stage.RolloutStage.capture(kube, '123456abcdef', lambda _: None,
+                    ['voice-gameintegration'], gis_binding=self.binding)
+                pack = self.compiled_target(stage)
+                nonnats = {'actions': [], 'checks': []}
+                pack['target']['nonnats_sha256'] = gis.digest(nonnats)
+                base = root / 'rollout-123456abcdef'
+                base.mkdir()
+                (base / 'apply-manifests.json').write_text(json.dumps(pack['manifests']), encoding='utf-8')
+                (root / 'kernel').write_bytes(b'fixture')
+                def capture_inputs(*_args, **_kwargs):
+                    if fault == 'uid':
+                        kube.service_account['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                    elif fault == 'resourceVersion':
+                        kube.service_account['metadata']['resourceVersion'] = '2'
+                    return {}
+                expected = ('gis_existing_lifecycle_incomplete' if fault == 'none'
+                            else 'gis_existing_service_account_changed')
+                with patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read), \
+                        patch.object(transaction, 'private_json', side_effect=read), \
+                        patch.object(transaction.migrations, 'preflight', return_value={}), \
+                        patch.object(transaction.space_safeguards, 'preflight', return_value=None), \
+                        patch.object(transaction.space_safeguards, 'combined_capacity', return_value={}), \
+                        patch.object(transaction.nonnats_runtime, 'preflight', return_value={}), \
+                        patch.object(source_plan, 'verify_db_init'), \
+                        patch.object(transaction, 'native_preflight', return_value={}), \
+                        patch.object(transaction, 'capture_inputs', side_effect=capture_inputs), \
+                        patch.object(runtime_stage.RolloutStage, 'fence') as fence, \
+                        patch('operator_retirement.record_readonly_failure', side_effect=lambda _b, value, _e: value):
+                    with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
+                        transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                            {}, [], nonnats, gis_binding=self.binding, gis_source_authority=self.source_fixture())
+                    fence.assert_not_called()
+
     def test_full_update_records_source_selected_service_account(self):
         for mode in ('full', 'app-only'):
             with self.subTest(mode=mode):
@@ -595,6 +695,102 @@ class GISLifecycleContract(unittest.TestCase):
                         stage.restart.assert_not_called()
                         save.assert_not_called()
 
+    def test_finish_rechecks_target_service_account_before_restart(self):
+        class ReachedRestart(Exception):
+            pass
+        target = copy.deepcopy(self.old)
+        target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
+        binding = existing.bind_target(self.binding, target)
+        for fault in ('none', 'uid', 'resourceVersion'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                kube = copy.deepcopy(self.kube)
+                kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
+                kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
+                account = existing.service_account_preflight(kube, target['spec']['template']['spec'])
+                receipt = {'operation': '123456abcdef', 'target': {'mode': 'images-only'},
+                    'expires_at': (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5)).isoformat()}
+                state = {'operation': receipt['operation'], 'phase': 'PAUSED_APPLY', 'status': 'WAITING',
+                    'target': receipt['target'], 'authorization': receipt, 'gis_binding': binding,
+                    'gis_service_account': account, 'events': [], 'provenance': {}, 'cut': {'manifest': {}}}
+                class Stage:
+                    final_path = Path('/fixture-store')
+                    def adopt_applied_target(self, *_args): pass
+                    def verify_final_storage(self): pass
+                    def verified(self): pass
+                    def refence(self): return {'verified': True}
+                    def restart(self): raise ReachedRestart()
+                stage = Stage()
+                stage.kube = kube
+                def post_apply(*_args):
+                    if fault == 'uid':
+                        kube.service_account['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                    elif fault == 'resourceVersion':
+                        kube.service_account['metadata']['resourceVersion'] = '2'
+                    return {'verified': True}
+                with patch.object(transaction, 'reconstruct', return_value=stage), \
+                        patch.object(transaction, 'revalidate_inputs'), \
+                        patch.object(transaction, 'context', return_value={}), \
+                        patch.object(transaction, 'DockerRuntime'), \
+                        patch.object(transaction, 'verify_post_apply', side_effect=post_apply), \
+                        patch.object(transaction, 'attach_closed_preservation'), \
+                        patch.object(transaction, 'save'):
+                    if fault == 'none':
+                        with self.assertRaises(ReachedRestart):
+                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                    else:
+                        with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked),
+                                'gis_existing_service_account_changed'):
+                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+
+    def test_finish_installs_start_guard_for_late_service_account_drift(self):
+        class ReachedScale(Exception):
+            pass
+        target = copy.deepcopy(self.old)
+        target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
+        binding = existing.bind_target(self.binding, target)
+        for fault in ('none', 'uid', 'resourceVersion'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                kube = copy.deepcopy(self.kube)
+                kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
+                kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
+                account = existing.service_account_preflight(kube, target['spec']['template']['spec'])
+                receipt = {'operation': '123456abcdef', 'target': {'mode': 'images-only'},
+                    'expires_at': (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5)).isoformat()}
+                state = {'operation': receipt['operation'], 'phase': 'PAUSED_APPLY', 'status': 'WAITING',
+                    'target': receipt['target'], 'authorization': receipt, 'gis_binding': binding,
+                    'gis_service_account': account, 'events': [], 'provenance': {}, 'cut': {'manifest': {}}}
+                test = self
+                class Stage:
+                    final_path = Path('/fixture-store')
+                    def adopt_applied_target(self, *_args): pass
+                    def verify_final_storage(self): pass
+                    def verified(self): pass
+                    def refence(self): return {'verified': True}
+                    def restart(self):
+                        if fault == 'uid':
+                            kube.service_account['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                        elif fault == 'resourceVersion':
+                            kube.service_account['metadata']['resourceVersion'] = '2'
+                        test.assertTrue(callable(getattr(self, 'gis_start_guard', None)))
+                        self.gis_start_guard(self)
+                        raise ReachedScale()
+                stage = Stage()
+                stage.kube = kube
+                with patch.object(transaction, 'reconstruct', return_value=stage), \
+                        patch.object(transaction, 'revalidate_inputs'), \
+                        patch.object(transaction, 'context', return_value={}), \
+                        patch.object(transaction, 'DockerRuntime'), \
+                        patch.object(transaction, 'verify_post_apply', return_value={'verified': True}), \
+                        patch.object(transaction, 'attach_closed_preservation'), \
+                        patch.object(transaction, 'save'):
+                    if fault == 'none':
+                        with self.assertRaises(ReachedScale):
+                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                    else:
+                        with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked),
+                                'gis_existing_service_account_changed'):
+                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+
     def test_finish_installs_real_ready_proof_and_persists_it_before_release(self):
         class BeforeRelease(Exception):
             pass
@@ -717,6 +913,43 @@ class GISLifecycleContract(unittest.TestCase):
                 reconstruct.assert_not_called()
                 save.assert_not_called()
                 publication.assert_not_called()
+
+    def test_paused_rollback_rejects_foreign_pair_before_adoption(self):
+        class ReachedAdoption(Exception):
+            pass
+        target = copy.deepcopy(self.old)
+        target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
+        binding = existing.bind_target(self.binding, target)
+        for fault in ('third_image', 'deployment_uid', 'service_drift'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                kube = copy.deepcopy(self.kube)
+                kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
+                kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
+                if fault == 'third_image':
+                    kube.deployments['voice-gameintegration']['spec']['template']['spec']['containers'][0]['image'] = (
+                        'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'f' * 64)
+                elif fault == 'deployment_uid':
+                    kube.deployments['voice-gameintegration']['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                else:
+                    kube.gis_kube.objects[gis.SERVICE]['spec']['selector']['app'] = 'foreign'
+                receipt = {'operation': '123456abcdef', 'target': {'mode': 'images-only'},
+                    'expires_at': (dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5)).isoformat()}
+                state = {'operation': receipt['operation'], 'phase': 'PAUSED_APPLY', 'status': 'WAITING',
+                    'target': receipt['target'], 'authorization': receipt, 'gis_binding': binding,
+                    'events': [], 'provenance': {}, 'fence_status': 'VERIFIED'}
+                stage = Mock()
+                stage.kube = kube
+                stage.finish_released_marker = None
+                stage.adopt_rollback_target.side_effect = ReachedAdoption
+                with patch.object(transaction, 'reconstruct', return_value=stage), \
+                        patch.object(transaction, 'revalidate_inputs'), \
+                        patch.object(transaction, 'context', return_value={}), \
+                        patch.object(transaction, 'save'):
+                    with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), 'gis_existing_rollback_pair_changed'):
+                        transaction.rollback(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                    stage.adopt_rollback_target.assert_not_called()
+                    stage.restore_original_templates.assert_not_called()
+                    stage.restart.assert_not_called()
 
     def test_root_authority_rejects_dangling_or_nonpass_successor(self):
         _, first, receipt = fixtures.first_install()
