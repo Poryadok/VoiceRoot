@@ -17,6 +17,8 @@ import (
 const PageSize = 1000
 
 var ErrInvalid = errors.New("invalid reference inventory evidence")
+var ErrConflict = errors.New("reference inventory identity conflict")
+var ErrUnavailable = errors.New("reference inventory unavailable")
 
 // Strict rejects unknown fields at every nesting level, including map values.
 func Strict(m proto.Message) error {
