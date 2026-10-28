@@ -48,6 +48,10 @@ service FileService {
   rpc ResolveMessageAttachmentPreview(ResolveMessageAttachmentPreviewRequest) returns (ResolveMessageAttachmentPreviewResponse);
   // @voice.security=protected;callers=service:story
   rpc ValidateStoryMedia(ValidateStoryMediaRequest) returns (ValidateStoryMediaResponse);
+  // @voice.security=protected;callers=service:story
+  rpc ClaimStoryMedia(ClaimStoryMediaRequest) returns (ClaimStoryMediaResponse);
+  // @voice.security=protected;callers=service:story
+  rpc ReleaseStoryMedia(ReleaseStoryMediaRequest) returns (ReleaseStoryMediaResponse);
   rpc RequestUpload(RequestUploadRequest) returns (RequestUploadResponse);
   rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse);
   // @voice.security=public_gateway;callers=service:gateway
@@ -596,4 +600,38 @@ message GetSpacePurgeReceiptRequest {
 // @voice.hash=domain_separated_sha256
 message GetSpacePurgeReceiptResponse {
   voice.common.v1.SpacePurgeReceipt receipt = 1;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ClaimStoryMediaRequest {
+  string operation_id = 1;
+  string story_id = 2;
+  string file_id = 3;
+  string author_profile_id = 4;
+  voice.story.v1.StoryMediaType expected_story_type = 5;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ClaimStoryMediaResponse {
+  string receipt_id = 1;
+  string operation_id = 2;
+  bytes request_sha256 = 3;
+}
+
+// @voice.unknown_fields=reject
+// @voice.hash=domain_separated_sha256
+message ReleaseStoryMediaRequest {
+  string operation_id = 1;
+  string story_id = 2;
+  string file_id = 3;
+}
+
+// @voice.unknown_fields=accept_preserve
+// @voice.hash=domain_separated_sha256
+message ReleaseStoryMediaResponse {
+  string receipt_id = 1;
+  string operation_id = 2;
+  bytes request_sha256 = 3;
 }

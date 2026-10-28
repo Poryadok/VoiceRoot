@@ -284,16 +284,42 @@ func (s *StoryStore) DeleteStory(ctx context.Context, storyID, authorProfileID u
 	if s == nil || s.Pool == nil {
 		return ErrNotImplemented
 	}
-	tag, err := s.Pool.Exec(ctx, `
-UPDATE stories SET deleted_at = now()
-WHERE id = $1 AND author_profile_id = $2 AND deleted_at IS NULL`, storyID, authorProfileID)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
+	defer func() { _ = tx.Rollback(ctx) }()
+	var media *uuid.UUID
+	var deleted *time.Time
+	err = tx.QueryRow(ctx, `SELECT media_file_id,deleted_at FROM stories WHERE id=$1 AND author_profile_id=$2 FOR UPDATE`, storyID, authorProfileID).Scan(&media, &deleted)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var replay bool
+		if checkErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM story_deletion_receipts WHERE story_id=$1 AND author_profile_id=$2 AND completed_at>now()-interval '30 days')`, storyID, authorProfileID).Scan(&replay); checkErr != nil {
+			return checkErr
+		}
+		if replay {
+			return nil
+		}
 		return ErrNotFound
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO story_deletion_receipts(story_id,author_profile_id) VALUES($1,$2) ON CONFLICT(story_id) DO NOTHING`, storyID, authorProfileID); err != nil {
+		return err
+	}
+	if deleted != nil {
+		return tx.Commit(ctx)
+	}
+	if media != nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO story_media_deletion_outbox(operation_id,story_id,media_file_id,available_at,created_at,updated_at) VALUES($1,$1,$2,now(),now(),now()) ON CONFLICT(operation_id) DO NOTHING`, storyID, *media); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(ctx, `UPDATE stories SET deleted_at=now() WHERE id=$1`, storyID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // MarkViewed records a view; anonymous views omit viewer from author list.
