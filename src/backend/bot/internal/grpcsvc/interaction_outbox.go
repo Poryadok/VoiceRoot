@@ -80,6 +80,10 @@ func (s *BotGRPC) processSlashInteraction(ctx context.Context, id uuid.UUID) (bo
 		if strings.TrimSpace(*bot.WebhookURL) == "" {
 			return store.SlashResult{Retry: true}, nil
 		}
+		if e := s.requireInvokerMembership(call, chatID, invoker); e != nil {
+			denied := status.Code(e) == codes.PermissionDenied
+			return store.SlashResult{Failed: denied, Retry: !denied}, e
+		}
 		client := webhook.GuardedClient(s.HTTPClient, func(request context.Context) error { return s.Store.CheckSlashAttempt(request, event) })
 		resp, e := webhook.DeliverPOST(call, client, strings.TrimSpace(*bot.WebhookURL), bot.WebhookSecret, payload, dispatch.DefaultTimeout())
 		if e != nil {
