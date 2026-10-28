@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,15 +58,18 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 		"type": "photo", "media_file_id": fileID, "visibility": "everyone",
 	})
 	storyID := composeStoryID(t, story)
-	require.NotEmpty(t, storyID)
+	require.NoError(t, uuid.Validate(storyID))
+	require.NoError(t, uuid.Validate(fileID))
 	postgres := storyTTLComposeContainer(t, project, "postgres")
 	storyContainer := storyTTLComposeContainer(t, project, "story")
 	fileContainer := storyTTLComposeContainer(t, project, "file")
 	gatewayContainer := storyTTLComposeContainer(t, project, "gateway")
+	minioContainer := storyTTLComposeContainer(t, project, "minio")
 	storyTTLRequireOwnedContainer(t, postgres, project, "postgres", startedNano)
 	storyTTLRequireOwnedContainer(t, storyContainer, project, "story", startedNano)
 	storyTTLRequireOwnedContainer(t, fileContainer, project, "file", startedNano)
 	storyTTLRequireOwnedContainer(t, gatewayContainer, project, "gateway", startedNano)
+	storyTTLRequireOwnedContainer(t, minioContainer, project, "minio", startedNano)
 	for service, container := range map[string]string{"story": storyContainer, "file": fileContainer, "gateway": gatewayContainer} {
 		storyTTLRequireImage(t, container, os.Getenv("VOICE_STORY_TTL_DELETE_"+strings.ToUpper(service)+"_IMAGE_ID"))
 	}
@@ -72,6 +78,21 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 		postgres, storyContainer, fileContainer, gatewayContainer, storyID, fileID)
 	require.Equal(t, "1", storyTTLComposeSQL(t, postgres,
 		"SELECT count(*) FROM stories WHERE id='"+storyID+"'::uuid AND media_file_id='"+fileID+"'::uuid AND expired_at IS NULL AND archived_until > now();"))
+	var blob struct {
+		ID        string `json:"id"`
+		Original  string `json:"original"`
+		Converted string `json:"converted"`
+		Thumbnail string `json:"thumbnail"`
+	}
+	raw := storyTTLDatabaseSQL(t, postgres, "file_db", "SELECT json_build_object('id', b.blob_id, 'original', b.original_r2_key, 'converted', b.converted_r2_key, 'thumbnail', b.thumbnail_r2_key) FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id='"+fileID+"'::uuid AND b.state='LIVE';")
+	require.NoError(t, json.Unmarshal([]byte(raw), &blob))
+	require.NoError(t, uuid.Validate(blob.ID))
+	keys := []string{blob.Original, blob.Converted, blob.Thumbnail}
+	for _, key := range keys {
+		require.NotEmpty(t, key)
+	}
+	require.Len(t, map[string]bool{keys[0]: true, keys[1]: true, keys[2]: true}, 3)
+	require.True(t, storyTTLObjectsMatch(t, project, proofID, minioContainer, keys, true), "all three captured objects must exist before purge")
 
 	// The expiry marker, not merely feed filtering by expires_at, proves the worker ran.
 	require.Eventually(t, func() bool {
@@ -95,11 +116,15 @@ func TestComposeStoryTTLDeleteFile_live(t *testing.T) {
 			"SELECT count(*) FROM stories WHERE id='"+storyID+"'::uuid;") == "0"
 	}, 90*time.Second, 2*time.Second, "Story startup purge must remove the archived row")
 	require.Eventually(t, func() bool {
-		return composeGetFileMetadataStatus(t, client, base, sess.AccessToken, fileID) == http.StatusNotFound
-	}, 2*time.Minute, 2*time.Second, "actual File DeleteFile must make uploaded media unavailable")
+		return composeGetFileMetadataStatus(t, client, base, sess.AccessToken, fileID) == http.StatusForbidden
+	}, 2*time.Minute, 2*time.Second, "released reference must deny legacy metadata access")
 	require.Equal(t, "0", storyTTLComposeSQL(t, postgres,
 		"SELECT count(*) FROM story_media_deletion_outbox WHERE operation_id='"+storyID+"'::uuid AND media_file_id='"+fileID+"'::uuid;"),
 		"Story must acknowledge its File deletion operation")
+	require.Eventually(t, func() bool {
+		return storyTTLDatabaseSQL(t, postgres, "file_db", "SELECT state FROM file_blobs WHERE blob_id='"+blob.ID+"'::uuid;") == "GC_COMPLETE"
+	}, 2*time.Minute, 2*time.Second, "File GC must complete")
+	require.True(t, storyTTLObjectsMatch(t, project, proofID, minioContainer, keys, false), "all captured objects must be absent after GC")
 }
 
 func storyTTLRequireTestBinary(t *testing.T) {
@@ -147,25 +172,145 @@ func storyTTLComposeContainer(t *testing.T, project, service string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	raw, err := exec.CommandContext(ctx, "docker", "ps", "--quiet",
+	raw, err := exec.CommandContext(ctx, "docker", "ps", "--quiet", "--no-trunc",
 		"--filter", "label=com.docker.compose.project="+project,
 		"--filter", "label=com.docker.compose.service="+service).Output()
 	require.NoError(t, err)
 	ids := strings.Fields(string(raw))
 	require.Len(t, ids, 1)
+	require.Len(t, ids[0], 64)
 	return ids[0]
 }
 
 func storyTTLComposeSQL(t *testing.T, postgres, query string) string {
 	t.Helper()
+	return storyTTLDatabaseSQL(t, postgres, "story_db", query)
+}
+
+func storyTTLDatabaseSQL(t *testing.T, postgres, database, query string) string {
+	t.Helper()
+	require.Contains(t, []string{"story_db", "file_db"}, database)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "docker", "exec", "-i", postgres,
-		"psql", "-U", "voice", "-d", "story_db", "-v", "ON_ERROR_STOP=1", "-Atq")
+		"psql", "-U", "voice", "-d", database, "-v", "ON_ERROR_STOP=1", "-Atq")
 	cmd.Stdin = strings.NewReader(query)
 	raw, err := cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(raw))
+}
+
+// A successful authenticated recursive bucket listing distinguishes absence from
+// a missing bucket, access denial or transport error. It never deletes objects.
+func storyTTLObjectsMatch(t *testing.T, project, proofID, minioID string, keys []string, present bool) bool {
+	t.Helper()
+	networkID := storyTTLNetworkID(t, project, minioID)
+	name := project + "-object-check-" + uuid.NewString()
+	t.Logf("private object-check container name=%s", name)
+	containerID := ""
+	defer func() {
+		// The unique name and matching label guard cleanup even if create timed out.
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		ids, err := exec.CommandContext(ctx, "docker", "ps", "-aq", "--filter", "name=^/"+name+"$").Output()
+		require.NoError(t, err, "cannot reconcile private object-check container")
+		matches := strings.Fields(string(ids))
+		if len(matches) == 0 {
+			require.Empty(t, containerID, "created object-check container disappeared")
+			return
+		}
+		require.Len(t, matches, 1)
+		if containerID != "" {
+			require.True(t, strings.HasPrefix(containerID, matches[0]))
+		}
+		raw, err := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{index .Config.Labels \"voice.story-ttl-proof\"}}", matches[0]).Output()
+		require.NoError(t, err)
+		require.Equal(t, proofID, strings.TrimSpace(string(raw)))
+		require.NoError(t, exec.CommandContext(ctx, "docker", "rm", "-f", matches[0]).Run(), "remove owned object-check container")
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "create", "--name", name, "--label", "voice.story-ttl-proof="+proofID, "--network", networkID,
+		"-e", "MC_HOST_proof=http://voice-minio:voice-minio-dev@minio:9000",
+		"quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727",
+		"ls", "--json", "--recursive", "proof/voice-story-ttl-"+proofID)
+	id, err := cmd.Output()
+	require.NoError(t, err, "create private object-check container; timeout requires later daemon reconciliation for %s", name)
+	containerID = strings.TrimSpace(string(id))
+	require.Len(t, containerID, 64)
+	raw, err := exec.CommandContext(ctx, "docker", "start", "-a", containerID).Output()
+	require.NoError(t, err, "authenticated private bucket listing failed")
+	require.Equal(t, networkID, storyTTLNetworkID(t, project, minioID))
+	ok, err := storyTTLInventoryMatches(bytes.NewReader(raw), keys, present)
+	require.NoError(t, err)
+	return ok
+}
+
+func storyTTLNetworkID(t *testing.T, project, minioID string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, "docker", "network", "inspect", project+"_default").Output()
+	require.NoError(t, err)
+	var networks []struct {
+		ID         string                     `json:"Id"`
+		Labels     map[string]string          `json:"Labels"`
+		Containers map[string]json.RawMessage `json:"Containers"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &networks))
+	require.Len(t, networks, 1)
+	network := networks[0]
+	require.Equal(t, project, network.Labels["com.docker.compose.project"])
+	require.NotEmpty(t, network.ID)
+	require.Contains(t, network.Containers, minioID)
+	aliases := 0
+	for id := range network.Containers {
+		raw, err := exec.CommandContext(ctx, "docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", id).Output()
+		require.NoError(t, err)
+		var attached map[string]struct {
+			NetworkID string   `json:"NetworkID"`
+			Aliases   []string `json:"Aliases"`
+		}
+		require.NoError(t, json.Unmarshal(raw, &attached))
+		entry, ok := attached[project+"_default"]
+		require.True(t, ok)
+		require.Equal(t, network.ID, entry.NetworkID)
+		for _, alias := range entry.Aliases {
+			if alias == "minio" {
+				aliases++
+				require.Equal(t, minioID, id)
+			}
+		}
+	}
+	require.Equal(t, 1, aliases, "MinIO alias must resolve only to owned container")
+	return network.ID
+}
+
+func storyTTLInventoryMatches(input io.Reader, keys []string, present bool) (bool, error) {
+	found := make(map[string]bool)
+	scanner := bufio.NewScanner(input)
+	for scanner.Scan() {
+		var row struct {
+			Status string `json:"status"`
+			Key    string `json:"key"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &row); err != nil {
+			return false, err
+		}
+		if row.Status != "success" || row.Key == "" {
+			return false, fmt.Errorf("invalid object listing")
+		}
+		found[row.Key] = true
+	}
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
+	for _, key := range keys {
+		if key == "" || found[key] != present {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func composeUploadUnscopedStoryImage(t *testing.T, client *http.Client, base, token string) string {
