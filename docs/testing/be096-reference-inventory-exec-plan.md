@@ -51,7 +51,8 @@ remain MISSING. Independent highlight-cover ownership is counted unresolved.
   actual GC claim/pre-DELETE and alternate destructive paths respect them.
 - [x] Real PostgreSQL concurrency, replay, migration rollback and protected
   transport checks, including concrete Story process → File importer/GC.
-- [ ] Final combined frozen-diff review and hosted required CI.
+- [x] Final independent combined frozen-diff source review.
+- [ ] Exact-head hosted required CI and normal dependency-first integration.
 
 ## Detailed Steps
 
@@ -131,6 +132,18 @@ highlighted aliases sharing a pending-GC blob, two private holds, zero readable
 references, zero issues and zero physical deletion. Other coverage remains
 MISSING. D117 scoped race/short/lint/vet packet is TT c19 attachment
 `d5ba799d2b4d361c4fe0929ad56c45f3`; D118 passed167 transport/root cases and vet.
+
+Final source `8000702a91642f951c8913404048b133bb092c5d` (tree
+`da20a4eaca3aa8679533b57b7b5f738641301d57`) received independent D59
+SOURCE CLEAR against coherent base `5a57863f`: no P1/P2 findings in the combined
+handwritten code, discriminating tests, migrations or generated mirror parity.
+Review was read-only, without tests or runtime acceptance. The subsequent receipt
+commit changes documentation only. Final changed-source File race checks passed
+store4.187s/composed17.544s. Both service short suites, scoped vet, Story and Linux
+File lint (zero issues), shared codec tests, Buf lint/format/breaking against the
+immutable5a baseline, Go/Dart regeneration without drift, and current-diff contract
+passed. Draft PR1016 is stacked on PR982; hosted required CI and dependency-first
+integration are separate pending gates. Global lifecycle criteria remain open.
 
 ## Risks and Follow-Ups
 
