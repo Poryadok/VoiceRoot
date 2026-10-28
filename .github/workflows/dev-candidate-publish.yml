@@ -50,6 +50,8 @@ on:
       - scripts/dev/realtime_secret_phase_test.py
       - scripts/dev/realtime_secret_provision.py
       - scripts/dev/realtime_secret_provision_test.py
+      - scripts/dev/realtime_migration_verify.py
+      - scripts/dev/realtime_migration_verify_test.py
       - scripts/dev/realtime_db_provision.py
       - scripts/dev/realtime_db_provision_test.py
       - scripts/dev/realtime_db_provision_journal_test.py
@@ -115,6 +117,7 @@ jobs:
           python -B scripts/dev/cohort_upload_runner_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
           python -B scripts/dev/realtime_secret_provision_test.py
+          python -B scripts/dev/realtime_migration_verify_test.py
           python -B scripts/dev/realtime_db_provision_test.py
           python -B scripts/dev/realtime_db_provision_journal_test.py
           python -B scripts/dev/realtime_p3_adoption_test.py
