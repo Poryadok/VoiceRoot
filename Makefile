@@ -319,6 +319,7 @@ ci-script-tests-pr: ci-script-tests
 ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check
 	python3 "$(ROOT)/scripts/dev/auth_flyway_upgrade_qualification_test.py"
 	python3 "$(ROOT)/scripts/dev/auth_flyway_upgrade_qualification_cohort_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_flyway_upgrade_qualification_journal_test.py"
 	python3 "$(ROOT)/scripts/ci/full_application_request_test.py"
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
