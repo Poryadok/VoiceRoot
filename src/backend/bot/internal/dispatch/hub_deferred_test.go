@@ -12,10 +12,10 @@ import (
 
 func TestHub_deferredStaysPendingUntilFinish(t *testing.T) {
 	hub := dispatch.NewHub()
-	ch := hub.Register("tok")
+	ch := hub.Register("tok", hubTestSession)
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		require.True(t, hub.Complete("tok", store.InteractionReply{Deferred: true}))
+		require.True(t, hub.Complete("tok", hubTestSession, store.InteractionReply{Deferred: true}))
 	}()
 	reply, ok := hub.Wait(ch, time.Second)
 	require.True(t, ok)

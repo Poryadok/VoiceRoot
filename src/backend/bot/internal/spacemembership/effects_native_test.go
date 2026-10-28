@@ -180,7 +180,7 @@ func TestNativeMembershipTypedCleanupLostReplyAndMalformedReceipt(t *testing.T) 
 			t.Fatal(e)
 		}
 	}
-	if _, e = db.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean);INSERT INTO schema_migrations VALUES(8,false)"); e != nil {
+	if _, e = db.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean);INSERT INTO schema_migrations VALUES(9,false)"); e != nil {
 		t.Fatal(e)
 	}
 	st := &store.BotStore{Pool: db}

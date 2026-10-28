@@ -26,7 +26,7 @@ func (s *BotGRPC) postSpaceBotMessage(ctx context.Context, bot *store.BotRow, me
 		return nil, err
 	}
 	var result *messagingv1.Message
-	err = s.Store.WithMessageSend(ctx, bot.ID, bot.ActorProfileID, chat, func(call context.Context, binding *commonv1.BotMessageSendBinding) error {
+	err = s.Store.WithMessageSend(ctx, bot.Authority(), bot.ActorProfileID, chat, func(call context.Context, binding *commonv1.BotMessageSendBinding) error {
 		req := &messagingv1.SendBotMessageRequest{Message: proto.Clone(message).(*messagingv1.SendMessageRequest), Binding: binding}
 		hash, err := principal.RequestHash(req)
 		if err != nil {

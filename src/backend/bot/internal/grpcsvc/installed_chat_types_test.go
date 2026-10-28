@@ -14,7 +14,7 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -31,7 +31,7 @@ func (c installedChatLookup) GetChat(ctx context.Context, req *chatv1.GetChatReq
 
 func TestListInstalledBots_ActualChatTypes(t *testing.T) {
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "installedtypes", "")
+	pool := testdb.StartPostgres(t, ctx, "installedtypes", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
 	require.NoError(t, err)
 	st := &store.BotStore{Pool: pool}

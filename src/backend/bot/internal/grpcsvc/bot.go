@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -152,12 +153,19 @@ func (s *BotGRPC) DeleteBot(ctx context.Context, req *botv1.DeleteBotRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ensureOwner(ctx, botID); err != nil {
-		return nil, err
+	owner, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing account")
 	}
-	_, err = s.Store.Pool.Exec(ctx, `UPDATE bots SET status = 'disabled', updated_at = now() WHERE id = $1`, botID)
+	epoch, err := s.Store.RevokeBot(ctx, botID, owner)
 	if err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
+		if errors.Is(err, store.ErrRotationDenied) {
+			return nil, status.Error(codes.PermissionDenied, "bot revocation denied")
+		}
+		return nil, mapStoreErr(err)
+	}
+	if s.Hub != nil {
+		s.Hub.PurgeBot(botID, epoch)
 	}
 	return &botv1.DeleteBotResponse{}, nil
 }
@@ -211,12 +219,19 @@ func (s *BotGRPC) RegenerateToken(ctx context.Context, req *botv1.RegenerateToke
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ensureOwner(ctx, botID); err != nil {
-		return nil, err
+	owner, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing account")
 	}
-	plain, err := s.Store.RegenerateToken(ctx, botID)
+	plain, epoch, err := s.Store.RotateCredential(ctx, botID, owner, false)
 	if err != nil {
+		if errors.Is(err, store.ErrRotationDenied) {
+			return nil, status.Error(codes.PermissionDenied, "bot rotation denied")
+		}
 		return nil, mapStoreErr(err)
+	}
+	if s.Hub != nil {
+		s.Hub.PurgeBot(botID, epoch)
 	}
 	return &botv1.RegenerateTokenResponse{TokenResponse: &botv1.TokenResponse{Token: plain}}, nil
 }
@@ -226,12 +241,19 @@ func (s *BotGRPC) RegenerateWebhookSecret(ctx context.Context, req *botv1.Regene
 	if err != nil {
 		return nil, err
 	}
-	if err := s.ensureOwner(ctx, botID); err != nil {
-		return nil, err
+	owner, ok := authctx.AccountID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "missing account")
 	}
-	plain, err := s.Store.RegenerateWebhookSecret(ctx, botID)
+	plain, epoch, err := s.Store.RotateCredential(ctx, botID, owner, true)
 	if err != nil {
+		if errors.Is(err, store.ErrRotationDenied) {
+			return nil, status.Error(codes.PermissionDenied, "bot rotation denied")
+		}
 		return nil, mapStoreErr(err)
+	}
+	if s.Hub != nil {
+		s.Hub.PurgeBot(botID, epoch)
 	}
 	return &botv1.RegenerateWebhookSecretResponse{
 		WebhookSecretResponse: &botv1.WebhookSecretResponse{WebhookSecret: plain},
@@ -472,15 +494,18 @@ func (s *BotGRPC) DeferResponse(ctx context.Context, req *botv1.DeferResponseReq
 		return nil, err
 	}
 	token := strings.TrimSpace(req.GetInteractionToken())
-	authority, err := s.authorizeInteraction(ctx, botRow, token, nil)
+	err = s.withInteractionSession(ctx, botRow, token, nil, func(call context.Context, tx pgx.Tx, current *store.BotRow, authority *interactionAuthority) error {
+		if authority.state != "pending" && authority.state != "delivered" {
+			return nil
+		}
+		_, err := tx.Exec(call, `UPDATE bot_event_log SET delivery_status='deferred' WHERE bot_id=$1 AND interaction_token=$2 AND delivery_status IN ('pending','delivered')`, current.ID, token)
+		if err == nil {
+			s.Hub.Complete(token, current.Session(), store.InteractionReply{Deferred: true})
+		}
+		return err
+	})
 	if err != nil {
 		return nil, err
-	}
-	if authority.state == "pending" {
-		if err := s.Store.MarkEventDeferred(ctx, botRow.ID, token); err != nil {
-			return nil, status.Error(codes.Unavailable, "interaction defer could not be persisted")
-		}
-		s.Hub.Complete(token, store.InteractionReply{Deferred: true})
 	}
 	return &botv1.DeferResponseResponse{}, nil
 }
@@ -498,18 +523,42 @@ func (s *BotGRPC) PollEvents(req *botv1.PollEventsRequest, stream botv1.BotServi
 	if !botRow.IsPollingMode {
 		return status.Error(codes.FailedPrecondition, "bot is not in polling mode")
 	}
-	s.touchPresence(ctx, botRow.ID)
+	if err = s.withBotSession(ctx, botRow, uuid.Nil, func(call context.Context, _ pgx.Tx, current *store.BotRow) error {
+		return s.Store.TouchPresence(call, current.ID)
+	}); err != nil {
+		return err
+	}
 	ids, _, _, err := s.Store.ListPendingEvents(ctx, botRow.ID, 25)
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
 	for _, id := range ids {
-		if err := s.Store.DeliverPollingEvent(ctx, botRow.ID, id, func(kind, payload string) error {
+		if err := s.Store.DeliverPollingEvent(ctx, botRow.Authority(), id, func(kind, payload string) error {
+			if kind == "interaction" || kind == "autocomplete" {
+				var binding struct {
+					ChatID  string `json:"chat_id"`
+					Invoker string `json:"invoker_profile_id"`
+				}
+				if json.Unmarshal([]byte(payload), &binding) != nil {
+					return status.Error(codes.NotFound, "event not found")
+				}
+				chat, e := uuid.Parse(binding.ChatID)
+				if e != nil {
+					return status.Error(codes.NotFound, "event not found")
+				}
+				invoker, e := uuid.Parse(binding.Invoker)
+				if e != nil {
+					return status.Error(codes.NotFound, "event not found")
+				}
+				if e = s.requireInvokerMembership(ctx, chat, invoker); e != nil {
+					return e
+				}
+			}
 			return stream.Send(&botv1.PollEventsResponse{BotEvent: &botv1.BotEvent{
 				EventId: id.String(), EventType: kind, PayloadJson: payload, CreatedAt: timestamppb.Now(),
 			}})
 		}); err != nil {
-			return err
+			return sessionError(err)
 		}
 	}
 	return nil
@@ -566,7 +615,13 @@ func (s *BotGRPC) botFromToken(ctx context.Context) (*store.BotRow, error) {
 	}
 	row, err := s.Store.GetBotByTokenHash(ctx, store.HashToken(token))
 	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.Unavailable, "Bot authority unavailable")
+		}
 		return nil, status.Error(codes.Unauthenticated, "invalid bot token")
+	}
+	if s.Hub != nil {
+		s.Hub.PurgeBot(row.ID, row.SessionEpoch)
 	}
 	return row, nil
 }

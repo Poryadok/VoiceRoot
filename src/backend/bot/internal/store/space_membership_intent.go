@@ -170,11 +170,11 @@ func (s *BotStore) membershipTx(ctx context.Context, source, space, bot uuid.UUI
 		return fail(err)
 	}
 	var valid bool
-	err = tx.QueryRow(ctx, `SELECT count(*)=1 AND coalesce(bool_and(m.version=8 AND NOT m.dirty),false)
+	err = tx.QueryRow(ctx, `SELECT count(*)=1 AND coalesce(bool_and(m.version=$2 AND NOT m.dirty),false)
  AND EXISTS(SELECT 1 FROM bot_space_membership_source s WHERE s.singleton AND s.source_generation=$1
  AND s.issued_pairs=(SELECT count(*) FROM bot_space_membership_heads)
  AND s.issued_operations=(SELECT count(*) FROM bot_space_membership_operations)
- AND s.issued_calls=(SELECT count(*) FROM bot_space_membership_calls)) FROM schema_migrations m`, source).Scan(&valid)
+	 AND s.issued_calls=(SELECT count(*) FROM bot_space_membership_calls)) FROM schema_migrations m`, source, BotSchemaVersion).Scan(&valid)
 	if err != nil || !valid {
 		return fail(ErrMembershipSource)
 	}
