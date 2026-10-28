@@ -4,6 +4,7 @@ import datetime as dt
 import hashlib
 import inspect
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ import resource_claim
 import resource_claim_test
 import runtime_stage
 import source_plan
+import source_plan_test
 import source_authority
 import transaction
 
@@ -469,7 +471,9 @@ class GISLifecycleContract(unittest.TestCase):
             with self.subTest(fault=fault):
                 self.check_transaction_captures_qualified_gis_and_normalizes_before_fence('images-only', fault)
 
-    def test_pre_fence_rechecks_target_service_account_before_blocker(self):
+    def test_pre_fence_rechecks_target_service_account_after_capture(self):
+        class ReachedFence(Exception):
+            pass
         _, first, receipt = fixtures.first_install()
         for fault in ('none', 'uid', 'resourceVersion'):
             with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
@@ -506,23 +510,146 @@ class GISLifecycleContract(unittest.TestCase):
                     elif fault == 'resourceVersion':
                         kube.service_account['metadata']['resourceVersion'] = '2'
                     return {}
-                expected = ('gis_existing_lifecycle_incomplete' if fault == 'none'
-                            else 'gis_existing_service_account_changed')
+                resource = Mock()
+                resource.binding.return_value = {'fixture': 'tt-bound'}
                 with patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read), \
                         patch.object(transaction, 'private_json', side_effect=read), \
                         patch.object(transaction.migrations, 'preflight', return_value={}), \
                         patch.object(transaction.space_safeguards, 'preflight', return_value=None), \
                         patch.object(transaction.space_safeguards, 'combined_capacity', return_value={}), \
                         patch.object(transaction.nonnats_runtime, 'preflight', return_value={}), \
+                        patch.object(transaction.nonnats_plan, 'revalidate'), \
                         patch.object(source_plan, 'verify_db_init'), \
                         patch.object(transaction, 'native_preflight', return_value={}), \
                         patch.object(transaction, 'capture_inputs', side_effect=capture_inputs), \
-                        patch.object(runtime_stage.RolloutStage, 'fence') as fence, \
+                        patch.object(runtime_stage.RolloutStage, 'fence', side_effect=ReachedFence) as fence, \
                         patch('operator_retirement.record_readonly_failure', side_effect=lambda _b, value, _e: value):
-                    with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
-                        transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
-                            {}, [], nonnats, gis_binding=self.binding, gis_source_authority=self.source_fixture())
-                    fence.assert_not_called()
+                    if fault == 'none':
+                        with self.assertRaises(ReachedFence):
+                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                                {}, [], nonnats, gis_binding=self.binding, gis_source_authority=self.source_fixture(),
+                                resource_session=resource)
+                        fence.assert_called_once()
+                    else:
+                        with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked),
+                                'gis_existing_service_account_changed'):
+                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                                {}, [], nonnats, gis_binding=self.binding, gis_source_authority=self.source_fixture(),
+                                resource_session=resource)
+                        fence.assert_not_called()
+
+    def test_transaction_rechecks_pair_and_sa_after_authority_and_tt_bind(self):
+        class ReachedFence(Exception):
+            pass
+        _, first, receipt = fixtures.first_install()
+        for fault in ('none', 'missing_tt', 'before_sa', 'before_service', 'before_active',
+                      'after_sa', 'after_deployment', 'after_active'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / 'installed').mkdir()
+                original = root / ('rollout-' + first['operation'])
+                original.mkdir()
+                (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
+                (root / 'installed' / 'active-release.json').write_text(json.dumps({
+                    'gis_first_install_transition': {'operation': first['operation'],
+                        'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+                def read(path, **kwargs):
+                    return json.loads(Path(path).read_text(encoding='utf-8'))
+                kube = copy.deepcopy(self.kube)
+                original_get = kube.get
+                def get(kind, name):
+                    row = original_get(kind, name)
+                    if kind == 'pvc': row['status'] = {'capacity': {'storage': '1Gi'}}
+                    return row
+                kube.get = get
+                kube.cas = Mock()
+                stage = runtime_stage.RolloutStage.capture(kube, '123456abcdef', lambda _: None,
+                    ['voice-gameintegration'], gis_binding=self.binding)
+                pack = self.compiled_target(stage)
+                nonnats = {'actions': [], 'checks': []}
+                pack['target']['nonnats_sha256'] = gis.digest(nonnats)
+                base = root / 'rollout-123456abcdef'
+                base.mkdir()
+                (base / 'apply-manifests.json').write_text(json.dumps(pack['manifests']), encoding='utf-8')
+                (root / 'kernel').write_bytes(b'fixture')
+                order = []
+                def before_fence():
+                    order.append('authority')
+                    if fault == 'before_sa':
+                        kube.service_account['metadata']['resourceVersion'] = '2'
+                    elif fault == 'before_service':
+                        kube.gis_kube.objects[gis.SERVICE]['spec']['selector']['app'] = 'foreign'
+                    elif fault == 'before_active':
+                        (root / 'installed' / 'active-release.json').write_text(json.dumps({'changed': True}), encoding='utf-8')
+                context = resource_claim_test.context()
+                context.update(commit=pack['target']['tag'], images=copy.deepcopy(pack['target']['images']))
+                card = resource_claim_test.card(context)
+                card['observed']['images'] = copy.deepcopy(stage.old_images)
+                journal = resource_claim_test.MemoryJournal()
+                resource = resource_claim.Session(context, '123456abcdef', 'a' * 64,
+                    lambda: copy.deepcopy(card), journal)
+                resource.admit(start=True)
+                bind_target = resource.bind_target
+                def bind(tag, images, old_images, target_hash):
+                    order.append('tt-bind')
+                    bind_target(tag, images, old_images, target_hash)
+                    if fault == 'after_sa':
+                        kube.service_account['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                    elif fault == 'after_deployment':
+                        kube.deployments['voice-gameintegration']['metadata']['uid'] = '00000000-0000-0000-0000-000000000999'
+                    elif fault == 'after_active':
+                        (root / 'installed' / 'active-release.json').write_text(json.dumps({'changed': True}), encoding='utf-8')
+                resource.bind_target = bind
+                def fence(_stage):
+                    order.append('fence')
+                    raise ReachedFence()
+                with patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read), \
+                        patch.object(transaction, 'private_json', side_effect=read), \
+                        patch.object(transaction.migrations, 'preflight', return_value={}), \
+                        patch.object(transaction.space_safeguards, 'preflight', return_value=None), \
+                        patch.object(transaction.space_safeguards, 'combined_capacity', return_value={}), \
+                        patch.object(transaction.nonnats_runtime, 'preflight', return_value={}), \
+                        patch.object(transaction.nonnats_plan, 'revalidate'), \
+                        patch.object(source_plan, 'verify_db_init'), \
+                        patch.object(transaction, 'native_preflight', return_value={}), \
+                        patch.object(transaction, 'capture_inputs', return_value={}), \
+                        patch.object(runtime_stage.RolloutStage, 'fence', autospec=True, side_effect=fence) as fence_call, \
+                        patch.object(runtime_stage.RolloutStage, 'scale', autospec=True) as scale, \
+                        patch('operator_retirement.record_readonly_failure', side_effect=lambda _b, value, _e: value):
+                    if fault == 'none':
+                        with self.assertRaises(ReachedFence):
+                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                                {}, [], nonnats, before_fence=before_fence, resource_session=resource,
+                                gis_binding=self.binding, gis_source_authority=self.source_fixture())
+                        self.assertEqual(order, ['authority', 'tt-bind', 'fence'])
+                        fence_call.assert_called_once()
+                        checkpoint = json.loads((base / 'checkpoint.json').read_text(encoding='utf-8'))
+                        self.assertEqual(resource.binding()['target_sha256'], gis.digest(checkpoint['target']))
+                        self.assertEqual(resource.check()['target_sha256'], gis.digest(checkpoint['target']))
+                        self.assertEqual(checkpoint['resource_fence'], resource.binding())
+                        resource.require_binding(checkpoint['resource_fence'])
+                        self.assertEqual(resource.context['commit'], checkpoint['target']['tag'])
+                        self.assertEqual(resource.context['images'], checkpoint['target']['images'])
+                    else:
+                        expected = ('gis_existing_resource_fence_required' if fault == 'missing_tt'
+                            else 'gis_existing_service_account_changed' if fault.endswith('_sa')
+                            else 'gis_existing_authority_changed' if fault.endswith('_active')
+                            else 'gis_existing_identity_changed')
+                        with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
+                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                                {}, [], nonnats, before_fence=before_fence,
+                                resource_session=None if fault == 'missing_tt' else resource,
+                                gis_binding=self.binding, gis_source_authority=self.source_fixture())
+                        self.assertEqual(order, ['authority'] if fault.startswith('before_') or fault == 'missing_tt'
+                            else ['authority', 'tt-bind'])
+                        fence_call.assert_not_called()
+                    checkpoint = json.loads((base / 'checkpoint.json').read_text(encoding='utf-8'))
+                    self.assertEqual(checkpoint['phase'], 'FENCE')
+                    self.assertEqual(checkpoint['status'], 'BLOCKED')
+                    self.assertEqual(checkpoint['fence_status'], 'UNKNOWN')
+                    self.assertEqual('resource_fence' in checkpoint, 'tt-bind' in order)
+                    scale.assert_not_called()
+                    kube.cas.assert_not_called()
 
     def test_full_update_records_source_selected_service_account(self):
         for mode in ('full', 'app-only'):
@@ -533,6 +660,73 @@ class GISLifecycleContract(unittest.TestCase):
         self.kube.target_account['automountServiceAccountToken'] = False
         self.check_transaction_captures_qualified_gis_and_normalizes_before_fence(
             'full', target_sa=True, reject_target_sa=True)
+
+    def test_full_and_app_only_compile_real_source_plan_with_gis_and_callers(self):
+        source = Path(os.environ.get('VOICE_TEST_SOURCE_ROOT', Path(__file__).resolve().parents[3]))
+        for mode in ('full', 'app-only'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(source_plan_test, 'SOURCE', source):
+                kube, params = source_plan_test.SourceTests().canonical_fixture(mode)
+                params.update(generation='r20260930a4', dataPVC='voice-nats-jsdata-d202610040049430b',
+                    changed_services=[], enrolled=[], contract={'scripts': []})
+                for part in ('realtime', 'notification', 'search', 'analytics-chat'):
+                    raw = (source / ('deploy/templates/nats-' + part + '-bootstrap.yaml')).read_bytes().split(b'---')[0]
+                    script = source_plan_test.decoder(raw)['data']['bootstrap.sh']
+                    params['contract']['scripts'].append({'part': part, 'sha256': hashlib.sha256(script.encode()).hexdigest()})
+                rows = compiler.rendered_source(source, params, source_plan_test.decoder)
+                deployments = [row for row in rows if row.get('kind') == 'Deployment']
+                params['enrolled'] = sorted(row['metadata']['name'] for row in deployments)
+                images = {}
+                for row in deployments:
+                    name = row['metadata']['name']
+                    spec = row['spec']['template']['spec']
+                    for container in spec.get('initContainers', []) + spec.get('containers', []):
+                        key = name + '/' + container['name']
+                        images[key] = ('docker.io/library/nginx@sha256:' + 'e' * 64 if name == source_plan.PRINCIPAL_PUBLISHER
+                                       else 'registry/' + container['name'] + '@sha256:' + 'a' * 64)
+                params['images'] = images
+                parameter_path = Path(tmp) / 'params.json'
+                parameter_path.write_text(json.dumps(params), encoding='utf-8')
+                output = Path(tmp) / ('target-' + params['tag'] + '.json')
+                with patch.object(compiler, 'decode_yaml', side_effect=source_plan_test.decoder):
+                    compiler.main([str(source), str(parameter_path), str(output)], producer=kube)
+                pack = json.loads(output.read_text(encoding='utf-8'))
+                identities = {(row['kind'], row['metadata']['name']) for row in pack['manifests']}
+                for kind, name in (('Service', 'voice-gameintegration'), ('Deployment', 'voice-gameintegration'),
+                                   ('Deployment', 'voice-role'), ('Deployment', 'voice-notification'),
+                                   ('Deployment', 'voice-realtime')):
+                    self.assertIn((kind, name), identities)
+                self.assertEqual(pack['target']['mode'], mode)
+                self.assertIn('voice-gameintegration/gameintegration', pack['target']['images'])
+                self.assertTrue(pack['nonnats']['checks'])
+                def object_for(kind, name):
+                    return next(row for row in pack['manifests']
+                        if row['kind'] == kind and row['metadata']['name'] == name)
+                service = object_for('Service', 'voice-gameintegration')
+                self.assertEqual(service['spec']['selector'], {'app': 'voice-gameintegration'})
+                self.assertEqual(len(service['spec']['ports']), 2)
+                self.assertEqual({row['name']: row['port'] for row in service['spec']['ports']},
+                    {'http': 8080, 'principal-jwks': 8443})
+                def env_for(name):
+                    deployment = object_for('Deployment', 'voice-' + name)
+                    container = next(row for row in deployment['spec']['template']['spec']['containers']
+                        if row['name'] == name)
+                    self.assertEqual(len(container.get('env', [])),
+                        len({row['name'] for row in container.get('env', [])}))
+                    return {row['name']: row for row in container.get('env', [])}
+                role = env_for('role')
+                issuers = json.loads(role['S2S_JWKS_URLS_JSON']['value'])
+                self.assertEqual(issuers['gameintegration'],
+                    'https://voice-gameintegration:8443/internal/v1/principal/jwks.json')
+                gis_env = env_for('gameintegration')
+                for caller in ('notification', 'realtime'):
+                    key = 'GAME_INTEGRATION_' + caller.upper() + '_WORKLOAD_KEY_B64'
+                    expected = {'secretKeyRef': {'name': 'voice-gameintegration-workload-credentials', 'key': key}}
+                    self.assertEqual(gis_env[key]['valueFrom'], expected)
+                    caller_env = env_for(caller)
+                    self.assertEqual(caller_env[key]['valueFrom'], expected)
+                    self.assertEqual(caller_env['GAME_INTEGRATION_CONSENT_URL']['value'],
+                        'http://voice-gameintegration:8080')
 
     def test_transaction_blocks_drift_between_real_captures_before_fence(self):
         class ReachedPrerequisite(Exception):
@@ -1331,6 +1525,10 @@ class GISLifecycleContract(unittest.TestCase):
                     self.assertEqual(published_b['gis_first_install_transition'], anchor)
                     self.assertEqual(published_b['gis_latest_transition']['receipt_sha256'], next_receipt['receipt_sha256'])
                     self.assertEqual(existing.load_authority(ready_kube)['old'], gis.semantic(next_deployment))
+                    with patch.object(bridge_root, 'save', wraps=bridge_root.save) as publish_save:
+                        actions._active_release(copy.deepcopy(second))
+                        publish_save.assert_not_called()
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), published_b)
                     try:
                         actions._active_release(state)
                     except (gis.Blocked, runtime_stage.Blocked):
