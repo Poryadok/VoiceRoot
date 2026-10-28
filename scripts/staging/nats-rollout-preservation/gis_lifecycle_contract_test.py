@@ -1354,6 +1354,10 @@ class GISLifecycleContract(unittest.TestCase):
                 state['gis_source_authority'] = self.source_fixture()
                 state['gis_service_account'] = account
                 state['gis_ready_proof'] = existing.verify_ready(ready_binding, ready_kube, account)
+                state['authorization']['expires_at'] = (dt.datetime.now(dt.timezone.utc)
+                    + dt.timedelta(minutes=5)).isoformat()
+                state['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(state['authorization'])
+                state.update(phase='PAUSED_APPLY', status='WAITING', fence_status='VERIFIED', provenance={})
                 anchor = {'operation': first_state['operation'], 'receipt_sha256': first_receipt['receipt_sha256']}
                 active = {'gis_first_install_transition': anchor}
                 state['gis_expected_active'] = copy.deepcopy(active)
@@ -1376,9 +1380,42 @@ class GISLifecycleContract(unittest.TestCase):
                 intent = runtime.verify_and_journal(stage)
                 runtime.arm_release(stage, intent)
                 snapshots = []
+                durable = base / 'checkpoint.json'
+                state['gis_ready_proof'] = None
+                ready_kube.objects[gis.DEPLOYMENT]['spec']['replicas'] = 0
+                stage.snapshots = {'voice-gameintegration': {}}
+                stage.expected = {'source_claim': 'fixture-claim'}
+                stage.owned_marker = lambda: {'data': {'phase': 'rollout-verified'}}
+                stage.scale = lambda _name, replicas: ready_kube.objects[gis.DEPLOYMENT]['spec'].update(replicas=replicas)
+                stage.wait_ready = lambda _name: None
+                stage.verify_selected_storage_identity = lambda: None
+                stage.adopt_applied_target = lambda *_args: None
+                stage.verified = lambda: None
+                stage.restart = lambda: runtime_stage.RolloutStage.release_marker(stage)
+                stage.refence = lambda: {'verified': False}
+                def marker_cas(*_args):
+                    checkpoint_at_cas = json.loads(durable.read_text(encoding='utf-8'))
+                    self.assertIn('receipt', checkpoint_at_cas['gis_existing_update'])
+                    self.assertEqual(checkpoint_at_cas['gis_ready_proof'],
+                        existing.verify_ready(ready_binding, ready_kube, account))
+                    self.assertNotEqual(checkpoint_at_cas['status'], 'PASS')
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), active)
+                    return {'data': {'phase': 'active'}}
+                ready_kube.cas = Mock(side_effect=marker_cas)
+                def persist(_path, row):
+                    snapshots.append(copy.deepcopy(row))
+                    durable.write_text(json.dumps(row), encoding='utf-8')
+                    durable.chmod(0o600)
                 with patch.object(guard, 'ROOT', root), \
-                        patch.object(transaction, 'save', side_effect=lambda _path, row: snapshots.append(copy.deepcopy(row))):
-                    receipt = transaction.gis_successor_checkpoint(base, state, stage)
+                        patch.object(transaction, 'save', side_effect=persist), \
+                        patch.object(transaction, 'reconstruct', return_value=stage), \
+                        patch.object(transaction, 'context', side_effect=lambda _stage: copy.deepcopy(state['context'])), \
+                        patch.object(transaction, 'revalidate_inputs'), \
+                        patch.object(transaction, 'DockerRuntime'), \
+                        patch.object(transaction, 'verify_post_apply', return_value=proof), \
+                        patch.object(transaction, 'attach_closed_preservation'):
+                    transaction.finish(ready_kube, base, state, state['authorization'], 'fixture-rv', {})
+                    receipt = state['gis_existing_update']['receipt']
                     self.assertEqual(receipt['anchor'], anchor)
                     self.assertEqual(receipt['predecessor'], anchor)
                     self.assertEqual(receipt['old_pair_sha256'], gis.digest({
@@ -1390,16 +1427,12 @@ class GISLifecycleContract(unittest.TestCase):
                     self.assertEqual(receipt['receipt_sha256'], gis.digest({
                         key: value for key, value in receipt.items() if key != 'receipt_sha256'}))
                     self.assertEqual(snapshots[-1]['gis_existing_update']['receipt'], receipt)
-                # Model a durably completed operation after the separately
-                # tested pre-release producer; this does not prove a real PASS.
-                state['status'] = 'PASS'
-                state['phase'] = 'POST_RESTART'
-                state['fence_status'] = 'RELEASED'
-                state['context'] = {'expected': {'namespace_uid': ready_binding['namespace_uid'],
-                    'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
-                durable = base / 'checkpoint.json'
-                durable.write_text(json.dumps(state), encoding='utf-8')
-                durable.chmod(0o600)
+                    self.assertEqual(snapshots[-1]['status'], 'PASS')
+                    self.assertEqual(snapshots[-1]['phase'], 'POST_RESTART')
+                    self.assertEqual(snapshots[-1]['fence_status'], 'RELEASED')
+                    ready_kube.cas.assert_called_once()
+                # Finish executed with controlled external Kube/NATS/storage seams.
+                self.assertEqual(json.loads(durable.read_text(encoding='utf-8')), state)
                 actions = object.__new__(bridge_root.Actions)
                 with patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
                         patch.object(bridge_root, 'Kube', return_value=ready_kube):
