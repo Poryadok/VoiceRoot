@@ -23,14 +23,17 @@ import (
 )
 
 // requireInvokerMembership asks the authoritative Chat service under the
-// caller's profile. Chat.ListMembers checks effective membership before reading.
+// caller's profile. Chat.GetChat checks effective membership without enumerating members.
 func (s *BotGRPC) requireInvokerMembership(ctx context.Context, chatID, invoker uuid.UUID) error {
 	if s.Chat == nil {
 		return status.Error(codes.Unavailable, "chat membership authority unavailable")
 	}
 	chatCtx := metadata.NewOutgoingContext(ctx, metadata.Pairs(authctx.HeaderProfileID, invoker.String()))
-	_, err := s.Chat.ListMembers(chatCtx, &chatv1.ListMembersRequest{ChatId: chatID.String()})
+	resp, err := s.Chat.GetChat(chatCtx, &chatv1.GetChatRequest{ChatId: chatID.String()})
 	if err == nil {
+		if resp.GetChat().GetId() != chatID.String() {
+			return status.Error(codes.Unavailable, "chat membership response invalid")
+		}
 		return nil
 	}
 	if code := status.Code(err); code == codes.PermissionDenied || code == codes.NotFound {

@@ -32,6 +32,7 @@ func (c *AttachmentReferenceCoordinator) preparePreviews(ctx context.Context, ro
 		return status.Error(codes.Unavailable, "attachment preview owner unavailable")
 	}
 	snapshots := map[string]*eventsv1.FilePreviewSnapshot{}
+	audio := map[string]*filev1.AudioNoGenericPreview{}
 	refs := map[string]*filev1.FileReferenceKey{}
 	for _, ref := range acquired.References {
 		request := &filev1.ResolveMessageAttachmentPreviewRequest{ProtocolVersion: 1, Reference: ref}
@@ -44,20 +45,40 @@ func (c *AttachmentReferenceCoordinator) preparePreviews(ctx context.Context, ro
 		if err != nil {
 			return err
 		}
-		if !proto.Equal(response.GetReference(), ref) || filepreview.Validate(response.GetSnapshot()) != nil || response.GetSnapshot().GetFileId() != ref.FileId {
+		if response == nil || ref == nil || !proto.Equal(response.GetReference(), ref) || (response.GetSnapshot() == nil) == (response.GetAudioNoGenericPreview() == nil) {
 			return status.Error(codes.DataLoss, "attachment preview response mismatch")
 		}
-		if readyOnly && response.Snapshot.Status != "ready" {
+		state := ""
+		if snapshot := response.GetSnapshot(); snapshot != nil {
+			if filepreview.Validate(snapshot) != nil || snapshot.GetFileId() != ref.FileId {
+				return status.Error(codes.DataLoss, "attachment preview response mismatch")
+			}
+			snapshots[ref.FileId] = snapshot
+			state = snapshot.Status
+		} else {
+			result := response.GetAudioNoGenericPreview()
+			id, parseErr := uuid.Parse(result.GetFileId())
+			if parseErr != nil || id == uuid.Nil || id.String() != result.GetFileId() || result.GetFileId() != ref.FileId || result.GetProtocolVersion() != 1 || len(result.ProtoReflect().GetUnknown()) != 0 {
+				return status.Error(codes.DataLoss, "attachment preview response mismatch")
+			}
+			switch result.GetStatus() {
+			case "pending_upload", "processing", "ready", "failed", "deleted", "expired":
+			default:
+				return status.Error(codes.DataLoss, "attachment preview response mismatch")
+			}
+			audio[ref.FileId] = result
+			state = result.Status
+		}
+		if readyOnly && state != "ready" {
 			return status.Error(codes.FailedPrecondition, "attachment file is not ready")
 		}
 		refs[ref.FileId] = ref
-		snapshots[ref.FileId] = response.Snapshot
 	}
 	var attachments []messageAttachment
 	if err := json.Unmarshal([]byte(row.AttachmentsJSON), &attachments); err != nil {
 		return err
 	}
-	row.FilePreviewBindings = nil
+	row.FilePreviewBindings = []store.FilePreviewBinding{}
 	for i, attachment := range attachments {
 		if attachment.FileID == "" {
 			continue
@@ -67,6 +88,12 @@ func (c *AttachmentReferenceCoordinator) preparePreviews(ctx context.Context, ro
 		}
 		snapshot := snapshots[attachment.FileID]
 		ref := refs[attachment.FileID]
+		if result := audio[attachment.FileID]; result != nil {
+			if ref == nil || (result.Status == "ready" && !attachmentTypeMatchesFileMeta(attachment.Type, "audio")) {
+				return status.Error(codes.FailedPrecondition, "attachment preview type unavailable")
+			}
+			continue
+		}
 		if snapshot == nil || ref == nil || (snapshot.Status == "ready" && !attachmentTypeMatchesFileMeta(attachment.Type, snapshot.FileType)) {
 			return status.Error(codes.FailedPrecondition, "attachment preview type unavailable")
 		}

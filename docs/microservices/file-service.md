@@ -412,7 +412,8 @@ When conversion finishes (`status=ready` or `failed`), File publishes **`file.pr
 | `preview` | Complete File-owned v1 snapshot with independent positive revision, category, persisted intent, size/scan, optional dimensions/duration and variant availability; never URLs/storage keys |
 
 **BE-080 contract:** File commits state, preview revision and stable event bytes
-in one transaction. Generic snapshots exclude Music and E2E. The new protected
+in one transaction. Generic snapshots cover legacy UNSPECIFIED files and processed
+GIF; they exclude AUDIO, Music, Sticker and E2E. The protected
 Messaging-only exact-reference resolver refreshes an existing MESSAGE projection,
 without creating a reference or authorizing a viewer. Terminal snapshots expose
 only identity/revision/status. Messaging privately binds attachment slots and
@@ -421,6 +422,14 @@ real-viewer authorization. Existing Music remains a separate mutually exclusive
 payload and revision namespace. This extension does not create processors for
 unsupported intents. Implementation and staged activation are tracked in the
 [BE-080 plan](../testing/be080-file-preview-exec-plan.md).
+
+For persisted plaintext AUDIO, that resolver instead returns a versioned
+`audio_no_generic_preview` observation after the same principal, exact reference,
+Space, blob and expiry gates. READY requires audio type, bounded positive size
+and clean or skipped scan. This observation is neither a snapshot nor viewer
+authority and does not create an AUDIO preview event. The ordinary processed
+notification and File metadata remain separate. Messaging must understand this
+response before File emits it; old consumers fail closed during skew.
 
 ## Публикуемые события (→ NATS)
 

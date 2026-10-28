@@ -10,7 +10,7 @@ matrix and deployment prerequisites; this plan does not grant activation.
 
 ## Purpose and contract
 
-Existing plaintext non-Music file attachments must converge after File processing,
+Eligible plaintext UNSPECIFIED and processed GIF file attachments must converge after File processing,
 failure, deletion and expiry, including forwards and repeated attachment slots.
 File owns complete redacted revisioned snapshots. Messaging owns exact private
 MESSAGE reference bindings, persisted projections and ordinary message.edited
