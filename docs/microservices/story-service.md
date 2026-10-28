@@ -356,6 +356,15 @@ mismatched certificate/key fails startup. TLS trust and the signed request-bound
 Partial configuration is a startup error; no configuration keeps media admission
 unavailable. Text and media-less LFP remain usable.
 
+For direct service-to-service HTTPS JWKS, set all three of
+`STORY_PRINCIPAL_JWKS_HTTPS_LISTEN`, `STORY_PRINCIPAL_JWKS_TLS_CERT_FILE` and
+`STORY_PRINCIPAL_JWKS_TLS_KEY_FILE`. The dedicated TLS listener serves the same
+public key set at `/.well-known/jwks.json`; partial settings, an invalid or
+currently unusable server certificate, or a failed bind stop startup. Without
+these settings, the existing HTTP endpoint can be served through an independently
+configured HTTPS ingress. The File consumer always verifies the TLS chain and
+server name; no plaintext fallback is introduced.
+
 Deployment owners provision Secret `voice-story-principal-keys` with exactly two
 `<kid>.pem` keys; `voice-file-principal-tls` with `tls.crt`/`tls.key` and SAN
 `voice-file-principal.<namespace>.svc`; `voice-principal-trust` with `ca.crt`
