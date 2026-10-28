@@ -6,8 +6,8 @@ transaction must first derive and verify that subset from the protected runtime
 snapshot, owner/database mapping and source-bound mutation plan, including
 required dependent stores. The subset supplied to this helper is data, not
 proof that the selection is complete. Unsupported, unexpected or ambiguous
-databases must hold the operation; they must not be silently dropped. Legacy
-`gateway_db`, deferred federation and multiple PostgreSQL engines are not
+databases must hold the operation; they must not be silently dropped. Deferred
+federation and multiple PostgreSQL engines are not
 qualified by this component.
 
 The authenticated binding includes an exact sources map for all database
@@ -51,6 +51,14 @@ yet qualified and fail closed before creating restore resources. Unchanged Auth
 compares its existing Flyway history; it does not run Flyway validation or
 prove Auth binary compatibility. The exact source migration file inventory is
 hash-checked even for the unchanged path.
+
+The selected `gateway_db` is restore-only with an `unmanaged` plan: `from`
+and `to` are null, while `files` binds the exact source migration inventory.
+The catalog records absence of the public Go and Flyway ledgers and compares
+the observed catalog after restore. This does not establish that any source
+migration was applied, that Gateway is compatible, or that all rows match; a
+present ledger or claimed migration is rejected. The caller must establish
+selection, actual source observations and service data invariants separately.
 
 The result is only selected-database isolated restore/catalog/ledger evidence.
 It does not establish a complete affected set, an actual off-node copy, service
