@@ -1223,6 +1223,7 @@ class GISLifecycleContract(unittest.TestCase):
         # Real ColdRelease constructs and journals the intent. Archive/content
         # I/O is simulated: this fixture does not prove off-node custody.
         from types import SimpleNamespace
+        import root_cli
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp) / 'rollout-123456abcdef'
             base.mkdir()
@@ -1393,6 +1394,7 @@ class GISLifecycleContract(unittest.TestCase):
                 stage.verified = lambda: None
                 stage.restart = lambda: runtime_stage.RolloutStage.release_marker(stage)
                 stage.refence = lambda: {'verified': False}
+                failure = {'point': None, 'marker_applied': False}
                 def marker_cas(*_args):
                     checkpoint_at_cas = json.loads(durable.read_text(encoding='utf-8'))
                     self.assertIn('receipt', checkpoint_at_cas['gis_existing_update'])
@@ -1400,9 +1402,17 @@ class GISLifecycleContract(unittest.TestCase):
                         existing.verify_ready(ready_binding, ready_kube, account))
                     self.assertNotEqual(checkpoint_at_cas['status'], 'PASS')
                     self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), active)
+                    if failure['point'] == 'cas-before':
+                        raise RuntimeError('injected CAS before effect')
+                    failure['marker_applied'] = True
+                    if failure['point'] == 'cas-response':
+                        raise RuntimeError('injected lost CAS response')
                     return {'data': {'phase': 'active'}}
                 ready_kube.cas = Mock(side_effect=marker_cas)
                 def persist(_path, row):
+                    if failure['point'] == 'save-pass' and row['status'] == 'PASS':
+                        failure['point'] = None
+                        raise RuntimeError('injected PASS save failure')
                     snapshots.append(copy.deepcopy(row))
                     durable.write_text(json.dumps(row), encoding='utf-8')
                     durable.chmod(0o600)
@@ -1414,6 +1424,27 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'DockerRuntime'), \
                         patch.object(transaction, 'verify_post_apply', return_value=proof), \
                         patch.object(transaction, 'attach_closed_preservation'):
+                    baseline_state = copy.deepcopy(state)
+                    for fault in ('cas-before', 'cas-response', 'save-pass'):
+                        with self.subTest(fault=fault):
+                            failure.update(point=fault, marker_applied=False)
+                            first_snapshot = len(snapshots)
+                            with self.assertRaisesRegex(RuntimeError, 'injected'):
+                                transaction.finish(ready_kube, base, state, state['authorization'], 'fixture-rv', {})
+                            saved = json.loads(durable.read_text(encoding='utf-8'))
+                            self.assertEqual(saved['status'], 'BLOCKED')
+                            self.assertEqual(saved['fence_status'], 'UNKNOWN')
+                            self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), active)
+                            self.assertEqual(failure['marker_applied'], fault != 'cas-before')
+                            self.assertTrue(all(row['status'] != 'PASS' for row in snapshots[first_snapshot:]))
+                            ready_kube.cas.assert_called_once()
+                            state.clear()
+                            state.update(copy.deepcopy(baseline_state))
+                            ready_kube.objects[gis.DEPLOYMENT]['spec']['replicas'] = 0
+                            if hasattr(stage, 'marker'):
+                                del stage.marker
+                            ready_kube.cas.reset_mock()
+                    failure.update(point=None, marker_applied=False)
                     transaction.finish(ready_kube, base, state, state['authorization'], 'fixture-rv', {})
                     receipt = state['gis_existing_update']['receipt']
                     self.assertEqual(receipt['anchor'], anchor)
@@ -1434,13 +1465,44 @@ class GISLifecycleContract(unittest.TestCase):
                 # Finish executed with controlled external Kube/NATS/storage seams.
                 self.assertEqual(json.loads(durable.read_text(encoding='utf-8')), state)
                 actions = object.__new__(bridge_root.Actions)
+                actions.binding = copy.deepcopy(helper)
                 with patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
-                        patch.object(bridge_root, 'Kube', return_value=ready_kube):
-                    actions._active_release(state)
+                        patch.object(root_cli, 'ROOT', root), patch.object(bridge_root, 'Kube', return_value=ready_kube):
+                    # TT transport and journal storage are simulated, but the
+                    # Session and root_scope state transitions are production code.
+                    tt_context = state['resource_fence']['context']
+                    journal = resource_claim_test.MemoryJournal()
+                    journal.save(dict(state['resource_fence'], status='active', phase='apply-ready'))
+                    check = Mock(return_value=resource_claim_test.card(tt_context))
+                    request = {'action': 'finish', 'operation': state['operation'], 'resource_context': tt_context}
+                    with patch.object(resource_claim, 'require_helper'), \
+                            patch.object(resource_claim, 'RootJournal', return_value=journal), \
+                            patch.object(resource_claim, 'Check', return_value=check):
+                        with self.assertRaisesRegex(OSError, 'publication unavailable'):
+                            with resource_claim.root_scope(actions, request) as session:
+                                session.admit(start=False)
+                                with patch.object(bridge_root, 'save', side_effect=OSError('publication unavailable')):
+                                    actions._active_release(state)
+                        self.assertEqual(journal.read()['status'], 'uncertain')
+                        with self.assertRaisesRegex(RuntimeError, 'staging_unfenced_or_uncertain_operation'):
+                            with resource_claim.root_scope(actions, request) as session:
+                                session.admit(start=False)
+                        check.uncertain.assert_called_once_with('staging_execution_interrupted_or_partial')
+                    self.assertEqual(json.loads(durable.read_text(encoding='utf-8')), state)
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), active)
+                    # Handler idempotence only: real root_scope may mark TT uncertain,
+                    # in which case a later admission must not be assumed possible.
+                    actions.state(state['operation'])
+                    result = actions.recover({'action': 'finish', 'operation': state['operation']})
+                    self.assertEqual(result['status'], 'PASS')
                     published = json.loads(active_path.read_text(encoding='utf-8'))
                     self.assertEqual(published['gis_first_install_transition'], anchor)
                     self.assertEqual(published['gis_latest_transition'], {
                         'operation': state['operation'], 'receipt_sha256': receipt['receipt_sha256']})
+                    with patch.object(bridge_root, 'save') as replay_save:
+                        self.assertEqual(actions.recover({'action': 'finish', 'operation': state['operation']})['status'], 'PASS')
+                        replay_save.assert_not_called()
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), published)
                     loaded = existing.load_authority(ready_kube)
                     self.assertEqual(loaded['anchor_sha256'], anchor['receipt_sha256'])
                     self.assertEqual(loaded['old'], gis.semantic(deployment))
