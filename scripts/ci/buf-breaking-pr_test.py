@@ -121,6 +121,32 @@ class ImmutableBaselineTests(unittest.TestCase):
         self.assertEqual(receipt['parents'], [base, head])
         self.assertEqual(receipt['base_protos_tree'], self.git('rev-parse', base + ':protos'))
 
+    def test_stale_event_base_uses_exact_current_merge_first_parent(self):
+        event_base, head, _, _ = self.fixture()
+        self.git('checkout', '-b', 'current-base', event_base)
+        (self.repo / SCHEMA).write_text(
+            'syntax = "proto3";\npackage example.v1;\n'
+            'message Current { string value = 1; }\n', encoding='utf-8')
+        current_base = self.commit('advance integration base')
+        self.git('merge', '--no-ff', head, '-m', 'synthetic refreshed integration')
+        merge = self.git('rev-parse', 'HEAD')
+        self.git('checkout', '--detach', merge)
+
+        result = self.gate(event_base, head, merge)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        receipt = json.loads(result.stdout.splitlines()[0])
+        self.assertEqual(receipt['event_base'], event_base)
+        self.assertEqual(receipt['base'], current_base)
+        self.assertEqual(receipt['parents'], [current_base, head])
+        self.assertEqual(receipt['base_tree'], self.git('rev-parse', current_base + '^{tree}'))
+        self.assertEqual(receipt['base_protos_tree'],
+                         self.git('rev-parse', current_base + ':protos'))
+        self.assertNotEqual(receipt['base_protos_tree'],
+                            self.git('rev-parse', event_base + ':protos'))
+
+        self.assert_refused_before_buf(head, head, merge, 'base_ancestry')
+
     def test_real_declaration_removal_still_fails_buf(self):
         base, head, merge, _ = self.fixture(remove=True)
         result = self.gate(base, head, merge)

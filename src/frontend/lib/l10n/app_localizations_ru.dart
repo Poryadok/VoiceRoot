@@ -4055,6 +4055,34 @@ class AppLocalizationsRu extends AppLocalizations {
   String get chatLinkPreviewRetry => 'Повторить';
 
   @override
+  String get gameCatalogAll => 'Все игры';
+
+  @override
+  String get gameCatalogBrowseAll => 'Все игры';
+
+  @override
+  String get gameCatalogChanged =>
+      'Каталог изменился. Начните просмотр заново, чтобы увидеть актуальные игры.';
+
+  @override
+  String get gameCatalogClearSearch => 'Очистить поиск';
+
+  @override
+  String get gameCatalogLoadMore => 'Загрузить ещё игры';
+
+  @override
+  String get gameCatalogPopular => 'Популярные';
+
+  @override
+  String get gameCatalogRecent => 'Недавние';
+
+  @override
+  String get gameCatalogRecentError => 'Не удалось загрузить недавние игры';
+
+  @override
+  String get gameCatalogSearchResults => 'Результаты поиска';
+
+  @override
   String get composerVoiceHold => 'Удерживайте для записи · вверх — закрепить';
 
   @override
