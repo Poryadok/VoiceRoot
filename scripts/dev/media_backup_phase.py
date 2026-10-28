@@ -39,8 +39,11 @@ class BackupPhases:
         if (self.poisoned or self.journal.poisoned or self.journal.intent != intent or
                 self.journal.state.get('intent') != intent or
                 intent.get('resource_context') != self.fence.context or intent.get('namespace_uid') != self.namespace_uid or
+                not isinstance(self.fence.context.get('operation_id'), str) or
+                not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', self.fence.context['operation_id']) or
                 not isinstance(capture, dict) or set(capture) != CAPTURE_FIELDS or
                 any(not isinstance(capture.get(k), str) or not capture[k] for k in CAPTURE_FIELDS - {'restart_count'}) or
+                not re.fullmatch(r'capture-[0-9a-f]{32}', capture['snapshot_id']) or
                 not re.fullmatch(r'containerd://[0-9a-f]{64}', capture['container_id']) or
                 type(capture.get('restart_count')) is not int or capture['restart_count'] < 0):
             raise RecoveryRequired('backup operation identity invalid or unavailable')

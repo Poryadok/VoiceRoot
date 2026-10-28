@@ -43,7 +43,7 @@ class PhaseTest(unittest.TestCase):
     def setUp(self):
         self.context = {'project': 'voice', 'resource': 'DEV', 'actor': 'scheduled_devops',
             'claim': '11111111-1111-4111-8111-111111111111', 'window': '22222222-2222-4222-8222-222222222222',
-            'revision': 4, 'generation': 3, 'operation_id': 'media-op', 'commit': 'a' * 40,
+            'revision': 4, 'generation': 3, 'operation_id': 'media-c1-' + 'a' * 32, 'commit': 'a' * 40,
             'images': {'voice-file/file': 'ghcr.io/x@sha256:' + 'b' * 64}}
         self.card = {'code': 'DEV', 'environment': 'dev', 'owner': 'scheduled_devops',
             'claim': self.context['claim'], 'generation': 3, 'window': self.context['window'],
@@ -53,9 +53,9 @@ class PhaseTest(unittest.TestCase):
         self.fence = resource_fencing.Fence(self.context, lambda: copy.deepcopy(self.card), self.ledger)
         self.lock = {'metadata': {'name': update_images.LOCK, 'namespace': 'voice-dev', 'uid': 'lock',
                         'resourceVersion': '8', 'labels': update_images.LABELS},
-                     'data': {'operation': 'token', 'resource_operation': 'media-op',
+                     'data': {'operation': 'token', 'resource_operation': self.context['operation_id'],
                               'resource_context': json.dumps(self.context, sort_keys=True, separators=(',', ':'))}}
-        self.capture = {'snapshot_id': 'capture-1', 'pod_uid': 'pod', 'pvc_uid': 'pvc', 'pv_uid': 'pv',
+        self.capture = {'snapshot_id': 'capture-' + 'b' * 32, 'pod_uid': 'pod', 'pvc_uid': 'pvc', 'pv_uid': 'pv',
                         'container_id': 'containerd://' + 'c' * 64, 'restart_count': 1}
         self.intent = {'resource_context': self.context, 'namespace_uid': 'ns', 'backup_capture': self.capture}
         self.temp = tempfile.TemporaryDirectory()
@@ -65,7 +65,7 @@ class PhaseTest(unittest.TestCase):
         self.phases = phase.BackupPhases(self.journal, self.fence, Client(self.lock), self.lock, 'ns')
 
     def receipt(self, member):
-        return self.capture | {'operation_id': 'media-op', 'member': member,
+        return self.capture | {'operation_id': self.context['operation_id'], 'member': member,
                                'exit': 0, 'scope': 'dump-terminal-only',
                                'attempt_nonce': self.journal.state['steps']['dump-' + member]['nonce']}
 
@@ -166,6 +166,14 @@ class PhaseTest(unittest.TestCase):
         self.journal.intent['namespace_uid'] = 'different'
         with self.assertRaises(phase.RecoveryRequired): self.phases.begin('roles')
         self.assertEqual(self.journal.state['steps'], {})
+
+    def test_unbound_snapshot_identity_is_rejected(self):
+        bad = copy.deepcopy(self.intent)
+        bad['backup_capture']['snapshot_id'] = 'not-a-capture-id'
+        other = journal.Journal(Path(self.temp.name) / 'bad-journal', bad)
+        self.addCleanup(other.close)
+        with self.assertRaises(phase.RecoveryRequired):
+            phase.BackupPhases(other, self.fence, Client(self.lock), self.lock, 'ns')
 
 
 if __name__ == '__main__': unittest.main()
