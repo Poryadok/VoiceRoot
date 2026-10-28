@@ -57,10 +57,11 @@ class CurrentDiffTests(unittest.TestCase):
         self.git('commit', '-qm', message)
         return self.git('rev-parse', 'HEAD')
 
-    def merge_commit(self, tree=None, base=None, source=None):
+    def merge_commit(self, tree=None, first_parent=None, source=None):
         source = source or self.git('rev-parse', 'HEAD')
         tree = tree or self.git('rev-parse', 'HEAD^{tree}')
-        return self.git('commit-tree', tree, '-p', base or self.base, '-p', source, '-m', 'PR merge')
+        return self.git('commit-tree', tree, '-p', first_parent or self.base,
+                        '-p', source, '-m', 'PR merge')
 
     def check(self, target='HEAD', head=None, base=None, extra_env=None):
         command = ['python3' if os.name != 'nt' else 'python', str(CHECKER),
@@ -82,20 +83,27 @@ class CurrentDiffTests(unittest.TestCase):
 
     def test_stale_event_base_uses_exact_current_merge_first_parent(self):
         event_base = self.base
-        self.write('README.md', 'current base\n')
-        current_base = self.commit('advance integration base')
+        self.write('README.md', 'base advanced\n')
+        current_base = self.commit('advance target base')
         self.git('checkout', '-q', event_base)
-        self.write('docs/pr.md', 'PR source\n')
-        head = self.commit('PR source')
-        self.git('checkout', '-q', current_base)
-        tree = self.git('merge-tree', '--write-tree', current_base, head).splitlines()[0]
-        merge = self.merge_commit(tree, base=current_base, source=head)
-        result = self.check(merge, head, base=event_base)
+        self.write('src/backend/migrations/voice_db/000002_new.up.sql', 'SELECT 2;\n')
+        head = self.commit('add migration')
+        merged = self.git('merge-tree', '--write-tree', current_base, head).splitlines()[0]
+        target = self.merge_commit(merged, first_parent=current_base)
+
+        result = self.check(target, head, base=event_base)
+
         self.assertEqual(result.returncode, 0, result.stderr)
         evidence = json.loads(result.stdout)
         self.assertEqual(evidence['event_base'], event_base)
         self.assertEqual(evidence['base'], current_base)
         self.assertEqual(evidence['pr_head'], head)
+        self.assertIn('src/backend/migrations/voice_db/000002_new.up.sql',
+                      evidence['changed_paths'])
+
+        result = self.check(target, head, base=head)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('base_ancestry', result.stderr)
 
     def test_event_base_reachable_only_through_pr_head_is_rejected(self):
         initial = self.base
@@ -105,7 +113,7 @@ class CurrentDiffTests(unittest.TestCase):
         head = self.commit('PR source')
         self.git('checkout', '-q', initial)
         tree = self.git('merge-tree', '--write-tree', initial, head).splitlines()[0]
-        merge = self.merge_commit(tree, base=initial, source=head)
+        merge = self.merge_commit(tree, first_parent=initial, source=head)
         result = self.check(merge, head, base=event_base)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('base_ancestry', result.stderr)

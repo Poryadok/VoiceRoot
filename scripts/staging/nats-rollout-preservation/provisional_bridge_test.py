@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 import bridge
 import bridge_client
@@ -11,6 +12,8 @@ class Tests(unittest.TestCase):
     def setUp(self):
         self.env={'GITHUB_TOKEN':'private-token','GITHUB_RUN_ID':'123','GITHUB_RUN_ATTEMPT':'1',
             'GITHUB_SHA':'a'*40,'GITHUB_JOB':'deploy'}
+        from resource_claim_test import context
+        self.env['VOICE_TTENREC_CONTEXT']=json.dumps(context())
         self.args=['prepare','images-only','voice','a'*40,'123']
 
     def test_typed_flag_changes_nonce_and_is_bound(self):

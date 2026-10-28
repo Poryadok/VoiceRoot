@@ -9,6 +9,7 @@ import guard
 import apply
 from compiler import compatible_bootstrap,decode_yaml
 from controller import Blocked
+TT_FENCE_VERSION=1
 
 
 def authenticated_bootstrap(root,contract,target):
@@ -50,7 +51,7 @@ def preflight():
     return receipt
 
 
-def main(args):
+def _main(args):
     if args not in ([],['--preflight']):raise Blocked('rollout_runner_arguments_invalid')
     receipt=preflight()
     if args:
@@ -61,6 +62,15 @@ def main(args):
     if os.environ.get('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'],'a') as output:output.write('claim_rv='+rv+'\n')
     apply.main()
+
+
+def main(args):
+    import resource_claim
+    from root_cli import code_binding
+    receipt=guard.protected_receipt(os.environ['VOICE_NATS_PRESERVATION_RECEIPT'])
+    # Install before preflight and marker claim, not merely before kubectl apply.
+    with resource_claim.runner_scope(receipt,guard.ROOT,code_binding(Path(__file__).resolve().parents[1])):
+        return _main(args)
 
 
 if __name__=='__main__':

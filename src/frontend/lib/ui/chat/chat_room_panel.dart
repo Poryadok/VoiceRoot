@@ -1527,7 +1527,24 @@ class _ChatRoomPanelState extends ConsumerState<ChatRoomPanel> {
                             chatId: widget.chatId,
                             controller: _inChatSearchController,
                             showSearchField: false,
-                            onActiveMessageChanged: _scrollToMessage,
+                            onActiveMessageChanged: (messageId) {
+                              ref
+                                      .read(
+                                        pendingChatMessageScrollProvider(
+                                          widget.chatId,
+                                        ).notifier,
+                                      )
+                                      .state =
+                                  messageId;
+                              ref
+                                      .read(
+                                        pendingChatMessageHighlightProvider(
+                                          widget.chatId,
+                                        ).notifier,
+                                      )
+                                      .state =
+                                  messageId;
+                            },
                             onDismiss: _closeInChatSearch,
                           ),
                         ),

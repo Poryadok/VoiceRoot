@@ -45,6 +45,10 @@ def request(args,environment):
         row={'action':action,'operation':args[1],'claim_rv':args[2],'run_id':int(args[3]),'token':environment['GITHUB_TOKEN']}
     elif action=='status' and len(args)==2:row={'action':action,'operation':args[1]}
     else:raise bridge.BridgeError('bridge_client_arguments_invalid')
+    if action!='status':
+        import resource_claim
+        try:row['resource_context']=resource_claim.validate(json.loads(environment.get('VOICE_TTENREC_CONTEXT','')))
+        except (ValueError,TypeError,AttributeError):raise bridge.BridgeError('bridge_resource_context_required') from None
     row.update(run_attempt=int(environment['GITHUB_RUN_ATTEMPT']),report_run_id=int(environment['GITHUB_RUN_ID']),report_source_sha=environment['GITHUB_SHA'])
     # Same job/attempt/action payload always resumes the same request. Status
     # is observational, so each poll has a distinct nonce and fresh result.

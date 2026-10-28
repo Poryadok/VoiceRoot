@@ -337,6 +337,20 @@ qualify actual DEV backup custody, old-image rollback or configured topology.
 
 ### Exact candidate publication (workflow)
 
+The separately dispatched `Source-bound Web image publication` route admits only
+`df00a393e03feb176439a50bfe5605f32c16b322` and builds the canonical `web`
+repository from `src/frontend/Dockerfile` and `src/frontend`, with
+`VOICE_RUNTIME_CONFIG_REQUIRED=true` and `SOURCE_REVISION` set to that source.
+It uses an isolated, non-cancelling concurrency group and a unique run/attempt tag;
+it does not write the CI SHA aliases. Its artifact records separate publisher and
+product snapshots, authenticated workflow/job, build invocation and arguments,
+registry index/platform/config digests, and pulled asset hashes. The runtime
+configuration contract is `voice-web-origin-bound-runtime-v1`. This route is
+publication evidence only; it cannot replace the original CI job or grant CI,
+release, runtime or deployment admission. After normal source review and CI,
+the existing publication owner may dispatch the workflow with that exact source;
+all separate release and environment gates still apply.
+
 `DEV candidate image publication` is a standalone publish-only Actions workflow.
 After normal review/integration, dispatch its default-branch publisher with the
 selected product commit:

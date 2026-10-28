@@ -64,6 +64,17 @@ void main() {
 
       expect(find.byKey(AccessibilitySettingsScreen.screenKey), findsOneWidget);
       final semantics = tester.ensureSemantics();
+      for (final heading in ['Motion and text', 'Voice calls']) {
+        expect(find.bySemanticsLabel(heading), findsOneWidget);
+        expect(
+          tester
+              .getSemantics(find.bySemanticsLabel(heading))
+              .getSemanticsData()
+              .flagsCollection
+              .isHeader,
+          isTrue,
+        );
+      }
       final motionToggle = find.byKey(
         AccessibilitySettingsScreen.reducedMotionKey,
       );

@@ -4018,6 +4018,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatLinkPreviewRetry => 'Retry';
 
   @override
+  String get gameCatalogAll => 'All games';
+
+  @override
+  String get gameCatalogBrowseAll => 'Browse all';
+
+  @override
+  String get gameCatalogChanged =>
+      'The catalog changed. Restart to see the current games.';
+
+  @override
+  String get gameCatalogClearSearch => 'Clear search';
+
+  @override
+  String get gameCatalogLoadMore => 'Load more games';
+
+  @override
+  String get gameCatalogPopular => 'Popular';
+
+  @override
+  String get gameCatalogRecent => 'Recent';
+
+  @override
+  String get gameCatalogRecentError => 'Could not load recent games';
+
+  @override
+  String get gameCatalogSearchResults => 'Search results';
+
+  @override
   String get composerVoiceHold => 'Hold to record · slide up to lock';
 
   @override
@@ -4041,4 +4069,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get composerVoiceLocked => 'Recording locked';
+
+  @override
+  String get queueSearchNoRolePreference => 'No role preference';
 }
