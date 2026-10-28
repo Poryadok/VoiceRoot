@@ -4,6 +4,8 @@ The owner must hold the common lock throughout and perform separate actual
 drain, identity and storage checks around the producer. Never restart this
 operation automatically after an unknown outcome: reconcile its journal,
 processes, effects and permanent ledger first, retaining the cluster lock.
+One sequential caller owns each instance; concurrent use of the same instance
+is not supported. Cluster CAS excludes independent invocations.
 """
 import copy
 import hashlib
