@@ -13,7 +13,8 @@ import (
 // again under the same Space guard as webhook delivery; the fence receipt waits
 // for an already admitted stream send to finish. Non-message event behavior is
 // preserved, with conditional terminal bookkeeping.
-func (s *BotStore) DeliverPollingEvent(ctx context.Context, bot, event uuid.UUID, send func(string, string) error) error {
+func (s *BotStore) DeliverPollingEvent(ctx context.Context, authority Authority, event uuid.UUID, send func(string, string) error) error {
+	bot := authority.BotID
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -23,13 +24,14 @@ func (s *BotStore) DeliverPollingEvent(ctx context.Context, bot, event uuid.UUID
 	var savedSpace *uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT event_type,payload::text,space_id FROM bot_event_log WHERE id=$1 AND bot_id=$2 AND delivery_status='pending'`, event, bot).Scan(&kind, &payload, &savedSpace)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return tx.Commit(ctx)
+		_ = tx.Rollback(ctx)
+		return s.WithSession(ctx, authority, uuid.Nil, func(context.Context, pgx.Tx, *BotRow) error { return nil })
 	}
 	if err != nil {
 		return err
 	}
-	authorized := true
-	if kind == "message" {
+	var authorized bool
+	if kind == "message" || kind == "interaction" || kind == "autocomplete" {
 		var hint struct {
 			ChatID string `json:"chat_id"`
 		}
@@ -63,22 +65,43 @@ func (s *BotStore) DeliverPollingEvent(ctx context.Context, bot, event uuid.UUID
 			authorized = authorized && live
 		}
 		var polling bool
-		var scopes string
-		err = tx.QueryRow(ctx, `SELECT is_polling_mode,scopes::text FROM bots WHERE id=$1 AND status='live' FOR SHARE`, bot).Scan(&polling, &scopes)
+		var scopes, hash string
+		var epoch int64
+		err = tx.QueryRow(ctx, `SELECT is_polling_mode,scopes::text,token_hash,session_epoch FROM bots WHERE id=$1 AND status='live' FOR SHARE`, bot).Scan(&polling, &scopes, &hash, &epoch)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		authorized = authorized && err == nil && polling && DevPollingEnabled() && ScopeAllows(scopes, PrivilegedScopeReadHistory)
+		if err != nil || authority.Epoch < 1 || epoch != authority.Epoch || hash != authority.TokenHash {
+			return ErrSessionRevoked
+		}
+		requiredScope := "TEXT_CHAT_SEND_MESSAGES"
+		if kind == "message" {
+			requiredScope = PrivilegedScopeReadHistory
+		}
+		authorized = authorized && err == nil && polling && DevPollingEnabled() && ScopeAllows(scopes, requiredScope)
 		if authorized {
 			authorized, err = lockMessageWhitelist(ctx, tx, bot, chat, space)
 			if err != nil {
 				return err
 			}
 		}
+	} else {
+		var epoch int64
+		var hash string
+		var polling bool
+		err = tx.QueryRow(ctx, `SELECT session_epoch,token_hash,is_polling_mode FROM bots WHERE id=$1 AND status='live' FOR SHARE`, bot).Scan(&epoch, &hash, &polling)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		if err != nil || authority.Epoch < 1 || epoch != authority.Epoch || hash != authority.TokenHash {
+			return ErrSessionRevoked
+		}
+		authorized = polling && DevPollingEnabled()
 	}
 	var currentKind, currentPayload string
 	var currentSpace *uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT event_type,payload::text,space_id FROM bot_event_log WHERE id=$1 AND bot_id=$2 AND delivery_status='pending' FOR UPDATE`, event, bot).Scan(&currentKind, &currentPayload, &currentSpace)
+	var eventEpoch *int64
+	err = tx.QueryRow(ctx, `SELECT event_type,payload::text,space_id,session_epoch FROM bot_event_log WHERE id=$1 AND bot_id=$2 AND delivery_status='pending' FOR UPDATE`, event, bot).Scan(&currentKind, &currentPayload, &currentSpace, &eventEpoch)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tx.Commit(ctx)
 	}
@@ -87,6 +110,9 @@ func (s *BotStore) DeliverPollingEvent(ctx context.Context, bot, event uuid.UUID
 	}
 	if currentKind != kind || currentPayload != payload || !sameOptionalUUID(savedSpace, currentSpace) {
 		return ErrMessageBindingChanged
+	}
+	if currentKind != "message" && (eventEpoch == nil || *eventEpoch != authority.Epoch) {
+		authorized = false
 	}
 	if !authorized {
 		_, err = tx.Exec(ctx, `UPDATE bot_event_log SET delivery_status='canceled',claimed_until=NULL,payload='{}'::jsonb WHERE id=$1 AND delivery_status='pending'`, event)

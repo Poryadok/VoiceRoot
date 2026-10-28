@@ -93,51 +93,21 @@ func (s *BotStore) CheckCurrentMessageSendAuthority(ctx context.Context, b *comm
 
 // WithMessageSend holds the existing revocation guards across the actual remote
 // attempt. The caller must not publish outside this callback or retain authority.
-func (s *BotStore) WithMessageSend(ctx context.Context, bot, actor, chat uuid.UUID, send func(context.Context, *commonv1.BotMessageSendBinding) error) error {
+func (s *BotStore) WithMessageSend(ctx context.Context, authority Authority, actor, chat uuid.UUID, send func(context.Context, *commonv1.BotMessageSendBinding) error) error {
 	if s == nil || s.Pool == nil || send == nil {
 		return ErrMembershipSource
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.Pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		return err
-	}
-	defer func() {
-		cleanup, done := context.WithTimeout(context.Background(), time.Second)
-		defer done()
-		_ = tx.Rollback(cleanup)
-	}()
-	space, err := messageWhitelistSpace(ctx, tx, bot, chat)
-	if err != nil {
-		return err
-	}
-	if space == uuid.Nil {
-		return ErrMessageSendDenied
-	}
-	if err = lockMessageSpaces(ctx, tx, []uuid.UUID{space}); err != nil {
-		return err
-	}
-	var lockedActor uuid.UUID
-	if err = tx.QueryRow(ctx, `SELECT actor_profile_id FROM bots WHERE id=$1 FOR SHARE`, bot).Scan(&lockedActor); err != nil {
-		return err
-	}
-	if lockedActor != actor {
-		return ErrMessageSendDenied
-	}
-	enabled, err := lockMessageWhitelist(ctx, tx, bot, chat, space)
-	if err != nil {
-		return err
-	}
-	if !enabled {
-		return ErrMessageSendDenied
-	}
-	binding, err := currentMessageSendBinding(ctx, tx, bot, space, chat)
-	if err != nil {
-		return err
-	}
-	if err = send(ctx, binding); err != nil {
-		return err
-	}
-	return ctx.Err()
+	return s.WithSession(ctx, authority, chat, func(call context.Context, tx pgx.Tx, current *BotRow) error {
+		if current.ActorProfileID != actor {
+			return ErrMessageSendDenied
+		}
+		held := call.Value(guardedSessionKey{}).(*guardedSession)
+		binding, err := currentMessageSendBinding(call, tx, current.ID, held.space, chat)
+		if err != nil {
+			return err
+		}
+		return send(call, binding)
+	})
 }

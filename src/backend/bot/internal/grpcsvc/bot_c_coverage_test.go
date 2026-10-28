@@ -211,7 +211,7 @@ func TestGetChatMessagesForBot_deniedWhenChatNotWhitelisted(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	require.Contains(t, status.Convert(err).Message(), "not enabled")
+	require.Equal(t, "Bot authority denied", status.Convert(err).Message())
 }
 
 func TestRehydrateDeferred_registersTokensInHub(t *testing.T) {
@@ -230,7 +230,7 @@ func TestRehydrateDeferred_registersTokensInHub(t *testing.T) {
 	require.NoError(t, err)
 
 	token := "defer-rehydrate-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"ping": true}, token)
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{"ping": true}, token)
 	require.NoError(t, err)
 	require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
 	require.False(t, hub.IsDeferred(token))
@@ -441,11 +441,11 @@ func TestDeferResponse_marksEventDeferred(t *testing.T) {
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "defer-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
-	hub.Register(token)
+	hub.Register(token, sessionForToken(t, st, token))
 
 	_, err = client.DeferResponse(botCtx, &botv1.DeferResponseRequest{InteractionToken: token})
 	require.NoError(t, err)
@@ -473,13 +473,13 @@ func TestSendBotMessage_deferredFollowUpPostsMessage(t *testing.T) {
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "defer-msg-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 		"chat_id":            chatID.String(),
 		"invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
 	require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-	hub.RegisterDeferred(token)
+	hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 	resp, err := client.SendBotMessage(botCtx, &botv1.SendBotMessageRequest{
 		InteractionToken: &token,
@@ -644,7 +644,7 @@ func TestCompleteInteraction_recoveryWithoutHubWaiter(t *testing.T) {
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "recover-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 		"chat_id":            chatID.String(),
 		"invoker_profile_id": uuid.NewString(),
 	}, token)
@@ -671,13 +671,13 @@ func TestCompleteInteraction_afterPollDelivery(t *testing.T) {
 	require.NoError(t, err)
 
 	token := "poll-" + uuid.NewString()
-	eventID, err := st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+	eventID, err := st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 		"chat_id":            chatID.String(),
 		"chat_type":          "CHAT_TYPE_CHANNEL",
 		"invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
-	waiter := hub.Register(token)
+	waiter := hub.Register(token, sessionForToken(t, st, token))
 	require.NoError(t, st.MarkEventDelivered(ctx, eventID))
 
 	_, err = client.CompleteInteraction(withBotToken(context.Background(), botToken), &botv1.CompleteInteractionRequest{
@@ -738,11 +738,11 @@ func TestSendBotMessage_completesPendingHubInteraction(t *testing.T) {
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "hub-" + uuid.NewString()
-	_, err := st.EnqueueEvent(ctx, uuid.MustParse(botID), "interaction", map[string]any{
+	_, err := st.EnqueueEvent(ctx, freshSession(t, st, uuid.MustParse(botID)), "interaction", map[string]any{
 		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
-	hub.Register(token)
+	hub.Register(token, sessionForToken(t, st, token))
 
 	_, err = client.SendBotMessage(botCtx, &botv1.SendBotMessageRequest{
 		InteractionToken: &token,
@@ -891,11 +891,11 @@ func TestCompleteInteraction_defersViaHub(t *testing.T) {
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "defer-hub-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
-	hub.Register(token)
+	hub.Register(token, sessionForToken(t, st, token))
 
 	_, err = client.CompleteInteraction(botCtx, &botv1.CompleteInteractionRequest{
 		InteractionToken: token,
@@ -1613,12 +1613,12 @@ func TestSendBotMessage_deferredRequiresContent(t *testing.T) {
 	botCtx := withBotToken(context.Background(), botToken)
 
 	token := "defer-empty-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)
 	require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-	hub.RegisterDeferred(token)
+	hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 	_, err = client.SendBotMessage(botCtx, &botv1.SendBotMessageRequest{
 		InteractionToken: &token,
@@ -2130,12 +2130,15 @@ commands:
 
 	svc := grpcsvc.NewBotGRPC(st, hub)
 	_, ok := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("CompleteAutocomplete")
+	svc.Chat = allowMembershipClient{}
 	require.True(t, ok, "CompleteAutocomplete must exist on BotGRPC (BOT-C)")
 
 	completeMethod, _ := reflect.TypeOf(&grpcsvc.BotGRPC{}).MethodByName("CompleteAutocomplete")
 	completeReq := reflect.New(completeMethod.Type.In(2).Elem())
+	var requestID string
+	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT interaction_token FROM bot_event_log WHERE bot_id=$1 AND event_type='autocomplete' ORDER BY created_at DESC LIMIT 1`, uuid.MustParse(botID)).Scan(&requestID))
 	if f := completeReq.Elem().FieldByName("RequestId"); f.IsValid() {
-		f.SetString("ac-req-1")
+		f.SetString(requestID)
 	}
 	choicesField := completeReq.Elem().FieldByName("Choices")
 	if choicesField.IsValid() && choicesField.Type().Kind() == reflect.Slice {
@@ -2177,7 +2180,7 @@ func TestDeferredTTLSweeper_abandonsStaleDeferredRows(t *testing.T) {
 	require.NoError(t, err)
 
 	token := "defer-stale-" + uuid.NewString()
-	_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{"x": 1}, token)
+	_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{"x": 1}, token)
 	require.NoError(t, err)
 	require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
 

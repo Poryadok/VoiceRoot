@@ -3,6 +3,8 @@ package grpcsvc
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"github.com/jackc/pgx/v5"
 	"strings"
 
 	"google.golang.org/grpc/codes"
@@ -98,13 +100,48 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 			return nil, status.Error(codes.FailedPrecondition, "development polling is disabled")
 		}
 		cacheKey := dispatch.AutocompleteCacheKey(
-			botID.String(), chatID.String(), cmdName, optionName, strings.TrimSpace(req.GetFocusedValue()),
+			botID.String(), chatID.String(), cmdName, optionName, strings.TrimSpace(req.GetFocusedValue()), botRow.SessionEpoch,
 		)
-		if choices, ok := s.Hub.GetAutocompleteChoices(cacheKey); ok {
-			return autocompleteChoicesToProto(choices), nil
+		var cached []dispatch.AutocompleteChoice
+		var found bool
+		err = s.withBotSession(ctx, botRow, chatID, func(call context.Context, tx pgx.Tx, current *store.BotRow) error {
+			if e := s.requireScope(current, "TEXT_CHAT_SEND_MESSAGES"); e != nil {
+				return e
+			}
+			if chatRefIsDM(req.GetChat()) {
+				if e := s.requireScope(current, "DM_SEND"); e != nil {
+					return e
+				}
+			}
+			if e := s.requireInvokerMembership(call, chatID, invoker); e != nil {
+				return e
+			}
+			space, held := store.GuardedChatSpace(call)
+			if !held {
+				return status.Error(codes.NotFound, "autocomplete not found")
+			}
+			var raw []byte
+			e := tx.QueryRow(call, `SELECT payload->'autocomplete_choices' FROM bot_event_log WHERE bot_id=$1 AND session_epoch=$2 AND event_type='autocomplete' AND delivery_status='delivered' AND payload->>'cache_key'=$3 AND space_id=$4 AND payload->>'invoker_profile_id'=$5 AND payload ? 'autocomplete_choices' ORDER BY created_at DESC LIMIT 1`, botID, botRow.SessionEpoch, cacheKey, space, invoker.String()).Scan(&raw)
+			if errors.Is(e, pgx.ErrNoRows) {
+				return nil
+			}
+			if e != nil {
+				return e
+			}
+			if e = json.Unmarshal(raw, &cached); e != nil {
+				return e
+			}
+			found = true
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			return autocompleteChoicesToProto(cached), nil
 		}
 		requestID := s.Hub.NextAutocompleteRequestID()
-		s.Hub.RegisterAutocomplete(requestID, cacheKey)
+		s.Hub.RegisterAutocomplete(requestID, cacheKey, botRow.Session())
 		var options map[string]any
 		_ = json.Unmarshal([]byte(req.GetOptionsJson()), &options)
 		payload := map[string]any{
@@ -117,8 +154,9 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 			"chat_id":            chatID.String(),
 			"chat_type":          req.GetChat().GetType().String(),
 			"invoker_profile_id": invoker.String(),
+			"cache_key":          cacheKey,
 		}
-		if _, err := s.Store.EnqueueEvent(ctx, botID, "autocomplete", payload, ""); err != nil {
+		if _, err := s.Store.EnqueueEvent(ctx, botRow.Session(), "autocomplete", payload, requestID); err != nil {
 			s.Hub.CancelAutocomplete(requestID)
 			return nil, status.Error(codes.Unavailable, "autocomplete could not be accepted")
 		}
@@ -137,16 +175,31 @@ func (s *BotGRPC) AutocompleteSlashOption(ctx context.Context, req *botv1.Autoco
 		ChatType:         req.GetChat().GetType().String(),
 		InvokerProfileID: invoker.String(),
 	}
-	choices, err := webhook.DeliverAutocompletePOST(ctx, s.HTTPClient, strings.TrimSpace(*botRow.WebhookURL), botRow.WebhookSecret, payload, dispatch.DefaultTimeout())
+	out := make([]*botv1.AutocompleteChoice, 0)
+	requestID := s.Hub.NextAutocompleteRequestID()
+	_, err = s.Store.EnqueueEvent(ctx, botRow.Session(), "autocomplete", map[string]any{"request_id": requestID, "chat_id": chatID.String(), "chat_type": req.GetChat().GetType().String(), "invoker_profile_id": invoker.String(), "command_name": cmdName, "option_name": optionName, "focused_value": req.GetFocusedValue(), "options": options}, requestID)
 	if err != nil {
-		if s.Events != nil {
-			_ = s.Events.PublishWebhookFailed(ctx, botID.String(), "autocomplete", err.Error())
-		}
-		return &botv1.AutocompleteSlashOptionResponse{}, nil
+		return nil, requestSessionError(ctx, err)
 	}
-	out := make([]*botv1.AutocompleteChoice, 0, len(choices))
-	for _, ch := range choices {
-		out = append(out, &botv1.AutocompleteChoice{Name: ch.Name, Value: ch.Value})
+	err = s.withAutocompleteSession(ctx, botRow, requestID, func(call context.Context, tx pgx.Tx, current *store.BotRow, _ map[string]any) error {
+		if current.IsPollingMode || current.WebhookURL == nil {
+			return status.Error(codes.NotFound, "autocomplete not found")
+		}
+		client := webhook.GuardedClient(s.HTTPClient, func(request context.Context) error { return s.Store.CheckGuardedSession(request, current.Session()) })
+		choices, e := webhook.DeliverAutocompletePOST(call, client, strings.TrimSpace(*current.WebhookURL), current.WebhookSecret, payload, dispatch.DefaultTimeout())
+		state := "delivered"
+		if e != nil {
+			state = "failed"
+		} else {
+			for _, choice := range choices {
+				out = append(out, &botv1.AutocompleteChoice{Name: choice.Name, Value: choice.Value})
+			}
+		}
+		_, e = tx.Exec(call, `UPDATE bot_event_log SET delivery_status=$3,delivered_at=clock_timestamp() WHERE bot_id=$1 AND interaction_token=$2`, botID, requestID, state)
+		return e
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &botv1.AutocompleteSlashOptionResponse{Choices: out}, nil
 }
@@ -173,8 +226,25 @@ func (s *BotGRPC) CompleteAutocomplete(ctx context.Context, req *botv1.CompleteA
 	if len(choices) > 25 {
 		choices = choices[:25]
 	}
-	if s.Hub == nil || !s.Hub.CompleteAutocomplete(requestID, botRow.ID.String(), choices) {
-		return nil, status.Error(codes.NotFound, "unknown autocomplete request")
+	err = s.withAutocompleteSession(ctx, botRow, requestID, func(call context.Context, tx pgx.Tx, current *store.BotRow, binding map[string]any) error {
+		if _, completed := binding["autocomplete_choices"]; completed {
+			return status.Error(codes.NotFound, "autocomplete not found")
+		}
+		if !current.IsPollingMode || !store.DevPollingEnabled() {
+			return status.Error(codes.FailedPrecondition, "development polling is disabled")
+		}
+		raw, e := json.Marshal(choices)
+		if e != nil {
+			return e
+		}
+		_, e = tx.Exec(call, `UPDATE bot_event_log SET payload=jsonb_set(payload,'{autocomplete_choices}',$3::jsonb),delivery_status='delivered',delivered_at=clock_timestamp() WHERE bot_id=$1 AND interaction_token=$2`, current.ID, requestID, string(raw))
+		if e == nil && s.Hub != nil {
+			s.Hub.CompleteAutocomplete(requestID, current.ID.String(), current.Session(), choices)
+		}
+		return e
+	})
+	if err != nil {
+		return nil, err
 	}
 	return &botv1.CompleteAutocompleteResponse{}, nil
 }

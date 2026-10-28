@@ -14,13 +14,13 @@ import (
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 )
 
 func messageSendStore(t *testing.T) (*BotStore, uuid.UUID, MembershipRecord, uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botsend", "")
+	pool := testdb.StartPostgres(t, ctx, "botsend", "")
 	files, err := filepath.Glob("../../../migrations/bot_db/*.up.sql")
 	require.NoError(t, err)
 	for _, name := range files {
@@ -29,7 +29,7 @@ func messageSendStore(t *testing.T) (*BotStore, uuid.UUID, MembershipRecord, uui
 		_, e = pool.Exec(ctx, string(raw))
 		require.NoError(t, e)
 	}
-	_, err = pool.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(8,false)")
+	_, err = pool.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(9,false)")
 	require.NoError(t, err)
 	st := &BotStore{Pool: pool}
 	var source uuid.UUID
@@ -65,7 +65,7 @@ func TestMessageSendAuthorityCurrentTupleAndGuard(t *testing.T) {
 	st, _, record, chat := messageSendStore(t)
 	ctx := context.Background()
 	var binding *commonv1.BotMessageSendBinding
-	require.NoError(t, st.WithMessageSend(ctx, record.BotID, record.ActorProfileID, chat, func(call context.Context, b *commonv1.BotMessageSendBinding) error {
+	require.NoError(t, st.WithMessageSend(ctx, testAuthority(t, st, record.BotID), record.ActorProfileID, chat, func(call context.Context, b *commonv1.BotMessageSendBinding) error {
 		binding = proto.Clone(b).(*commonv1.BotMessageSendBinding)
 		allowed, err := st.CheckCurrentMessageSendAuthority(call, b)
 		require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestMessageSendAuthorityCurrentTupleAndGuard(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed)
 	called := false
-	require.Error(t, st.WithMessageSend(ctx, record.BotID, record.ActorProfileID, chat, func(context.Context, *commonv1.BotMessageSendBinding) error { called = true; return nil }))
+	require.Error(t, st.WithMessageSend(ctx, testAuthority(t, st, record.BotID), record.ActorProfileID, chat, func(context.Context, *commonv1.BotMessageSendBinding) error { called = true; return nil }))
 	require.False(t, called)
 }
 
@@ -109,7 +109,7 @@ func TestMessageSendCancellationWaitsGuardAndRevokesTuple(t *testing.T) {
 	req := &botv1.UninstallBotFromSpaceRequest{BotId: record.BotID.String(), SpaceId: record.SpaceID.String()}
 	admin := nativeAdmin(t, req, botv1.BotService_UninstallBotFromSpace_FullMethodName)
 	var binding *commonv1.BotMessageSendBinding
-	require.NoError(t, st.WithMessageSend(t.Context(), record.BotID, record.ActorProfileID, chat, func(ctx context.Context, b *commonv1.BotMessageSendBinding) error {
+	require.NoError(t, st.WithMessageSend(t.Context(), testAuthority(t, st, record.BotID), record.ActorProfileID, chat, func(ctx context.Context, b *commonv1.BotMessageSendBinding) error {
 		binding = proto.Clone(b).(*commonv1.BotMessageSendBinding)
 		blocked, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
@@ -126,7 +126,7 @@ func TestMessageSendCancellationWaitsGuardAndRevokesTuple(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed, "cancellation denies before cleanup finishes")
 	called := false
-	require.Error(t, st.WithMessageSend(t.Context(), record.BotID, record.ActorProfileID, chat, func(context.Context, *commonv1.BotMessageSendBinding) error { called = true; return nil }))
+	require.Error(t, st.WithMessageSend(t.Context(), testAuthority(t, st, record.BotID), record.ActorProfileID, chat, func(context.Context, *commonv1.BotMessageSendBinding) error { called = true; return nil }))
 	require.False(t, called)
 }
 
@@ -144,7 +144,7 @@ func TestMessageSendCallbackIndependentFromSaturatedProducerPool(t *testing.T) {
 	reader, err := NewMessageAuthorityStore(t.Context(), producer)
 	require.NoError(t, err)
 	defer reader.Pool.Close()
-	require.NoError(t, st.WithMessageSend(t.Context(), record.BotID, record.ActorProfileID, chat, func(ctx context.Context, binding *commonv1.BotMessageSendBinding) error {
+	require.NoError(t, st.WithMessageSend(t.Context(), testAuthority(t, st, record.BotID), record.ActorProfileID, chat, func(ctx context.Context, binding *commonv1.BotMessageSendBinding) error {
 		require.EqualValues(t, 1, producer.Stat().AcquiredConns())
 		allowed, err := reader.CheckCurrentMessageSendAuthority(ctx, binding)
 		require.NoError(t, err)

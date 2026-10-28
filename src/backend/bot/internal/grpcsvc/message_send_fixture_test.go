@@ -91,7 +91,7 @@ func protectedMessagingFixture(t *testing.T, svc *grpcsvc.BotGRPC, inner messagi
 	require.NoError(t, err)
 	_, err = svc.Store.Pool.Exec(t.Context(), string(raw))
 	require.NoError(t, err)
-	_, err = svc.Store.Pool.Exec(t.Context(), "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(8,false)")
+	_, err = svc.Store.Pool.Exec(t.Context(), "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(9,false)")
 	require.NoError(t, err)
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)

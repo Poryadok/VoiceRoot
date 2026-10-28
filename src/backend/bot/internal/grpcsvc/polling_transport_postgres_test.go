@@ -22,7 +22,7 @@ import (
 	"voice/backend/bot/internal/authctx"
 	"voice/backend/bot/internal/dispatch"
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 )
 
 type observedNativePollStream struct {
@@ -52,9 +52,9 @@ func TestPollingTransportActualHandlerStallReleasesPostgresFence(t *testing.T) {
 	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	setupCtx, setupCancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer setupCancel()
-	pool := integrationtest.StartPostgres(t, setupCtx, "botdb", "")
+	pool := testdb.StartPostgres(t, setupCtx, "botdb", "")
 	_, file, _, _ := runtime.Caller(0)
-	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql"} {
+	for _, name := range []string{"000001_init.up.sql", "000002_bot_presence.up.sql", "000003_message_delivery_outbox.up.sql", "000004_slash_interaction_outbox.up.sql", "000005_space_lifecycle.up.sql", "000007_message_token_uniqueness.up.sql", "000009_session_epoch.up.sql"} {
 		raw, err := os.ReadFile(filepath.Join(filepath.Dir(file), "..", "..", "..", "migrations", "bot_db", name))
 		require.NoError(t, err)
 		_, err = pool.Exec(setupCtx, string(raw))
@@ -73,7 +73,7 @@ func TestPollingTransportActualHandlerStallReleasesPostgresFence(t *testing.T) {
 		d, err := st.ClaimDueMessageDelivery(setupCtx)
 		require.NoError(t, err)
 		require.NotNil(t, d)
-		require.NoError(t, st.DeliverMessage(setupCtx, d, func(string, string) error { t.Fatal("unexpected webhook"); return nil }))
+		require.NoError(t, st.DeliverMessage(setupCtx, d, func(context.Context, string, string) error { t.Fatal("unexpected webhook"); return nil }))
 	}
 	setupCancel()
 	// Container startup and fixture writes must not consume the transport proof's

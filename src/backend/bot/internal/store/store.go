@@ -46,6 +46,7 @@ type BotRow struct {
 	Slug           string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+	SessionEpoch   int64
 }
 
 type CommandRow struct {
@@ -137,8 +138,9 @@ func (s *BotStore) CreateBot(ctx context.Context, owner uuid.UUID, name, descrip
 		Slug:           slug,
 		CreatedAt:      now,
 		UpdatedAt:      now,
+		SessionEpoch:   1,
 	}
-	_, err = s.Pool.Exec(ctx, `
+	_, err = s.sessionDB(ctx).Exec(ctx, `
 INSERT INTO bots (
 	id, owner_account_id, name, description, token_hash, webhook_secret,
 	is_polling_mode, scopes, status, actor_profile_id, slug
@@ -156,17 +158,17 @@ func (s *BotStore) GetBotBySlug(ctx context.Context, slug string) (*BotRow, erro
 	if slug == "" {
 		return nil, ErrNotFound
 	}
-	row := s.Pool.QueryRow(ctx, `
+	row := s.sessionDB(ctx).QueryRow(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
-	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+		is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at, session_epoch
 FROM bots WHERE slug = $1 AND status = 'live'`, slug)
 	return scanBot(row)
 }
 
 func (s *BotStore) GetBotByID(ctx context.Context, id uuid.UUID) (*BotRow, error) {
-	row := s.Pool.QueryRow(ctx, `
+	row := s.sessionDB(ctx).QueryRow(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
-	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+		is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at, session_epoch
 FROM bots WHERE id = $1`, id)
 	return scanBot(row)
 }
@@ -177,7 +179,7 @@ FROM bots WHERE id = $1`, id)
 func (s *BotStore) LookupGameIntegrationBotAuthority(ctx context.Context, id uuid.UUID) (uuid.UUID, string, bool, error) {
 	var ownerID uuid.UUID
 	var status string
-	err := s.Pool.QueryRow(ctx, `SELECT owner_account_id, status FROM bots WHERE id=$1`, id).Scan(&ownerID, &status)
+	err := s.sessionDB(ctx).QueryRow(ctx, `SELECT owner_account_id, status FROM bots WHERE id=$1`, id).Scan(&ownerID, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return uuid.Nil, "", false, nil
 	}
@@ -191,23 +193,23 @@ func (s *BotStore) LookupGameIntegrationBotAuthority(ctx context.Context, id uui
 func (s *BotStore) GetBotByIDForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*BotRow, error) {
 	row := tx.QueryRow(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
-	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+		is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at, session_epoch
 FROM bots WHERE id = $1 FOR UPDATE`, id)
 	return scanBot(row)
 }
 
 func (s *BotStore) GetBotByTokenHash(ctx context.Context, hash string) (*BotRow, error) {
-	row := s.Pool.QueryRow(ctx, `
+	row := s.sessionDB(ctx).QueryRow(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
-	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+		is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at, session_epoch
 FROM bots WHERE token_hash = $1 AND status = 'live'`, hash)
 	return scanBot(row)
 }
 
 func (s *BotStore) ListBotsByOwner(ctx context.Context, owner uuid.UUID) ([]BotRow, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT id, owner_account_id, name, description, avatar_url, token_hash, webhook_url, webhook_secret,
-	is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at
+		is_polling_mode, scopes::text, status, actor_profile_id, slug, created_at, updated_at, session_epoch
 FROM bots WHERE owner_account_id = $1 ORDER BY created_at DESC`, owner)
 	if err != nil {
 		return nil, err
@@ -222,37 +224,6 @@ FROM bots WHERE owner_account_id = $1 ORDER BY created_at DESC`, owner)
 		out = append(out, *b)
 	}
 	return out, rows.Err()
-}
-
-func (s *BotStore) RegenerateToken(ctx context.Context, botID uuid.UUID) (string, error) {
-	plain, hash, err := NewToken()
-	if err != nil {
-		return "", err
-	}
-	tag, err := s.Pool.Exec(ctx, `UPDATE bots SET token_hash = $2, updated_at = now() WHERE id = $1`, botID, hash)
-	if err != nil {
-		return "", err
-	}
-	if tag.RowsAffected() == 0 {
-		return "", ErrNotFound
-	}
-	return plain, nil
-}
-
-func (s *BotStore) RegenerateWebhookSecret(ctx context.Context, botID uuid.UUID) (string, error) {
-	secretBytes := make([]byte, 32)
-	if _, err := rand.Read(secretBytes); err != nil {
-		return "", err
-	}
-	secret := hex.EncodeToString(secretBytes)
-	tag, err := s.Pool.Exec(ctx, `UPDATE bots SET webhook_secret = $2, updated_at = now() WHERE id = $1`, botID, secret)
-	if err != nil {
-		return "", err
-	}
-	if tag.RowsAffected() == 0 {
-		return "", ErrNotFound
-	}
-	return secret, nil
 }
 
 func (s *BotStore) ApplyManifest(ctx context.Context, botID uuid.UUID, doc manifest.Document) error {
@@ -308,7 +279,7 @@ VALUES ($1, $2, $3, $4, $5::jsonb)`,
 }
 
 func (s *BotStore) ListCommands(ctx context.Context, botID uuid.UUID) ([]CommandRow, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT id, bot_id, name, description, parameters::text
 FROM bot_commands WHERE bot_id = $1 ORDER BY name`, botID)
 	if err != nil {
@@ -409,7 +380,7 @@ VALUES ($1, $2, $3, true, $4)`,
 }
 
 func (s *BotStore) ListWhitelistedChatIDs(ctx context.Context, botID, spaceID uuid.UUID) ([]uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT chat_id FROM bot_chat_whitelist WHERE bot_id = $1 AND space_id = $2`, botID, spaceID)
 	if err != nil {
 		return nil, err
@@ -558,7 +529,7 @@ type ChatBotRow struct {
 }
 
 func (s *BotStore) ListBotsInChat(ctx context.Context, chatID, spaceID uuid.UUID) ([]ChatBotRow, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT b.id, b.owner_account_id, b.name, b.description, b.avatar_url, b.webhook_url,
 	b.is_polling_mode, b.scopes::text, b.status, b.actor_profile_id, b.slug, b.created_at, b.updated_at,
 	COALESCE(w.enabled, false), (w.bot_id IS NOT NULL)
@@ -589,7 +560,7 @@ ORDER BY b.name`, chatID, spaceID)
 
 // PrimaryInstalledSpace returns the space_id when the bot has exactly one installation.
 func (s *BotStore) PrimaryInstalledSpace(ctx context.Context, botID uuid.UUID) (uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT space_id FROM bot_space_installations WHERE bot_id = $1`, botID)
 	if err != nil {
 		return uuid.Nil, err
@@ -618,7 +589,7 @@ SELECT space_id FROM bot_space_installations WHERE bot_id = $1`, botID)
 
 func (s *BotStore) IsChatWhitelisted(ctx context.Context, botID, chatID uuid.UUID) (bool, error) {
 	var enabled bool
-	err := s.Pool.QueryRow(ctx, `
+	err := s.sessionDB(ctx).QueryRow(ctx, `
 SELECT enabled FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2`, botID, chatID).Scan(&enabled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -631,10 +602,10 @@ SELECT enabled FROM bot_chat_whitelist WHERE bot_id = $1 AND chat_id = $2`, botI
 
 // ListLiveBotsForChat returns bots enabled in a chat for inbound message delivery.
 func (s *BotStore) ListLiveBotsForChat(ctx context.Context, chatID uuid.UUID) ([]BotRow, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT b.id, b.owner_account_id, b.name, b.description, b.avatar_url, b.token_hash, b.webhook_url,
        b.webhook_secret, b.is_polling_mode, b.scopes::text, b.status, b.actor_profile_id, b.slug,
-       b.created_at, b.updated_at
+       b.created_at, b.updated_at, b.session_epoch
 FROM bots b
 JOIN bot_chat_whitelist w ON w.bot_id = b.id
 WHERE w.chat_id = $1 AND w.enabled = true AND b.status = 'live'`, chatID)
@@ -654,7 +625,7 @@ WHERE w.chat_id = $1 AND w.enabled = true AND b.status = 'live'`, chatID)
 }
 
 func (s *BotStore) ListSlashCommandsForChat(ctx context.Context, chatID uuid.UUID) ([]CommandRow, string, uuid.UUID, error) {
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT c.id, c.bot_id, c.name, c.description, c.parameters::text, b.name
 FROM bot_commands c
 JOIN bots b ON b.id = c.bot_id
@@ -681,14 +652,17 @@ ORDER BY b.name, c.name`, chatID)
 	return out, botName, botID, rows.Err()
 }
 
-func (s *BotStore) EnqueueEvent(ctx context.Context, botID uuid.UUID, eventType string, payload map[string]any, token string) (uuid.UUID, error) {
+func (s *BotStore) EnqueueEvent(ctx context.Context, session Session, eventType string, payload map[string]any, token string) (uuid.UUID, error) {
 	id := uuid.New()
 	b, _ := json.Marshal(payload)
-	_, err := s.Pool.Exec(ctx, `
-INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token,space_id)
+	err := s.WithSession(ctx, Authority{Session: session}, uuid.Nil, func(call context.Context, tx pgx.Tx, _ *BotRow) error {
+		_, err := tx.Exec(call, `
+INSERT INTO bot_event_log (id, bot_id, event_type, payload, delivery_status, interaction_token,space_id,session_epoch)
 VALUES ($1, $2, $3, $4::jsonb, 'pending', $5,
- (SELECT w.space_id FROM bot_chat_whitelist w WHERE w.bot_id=$2 AND w.chat_id::text=$4::jsonb->>'chat_id' LIMIT 1))`,
-		id, botID, eventType, string(b), token)
+ (SELECT w.space_id FROM bot_chat_whitelist w WHERE w.bot_id=$2 AND w.chat_id::text=$4::jsonb->>'chat_id' LIMIT 1),$6)`,
+			id, session.BotID, eventType, string(b), token, session.Epoch)
+		return err
+	})
 	return id, err
 }
 
@@ -696,7 +670,7 @@ func (s *BotStore) ListPendingEvents(ctx context.Context, botID uuid.UUID, limit
 	if limit <= 0 {
 		limit = 25
 	}
-	rows, err := s.Pool.Query(ctx, `
+	rows, err := s.sessionDB(ctx).Query(ctx, `
 SELECT id, event_type, payload::text
 FROM bot_event_log
 WHERE bot_id = $1 AND delivery_status = 'pending'
@@ -723,7 +697,7 @@ LIMIT $2`, botID, limit)
 }
 
 func (s *BotStore) MarkEventDelivered(ctx context.Context, eventID uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
 WHERE id = $1 AND delivery_status='pending'`, eventID)
 	return err
@@ -733,54 +707,17 @@ func (s *BotStore) MarkInteractionDelivered(ctx context.Context, botID uuid.UUID
 	if strings.TrimSpace(token) == "" {
 		return nil
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
 WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
 	return err
-}
-
-// CompleteDeferredInteraction serializes a deferred follow-up and marks it
-// delivered only after complete succeeds. A failure rolls the row back to
-// deferred so the caller may retry with the same idempotency key.
-func (s *BotStore) CompleteDeferredInteraction(ctx context.Context, botID uuid.UUID, token string, complete func() error) (bool, error) {
-	if strings.TrimSpace(token) == "" {
-		return false, nil
-	}
-	tx, err := s.Pool.Begin(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	var eventID uuid.UUID
-	err = tx.QueryRow(ctx, `
-SELECT id FROM bot_event_log
-WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'deferred'
-FOR UPDATE`, botID, token).Scan(&eventID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if err := complete(); err != nil {
-		return true, err
-	}
-	if _, err := tx.Exec(ctx, `
-UPDATE bot_event_log SET delivery_status = 'delivered', delivered_at = now(), attempts = attempts + 1
-WHERE id = $1 AND delivery_status = 'deferred'`, eventID); err != nil {
-		return true, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return true, err
-	}
-	return true, nil
 }
 
 func (s *BotStore) MarkEventFailed(ctx context.Context, botID uuid.UUID, token string) error {
 	if strings.TrimSpace(token) == "" {
 		return nil
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'failed', attempts = attempts + 1
 WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
 	return err
@@ -790,7 +727,7 @@ func (s *BotStore) MarkEventTimeout(ctx context.Context, botID uuid.UUID, token 
 	if strings.TrimSpace(token) == "" {
 		return nil
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'timeout', attempts = attempts + 1
 WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
 	return err
@@ -800,7 +737,7 @@ func (s *BotStore) IncrementEventAttempts(ctx context.Context, botID uuid.UUID, 
 	if strings.TrimSpace(token) == "" {
 		return nil
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET attempts = attempts + 1
 WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
 	return err
@@ -811,7 +748,7 @@ func scanBot(row pgx.Row) (*BotRow, error) {
 	err := row.Scan(
 		&b.ID, &b.OwnerAccountID, &b.Name, &b.Description, &b.AvatarURL, &b.TokenHash, &b.WebhookURL,
 		&b.WebhookSecret, &b.IsPollingMode, &b.ScopesJSON, &b.Status, &b.ActorProfileID, &b.Slug,
-		&b.CreatedAt, &b.UpdatedAt,
+		&b.CreatedAt, &b.UpdatedAt, &b.SessionEpoch,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound

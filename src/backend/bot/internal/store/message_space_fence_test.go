@@ -50,13 +50,13 @@ func TestSpaceMessageNewAdmissionAndStaleWorkerDeniedAfterFence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, d)
 	called := false
-	require.NoError(t, st.DeliverMessage(ctx, d, func(string, string) error { called = true; return nil }))
+	require.NoError(t, st.DeliverMessage(ctx, d, func(context.Context, string, string) error { called = true; return nil }))
 	require.False(t, called)
 	var state, payload string
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT status,payload::text FROM bot_message_deliveries WHERE id=$1`, delivery).Scan(&state, &payload))
 	require.Equal(t, "canceled", state)
 	require.Equal(t, "{}", payload)
-	require.NoError(t, st.FailMessageDelivery(ctx, delivery))
+	require.NoError(t, st.FailMessageDelivery(ctx, delivery, 1))
 	require.NoError(t, st.RetryMessageDelivery(ctx, delivery, 1))
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT status FROM bot_message_deliveries WHERE id=$1`, delivery).Scan(&state))
 	require.Equal(t, "canceled", state)
@@ -72,7 +72,7 @@ func TestSpaceMessagePollingEventCarriesSpaceAndFreezeScrubsIt(t *testing.T) {
 	d, err := st.ClaimDueMessageDelivery(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, d)
-	require.NoError(t, st.DeliverMessage(ctx, d, func(string, string) error { t.Fatal("polling must not POST"); return nil }))
+	require.NoError(t, st.DeliverMessage(ctx, d, func(context.Context, string, string) error { t.Fatal("polling must not POST"); return nil }))
 	var space string
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT space_id::text FROM bot_event_log WHERE bot_id=$1`, bot.ID).Scan(&space))
 	require.Equal(t, fence.SpaceId, space)
@@ -118,7 +118,7 @@ func TestSpaceMessageWebhookAttemptDelaysFenceReceipt(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	delivered := make(chan error, 1)
 	go func() {
-		delivered <- st.DeliverMessage(ctx, d, func(string, string) error {
+		delivered <- st.DeliverMessage(ctx, d, func(context.Context, string, string) error {
 			close(entered)
 			select {
 			case <-release:
@@ -191,7 +191,7 @@ func TestSpaceMessagePollingLegacyAndStaleHintsCannotSendAfterReceipt(t *testing
 	_, err = st.ApplySpaceLifecycleFence(ctx, fence)
 	require.NoError(t, err)
 	called := false
-	require.NoError(t, st.DeliverPollingEvent(ctx, bot.ID, legacy, func(string, string) error { called = true; return nil }))
+	require.NoError(t, st.DeliverPollingEvent(ctx, bot.Authority(), legacy, func(string, string) error { called = true; return nil }))
 	require.False(t, called)
 	var state, payload string
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT delivery_status,payload::text FROM bot_event_log WHERE id=$1`, legacy).Scan(&state, &payload))
@@ -201,7 +201,7 @@ func TestSpaceMessagePollingLegacyAndStaleHintsCannotSendAfterReceipt(t *testing
 	stale := uuid.New()
 	_, err = st.Pool.Exec(ctx, `INSERT INTO bot_event_log(id,bot_id,event_type,payload,delivery_status,interaction_token) VALUES($1,$2,'message',jsonb_build_object('chat_id',$3::text),'pending','')`, stale, bot.ID, chat.String())
 	require.NoError(t, err)
-	require.NoError(t, st.DeliverPollingEvent(ctx, bot.ID, stale, func(string, string) error { called = true; return nil }))
+	require.NoError(t, st.DeliverPollingEvent(ctx, bot.Authority(), stale, func(string, string) error { called = true; return nil }))
 	require.False(t, called)
 	require.NoError(t, st.Pool.QueryRow(ctx, `SELECT delivery_status,payload::text FROM bot_event_log WHERE id=$1`, stale).Scan(&state, &payload))
 	require.Equal(t, "canceled", state)
@@ -220,7 +220,7 @@ func TestSpaceMessagePollingSendDelaysFenceAndRestoredFreshMessageWorks(t *testi
 		d, err := st.ClaimDueMessageDelivery(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, d)
-		require.NoError(t, st.DeliverMessage(ctx, d, func(string, string) error { t.Fatal("unexpected POST"); return nil }))
+		require.NoError(t, st.DeliverMessage(ctx, d, func(context.Context, string, string) error { t.Fatal("unexpected POST"); return nil }))
 	}
 	queue()
 	ids, _, _, err := st.ListPendingEvents(ctx, bot.ID, 25)
@@ -229,7 +229,7 @@ func TestSpaceMessagePollingSendDelaysFenceAndRestoredFreshMessageWorks(t *testi
 	entered, release := make(chan struct{}), make(chan struct{})
 	sent := make(chan error, 1)
 	go func() {
-		sent <- st.DeliverPollingEvent(ctx, bot.ID, ids[0], func(string, string) error {
+		sent <- st.DeliverPollingEvent(ctx, bot.Authority(), ids[0], func(string, string) error {
 			close(entered)
 			select {
 			case <-release:
@@ -264,6 +264,6 @@ func TestSpaceMessagePollingSendDelaysFenceAndRestoredFreshMessageWorks(t *testi
 	require.NoError(t, err)
 	require.Len(t, ids, 1)
 	count := 0
-	require.NoError(t, st.DeliverPollingEvent(ctx, bot.ID, ids[0], func(string, string) error { count++; return nil }))
+	require.NoError(t, st.DeliverPollingEvent(ctx, bot.Authority(), ids[0], func(string, string) error { count++; return nil }))
 	require.Equal(t, 1, count)
 }
