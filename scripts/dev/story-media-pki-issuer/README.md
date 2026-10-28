@@ -2,8 +2,17 @@
 
 This initial-stage issuer generates an isolated `voice-dev` certificate and
 signing-key packet for the direct Story/File/Messaging JWKS route. It has no
-Kubernetes client, export operation, replay credential, deploy operation or
-rotation workflow. A staged packet is not publication or rollout authority.
+Kubernetes client, replay credential, deploy operation or rotation workflow.
+The explicit export mode validates an existing stage under the same lock and
+writes its private packet to a pipe. The caller must capture that pipe directly
+in memory and must never log or display it; a pipe alone does not protect its
+contents from its reader. Export does not create a missing stage. A staged or
+exported packet is not publication or rollout authority.
+Any container operator must disable the Docker logging driver (`--log-driver=none`),
+use no TTY, and capture stdout directly in a private in-memory pipe. It must
+discard partial output and refuse all publication on a nonzero or uncertain
+issuer exit. This version cannot export a stage made by another issuer source;
+there is no stage migration or key regeneration procedure here.
 Do not run it against DEV until a separately reviewed operator binds the issuer
 image, namespace UID, current resource claim and exact input/template hashes,
 qualifies private key custody and encrypted recovery, and implements
