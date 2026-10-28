@@ -16,6 +16,11 @@ work; it does not authorize shared rollout or Native qualification.
 HOLD. The real migrator's dirty33 marker is permitted only inside this atomic
 body; successful migration ends clean33. No `force` or fake marker is used.
 The migrator must be the privileged catalog owner; runtime ownership refuses.
+The public schema must retain PostgreSQL16/18's `pg_database_owner` owner and
+exact baseline ACL: owner CREATE/USAGE, PUBLIC USAGE and migration3's runtime
+USAGE, without additional grants or grant options. A changed owner or ACL
+HOLDs before restoration; the real migrator leaves its attempted 33 dirty
+marker while schema, ACL and retained data remain unchanged.
 The complete layout keeps scoped operation keys from shipped14. Its restored15
 is owned by Marusya-47 (SHA256
 `41cd6c25408e15f5fe9693fc0a2d29b2224bc032982f9bccc8267a9dae1fee8e`).

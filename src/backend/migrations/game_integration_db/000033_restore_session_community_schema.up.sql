@@ -78,6 +78,26 @@ WITH objects AS (
 SELECT encode(sha256(convert_to(coalesce(jsonb_agg(jsonb_build_array(k,n,v) ORDER BY k COLLATE "C",n COLLATE "C",v::text COLLATE "C")::text,'[]'),'UTF8')),'hex') FROM objects
 $identity$;
 DO $forward$ DECLARE layout text; floor_before bigint; BEGIN
+ -- PG16/18 initialize public under pg_database_owner. Migration3 adds only
+ -- runtime USAGE. Compare the complete effective ACL, including grantors and
+ -- grant options, so extra or revoked privileges cannot pass as known layout.
+ IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='public'
+                AND nspowner='pg_database_owner'::regrole) OR EXISTS (
+  WITH actual AS (
+   SELECT a.grantee,a.grantor,a.privilege_type,a.is_grantable
+   FROM pg_namespace n, LATERAL aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a
+   WHERE n.nspname='public'
+  ), expected AS (
+   SELECT grantee,'pg_database_owner'::regrole::oid AS grantor,privilege_type,false AS is_grantable
+   FROM (VALUES ('pg_database_owner'::regrole::oid,'CREATE'),
+                ('pg_database_owner'::regrole::oid,'USAGE'),
+                (0::oid,'USAGE'),('gameintegration_runtime'::regrole::oid,'USAGE')) v(grantee,privilege_type)
+  )
+  (SELECT * FROM actual EXCEPT SELECT * FROM expected)
+  UNION ALL (SELECT * FROM expected EXCEPT SELECT * FROM actual)
+ ) THEN
+  RAISE EXCEPTION 'GIS33 changed public schema owner or ACL; HOLD' USING ERRCODE='55000';
+ END IF;
  IF (SELECT relowner FROM pg_class WHERE oid='public.applications'::regclass)<>current_user::regrole
  OR pg_get_userbyid((SELECT relowner FROM pg_class WHERE oid='public.applications'::regclass))='gameintegration_runtime' THEN
   RAISE EXCEPTION 'GIS33 requires the privileged catalog owner, never runtime ownership; HOLD' USING ERRCODE='55000';

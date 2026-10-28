@@ -40,8 +40,9 @@ class Forward33(unittest.TestCase):
                 "-e", "POSTGRES_PASSWORD=private_fixture", OPTIONS.postgres_image)
         try:
             command("docker", "exec", cls.container, "sh", "-c",
-                    "for n in $(seq 1 60); do pg_isready -U postgres && exit 0; sleep 1; done; exit 1")
-            cls.sql("postgres", "CREATE ROLE gameintegration_runtime NOLOGIN; CREATE DATABASE game_integration_db;")
+                    "for n in $(seq 1 60); do pg_isready -h 127.0.0.1 -U postgres && exit 0; sleep 1; done; exit 1")
+            cls.sql("postgres", "CREATE ROLE gameintegration_runtime NOLOGIN")
+            cls.sql("postgres", "CREATE DATABASE game_integration_db")
         except BaseException:
             cls.tearDownClass()
             raise
@@ -147,6 +148,25 @@ SELECT jsonb_build_object('apps',(SELECT jsonb_agg(to_jsonb(a)) FROM application
         self.migrate(database, self.complete, "up", ok=False)
         self.assertEqual(before, self.schema(database))
         self.assertEqual("32|t", self.sql(database, "SELECT version,dirty FROM schema_migrations").stdout.strip())
+
+    def test_schema_owner_and_acl_changes_hold_atomically(self):
+        for legacy in (True, False):
+            for alteration in ["GRANT CREATE ON SCHEMA public TO gameintegration_runtime",
+                               "ALTER SCHEMA public OWNER TO gameintegration_runtime",
+                               "GRANT USAGE ON SCHEMA public TO gameintegration_runtime WITH GRANT OPTION",
+                               "GRANT CREATE ON SCHEMA public TO PUBLIC",
+                               "REVOKE USAGE ON SCHEMA public FROM PUBLIC"]:
+                with self.subTest(legacy=legacy, alteration=alteration):
+                    database = self.database(legacy=legacy)
+                    self.seed(database)
+                    self.sql(database, alteration)
+                    before, rows = self.schema(database), self.retained(database)
+                    acl = self.sql(database, "SELECT nspowner::regrole::text,nspacl::text FROM pg_namespace WHERE nspname='public'").stdout
+                    self.migrate(database, self.complete, "up", ok=False)
+                    self.assertEqual(before, self.schema(database))
+                    self.assertEqual(rows, self.retained(database))
+                    self.assertEqual(acl, self.sql(database, "SELECT nspowner::regrole::text,nspacl::text FROM pg_namespace WHERE nspname='public'").stdout)
+                    self.assertEqual("33|t", self.sql(database, "SELECT version,dirty FROM schema_migrations").stdout.strip())
 
     def test_missing_floor_holds_without_reset(self):
         database = self.database(legacy=True)
