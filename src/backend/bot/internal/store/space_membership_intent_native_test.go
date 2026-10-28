@@ -92,7 +92,7 @@ func TestMembershipNativeTransitions(t *testing.T) {
 			t.Fatalf("%s: %v", file, e)
 		}
 	}
-	if _, err = db.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(8,false)"); err != nil {
+	if _, err = db.Exec(ctx, "CREATE TABLE schema_migrations(version bigint,dirty boolean); INSERT INTO schema_migrations VALUES(9,false)"); err != nil {
 		t.Fatal(err)
 	}
 	st := &BotStore{Pool: db}

@@ -72,7 +72,7 @@ func (h *MessageHandler) ProcessNext(ctx context.Context) (bool, error) {
 	if err != nil || d == nil {
 		return false, err
 	}
-	err = h.Store.DeliverMessage(ctx, d, func(url, secret string) error {
+	err = h.Store.DeliverMessage(ctx, d, func(call context.Context, url, secret string) error {
 		options := make(map[string]any, len(d.Payload)+1)
 		for k, v := range d.Payload {
 			options[k] = v
@@ -84,8 +84,9 @@ func (h *MessageHandler) ProcessNext(ctx context.Context) (bool, error) {
 			timeout = dispatch.DefaultTimeout()
 		}
 		// Finish the HTTP attempt well before the database lease expires.
-		attemptCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
-		_, postErr := webhook.DeliverPOST(attemptCtx, h.Client, url, secret, p, timeout)
+		attemptCtx, cancel := context.WithTimeout(call, 25*time.Second)
+		client := webhook.GuardedClient(h.Client, h.Store.CheckMessageAttempt)
+		_, postErr := webhook.DeliverPOST(attemptCtx, client, url, secret, p, timeout)
 		cancel()
 		return postErr
 	})
@@ -94,7 +95,7 @@ func (h *MessageHandler) ProcessNext(ctx context.Context) (bool, error) {
 			h.Logger.Warn("bot message delivery failed", slog.String("bot_id", d.BotID.String()), slog.Any("error", err))
 		}
 		if webhook.IsPermanentDeliveryError(err) {
-			return true, errors.Join(err, h.Store.FailMessageDelivery(ctx, d.ID))
+			return true, errors.Join(err, h.Store.FailMessageDelivery(ctx, d.ID, d.Attempts))
 		}
 		return true, errors.Join(err, h.Store.RetryMessageDelivery(ctx, d.ID, d.Attempts))
 	}

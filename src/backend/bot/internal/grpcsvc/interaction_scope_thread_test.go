@@ -55,7 +55,7 @@ func TestDeferredBotMessagePropagatesThreadParent(t *testing.T) {
 	defer cleanup()
 	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
 	token, parent := uuid.NewString(), uuid.NewString()
-	_, err := st.EnqueueEvent(ctx, uuid.MustParse(botID), "interaction", map[string]any{
+	_, err := st.EnqueueEvent(ctx, freshSession(t, st, uuid.MustParse(botID)), "interaction", map[string]any{
 		"chat_id": chatID.String(), "chat_type": "CHAT_TYPE_CHANNEL", "invoker_profile_id": uuid.NewString(),
 	}, token)
 	require.NoError(t, err)

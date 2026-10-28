@@ -21,7 +21,7 @@ var botChatRequestHashPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 // TouchPresence records bot liveness (heartbeat / poll / webhook activity).
 func (s *BotStore) TouchPresence(ctx context.Context, botID uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 INSERT INTO bot_presence (bot_id, last_seen_at) VALUES ($1, now())
 ON CONFLICT (bot_id) DO UPDATE SET last_seen_at = now()`, botID)
 	return err
@@ -33,7 +33,7 @@ func (s *BotStore) IsBotOnline(ctx context.Context, botID uuid.UUID, ttl time.Du
 		ttl = DefaultPresenceTTL
 	}
 	var last time.Time
-	err := s.Pool.QueryRow(ctx, `SELECT last_seen_at FROM bot_presence WHERE bot_id = $1`, botID).Scan(&last)
+	err := s.sessionDB(ctx).QueryRow(ctx, `SELECT last_seen_at FROM bot_presence WHERE bot_id = $1`, botID).Scan(&last)
 	if err != nil {
 		return false, nil
 	}
@@ -43,7 +43,7 @@ func (s *BotStore) IsBotOnline(ctx context.Context, botID uuid.UUID, ttl time.Du
 // DailyChatCreateCount returns today's create count for the bot (0 if none).
 func (s *BotStore) DailyChatCreateCount(ctx context.Context, botID uuid.UUID) (int, error) {
 	var count int
-	err := s.Pool.QueryRow(ctx, `
+	err := s.sessionDB(ctx).QueryRow(ctx, `
 SELECT COALESCE(count, 0) FROM bot_daily_chat_creates
 WHERE bot_id = $1 AND day = CURRENT_DATE`, botID).Scan(&count)
 	if err != nil {
@@ -58,7 +58,7 @@ WHERE bot_id = $1 AND day = CURRENT_DATE`, botID).Scan(&count)
 // ReserveDailyChatCreate atomically claims one of the bot's daily chat-create slots.
 // The returned day identifies the reservation for safe release across a date boundary.
 func (s *BotStore) ReserveDailyChatCreate(ctx context.Context, botID uuid.UUID) (day time.Time, reserved bool, err error) {
-	err = s.Pool.QueryRow(ctx, `
+	err = s.sessionDB(ctx).QueryRow(ctx, `
 INSERT INTO bot_daily_chat_creates (bot_id, day, count) VALUES ($1, CURRENT_DATE, 1)
 ON CONFLICT (bot_id, day) DO UPDATE
 SET count = bot_daily_chat_creates.count + 1
@@ -80,7 +80,7 @@ func (s *BotStore) ReserveDailyChatCreateForRequest(ctx context.Context, botID, 
 	if botID == uuid.Nil || requestID == uuid.Nil || !botChatRequestHashPattern.MatchString(requestHash) {
 		return time.Time{}, false, false, errors.New("invalid bot chat create request identity")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginSessionDB(ctx)
 	if err != nil {
 		return time.Time{}, false, false, err
 	}
@@ -193,7 +193,7 @@ func (s *BotStore) FinishDailyChatCreateRequestAttempt(ctx context.Context, botI
 	if outcome != BotChatCreateAttemptRejected && outcome != BotChatCreateAttemptSucceeded && outcome != BotChatCreateAttemptUncertain {
 		return false, errors.New("invalid bot chat create attempt outcome")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginSessionDB(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -240,7 +240,7 @@ func (s *BotStore) FinishDailyChatCreateRequestAttempt(ctx context.Context, botI
 // ReleaseDailyChatCreate returns a reserved slot after an outcome known to have
 // been rejected before Chat persistence. Ambiguous outcomes must keep the slot.
 func (s *BotStore) ReleaseDailyChatCreate(ctx context.Context, botID uuid.UUID, day time.Time) error {
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_daily_chat_creates
 SET count = count - 1
 WHERE bot_id = $1 AND day = $2::date AND count > 0`, botID, day)
@@ -250,7 +250,7 @@ WHERE bot_id = $1 AND day = $2::date AND count > 0`, botID, day)
 // IncrementDailyChatCreates returns the new count for today; enforces platform limit externally.
 func (s *BotStore) IncrementDailyChatCreates(ctx context.Context, botID uuid.UUID) (int, error) {
 	var count int
-	err := s.Pool.QueryRow(ctx, `
+	err := s.sessionDB(ctx).QueryRow(ctx, `
 INSERT INTO bot_daily_chat_creates (bot_id, day, count) VALUES ($1, CURRENT_DATE, 1)
 ON CONFLICT (bot_id, day) DO UPDATE SET count = bot_daily_chat_creates.count + 1
 RETURNING count`, botID).Scan(&count)
@@ -262,7 +262,7 @@ func (s *BotStore) MarkEventDeferred(ctx context.Context, botID uuid.UUID, token
 	if token == "" {
 		return nil
 	}
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'deferred'
 WHERE bot_id = $1 AND interaction_token = $2 AND delivery_status = 'pending'`, botID, token)
 	return err
@@ -274,25 +274,31 @@ func (s *BotStore) AbandonStaleDeferred(ctx context.Context, ttl time.Duration) 
 		ttl = 24 * time.Hour
 	}
 	cutoff := time.Now().Add(-ttl)
-	_, err := s.Pool.Exec(ctx, `
+	_, err := s.sessionDB(ctx).Exec(ctx, `
 UPDATE bot_event_log SET delivery_status = 'abandoned'
 WHERE delivery_status = 'deferred' AND created_at < $1`, cutoff)
 	return err
 }
 
-// ListDeferredTokens returns interaction tokens awaiting async completion.
-func (s *BotStore) ListDeferredTokens(ctx context.Context) ([]string, error) {
-	rows, err := s.Pool.Query(ctx, `
-SELECT interaction_token FROM bot_event_log
-WHERE delivery_status = 'deferred' AND interaction_token IS NOT NULL AND interaction_token <> ''`)
+// DeferredSession binds an interaction awaiting async completion to its epoch.
+type DeferredSession struct {
+	Token string
+	Session
+}
+
+func (s *BotStore) ListDeferredSessions(ctx context.Context) ([]DeferredSession, error) {
+	rows, err := s.sessionDB(ctx).Query(ctx, `
+SELECT e.interaction_token,e.bot_id,e.session_epoch FROM bot_event_log e
+JOIN bots b ON b.id=e.bot_id AND b.status='live' AND b.session_epoch=e.session_epoch
+WHERE e.event_type='interaction' AND e.delivery_status = 'deferred' AND e.interaction_completed_at IS NULL AND e.interaction_token IS NOT NULL AND e.interaction_token <> ''`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []string
+	var out []DeferredSession
 	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
+		var token DeferredSession
+		if err := rows.Scan(&token.Token, &token.BotID, &token.Epoch); err != nil {
 			return nil, err
 		}
 		out = append(out, token)

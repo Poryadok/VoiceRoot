@@ -18,7 +18,7 @@ func seedSlashOutboxRow(t *testing.T) (context.Context, uuid.UUID, uuid.UUID, fu
 	require.NoError(t, err)
 	_, err = st.Pool.Exec(ctx, `UPDATE bots SET webhook_url = 'https://example.invalid/hook' WHERE id = $1`, bot.ID)
 	require.NoError(t, err)
-	id, err := st.EnqueueEvent(ctx, bot.ID, "interaction", map[string]any{"chat_id": uuid.NewString()}, uuid.NewString())
+	id, err := st.EnqueueEvent(ctx, freshSession(t, st, bot.ID), "interaction", map[string]any{"chat_id": uuid.NewString()}, uuid.NewString())
 	require.NoError(t, err)
 	return ctx, bot.ID, id, cleanup, st
 }

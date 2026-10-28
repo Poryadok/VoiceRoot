@@ -18,7 +18,7 @@ import (
 	"voice/backend/bot/internal/dispatch"
 	grpcsvc "voice/backend/bot/internal/grpcsvc"
 	"voice/backend/bot/internal/store"
-	"voice/backend/pkg/integrationtest"
+	"voice/backend/bot/internal/testdb"
 
 	botv1 "voice.app/voice/bot/v1"
 	chatv1 "voice.app/voice/chat/v1"
@@ -79,7 +79,7 @@ func startBotGRPCWithDeps(t *testing.T, user *fakeUserClient, msg messagingv1.Me
 	t.Helper()
 	t.Setenv("BOT_ENABLE_DEV_POLLING", "true")
 	ctx := context.Background()
-	pool := integrationtest.StartPostgres(t, ctx, "botinteraction", "")
+	pool := testdb.StartPostgres(t, ctx, "botinteraction", "")
 	_, err := pool.Exec(ctx, migrationSQL(t))
 	require.NoError(t, err)
 

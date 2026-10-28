@@ -188,7 +188,7 @@ func TestDeferredInteraction_recoveryRestoresPersistedChatType(t *testing.T) {
 			botUUID, err := uuid.Parse(botID)
 			require.NoError(t, err)
 			token := "recover-chat-type-" + uuid.NewString()
-			_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+			_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 				"chat_id":            chatID.String(),
 				"chat_type":          tc.chatType.String(),
 				"invoker_profile_id": uuid.NewString(),
@@ -196,7 +196,7 @@ func TestDeferredInteraction_recoveryRestoresPersistedChatType(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
 			if tc.deferred {
-				hub.RegisterDeferred(token)
+				hub.RegisterDeferred(token, sessionForToken(t, st, token))
 			}
 
 			require.NoError(t, tc.followUp(client, withBotToken(context.Background(), botToken), token))
@@ -241,7 +241,7 @@ func TestDeferredInteraction_legacyOrInvalidChatTypeFallsBackToChannel(t *testin
 			for key, value := range tc.payload {
 				payload[key] = value
 			}
-			_, err = st.EnqueueEvent(ctx, botUUID, "interaction", payload, token)
+			_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", payload, token)
 			require.NoError(t, err)
 			require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
 
@@ -273,14 +273,14 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "authorized-dm-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id":            chatID.String(),
 			"chat_type":          chatv1.ChatType_CHAT_TYPE_DM.String(),
 			"invoker_profile_id": uuid.NewString(),
 		}, token)
 		require.NoError(t, err)
 		require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-		hub.RegisterDeferred(token)
+		hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 		_, err = client.SendBotMessage(withBotToken(context.Background(), botToken), &botv1.SendBotMessageRequest{
 			InteractionToken: &token,
@@ -301,14 +301,14 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "explicit-original-dm-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id":            chatID.String(),
 			"chat_type":          dmType.String(),
 			"invoker_profile_id": uuid.NewString(),
 		}, token)
 		require.NoError(t, err)
 		require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-		hub.RegisterDeferred(token)
+		hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 		_, err = client.SendBotMessage(withBotToken(context.Background(), botToken), &botv1.SendBotMessageRequest{
 			Chat:             &chatv1.ChatRef{Id: chatID.String(), Type: &dmType},
@@ -332,7 +332,7 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "missing-dm-send-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id":            chatID.String(),
 			"chat_type":          chatv1.ChatType_CHAT_TYPE_DM.String(),
 			"invoker_profile_id": uuid.NewString(),
@@ -358,14 +358,14 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "missing-dm-send-deferred-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id":            chatID.String(),
 			"chat_type":          chatv1.ChatType_CHAT_TYPE_DM.String(),
 			"invoker_profile_id": uuid.NewString(),
 		}, token)
 		require.NoError(t, err)
 		require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-		hub.RegisterDeferred(token)
+		hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 		_, err = client.SendBotMessage(withBotToken(context.Background(), botToken), &botv1.SendBotMessageRequest{
 			InteractionToken: &token,
@@ -393,7 +393,7 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		msg.expectedChatID = originalDM.String()
 
 		token := "deferred-dm-a-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id":            originalDM.String(),
 			"chat_type":          dmType.String(),
 			"invoker_profile_id": uuid.NewString(),
@@ -421,14 +421,14 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "single-use-deferred-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id":            chatID.String(),
 			"chat_type":          channelType.String(),
 			"invoker_profile_id": uuid.NewString(),
 		}, token)
 		require.NoError(t, err)
 		require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-		hub.RegisterDeferred(token)
+		hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 		start := make(chan struct{})
 		errs := make(chan error, 2)
@@ -474,12 +474,12 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "empty-retry-deferred-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id": chatID.String(), "chat_type": channelType.String(), "invoker_profile_id": uuid.NewString(),
 		}, token)
 		require.NoError(t, err)
 		require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-		hub.RegisterDeferred(token)
+		hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 		_, err = client.SendBotMessage(withBotToken(context.Background(), botToken), &botv1.SendBotMessageRequest{InteractionToken: &token, Content: " "})
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -500,12 +500,12 @@ func TestDeferredDMInteraction_requiresScopeAndOriginalInteraction(t *testing.T)
 		botUUID, err := uuid.Parse(botID)
 		require.NoError(t, err)
 		token := "failure-retry-deferred-" + uuid.NewString()
-		_, err = st.EnqueueEvent(ctx, botUUID, "interaction", map[string]any{
+		_, err = st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
 			"chat_id": chatID.String(), "chat_type": channelType.String(), "invoker_profile_id": uuid.NewString(),
 		}, token)
 		require.NoError(t, err)
 		require.NoError(t, st.MarkEventDeferred(ctx, botUUID, token))
-		hub.RegisterDeferred(token)
+		hub.RegisterDeferred(token, sessionForToken(t, st, token))
 
 		_, err = client.SendBotMessage(withBotToken(context.Background(), botToken), &botv1.SendBotMessageRequest{InteractionToken: &token, Content: "retry"})
 		require.Equal(t, codes.Unavailable, status.Code(err))
