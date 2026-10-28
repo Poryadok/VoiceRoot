@@ -4078,4 +4078,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get composerVoiceLocked => 'Запись закреплена';
+
+  @override
+  String get queueSearchNoRolePreference => 'Без предпочтения роли';
 }

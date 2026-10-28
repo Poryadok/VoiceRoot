@@ -4041,4 +4041,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get composerVoiceLocked => 'Recording locked';
+
+  @override
+  String get queueSearchNoRolePreference => 'No role preference';
 }
