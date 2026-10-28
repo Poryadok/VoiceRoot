@@ -158,6 +158,18 @@ func TestInventoryMigrationRekeysRetainedStoryProof(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestInventoryMigrationDownOnEmptySchema(t *testing.T) {
+	ctx := r23TestContext(t)
+	pool := inventoryPool(t, ctx)
+	down, err := os.ReadFile(filepath.Join(fileGateRepoRoot(t), "src", "backend", "migrations", "file_db", "000017_reference_inventory_multiowner.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(down))
+	require.NoError(t, err)
+	var present bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='file_reference_inventory_imports' AND column_name='component')`).Scan(&present))
+	require.False(t, present, "empty rollback restores the migration 16 schema")
+}
+
 func TestInventoryMigrationWaitsForConcurrentLegacyWriter(t *testing.T) {
 	ctx := r23TestContext(t)
 	pool := startR23FilePostgres(t, ctx)
