@@ -5,6 +5,8 @@ own the short prepare-only guard, and verify its workload and DB binding. This
 probe never proves Space's source catalog, startup, or migration eligibility.
 """
 import json
+import re
+from pathlib import Path
 from urllib.parse import urlsplit
 import full_cohort_schema_metadata as common
 import full_cohort_schema_metadata_space_catalog as source_catalog
@@ -183,10 +185,75 @@ def probe(source_root, source_snapshot, pod_name, expected_engine_role, guard,
                     'checks': {key: checked[key] for key in ('ledger25', 'tables_ok', 'triggers_ok', 'functions_ok')}},
                 'status': 'HOLD',
                 'limits': ['shape_is_not_full_validation', 'catalog_metadata_does_not_prove_domain_read_or_startup',
-                           'objects_use_observer_search_path', 'no_existing_application_connection_peer_proof']}
+                           'objects_use_observer_search_path', 'runtime_role_privileges_not_verified',
+                           'no_existing_application_connection_peer_proof']}
     except common.GuardLost:
         raise
     except Hold:
         raise
     except Exception:
         raise Hold('space_probe_failed') from None
+
+
+def run_prepare(source_root, source_sha, source_authority, pods, expected_engine_role,
+                claim_guard, namespace_uid, run_bytes=common.linux_private_bytes,
+                run_psql=common.linux_psql):
+    """Run only under the caller's already-owned prepare-only TT claim.
+
+    claim_guard checks the actual actor/claim/revision/generation/window. Caller
+    verifies canonical source authority, exact candidate images and complete
+    Pod inventory. This is not a deploy lock or permission to mutate anything.
+    """
+    from publish_candidate import source_snapshot
+    if not isinstance(namespace_uid, str) or not namespace_uid:
+        raise Hold('namespace_identity_invalid')
+    def guard():
+        common._fence(claim_guard)
+        args = ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',
+                '--request-timeout=15s', 'get', 'namespace', 'voice-dev', '-o', 'json']
+        try:
+            raw = common._external(run_bytes, args)
+            if not isinstance(raw, bytes) or len(raw) > 65536:
+                raise Hold('namespace_identity_invalid')
+            meta = json.loads(raw)['metadata']
+            if meta.get('name') != 'voice-dev' or meta.get('uid') != namespace_uid:
+                raise Hold('namespace_identity_invalid')
+        except common.GuardLost:
+            raise
+        except Exception:
+            raise common.GuardLost('namespace_guard_failed') from None
+        common._fence(claim_guard)
+    def authorize():
+        if common._external(source_authority, source_sha) is False:
+            raise Hold('source_authority_failed')
+    common._fence(guard)
+    authorize()
+    snapshot = common._external(source_snapshot, Path(source_root), source_sha)
+    authorize()
+    catalog = common.catalog(snapshot)
+    cohort = common.inspect_all(catalog, pods, expected_engine_role, guard, run_bytes, run_psql)
+    space = []
+    for name in pods['space']:
+        common._fence(guard)
+        try:
+            space.append({'status': 'observed', 'result':
+                          probe(source_root, snapshot, name, expected_engine_role, guard, run_bytes, run_psql)})
+        except common.GuardLost:
+            raise
+        except Hold as error:
+            common._fence(guard)
+            code = str(error)
+            space.append({'status': 'hold', 'reason': code if re.fullmatch(r'[a-z0-9_]+', code) else 'observation_failed'})
+    authorize()
+    if common._external(source_snapshot, Path(source_root), source_sha) != snapshot:
+        raise Hold('source_snapshot_changed')
+    common._fence(guard)
+    return {'source_sha': source_sha, 'cohort': cohort, 'space': space, 'status': 'HOLD'}
+
+
+def run_guarded(source_root, source_sha, source_authority, pods, expected_engine_role,
+                fence, client, expected_lock, namespace_uid):
+    """Optional updater-lock integration; caller still establishes prepare-only scope."""
+    from media_operation_guard import verify
+    return run_prepare(source_root, source_sha, source_authority, pods, expected_engine_role,
+                       lambda: verify(fence, client, expected_lock, namespace_uid), namespace_uid)

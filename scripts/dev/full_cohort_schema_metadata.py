@@ -107,7 +107,8 @@ class GuardLost(Hold):
 
 def _fence(callback):
     try:
-        callback()
+        if callback() is False:
+            raise GuardLost('operation_guard_failed')
     except Exception:
         raise GuardLost('operation_guard_failed') from None
 
@@ -607,9 +608,11 @@ def catalog_from_source(root, expected_sha, authority):
         from publish_candidate import source_snapshot
         if not isinstance(expected_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', expected_sha):
             raise Hold('source_identity_invalid')
-        _external(authority, expected_sha)
+        if _external(authority, expected_sha) is False:
+            raise Hold('source_authority_failed')
         result = catalog(source_snapshot(Path(root), expected_sha))
-        _external(authority, expected_sha)
+        if _external(authority, expected_sha) is False:
+            raise Hold('source_authority_failed')
         return result
     except Hold:
         raise

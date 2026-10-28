@@ -57,6 +57,29 @@ class SpaceProbeTest(unittest.TestCase):
         self.assertEqual(result['source_catalog']['status'], 'v25_metadata_matched')
         self.assertNotIn('secret', repr(result))
 
+    def test_prepare_runner_rechecks_source_namespace_and_guard(self):
+        source = {'source_sha': 'a' * 40, 'files': {}}
+        namespace = lambda _: b'{"metadata":{"name":"voice-dev","uid":"namespace"}}'
+        with mock.patch('publish_candidate.source_snapshot', return_value=source), \
+             mock.patch.object(probe.common, 'catalog', return_value={}), \
+             mock.patch.object(probe.common, 'inspect_all', return_value={'status': 'HOLD'}), \
+             mock.patch.object(probe, 'probe', return_value={'status': 'HOLD'}):
+            result = probe.run_prepare('.', 'a' * 40, lambda _: None, {'space': ['pod']},
+                                       'voice', lambda: None, 'namespace', namespace)
+            self.assertEqual(result['status'], 'HOLD')
+        with self.assertRaises(probe.common.GuardLost):
+            probe.run_prepare('.', 'a' * 40, lambda _: None, {'space': ['pod']}, 'voice',
+                              lambda: (_ for _ in ()).throw(ValueError('private')), 'namespace', namespace)
+        with self.assertRaises(probe.common.GuardLost):
+            probe.run_prepare('.', 'a' * 40, lambda _: None, {'space': ['pod']}, 'voice',
+                              lambda: False, 'namespace', namespace)
+        with self.assertRaises(probe.common.GuardLost):
+            probe.run_prepare('.', 'a' * 40, lambda _: None, {'space': ['pod']}, 'voice',
+                              lambda: None, 'different', namespace)
+        with self.assertRaises(probe.Hold):
+            probe.run_prepare('.', 'a' * 40, lambda _: False, {'space': ['pod']}, 'voice',
+                              lambda: None, 'namespace', namespace)
+
 
 if __name__ == '__main__':
     unittest.main()
