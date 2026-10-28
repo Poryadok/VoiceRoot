@@ -435,12 +435,13 @@ class RealGitSuccessorTest(unittest.TestCase):
                                       'docs/DATA_STORES.md'), D1_DATA_STORES_ENTRY)
         self.assertTrue(reviewed_stores_source(D1_DATA_STORES_COMMIT))
 
-    def test_d1_c2_union_matches_exact_source_and_current_entry(self):
+    def test_d1_c2_union_and_current_inventory_entries_are_exact(self):
         self.assertEqual(legacy.entry(ROOT, D1_C2_DATA_STORES_COMMIT,
                                       'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
         self.assertEqual(legacy.entry(ROOT, git('rev-parse', 'HEAD'),
-                                      'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
+                                      'docs/DATA_STORES.md'), INVENTORY_DATA_STORES_ENTRY)
         self.assertTrue(reviewed_stores_source(D1_C2_DATA_STORES_COMMIT))
+        self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
 
     def test_d1_c2_union_rejects_unknown_bytes_mode_missing_and_disconnected_source(self):
         current = git('rev-parse', 'HEAD')
