@@ -68,6 +68,39 @@ def run(phase, root, key, expected, admin_role, drain):
         current, current_revision = p.fence.ledger.read()
         if current != row or current_revision != revision:
             raise CohortOperationError('cohort ledger changed')
+        verified = custody.verify_bundle(bundle, key, final_binding, binding['databases'])
+        marker = {'status':'done','operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
+                  'invocation_nonce':p.invocation,'bundle_bytes':verified['bytes'],'bundle_sha256':verified['sha256'],
+                  'manifest_sha256':hashlib.sha256(json.dumps(final_manifest,sort_keys=True,separators=(',', ':'),
+                                          ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest(),
+                  'receipt_sha256':copy.deepcopy(final_binding['dump_receipts'])}
+        if 'cohort-bundle' in p.journal.state['steps'] or 'cohort_bundle' in row:
+            raise CohortOperationError('cohort bundle already attempted')
+        p.journal.state['steps']['cohort-bundle'] = {'status':'pending','marker':copy.deepcopy(marker)}
+        p.journal.save()
+        phase._guard(); drain()
+        current, current_revision = p.fence.ledger.read()
+        if current != row or current_revision != revision:
+            raise CohortOperationError('cohort ledger changed before marker')
+        current['cohort_bundle'] = copy.deepcopy(marker)
+        current['step'] = 'cohort-bundle-done'
+        p.fence.ledger.write(current_revision,current)
+        phase._guard(); drain()
+        checked, checked_revision = p.fence.ledger.read()
+        if (not p.fence.owned(checked) or checked.get('status') != 'active' or not p._owned_invocation(checked) or
+                checked.get('cohort_bundle') != marker or checked.get('cohort_members') != row['cohort_members'] or
+                not isinstance(checked_revision,tuple) or len(checked_revision)!=2 or
+                any(not isinstance(v,str) or not v for v in checked_revision)):
+            raise CohortOperationError('cohort bundle marker changed')
+        p.journal.state['steps']['cohort-bundle'] = {'status':'done','marker':copy.deepcopy(marker)}
+        p.journal.save()
+        phase._guard(); drain()
+        terminal, terminal_revision = p.fence.ledger.read()
+        if (not p.fence.owned(terminal) or terminal.get('status') != 'active' or not p._owned_invocation(terminal) or
+                terminal.get('cohort_bundle') != marker or terminal.get('cohort_members') != row['cohort_members'] or
+                not isinstance(terminal_revision,tuple) or len(terminal_revision)!=2 or
+                any(not isinstance(v,str) or not v for v in terminal_revision)):
+            raise CohortOperationError('cohort terminal marker changed')
         return bundle, final_binding, final_manifest
     except BaseException:
         if pending:

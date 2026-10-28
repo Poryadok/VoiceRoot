@@ -18,7 +18,7 @@ class CohortPhasesTest(unittest.TestCase):
                    'voice_db':{'engine':engine,'server_start':'2026-10-28T20:00:00Z','database_oid':55}}
         self.binding = {'operation_id':self.base.context['operation_id'], 'snapshot_id':self.base.capture['snapshot_id'],
                         'source_sha':self.base.context['commit'], 'databases':['voice_db'], 'sources':sources}
-        intent = self.base.intent | {'cohort_binding': self.binding}
+        intent = self.base.intent | {'cohort_binding': self.binding, 'upload_workflow_sha':self.base.context['commit']}
         self.journal = journal.Journal(Path(self.base.temp.name)/'cohort-journal', intent)
         self.addCleanup(self.journal.close)
         self.media = media.BackupPhases(self.journal, self.base.fence, fixture.Client(self.base.lock), self.base.lock, 'ns')
