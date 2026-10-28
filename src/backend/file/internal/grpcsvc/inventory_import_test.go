@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -46,6 +47,34 @@ func TestInventoryCohortBindsDistinctComponentsOnce(t *testing.T) {
 	duplicate := proto.Clone(message).(*commonv1.ReferenceInventoryIdentity)
 	duplicate.OwnerIncarnationId, duplicate.SnapshotId = uuid.NewString(), uuid.NewString()
 	require.ErrorIs(t, files.CreateInventoryOperation(ctx, uuid.New(), duplicate), inv.ErrConflict)
+}
+
+func TestInventoryWorkerRotatesPastUnavailableOwners(t *testing.T) {
+	ctx := r23TestContext(t)
+	pool := inventoryPool(t, ctx)
+	files := store.NewFilesStore(pool)
+	story := inventoryIdentity()
+	for n, component := range [][2]string{{"user", "user.profile-avatar.v1"}, {"chat", "chat.chat-avatar.v1"}, {"space", "space.space-avatar.v1"}, {"messaging", "messaging.sticker-usage.v1"}} {
+		id := proto.Clone(story).(*commonv1.ReferenceInventoryIdentity)
+		id.SourceService, id.SourceComponent = component[0], component[1]
+		id.OwnerIncarnationId, id.SnapshotId = uuid.NewString(), uuid.NewString()
+		op := uuid.MustParse(fmt.Sprintf("00000000-0000-4000-8000-%012d", n+1))
+		require.NoError(t, files.CreateInventoryOperation(ctx, op, id))
+	}
+	require.NoError(t, files.CreateInventoryOperation(ctx, uuid.MustParse("00000000-0000-4000-8000-000000000005"), story))
+	descriptor, err := inv.Describe(nil, story, 1)
+	require.NoError(t, err)
+	attempts := 0
+	source := &inventorySourceFixture{descriptor: descriptor, changes: &commonv1.ReadReferenceInventoryChangesResponse{Identity: story, HighWatermark: 1}, onChanges: func() { attempts++ }}
+	worker := &inventory.Importer{Files: files, Router: &inventory.OwnerRouter{Story: source}}
+	_, _ = worker.RunPendingOnce(ctx, 4)
+	require.Zero(t, attempts, "first page contains only unavailable owners")
+	_, _ = worker.RunPendingOnce(ctx, 4)
+	require.Equal(t, 1, attempts, "unavailable older owners must not starve a configured owner")
+	_, _ = worker.RunPendingOnce(ctx, 4)
+	require.Equal(t, 1, attempts, "rotation wraps to the first page")
+	_, _ = worker.RunPendingOnce(ctx, 4)
+	require.Equal(t, 2, attempts, "rotation reaches the later owner again")
 }
 
 func TestMessageInventoryProtectsMultipleFilesAndExactScope(t *testing.T) {
@@ -174,6 +203,7 @@ type inventorySourceFixture struct {
 	descriptor *commonv1.ReferenceInventoryDescriptor
 	page       *commonv1.ReferenceInventoryPage
 	begin      func()
+	onChanges  func()
 	changes    *commonv1.ReadReferenceInventoryChangesResponse
 }
 
@@ -187,6 +217,9 @@ func (s *inventorySourceFixture) ReadReferenceInventoryPage(context.Context, *co
 	return &commonv1.ReadReferenceInventoryPageResponse{Page: s.page}, nil
 }
 func (s *inventorySourceFixture) ReadReferenceInventoryChanges(context.Context, *commonv1.ReadReferenceInventoryChangesRequest) (*commonv1.ReadReferenceInventoryChangesResponse, error) {
+	if s.onChanges != nil {
+		s.onChanges()
+	}
 	return s.changes, nil
 }
 

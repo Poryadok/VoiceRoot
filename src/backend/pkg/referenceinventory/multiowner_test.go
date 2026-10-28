@@ -11,7 +11,7 @@ import (
 func TestMessageInventoryUsesClosedComponentAndCompleteTuple(t *testing.T) {
 	id := identityFixture()
 	id.SourceService, id.SourceComponent = "messaging", "messaging.message.v1"
-	require.NoError(t, ValidateIdentity(id))
+	require.NoError(t, ValidateOwnerIdentity(id))
 	e := entryFixture()
 	e.Key.OwnerType = 1
 	e.Key.ScopeSpaceId = proto.String(uuid.NewString())
@@ -25,7 +25,7 @@ func TestMessageInventoryUsesClosedComponentAndCompleteTuple(t *testing.T) {
 	_, err = Describe([]*commonv1.ReferenceInventoryPage{p}, id, 0)
 	require.Error(t, err, "forged owner kind cannot use MESSAGE identity")
 	id.SourceService = "story"
-	require.Error(t, ValidateIdentity(id), "service/component pair is closed")
+	require.Error(t, ValidateOwnerIdentity(id), "service/component pair is closed")
 }
 
 func TestCompareIncludesKindSubresourceAndScope(t *testing.T) {
@@ -53,4 +53,11 @@ func TestOwnerChatBindingIsCanonicalAndMessageOnly(t *testing.T) {
 	require.NoError(t, ValidateEntryForIdentity(e, id, false))
 	e.OwnerChatId = proto.String("not-a-uuid")
 	require.Error(t, ValidateEntryForIdentity(e, id, false))
+}
+
+func TestStoryIdentityValidatorRejectsOtherComponents(t *testing.T) {
+	id := identityFixture()
+	require.NoError(t, ValidateIdentity(id))
+	id.SourceService, id.SourceComponent = "messaging", "messaging.message.v1"
+	require.Error(t, ValidateIdentity(id), "Story's existing validator must not accept a different owner identity")
 }

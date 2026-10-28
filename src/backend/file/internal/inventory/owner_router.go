@@ -9,7 +9,7 @@ import (
 type OwnerRouter struct{ Story, Messaging Source }
 
 func (r *OwnerRouter) SourceFor(id *commonv1.ReferenceInventoryIdentity) (Source, error) {
-	if r == nil || inv.ValidateIdentity(id) != nil {
+	if r == nil || inv.ValidateOwnerIdentity(id) != nil {
 		return nil, inv.ErrInvalid
 	}
 	switch {

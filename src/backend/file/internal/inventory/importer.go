@@ -5,6 +5,7 @@ package inventory
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,9 +21,11 @@ type Source interface {
 }
 
 type Importer struct {
-	Files  *store.FilesStore
-	Source Source
-	Router *OwnerRouter
+	Files      *store.FilesStore
+	Source     Source
+	Router     *OwnerRouter
+	rotationMu sync.Mutex
+	after      uuid.UUID
 }
 
 // Run makes bounded progress on an ALREADY DURABLE operation. Every remote call
@@ -104,9 +107,18 @@ func (i *Importer) RunPendingOnce(ctx context.Context, limit int) (int, error) {
 	if i == nil || i.Files == nil || (i.Source == nil && i.Router == nil) {
 		return 0, inv.ErrUnavailable
 	}
-	operations, err := i.Files.PendingInventoryOperations(ctx, limit)
+	i.rotationMu.Lock()
+	defer i.rotationMu.Unlock()
+	operations, err := i.Files.PendingInventoryOperationsAfter(ctx, limit, i.after)
 	if err != nil {
 		return 0, err
+	}
+	if len(operations) == 0 && i.after != uuid.Nil {
+		i.after = uuid.Nil
+		operations, err = i.Files.PendingInventoryOperationsAfter(ctx, limit, i.after)
+		if err != nil {
+			return 0, err
+		}
 	}
 	var result error
 	var done int
@@ -114,6 +126,7 @@ func (i *Importer) RunPendingOnce(ctx context.Context, limit int) (int, error) {
 		if ctx.Err() != nil {
 			return done, errors.Join(result, ctx.Err())
 		}
+		i.after = op
 		if err = i.Run(ctx, op); err != nil {
 			result = errors.Join(result, err)
 		} else {

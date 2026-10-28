@@ -57,6 +57,15 @@ func UUID(s string) bool {
 }
 
 func ValidateIdentity(id *commonv1.ReferenceInventoryIdentity) error {
+	if ValidateOwnerIdentity(id) != nil || id.SourceService != "story" || id.SourceComponent != "story.media.v1" {
+		return ErrInvalid
+	}
+	return nil
+}
+
+// ValidateOwnerIdentity validates the closed multi-owner registry. The older
+// ValidateIdentity remains Story-only for existing Story exporter callers.
+func ValidateOwnerIdentity(id *commonv1.ReferenceInventoryIdentity) error {
 	if Strict(id) != nil || id.ProtocolVersion != 1 || id.WriterProtocolVersion != 1 || ComponentOwner(id.SourceService, id.SourceComponent) == 0 {
 		return ErrInvalid
 	}
@@ -98,7 +107,7 @@ func ValidateEntry(e *commonv1.ReferenceInventoryEntry, allowRetired bool) error
 }
 
 func ValidateEntryForIdentity(e *commonv1.ReferenceInventoryEntry, id *commonv1.ReferenceInventoryIdentity, allowRetired bool) error {
-	if ValidateIdentity(id) != nil {
+	if ValidateOwnerIdentity(id) != nil {
 		return ErrInvalid
 	}
 	return validateEntry(e, allowRetired, ComponentOwner(id.SourceService, id.SourceComponent))
@@ -209,7 +218,7 @@ func ValidateStoryPage(p *commonv1.ReferenceInventoryPage) error {
 }
 
 func ValidatePage(p *commonv1.ReferenceInventoryPage) error {
-	if Strict(p) != nil || ValidateIdentity(p.Identity) != nil || len(p.Entries) == 0 || len(p.Entries) > PageSize {
+	if Strict(p) != nil || ValidateOwnerIdentity(p.Identity) != nil || len(p.Entries) == 0 || len(p.Entries) > PageSize {
 		return ErrInvalid
 	}
 	for i, entry := range p.Entries {
@@ -237,7 +246,7 @@ func Encode(m proto.Message) ([]byte, []byte, error) {
 }
 
 func Describe(pages []*commonv1.ReferenceInventoryPage, id *commonv1.ReferenceInventoryIdentity, boundary uint64) (*commonv1.ReferenceInventoryDescriptor, error) {
-	if ValidateIdentity(id) != nil {
+	if ValidateOwnerIdentity(id) != nil {
 		return nil, ErrInvalid
 	}
 	m := &commonv1.InventoryManifest{Identity: proto.Clone(id).(*commonv1.ReferenceInventoryIdentity), BoundaryRevision: boundary}
@@ -267,7 +276,7 @@ func Describe(pages []*commonv1.ReferenceInventoryPage, id *commonv1.ReferenceIn
 }
 
 func ValidateDescriptor(d *commonv1.ReferenceInventoryDescriptor) error {
-	if Strict(d) != nil || d.Manifest == nil || ValidateIdentity(d.Manifest.Identity) != nil || d.Manifest.UnresolvedCount > d.Manifest.TotalCount {
+	if Strict(d) != nil || d.Manifest == nil || ValidateOwnerIdentity(d.Manifest.Identity) != nil || d.Manifest.UnresolvedCount > d.Manifest.TotalCount {
 		return ErrInvalid
 	}
 	var count uint64
@@ -297,7 +306,7 @@ func ValidateCommittedPage(d *commonv1.ReferenceInventoryDescriptor, p *commonv1
 }
 
 func ValidateChanges(r *commonv1.ReadReferenceInventoryChangesResponse, id *commonv1.ReferenceInventoryIdentity, after uint64) error {
-	if Strict(r) != nil || ValidateIdentity(r.Identity) != nil || !proto.Equal(r.Identity, id) || after < r.RetainedFloor || after > r.HighWatermark || len(r.Revisions) > PageSize || (len(r.Revisions) == 0 && after != r.HighWatermark) {
+	if Strict(r) != nil || ValidateOwnerIdentity(r.Identity) != nil || !proto.Equal(r.Identity, id) || after < r.RetainedFloor || after > r.HighWatermark || len(r.Revisions) > PageSize || (len(r.Revisions) == 0 && after != r.HighWatermark) {
 		return ErrInvalid
 	}
 	for i, revision := range r.Revisions {

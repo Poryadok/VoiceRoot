@@ -85,7 +85,7 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 	if s == nil || s.Pool == nil {
 		return inv.ErrUnavailable
 	}
-	if op == uuid.Nil || inv.ValidateIdentity(id) != nil {
+	if op == uuid.Nil || inv.ValidateOwnerIdentity(id) != nil {
 		return inv.ErrInvalid
 	}
 	raw, _, err := inv.Encode(id)
@@ -629,10 +629,16 @@ func nullableInventoryUUID(s string) any {
 }
 
 func (s *FilesStore) PendingInventoryOperations(ctx context.Context, limit int) ([]uuid.UUID, error) {
+	return s.PendingInventoryOperationsAfter(ctx, limit, uuid.Nil)
+}
+
+// PendingInventoryOperationsAfter allows the worker to rotate through every
+// pending operation even when some sources are unavailable indefinitely.
+func (s *FilesStore) PendingInventoryOperationsAfter(ctx context.Context, limit int, after uuid.UUID) ([]uuid.UUID, error) {
 	if limit < 1 || limit > 100 {
 		return nil, inv.ErrInvalid
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT i.operation_id FROM file_reference_inventory_imports i JOIN file_reference_inventory_cohorts c USING(migration_id) WHERE i.state<>'BLOCKED' AND c.state='MIGRATING' ORDER BY i.created_at,i.operation_id LIMIT $1`, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT i.operation_id FROM file_reference_inventory_imports i JOIN file_reference_inventory_cohorts c USING(migration_id) WHERE i.state<>'BLOCKED' AND c.state='MIGRATING' AND i.operation_id>$2 ORDER BY i.operation_id LIMIT $1`, limit, after)
 	if err != nil {
 		return nil, err
 	}
