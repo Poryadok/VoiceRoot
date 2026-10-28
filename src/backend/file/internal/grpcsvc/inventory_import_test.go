@@ -24,11 +24,59 @@ func inventoryPool(t *testing.T, ctx context.Context) *pgxpool.Pool {
 	t.Helper()
 	p := startR23FilePostgres(t, ctx)
 	applyFileGateSQL(t, ctx, p, filepath.Join("src", "backend", "migrations", "file_db", "000016_reference_inventory.up.sql"))
+	applyFileGateSQL(t, ctx, p, filepath.Join("src", "backend", "migrations", "file_db", "000017_reference_inventory_multiowner.up.sql"))
 	return p
 }
 func inventoryEntry(file, owner, author uuid.UUID) *commonv1.ReferenceInventoryEntry {
 	a := author.String()
 	return &commonv1.ReferenceInventoryEntry{Key: &commonv1.ReferenceInventoryKey{FileId: file.String(), OwnerType: 2, OwnerId: owner.String()}, OwnerRevision: 1, Reasons: []commonv1.ReferenceInventoryProtectionReason{1}, AuthorProfileId: &a, MediaType: "photo"}
+}
+
+func TestInventoryCohortBindsDistinctComponentsOnce(t *testing.T) {
+	ctx := r23TestContext(t)
+	pool := inventoryPool(t, ctx)
+	files := store.NewFilesStore(pool)
+	story := inventoryIdentity()
+	require.NoError(t, files.CreateInventoryOperation(ctx, uuid.New(), story))
+	message := proto.Clone(story).(*commonv1.ReferenceInventoryIdentity)
+	message.SourceService, message.SourceComponent = "messaging", "messaging.message.v1"
+	message.OwnerIncarnationId, message.SnapshotId = uuid.NewString(), uuid.NewString()
+	require.NoError(t, files.CreateInventoryOperation(ctx, uuid.New(), message))
+	duplicate := proto.Clone(message).(*commonv1.ReferenceInventoryIdentity)
+	duplicate.OwnerIncarnationId, duplicate.SnapshotId = uuid.NewString(), uuid.NewString()
+	require.ErrorIs(t, files.CreateInventoryOperation(ctx, uuid.New(), duplicate), inv.ErrConflict)
+}
+
+func TestInventoryMigrationRekeysRetainedStoryProof(t *testing.T) {
+	ctx := r23TestContext(t)
+	pool := startR23FilePostgres(t, ctx)
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000016_reference_inventory.up.sql"))
+	file, owner, author, migration, op := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedStoryMediaFile(t, ctx, pool, file, author, "image", "ready", "clean", nil, false, nil, nil)
+	var blob uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT blob_id FROM files WHERE id=$1`, file).Scan(&blob))
+	_, err := pool.Exec(ctx, `INSERT INTO file_reference_inventory_cohorts(migration_id,installation_id,restore_cohort_id,file_incarnation_id,state,registry_sha256) VALUES($1,$2,$3,$4,'MIGRATING',$5)`, migration, uuid.New(), uuid.New(), uuid.New(), make([]byte, 32))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO file_reference_inventory_components(migration_id,component) VALUES($1,'story.media.v1')`, migration)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO file_reference_inventory_imports(operation_id,migration_id,snapshot_id,identity_bytes) VALUES($1,$2,$3,$4)`, op, migration, uuid.New(), []byte{1})
+	require.NoError(t, err)
+	old := "key:" + file.String() + "/" + owner.String()
+	_, err = pool.Exec(ctx, `INSERT INTO file_reference_inventory_items(operation_id,item_key,file_id,owner_id,owner_revision,entry_bytes) VALUES($1,$2,$3,$4,1,$5)`, op, old, file, owner, []byte{1})
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO file_reference_inventory_holds(operation_id,item_key,blob_id) VALUES($1,$2,$3)`, op, old, blob)
+	require.NoError(t, err)
+	applyFileGateSQL(t, ctx, pool, filepath.Join("src", "backend", "migrations", "file_db", "000017_reference_inventory_multiowner.up.sql"))
+	want := "key:" + file.String() + "/2/" + owner.String() + "/-/-"
+	var item, hold string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT item_key FROM file_reference_inventory_items WHERE operation_id=$1`, op).Scan(&item))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT item_key FROM file_reference_inventory_holds WHERE operation_id=$1`, op).Scan(&hold))
+	require.Equal(t, want, item)
+	require.Equal(t, want, hold)
+	down, err := os.ReadFile(filepath.Join(fileGateRepoRoot(t), "src", "backend", "migrations", "file_db", "000017_reference_inventory_multiowner.down.sql"))
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, string(down))
+	require.Error(t, err)
 }
 
 type inventorySourceFixture struct {

@@ -33,7 +33,7 @@ func inventoryGCPool(t *testing.T) (context.Context, *pgxpool.Pool, *FilesStore,
 	_, source, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	root := filepath.Join(filepath.Dir(source), "..", "..", "..", "migrations", "file_db")
-	for _, migration := range []string{"000001_init", "000002_premium_upload_limit", "000003_story_context", "000004_file_reference_lifecycle", "000005_reference_gc_receipts", "000006_music_metadata", "000007_preview_metadata", "000008_expiry_event_outbox", "000009_gif_processing", "000016_reference_inventory"} {
+	for _, migration := range []string{"000001_init", "000002_premium_upload_limit", "000003_story_context", "000004_file_reference_lifecycle", "000005_reference_gc_receipts", "000006_music_metadata", "000007_preview_metadata", "000008_expiry_event_outbox", "000009_gif_processing", "000016_reference_inventory", "000017_reference_inventory_multiowner"} {
 		raw, err := os.ReadFile(filepath.Join(root, migration+".up.sql"))
 		require.NoError(t, err)
 		_, err = pool.Exec(ctx, string(raw))

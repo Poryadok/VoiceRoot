@@ -22,13 +22,14 @@ type Source interface {
 type Importer struct {
 	Files  *store.FilesStore
 	Source Source
+	Router *OwnerRouter
 }
 
 // Run makes bounded progress on an ALREADY DURABLE operation. Every remote call
 // is outside File transactions. A restart retries the same operation and page;
 // it never changes identity, drops protection or treats source absence as zero.
 func (i *Importer) Run(ctx context.Context, operation uuid.UUID) error {
-	if i == nil || i.Files == nil || i.Source == nil {
+	if i == nil || i.Files == nil || (i.Source == nil && i.Router == nil) {
 		return inv.ErrUnavailable
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -40,8 +41,17 @@ func (i *Importer) Run(ctx context.Context, operation uuid.UUID) error {
 	if o.State == "BLOCKED" {
 		return inv.ErrConflict
 	}
+	source := i.Source
+	if i.Router != nil {
+		source, err = i.Router.SourceFor(o.Identity)
+		if err != nil {
+			return err
+		}
+	} else if o.Identity.SourceService != "story" || o.Identity.SourceComponent != "story.media.v1" {
+		return inv.ErrUnavailable
+	}
 	if o.Descriptor == nil {
-		response, e := i.Source.BeginReferenceInventory(ctx, &commonv1.BeginReferenceInventoryRequest{OperationId: operation.String(), Identity: o.Identity})
+		response, e := source.BeginReferenceInventory(ctx, &commonv1.BeginReferenceInventoryRequest{OperationId: operation.String(), Identity: o.Identity})
 		if e != nil {
 			return e
 		}
@@ -63,7 +73,7 @@ func (i *Importer) Run(ctx context.Context, operation uuid.UUID) error {
 		if o.State != "SNAPSHOT" {
 			break
 		}
-		response, e := i.Source.ReadReferenceInventoryPage(ctx, &commonv1.ReadReferenceInventoryPageRequest{Identity: o.Identity, PageIndex: o.NextPage})
+		response, e := source.ReadReferenceInventoryPage(ctx, &commonv1.ReadReferenceInventoryPageRequest{Identity: o.Identity, PageIndex: o.NextPage})
 		if e != nil {
 			return e
 		}
@@ -81,7 +91,7 @@ func (i *Importer) Run(ctx context.Context, operation uuid.UUID) error {
 	if o.State != "CATCHING_UP" {
 		return nil
 	}
-	response, err := i.Source.ReadReferenceInventoryChanges(ctx, &commonv1.ReadReferenceInventoryChangesRequest{Identity: o.Identity, AfterRevision: o.Cursor, Limit: 1000})
+	response, err := source.ReadReferenceInventoryChanges(ctx, &commonv1.ReadReferenceInventoryChangesRequest{Identity: o.Identity, AfterRevision: o.Cursor, Limit: 1000})
 	if err != nil {
 		return err
 	}
@@ -91,7 +101,7 @@ func (i *Importer) Run(ctx context.Context, operation uuid.UUID) error {
 // RunPendingOnce never creates a migration from configuration or startup IDs.
 // Multiple workers may fetch concurrently; immutable receipts serialize apply.
 func (i *Importer) RunPendingOnce(ctx context.Context, limit int) (int, error) {
-	if i == nil || i.Files == nil || i.Source == nil {
+	if i == nil || i.Files == nil || (i.Source == nil && i.Router == nil) {
 		return 0, inv.ErrUnavailable
 	}
 	operations, err := i.Files.PendingInventoryOperations(ctx, limit)
