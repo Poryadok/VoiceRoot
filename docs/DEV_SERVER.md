@@ -270,13 +270,30 @@ Wildcard и staging-записи не менялись. Ранее proxied-ма�
 отдельные Ingress; HTTPS — в соответствующие dev Services. LiveKit использует
 TCP31081 / UDP31082 для media; доступность страницы не доказывает работу UDP.
 
-The HTTPS API ingress also preserves the exact `/voice-dev-files` bucket
-prefix to `voice-minio:9000`, before the ordinary Gateway fallback. Presigned
-File URLs keep their original host and complete bucket/object path; no path
-rewrite, wildcard host, or TLS exception is used. The ACME HTTP route and the
-other four HTTPS hosts retain their existing backends. A source update does
-not update the installed operator or the live ingress automatically: qualify
-and apply that bounded configuration change under a fresh DEV resource claim.
+The File bucket uses a separately owned companion Ingress
+`voice-dev-file-storage-https`, rendered by
+`python3 scripts/dev/file_storage_https.py render`. It reuses the existing
+`api-dev.comrade.click` host, `websecure` entrypoint and
+`voice-dev-signaling-tls` Secret. Exact `/voice-dev-files` and Prefix
+`/voice-dev-files/` route to `voice-minio:9000` without changing the signed
+host or object path. The pair is intentional: the observed Traefik3.6.6
+controller has `strictPrefixMatching=false`, so a bare bucket prefix would
+also capture sibling names such as `/voice-dev-files-other`.
+
+The certificate operator continues to own only its ten derived Ingress names
+and fixed TLS Secret. Its canonical renewal path publishes those named objects
+without listing/pruning other Ingresses; it does not select this companion.
+The issuer source and protected installed copy are unchanged by this route
+repair. Other HTTPS/ACME routes and TLS issuance remain with their current
+owners. Any future change to the renewal selection/pruning contract must
+requalify the companion's persistence.
+
+Rendering has no live effects. Apply/recovery requires a reviewed source-bound
+operation packet, fresh DEV resource claim and baseline, create-only ownership
+and UID/resourceVersion guards. Verify actual controller routing, signed URL
+PUT/GET, TLS and unchanged Gateway/other hosts before recording qualification.
+The installed root-only renewal copy was not readable by the DEV actor;
+source-based no-prune evidence is separate from an actual renewal exercise.
 
 Root-only ACME state: `/home/voice-dev/tls/` (0700). Установленный операторский
 скрипт: `/home/voice-dev/operator/signal_tls.py`. Daily systemd timer
