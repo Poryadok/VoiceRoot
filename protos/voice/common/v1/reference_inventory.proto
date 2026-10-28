@@ -67,6 +67,8 @@ message ReferenceInventoryEntry {
   bool retired = 9;
   // Known File for an unmappable issue; never invent an owner key for it.
   optional string observed_file_id = 10;
+  // Persisted owner context only; not File upload context or Space authority.
+  optional string owner_chat_id = 11;
 }
 
 message ReferenceInventoryPage {
