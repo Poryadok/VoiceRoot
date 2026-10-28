@@ -87,13 +87,6 @@ func loadStoryInventorySource(file *filePrincipalRuntime) (*inventory.StorySourc
 	return inventory.DialStorySource(settings["GRPC_ADDR"], &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: settings["TLS_SERVER_NAME"], Certificates: []tls.Certificate{cert}}, file.Issuer)
 }
 
-func startStoryInventoryWorker(ctx context.Context, files *store.FilesStore, source *inventory.StorySource, logger *slog.Logger) error {
-	if source == nil {
-		return nil
-	}
-	return startInventoryWorker(ctx, files, &inventory.OwnerRouter{Story: source}, logger)
-}
-
 func startInventoryWorker(ctx context.Context, files *store.FilesStore, router *inventory.OwnerRouter, logger *slog.Logger) error {
 	if router == nil || (router.Story == nil && router.Messaging == nil) {
 		return nil
