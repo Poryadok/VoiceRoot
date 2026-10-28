@@ -52,8 +52,9 @@ class LocalVoiceNoteRecorder implements VoiceNoteRecorder {
 
   Future<void> _readAmplitude() async {
     final recorder = _recorder;
-    if (recorder == null || _readingAmplitude || !_recording || _disposed)
+    if (recorder == null || _readingAmplitude || !_recording || _disposed) {
       return;
+    }
     final generation = _pollGeneration;
     _readingAmplitude = true;
     try {
