@@ -28,9 +28,11 @@ func botPresenceMigrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	outboxSQL, err := os.ReadFile(filepath.Join(dir, "000004_slash_interaction_outbox.up.sql"))
 	require.NoError(t, err)
+	lifecycleSQL, err := os.ReadFile(filepath.Join(dir, "000005_space_lifecycle.up.sql"))
+	require.NoError(t, err)
 	epochSQL, err := os.ReadFile(filepath.Join(dir, "000009_session_epoch.up.sql"))
 	require.NoError(t, err)
-	return string(initSQL) + "\n" + string(presenceSQL) + "\n" + string(requestsSQL) + "\n" + string(outboxSQL) + "\n" + string(epochSQL)
+	return string(initSQL) + "\n" + string(presenceSQL) + "\n" + string(outboxSQL) + "\n" + string(lifecycleSQL) + "\n" + string(requestsSQL) + "\n" + string(epochSQL)
 }
 
 func startBotStoreWithPresence(t *testing.T) *store.BotStore {
