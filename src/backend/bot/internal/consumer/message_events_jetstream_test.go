@@ -21,8 +21,10 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 
@@ -159,7 +161,11 @@ func TestMessageEventsJetStreamDurableDelivery(t *testing.T) {
 	pollCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("x-voice-bot-token", pollToken))
 	svc := grpcsvc.NewBotGRPC(st, nil)
 	sendErr := errors.New("poll transport unavailable")
-	require.ErrorIs(t, svc.PollEvents(&botv1.PollEventsRequest{}, &failedMessagePoll{ctx: pollCtx, err: sendErr}), sendErr)
+	failedPoll := &failedMessagePoll{ctx: pollCtx, err: sendErr}
+	err = svc.PollEvents(&botv1.PollEventsRequest{}, failedPoll)
+	require.Equal(t, 1, failedPoll.calls, "the admitted event must reach the failing transport")
+	require.Equal(t, codes.Unavailable, grpcstatus.Code(err))
+	require.Equal(t, "Bot authority unavailable", grpcstatus.Convert(err).Message())
 	idsAfter, _, _, err := st.ListPendingEvents(ctx, poll.ID, 10)
 	require.NoError(t, err)
 	require.Equal(t, ids, idsAfter)
@@ -200,12 +206,16 @@ func TestMessageEventsJetStreamDurableDelivery(t *testing.T) {
 
 type failedMessagePoll struct {
 	grpc.ServerStream
-	ctx context.Context
-	err error
+	ctx   context.Context
+	err   error
+	calls int
 }
 
-func (s *failedMessagePoll) Context() context.Context             { return s.ctx }
-func (s *failedMessagePoll) Send(*botv1.PollEventsResponse) error { return s.err }
+func (s *failedMessagePoll) Context() context.Context { return s.ctx }
+func (s *failedMessagePoll) Send(*botv1.PollEventsResponse) error {
+	s.calls++
+	return s.err
+}
 
 func startMessageJetStream(t *testing.T) (string, nats.JetStreamContext) {
 	t.Helper()

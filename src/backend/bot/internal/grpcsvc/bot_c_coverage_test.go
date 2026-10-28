@@ -211,7 +211,7 @@ func TestGetChatMessagesForBot_deniedWhenChatNotWhitelisted(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
-	require.Contains(t, status.Convert(err).Message(), "not enabled")
+	require.Equal(t, "Bot authority denied", status.Convert(err).Message())
 }
 
 func TestRehydrateDeferred_registersTokensInHub(t *testing.T) {
