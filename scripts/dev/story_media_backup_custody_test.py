@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import tarfile
@@ -17,6 +18,48 @@ import story_media_backup_custody as custody
 
 
 class CustodyTest(unittest.TestCase):
+    def test_preupload_fifo_is_rejected_without_blocking(self):
+        fifo = self.root / 'fifo.tar'
+        os.mkfifo(fifo, 0o600)
+        def attempt():
+            try:
+                custody.verify_bundle(fifo, self.key, self.binding)
+            except custody.CustodyError:
+                return
+            raise RuntimeError('FIFO was accepted')
+        process = multiprocessing.get_context('fork').Process(target=attempt)
+        process.start(); process.join(2)
+        stuck = process.is_alive()
+        if stuck:
+            process.terminate(); process.join(5)
+        self.assertFalse(stuck, 'FIFO open blocked before validation')
+        self.assertEqual(process.exitcode, 0)
+
+    def test_member_and_readback_fifo_are_rejected_without_blocking(self):
+        for fault in ('member', 'bundle'):
+            with self.subTest(fault=fault):
+                self.setUp()
+                path = self.root / ('file_db.enc' if fault == 'member' else 'fifo.tar')
+                if path.exists(): path.unlink()
+                os.mkfifo(path, 0o600)
+                def attempt():
+                    try:
+                        if fault == 'member':
+                            backup.verify(self.root, self.key, self.binding, self.manifest)
+                        else:
+                            custody.readback_extract('fixture-token', self.artifact, 23, path,
+                                                    self.key, self.binding, self.destination)
+                    except (backup.BackupError, custody.CustodyError):
+                        return
+                    raise RuntimeError('FIFO was accepted')
+                process = multiprocessing.get_context('fork').Process(target=attempt)
+                process.start(); process.join(2)
+                stuck = process.is_alive()
+                if stuck:
+                    process.terminate(); process.join(5)
+                self.assertFalse(stuck, 'FIFO open blocked before validation')
+                self.assertEqual(process.exitcode, 0)
+
     def rewrap(self, raw):
         self.raw = raw
         self.bundle.write_bytes(raw)

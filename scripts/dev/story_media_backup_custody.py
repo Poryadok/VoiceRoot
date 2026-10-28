@@ -35,7 +35,7 @@ def verify_bundle(path, key, expected_binding):
         path = Path(path)
         deadline = time.monotonic() + transport.TIME_LIMIT
         with backup.private_directory(path.parent) as dirfd:
-            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
             with os.fdopen(fd, 'rb') as stream:
                 observed = os.fstat(stream.fileno())
                 if (not stat.S_ISREG(observed.st_mode) or observed.st_uid != os.geteuid()
@@ -198,7 +198,7 @@ def build_bundle(root, key, expected_binding, manifest):
                     info = tarfile.TarInfo('manifest.json'); info.mode = 0o600; info.size = len(encoded)
                     archive.addfile(info, io.BytesIO(encoded))
                     for name in MEMBER_NAMES:
-                        member_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+                        member_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
                         with os.fdopen(member_fd, 'rb') as member:
                             info = os.fstat(member.fileno())
                             if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
@@ -242,7 +242,7 @@ def readback_extract(token, binding, artifact_id, bundle, key, expected_binding,
         deadline = time.monotonic() + transport.TIME_LIMIT
         bundle = Path(bundle)
         with backup.private_directory(bundle.parent) as dirfd:
-            fd = os.open(bundle.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+            fd = os.open(bundle.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
             with os.fdopen(fd, 'rb') as local:
                 info = os.fstat(local.fileno())
                 if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
