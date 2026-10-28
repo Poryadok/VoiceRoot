@@ -49,7 +49,7 @@ func (s *FilesStore) prepareLegacyDeletion(ctx context.Context, id uuid.UUID, ex
 	if s == nil || s.Pool == nil {
 		return uuid.Nil, false, fmt.Errorf("file persistence not configured")
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return uuid.Nil, false, err
 	}
@@ -69,6 +69,12 @@ func (s *FilesStore) prepareLegacyDeletion(ctx context.Context, id uuid.UUID, ex
 	var state string
 	if err = tx.QueryRow(ctx, `SELECT state FROM file_blobs WHERE blob_id=$1 FOR UPDATE`, blob).Scan(&state); err != nil {
 		return uuid.Nil, false, err
+	}
+	if held, e := inventoryBlobHeldTx(ctx, tx, blob); e != nil || held {
+		if e != nil {
+			return uuid.Nil, false, e
+		}
+		return uuid.Nil, false, ErrFileRetained
 	}
 	// Separate statement obtains a fresh READ COMMITTED snapshot after lock wait.
 	var protected bool

@@ -11,7 +11,7 @@ import (
 )
 
 func (s *FilesStore) catalogWriteTx(ctx context.Context, imp CatalogImport, keys *catalogasset.ReplayKeys) (pgx.Tx, string, string, error) {
-	tx, e := s.Pool.Begin(ctx)
+	tx, e := BeginInventoryMutation(ctx, s.Pool, true)
 	if e != nil {
 		return nil, "", "", e
 	}

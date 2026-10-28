@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 	filev1 "voice.app/voice/file/v1"
 	storyv1 "voice.app/voice/story/v1"
+	"voice/backend/file/internal/store"
 )
 
 // StoryReferenceReleaseAuthority must prove the complete global owner backfill
@@ -56,7 +57,7 @@ func (s *FileGRPC) ClaimStoryMedia(ctx context.Context, req *filev1.ClaimStoryMe
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "file persistence unavailable")
 	}
@@ -71,6 +72,12 @@ func (s *FileGRPC) ClaimStoryMedia(ctx context.Context, req *filev1.ClaimStoryMe
 		return nil, e
 	} else if found {
 		return response, nil
+	}
+	var fileLocked uuid.UUID
+	if err = tx.QueryRow(ctx, `SELECT id FROM files WHERE id=$1 FOR NO KEY UPDATE`, file).Scan(&fileLocked); errors.Is(err, pgx.ErrNoRows) {
+		return nil, status.Error(codes.NotFound, "file not found")
+	} else if err != nil {
+		return nil, err
 	}
 	var blob uuid.UUID
 	var blobState string
@@ -90,7 +97,7 @@ func (s *FileGRPC) ClaimStoryMedia(ctx context.Context, req *filev1.ClaimStoryMe
 	var e2e bool
 	var lifecycle, scan, category string
 	var duration *int32
-	err = tx.QueryRow(ctx, `SELECT uploader_profile_id,chat_id,story_id,is_e2e,status,scan_result,file_type,duration_seconds FROM files WHERE id=$1 AND blob_id=$2 FOR UPDATE`, file, blob).Scan(&uploader, &chat, &existingStory, &e2e, &lifecycle, &scan, &category, &duration)
+	err = tx.QueryRow(ctx, `SELECT uploader_profile_id,chat_id,story_id,is_e2e,status,scan_result,file_type,duration_seconds FROM files WHERE id=$1 AND blob_id=$2`, file, blob).Scan(&uploader, &chat, &existingStory, &e2e, &lifecycle, &scan, &category, &duration)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "file persistence unavailable")
 	}
@@ -158,7 +165,7 @@ func (s *FileGRPC) ReleaseStoryMedia(ctx context.Context, req *filev1.ReleaseSto
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, err
 	}
