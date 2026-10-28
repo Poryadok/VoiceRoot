@@ -117,7 +117,7 @@ func TestClientSendsExactOperationToProtectedSpaceRPC(t *testing.T) {
 	require.Equal(t, op.TemplateID, service.request.GetTemplateId())
 	require.Equal(t, []string{"Bearer gis-test-token"}, service.authorization)
 	spaceID = uuid.New()
-	recoveryOp := registry.OwnerRecoveryOperation{OperationID: op.OperationID, ApplicationID: op.ApplicationID, EnvironmentID: op.EnvironmentID, CorporationKey: op.CorporationKey, SpaceID: &spaceID, PreviousOwnerAccountID: uuid.New(), PreviousOwnerProfileID: uuid.New(), ReplacementAccountID: uuid.New(), ReplacementProfileID: uuid.New(), ExpectedGeneration: 3, ReasonCode: "owner_lost", EvidenceSHA256: make([]byte, 32)}
+	recoveryOp := registry.OwnerRecoveryOperation{OperationID: op.OperationID, ApplicationID: op.ApplicationID, EnvironmentID: op.EnvironmentID, CorporationKey: op.CorporationKey, TargetSpaceID: spaceID, PreviousOwnerAccountID: uuid.New(), PreviousOwnerProfileID: uuid.New(), ReplacementAccountID: uuid.New(), ReplacementProfileID: uuid.New(), ExpectedGeneration: 3, ReasonCode: "owner_lost", EvidenceSHA256: make([]byte, 32)}
 	receipt, err := client.ProvisionCommunityOwnerRecovery(context.Background(), recoveryOp)
 	require.NoError(t, err)
 	require.Equal(t, OwnerRecoveryReceipt{SpaceID: spaceID, Generation: 4}, receipt)

@@ -111,13 +111,13 @@ type OwnerRecoveryReceipt struct {
 }
 
 func (c *Client) ProvisionCommunityOwnerRecovery(ctx context.Context, op registry.OwnerRecoveryOperation) (OwnerRecoveryReceipt, error) {
-	if c == nil || c.service == nil || c.token == "" || op.SpaceID == nil {
+	if c == nil || c.service == nil || c.token == "" || op.TargetSpaceID == uuid.Nil {
 		return OwnerRecoveryReceipt{}, fmt.Errorf("Space owner recovery client unavailable")
 	}
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+c.token)
 	response, err := c.service.RecoverCommunityOwner(ctx, &spacev1.RecoverCommunityOwnerRequest{
 		OperationId: op.OperationID.String(), ApplicationId: op.ApplicationID.String(), EnvironmentId: op.EnvironmentID.String(),
-		CorporationKey: op.CorporationKey, SpaceId: op.SpaceID.String(), PreviousOwnerAccountId: op.PreviousOwnerAccountID.String(),
+		CorporationKey: op.CorporationKey, SpaceId: op.TargetSpaceID.String(), PreviousOwnerAccountId: op.PreviousOwnerAccountID.String(),
 		PreviousOwnerProfileId: op.PreviousOwnerProfileID.String(), ReplacementAccountId: op.ReplacementAccountID.String(),
 		ReplacementProfileId: op.ReplacementProfileID.String(), ExpectedGeneration: op.ExpectedGeneration,
 		ReasonCode: op.ReasonCode, EvidenceSha256: append([]byte(nil), op.EvidenceSHA256...),
@@ -126,7 +126,7 @@ func (c *Client) ProvisionCommunityOwnerRecovery(ctx context.Context, op registr
 		return OwnerRecoveryReceipt{}, err
 	}
 	spaceID, err := uuid.Parse(response.GetSpaceId())
-	if err != nil || spaceID == uuid.Nil || spaceID != *op.SpaceID || response.GetOwnerGeneration() != op.ExpectedGeneration+1 {
+	if err != nil || spaceID == uuid.Nil || spaceID != op.TargetSpaceID || response.GetOwnerGeneration() != op.ExpectedGeneration+1 {
 		return OwnerRecoveryReceipt{}, fmt.Errorf("Space owner recovery returned a mismatched receipt")
 	}
 	return OwnerRecoveryReceipt{SpaceID: spaceID, Generation: response.GetOwnerGeneration()}, nil
