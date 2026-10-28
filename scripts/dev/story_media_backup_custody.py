@@ -29,6 +29,29 @@ class CustodyError(Exception):
     pass
 
 
+def verify_bundle(path, key, expected_binding):
+    """Authenticate the exact private bundle before an uploader copies it."""
+    try:
+        path = Path(path)
+        deadline = time.monotonic() + transport.TIME_LIMIT
+        with backup.private_directory(path.parent) as dirfd:
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+            with os.fdopen(fd, 'rb') as stream:
+                observed = os.fstat(stream.fileno())
+                if (not stat.S_ISREG(observed.st_mode) or observed.st_uid != os.geteuid()
+                        or observed.st_mode & 0o077 or observed.st_nlink != 1):
+                    _fail()
+                before = _bundle_identity(stream, deadline)
+                _inspect_bundle(stream, key, expected_binding, deadline)
+                after = _bundle_identity(stream, deadline)
+                current = os.stat(path.name, dir_fd=dirfd, follow_symlinks=False)
+                if (before != after or (observed.st_dev, observed.st_ino) != (current.st_dev, current.st_ino)):
+                    _fail()
+        return {'bytes': after[0], 'sha256': after[1]}
+    except Exception:
+        raise CustodyError('media backup custody rejected') from None
+
+
 CHUNK = 1024 * 1024
 MAX_BYTES = 64 * 1024 ** 3
 TAR_MEMBER_MAX = 8 ** 11 - 1

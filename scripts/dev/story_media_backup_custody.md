@@ -9,6 +9,10 @@ Each encrypted member is limited to 8 GiB minus one byte, the bundle to 64 GiB;
 capacity is checked before creating the bundle. The key is a separate 32-byte
 custody input and must never be placed in the artifact, output or logs. The
 binding itself must contain operation metadata only, not secrets or rows.
+`verify_bundle(path, key, expected_binding)` rechecks the complete authenticated
+bundle on a single private no-symlink file descriptor and returns only byte
+count and SHA-256. The uploader must copy the verified ciphertext into private
+runner scratch and recheck the copied bytes against that result before upload.
 
 The consumer must durably bind the actual operation and snapshot, upload
 attempt, workflow run/head, fresh challenge, creation time and exact bundle

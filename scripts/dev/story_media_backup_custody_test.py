@@ -73,6 +73,26 @@ class CustodyTest(unittest.TestCase):
                          {'manifest.json', *(name + '.enc' for name in backup.MEMBERS)})
         self.assertNotIn(self.key.hex(), repr(receipt))
 
+    def test_preupload_verification_returns_only_bound_size_and_digest(self):
+        result = custody.verify_bundle(self.bundle, self.key, self.binding)
+        self.assertEqual(result, {'bytes': len(self.raw), 'sha256': hashlib.sha256(self.raw).hexdigest()})
+        self.assertNotIn(self.key.hex(), repr(result))
+        with self.assertRaises(custody.CustodyError):
+            custody.verify_bundle(self.bundle, bytes(reversed(self.key)), self.binding)
+        link = self.root / 'alias.tar'; link.symlink_to(self.bundle.name)
+        with self.assertRaises(custody.CustodyError): custody.verify_bundle(link, self.key, self.binding)
+
+    def test_preupload_path_replacement_is_rejected(self):
+        original = custody._inspect_bundle
+        def replace(stream, key, binding, deadline=None):
+            result = original(stream, key, binding, deadline)
+            self.bundle.rename(self.root / 'old.tar')
+            self.bundle.write_bytes(self.raw); self.bundle.chmod(0o600)
+            return result
+        with patch.object(custody, '_inspect_bundle', side_effect=replace):
+            with self.assertRaises(custody.CustodyError):
+                custody.verify_bundle(self.bundle, self.key, self.binding)
+
     def test_wrong_artifact_identity_or_tamper_rejected_without_extract(self):
         for fault in ('head', 'run', 'name', 'snapshot', 'bytes', 'key'):
             with self.subTest(fault=fault):
