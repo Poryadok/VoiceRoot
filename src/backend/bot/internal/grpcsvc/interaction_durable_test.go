@@ -27,8 +27,8 @@ import (
 
 type allowMembershipClient struct{ chatv1.ChatServiceClient }
 
-func (allowMembershipClient) GetChat(context.Context, *chatv1.GetChatRequest, ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
-	return nil, status.Error(codes.Unavailable, "chat metadata not provided by membership fixture")
+func (allowMembershipClient) GetChat(_ context.Context, req *chatv1.GetChatRequest, _ ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
+	return &chatv1.GetChatResponse{Chat: &chatv1.Chat{Id: req.GetChatId()}}, nil
 }
 
 func (allowMembershipClient) ListMembers(context.Context, *chatv1.ListMembersRequest, ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
@@ -47,15 +47,15 @@ type changingSlashMembership struct {
 	err       error
 }
 
-func (m *changingSlashMembership) ListMembers(ctx context.Context, req *chatv1.ListMembersRequest, opts ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
+func (m *changingSlashMembership) GetChat(ctx context.Context, req *chatv1.GetChatRequest, opts ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
 	if m.calls.Add(1) == 1 {
 		close(m.preflight)
-		return m.allowMembershipClient.ListMembers(ctx, req, opts...)
+		return m.allowMembershipClient.GetChat(ctx, req, opts...)
 	}
 	if m.revoked.Load() {
 		return nil, m.err
 	}
-	return m.allowMembershipClient.ListMembers(ctx, req, opts...)
+	return m.allowMembershipClient.GetChat(ctx, req, opts...)
 }
 
 func TestSlashOutboxRechecksMembershipAfterGuardWait(t *testing.T) {

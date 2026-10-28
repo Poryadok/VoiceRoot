@@ -119,6 +119,8 @@ File-derived attachment fields and the ordinary message.edited outbox, preservin
 message identity, creation time, content type, unread state and Chat sort keys.
 Public URL reads still require the actual viewer and exact reference. E2E,
 URL-only records and independent Music metadata retain their existing boundaries.
+Plaintext AUDIO has no generic binding or preview event: a protected fresh
+exact-reference observation classifies each AUDIO slot without viewer authority.
 
 **Права:** standalone чат — **Chat** + настройки. Чат с `space_id` — **Space** (дерево `space_tree_nodes`), **Role** (роли участника спейса + `chat_overrides` / `voice_room_overrides`). Messaging не вводит FK на чужие БД и опирается на решение Gateway/оркестрации.
 

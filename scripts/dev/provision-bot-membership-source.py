@@ -14,12 +14,13 @@ import uuid
 
 EMPTY_SQL = "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema')"
 STATE_SQL = """SELECT s.source_generation::text,
- (SELECT count(*)=1 AND bool_and(version=8 AND NOT dirty) FROM schema_migrations)
+ (SELECT count(*)=1 AND bool_and(version=9 AND NOT dirty) FROM schema_migrations)
  AND s.issued_pairs=(SELECT count(*) FROM bot_space_membership_heads)
  AND s.issued_operations=(SELECT count(*) FROM bot_space_membership_operations)
  AND s.issued_calls=(SELECT count(*) FROM bot_space_membership_calls),
  s.issued_pairs=0 AND s.issued_operations=0 AND s.issued_calls=0
  FROM bot_space_membership_source s WHERE singleton"""
+LEGACY_STATE_SQL = STATE_SQL.replace("version=9", "version=8")
 
 
 def canonical(raw):
@@ -47,6 +48,14 @@ def provision(path, query, migrate):
             migrate()
             expected = None
         parts = query(STATE_SQL).split("|")
+        if retained and (len(parts) != 3 or parts[1] != "t"):
+            legacy = query(LEGACY_STATE_SQL).split("|")
+            if len(legacy) != 3 or legacy[1] != "t":
+                raise ValueError("Bot migration/source counters are not current")
+            if canonical(legacy[0]) != expected:
+                raise ValueError("Bot database differs from retained source artifact")
+            migrate()
+            parts = query(STATE_SQL).split("|")
         if len(parts) != 3 or parts[1] != "t":
             raise ValueError("Bot migration/source counters are not current")
         source = canonical(parts[0])
