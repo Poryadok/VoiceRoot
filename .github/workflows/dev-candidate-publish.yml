@@ -16,6 +16,10 @@ on:
       - scripts/dev/media_live_baseline_test.py
       - scripts/dev/media_operation_journal.py
       - scripts/dev/media_operation_journal_test.py
+      - scripts/dev/media_operation_guard.py
+      - scripts/dev/media_operation_guard_test.py
+      - scripts/dev/resource_fencing.py
+      - scripts/dev/update_images.py
       - deploy/templates/story-media-*.yaml
   workflow_dispatch:
     inputs:
@@ -52,6 +56,7 @@ jobs:
           python -B scripts/dev/media_initial_admission_test.py
           python -B scripts/dev/media_live_baseline_test.py
           python -B scripts/dev/media_operation_journal_test.py
+          python -B scripts/dev/media_operation_guard_test.py
 
   publish:
     name: Publish exact DEV candidate
