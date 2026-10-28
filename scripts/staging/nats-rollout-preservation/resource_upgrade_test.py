@@ -19,16 +19,16 @@ class UpgradeTests(unittest.TestCase):
             for p in installer.TT_FENCING_PREDECESSOR_MEMBERS|{installer.TT_FENCING_NEW_MEMBER}}
 
     def historical_binding(self):
-        # The finite TT transition is pinned to f8624086; Bot9's later
-        # preflight is not an authorized successor for this historical path.
-        binding=self.binding()
-        binding['nats-rollout-preservation/bot_migration.py']='d41d2c245ce2f1b5dce7c45b7f56a576b7fb7b1c38fc1713f162de522ce2770f'
-        return binding
+        # The reviewed 9aa2 successor inventory is independent of this checkout;
+        # production still validates it against the fixed f862 transition.
+        return json.loads((Path(__file__).resolve().parent/'installed_cohort_successor_fixture.json').read_bytes())
 
     def test_closed_predecessor_preserves_all_unchanged_binary_pins(self):
         current=self.historical_binding();old=installer.tt_fencing_predecessor(current)
         self.assertEqual(len(old),85);self.assertNotIn(installer.TT_FENCING_NEW_MEMBER,old)
         self.assertEqual(set(old),installer.TT_FENCING_PREDECESSOR_MEMBERS)
+        self.assertEqual(hashlib.sha256(json.dumps(old,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
+                         '0a81983170a46924ed21194e005087a999748a7e13e6762d6eefa76ed526fc21')
         for key in old:
             self.assertEqual(old[key],installer.TT_FENCING_OLD_HASHES.get(key,current[key]))
         for key in ('nats-known-baseline/kernel','nats-rollout-preservation/bootstrap-renewer','nats-rollout-preservation/story-current4-probe'):
@@ -47,6 +47,12 @@ class UpgradeTests(unittest.TestCase):
     def test_current_bot9_source_is_not_an_authorized_tt_successor(self):
         with self.assertRaisesRegex(installer.Blocked, 'bridge_tt_upgrade_predecessor_source_drift'):
             installer.tt_fencing_predecessor(self.binding())
+
+    def test_new_custody_source_is_not_a_historical_successor(self):
+        changed=self.historical_binding()
+        changed['nats-rollout-preservation/github_custody.py']='f'*64
+        with self.assertRaisesRegex(installer.Blocked,'bridge_tt_upgrade_predecessor_source_drift'):
+            installer.tt_fencing_predecessor(changed)
 
     def test_upgrade_uses_only_fixed_source_transition_and_exact_full_predecessor(self):
         current=self.historical_binding();old=installer.tt_fencing_predecessor(current)
