@@ -1,9 +1,55 @@
 // Startup diagnostics and owned-process cleanup for the runtime config browser.
 import { spawn } from 'node:child_process';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function readProc(path) {
+  const handle = await open(path, 'r');
+  try {
+    const buffer = Buffer.alloc(65537);
+    let used = 0;
+    while (used < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, used, buffer.length - used, null);
+      if (!bytesRead) return buffer.subarray(0, used);
+      used += bytesRead;
+    }
+    throw new Error('proc observation exceeds bound');
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function observeProfileProcesses(profile, fs = {
+  readdir, stat, readFile: readProc, uid: process.getuid?.(), self: process.pid,
+}) {
+  const marker = join(profile, '.chrome-config');
+  let uncertain = false;
+  let pids;
+  try { pids = await fs.readdir('/proc'); }
+  catch { return 'unknown'; }
+  for (const pid of pids) {
+    if (!/^\d+$/.test(pid) || Number(pid) === fs.self) continue;
+    try {
+      if ((await fs.stat('/proc/' + pid)).uid !== fs.uid) continue;
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ESRCH') uncertain = true;
+      continue;
+    }
+    for (const file of ['environ', 'cmdline']) {
+      try {
+        const values = (await fs.readFile('/proc/' + pid + '/' + file)).toString().split('\0');
+        if (file === 'environ' && values.includes('XDG_CONFIG_HOME=' + marker)) return 'alive';
+        if (file === 'cmdline' && values.some(arg => arg === profile || arg === '--user-data-dir=' + profile ||
+            arg.startsWith('--database=' + profile + '/'))) return 'alive';
+      } catch (error) {
+        if (error.code !== 'ENOENT' && error.code !== 'ESRCH') uncertain = true;
+      }
+    }
+  }
+  return uncertain ? 'unknown' : 'clear';
+}
 
 function safeStderr(raw) {
   // Report only fixed signatures. Chrome stderr may contain arbitrary URLs,
@@ -16,7 +62,7 @@ function safeStderr(raw) {
   ].filter(([, pattern]) => pattern.test(raw)).map(([name]) => name).join('; ');
 }
 
-export function startChrome(binary, args, profile) {
+export function startChrome(binary, args, profile, observe = observeProfileProcesses) {
   const start = Date.now();
   const marker = join(profile, '.chrome-config');
   const child = spawn(binary, args, { stdio: ['ignore', 'ignore', 'pipe'],
@@ -75,40 +121,28 @@ export function startChrome(binary, args, profile) {
           try { process.kill(-child.pid, 0); return true; }
           catch (error) { if (error.code === 'ESRCH') return false; throw error; }
         };
-        const profileProcessesAlive = async () => {
-          // This identifies observed Chrome/crashpad profile bindings; it is not
-          // OS-enforced containment of arbitrary descendants that erase all markers.
-          if (process.platform !== 'linux' || typeof process.getuid !== 'function') return false;
-          for (const pid of await readdir('/proc')) {
-            if (!/^\d+$/.test(pid) || Number(pid) === process.pid) continue;
-            try {
-              if ((await stat('/proc/' + pid)).uid !== process.getuid()) continue;
-              const env = await readFile('/proc/' + pid + '/environ');
-              if (env.toString().split('\0').includes('XDG_CONFIG_HOME=' + marker)) return true;
-              const args = (await readFile('/proc/' + pid + '/cmdline')).toString().split('\0');
-              if (args.some(arg => arg === profile || arg === '--user-data-dir=' + profile ||
-                  arg.startsWith('--database=' + profile + '/'))) return true;
-            } catch (error) {
-              if (error.code !== 'ENOENT' && error.code !== 'ESRCH') throw error;
-            }
-          }
-          return false;
-        };
+        // These profile bindings do not contain arbitrary descendants that erase all markers.
         const wait = async ms => {
           const deadline = Date.now() + ms;
           while (Date.now() < deadline) {
-            if (didClose && !groupAlive() && !await profileProcessesAlive()) return true;
+            if (didClose && !groupAlive()) {
+              if (process.platform !== 'linux' || typeof process.getuid !== 'function') return 'unknown';
+              const observed = await observe(profile);
+              if (observed === 'clear' || observed === 'unknown') return observed;
+              if (observed !== 'alive') return 'unknown';
+            }
             await delay(50);
           }
-          return didClose && !groupAlive() && !await profileProcessesAlive();
+          return 'waiting';
         };
         signal('SIGTERM');
-        if (!await wait(2000)) {
+        let result = await wait(2000);
+        if (result === 'waiting') {
           signal('SIGKILL');
-          if (!await wait(5000)) throw new Error('Chrome shutdown not confirmed; profile retained');
+          result = await wait(5000);
+          if (result === 'waiting') throw new Error('Chrome shutdown not confirmed; profile retained');
         }
-        // Outside Linux the parent is settled, but descendant observation is unavailable.
-        return process.platform === 'linux' && typeof process.getuid === 'function';
+        return result === 'clear';
       })();
       return closePromise;
     },

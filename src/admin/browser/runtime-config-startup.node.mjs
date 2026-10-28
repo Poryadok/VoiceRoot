@@ -1,12 +1,45 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { startChrome } from './runtime-config-startup.mjs';
+import { observeProfileProcesses, startChrome } from './runtime-config-startup.mjs';
 
 // Descendant custody uses Linux /proc; non-Linux retains the profile instead.
 const linuxTest = (name, fn) => test(name, { skip: process.platform !== 'linux' }, fn);
+
+linuxTest('unreadable proc remains unknown and cannot mask a known owned process', async () => {
+  const inaccessible = Object.assign(new Error('denied'), { code: 'EACCES' });
+  const fs = {
+    readdir: async () => ['101', '102'],
+    stat: async () => ({ uid: 42 }),
+    readFile: async path => {
+      if (path.includes('/101/')) throw inaccessible;
+      return Buffer.from(path.endsWith('/environ') ? 'XDG_CONFIG_HOME=/profile/.chrome-config\0' : '');
+    },
+    uid: 42, self: -1,
+  };
+  assert.equal(await observeProfileProcesses('/profile', fs), 'alive');
+  fs.readdir = async () => ['101'];
+  assert.equal(await observeProfileProcesses('/profile', fs), 'unknown');
+  fs.readFile = async path => {
+    if (path.endsWith('/environ')) throw inaccessible;
+    return Buffer.from('--user-data-dir=/profile\0');
+  };
+  assert.equal(await observeProfileProcesses('/profile', fs), 'alive');
+});
+
+linuxTest('unknown proc state settles child but keeps the profile', async () => {
+  const profile = await mkdtemp(join(tmpdir(), 'voice-chrome-test-'));
+  const child = startChrome(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], profile, async () => 'unknown');
+  try {
+    assert.equal(await child.close(), false);
+    assert.notEqual(child.process.exitCode ?? child.process.signalCode, null);
+    assert.ok((await stat(profile)).isDirectory());
+  } finally {
+    await rm(profile, { recursive: true, force: true });
+  }
+});
 
 linuxTest('startup timeout retains bounded redacted diagnostics and settles the child', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'voice-chrome-test-'));
@@ -68,6 +101,7 @@ for (const dropMarker of [false, true]) linuxTest(`escaped descendant prevents p
     setInterval(() => {}, 1000);
   `, pidFile, profile], profile);
   let escapedPid;
+  let cleanupError;
   try {
     for (let i = 0; i < 100 && !escapedPid; i++) {
       try { escapedPid = Number(await readFile(pidFile, 'utf8')); }
@@ -78,8 +112,9 @@ for (const dropMarker of [false, true]) linuxTest(`escaped descendant prevents p
     assert.equal(Number(await readFile(pidFile, 'utf8')), escapedPid);
   } finally {
     if (escapedPid) {
-      try { process.kill(escapedPid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+      try { process.kill(escapedPid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') cleanupError = error; }
     }
     await rm(profile, { recursive: true, force: true });
   }
+  if (cleanupError) throw cleanupError;
 });
