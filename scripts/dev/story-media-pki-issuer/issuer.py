@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage isolated DEV media identities offline; never apply or export secrets."""
+"""Stage DEV media identities offline; export only to an explicitly managed pipe."""
 import argparse
 import base64
 import fcntl
