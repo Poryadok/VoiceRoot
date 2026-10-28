@@ -1,0 +1,66 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {"name": "story-media-replay-__COHORT__", "namespace": "voice-dev"},
+      "immutable": true,
+      "data": {
+        "redis.conf": "bind 0.0.0.0\nprotected-mode yes\nport 6379\ndir /data\nappendonly yes\nappendfsync always\naof-load-truncated no\nno-appendfsync-on-rewrite no\nmaxmemory 256mb\nmaxmemory-policy noeviction\nsave \"\"\n",
+        "start.sh": "set -eu\nprintf '%s' \"$REPLAY_BINDING\" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' || exit 1\n[ -f /data/.voice-replay-binding ] || exit 1\n[ \"$(cat /data/.voice-replay-binding)\" = \"$REPLAY_BINDING\" ] || exit 1\ncase \"$REDIS_PASSWORD\" in ''|*[!0-9a-f]*) exit 1 ;; esac\n[ \"${#REDIS_PASSWORD}\" -eq 64 ] || exit 1\numask 077\nrm -f /run/replay/admit /run/replay/nonce\ncat /proc/sys/kernel/random/uuid > /run/replay/nonce\nwhile [ ! -f /run/replay/admit ] || [ \"$(cat /run/replay/admit)\" != \"$(cat /run/replay/nonce)\" ]; do sleep 1; done\nrm -f /run/replay/admit /run/replay/nonce\ncp /config/redis.conf /run/replay/redis.conf\nprintf 'requirepass %s\\n' \"$REDIS_PASSWORD\" >> /run/replay/redis.conf\nexec redis-server /run/replay/redis.conf\n"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {"name": "story-media-replay-__COHORT__", "namespace": "voice-dev"},
+      "spec": {
+        "type": "ClusterIP",
+        "selector": {"app": "story-media-replay", "replay-cohort": "__COHORT__"},
+        "ports": [{"name": "redis", "port": 6379, "targetPort": "redis", "protocol": "TCP"}]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {"name": "story-media-replay-__COHORT__", "namespace": "voice-dev"},
+      "spec": {
+        "replicas": 1,
+        "strategy": {"type": "Recreate"},
+        "selector": {"matchLabels": {"app": "story-media-replay", "replay-cohort": "__COHORT__"}},
+        "template": {
+          "metadata": {"labels": {"app": "story-media-replay", "replay-cohort": "__COHORT__"}},
+          "spec": {
+            "automountServiceAccountToken": false,
+            "enableServiceLinks": false,
+            "terminationGracePeriodSeconds": 30,
+            "securityContext": {"runAsNonRoot": true, "runAsUser": 999, "runAsGroup": 999, "fsGroup": 999, "seccompProfile": {"type": "RuntimeDefault"}},
+            "containers": [{
+              "name": "redis",
+              "image": "redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+              "imagePullPolicy": "IfNotPresent",
+              "command": ["sh", "/config/start.sh"],
+              "ports": [{"name": "redis", "containerPort": 6379, "protocol": "TCP"}],
+              "env": [
+                {"name": "REPLAY_BINDING", "value": "__PVC_UID__|__PV_UID__"},
+                {"name": "REDIS_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "__SECRET_NAME__", "key": "password"}}},
+                {"name": "REDISCLI_AUTH", "valueFrom": {"secretKeyRef": {"name": "__SECRET_NAME__", "key": "password"}}}
+              ],
+              "readinessProbe": {"exec": {"command": ["sh", "-ec", "redis-cli --no-auth-warning ping | grep -x PONG"]}, "periodSeconds": 5, "timeoutSeconds": 2},
+              "securityContext": {"allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true, "capabilities": {"drop": ["ALL"]}},
+              "resources": {"requests": {"cpu": "100m", "memory": "384Mi"}, "limits": {"cpu": "1", "memory": "512Mi"}},
+              "volumeMounts": [{"name": "data", "mountPath": "/data"}, {"name": "config", "mountPath": "/config", "readOnly": true}, {"name": "run", "mountPath": "/run/replay"}]
+            }],
+            "volumes": [
+              {"name": "data", "persistentVolumeClaim": {"claimName": "__PVC_NAME__"}},
+              {"name": "config", "configMap": {"name": "story-media-replay-__COHORT__", "defaultMode": 292}},
+              {"name": "run", "emptyDir": {"medium": "Memory", "sizeLimit": "1Mi"}}
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
