@@ -103,6 +103,17 @@ class Session:
     def admit(self,*,start,request=None):
         self.authority();previous=self.journal.read()
         if start:
+            if previous is not None and previous.get('status')=='complete':
+                try:
+                    c=validate(previous.get('context'))
+                    closed=(set(previous)=={'schema','context','operation','helper_sha256','status','phase','target_sha256','actual'}
+                        and previous['schema']=='voice-staging-resource-fence-v1'
+                        and previous['phase']=='finished' and previous['actual']==c['images']
+                        and re.fullmatch('[a-f0-9]{12}',previous['operation'])
+                        and re.fullmatch('[a-f0-9]{64}',previous['helper_sha256'])
+                        and re.fullmatch('[a-f0-9]{64}',previous['target_sha256']))
+                except (ValueError,TypeError,KeyError):closed=False
+                if not closed:raise RuntimeError('staging_closed_executor_reconciliation_required')
             if self.owned(previous) and previous.get('status')=='active':
                 # The request journal alone decides completed replay versus
                 # interrupted execution; never reset its durable executor intent.

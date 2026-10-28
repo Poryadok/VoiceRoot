@@ -99,6 +99,16 @@ class ResourceTests(unittest.TestCase):
         claim.Session(newer,'e'*12,'b'*64,lambda:card(newer),journal).admit(start=True)
         with self.assertRaises(RuntimeError):session.check(['kubectl','apply'])
 
+    def test_new_start_refuses_unknown_or_incomplete_closed_journal(self):
+        for field,value in (('schema','unknown-v2'),('phase','prepare'),('actual',{}),
+                            ('target_sha256',None),('helper_sha256','bad'),('operation','bad')):
+            old,current,journal=self.prepared();old.complete('PASS',context()['images'])
+            journal.row[field]=value;before=journal.read()
+            newer=context();newer.update(generation=8,claim='33333333-3333-4333-8333-333333333333',operation_id='next')
+            new=claim.Session(newer,'e'*12,'b'*64,lambda:card(newer),journal)
+            with self.subTest(field=field),self.assertRaises(RuntimeError):new.admit(start=True)
+            self.assertEqual(journal.read(),before)
+
     def test_bridge_admission_precedes_cached_result_and_recovery(self):
         import bridge
         request=dict(action='finish',operation='a'*12,claim_rv='17',nonce='b'*64)
