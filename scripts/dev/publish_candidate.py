@@ -2,6 +2,7 @@
 """Publish the selected DEV candidate only; never contacts a cluster or deployer."""
 import argparse
 import base64
+from contextlib import contextmanager, nullcontext
 import hashlib
 import io
 import json
@@ -17,11 +18,16 @@ import zipfile
 
 PRODUCT = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 AUTH_USER_PRODUCT = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
+FROZEN_FILE_PRODUCT = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
+FROZEN_WEB_PRODUCT = 'df00a393e03feb176439a50bfe5605f32c16b322'
+WEB_WORKFLOW = '.github/workflows/source-web-publish.yml'
+WEB_JOB_NAME = 'Publish exact source Web image'
 # Each reviewed source has its own bounded consumer; never admit arbitrary SHAs.
 PRODUCT_COMPONENTS = {
     PRODUCT: ('web', 'admin', 'developer-portal', 'auth', 'user',
               'notification', 'realtime', 'space-native-migrate'),
     AUTH_USER_PRODUCT: ('auth', 'user'),
+    FROZEN_FILE_PRODUCT: ('file',),
 }
 REPOSITORY = 'Poryadok/VoiceRoot'
 REGISTRY = 'ghcr.io/poryadok/voiceroot'
@@ -40,15 +46,25 @@ def require(condition, code):
         raise Refused(code)
 
 
-def build_plan(product, publisher, run_id, attempt):
-    require(isinstance(product, str) and product in PRODUCT_COMPONENTS, 'unselected_product')
+def build_plan(product, publisher, run_id, attempt, *, route='dev'):
+    require(route in ('dev', 'web') and isinstance(product, str) and
+            (product in PRODUCT_COMPONENTS if route == 'dev' else product == FROZEN_WEB_PRODUCT), 'unselected_product')
     require(isinstance(publisher, str) and SHA.fullmatch(publisher), 'publisher_identity')
     require(all(isinstance(v, str) and re.fullmatch(r'[1-9][0-9]{0,19}', v)
                 for v in (run_id, attempt)), 'run_identity')
     components = {}
+    if route == 'web':
+        components['web'] = {'context': 'src/frontend', 'dockerfile': 'src/frontend/Dockerfile',
+            'build_args': {'VOICE_RUNTIME_CONFIG_REQUIRED': 'true', 'SOURCE_REVISION': product},
+            'platform': 'linux/amd64',
+            'tag': REGISTRY + '/web:source-' + product + '-' + run_id + '-' + attempt}
+        return {'product_sha': product, 'publisher_sha': publisher, 'run_id': int(run_id),
+                'run_attempt': int(attempt), 'components': components}
     for name in PRODUCT_COMPONENTS[product]:
         args = {}
-        if name == 'space-native-migrate':
+        if name == 'file':
+            context, dockerfile = 'src/backend', 'src/backend/file/Dockerfile'
+        elif name == 'space-native-migrate':
             context, dockerfile = '.', 'src/backend/space/Dockerfile.native-migrate'
             args = {'SOURCE_REVISION': product}
         elif name == 'auth':
@@ -64,7 +80,7 @@ def build_plan(product, publisher, run_id, attempt):
                      'VOICE_LIVEKIT_URL': 'wss://livekit-dev.comrade.click'} if name == 'web' else
                     {'VITE_VOICE_API_BASE': 'https://api-dev.comrade.click',
                      'VITE_OAUTH_CLIENT_ID': 'voice-' + name, 'VITE_OAUTH_DISABLED': 'false'})
-        component = 'dev-' + name
+        component = name if product == FROZEN_FILE_PRODUCT else 'dev-' + name
         components[component] = {'context': context, 'dockerfile': dockerfile,
             'build_args': args, 'platform': 'linux/amd64',
             'tag': REGISTRY + '/' + component + ':dev-' + product + '-' + run_id + '-' + attempt}
@@ -72,17 +88,19 @@ def build_plan(product, publisher, run_id, attempt):
             'run_attempt': int(attempt), 'components': components}
 
 
-def validate_run(run, jobs, publisher, run_id, attempt):
+def validate_run(run, jobs, publisher, run_id, attempt, *, route='dev'):
+    require(route in ('dev', 'web'), 'publisher_route')
+    workflow, job_name = (WORKFLOW, JOB_NAME) if route == 'dev' else (WEB_WORKFLOW, WEB_JOB_NAME)
     require(run.get('id') == int(run_id) and run.get('run_attempt') == int(attempt)
             and run.get('head_sha') == publisher and run.get('event') == 'workflow_dispatch'
-            and run.get('path') == WORKFLOW
+            and run.get('path') == workflow
             and run.get('repository', {}).get('full_name') == REPOSITORY, 'authenticated_run_binding')
-    matches = [j for j in jobs.get('jobs', []) if j.get('name') == JOB_NAME]
+    matches = [j for j in jobs.get('jobs', []) if j.get('name') == job_name]
     require(len(matches) == 1, 'unique_publisher_job')
     job = matches[0]
     require(job.get('run_id') == int(run_id) and job.get('head_sha') == publisher
             and type(job.get('id')) is int, 'authenticated_job_binding')
-    return {'repository': REPOSITORY, 'workflow': WORKFLOW, 'publisher_sha': publisher,
+    return {'repository': REPOSITORY, 'workflow': workflow, 'publisher_sha': publisher,
             'run_id': int(run_id), 'run_attempt': int(attempt), 'job_id': job['id']}
 
 
@@ -111,14 +129,39 @@ def validate_config_identity(expected, actual):
 
 
 def verify_config_source(config, product):
-    require(product in PRODUCT_COMPONENTS and config.get('config', {}).get('Labels', {}).get(
+    require((product in PRODUCT_COMPONENTS or product == FROZEN_WEB_PRODUCT) and config.get('config', {}).get('Labels', {}).get(
         'org.opencontainers.image.revision') == product, 'pulled_config_product_source')
 
 
 def verify_output(component, files, product, expected_sql=None):
-    require(product in PRODUCT_COMPONENTS and component in {
-        'dev-' + name for name in PRODUCT_COMPONENTS[product]} and files, 'output_source_or_inventory')
-    if component == 'dev-auth':
+    if product == FROZEN_WEB_PRODUCT:
+        require(component == 'web' and files.get('index.html') and files.get('main.dart.js'), 'output_source_or_inventory')
+        scripts = b'\n'.join(v for k, v in files.items() if k.endswith('.js'))
+        require(b'voice-runtime-config.json' in scripts and all(url not in scripts for url in
+                (b'https://api-dev.comrade.click', b'https://api-staging.comrade.click',
+                 b'wss://livekit-dev.comrade.click', b'wss://livekit-staging.comrade.click')),
+                'web_runtime_config_output')
+        manifest = json.loads(files.get('web-asset-manifest.json', b'{}'))
+        require(manifest.get('schema') == 'voice-web-assets-v1', 'web_asset_manifest')
+        for kind, prefix, suffix in (('main', 'main.', '.dart.js'), ('bootstrap', 'flutter_bootstrap.', '.js')):
+            row = manifest.get(kind, {})
+            sha = row.get('sha256', '')
+            require(isinstance(sha, str) and re.fullmatch(r'[0-9a-f]{64}', sha), 'web_asset_digest')
+            name = prefix + sha + suffix
+            data = files.get(name)
+            require(row.get('path') == name and isinstance(data, bytes) and row.get('bytes') == len(data)
+                    and hashlib.sha256(data).hexdigest() == sha, 'web_asset_identity')
+        require(manifest['bootstrap']['path'].encode() in files['index.html'], 'web_index_binding')
+        require(manifest['main']['path'].encode() in files[manifest['bootstrap']['path']], 'web_bootstrap_binding')
+        return {'verified': True, 'files': {k: {'sha256': hashlib.sha256(v).hexdigest(), 'bytes': len(v)}
+                                          for k, v in sorted(files.items())}}
+    require(product in PRODUCT_COMPONENTS, 'output_source_or_inventory')
+    selected = {'file'} if product == FROZEN_FILE_PRODUCT else {
+        'dev-' + name for name in PRODUCT_COMPONENTS[product]}
+    require(component in selected and files, 'output_source_or_inventory')
+    if component == 'file':
+        require(set(files) == {'service'} and files['service'].startswith(b'\x7fELF'), 'file_binary_missing')
+    elif component == 'dev-auth':
         with zipfile.ZipFile(io.BytesIO(files['auth.jar'])) as archive:
             require(archive.read('BOOT-INF/classes/voice-build-source.sha').decode().strip() == product,
                     'auth_embedded_source')
@@ -242,19 +285,27 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
             if component == 'dev-auth':
                 paths = {'auth.jar': '/auth.jar', 'auth-roots.pem': '/etc/ssl/certs/ca-certificates.crt',
                          'auth-cacerts': '/opt/java/openjdk/lib/security/cacerts'}
-            elif component in ('dev-user', 'dev-notification', 'dev-realtime'):
+            elif component in ('file', 'dev-user', 'dev-notification', 'dev-realtime'):
                 paths = {'service': '/service'}
             elif component == 'dev-space-native-migrate':
                 paths = {'native-migrate': '/usr/local/bin/native-migrate', 'migrations': '/migrations'}
             else:
                 paths = {'web': '/usr/share/nginx/html'}
+                if component == 'web':
+                    paths['nginx.conf'] = '/etc/nginx/conf.d/default.conf'
             for target, source in paths.items():
                 command(['docker', 'cp', '-L', container + ':' + source, str(root / target)])
             files = {p.relative_to(root).as_posix().removeprefix('web/'): p.read_bytes()
                      for p in root.rglob('*') if p.is_file()}
+            if component == 'web':
+                nginx = files.pop('nginx.conf')
+                require(nginx == (product_root / 'src/frontend/docker/nginx-default.conf').read_bytes(),
+                        'web_nginx_source_mismatch')
             sql = ({p.name: p.read_bytes() for p in (product_root / 'src/backend/migrations/space_db').glob('*.sql')}
                    if component == 'dev-space-native-migrate' else None)
             proof = verify_output(component, files, product, sql)
+            if component == 'web':
+                proof['nginx_config_sha256'] = hashlib.sha256(nginx).hexdigest()
             if component == 'dev-auth':
                 # Public trust inputs only; never export a private key or credential.
                 for name in ('auth-roots.pem', 'auth-cacerts'):
@@ -269,8 +320,22 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
     return proof
 
 
-def publish(product_root, publisher_root, output, env):
-    plan = build_plan(env['PRODUCT_SHA'], env['PUBLISHER_SHA'], env['GITHUB_RUN_ID'], env['GITHUB_RUN_ATTEMPT'])
+@contextmanager
+def file_builder(run_id, attempt):
+    # The dedicated BuildKit container is the only executor for this one image.
+    builder = 'voice-file-' + str(run_id) + '-' + str(attempt)
+    command(['docker', 'buildx', 'create', '--driver', 'docker-container', '--name', builder])
+    try:
+        command(['docker', 'buildx', 'inspect', '--builder', builder, '--bootstrap'])
+        command(['docker', 'update', '--cpus', '2', '--memory', '4g', '--memory-swap', '4g',
+                 'buildx_buildkit_' + builder + '0'])
+        yield builder
+    finally:
+        command(['docker', 'buildx', 'rm', builder])
+
+
+def publish(product_root, publisher_root, output, env, *, route='dev'):
+    plan = build_plan(env['PRODUCT_SHA'], env['PUBLISHER_SHA'], env['GITHUB_RUN_ID'], env['GITHUB_RUN_ATTEMPT'], route=route)
     product = plan['product_sha']
     require(env.get('GITHUB_REPOSITORY') == REPOSITORY and env.get('GITHUB_REF') == 'refs/heads/master', 'publisher_repository_or_ref')
     publisher_source = source_snapshot(publisher_root, plan['publisher_sha'])
@@ -278,7 +343,7 @@ def publish(product_root, publisher_root, output, env):
     run = json.loads(command(['gh', 'api', 'repos/' + REPOSITORY + '/actions/runs/' + str(plan['run_id'])]))
     jobs = json.loads(command(['gh', 'api', 'repos/' + REPOSITORY + '/actions/runs/' + str(plan['run_id'])
                                + '/attempts/' + str(plan['run_attempt']) + '/jobs?per_page=100']))
-    authority = validate_run(run, jobs, plan['publisher_sha'], str(plan['run_id']), str(plan['run_attempt']))
+    authority = validate_run(run, jobs, plan['publisher_sha'], str(plan['run_id']), str(plan['run_attempt']), route=route)
     output.mkdir(parents=True, exist_ok=False)
     write(output / 'product-source.json', product_source)
     write(output / 'publisher-source.json', publisher_source)
@@ -296,8 +361,12 @@ def publish(product_root, publisher_root, output, env):
         for key, value in row['build_args'].items():
             args += ['--build-arg', key + '=' + value]
         args.append(str(product_root / row['context']))
-        write(output / (component + '-invocation.json'), {'command': args, 'product_sha': product, **authority})
-        command(args, log=output / (component + '-build.log'))
+        with (file_builder(plan['run_id'], plan['run_attempt'])
+              if product == FROZEN_FILE_PRODUCT else nullcontext(None)) as builder:
+            if builder:
+                args[3:3] = ['--builder', builder]
+            write(output / (component + '-invocation.json'), {'command': args, 'product_sha': product, **authority})
+            command(args, log=output / (component + '-build.log'))
         digest = json.loads(metadata.read_bytes())['containerimage.digest']
         repository, tag = row['tag'].removeprefix('ghcr.io/').rsplit(':', 1)
         raw = registry.get(repository, 'manifests/' + digest)
@@ -310,7 +379,8 @@ def publish(product_root, publisher_root, output, env):
         proof = pulled_output(component, reference, config_digest, product_root, registry, repository, output, product=product)
         published.append({'component': component, 'product_sha': product, 'tag': row['tag'],
             'index_digest': digest, 'platform_manifest_digest': platform, 'config_digest': config_digest,
-            'reference': reference, 'build_args': row['build_args'], 'output_verification': proof, **authority})
+            'reference': reference, 'build_args': row['build_args'], 'output_verification': proof,
+            **({'configuration_contract': 'voice-web-origin-bound-runtime-v1'} if route == 'web' else {}), **authority})
         write(output / 'published-images.json', {'publication_complete': False, 'images': published, **authority})
     require(source_snapshot(product_root, product) == product_source, 'product_changed_during_build')
     require(source_snapshot(publisher_root, plan['publisher_sha']) == publisher_source, 'publisher_changed_during_build')
@@ -327,9 +397,10 @@ def main():
     parser.add_argument('--product-root', required=True, type=Path)
     parser.add_argument('--publisher-root', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--route', choices=('dev', 'web'), default='dev')
     args = parser.parse_args()
     try:
-        publish(args.product_root.resolve(), args.publisher_root.resolve(), args.output.resolve(), os.environ)
+        publish(args.product_root.resolve(), args.publisher_root.resolve(), args.output.resolve(), os.environ, route=args.route)
     except Exception as error:
         # Never print a request, token, redirected signed URL or raw CLI error.
         print('DEV candidate publisher failed: ' + (str(error) if isinstance(error, Refused) else type(error).__name__))

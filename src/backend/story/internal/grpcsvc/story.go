@@ -46,6 +46,10 @@ type FileMediaValidator interface {
 	ValidateStoryMedia(ctx context.Context, fileID, authorID uuid.UUID, expected storyv1.StoryMediaType) error
 }
 
+type FileMediaClaimer interface {
+	ClaimStoryMedia(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, storyv1.StoryMediaType) error
+}
+
 // SubscriptionChecker resolves Premium entitlement for anonymous story views.
 type SubscriptionChecker interface {
 	HasActivePremium(ctx context.Context, accountID uuid.UUID) (bool, error)
@@ -152,7 +156,7 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 			}
 		}
 	}
-	row, err := s.Store.CreateStory(ctx, store.CreateStoryInput{
+	input := store.CreateStoryInput{
 		AuthorProfileID:        profileID,
 		Type:                   storyType,
 		MediaFileID:            mediaID,
@@ -162,7 +166,30 @@ func (s *StoryGRPC) CreateStory(ctx context.Context, req *storyv1.CreateStoryReq
 		MentionProfileIDs:      mentionIDsToJSON(req.GetMentionProfileIds()),
 		Visibility:             visibility,
 		VisibilityAudienceJSON: visAudienceJSON,
-	})
+	}
+	var row *store.StoryRow
+	if mediaID == nil {
+		row, err = s.Store.CreateStory(ctx, input)
+	} else {
+		claimer, ok := s.Files.(FileMediaClaimer)
+		if !ok {
+			return nil, status.Error(codes.Unavailable, "story media reference unavailable")
+		}
+		expected := storyv1.StoryMediaType_STORY_MEDIA_TYPE_PHOTO
+		if storyType == "video" {
+			expected = storyv1.StoryMediaType_STORY_MEDIA_TYPE_VIDEO
+		}
+		row, err = s.Store.CreateStoryWithMedia(ctx, input, func(acquireCtx context.Context, id uuid.UUID) error {
+			return claimer.ClaimStoryMedia(acquireCtx, id, *mediaID, profileID, expected)
+		})
+		if err != nil {
+			switch status.Code(err) {
+			case codes.InvalidArgument, codes.NotFound, codes.PermissionDenied, codes.FailedPrecondition:
+				return nil, status.Error(status.Code(err), "story media rejected")
+			}
+			return nil, status.Error(codes.Unavailable, "story media reference unavailable")
+		}
+	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

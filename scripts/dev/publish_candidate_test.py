@@ -20,10 +20,144 @@ C = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 PREVIOUS_C = '4e88e14e64300667e3349b08e75c4c31bf50b61e'
 P = 'a' * 40
 A = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
+FILE = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
 DIGEST = 'sha256:' + 'b' * 64
 
 
 class PublisherTests(unittest.TestCase):
+    def test_frozen_web_route_is_separate_and_source_bound(self):
+        source = 'df00a393e03feb176439a50bfe5605f32c16b322'
+        plan = publisher.build_plan(source, P, '12345', '2', route='web')
+        self.assertEqual(set(plan['components']), {'web'})
+        row = plan['components']['web']
+        self.assertEqual((row['context'], row['dockerfile']), ('src/frontend', 'src/frontend/Dockerfile'))
+        self.assertEqual(row['build_args'], {'VOICE_RUNTIME_CONFIG_REQUIRED': 'true', 'SOURCE_REVISION': source})
+        self.assertEqual(row['tag'], publisher.REGISTRY + '/web:source-' + source + '-12345-2')
+        with self.assertRaises(publisher.Refused):
+            publisher.build_plan(source, P, '12345', '2')
+        with self.assertRaises(publisher.Refused):
+            publisher.build_plan(C, P, '12345', '2', route='web')
+
+    def test_frozen_web_output_requires_runtime_loader_and_no_environment_urls(self):
+        source = 'df00a393e03feb176439a50bfe5605f32c16b322'
+        def fixture(main=b'voice-runtime-config.json', *, bootstrap_binds_main=True):
+            main_sha = hashlib.sha256(main).hexdigest()
+            main_name = 'main.' + main_sha + '.dart.js'
+            boot = main_name.encode() if bootstrap_binds_main else b'unrelated bootstrap'
+            boot_sha = hashlib.sha256(boot).hexdigest()
+            boot_name = 'flutter_bootstrap.' + boot_sha + '.js'
+            manifest = {'schema': 'voice-web-assets-v1',
+                        'main': {'path': main_name, 'sha256': main_sha, 'bytes': len(main)},
+                        'bootstrap': {'path': boot_name, 'sha256': boot_sha, 'bytes': len(boot)}}
+            return {'main.dart.js': main, main_name: main, boot_name: boot,
+                    'index.html': boot_name.encode(), 'web-asset-manifest.json': json.dumps(manifest).encode()}
+
+        publisher.verify_output('web', fixture(), source)
+        bad_scripts = (b'other', *(b'voice-runtime-config.json ' + url for url in (
+            b'https://api-dev.comrade.click', b'https://api-staging.comrade.click',
+            b'wss://livekit-dev.comrade.click', b'wss://livekit-staging.comrade.click')))
+        for script in bad_scripts:
+            with self.subTest(script=script), self.assertRaisesRegex(publisher.Refused, '^web_runtime_config_output$'):
+                publisher.verify_output('web', fixture(script), source)
+
+        files = fixture()
+        manifest = json.loads(files['web-asset-manifest.json'])
+        files[manifest['main']['path']] += b'corrupt'
+        with self.assertRaisesRegex(publisher.Refused, '^web_asset_identity$'):
+            publisher.verify_output('web', files, source)
+        files = fixture()
+        files['index.html'] = b'unrelated index'
+        with self.assertRaisesRegex(publisher.Refused, '^web_index_binding$'):
+            publisher.verify_output('web', files, source)
+        with self.assertRaisesRegex(publisher.Refused, '^web_bootstrap_binding$'):
+            publisher.verify_output('web', fixture(bootstrap_binds_main=False), source)
+
+    def test_frozen_file_candidate_is_single_source_bound_image(self):
+        plan = publisher.build_plan(FILE, P, '12345', '2')
+        self.assertEqual(set(plan['components']), {'file'})
+        row = plan['components']['file']
+        self.assertEqual(row['context'], 'src/backend')
+        self.assertEqual(row['dockerfile'], 'src/backend/file/Dockerfile')
+        self.assertEqual(row['platform'], 'linux/amd64')
+        self.assertEqual(row['build_args'], {})
+        self.assertEqual(row['tag'], publisher.REGISTRY + '/file:dev-' + FILE + '-12345-2')
+        self.assertEqual(plan['publisher_sha'], P)
+        self.assertEqual(publisher.verify_output('file', {'service': b'\x7fELFbinary'}, FILE)['files']['service'],
+                         {'sha256': hashlib.sha256(b'\x7fELFbinary').hexdigest(), 'bytes': 10})
+        for bad in ({'service': b'wrong'}, {'other': b'\x7fELFbinary'}):
+            with self.assertRaises(publisher.Refused):
+                publisher.verify_output('file', bad, FILE)
+        with self.assertRaises(publisher.Refused):
+            publisher.verify_output('file', {'service': b'\x7fELFbinary'}, A)
+
+    def test_frozen_file_builder_enforces_cgroup_caps_and_cleans_up(self):
+        calls = []
+        def command(args, **kwargs):
+            calls.append(args)
+            return b''
+        with mock.patch.object(publisher, 'command', side_effect=command):
+            with publisher.file_builder(12345, 2) as builder:
+                self.assertEqual(builder, 'voice-file-12345-2')
+        self.assertEqual(calls, [
+            ['docker', 'buildx', 'create', '--driver', 'docker-container', '--name', builder],
+            ['docker', 'buildx', 'inspect', '--builder', builder, '--bootstrap'],
+            ['docker', 'update', '--cpus', '2', '--memory', '4g', '--memory-swap', '4g',
+             'buildx_buildkit_' + builder + '0'],
+            ['docker', 'buildx', 'rm', builder],
+        ])
+        calls.clear()
+        with mock.patch.object(publisher, 'command', side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, 'fixture'):
+                with publisher.file_builder(12345, 2):
+                    raise RuntimeError('fixture')
+        self.assertEqual(calls[-1], ['docker', 'buildx', 'rm', builder])
+
+    def test_frozen_file_publication_retains_product_publisher_and_registry_receipt(self):
+        env = {'PRODUCT_SHA': FILE, 'PUBLISHER_SHA': P, 'GITHUB_RUN_ID': '12345',
+               'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_REPOSITORY': publisher.REPOSITORY,
+               'GITHUB_REF': 'refs/heads/master', 'GITHUB_ACTOR': 'fixture', 'GH_TOKEN': 'fixture'}
+        run = {'id': 12345, 'run_attempt': 2, 'head_sha': P, 'event': 'workflow_dispatch',
+               'path': publisher.WORKFLOW, 'repository': {'full_name': publisher.REPOSITORY}}
+        jobs = {'jobs': [{'id': 67890, 'run_id': 12345, 'head_sha': P, 'name': publisher.JOB_NAME}]}
+        manifest = json.dumps({'config': {'digest': DIGEST}}).encode()
+        platform = 'sha256:' + hashlib.sha256(manifest).hexdigest()
+        index = json.dumps({'manifests': [{'digest': platform,
+            'platform': {'os': 'linux', 'architecture': 'amd64'}}]}).encode()
+        digest = 'sha256:' + hashlib.sha256(index).hexdigest()
+        registry = mock.Mock()
+        registry.get.side_effect = lambda repository, path, absent=False: (
+            None if absent else manifest if path == 'manifests/' + platform else index)
+        calls = []
+        def command(args, **kwargs):
+            calls.append(args)
+            if args[0] == 'gh':
+                return json.dumps(jobs if '/jobs?' in args[-1] else run).encode()
+            if args[:3] == ['docker', 'buildx', 'build']:
+                self.assertEqual(args[3:5], ['--builder', 'voice-file-12345-2'])
+                self.assertIn('org.opencontainers.image.revision=' + FILE, args)
+                self.assertNotIn('--build-arg', args)
+                Path(args[args.index('--metadata-file') + 1]).write_text(
+                    json.dumps({'containerimage.digest': digest}))
+            return b''
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(publisher, 'source_snapshot', side_effect=lambda root, sha: {'source_sha': sha}) as snapshot, \
+                mock.patch.object(publisher, 'Registry', return_value=registry), \
+                mock.patch.object(publisher, 'command', side_effect=command), \
+                mock.patch.object(publisher, 'pulled_output', return_value={'verified': True}):
+            output = Path(folder) / 'evidence'
+            publisher.publish(Path(folder), Path(folder), output, env)
+            receipt = json.loads((output / 'published-images.json').read_bytes())
+            self.assertEqual(receipt['product_sha'], FILE)
+            self.assertEqual(receipt['publisher_sha'], P)
+            self.assertEqual(len(receipt['images']), 1)
+            image = receipt['images'][0]
+            self.assertEqual(image['component'], 'file')
+            self.assertEqual(image['config_digest'], DIGEST)
+            self.assertEqual(image['platform_manifest_digest'], platform)
+            self.assertEqual(image['reference'], publisher.REGISTRY + '/file@' + platform)
+            self.assertEqual([call.args[1] for call in snapshot.call_args_list], [P, FILE, FILE, P])
+            self.assertIn(['docker', 'buildx', 'rm', 'voice-file-12345-2'], calls)
+
     def test_auth_user_adoption_candidate_is_exact_and_component_scoped(self):
         plan = publisher.build_plan(A, P, '12345', '2')
         self.assertEqual(set(plan['components']), {'dev-auth', 'dev-user'})
@@ -328,6 +462,24 @@ class PublisherTests(unittest.TestCase):
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_web_route_is_isolated_and_authenticates_its_own_job(self):
+        path = Path(__file__).resolve().parents[2] / publisher.WEB_WORKFLOW
+        workflow = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+        self.assertEqual(set(workflow['on']), {'pull_request', 'workflow_dispatch'})
+        self.assertEqual(workflow['concurrency'], {'group': 'source-web-image-publication', 'cancel-in-progress': 'false'})
+        job = workflow['jobs']['publish']
+        self.assertEqual(job['name'], publisher.WEB_JOB_NAME)
+        self.assertIn("github.event_name == 'workflow_dispatch'", job['if'])
+        self.assertIn("github.ref == 'refs/heads/master'", job['if'])
+        self.assertEqual(job['permissions'], {'actions': 'read', 'contents': 'read', 'packages': 'write'})
+        self.assertIn('--route web', str(job))
+        run = {'id': 12345, 'run_attempt': 2, 'head_sha': P, 'event': 'workflow_dispatch',
+               'path': publisher.WEB_WORKFLOW, 'repository': {'full_name': publisher.REPOSITORY}}
+        jobs = {'jobs': [{'id': 67890, 'run_id': 12345, 'head_sha': P, 'name': publisher.WEB_JOB_NAME}]}
+        self.assertEqual(publisher.validate_run(run, jobs, P, '12345', '2', route='web')['workflow'], publisher.WEB_WORKFLOW)
+        with self.assertRaises(publisher.Refused):
+            publisher.validate_run(run, jobs, P, '12345', '2')
+
     def test_publication_is_manual_only_with_no_deployment_consumer(self):
         path = Path(__file__).resolve().parents[2] / publisher.WORKFLOW
         workflow = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.BaseLoader)

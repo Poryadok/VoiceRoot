@@ -3190,6 +3190,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get screenShareQuality720p30 => '720p · 30 FPS';
 
   @override
+  String get screenShareSystemAudio => 'Включить системный звук';
+
+  @override
+  String get screenShareSourceTitle => 'Выберите, чем поделиться';
+
+  @override
+  String get screenShareEntireScreen => 'Весь экран';
+
+  @override
+  String get screenShareWindow => 'Окно или приложение';
+
+  @override
+  String get screenShareSourceUnavailable =>
+      'Нет доступных экранов или окон для демонстрации';
+
+  @override
   String get screenShareLimitReached =>
       'В этом войсе уже 3 демонстрации экрана';
 
@@ -3198,7 +3214,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get platformWebSystemAudioUnavailable =>
-      'Шаринг системного аудио недоступен в браузере';
+      'Захват системного звука недоступен на этой платформе';
 
   @override
   String get platformWebGlobalPttUnavailable =>
@@ -4028,4 +4044,69 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get addGameModeDuplicate =>
       'У каждого режима должно быть своё название.';
+
+  @override
+  String get chatLinkPreviewLoading => 'Загружаем предпросмотр ссылки…';
+
+  @override
+  String get chatLinkPreviewUnavailable => 'Предпросмотр недоступен';
+
+  @override
+  String get chatLinkPreviewRetry => 'Повторить';
+
+  @override
+  String get gameCatalogAll => 'Все игры';
+
+  @override
+  String get gameCatalogBrowseAll => 'Все игры';
+
+  @override
+  String get gameCatalogChanged =>
+      'Каталог изменился. Начните просмотр заново, чтобы увидеть актуальные игры.';
+
+  @override
+  String get gameCatalogClearSearch => 'Очистить поиск';
+
+  @override
+  String get gameCatalogLoadMore => 'Загрузить ещё игры';
+
+  @override
+  String get gameCatalogPopular => 'Популярные';
+
+  @override
+  String get gameCatalogRecent => 'Недавние';
+
+  @override
+  String get gameCatalogRecentError => 'Не удалось загрузить недавние игры';
+
+  @override
+  String get gameCatalogSearchResults => 'Результаты поиска';
+
+  @override
+  String get composerVoiceHold => 'Удерживайте для записи · вверх — закрепить';
+
+  @override
+  String get composerVoicePermission =>
+      'Разрешите доступ к микрофону и повторите.';
+
+  @override
+  String get composerVoiceProcessing => 'Подготовка записи…';
+
+  @override
+  String get composerVoiceTooShort => 'Запишите не менее 1 секунды.';
+
+  @override
+  String get composerVoiceError => 'Не удалось записать. Повторите.';
+
+  @override
+  String get composerVoiceStop => 'Завершить запись';
+
+  @override
+  String get composerVoiceCancel => 'Отменить запись';
+
+  @override
+  String get composerVoiceLocked => 'Запись закреплена';
+
+  @override
+  String get queueSearchNoRolePreference => 'Без предпочтения роли';
 }

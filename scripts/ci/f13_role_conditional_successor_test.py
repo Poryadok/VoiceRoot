@@ -4,6 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -21,15 +22,41 @@ def git(*args,data=None,env=None):
 class RoleSuccessorTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.target=git('rev-parse','HEAD')
+        cls.actual_head=git('rev-parse','HEAD')
         cls.record=successor.load_record(ROOT)
+        current={line.split('\t',1)[1]:line.split()[2] for line in
+                 git('ls-tree','-r',cls.actual_head).splitlines()}
+        cls.restored_context=[row for row in cls.record['context']
+                              if current.get(row['path'])!=row['entry']['oid']]
+        closure=json.loads(legacy.git(ROOT,'show',successor.PINNED_RECORD_COMMIT+':'+
+                                          cls.record['closure_manifest']['path']))
+        packages={item['directory']:set(item['paths']) for item in closure['package_inventories']}
+        cls.removed_package_paths=sorted(path for path in current if
+            str(Path(path).parent).replace('\\','/') in packages and
+            path not in packages[str(Path(path).parent).replace('\\','/')])
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'),
+                     GIT_AUTHOR_NAME='F13 fixture',GIT_COMMITTER_NAME='F13 fixture',
+                     GIT_AUTHOR_EMAIL='fixture@example.invalid',GIT_COMMITTER_EMAIL='fixture@example.invalid')
+            git('read-tree',cls.actual_head,env=env)
+            for row in cls.restored_context:
+                entry=row['entry']
+                git('update-index','--add','--cacheinfo',
+                    entry['mode']+','+entry['oid']+','+row['path'],env=env)
+            for path in cls.removed_package_paths:
+                git('update-index','--force-remove',path,env=env)
+            cls.target=git('commit-tree',git('write-tree',env=env),'-p',cls.actual_head,
+                           data=b'Synthetic Role context fixture; no admission\n',env=env)
         old=json.loads(legacy.git(ROOT,'show',legacy.PINNED_RECORD_COMMIT+':'+legacy.RECORD_PATH))
         cls.prior='\t'.join(old['actual_prior_row'])
         m=old['incoming_metadata_at_failure']
         cls.incoming='\t'.join([legacy.ROLE_PATH,'true',m['owner'],m['parent'],m['source_base'],m['source_head'],m['content_base'],legacy.PINNED_BASE])
 
     def qualify(self,target=None,prior=None,incoming=None):
-        return successor.qualify(ROOT,target or self.target,prior or self.prior,incoming or self.incoming)
+        # The pinned record was fully verified in setUpClass. Each private target
+        # still exercises the real ancestry, carrier, entry and inventory guards.
+        with patch.object(successor,'load_record',return_value=self.record):
+            return successor.qualify(ROOT,target or self.target,prior or self.prior,incoming or self.incoming)
 
     def changed(self,name,content=b'unreviewed fixture\n',mode='100644'):
         with tempfile.TemporaryDirectory() as folder:
@@ -45,7 +72,7 @@ class RoleSuccessorTest(unittest.TestCase):
                        data=b'Synthetic Role source fixture; no admission\n',env=env)
 
     def test_exact_historical_and_current_correction(self):
-        result=self.qualify()
+        result=successor.qualify(ROOT,self.target,self.prior,self.incoming)
         self.assertEqual(result['actual_target'],self.target)
         self.assertEqual(result['historical_validation_target'],successor.HISTORICAL_CARRIER)
         self.assertNotEqual(result['actual_target'],result['historical_validation_target'])
@@ -54,6 +81,34 @@ class RoleSuccessorTest(unittest.TestCase):
         self.assertEqual(result['historical_runtime_gap'],self.record['historical_runtime_gap'])
         self.assertTrue(result['retain_runtime_and_content_taint'])
         self.assertTrue(all(result[name] is False for name in successor.FALSE_FLAGS))
+
+    def test_private_fixture_restores_only_reviewed_context(self):
+        self.assertEqual({row['path'] for row in self.restored_context},{
+            'src/backend/chat/pb/voice/chat/v1/chat.pb.go',
+            'src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go',
+            'src/backend/file/pb/voice/file/v1/file.pb.go',
+            'src/backend/pkg/integrationtest/migrations.go'})
+        self.assertEqual(set(self.removed_package_paths),{
+            'src/backend/chat/pb/voice/chat/v1/catalog_assets.pb.go',
+            'src/backend/chat/pb/voice/chat/v1/catalog_assets_grpc.pb.go',
+            'src/backend/file/pb/voice/file/v1/catalog_assets.pb.go',
+            'src/backend/file/pb/voice/file/v1/catalog_assets_grpc.pb.go',
+            'src/backend/pkg/authoritysource/gis_state.go',
+            'src/backend/pkg/authoritysource/gis_state_test.go'})
+        self.assertEqual(git('rev-list','--parents','-n','1',self.target).split(),
+                         [self.target,self.actual_head])
+        self.assertEqual(set(git('diff','--name-only',self.actual_head,self.target).splitlines()),
+                         {row['path'] for row in self.restored_context}|set(self.removed_package_paths))
+        for row in self.restored_context:
+            with self.subTest(path=row['path']):
+                self.assertEqual(legacy.entry(ROOT,self.target,row['path']),row['entry'])
+        for path in self.removed_package_paths:
+            with self.subTest(path=path),self.assertRaisesRegex(legacy.Rejected,'single_entry'):
+                legacy.entry(ROOT,self.target,path)
+
+    def test_actual_head_context_drift_is_rejected(self):
+        with self.assertRaisesRegex(legacy.Rejected,'actual_entry'):
+            self.qualify(self.actual_head)
 
     def test_old_actual_target_is_still_denied(self):
         with self.assertRaisesRegex(legacy.Rejected,'actual_entry'):
@@ -127,8 +182,9 @@ spec=importlib.util.spec_from_file_location('extracted_role',sys.argv[1])
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 r=m.qualify(*sys.argv[2:]);assert r['actual_target']==sys.argv[3]
 """
-        subprocess.run(['python','-c',code,str(ROOT/successor.VERIFIER_PATH),str(ROOT),self.target,
-                        self.prior,self.incoming],cwd='/tmp',capture_output=True,check=True)
+        with tempfile.TemporaryDirectory() as folder:
+            subprocess.run([sys.executable,'-c',code,str(ROOT/successor.VERIFIER_PATH),str(ROOT),self.target,
+                            self.prior,self.incoming],cwd=folder,capture_output=True,check=True)
 
     def altered_record(self, mutate, reason):
         record=json.loads(json.dumps(self.record));mutate(record)

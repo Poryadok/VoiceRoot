@@ -83,9 +83,22 @@ TRACE_DIR=''
 TRACE_FILE=''
 STATUS_FILE=''
 notification_container=''
+mm_accept_game_id=''
+cleanup_mm_accept_fixture() {
+  if [[ -n "${mm_accept_game_id}" ]]; then
+    if ! python3 "${ROOT}/scripts/ci/compose_mm_accept_fixture.py" archive "${mm_accept_game_id}"; then
+      echo 'compose_mm_fixture_cleanup=failed' >&2
+      return 1
+    fi
+    mm_accept_game_id=''
+  fi
+}
 cleanup_fcm_diagnostic() {
   local original_status=$?
   trap - EXIT
+  if ! cleanup_mm_accept_fixture && ((original_status == 0)); then
+    original_status=1
+  fi
   if [[ -n "${TRACE_FILE}" ]]; then
     if ! voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}" "${STATUS_FILE}"; then
       echo 'compose_fcm_cleanup=failed' >&2
@@ -175,9 +188,14 @@ if ((date_status != 0)) || ! voice_fcm_diag_since_valid "${diagnostic_since}"; t
   echo 'compose_fcm_diag valid=false reason=unknown admission=none candidates=0 attempts=0 member_result=unknown member_count=0 recipient_present=unknown inbox=unknown base_push=unknown final_push=unknown presence=unknown policy=unknown token_rows=0 fcm_tokens=0 dispatcher_returns=0 route=unknown'
   exit 1
 fi
+# Generate custody before SQL: EXIT cleanup can archive this exact fixture even
+# if the create call loses its result after PostgreSQL commits.
+mm_accept_game_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+python3 "${ROOT}/scripts/ci/compose_mm_accept_fixture.py" create "${mm_accept_game_id}"
 set +e
 flutter test --concurrency=1 "${ARGS[@]}" \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
+  --dart-define=VOICE_COMPOSE_MM_ACCEPT_GAME_ID="${mm_accept_game_id}" \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
   --dart-define=VOICE_FCM_DIAGNOSTIC_FILE="${TRACE_FILE}" \
   --dart-define=VOICE_FCM_DIAGNOSTIC_STATUS_FILE="${STATUS_FILE}"
@@ -250,6 +268,9 @@ if ((flutter_status != 0)) && [[ -n "${TRACE_FILE}" ]]; then
 fi
 
 cleanup_failed=false
+if ! cleanup_mm_accept_fixture; then
+  cleanup_failed=true
+fi
 if [[ -n "${TRACE_FILE}" ]]; then
   if voice_fcm_diag_cleanup "${TRACE_FILE}" "${TRACE_DIR}" "${STATUS_FILE}"; then
     TRACE_FILE=''

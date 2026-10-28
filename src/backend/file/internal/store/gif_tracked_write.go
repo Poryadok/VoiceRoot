@@ -28,7 +28,7 @@ func (s *FilesStore) PrepareGIFTrackedWrites(ctx context.Context, job *GIFJob, f
 	if job == nil || !validGIFRepresentation(full, job.FullKey, "video/mp4") || !validGIFRepresentation(thumb, job.ThumbnailKey, "image/webp") {
 		return ErrTrackedWrite
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return err
 	}

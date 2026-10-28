@@ -4,7 +4,7 @@ import { setAccessToken } from '../oauth/session';
 describe('api client', () => {
   beforeEach(() => {
     sessionStorage.clear();
-    vi.stubEnv('VITE_VOICE_API_BASE', 'http://api.test');
+    vi.stubEnv('VITE_VOICE_API_BASE', 'https://api.test');
     vi.resetModules();
     vi.stubGlobal('fetch', vi.fn());
   });
@@ -17,7 +17,7 @@ describe('api client', () => {
     await apiFetch('/api/v1/bots');
 
     expect(fetch).toHaveBeenCalledWith(
-      'http://api.test/api/v1/bots',
+      'https://api.test/api/v1/bots',
       expect.objectContaining({
         headers: expect.any(Headers),
       }),
@@ -54,7 +54,7 @@ describe('api client', () => {
   });
 
   it('apiFetch normalizes api base trailing slash', async () => {
-    vi.stubEnv('VITE_VOICE_API_BASE', 'http://api.test/');
+    vi.stubEnv('VITE_VOICE_API_BASE', 'https://api.test/');
     vi.resetModules();
     const { apiFetch } = await import('../oauth/api');
     vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }));
@@ -62,7 +62,7 @@ describe('api client', () => {
     await apiFetch('/api/v1/bots/abc/manifest');
 
     expect(fetch).toHaveBeenCalledWith(
-      'http://api.test/api/v1/bots/abc/manifest',
+      'https://api.test/api/v1/bots/abc/manifest',
       expect.any(Object),
     );
   });

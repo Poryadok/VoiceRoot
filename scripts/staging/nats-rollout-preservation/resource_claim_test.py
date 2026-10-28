@@ -1,0 +1,315 @@
+"""Pure host tests: no tracker writes, subprocesses or stand access."""
+import copy
+import json
+import os
+import tempfile
+import sys
+from pathlib import Path
+import unittest
+from unittest.mock import Mock, patch
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
+
+import resource_claim as claim
+
+
+def context():
+    return dict(project='voice',resource='STAGING',actor='operator',
+        claim='11111111-1111-4111-8111-111111111111',generation=7,
+        window='22222222-2222-4222-8222-222222222222',revision=12,
+        operation_id='stg-run-17',commit='c'*40,
+        images={'voice-user/user':'registry/user@sha256:'+'c'*64})
+
+
+def card(c):
+    return dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['actor'],
+        claim=c['claim'],generation=c['generation'],window=c['window'],revision=c['revision'],operation=2,
+        candidate=dict(state='known',commit=c['commit'],images=copy.deepcopy(c['images'])),
+        observed=dict(state='known',claim=c['claim'],window=c['window'],operation=1,
+            images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
+
+
+class MemoryJournal:
+    def __init__(self): self.row=None; self.events=[];self.supersessions=[]
+    def read(self): return copy.deepcopy(self.row)
+    def save(self,row): self.row=copy.deepcopy(row);self.events.append(copy.deepcopy(row))
+    def supersede(self,*args):self.supersessions.append(copy.deepcopy(args))
+
+
+class ResourceTests(unittest.TestCase):
+    def fixture(self):
+        c=context(); current=card(c); journal=MemoryJournal()
+        session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
+        return session,current,journal
+
+    def test_identity_is_typed_and_exact_not_actor_label(self):
+        for key in context():
+            c=context();del c[key]
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                claim.Session(c,'a'*12,'b'*64,Mock(),MemoryJournal())
+        for key in ('claim','generation','window','revision','owner','state','phase'):
+            session,current,journal=self.fixture();current[key]='stale'
+            with self.subTest(key=key),self.assertRaises(RuntimeError):session.admit(start=True)
+            self.assertIsNone(journal.row)
+
+    def test_journal_precedes_commands_and_survives_stage_boundaries(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        session.check(['kubectl','get','deployments'])
+        session.bind_target('c'*40,context()['images'],current['observed']['images'],'d'*64)
+        binding=session.binding()
+        self.assertEqual(journal.row['status'],'active')
+        resumed=claim.Session(context(),'a'*12,'b'*64,lambda:current,journal)
+        resumed.admit(start=False);resumed.require_binding(binding)
+        resumed.ready();resumed.check(['kubectl','apply','-f','-'])
+        self.assertEqual(journal.row['status'],'active')
+
+    def test_new_generation_cannot_replace_active_or_uncertain_operation(self):
+        for uncertain in (False,True):
+            session,current,journal=self.fixture();session.admit(start=True)
+            if uncertain:session.uncertain('partial apply')
+            newer=context();newer.update(generation=8,claim='33333333-3333-4333-8333-333333333333')
+            other=claim.Session(newer,'e'*12,'b'*64,lambda:card(newer),journal)
+            with self.subTest(uncertain=uncertain),self.assertRaises(RuntimeError):other.admit(start=True)
+            self.assertEqual(journal.row['context']['generation'],7)
+
+    def test_paused_executor_rechecks_live_card_and_journal_before_spawn(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        current['claim']='33333333-3333-4333-8333-333333333333'
+        with self.assertRaises(RuntimeError):session.check(['kubectl','patch','deployment'])
+        current['claim']=context()['claim'];journal.row['status']='uncertain'
+        with self.assertRaises(RuntimeError):session.check(['kubectl','delete','pod'])
+
+    def test_legacy_or_changed_helper_binding_and_baseline_are_rejected(self):
+        session,current,journal=self.fixture()
+        with self.assertRaises(RuntimeError):session.admit(start=False)
+        session.admit(start=True)
+        with self.assertRaises(RuntimeError):session.bind_target('c'*40,context()['images'],{},'d'*64)
+        session.bind_target('c'*40,context()['images'],current['observed']['images'],'d'*64)
+        for changed in ({},dict(session.binding(),helper_sha256='e'*64)):
+            with self.assertRaises(RuntimeError):session.require_binding(changed)
+
+    def test_only_actual_finish_closes_and_old_generation_cannot_reopen(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        session.bind_target('c'*40,context()['images'],current['observed']['images'],'d'*64);session.ready()
+        with self.assertRaises(RuntimeError):session.complete('WAITING',context()['images'])
+        session.complete('PASS',context()['images'])
+        with self.assertRaises(RuntimeError):session.admit(start=True)
+        with self.assertRaises(RuntimeError):session.check(['kubectl','patch'])
+        newer=context();newer.update(generation=8,claim='33333333-3333-4333-8333-333333333333',operation_id='next')
+        claim.Session(newer,'e'*12,'b'*64,lambda:card(newer),journal).admit(start=True)
+        with self.assertRaises(RuntimeError):session.check(['kubectl','apply'])
+
+    def test_new_start_refuses_unknown_or_incomplete_closed_journal(self):
+        for field,value in (('schema','unknown-v2'),('phase','prepare'),('actual',{}),
+                            ('target_sha256',None),('helper_sha256','bad'),('operation','bad')):
+            old,current,journal=self.prepared();old.complete('PASS',context()['images'])
+            journal.row[field]=value;before=journal.read()
+            newer=context();newer.update(generation=8,claim='33333333-3333-4333-8333-333333333333',operation_id='next')
+            new=claim.Session(newer,'e'*12,'b'*64,lambda:card(newer),journal)
+            with self.subTest(field=field),self.assertRaises(RuntimeError):new.admit(start=True)
+            self.assertEqual(journal.read(),before)
+
+    def test_bridge_admission_precedes_cached_result_and_recovery(self):
+        import bridge
+        request=dict(action='finish',operation='a'*12,claim_rv='17',nonce='b'*64)
+        with tempfile.TemporaryDirectory() as directory:
+            calls=[]
+            bridge.dispatch(Path(directory),request,lambda row:{'status':'PASS'},lambda row:None,
+                admit=lambda row:calls.append('check'))
+            def stale(row):raise RuntimeError('claim rotated')
+            with self.assertRaises(RuntimeError):
+                bridge.dispatch(Path(directory),request,lambda row:self.fail('rerun'),lambda row:self.fail('recover'),admit=stale)
+            self.assertEqual(calls,['check'])
+
+    def test_actual_command_boundary_checks_before_popen_and_cleanup_has_same_guard(self):
+        import commands
+        session,current,journal=self.fixture();session.admit(start=True)
+        session.bind_target('c'*40,context()['images'],current['observed']['images'],'d'*64)
+        current['claim']='33333333-3333-4333-8333-333333333333'
+        previous=commands.authority_guard
+        with patch.object(commands.subprocess,'Popen') as spawn:
+            with claim.command_scope(session.check):
+                for argv in (['kubectl','patch','deployment'],['kubectl','scale','deployment','--replicas=0']):
+                    with self.assertRaises(RuntimeError):commands.capture(argv)
+            spawn.assert_not_called()
+        self.assertIs(commands.authority_guard,previous)
+
+    def test_failed_baseline_cannot_fall_through_to_refence(self):
+        import commands
+        session,current,journal=self.fixture();session.admit(start=True)
+        with self.assertRaises(RuntimeError):session.bind_target('c'*40,context()['images'],{},'d'*64)
+        with claim.command_scope(session.check),patch.object(commands.subprocess,'Popen') as spawn:
+            with self.assertRaises(RuntimeError):commands.capture(['kubectl','patch','deployment','--patch={}'])
+            spawn.assert_not_called()
+
+    def test_runner_reads_live_journal_each_stage_and_never_closes_it(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        target=dict(tag='c'*40,images=context()['images'])
+        session.bind_target('c'*40,context()['images'],current['observed']['images'],claim.digest(target));session.ready()
+        binding=session.binding();helper={'fixture':'b'*64}
+        journal.row['helper_sha256']=claim.digest(helper);binding['helper_sha256']=claim.digest(helper)
+        receipt=dict(operation='a'*12,target=target,resource_fence=binding)
+        check=Mock(side_effect=lambda:copy.deepcopy(current));check.uncertain=Mock()
+        with patch.object(claim,'require_helper'),patch.object(claim,'RootJournal',return_value=journal),patch.object(claim,'Check',return_value=check):
+            with self.assertRaises(RuntimeError):
+                with claim.runner_scope(receipt,Path('/unused'),helper) as runner:
+                    journal.row['target_sha256']='e'*64
+                    runner.check(['kubectl','apply'])
+        self.assertEqual(journal.row['status'],'active')
+        check.uncertain.assert_called_once()
+
+    def test_mutating_client_requires_context_and_binds_it_into_nonce(self):
+        import bridge_client
+        environment=dict(GITHUB_TOKEN='private',GITHUB_RUN_ATTEMPT='1',GITHUB_RUN_ID='17',GITHUB_SHA='c'*40)
+        with self.assertRaises(Exception):bridge_client.request(['prepare','images-only','user','c'*40,'17'],environment)
+        environment['VOICE_TTENREC_CONTEXT']=__import__('json').dumps(context())
+        first=bridge_client.request(['prepare','images-only','user','c'*40,'17'],environment)
+        self.assertEqual(first['resource_context'],context())
+        changed=context();changed['generation']+=1
+        environment['VOICE_TTENREC_CONTEXT']=__import__('json').dumps(changed)
+        second=bridge_client.request(['prepare','images-only','user','c'*40,'17'],environment)
+        self.assertNotEqual(first['nonce'],second['nonce'])
+
+    def prepared(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        session.bind_target('c'*40,context()['images'],current['observed']['images'],'d'*64);session.ready()
+        return session,current,journal
+
+    def test_provisional_finish_remains_active_through_actual_acceptance(self):
+        session,current,journal=self.prepared();session.complete('PROVISIONAL_READY',context()['images'])
+        self.assertEqual(journal.row['status'],'active')
+        self.assertEqual(journal.row['phase'],'awaiting-ci')
+        session.check(['kubectl','get','deployments'])
+        actions=Mock();actions.state.return_value=(Path('/unused'),dict(status='PASS',target=dict(images=context()['images'])))
+        claim.finish_request(session,actions,dict(action='accept-provisional',operation='a'*12),dict(status='PASS'))
+        self.assertEqual(journal.row['status'],'complete')
+
+    def test_cached_authorize_after_completion_does_not_reopen_or_mark_uncertain(self):
+        session,current,journal=self.prepared();session.complete('PASS',context()['images'])
+        before=copy.deepcopy(journal.row);events=len(journal.events)
+        claim.finish_request(session,Mock(),dict(action='authorize'),dict(status='WAITING'))
+        self.assertEqual(journal.row,before);self.assertEqual(len(journal.events),events)
+
+    def test_nested_runner_and_apply_have_one_uncertain_notification_owner(self):
+        session,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'])
+        helper={'fixture':'b'*64};journal.row.update(helper_sha256=claim.digest(helper),target_sha256=claim.digest(target))
+        binding={k:copy.deepcopy(journal.row[k]) for k in ('schema','context','operation','helper_sha256','target_sha256')}
+        receipt=dict(operation='a'*12,target=target,resource_fence=binding)
+        check=Mock(side_effect=lambda:copy.deepcopy(current));check.uncertain=Mock(side_effect=RuntimeError('lost POST response'))
+        with patch.object(claim,'require_helper'),patch.object(claim,'RootJournal',return_value=journal),patch.object(claim,'Check',return_value=check):
+            with self.assertRaisesRegex(RuntimeError,'apply response lost'):
+                with claim.runner_scope(receipt,Path('/unused'),helper):
+                    with claim.runner_scope(receipt,Path('/unused'),helper):raise RuntimeError('apply response lost')
+        self.assertEqual(check.uncertain.call_count,1)
+        self.assertEqual(journal.row['status'],'active')
+
+    def test_rejected_admission_cannot_mark_some_other_executor_uncertain(self):
+        session,current,journal=self.prepared();session.complete('PASS',context()['images'])
+        c=context();c.update(generation=8,claim='33333333-3333-4333-8333-333333333333')
+        check=Mock(return_value=card(c));check.uncertain=Mock()
+        actions=Mock();actions.binding={'fixture':'b'*64}
+        request=dict(action='authorize',operation='a'*12,nonce='e'*64,resource_context=c)
+        before=copy.deepcopy(journal.row)
+        with patch.object(claim,'require_helper'),patch.object(claim,'RootJournal',return_value=journal),patch.object(claim,'Check',return_value=check):
+            with self.assertRaises(RuntimeError):
+                with claim.root_scope(actions,request) as active:active.admit_request(request)
+        check.uncertain.assert_not_called();self.assertEqual(journal.row,before)
+
+    def test_historical_parent_binding_does_not_reuse_its_old_resource_authority(self):
+        session,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'])
+        helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
+        session.helper=claim.digest(helper);journal.row.update(helper_sha256=session.helper,target_sha256=claim.digest(target))
+        session.expected_target=claim.digest(target);binding=session.binding()
+        state=dict(operation='a'*12,target=target,code_capture=helper,resource_fence=binding)
+        self.assertEqual(claim.historical_binding(state),binding)
+        for invalid in ({k:v for k,v in state.items() if k!='resource_fence'},dict(state,target=dict(tag='e'*40,images=context()['images']))):
+            with self.assertRaises(RuntimeError):claim.historical_binding(invalid)
+
+    def repair(self):
+        old,current,journal=self.prepared();old.complete('PROVISIONAL_READY',context()['images'])
+        newer=context();newer.update(generation=8,revision=14,claim='33333333-3333-4333-8333-333333333333',operation_id='repair-18')
+        new=claim.Session(newer,'e'*12,'b'*64,lambda:card(newer),journal)
+        new.repair_guard=Mock(return_value=dict(operation=old.operation,checkpoint_sha256='f'*64))
+        return old,new,journal,dict(action='prepare-repair',operation=old.operation)
+
+    def test_repair_archives_verified_provisional_before_replacing_and_denies_old_writer(self):
+        old,new,journal,request=self.repair();before=journal.read()
+        new.admit_request(request)
+        self.assertEqual(journal.supersessions[0][0],before)
+        self.assertEqual(new.repair_guard.call_count,2)
+        self.assertEqual(journal.row['context'],new.context)
+        with self.assertRaises(RuntimeError):old.check(['kubectl','apply'])
+        new.uncertain('lost response')
+        self.assertEqual(journal.row['status'],'uncertain')
+        self.assertEqual(journal.supersessions[0][0],before)
+
+    def test_repair_requires_fresh_identity_exact_phase_and_durable_history(self):
+        for change in ('phase','status','actual','generation','claim','operation_id','action','proof','archive','reread'):
+            old,new,journal,request=self.repair();before=journal.read()
+            if change=='phase':journal.row['phase']='apply-ready'
+            elif change=='status':journal.row['status']='uncertain'
+            elif change=='actual':journal.row['actual']={}
+            elif change in ('generation','claim','operation_id'):new.context[change]=old.context[change]
+            elif change=='action':request['action']='prepare'
+            elif change=='proof':new.repair_guard.side_effect=RuntimeError('bad protected parent')
+            elif change=='archive':journal.supersede=Mock(side_effect=RuntimeError('fsync failed'))
+            elif change=='reread':new.repair_guard.side_effect=[{'checkpoint_sha256':'f'*64},{'checkpoint_sha256':'d'*64}]
+            expected=journal.read()
+            with self.subTest(change=change),self.assertRaises(RuntimeError):new.admit_request(request)
+            self.assertEqual(journal.row,expected)
+
+    def test_repair_proof_reads_exact_protected_parent(self):
+        old,current,journal=self.prepared();target=dict(tag='c'*40,images=context()['images'])
+        helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
+        old.helper=claim.digest(helper);journal.row.update(helper_sha256=old.helper,target_sha256=claim.digest(target))
+        old.expected_target=claim.digest(target)
+        state=dict(operation=old.operation,target=target,code_capture=helper,resource_fence=old.binding(),
+            status='PROVISIONAL_READY',phase='POST_RESTART',fence_status='RELEASED')
+        old.complete('PROVISIONAL_READY',context()['images'])
+        import json
+        actions=Mock();actions.state.return_value=(Path('/private'),state)
+        request=dict(operation=old.operation)
+        with patch('operator_retirement.private_bytes',return_value=json.dumps(state).encode()):
+            proof=claim.repair_proof(actions,request,journal.row)
+            self.assertEqual(proof['operation'],old.operation)
+            state['fence_status']='UNKNOWN'
+            with self.assertRaises(RuntimeError):claim.repair_proof(actions,request,journal.row)
+
+    @unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'isolated root Linux custody fixture')
+    def test_root_archive_and_actual_protected_checkpoint_survive_failed_replacement(self):
+        import root_main
+        old,new,memory,request=self.repair()
+        target=dict(tag='c'*40,images=context()['images'])
+        helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
+        previous=memory.read();previous.update(helper_sha256=claim.digest(helper),target_sha256=claim.digest(target))
+        binding={k:previous[k] for k in ('schema','context','operation','helper_sha256','target_sha256')}
+        state=dict(operation=old.operation,target=target,code_capture=helper,resource_fence=binding,
+            status='PROVISIONAL_READY',phase='POST_RESTART',fence_status='RELEASED')
+        # The disposable CI image has no host operator account. Keep the real
+        # chown/mode/custody path, with a fixture-local group identity only.
+        with tempfile.TemporaryDirectory() as folder,patch('grp.getgrnam',return_value=Mock(gr_gid=os.getgid())):
+            root=Path(folder);(root/'installed').mkdir(mode=0o700)
+            base=root/('rollout-'+old.operation);base.mkdir(mode=0o700)
+            root_main.save(base/'checkpoint.json',state)
+            journal=claim.RootJournal(root);journal.save(previous)
+            import bridge_root,guard,root_cli
+            actions=bridge_root.Actions.__new__(bridge_root.Actions);actions.tt_session=new;actions.binding=helper
+            new.journal=journal;new.repair_guard=lambda req,prior:claim.repair_proof(actions,req,prior)
+            with patch.object(guard,'ROOT',root),patch.object(root_cli,'ROOT',root):
+                with patch.object(journal,'save',side_effect=OSError('replace interrupted')):
+                    with self.assertRaises(OSError):new.admit_request(request)
+                self.assertEqual(journal.read(),previous)
+                archive=root/'installed/tt-resource-supersessions'/('e'*12+'.json')
+                record=claim.trusted_json(archive)
+                self.assertEqual(record['previous'],previous)
+                self.assertEqual(record['parent']['checkpoint_sha256'],__import__('hashlib').sha256((base/'checkpoint.json').read_bytes()).hexdigest())
+                # Lost replacement response retries only the identical archive;
+                # changed checkpoint bytes cannot overwrite durable history.
+                new.admit_request(request)
+                self.assertEqual(journal.read()['context'],new.context)
+                self.assertEqual(claim.trusted_json(archive),record)
+                archive.chmod(0o660)
+                with self.assertRaises(RuntimeError):claim.trusted_json(archive)
+
+
+if __name__=='__main__':unittest.main()

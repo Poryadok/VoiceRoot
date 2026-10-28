@@ -5475,6 +5475,357 @@ class GetSpacePurgeReceiptResponse extends $pb.GeneratedMessage {
   $6.SpacePurgeReceipt ensureReceipt() => $_ensure(0);
 }
 
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class ClaimStoryMediaRequest extends $pb.GeneratedMessage {
+  factory ClaimStoryMediaRequest({
+    $core.String? operationId,
+    $core.String? storyId,
+    $core.String? fileId,
+    $core.String? authorProfileId,
+    $3.StoryMediaType? expectedStoryType,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (storyId != null) result.storyId = storyId;
+    if (fileId != null) result.fileId = fileId;
+    if (authorProfileId != null) result.authorProfileId = authorProfileId;
+    if (expectedStoryType != null) result.expectedStoryType = expectedStoryType;
+    return result;
+  }
+
+  ClaimStoryMediaRequest._();
+
+  factory ClaimStoryMediaRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ClaimStoryMediaRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ClaimStoryMediaRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'storyId')
+    ..aOS(3, _omitFieldNames ? '' : 'fileId')
+    ..aOS(4, _omitFieldNames ? '' : 'authorProfileId')
+    ..aE<$3.StoryMediaType>(5, _omitFieldNames ? '' : 'expectedStoryType',
+        enumValues: $3.StoryMediaType.values)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClaimStoryMediaRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClaimStoryMediaRequest copyWith(
+          void Function(ClaimStoryMediaRequest) updates) =>
+      super.copyWith((message) => updates(message as ClaimStoryMediaRequest))
+          as ClaimStoryMediaRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ClaimStoryMediaRequest create() => ClaimStoryMediaRequest._();
+  @$core.override
+  ClaimStoryMediaRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ClaimStoryMediaRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ClaimStoryMediaRequest>(create);
+  static ClaimStoryMediaRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get storyId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set storyId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStoryId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStoryId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get fileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set fileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasFileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearFileId() => $_clearField(3);
+
+  @$pb.TagNumber(4)
+  $core.String get authorProfileId => $_getSZ(3);
+  @$pb.TagNumber(4)
+  set authorProfileId($core.String value) => $_setString(3, value);
+  @$pb.TagNumber(4)
+  $core.bool hasAuthorProfileId() => $_has(3);
+  @$pb.TagNumber(4)
+  void clearAuthorProfileId() => $_clearField(4);
+
+  @$pb.TagNumber(5)
+  $3.StoryMediaType get expectedStoryType => $_getN(4);
+  @$pb.TagNumber(5)
+  set expectedStoryType($3.StoryMediaType value) => $_setField(5, value);
+  @$pb.TagNumber(5)
+  $core.bool hasExpectedStoryType() => $_has(4);
+  @$pb.TagNumber(5)
+  void clearExpectedStoryType() => $_clearField(5);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ClaimStoryMediaResponse extends $pb.GeneratedMessage {
+  factory ClaimStoryMediaResponse({
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.List<$core.int>? requestSha256,
+  }) {
+    final result = create();
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    return result;
+  }
+
+  ClaimStoryMediaResponse._();
+
+  factory ClaimStoryMediaResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ClaimStoryMediaResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ClaimStoryMediaResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        3, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClaimStoryMediaResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ClaimStoryMediaResponse copyWith(
+          void Function(ClaimStoryMediaResponse) updates) =>
+      super.copyWith((message) => updates(message as ClaimStoryMediaResponse))
+          as ClaimStoryMediaResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ClaimStoryMediaResponse create() => ClaimStoryMediaResponse._();
+  @$core.override
+  ClaimStoryMediaResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ClaimStoryMediaResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ClaimStoryMediaResponse>(create);
+  static ClaimStoryMediaResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get receiptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set receiptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceiptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceiptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.List<$core.int> get requestSha256 => $_getN(2);
+  @$pb.TagNumber(3)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRequestSha256() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRequestSha256() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=reject
+/// @voice.hash=domain_separated_sha256
+class ReleaseStoryMediaRequest extends $pb.GeneratedMessage {
+  factory ReleaseStoryMediaRequest({
+    $core.String? operationId,
+    $core.String? storyId,
+    $core.String? fileId,
+  }) {
+    final result = create();
+    if (operationId != null) result.operationId = operationId;
+    if (storyId != null) result.storyId = storyId;
+    if (fileId != null) result.fileId = fileId;
+    return result;
+  }
+
+  ReleaseStoryMediaRequest._();
+
+  factory ReleaseStoryMediaRequest.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReleaseStoryMediaRequest.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReleaseStoryMediaRequest',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'operationId')
+    ..aOS(2, _omitFieldNames ? '' : 'storyId')
+    ..aOS(3, _omitFieldNames ? '' : 'fileId')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReleaseStoryMediaRequest clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReleaseStoryMediaRequest copyWith(
+          void Function(ReleaseStoryMediaRequest) updates) =>
+      super.copyWith((message) => updates(message as ReleaseStoryMediaRequest))
+          as ReleaseStoryMediaRequest;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReleaseStoryMediaRequest create() => ReleaseStoryMediaRequest._();
+  @$core.override
+  ReleaseStoryMediaRequest createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReleaseStoryMediaRequest getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReleaseStoryMediaRequest>(create);
+  static ReleaseStoryMediaRequest? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get operationId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set operationId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasOperationId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearOperationId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get storyId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set storyId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasStoryId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearStoryId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get fileId => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set fileId($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasFileId() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearFileId() => $_clearField(3);
+}
+
+/// @voice.unknown_fields=accept_preserve
+/// @voice.hash=domain_separated_sha256
+class ReleaseStoryMediaResponse extends $pb.GeneratedMessage {
+  factory ReleaseStoryMediaResponse({
+    $core.String? receiptId,
+    $core.String? operationId,
+    $core.List<$core.int>? requestSha256,
+  }) {
+    final result = create();
+    if (receiptId != null) result.receiptId = receiptId;
+    if (operationId != null) result.operationId = operationId;
+    if (requestSha256 != null) result.requestSha256 = requestSha256;
+    return result;
+  }
+
+  ReleaseStoryMediaResponse._();
+
+  factory ReleaseStoryMediaResponse.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory ReleaseStoryMediaResponse.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'ReleaseStoryMediaResponse',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aOS(1, _omitFieldNames ? '' : 'receiptId')
+    ..aOS(2, _omitFieldNames ? '' : 'operationId')
+    ..a<$core.List<$core.int>>(
+        3, _omitFieldNames ? '' : 'requestSha256', $pb.PbFieldType.OY)
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReleaseStoryMediaResponse clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  ReleaseStoryMediaResponse copyWith(
+          void Function(ReleaseStoryMediaResponse) updates) =>
+      super.copyWith((message) => updates(message as ReleaseStoryMediaResponse))
+          as ReleaseStoryMediaResponse;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static ReleaseStoryMediaResponse create() => ReleaseStoryMediaResponse._();
+  @$core.override
+  ReleaseStoryMediaResponse createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static ReleaseStoryMediaResponse getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<ReleaseStoryMediaResponse>(create);
+  static ReleaseStoryMediaResponse? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.String get receiptId => $_getSZ(0);
+  @$pb.TagNumber(1)
+  set receiptId($core.String value) => $_setString(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasReceiptId() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearReceiptId() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get operationId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set operationId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasOperationId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearOperationId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.List<$core.int> get requestSha256 => $_getN(2);
+  @$pb.TagNumber(3)
+  set requestSha256($core.List<$core.int> value) => $_setBytes(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasRequestSha256() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearRequestSha256() => $_clearField(3);
+}
+
 const $core.bool _omitFieldNames =
     $core.bool.fromEnvironment('protobuf.omit_field_names');
 const $core.bool _omitMessageNames =

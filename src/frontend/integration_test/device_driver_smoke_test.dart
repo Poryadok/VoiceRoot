@@ -21,7 +21,6 @@ import 'package:voice_frontend/state/connectivity_providers.dart';
 import 'package:voice_frontend/state/deep_link_navigation.dart';
 import 'package:voice_frontend/state/push_notifications.dart';
 import 'package:voice_frontend/state/push_notifications_bootstrap.dart';
-import 'package:voice_frontend/state/shared_media_providers.dart';
 import 'package:voice_frontend/state/shell_providers.dart';
 import 'package:voice_frontend/state/social_providers.dart';
 import 'package:voice_frontend/state/space_providers.dart';
@@ -29,6 +28,7 @@ import 'package:voice_frontend/state/voip_push_platform.dart';
 import 'package:voice_frontend/ui/social/profile_detail_sheet.dart';
 
 import '../test/support/auth_test_overrides.dart';
+import '../test/support/deep_link_message_fixture.dart';
 import '../test/support/fake_voice_api_clients.dart';
 import '../test/support/gateway_test_client.dart';
 import '../test/support/voice_test_theme.dart';
@@ -55,7 +55,15 @@ void main() {
       tester,
     ) async {
       await bindDesktopTestViewport(tester);
-      final env = await _pumpDriverShell(tester);
+      final env = await _pumpDriverShell(
+        tester,
+        extraOverrides: [
+          deepLinkMessageHistoryOverride(
+            chatId: 'device-driver-chat',
+            messageId: 'device-driver-msg',
+          ),
+        ],
+      );
 
       await env.container
           .read(deepLinkNavigatorProvider)
@@ -67,11 +75,11 @@ void main() {
       await _pumpShellReady(tester);
 
       expect(env.container.read(selectedChatIdProvider), 'device-driver-chat');
-      expect(
-        env.container.read(
-          pendingChatMessageScrollProvider('device-driver-chat'),
-        ),
-        'device-driver-msg',
+      await expectDeepLinkMessageVisible(
+        tester,
+        container: env.container,
+        chatId: 'device-driver-chat',
+        messageId: 'device-driver-msg',
       );
       expect(find.byKey(ThreeColumnShell.navOpenChat), findsOneWidget);
       expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
@@ -163,7 +171,15 @@ void main() {
 
     testWidgets('voice:// custom scheme opens conversation', (tester) async {
       await bindDesktopTestViewport(tester);
-      final env = await _pumpDriverShell(tester);
+      final env = await _pumpDriverShell(
+        tester,
+        extraOverrides: [
+          deepLinkMessageHistoryOverride(
+            chatId: 'voice-scheme-chat',
+            messageId: 'voice-scheme-msg',
+          ),
+        ],
+      );
 
       await env.container
           .read(deepLinkNavigatorProvider)
@@ -173,11 +189,11 @@ void main() {
       await _pumpShellReady(tester);
 
       expect(env.container.read(selectedChatIdProvider), 'voice-scheme-chat');
-      expect(
-        env.container.read(
-          pendingChatMessageScrollProvider('voice-scheme-chat'),
-        ),
-        'voice-scheme-msg',
+      await expectDeepLinkMessageVisible(
+        tester,
+        container: env.container,
+        chatId: 'voice-scheme-chat',
+        messageId: 'voice-scheme-msg',
       );
       expect(find.bySemanticsLabel('Conversation'), findsOneWidget);
     });
@@ -188,6 +204,10 @@ void main() {
         tester,
         extraOverrides: [
           authControllerProvider.overrideWith(_loggedOutAuthController),
+          deepLinkMessageHistoryOverride(
+            chatId: 'pending-after-login',
+            messageId: 'pending-msg',
+          ),
         ],
       );
 
@@ -222,11 +242,11 @@ void main() {
       await _pumpShellReady(tester);
 
       expect(env.container.read(selectedChatIdProvider), 'pending-after-login');
-      expect(
-        env.container.read(
-          pendingChatMessageScrollProvider('pending-after-login'),
-        ),
-        'pending-msg',
+      await expectDeepLinkMessageVisible(
+        tester,
+        container: env.container,
+        chatId: 'pending-after-login',
+        messageId: 'pending-msg',
       );
     });
   });

@@ -55,6 +55,7 @@ type LfpStore struct {
 }
 
 // UpsertListing records or refreshes an LFP story listing from story.lfp_created.
+// Replayed creation events must preserve Matchmaking's later deactivation.
 func (s *LfpStore) UpsertListing(ctx context.Context, storyID, authorID uuid.UUID, criteriaJSON string) (LfpListing, error) {
 	if s == nil || s.Pool == nil {
 		return LfpListing{}, errors.New("lfp store unavailable")
@@ -68,8 +69,7 @@ func (s *LfpStore) UpsertListing(ctx context.Context, storyID, authorID uuid.UUI
 		VALUES ($1, $2, $3::jsonb)
 		ON CONFLICT (story_id) DO UPDATE SET
 			author_profile_id = EXCLUDED.author_profile_id,
-			criteria_json = EXCLUDED.criteria_json,
-			inactive_at = NULL
+			criteria_json = EXCLUDED.criteria_json
 		RETURNING story_id, author_profile_id, criteria_json::text, created_at, inactive_at
 	`, storyID, authorID, criteriaJSON)
 	return scanLfpListing(row)

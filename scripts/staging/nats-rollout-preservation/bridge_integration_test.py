@@ -137,6 +137,8 @@ class IntegrationTests(unittest.TestCase):
 
     def test_actual_reusable_parent_run_and_source_request_binding(self):
         environment={'GITHUB_RUN_ID':'9001','GITHUB_RUN_ATTEMPT':'2','GITHUB_SHA':'a'*40,'GITHUB_TOKEN':'private-token','GITHUB_JOB':'deploy'}
+        from resource_claim_test import context
+        environment['VOICE_TTENREC_CONTEXT']=json.dumps(context())
         row=bridge_client.request(['prepare','images-only','web','a'*40,'9001'],environment)
         self.assertEqual(row['run_id'],9001);self.assertEqual(row['source_sha'],environment['GITHUB_SHA'])
         with self.assertRaises(bridge.BridgeError):bridge_client.request(['prepare','images-only','web','a'*40,'9002'],environment)

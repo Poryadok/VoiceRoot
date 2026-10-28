@@ -16,8 +16,11 @@ from controller import Blocked
 
 class BoundaryFailureTests(unittest.TestCase):
     def environment(self, directory):
+        from resource_claim_test import context
+        resource=context();resource['commit']='a'*40
         return {'RUNNER_TEMP':directory,'GITHUB_RUN_ID':'17','GITHUB_RUN_ATTEMPT':'2',
                 'GITHUB_SHA':'b'*40,'GITHUB_TOKEN':'SECRET_TOKEN',
+                'VOICE_TTENREC_CONTEXT':json.dumps(resource),
                 'GITHUB_STEP_SUMMARY':directory+'/summary','GITHUB_OUTPUT':directory+'/output'}
 
     def test_source_mismatch_is_visible_and_collectable_without_submission(self):

@@ -25,7 +25,7 @@ type recordingFileDeleter struct {
 	errs    []error
 }
 
-func (r *recordingFileDeleter) DeleteFile(_ context.Context, fileID string) error {
+func (r *recordingFileDeleter) ReleaseStoryMedia(_ context.Context, storyID, fileID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.deleted = append(r.deleted, fileID)
@@ -49,7 +49,7 @@ type cancellationObservingFileDeleter struct {
 	release  chan struct{}
 }
 
-func (d *cancellationObservingFileDeleter) DeleteFile(ctx context.Context, _ string) error {
+func (d *cancellationObservingFileDeleter) ReleaseStoryMedia(ctx context.Context, _, _ string) error {
 	d.started <- struct{}{}
 	select {
 	case <-ctx.Done():
@@ -79,13 +79,13 @@ type cooperativeDeadlineFileDeleter struct {
 	started chan string
 }
 
-func (d *cooperativeDeadlineFileDeleter) DeleteFile(ctx context.Context, fileID string) error {
+func (d *cooperativeDeadlineFileDeleter) ReleaseStoryMedia(ctx context.Context, _, fileID string) error {
 	d.started <- fileID
 	<-ctx.Done()
 	return ctx.Err()
 }
 
-func (d *blockingFileDeleter) DeleteFile(context.Context, string) error {
+func (d *blockingFileDeleter) ReleaseStoryMedia(context.Context, string, string) error {
 	d.started <- struct{}{}
 	<-d.release
 	d.finished <- struct{}{}
@@ -156,7 +156,7 @@ func TestArchivePurgeOutbox_failureRequeuesAndStaleLeaseCannotComplete(t *testin
 	require.True(t, ok)
 }
 
-func (d *purgeBarrierFileDeleter) DeleteFile(ctx context.Context, fileID string) error {
+func (d *purgeBarrierFileDeleter) ReleaseStoryMedia(ctx context.Context, _, fileID string) error {
 	_, d.callbackLookup = d.store.GetStory(ctx, d.storyID)
 	d.started <- struct{}{}
 	<-d.release
@@ -176,7 +176,9 @@ func migrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	b4, err := os.ReadFile(filepath.Join(dir, "000004_archive_purge_outbox.up.sql"))
 	require.NoError(t, err)
-	return string(b1) + "\n" + string(b2) + "\n" + string(b3) + "\n" + string(b4)
+	b7, err := os.ReadFile(filepath.Join(dir, "000007_media_reference_intents.up.sql"))
+	require.NoError(t, err)
+	return string(b1) + "\n" + string(b2) + "\n" + string(b3) + "\n" + string(b4) + "\n" + string(b7)
 }
 
 // TestArchivePurgeWorker_invokesFileDeleter documents stories (docs/features/stories.md) archive cleanup:
@@ -414,7 +416,7 @@ func TestArchivePurgeOutbox_postCommitCrashRecovery(t *testing.T) {
 	require.Len(t, first, 1)
 	require.Equal(t, mediaID, first[0].MediaFileID)
 	firstFileCall := &recordingFileDeleter{}
-	require.NoError(t, firstFileCall.DeleteFile(ctx, mediaID.String()))
+	require.NoError(t, firstFileCall.ReleaseStoryMedia(ctx, storyID.String(), mediaID.String()))
 	require.Equal(t, []string{mediaID.String()}, firstFileCall.deleted,
 		"the first dispatcher reached File before its process crashed")
 	_, err = st.Pool.Exec(ctx, `UPDATE story_media_deletion_outbox SET lease_until=now()-interval '1 second' WHERE operation_id=$1`, first[0].OperationID)

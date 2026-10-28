@@ -1319,25 +1319,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
-      - name: Resolve VITE_VOICE_API_BASE
-        id: vite
-        shell: bash
-        run: |
-          HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
-          if [ -z "${HOST}" ]; then
-            # shellcheck disable=SC1091
-            source deploy/staging/domains.defaults
-            HOST="${VOICE_GATEWAY_INGRESS_HOST}"
-          fi
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            if [ -z "${HOST}" ]; then
-              echo "VOICE_GATEWAY_INGRESS_HOST must be set (or deploy/staging/domains.defaults) for developer-portal image push on master." >&2
-              exit 1
-            fi
-            echo "api_base=https://${HOST}" >> "$GITHUB_OUTPUT"
-          else
-            echo "api_base=http://127.0.0.1:18080" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -1346,13 +1327,16 @@ jobs:
       - name: npm ci, lint, test
         working-directory: src/developer-portal
         env:
-          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
           VITE_OAUTH_CLIENT_ID: voice-developer-portal
           VITE_OAUTH_DISABLED: "false"
+          VITE_RUNTIME_CONFIG_REQUIRED: "true"
+          CHROME_BIN: google-chrome
         run: |
           npm ci
           npm run lint
           npm test
+          npm run build
+          node ../admin/browser/runtime-config.mjs dist portal
       # PR verification and selected master publication already compile in Docker.
       - name: Build developer-portal without Docker
         if: >-
@@ -1361,7 +1345,6 @@ jobs:
            needs.changes.outputs.run_developer_portal != 'true')
         working-directory: src/developer-portal
         env:
-          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
           VITE_OAUTH_CLIENT_ID: voice-developer-portal
           VITE_OAUTH_DISABLED: "false"
         run: npm run build
@@ -1389,7 +1372,7 @@ jobs:
           file: ./src/developer-portal/Dockerfile
           push: false
           build-args: |
-            VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
+            VITE_RUNTIME_CONFIG_REQUIRED=true
             VITE_OAUTH_CLIENT_ID=voice-developer-portal
             VITE_OAUTH_DISABLED=false
           cache-from: type=gha,scope=developer-portal
@@ -1404,7 +1387,7 @@ jobs:
           file: ./src/developer-portal/Dockerfile
           push: true
           build-args: |
-            VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
+            VITE_RUNTIME_CONFIG_REQUIRED=true
             VITE_OAUTH_CLIENT_ID=voice-developer-portal
             VITE_OAUTH_DISABLED=false
           tags: ${{ steps.image.outputs.base }}/developer-portal:${{ github.sha }}
@@ -1536,25 +1519,6 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v5
-      - name: Resolve VITE_VOICE_API_BASE
-        id: vite
-        shell: bash
-        run: |
-          HOST="${{ vars.VOICE_GATEWAY_INGRESS_HOST }}"
-          if [ -z "${HOST}" ]; then
-            # shellcheck disable=SC1091
-            source deploy/staging/domains.defaults
-            HOST="${VOICE_GATEWAY_INGRESS_HOST}"
-          fi
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/master" ]; then
-            if [ -z "${HOST}" ]; then
-              echo "VOICE_GATEWAY_INGRESS_HOST must be set (or deploy/staging/domains.defaults) for admin image push on master." >&2
-              exit 1
-            fi
-            echo "api_base=https://${HOST}" >> "$GITHUB_OUTPUT"
-          else
-            echo "api_base=http://127.0.0.1:18080" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -1563,13 +1527,18 @@ jobs:
       - name: npm ci, lint, test
         working-directory: src/admin
         env:
-          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
           VITE_OAUTH_CLIENT_ID: voice-admin
           VITE_OAUTH_DISABLED: "false"
+          VITE_RUNTIME_CONFIG_REQUIRED: "true"
+          CHROME_BIN: google-chrome
         run: |
           npm ci
           npm run lint
           npm test
+          npm run build
+          node browser/runtime-config.mjs dist admin
+          python3 ../../scripts/staging/check-frontend-runtime-config_test.py
+          python3 ../../scripts/prod/frontend-runtime-render_test.py
       # PR verification and selected master publication already compile in Docker.
       - name: Build admin without Docker
         if: >-
@@ -1578,7 +1547,6 @@ jobs:
            needs.changes.outputs.run_admin != 'true')
         working-directory: src/admin
         env:
-          VITE_VOICE_API_BASE: ${{ steps.vite.outputs.api_base }}
           VITE_OAUTH_CLIENT_ID: voice-admin
           VITE_OAUTH_DISABLED: "false"
         run: npm run build
@@ -1606,7 +1574,7 @@ jobs:
           file: ./src/admin/Dockerfile
           push: false
           build-args: |
-            VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
+            VITE_RUNTIME_CONFIG_REQUIRED=true
             VITE_OAUTH_CLIENT_ID=voice-admin
             VITE_OAUTH_DISABLED=false
           cache-from: type=gha,scope=admin
@@ -1621,7 +1589,7 @@ jobs:
           file: ./src/admin/Dockerfile
           push: true
           build-args: |
-            VITE_VOICE_API_BASE=${{ steps.vite.outputs.api_base }}
+            VITE_RUNTIME_CONFIG_REQUIRED=true
             VITE_OAUTH_CLIENT_ID=voice-admin
             VITE_OAUTH_DISABLED=false
           tags: ${{ steps.image.outputs.base }}/admin:${{ github.sha }}
@@ -2039,6 +2007,7 @@ jobs:
       contents: read
       packages: read
     env:
+      COMPOSE_PROJECT_NAME: voice-compose-e2e-${{ github.run_id }}-${{ github.run_attempt }}
       VOICE_MINIO_IMAGE: ghcr.io/poryadok/voiceroot/minio:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:ab7687bc47a84c3aec0d9706dabd47b4719b081683cde745f8a1b84c6c7681e0
       VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:

@@ -31,6 +31,10 @@ def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
 class Actions:
+    def resource_scope(self,request):
+        import resource_claim
+        return resource_claim.root_scope(self,request)
+
     def __init__(self,code):
         self.code=Path(code);self.binding=root_cli.code_binding(self.code)
 
@@ -48,6 +52,12 @@ class Actions:
         base=root_cli.operation_path(str(guard.ROOT/('rollout-'+operation)))
         state=private_json(base/'checkpoint.json')
         if state.get('operation')!=operation:raise Blocked('bridge_operation_custody_invalid')
+        session=getattr(self,'tt_session',None)
+        if session is not None:
+            if operation==session.operation:session.require_binding(state.get('resource_fence'))
+            else:
+                import resource_claim
+                resource_claim.historical_binding(state)
         if state.get('operator_retirement') is not None:
             from operator_retirement import verify_terminal
             verify_terminal(base,state)
@@ -316,6 +326,7 @@ class Actions:
             if repair is not None:
                 provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
+        if getattr(self,'tt_session',None) is not None:lifecycle_args['resource_session']=self.tt_session
         state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
