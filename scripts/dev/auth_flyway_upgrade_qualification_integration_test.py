@@ -118,7 +118,9 @@ class RealFlywayQualification(unittest.TestCase):
                     journal.save = mutate_caller_and_save
                     receipt = qualify(root, admission, encrypted, manifest, report, operation, tools_image, journal)
                     self.assertEqual([x['version'] for x in receipt['after_history'][-3:]], ['28', '31', '32'])
-                    self.assertEqual(receipt['before_markers'], receipt['after_markers'])
+                    self.assertEqual(receipt['expected_after_markers'], receipt['after_markers'])
+                    self.assertNotEqual(receipt['before_markers']['accounts'], receipt['after_markers']['accounts'])
+                    self.assertNotEqual(receipt['before_markers']['auth_authority_revision'], receipt['after_markers']['auth_authority_revision'])
                     self.assertEqual(receipt['cleanup'], 'confirmed')
                     self.assertEqual(receipt['plan_sha256'], 'a' * 64)
                     self.assertEqual(receipt['backup_binding']['source_sha'], source)

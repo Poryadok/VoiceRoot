@@ -144,7 +144,7 @@ def validate_backup_inputs(admission, manifest, report, operation, directory):
     return key, encrypted
 
 
-def marker_snapshot(query, columns, *, before):
+def marker_snapshot(query, columns, *, before, normalize=False):
     """Hash all preexisting ordinary-table rows over their original columns.
 
     Query is an internal isolated-clone PostgreSQL adapter, never caller SQL.
@@ -169,10 +169,10 @@ def marker_snapshot(query, columns, *, before):
         expr = 'to_jsonb(t)'
         if additions:
             expr += " - ARRAY[" + ','.join("'" + name + "'" for name in additions) + "]::text[]"
-        if before and table == 'accounts':
+        if before and normalize and table == 'accounts':
             changed = "jsonb_set(jsonb_set(" + expr + ",'{status}',to_jsonb('deleted'::text)),'{security_revision}',to_jsonb(t.security_revision+1))"
             expr = "CASE WHEN t.deleted_at IS NOT NULL AND t.status <> 'deleted' THEN " + changed + " ELSE " + expr + ' END'
-        if before and table == 'auth_authority_revision':
+        if before and normalize and table == 'auth_authority_revision':
             expr = "jsonb_set(" + expr + ",'{revision}',to_jsonb(t.revision+1))"
         result[table] = query("SELECT json_build_object('count',count(*),'sha256',"
             "encode(sha256(convert_to(coalesce(string_agg(j::text,E'\\n' ORDER BY j::text),''),'UTF8')),'hex')) "
@@ -267,6 +267,7 @@ def qualify(root, admission, backup_directory, manifest, report, operation, tool
             "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r'")
         q = lambda sql: query('auth_db', sql)
         before_markers = marker_snapshot(q, cols, before=True)
+        expected_after_markers = marker_snapshot(q, cols, before=True, normalize=True)
         role_sql_query = "SELECT coalesce(json_agg(row_to_json(r) ORDER BY r.rolname),'[]'::json) FROM (SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY rolname) r"
         before_roles = query('postgres', role_sql_query)
         memberships_sql = "SELECT coalesce(json_agg(row_to_json(m) ORDER BY m.role_name,m.member_name),'[]'::json) FROM (SELECT pg_get_userbyid(roleid) role_name,pg_get_userbyid(member) member_name,admin_option,inherit_option,set_option FROM pg_auth_members) m"
@@ -298,8 +299,8 @@ def qualify(root, admission, backup_directory, manifest, report, operation, tool
             pinned_v31.write_bytes(sources['V31__auth_identity_ddl_barrier.sql'])
             validate_ddl_gate(q(gate_bytes.decode('utf-8')), pinned_root)
         after_markers = marker_snapshot(q, cols, before=False)
-        if before_markers != after_markers:
-            changed = sorted(k for k in before_markers if before_markers[k] != after_markers.get(k))
+        if expected_after_markers != after_markers:
+            changed = sorted(k for k in expected_after_markers if expected_after_markers[k] != after_markers.get(k))
             raise ValueError('original data changed outside admitted transformations: ' + ','.join(changed))
         if (before_roles != query('postgres', role_sql_query)
                 or before_memberships != query('postgres', memberships_sql)):
@@ -319,7 +320,8 @@ def qualify(root, admission, backup_directory, manifest, report, operation, tool
             'backup_manifest_sha256': digest(manifest), 'restore_report_sha256': digest(report),
             'tools_image': tools_image, 'flyway_image': QUALIFIED_TOOLS['flyway'],
             'postgres_image': QUALIFIED_TOOLS['postgres'], 'before_history': before_history,
-            'after_history': after_history, 'before_markers': before_markers, 'after_markers': after_markers,
+            'after_history': after_history, 'before_markers': before_markers,
+            'expected_after_markers': expected_after_markers, 'after_markers': after_markers,
             'original_table_columns': cols,
             'before_catalog_sha256': digest(original_catalog), 'after_catalog_sha256': digest(after_catalog),
             'roles_sha256': digest({'roles': before_roles, 'memberships': before_memberships}),
