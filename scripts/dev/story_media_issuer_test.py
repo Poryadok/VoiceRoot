@@ -20,6 +20,44 @@ spec.loader.exec_module(issuer)
 
 
 class StoryMediaIssuerTest(unittest.TestCase):
+    def test_export_requires_existing_stage_and_pipe(self):
+        op = 'smp-' + '9' * 32
+        source = hashlib.sha256(path.read_bytes()).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'state'
+            root.mkdir(mode=0o700)
+            args = [sys.executable, str(path), '--state-dir', str(root), '--operation', op,
+                    '--issuer-source-sha256', source, '--export-packet']
+            missing = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertEqual(missing.stdout, b'')
+            self.assertFalse((root / op).exists())
+            issuer.stage(root, op, source)
+            def blocked_sink(raw):
+                with self.assertRaisesRegex(ValueError, 'busy'):
+                    issuer.stage(root, op, source)
+                raise BrokenPipeError('injected interrupted export')
+            with self.assertRaises(BrokenPipeError):
+                issuer.stage(root, op, source, export_sink=blocked_sink)
+            self.assertTrue((root / op / 'stage.json').is_file())
+            with tempfile.TemporaryFile() as output:
+                refused = subprocess.run(args, stdout=output, stderr=subprocess.PIPE)
+                self.assertNotEqual(refused.returncode, 0)
+                self.assertEqual(output.tell(), 0)
+            exported = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(exported.returncode, 0)
+            packet = json.loads(exported.stdout)
+            self.assertEqual({item['metadata']['name'] for item in packet['items']},
+                             set(issuer.receipt_for(op, source)['objects']))
+            self.assertEqual(exported.stderr, b'')
+            stage_path = root / op / 'stage.json'
+            value = json.loads(stage_path.read_bytes())
+            value['packet_sha256'] = '0' * 64
+            stage_path.write_text(json.dumps(value))
+            tampered = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertNotEqual(tampered.returncode, 0)
+            self.assertEqual(tampered.stdout, b'')
+
     def test_stage_is_bound_and_preserves_exact_private_material(self):
         op = 'smp-' + '1' * 32
         source = hashlib.sha256(path.read_bytes()).hexdigest()
