@@ -96,6 +96,9 @@ class ExistingGISTest(unittest.TestCase):
             stage.release_marker()
         stage.kube.cas.assert_not_called()
         stage.gis_ready_proof = Mock(side_effect=gis.Blocked('unsafe-ready'))
+        with self.assertRaisesRegex(runtime_stage.Blocked, 'gis_existing_start_guard_missing'):
+            stage.release_marker()
+        stage.gis_start_guard = Mock()
         with self.assertRaises(gis.Blocked):
             stage.release_marker()
         stage.kube.cas.assert_not_called()

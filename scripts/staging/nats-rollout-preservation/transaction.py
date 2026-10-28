@@ -200,6 +200,15 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
+def verify_gis_before_fence(kube,state):
+    import gis_existing_update as existing
+    existing.verify_phase(state['gis_binding'],kube,'active')
+    if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+        raise Blocked('gis_existing_service_account_changed')
+    if private_json(guard.ROOT/'installed'/'active-release.json')!=state['gis_expected_active']:
+        raise Blocked('gis_existing_authority_changed')
+
+
 def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
@@ -375,11 +384,7 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
         shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
         state['kernel_sha256']=file_sha(base/'kernel')
-        if gis_binding is not None:
-            existing.verify_phase(state['gis_binding'],kube,'active')
-            if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
-                raise Blocked('gis_existing_service_account_changed')
-            raise Blocked('gis_existing_lifecycle_incomplete')
+        if gis_binding is not None:verify_gis_before_fence(kube,state)
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
@@ -391,10 +396,15 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     try:
         nonnats_plan.revalidate(kube,state['nonnats_binding'])
         if before_fence is not None:before_fence()
+        if gis_binding is not None:
+            if resource_session is None:raise Blocked('gis_existing_resource_fence_required')
+            verify_gis_before_fence(kube,state)
         if resource_session is not None:
             resource_session.bind_target(state['target']['tag'],state['target']['images'],stage.old_images,canonical(state['target']))
             state['resource_fence']=resource_session.binding()
             save(base/'checkpoint.json',state)
+        if gis_binding is not None:
+            verify_gis_before_fence(kube,state)
         stage.runtime_base=base
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
         save(base/'checkpoint.json',state)
