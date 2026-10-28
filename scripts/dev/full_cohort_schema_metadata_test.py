@@ -326,7 +326,7 @@ class PrivateReaderTest(unittest.TestCase):
         self.assertEqual(result.stdout, b'Pexpected')
 
     def test_auth_env_policy_rejects_relaxed_property_names(self):
-        if not shutil.which('bash'):
+        if sys.platform != 'linux' or not shutil.which('bash'):
             self.skipTest('requires bash')
         script = subject.AUTH_ENV_POLICY.replace('/proc/1/environ', '/dev/stdin')
         for key in ('spring_datasource_url', 'spring_flyway_enabled', 'spring_config_location',

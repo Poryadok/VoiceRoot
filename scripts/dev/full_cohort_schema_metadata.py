@@ -14,6 +14,7 @@ import selectors
 import time
 import ipaddress
 import shlex
+import hashlib
 from urllib.parse import unquote, urlsplit, parse_qsl
 
 OWNERS = dict((name, name + '_db') for name in (
@@ -35,6 +36,13 @@ VOICE_LIFECYCLE_SOURCE = {
     'src/backend/voice/database.go': '25bdcd5d85f93e27c269fcd60e2e433ab9203d1d68d6139cd1b3f22763714580',
     'src/backend/voice/internal/roomlifecycle/postgres_store.go': 'a8fa8db25582ea44c7f00bbd3fad647c89e753423bc2ccb750476ec559b85b03',
 }
+AUTH_RUNTIME_SOURCE = {
+    'src/backend/auth/src/main/resources/application.yml': 'b5099308961d22e417202837e69bd5f9067b2ec81f7f6c6f4cac61b7b86111fe',
+    'src/backend/auth/Dockerfile': '4a522457374e0e991bda50d08290d9f476836e366fcf3b312c7ffb55297b0321',
+    'src/backend/auth/src/main/java/voice/backend/auth/roleidentityauthority/AuthIdentityMigrationHistory.java':
+        'b9be5d4c2ed54bac15b58ded5d8301141330ddc79872d8c182f6147a81b44b52',
+}
+AUTH_SOURCE_MANIFEST_SHA256 = '2c6623cc10587fdcf57ae347ec68b7be33a317057e40138837f851c5a70e406d'
 IDENTITY = ('namespace', 'namespace_uid', 'deployment', 'deployment_uid', 'deployment_rv', 'pod_name', 'pod_uid',
             'pod_rv', 'container_id', 'restart_count', 'container_name')
 SAFE = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]{0,62}\Z')
@@ -561,6 +569,13 @@ def catalog(snapshot):
                     raise Hold('auth_canonical_inventory_incomplete')
                 databases[database]['canonical_files'] = dict(sorted(canonical.items()))
                 databases[database]['canonical_versions'] = sorted({int(n.split('_', 1)[0]) for n in canonical if n.endswith('.up.sql')})
+                if not databases[database]['canonical_versions']:
+                    raise Hold('auth_canonical_inventory_incomplete')
+                databases[database]['auth_runtime_policy_recognized'] = all(
+                    snapshot['files'].get(path) == digest for path, digest in AUTH_RUNTIME_SOURCE.items()) and (
+                    hashlib.sha256(json.dumps({path: digest for path, digest in snapshot['files'].items()
+                        if path.startswith('src/backend/auth/')}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                    == AUTH_SOURCE_MANIFEST_SHA256)
         return {'source_sha': snapshot['source_sha'], 'tree_sha256': snapshot['git_tree_sha256'],
                 'databases': databases, 'live_schema_qualified': False}
     except Hold:
@@ -597,6 +612,8 @@ def inspect(source_catalog, workload, pod_name, expected_engine_role, guard,
     Caller must own the live prepare-only guard and verify the selected workload
     image is the candidate. Non-PostgreSQL applications remain unqualified.
     """
+    if workload == 'auth' and source_catalog.get('databases', {}).get('auth_db', {}).get('auth_runtime_policy_recognized') is not True:
+        raise Hold('auth_source_policy_unknown')
     snap = kube_workload_snapshot(workload, pod_name, run_bytes, guard)
     key = kube_key_reader(run_bytes)
     runtime = kube_runtime_reader(workload, pod_name, run_bytes)
