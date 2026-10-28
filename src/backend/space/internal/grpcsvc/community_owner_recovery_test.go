@@ -43,7 +43,8 @@ func TestRecoverCommunityOwnerUsesRoleV2ReceiptAndFencesGeneration(t *testing.T)
 	pool := communityPublicationFixture(t, ctx)
 	ownerAccount, ownerProfile, replacementAccount, replacementProfile := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	role := &communityRecoveryRoleClient{newOwnerProfile: replacementProfile}
-	issuer := ownershipTestIssuer(t)
+	bootstrapRole, issuer := newBootstrapLedgerFixture(t, nil)
+	role.RoleServiceClient = bootstrapRole
 	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}, OwnershipRoles: role, PrincipalIssuer: issuer}
 	bootstrap := &spacev1.CreateCommunityBootstrapRequest{OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(), OwnerAccountId: ownerAccount.String(), OwnerProfileId: ownerProfile.String(), CorporationKey: "corp-7", TemplateId: "guild-default"}
 	created, err := svc.CreateCommunityBootstrap(authctx.WithVerifiedServiceIdentity(ctx, authctx.ServiceIdentityGameIntegration), bootstrap)
