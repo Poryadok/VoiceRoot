@@ -11,6 +11,8 @@ import tarfile
 import tempfile
 import time
 import unittest
+import copy
+from unittest.mock import patch
 
 from auth_user_adoption import Journal
 from auth_user_adoption_runtime import QUALIFIED_TOOLS, backup_catalog_queries, digest, operator_fingerprint, source_config
@@ -22,8 +24,57 @@ import story_media_backup_cohort_finalize as finalize
 import story_media_backup_cohort_restore as cohort_restore
 import story_media_backup_restore as media_restore
 from story_media_backup_restore_integration_test import Journal as FixtureRestoreJournal
+import auth_flyway_upgrade_qualification_journal as auth_journal
+import cohort_readback_test as readback_fixture
+import cohort_restore_journal
+import cohort_upload_phase
+import media_backup_phase_test as phase_fixture
+import resource_fencing
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def guarded_cohort_fixture(root, source, metadata, blobs, template_binding):
+    """Real local Journal/Fence, mocked Kubernetes/GitHub, real Docker/SQL."""
+    original_phase_setup=phase_fixture.PhaseTest.setUp
+    original_template_setup=readback_fixture.fixtures.FinalizeCohortTest.setUp
+    original_export=cohort.export
+    def phase_setup(base):
+        original_phase_setup(base)
+        base.context['commit']=source; base.card['candidate']['commit']=source
+        base.ledger=phase_fixture.Ledger(base.context)
+        base.fence=resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),base.ledger)
+        base.lock['data']['resource_context']=json.dumps(base.context,sort_keys=True,separators=(',', ':'))
+    def template_setup(template):
+        original_template_setup(template)
+        template.binding=copy.deepcopy(template_binding)
+        template.databases=['auth_db']
+    def export(dest,key,binding,databases,producer):
+        if binding['source_sha']==source:
+            producer=lambda member,out:out.write(blobs[member+'.enc'])
+        return original_export(dest,key,binding,databases,producer)
+    fixture=readback_fixture.ReadbackTest('test_real_encrypted_readback_and_no_replay')
+    try:
+        with patch.object(phase_fixture.PhaseTest,'setUp',phase_setup), \
+             patch.object(readback_fixture.fixtures.FinalizeCohortTest,'setUp',template_setup), \
+             patch.object(cohort,'export',side_effect=export):
+            fixture.setUp()
+        custody,manifest=fixture.extract()
+        with patch.object(cohort_upload_phase,'ROOT',fixture.root):
+            restore_receipt=cohort_restore_journal.run(fixture.phase,fixture.key,fixture.destination,manifest,
+                metadata,root,QUALIFIED_TOOLS['postgres'],QUALIFIED_TOOLS['migrate'],lambda:None)
+        admission={'source_sha':source,'target':32,'flyway_enabled':False,'selector_mode':'absent',
+            'persistence':'jdbc','plan_sha256':'a'*64,'custody_sha256':digest(custody),
+            'restore_sha256':digest(restore_receipt)}
+        journal=auth_journal.AuthFlywayJournal(fixture.phase,lambda:None,fixture.binding,digest(manifest),
+            digest(custody),digest(restore_receipt),admission['plan_sha256'],metadata)
+        result=qualify_cohort(root,fixture.destination,fixture.key,fixture.binding,['auth_db'],manifest,metadata,
+                              custody,restore_receipt,admission,journal)
+        if fixture.base.ledger.row['cohort_auth_flyway']['status'] != 'done':
+            raise AssertionError('fenced Auth receipt was not committed')
+        return result
+    finally:
+        if not fixture.doCleanups(): raise RuntimeError('guarded fixture cleanup failed')
 
 
 @unittest.skipUnless(os.environ.get('RUN_DOCKER_INTEGRATION') == '1', 'explicit Linux Docker integration')
@@ -189,6 +240,10 @@ class RealFlywayQualification(unittest.TestCase):
                 self.assertEqual(result['expected_after_markers'],result['after_markers'])
                 self.assertEqual(result['cleanup'],'confirmed')
                 self.assertEqual(cohort_journal.stages,[('flyway-migrate','pending'),('flyway-migrate','done')])
+                guarded=guarded_cohort_fixture(root,source,metadata,blobs,
+                    {k:v for k,v in binding.items() if k != 'dump_receipts'})
+                self.assertEqual(guarded['expected_after_markers'],guarded['after_markers'])
+                self.assertEqual(guarded['cleanup'],'confirmed')
             finally:
                 owned.cleanup(); fixture_journal.close()
 
