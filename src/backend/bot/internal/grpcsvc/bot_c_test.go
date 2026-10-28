@@ -536,11 +536,18 @@ func TestPollEvents_marksEventDeliveredAfterStream(t *testing.T) {
 	client, st, cleanup := startBotGRPC(t)
 	defer cleanup()
 
-	ctx, botID, botToken, _, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
+	ctx, botID, botToken, chatID, _ := setupBotCCommandBot(t, client, st, `["TEXT_CHAT_SEND_MESSAGES"]`)
 	botUUID, err := uuid.Parse(botID)
 	require.NoError(t, err)
 
-	eventID, err := st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{"ping": true}, "")
+	invoker, ok := authProfile(ctx)
+	require.True(t, ok)
+	eventID, err := st.EnqueueEvent(ctx, freshSession(t, st, botUUID), "interaction", map[string]any{
+		"ping":               true,
+		"chat_id":            chatID.String(),
+		"chat_type":          "CHAT_TYPE_CHANNEL",
+		"invoker_profile_id": invoker.String(),
+	}, uuid.NewString())
 	require.NoError(t, err)
 
 	botCtx := withBotToken(context.Background(), botToken)
@@ -556,7 +563,6 @@ func TestPollEvents_marksEventDeliveredAfterStream(t *testing.T) {
 		require.NoError(t, recvErr)
 		if resp.GetBotEvent().GetEventId() == eventID.String() {
 			received = true
-			break
 		}
 	}
 	require.True(t, received, "PollEvents must stream pending bot events")
