@@ -285,7 +285,9 @@ class ResourceTests(unittest.TestCase):
         binding={k:previous[k] for k in ('schema','context','operation','helper_sha256','target_sha256')}
         state=dict(operation=old.operation,target=target,code_capture=helper,resource_fence=binding,
             status='PROVISIONAL_READY',phase='POST_RESTART',fence_status='RELEASED')
-        with tempfile.TemporaryDirectory() as folder:
+        # The disposable CI image has no host operator account. Keep the real
+        # chown/mode/custody path, with a fixture-local group identity only.
+        with tempfile.TemporaryDirectory() as folder,patch('grp.getgrnam',return_value=Mock(gr_gid=os.getgid())):
             root=Path(folder);(root/'installed').mkdir(mode=0o700)
             base=root/('rollout-'+old.operation);base.mkdir(mode=0o700)
             root_main.save(base/'checkpoint.json',state)
