@@ -839,7 +839,7 @@ When File Service finishes async processing (`file.processed` on JetStream), Mes
 
 | Step | Owner |
 |------|-------|
-| File publishes `file.processed` | `file_events` / `file.processed`: independent complete revisioned `preview` snapshot for plaintext non-Music files; no URL or storage key |
+| File publishes `file.processed` | `file_events` / `file.processed`: independent complete revisioned `preview` snapshot for eligible UNSPECIFIED and processed GIF files; no URL or storage key |
 | Messaging consumer | Refreshes only private exact MESSAGE-reference/slot bindings, persists monotonic snapshots before discovery, and writes ordinary `message.edited` atomically; list/history reads use persisted attachments |
 | Client | On `message_update` WS (or poll) refresh bubble + list row label |
 
@@ -850,7 +850,14 @@ it never invents viewer authority. Ready-only admission remains unchanged. The
 snapshot includes status, category, persisted intent, size/scan, optional dimensions
 and variant availability. Missing fields clear stale metadata; terminal snapshots
 cannot be revived. Multiple slots and forwards retain private per-slot bindings.
-E2E and URL-only attachments are excluded. Public URL reads still require the real
+E2E, Music, Sticker and AUDIO are excluded from generic snapshots; URL-only
+attachments have no File binding. For plaintext AUDIO the same protected resolver
+returns a separate exact-reference, versioned no-generic-preview observation.
+Messaging validates exactly one result and omits only that AUDIO slot; a new send
+or forward still requires ready state and the ordinary viewer/type/scan checks.
+Legacy reconciliation can classify non-ready AUDIO without synthesizing a
+snapshot. Deploy compatible Messaging consumers before the File producer; old
+consumers deny the new response. Public URL reads still require the real
 viewer and exact reference. Frozen work is retained durably and legacy rows need
 bounded restartable reconciliation. See [BE-080 plan](../testing/be080-file-preview-exec-plan.md)
 for implementation progress and the all-consumers-before-publication rollout gate.

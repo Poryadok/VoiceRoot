@@ -252,7 +252,9 @@ freeze/retry. `messaging_file_preview_reconciliation` records bounded owner-row
 discovery passes and `messaging_file_preview_errors` records per-row retry gaps.
 These are owner projections and repair evidence, never viewer capabilities or
 cross-database foreign keys. Snapshot/outbox payloads contain no URL or R2 key.
-Music retains its independent existing state. See the [implementation plan](testing/be080-file-preview-exec-plan.md)
+Music retains its independent existing state. AUDIO has no generic snapshot or
+outbox entry; protected per-reference classification adds no cached exclusion
+marker or new storage. See the [implementation plan](testing/be080-file-preview-exec-plan.md)
 for current verification and activation obligations.
 
 ### `messaging_db` (Messaging Service): ListThreads successor (accepted target)

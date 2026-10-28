@@ -84,12 +84,26 @@ func (s *FileGRPC) ResolveMessageAttachmentPreview(ctx context.Context, req *fil
 	if clockExpired && row.Status != "expired" && row.Status != "deleted" {
 		return nil, status.Error(codes.FailedPrecondition, "expiry transition pending")
 	}
-	snapshot, err := store.PreviewSnapshotTx(ctx, tx, row)
-	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, "preview unsupported or invalid")
+	response := &filev1.ResolveMessageAttachmentPreviewResponse{Reference: proto.Clone(req.Reference).(*filev1.FileReferenceKey)}
+	if row.UploadIntent == "audio" && !row.IsE2E {
+		switch row.Status {
+		case "pending_upload", "processing", "ready", "failed", "deleted", "expired":
+		default:
+			return nil, status.Error(codes.FailedPrecondition, "preview unsupported or invalid")
+		}
+		if row.Status == "ready" && (row.FileType != "audio" || row.SizeBytes <= 0 || row.SizeBytes > 10*1024*1024 || (row.ScanResult != "clean" && row.ScanResult != "skipped")) {
+			return nil, status.Error(codes.FailedPrecondition, "preview unsupported or invalid")
+		}
+		response.AudioNoGenericPreview = &filev1.AudioNoGenericPreview{ProtocolVersion: 1, FileId: row.ID.String(), Status: row.Status}
+	} else {
+		snapshot, err := store.PreviewSnapshotTx(ctx, tx, row)
+		if err != nil {
+			return nil, status.Error(codes.FailedPrecondition, "preview unsupported or invalid")
+		}
+		response.Snapshot = snapshot
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, status.Error(codes.Unavailable, "preview persistence unavailable")
 	}
-	return &filev1.ResolveMessageAttachmentPreviewResponse{Reference: proto.Clone(req.Reference).(*filev1.FileReferenceKey), Snapshot: snapshot}, nil
+	return response, nil
 }
