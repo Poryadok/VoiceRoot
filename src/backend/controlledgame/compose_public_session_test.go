@@ -220,7 +220,7 @@ func exerciseT40CommunityRoster(t *testing.T, ctx context.Context, client *Publi
 	accountID, ok := bannedAccount["user_id"].(string)
 	require.True(t, ok)
 	_, _ = t40JSONRequest(t, ctx, baseURL, http.MethodPost, "/api/v1/spaces/"+spaceID.String()+"/bans", ownerToken, map[string]any{
-		"account_id": accountID, "profile_id": profileTwo.String(), "reason": "T40 banned-user acceptance",
+		"operation_id": uuid.NewString(), "account_id": accountID, "profile_id": profileTwo.String(), "reason": "T40 banned-user acceptance",
 	}, http.StatusNoContent)
 	var activeSpaceMember, spaceBan, currentOwnerRosterMember int
 	require.NoError(t, spaceDB.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=$2`, spaceID, profileTwo).Scan(&activeSpaceMember))
