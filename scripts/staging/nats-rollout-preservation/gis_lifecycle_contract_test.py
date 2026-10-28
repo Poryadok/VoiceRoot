@@ -1,6 +1,7 @@
 """Cross-stage GIS contract using actual capture, compiler and normalizer."""
 import copy
 import datetime as dt
+import hashlib
 import inspect
 import json
 from pathlib import Path
@@ -17,6 +18,9 @@ import gis_first_install as gis
 import gis_existing_update_test as fixtures
 import normalize
 import paused_recovery
+import preserve
+import resource_claim
+import resource_claim_test
 import runtime_stage
 import source_authority
 import transaction
@@ -787,6 +791,402 @@ class GISLifecycleContract(unittest.TestCase):
             reconstruct.assert_not_called()
             save.assert_not_called()
             publication.assert_not_called()
+
+    def test_successor_evidence_uses_owned_cold_intent_and_exact_custody(self):
+        # Real ColdRelease constructs and journals the intent. Archive/content
+        # I/O is simulated: this fixture does not prove off-node custody.
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / 'rollout-123456abcdef'
+            base.mkdir()
+            census = {'fixture': 'cold-state'}
+            cut = {'manifest': {'archive_sha256': '6' * 64}, 'census': census,
+                'census_sha256': gis.digest(census)}
+            raw = b'synthetic native manifest'
+            (base / 'rollout-before-manifest.json').write_bytes(raw)
+            cut['manifest_sha256'] = hashlib.sha256(raw).hexdigest()
+            pair = {'fixture': 'normalized-pair'}
+            target = {'tag': 'a' * 40, 'mode': 'images-only',
+                'images': {'voice-gameintegration/gameintegration': self.new_image},
+                'gis_existing_normalized_sha256': gis.digest(pair), 'manifest_sha256': '9' * 64}
+            backup = {'archive_sha256': cut['manifest']['archive_sha256'],
+                'manifest_sha256': cut['manifest_sha256'], 'census_sha256': cut['census_sha256'],
+                'off_node_verified': True}
+            binding = {'operation': '123456abcdef', 'challenge': 'b' * 32, 'run_id': 17,
+                'head_sha': 'a' * 40, 'cipher_sha256': 'c' * 64, 'cipher_bytes': 100,
+                'created_at': '2026-10-28T00:00:00+00:00'}
+            custody = {'schema': 'voice-nats-custody-v1', 'destination': 'github:Poryadok/VoiceRoot',
+                'verified': True, 'artifact_id': 19,
+                **{key: value for key, value in binding.items() if key != 'created_at'}}
+            restore = {'schema': 'voice-nats-decrypted-restore-v1', 'cipher_sha256': binding['cipher_sha256'],
+                'cipher_bytes': binding['cipher_bytes'], 'decrypted_members_verified': True,
+                'readback': {'native_archive_verified': True, 'census_sha256': cut['census_sha256']},
+                'members': {'rollout-before.tar': backup['archive_sha256'],
+                    'rollout-before-manifest.json': backup['manifest_sha256']}}
+            restore_path = base / 'decrypted-restore.json'
+            restore_path.write_text(json.dumps(restore), encoding='utf-8')
+            restore_path.chmod(0o600)
+            proof = {'archive': 'synthetic.tar', 'archive_sha256': 'd' * 64,
+                'native_files_verified': True, 'census_verified': True, 'census_sha256': cut['census_sha256']}
+            helper = {'nats-rollout-preservation/resource_claim.py': 'e' * 64}
+            context = resource_claim_test.context()
+            context.update(commit=target['tag'], images=copy.deepcopy(target['images']))
+            fence = {'schema': 'voice-staging-resource-fence-v1', 'context': context,
+                'operation': binding['operation'], 'helper_sha256': gis.digest(helper),
+                'target_sha256': gis.digest(target)}
+            authorization = {'operation': binding['operation'], 'target': target, 'backup': backup,
+                'namespace_uid': self.binding['namespace_uid']}
+            nonce = 'f' * 64
+            state = {'operation': binding['operation'], 'cut': cut, 'target': target,
+                'authorization': authorization, 'cipher_binding': binding, 'custody': custody,
+                'gis_binding': copy.deepcopy(self.binding),
+                'context': {'expected': {'namespace_uid': authorization['namespace_uid'],
+                    'source_claim_uid': '00000000-0000-0000-0000-000000000012'}},
+                'preservation': proof, 'resource_fence': fence, 'code_capture': helper,
+                'gis_normalized_pair': pair, 'events': [], 'closed_preservation_attempt_nonce': nonce,
+                'closed_preservation_attempts': {nonce: {'nonce': nonce,
+                    'authorization_sha256': gis.digest(authorization), 'admitted_cut_sha256': gis.digest(cut)}}}
+            stage = SimpleNamespace(final_path=base, verify_final_storage=lambda: None)
+            stage.save = lambda event: state['events'].append(copy.deepcopy(event))
+            runtime = preserve.ColdRelease(base, state, stage, lambda: None, cut, nonce,
+                dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5))
+            stage.closed_preservation_runtime = runtime
+            resource_claim.historical_binding(state)
+            with patch.object(preserve, 'DockerRuntime', create=True), \
+                    patch('docker_runtime.DockerRuntime'), \
+                    patch.object(preserve, 'verify_post_apply', return_value=proof), \
+                    patch.object(preserve, 'closed_native_states', return_value={'fixture': 'same'}), \
+                    patch('native_store.verify_archive', return_value=True):
+                intent = runtime.verify_and_journal(stage)
+                runtime.arm_release(stage, intent)
+                evidence = existing.successor_evidence(base, state, stage)
+                self.assertEqual(evidence['cold_intent'], intent)
+                self.assertEqual(evidence['custody'], custody)
+                self.assertEqual(evidence['restore'], restore)
+                for fault in ('custody', 'restore', 'target', 'normalized', 'intent', 'fence_context'):
+                    with self.subTest(fault=fault):
+                        original = copy.deepcopy(state)
+                        original_restore = restore_path.read_bytes()
+                        if fault == 'custody':
+                            state['custody']['run_id'] += 1
+                        elif fault == 'restore':
+                            changed = copy.deepcopy(restore)
+                            changed['cipher_sha256'] = '0' * 64
+                            restore_path.write_text(json.dumps(changed), encoding='utf-8')
+                        elif fault == 'target':
+                            state['resource_fence']['target_sha256'] = '0' * 64
+                        elif fault == 'normalized':
+                            state['gis_normalized_pair']['fixture'] = 'changed'
+                        elif fault == 'intent':
+                            state['events'].clear()
+                        else:
+                            state['resource_fence']['context']['commit'] = 'f' * 40
+                        with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                            existing.successor_evidence(base, state, stage)
+                        state.clear()
+                        state.update(original)
+                        restore_path.write_bytes(original_restore)
+                with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                    existing.successor_evidence(base, copy.deepcopy(state), stage)
+                with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                    existing.successor_evidence(base / 'other', state, stage)
+                hook = stage.closed_preservation_release
+                stage.closed_preservation_release = lambda *_args: None
+                with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                    existing.successor_evidence(base, state, stage)
+                stage.closed_preservation_release = hook
+                prior_cut = copy.deepcopy(runtime.cut)
+                runtime.cut['census_sha256'] = '0' * 64
+                with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                    existing.successor_evidence(base, state, stage)
+                runtime.cut = prior_cut
+                state['code_capture']['nats-rollout-preservation/resource_claim.py'] = '0' * 64
+                with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                    existing.successor_evidence(base, state, stage)
+                state['code_capture'] = copy.deepcopy(helper)
+
+                # Genesis uses real first-install receipt, live-ready fixture
+                # and an actual cold intent; only native archive I/O is mocked.
+                first_kube, first_state, first_receipt = fixtures.first_install()
+                ready_kube, ready_binding, account = self.ready_fixture()
+                deployment = copy.deepcopy(ready_kube.objects[gis.DEPLOYMENT])
+                service = copy.deepcopy(ready_kube.objects[gis.SERVICE])
+                normalized_deployment = gis.semantic(deployment)
+                normalized_deployment['spec']['replicas'] = 0
+                normalized_pair = {'deployment_mode': 'selected-paused',
+                    'deployment_uid': ready_binding['deployment_uid'], 'service_uid': ready_binding['service_uid'],
+                    'deployment': normalized_deployment, 'service': gis.semantic(service)}
+                state['gis_normalized_pair'] = normalized_pair
+                state['target']['gis_existing_normalized_sha256'] = gis.digest(normalized_pair)
+                state['target']['template_hashes'] = {'voice-gameintegration':
+                    gis.digest(normalized_deployment['spec']['template'])}
+                state['resource_fence']['target_sha256'] = gis.digest(state['target'])
+                state['authorization']['target'] = copy.deepcopy(state['target'])
+                state['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(state['authorization'])
+                state['gis_binding'] = ready_binding
+                state['gis_source_authority'] = self.source_fixture()
+                state['gis_service_account'] = account
+                state['gis_ready_proof'] = existing.verify_ready(ready_binding, ready_kube, account)
+                anchor = {'operation': first_state['operation'], 'receipt_sha256': first_receipt['receipt_sha256']}
+                active = {'gis_first_install_transition': anchor}
+                state['gis_expected_active'] = copy.deepcopy(active)
+                root = Path(tmp)
+                original_dir = root / ('rollout-' + first_state['operation'])
+                original_dir.mkdir()
+                checkpoint = original_dir / 'checkpoint.json'
+                checkpoint.write_text(json.dumps(first_state), encoding='utf-8')
+                checkpoint.chmod(0o600)
+                installed = root / 'installed'
+                installed.mkdir()
+                active_path = installed / 'active-release.json'
+                active_path.write_text(json.dumps(active), encoding='utf-8')
+                active_path.chmod(0o600)
+                stage.kube = ready_kube
+                state['events'] = []
+                runtime = preserve.ColdRelease(base, state, stage, lambda: None, cut, nonce,
+                    dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5))
+                stage.closed_preservation_runtime = runtime
+                intent = runtime.verify_and_journal(stage)
+                runtime.arm_release(stage, intent)
+                snapshots = []
+                with patch.object(guard, 'ROOT', root), \
+                        patch.object(transaction, 'save', side_effect=lambda _path, row: snapshots.append(copy.deepcopy(row))):
+                    receipt = transaction.gis_successor_checkpoint(base, state, stage)
+                    self.assertEqual(receipt['anchor'], anchor)
+                    self.assertEqual(receipt['predecessor'], anchor)
+                    self.assertEqual(receipt['old_pair_sha256'], gis.digest({
+                        'deployment_uid': ready_binding['deployment_uid'], 'service_uid': ready_binding['service_uid'],
+                        'deployment': ready_binding['old'], 'service': ready_binding['service']}))
+                    self.assertEqual(receipt['ready_pair_sha256'], gis.digest({
+                        'deployment_uid': ready_binding['deployment_uid'], 'service_uid': ready_binding['service_uid'],
+                        'deployment': gis.semantic(deployment), 'service': gis.semantic(service)}))
+                    self.assertEqual(receipt['receipt_sha256'], gis.digest({
+                        key: value for key, value in receipt.items() if key != 'receipt_sha256'}))
+                    self.assertEqual(snapshots[-1]['gis_existing_update']['receipt'], receipt)
+                # Model a durably completed operation after the separately
+                # tested pre-release producer; this does not prove a real PASS.
+                state['status'] = 'PASS'
+                state['phase'] = 'POST_RESTART'
+                state['fence_status'] = 'RELEASED'
+                state['context'] = {'expected': {'namespace_uid': ready_binding['namespace_uid'],
+                    'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
+                durable = base / 'checkpoint.json'
+                durable.write_text(json.dumps(state), encoding='utf-8')
+                durable.chmod(0o600)
+                actions = object.__new__(bridge_root.Actions)
+                with patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
+                        patch.object(bridge_root, 'Kube', return_value=ready_kube):
+                    actions._active_release(state)
+                    published = json.loads(active_path.read_text(encoding='utf-8'))
+                    self.assertEqual(published['gis_first_install_transition'], anchor)
+                    self.assertEqual(published['gis_latest_transition'], {
+                        'operation': state['operation'], 'receipt_sha256': receipt['receipt_sha256']})
+                    loaded = existing.load_authority(ready_kube)
+                    self.assertEqual(loaded['anchor_sha256'], anchor['receipt_sha256'])
+                    self.assertEqual(loaded['old'], gis.semantic(deployment))
+                    # Re-seal target, authority and TT records consistently,
+                    # but retain the original normalized/bound GIS template.
+                    forged = copy.deepcopy(state)
+                    changed_image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'e' * 64
+                    forged['target']['images']['voice-gameintegration/gameintegration'] = changed_image
+                    forged['gis_source_authority']['images']['gameintegration'] = changed_image
+                    forged['authorization']['target'] = copy.deepcopy(forged['target'])
+                    forged['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(forged['authorization'])
+                    forged['resource_fence']['context']['images'] = copy.deepcopy(forged['target']['images'])
+                    forged['resource_fence']['target_sha256'] = gis.digest(forged['target'])
+                    section = forged['gis_existing_update']
+                    section['source_authority'] = copy.deepcopy(forged['gis_source_authority'])
+                    section['resource_fence'] = copy.deepcopy(forged['resource_fence'])
+                    forged_receipt = section['receipt']
+                    forged_receipt['source_authority_sha256'] = gis.digest(section['source_authority'])
+                    forged_receipt['resource_fence_sha256'] = gis.digest(section['resource_fence'])
+                    forged_receipt['target_sha256'] = gis.digest(forged['target'])
+                    forged_receipt['receipt_sha256'] = gis.digest({
+                        key: value for key, value in forged_receipt.items() if key != 'receipt_sha256'})
+                    durable.write_text(json.dumps(forged), encoding='utf-8')
+                    changed_active = copy.deepcopy(published)
+                    changed_active['gis_latest_transition']['receipt_sha256'] = forged_receipt['receipt_sha256']
+                    active_path.write_text(json.dumps(changed_active), encoding='utf-8')
+                    with self.assertRaisesRegex(gis.Blocked, 'gis_existing_successor_binding_changed'):
+                        existing.load_authority(ready_kube)
+                    durable.write_text(json.dumps(state), encoding='utf-8')
+                    active_path.write_text(json.dumps(published), encoding='utf-8')
+                    legacy = {'operation': 'c' * 12, 'status': 'PASS', 'context': state['context'],
+                        'target': {'mode': 'images-only', 'manifest_sha256': '8' * 64}}
+                    legacy_dir = root / ('rollout-' + legacy['operation'])
+                    legacy_dir.mkdir()
+                    legacy_checkpoint = legacy_dir / 'checkpoint.json'
+                    legacy_checkpoint.write_text(json.dumps(legacy), encoding='utf-8')
+                    legacy_checkpoint.chmod(0o600)
+                    try:
+                        actions._active_release(legacy)
+                    except (gis.Blocked, runtime_stage.Blocked):
+                        pass
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), published)
+
+                    # B is independently produced and journaled against A's
+                    # published root reference. Completion is still simulated.
+                    second = copy.deepcopy(state)
+                    second.pop('gis_existing_update')
+                    second['operation'] = 'b' * 12
+                    second['status'] = 'WAITING'
+                    second['phase'] = 'RESTART'
+                    second['fence_status'] = 'VERIFIED'
+                    second['gis_expected_active'] = copy.deepcopy(published)
+                    second_image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'c' * 64
+                    next_deployment = copy.deepcopy(ready_kube.objects[gis.DEPLOYMENT])
+                    next_deployment['spec']['template']['spec']['containers'][0]['image'] = second_image
+                    next_binding = existing.bind_target(loaded, next_deployment)
+                    ready_kube.objects[gis.DEPLOYMENT] = copy.deepcopy(next_deployment)
+                    ready_kube.rs['spec']['template'] = copy.deepcopy(next_deployment['spec']['template'])
+                    ready_kube.pod['spec']['containers'][0]['image'] = second_image
+                    ready_kube.pod['status']['containerStatuses'][0]['imageID'] = second_image
+                    next_pair = {'deployment_mode': 'selected-paused',
+                        'deployment_uid': next_binding['deployment_uid'], 'service_uid': next_binding['service_uid'],
+                        'deployment': gis.semantic(next_deployment), 'service': gis.semantic(service)}
+                    next_pair['deployment']['spec']['replicas'] = 0
+                    second['gis_binding'] = next_binding
+                    second['gis_normalized_pair'] = next_pair
+                    second['gis_ready_proof'] = existing.verify_ready(next_binding, ready_kube, account)
+                    second['target']['images']['voice-gameintegration/gameintegration'] = second_image
+                    second['target']['manifest_sha256'] = '8' * 64
+                    second['target']['gis_existing_normalized_sha256'] = gis.digest(next_pair)
+                    second['target']['template_hashes']['voice-gameintegration'] = gis.digest(next_pair['deployment']['spec']['template'])
+                    second['gis_source_authority']['images']['gameintegration'] = second_image
+                    second['resource_fence']['operation'] = second['operation']
+                    second['resource_fence']['context']['images'] = copy.deepcopy(second['target']['images'])
+                    second['resource_fence']['target_sha256'] = gis.digest(second['target'])
+                    second['authorization']['operation'] = second['operation']
+                    second['authorization']['target'] = copy.deepcopy(second['target'])
+                    second['cipher_binding']['operation'] = second['operation']
+                    second['custody']['operation'] = second['operation']
+                    second['cipher_binding']['challenge'] = '1' * 32
+                    second['custody']['challenge'] = second['cipher_binding']['challenge']
+                    second['cipher_binding']['cipher_sha256'] = '2' * 64
+                    second['custody']['cipher_sha256'] = second['cipher_binding']['cipher_sha256']
+                    second['custody']['artifact_id'] = 20
+                    second['events'] = []
+                    second['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(second['authorization'])
+                    second_base = root / ('rollout-' + second['operation'])
+                    second_base.mkdir()
+                    (second_base / 'rollout-before-manifest.json').write_bytes(raw)
+                    second_restore = second_base / 'decrypted-restore.json'
+                    restored_b = copy.deepcopy(restore)
+                    restored_b['cipher_sha256'] = second['cipher_binding']['cipher_sha256']
+                    second_restore.write_text(json.dumps(restored_b), encoding='utf-8')
+                    second_restore.chmod(0o600)
+                    second_stage = SimpleNamespace(final_path=second_base, kube=ready_kube,
+                        verify_final_storage=lambda: None)
+                    second_stage.save = lambda event: second['events'].append(copy.deepcopy(event))
+                    second_runtime = preserve.ColdRelease(second_base, second, second_stage, lambda: None, cut, nonce,
+                        dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5))
+                    second_stage.closed_preservation_runtime = second_runtime
+                    next_intent = second_runtime.verify_and_journal(second_stage)
+                    second_runtime.arm_release(second_stage, next_intent)
+                    with patch.object(transaction, 'save'):
+                        next_receipt = transaction.gis_successor_checkpoint(second_base, second, second_stage)
+                    self.assertEqual(next_receipt['predecessor'], published['gis_latest_transition'])
+                    self.assertEqual(next_receipt['old_pair_sha256'], receipt['ready_pair_sha256'])
+                    second['status'] = 'PASS'
+                    second['phase'] = 'POST_RESTART'
+                    second['fence_status'] = 'RELEASED'
+                    second_checkpoint = second_base / 'checkpoint.json'
+                    second_checkpoint.write_text(json.dumps(second), encoding='utf-8')
+                    second_checkpoint.chmod(0o600)
+                    actions._active_release(second)
+                    published_b = json.loads(active_path.read_text(encoding='utf-8'))
+                    self.assertEqual(published_b['gis_first_install_transition'], anchor)
+                    self.assertEqual(published_b['gis_latest_transition']['receipt_sha256'], next_receipt['receipt_sha256'])
+                    self.assertEqual(existing.load_authority(ready_kube)['old'], gis.semantic(next_deployment))
+                    try:
+                        actions._active_release(state)
+                    except (gis.Blocked, runtime_stage.Blocked):
+                        pass
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), published_b)
+                    for fault in ('missing_receipt', 'nonpass', 'context_namespace', 'authorization_namespace'):
+                        with self.subTest(chain_fault=fault):
+                            damaged = copy.deepcopy(second)
+                            if fault == 'missing_receipt':
+                                damaged['gis_existing_update'].pop('receipt')
+                            elif fault == 'nonpass':
+                                damaged['status'] = 'ROLLED_BACK'
+                            elif fault == 'context_namespace':
+                                damaged['context']['expected']['namespace_uid'] = '00000000-0000-0000-0000-000000000099'
+                            else:
+                                damaged['authorization']['namespace_uid'] = '00000000-0000-0000-0000-000000000099'
+                                damaged['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(damaged['authorization'])
+                            second_checkpoint.write_text(json.dumps(damaged), encoding='utf-8')
+                            with self.assertRaises((gis.Blocked, runtime_stage.Blocked, RuntimeError)):
+                                existing.load_authority(ready_kube)
+                            self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), published_b)
+                            second_checkpoint.write_text(json.dumps(second), encoding='utf-8')
+                    altered_pair = copy.deepcopy(second)
+                    altered_pair['gis_binding']['old']['spec']['template']['spec']['containers'][0]['image'] = (
+                        'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'f' * 64)
+                    altered_pair['gis_binding'] = existing.seal(altered_pair['gis_binding'])
+                    altered_section = altered_pair['gis_existing_update']
+                    altered_section['old_pair']['deployment'] = copy.deepcopy(altered_pair['gis_binding']['old'])
+                    altered_receipt = altered_section['receipt']
+                    altered_receipt['old_pair_sha256'] = gis.digest(altered_section['old_pair'])
+                    altered_receipt['receipt_sha256'] = gis.digest({
+                        key: value for key, value in altered_receipt.items() if key != 'receipt_sha256'})
+                    second_checkpoint.write_text(json.dumps(altered_pair), encoding='utf-8')
+                    altered_active = copy.deepcopy(published_b)
+                    altered_active['gis_latest_transition']['receipt_sha256'] = altered_receipt['receipt_sha256']
+                    active_path.write_text(json.dumps(altered_active), encoding='utf-8')
+                    with self.assertRaisesRegex(gis.Blocked, 'gis_existing_successor_predecessor_changed'):
+                        existing.load_authority(ready_kube)
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), altered_active)
+                    second_checkpoint.write_text(json.dumps(second), encoding='utf-8')
+                    active_path.write_text(json.dumps(published_b), encoding='utf-8')
+                    # Forged C claims B was active but links directly to A.
+                    # Re-seal its local evidence to isolate predecessor skip.
+                    forged_c = copy.deepcopy(second)
+                    forged_c['operation'] = 'e' * 12
+                    forged_c['gis_expected_active'] = copy.deepcopy(published_b)
+                    forged_c['authorization']['operation'] = forged_c['operation']
+                    forged_c['cipher_binding']['operation'] = forged_c['operation']
+                    forged_c['custody']['operation'] = forged_c['operation']
+                    forged_c['resource_fence']['operation'] = forged_c['operation']
+                    forged_c['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(forged_c['authorization'])
+                    section_c = forged_c['gis_existing_update']
+                    section_c['custody'] = copy.deepcopy(forged_c['custody'])
+                    section_c['resource_fence'] = copy.deepcopy(forged_c['resource_fence'])
+                    evidence_c = section_c['preservation']
+                    evidence_c['custody'] = copy.deepcopy(forged_c['custody'])
+                    intent_c = evidence_c['cold_intent']
+                    intent_c['operation'] = forged_c['operation']
+                    intent_c['custody_sha256'] = gis.digest(forged_c['custody'])
+                    forged_c['events'] = [copy.deepcopy(intent_c)]
+                    receipt_c = section_c['receipt']
+                    receipt_c['operation'] = forged_c['operation']
+                    receipt_c['predecessor'] = copy.deepcopy(published['gis_latest_transition'])
+                    receipt_c['custody_sha256'] = gis.digest(section_c['custody'])
+                    receipt_c['resource_fence_sha256'] = gis.digest(section_c['resource_fence'])
+                    receipt_c['preservation_sha256'] = gis.digest(evidence_c)
+                    receipt_c['receipt_sha256'] = gis.digest({
+                        key: value for key, value in receipt_c.items() if key != 'receipt_sha256'})
+                    third_base = root / ('rollout-' + forged_c['operation'])
+                    third_base.mkdir()
+                    (third_base / 'rollout-before-manifest.json').write_bytes(raw)
+                    third_restore = third_base / 'decrypted-restore.json'
+                    third_restore.write_text(json.dumps(restored_b), encoding='utf-8')
+                    third_restore.chmod(0o600)
+                    third_checkpoint = third_base / 'checkpoint.json'
+                    third_checkpoint.write_text(json.dumps(forged_c), encoding='utf-8')
+                    third_checkpoint.chmod(0o600)
+                    with self.assertRaisesRegex(runtime_stage.Blocked, 'gis_existing_publication_stale'):
+                        actions._active_release(forged_c)
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), published_b)
+                    active_c = copy.deepcopy(published_b)
+                    active_c['operation'] = forged_c['operation']
+                    active_c['gis_latest_transition'] = {'operation': forged_c['operation'],
+                        'receipt_sha256': receipt_c['receipt_sha256']}
+                    active_path.write_text(json.dumps(active_c), encoding='utf-8')
+                    with self.assertRaisesRegex(gis.Blocked, 'gis_existing_successor_invalid'):
+                        existing.load_authority(ready_kube)
+                    self.assertEqual(json.loads(active_path.read_text(encoding='utf-8')), active_c)
+                    active_path.write_text(json.dumps(published_b), encoding='utf-8')
 
     def test_bridge_qualifies_gis_before_real_workload_capture(self):
         class Captured(Exception):
