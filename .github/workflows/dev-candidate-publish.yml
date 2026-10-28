@@ -20,6 +20,9 @@ on:
       - scripts/dev/media_operation_guard_test.py
       - scripts/dev/media_backup_phase.py
       - scripts/dev/media_backup_phase_test.py
+      - scripts/dev/media_backup_upload_phase.py
+      - scripts/dev/media_backup_upload_phase_test.py
+      - scripts/dev/story_media_backup_custody.py
       - scripts/dev/resource_fencing.py
       - scripts/dev/update_images.py
       - deploy/templates/story-media-*.yaml
@@ -60,6 +63,7 @@ jobs:
           python -B scripts/dev/media_operation_journal_test.py
           python -B scripts/dev/media_operation_guard_test.py
           python -B scripts/dev/media_backup_phase_test.py
+          python -B scripts/dev/media_backup_upload_phase_test.py
 
   publish:
     name: Publish exact DEV candidate
