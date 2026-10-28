@@ -7,6 +7,7 @@ probe never proves Space's source catalog, startup, or migration eligibility.
 import json
 from urllib.parse import urlsplit
 import full_cohort_schema_metadata as common
+import full_cohort_schema_metadata_space_catalog as source_catalog
 
 Hold = common.Hold
 SOURCE_FILES = {
@@ -110,15 +111,17 @@ def classify(values):
     return result
 
 
-def probe(source_snapshot, pod_name, expected_engine_role, guard,
+def probe(source_root, source_snapshot, pod_name, expected_engine_role, guard,
           run_bytes=common.linux_private_bytes, run_psql=common.linux_psql):
     """Return enum-only configuration evidence, surrounded by Pod identity checks.
 
-    The operator must separately run the real schema-locked source verifier.
+    Catalog checks run in one read-only repeatable-read schema-locked session;
+    this does not perform a domain read or qualify other capabilities.
     """
     try:
         if any(source_snapshot['files'].get(p) != h for p, h in SOURCE_FILES.items()):
             raise Hold('space_source_policy_unknown')
+        catalog_sql = source_catalog.compile_sql(source_root, source_snapshot)
         snapshot = common.kube_workload_snapshot('space', pod_name, run_bytes, guard)
         key_reader = common.kube_key_reader(run_bytes)
         runtime = common.kube_runtime_reader('space', pod_name, run_bytes)
@@ -155,6 +158,17 @@ def probe(source_snapshot, pod_name, expected_engine_role, guard,
                   'composite_evidence_present', 'purge_fences_present', 'audit_lock_present')
         if any(type(observed.get(field)) is not bool for field in fields):
             raise Hold('space_metadata_invalid')
+        common._fence(guard)
+        args[-1] = catalog_sql
+        checked = json.loads(common._external(run_psql, args))
+        common._fence(guard)
+        if (checked.get('database') != 'space_db' or checked.get('database_oid') != baseline['session']['database_oid'] or
+                checked.get('server_start') != baseline['session']['server_start'] or checked.get('role') != expected_engine_role or
+                checked.get('read_only') != 'on' or checked.get('data_directory') != '/var/lib/postgresql/data' or
+                any(type(checked.get(key)) is not bool for key in ('ledger25', 'tables_ok', 'triggers_ok', 'functions_ok'))):
+            raise Hold('space_source_catalog_unqualified')
+        if engine() != baseline['engine']:
+            raise Hold('engine_changed')
         after = snapshot()
         if any(before[k] != after[k] for k in common.IDENTITY):
             raise Hold('pod_changed')
@@ -164,10 +178,15 @@ def probe(source_snapshot, pod_name, expected_engine_role, guard,
         return {'source_sha': source_snapshot['source_sha'],
                 'binding': {k: before[k] for k in common.IDENTITY}, 'features': result,
                 'ledger': baseline['ledger'], 'objects': {field: observed[field] for field in fields},
-                'source_catalog': 'not_evaluated', 'status': 'HOLD',
-                'limits': ['shape_is_not_full_validation', 'source_catalog_and_startup_not_qualified',
+                'source_catalog': {'status': 'v25_metadata_matched' if all(checked[key] for key in
+                    ('ledger25', 'tables_ok', 'triggers_ok', 'functions_ok')) else 'HOLD',
+                    'checks': {key: checked[key] for key in ('ledger25', 'tables_ok', 'triggers_ok', 'functions_ok')}},
+                'status': 'HOLD',
+                'limits': ['shape_is_not_full_validation', 'catalog_metadata_does_not_prove_domain_read_or_startup',
                            'objects_use_observer_search_path', 'no_existing_application_connection_peer_proof']}
     except common.GuardLost:
+        raise
+    except Hold:
         raise
     except Exception:
         raise Hold('space_probe_failed') from None

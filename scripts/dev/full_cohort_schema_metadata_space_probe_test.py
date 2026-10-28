@@ -39,17 +39,22 @@ class SpaceProbeTest(unittest.TestCase):
                  'dirty': False, 'ledger_rows': 1, 'native_guard_present': False, 'ordinary_heads_present': False,
                  'composite_fences_present': False, 'composite_evidence_present': False,
                  'purge_fences_present': False, 'audit_lock_present': False}
-        with mock.patch.object(probe.common, 'kube_workload_snapshot', return_value=lambda: pod.copy()), \
+        catalog_row = {'database': 'space_db', 'database_oid': 5, 'server_start': 'time', 'role': 'voice',
+                       'read_only': 'on', 'data_directory': '/var/lib/postgresql/data', 'ledger25': True,
+                       'tables_ok': True, 'triggers_ok': True, 'functions_ok': True}
+        responses = iter([json.dumps(dbrow), json.dumps(catalog_row)])
+        with mock.patch.object(probe.source_catalog, 'compile_sql', return_value='fixed'), \
+             mock.patch.object(probe.common, 'kube_workload_snapshot', return_value=lambda: pod.copy()), \
              mock.patch.object(probe.common, 'kube_key_reader'), mock.patch.object(probe.common, 'kube_runtime_reader'), \
              mock.patch.object(probe.common, 'kube_dns_reader'), mock.patch.object(probe.common, 'catalog'), \
              mock.patch.object(probe.common, 'resolve', return_value={'binding': 'fixed'}), \
              mock.patch.object(probe.common, 'kube_engine_snapshot', return_value=lambda: engine.copy()), \
              mock.patch.object(probe.common, 'observe', return_value=baseline):
-            result = probe.probe(source, 'voice-space-a', 'voice', lambda: None,
+            result = probe.probe('.', source, 'voice-space-a', 'voice', lambda: None,
                                  lambda _: b'SPACE_CHAT_COMPOSITE_PRINCIPAL_REDIS_PASSWORD=secret\0',
-                                 lambda _: json.dumps(dbrow))
+                                 lambda _: next(responses))
         self.assertEqual(result['status'], 'HOLD')
-        self.assertEqual(result['source_catalog'], 'not_evaluated')
+        self.assertEqual(result['source_catalog']['status'], 'v25_metadata_matched')
         self.assertNotIn('secret', repr(result))
 
 

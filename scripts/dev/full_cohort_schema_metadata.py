@@ -62,9 +62,9 @@ AUTH_ENV_POLICY = ("while IFS= read -r -d '' line; do key=${line%%=*}; case \"$k
                    "key=${key,,}; key=${key//./_}; key=${key//-/_}; case \"$key\" in "
                    "spring_config*|spring_application_json|spring_profiles*|spring_datasource*|spring_flyway*|"
                    "voice_auth_jdbc*) exit 1;; esac; done </proc/1/environ; printf ok")
-COMMON_SQL = ("'database',current_database(),'database_oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),"
-              "'role',current_user,'pid',pg_backend_pid(),'server_start',pg_postmaster_start_time(),"
-              "'read_only',current_setting('transaction_read_only'),'data_directory',current_setting('data_directory')")
+COMMON_SQL = ("'database',pg_catalog.current_database(),'database_oid',(SELECT oid::bigint FROM pg_catalog.pg_database WHERE datname=pg_catalog.current_database()),"
+              "'role',current_user,'pid',pg_catalog.pg_backend_pid(),'server_start',pg_catalog.pg_postmaster_start_time(),"
+              "'read_only',pg_catalog.current_setting('transaction_read_only'),'data_directory',pg_catalog.current_setting('data_directory')")
 MIGRATE_SQL = ("SELECT json_build_object(" + COMMON_SQL +
                ",'version',max(version),'dirty',bool_or(dirty),'ledger_rows',count(*)) FROM public.schema_migrations")
 VOICE_SQL = MIGRATE_SQL.replace("'ledger_rows',count(*)", "'ledger_rows',count(*),"
