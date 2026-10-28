@@ -34,7 +34,7 @@ func recordExpiryEvent(ctx context.Context, tx pgx.Tx, row FileRow) error {
 func (s *FilesStore) DispatchExpiryEvent(ctx context.Context, publish func(context.Context, []byte) error) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}

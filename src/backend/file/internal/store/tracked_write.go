@@ -181,7 +181,7 @@ func (s *FilesStore) StartTrackedWrite(ctx context.Context, key string, generati
 	if s == nil || s.Pool == nil {
 		return TrackedWriteIntent{}, ErrTrackedWrite
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, false)
 	if err != nil {
 		return TrackedWriteIntent{}, err
 	}
@@ -215,7 +215,7 @@ func (s *FilesStore) SettleTrackedWrite(ctx context.Context, key string, generat
 
 // Only idempotent database settlement is retried. Storage is never invoked here.
 func (s *FilesStore) settleTrackedWriteAttempt(ctx context.Context, key string, generation uuid.UUID, acknowledged bool) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, false)
 	if err != nil {
 		return err
 	}
@@ -269,6 +269,15 @@ func CanCollectTrackedObjectTx(ctx context.Context, tx pgx.Tx, file uuid.UUID, k
 	if tx == nil || file == uuid.Nil || key == "" {
 		return false, ErrTrackedWrite
 	}
+	var blob *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT blob_id FROM files WHERE id=$1`, file).Scan(&blob); err != nil {
+		return false, err
+	}
+	if blob != nil {
+		if held, err := inventoryBlobHeldTx(ctx, tx, *blob); err != nil || held {
+			return false, err
+		}
+	}
 	exists, err := trackedWriteLedgerExists(ctx, tx)
 	if err != nil {
 		return false, err
@@ -288,6 +297,9 @@ func CanCollectTrackedObjectTx(ctx context.Context, tx pgx.Tx, file uuid.UUID, k
 func CanCollectTrackedBlobTx(ctx context.Context, tx pgx.Tx, blob uuid.UUID) (bool, error) {
 	if tx == nil || blob == uuid.Nil {
 		return false, ErrTrackedWrite
+	}
+	if held, err := inventoryBlobHeldTx(ctx, tx, blob); err != nil || held {
+		return false, err
 	}
 	exists, err := trackedWriteLedgerExists(ctx, tx)
 	if err != nil {
