@@ -125,6 +125,7 @@ class RealComponentsTest(unittest.TestCase):
           'pvc': {'metadata':{'uid':uid,'namespace':'voice-dev'},'spec':{'volumeName':'pv'},'status':{'phase':'Bound'}},
           'pv': {'metadata':{'uid':uid},'spec':{'claimRef':{'uid':uid,'namespace':'voice-dev','name':'pgdata-voice-postgres-0'}}}}
         mount = '42 1 0:42 / /var/lib/postgresql/data rw - ext4 /dev/x rw\n'
+        executed = []
         def runner(command, **kwargs):
             text = ' '.join(command)
             if 'get' in command:
@@ -133,7 +134,9 @@ class RealComponentsTest(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout=json.dumps({'data_directory':expected['data_directory'], 'version':'160014','mountinfo':mount}).encode())
             if 'readlink' in text:
                 return SimpleNamespace(returncode=0, stdout=(expected['data_directory']+'\n'+expected['mount_path']+'\n'+mount).encode())
-            kwargs['stdout'].write(b'synthetic source bytes')
+            member = command[-1]
+            executed.append(member)
+            kwargs['stdout'].write(('synthetic-' + member).encode())
             return SimpleNamespace(returncode=0, stdout=b'')
         real_producer = capture.Producer
         key = bytes(range(32))
@@ -150,6 +153,8 @@ class RealComponentsTest(unittest.TestCase):
                 return
             planned = operation.run(root, key, expected, phases, lambda: None)
         self.assertEqual(planned['status'], 'dispatch-pending')
+        self.assertEqual(set(executed), operation.MEMBERS)
+        self.assertEqual(len(executed), len(operation.MEMBERS))
         final_binding = binding | {'dump_receipts': {m: base.ledger.row['backup_members'][m]['receipt_sha256'] for m in operation.MEMBERS}}
         # The authenticated ciphertext decrypts to the bytes produced by the real adapter.
         with tarfile.open(root / 'media-backup.tar') as archive:
@@ -157,7 +162,7 @@ class RealComponentsTest(unittest.TestCase):
         for member in operation.MEMBERS:
             output = io.BytesIO()
             backup.decrypt(root, key, final_binding, manifest, member, output)
-            self.assertEqual(output.getvalue(), b'synthetic source bytes')
+            self.assertEqual(output.getvalue(), ('synthetic-' + member).encode())
 
 
 if __name__ == '__main__':
