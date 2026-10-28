@@ -744,6 +744,24 @@ live smoke duration, provider coverage or product acceptance.
   `make ci-script-tests`; no ACTIVE A3/v6/MM/provider deployment is implied or
   required for this dormant/restrictive source unit.
 
+### Space Voice leave failure diagnostics
+
+The real public leave helper adds a locally generated `X-Request-Id` and emits
+`VOICE503_DIAGNOSTIC` only before a non-204 failure. Its strict HTTP 204 assertion,
+received-RTP assertions and SDK-close/deferred-leave order remain unchanged.
+The diagnostic reads at most 4,097 bytes and emits only closed public error/message
+inventory and the validated local request ID; arbitrary bodies, headers, JWTs,
+DSNs and reader errors are never logged.
+
+From `src/backend/gateway`, run `go test -run
+'^TestComposeSpaceLeaveDiagnostic(AllowsOnlyPublicInventory|RejectsUnsafeInput|BoundsBodyRead)$' .`
+for the ordinary privacy checks. The offline real-helper probe is
+`CGO_ENABLED=1 go test -tags=live -run
+'^TestComposeSpaceLeaveDiagnosticPreservesStrictStatus$' .` on Linux with the
+existing LiveKit native build dependencies. It uses a private loopback HTTP
+fixture and subprocess to verify HTTP 204 success, strict HTTP 503 failure, request correlation
+and redaction; it does not run a service stack or reproduce a historical CI cause.
+
 ### E2E по фичам
 
 Краткий каталог smoke-тестов (полный список — в манифесте выше).
