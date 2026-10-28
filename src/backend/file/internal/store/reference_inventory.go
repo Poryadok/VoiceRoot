@@ -53,6 +53,15 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 	if err = tx.QueryRow(ctx, `SELECT blocked FROM file_reference_inventory_gate WHERE singleton FOR UPDATE`).Scan(&blocked); err != nil {
 		return err
 	}
+	// The exclusive local guard alone cannot fence a request after connection
+	// loss. Refuse a new proof window while a prior storage attempt is unknown.
+	var unsettled bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_deletes WHERE state IN ('STARTED','UNSETTLED'))`).Scan(&unsettled); err != nil {
+		return err
+	}
+	if unsettled {
+		return ErrInventoryBarrier
+	}
 	var existing []byte
 	err = tx.QueryRow(ctx, `SELECT identity_bytes FROM file_reference_inventory_imports WHERE operation_id=$1`, op).Scan(&existing)
 	if err == nil {
@@ -503,6 +512,8 @@ func applyInventoryEntry(ctx context.Context, tx pgx.Tx, op uuid.UUID, e *common
 	} else {
 		if state == "deleted" || state == "expired" || state == "failed" {
 			issue = "terminal file"
+		} else if state != "ready" {
+			issue = "unusable file"
 		}
 		if e.AuthorProfileId != nil && *e.AuthorProfileId != uploader.String() {
 			issue = "author conflict"

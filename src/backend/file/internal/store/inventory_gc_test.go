@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -128,4 +129,51 @@ func TestInventoryHoldsGuardGCAndAlternateObjectCleanup(t *testing.T) {
 	_, err = files.DeleteLegacyFile(ctx, file, nil, deleter)
 	require.ErrorIs(t, err, ErrFileRetained)
 	require.Zero(t, calls.Load())
+	// The blob ledger retains key custody even after the last File alias row
+	// disappears; an old original/error cleanup still cannot bypass its hold.
+	_, err = pool.Exec(ctx, `DELETE FROM file_gif_cleanup WHERE file_id=$1`, file)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `DELETE FROM files WHERE id=$1`, file)
+	require.NoError(t, err)
+	require.ErrorIs(t, files.InventoryGuardedDeleter(deleter).DeleteObject(ctx, "inventory/original"), ErrInventoryBarrier)
+	require.Zero(t, calls.Load())
+}
+
+func TestInventoryAmbiguousObjectCleanupBlocksCohort(t *testing.T) {
+	ctx, pool, files, _ := inventoryGCPool(t)
+	var calls atomic.Int32
+	deleter := files.InventoryGuardedDeleter(inventoryDeleteFunc(func(context.Context, string) error { calls.Add(1); return errors.New("lost storage response") }))
+	require.Error(t, deleter.DeleteObject(ctx, "inventory/original"))
+	require.ErrorIs(t, files.CreateInventoryOperation(ctx, uuid.New(), inventoryGCIdentity()), ErrInventoryBarrier, "an unresolved pre-cohort DELETE cannot be declared drained by local locks")
+	require.Error(t, deleter.DeleteObject(ctx, "inventory/original"))
+	require.EqualValues(t, 1, calls.Load(), "unknown outcome does not authorize another physical attempt")
+	var pending int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_reference_inventory_deletes WHERE state IN ('STARTED','UNSETTLED')`).Scan(&pending))
+	require.Equal(t, 1, pending)
+}
+
+func TestInventoryStorageAttemptSurvivesPhysicalConnectionLoss(t *testing.T) {
+	ctx, pool, files, _ := inventoryGCPool(t)
+	entered, release := make(chan struct{}), make(chan struct{})
+	done := make(chan error, 1)
+	deleter := files.InventoryGuardedDeleter(inventoryDeleteFunc(func(context.Context, string) error { close(entered); <-release; return nil }))
+	go func() { done <- deleter.DeleteObject(ctx, "inventory/original") }()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	var backend int32
+	require.NoError(t, pool.QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE datname=current_database() AND state='idle in transaction' AND query LIKE '%file_reference_inventory_holds%' ORDER BY query_start DESC LIMIT 1`).Scan(&backend))
+	var killed bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT pg_terminate_backend($1)`, backend).Scan(&killed))
+	require.True(t, killed)
+	// Only this test's owned physical transaction was terminated. The remote
+	// callback is still blocked: local lock disappearance is not storage drain.
+	require.ErrorIs(t, files.CreateInventoryOperation(ctx, uuid.New(), inventoryGCIdentity()), ErrInventoryBarrier)
+	close(release)
+	require.Error(t, <-done, "lost SQL connection cannot erase STARTED even after a storage ACK")
+	var state string
+	require.NoError(t, pool.QueryRow(ctx, `SELECT state FROM file_reference_inventory_deletes`).Scan(&state))
+	require.Equal(t, "STARTED", state)
 }

@@ -308,18 +308,46 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	}
 	// Recheck after the File lock with a fresh snapshot. A Start that won the
 	// lock before this cleanup may have submitted a PUT since candidate selection.
-	var blob uuid.UUID
-	if err = tx.QueryRow(ctx, `SELECT b.blob_id FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id=$1 FOR UPDATE OF b`, id).Scan(&blob); err != nil {
-		return false, err
+	if inventory, e := inventoryHoldsExistTx(ctx, tx); e != nil {
+		return false, e
+	} else if inventory {
+		var blob uuid.UUID
+		if err = tx.QueryRow(ctx, `SELECT b.blob_id FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id=$1 FOR UPDATE OF b`, id).Scan(&blob); err != nil {
+			return false, err
+		}
 	}
 	collect, err := CanCollectTrackedObjectTx(ctx, tx, id, key)
 	if err != nil || !collect {
 		return false, err
 	}
+	var deleteAttempt uuid.UUID
+	if inventory, e := inventoryHoldsExistTx(ctx, tx); e != nil {
+		return false, e
+	} else if inventory {
+		generation, e := LockInventoryGuardTx(ctx, tx, true)
+		if e != nil {
+			return false, e
+		}
+		// The outer physical transaction retains the shared guard. Commit the
+		// insert-only attempt through the pool, without reacquiring that guard
+		// behind an exclusive cohort waiter or releasing File/blob authority.
+		deleteAttempt, e = insertInventoryDelete(ctx, s.Pool, key, generation)
+		if e != nil {
+			return false, e
+		}
+	}
 	deleteCtx, cancel := context.WithTimeout(guardedInventoryDeleteContext(ctx), 5*time.Second)
 	defer cancel()
 	if err = deleter.DeleteObject(deleteCtx, key); err != nil {
+		if deleteAttempt != uuid.Nil {
+			return false, finishInventoryDeleteTx(tx, deleteAttempt, err)
+		}
 		return false, err
+	}
+	if deleteAttempt != uuid.Nil {
+		if err = setInventoryDeleteOutcomeTx(ctx, tx, deleteAttempt, nil); err != nil {
+			return false, err
+		}
 	}
 	// Public upload clients have no trusted storage completion/fence channel.
 	// Keep their original discoverable after URL expiry and repeat deletion at
