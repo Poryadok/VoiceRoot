@@ -201,6 +201,11 @@ checkout репозитория, Python3 и kubeconfig нужного класт
    Qualify the rendered config/source/hash separately. First adoption needs an
    authorized config/template migration; image-only updates preserve old config.
    See [immutable web binding](DEPLOYMENT.md#immutable-web-promotion-and-environment-binding).
+    Admin and Developer Portal likewise require separate read-only runtime config
+    projections, binding `admin-dev.comrade.click` and
+    `developers-dev.comrade.click` respectively to `api-dev.comrade.click`.
+    Their images must be the same immutable refs later used in STAGING; the
+    initial config/template adoption is a separate authorized migration.
    Schema changes still require separately prepared DEV migrations from the same source.
 3. Предварительно сохранить текущие image pins и выполнить preview:
 

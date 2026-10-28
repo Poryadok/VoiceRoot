@@ -36,12 +36,18 @@ func (f *protectedFileFixture) PurgeSpace(ctx context.Context, _ *filev1.PurgeSp
 func (f *protectedFileFixture) GetSpacePurgeReceipt(ctx context.Context, _ *filev1.GetSpacePurgeReceiptRequest) (*filev1.GetSpacePurgeReceiptResponse, error) {
 	return &filev1.GetSpacePurgeReceiptResponse{}, f.lifecycleOwner(ctx, "space")
 }
+func (f *protectedFileFixture) ClaimStoryMedia(ctx context.Context, _ *filev1.ClaimStoryMediaRequest) (*filev1.ClaimStoryMediaResponse, error) {
+	return &filev1.ClaimStoryMediaResponse{}, f.lifecycleOwner(ctx, "story")
+}
+func (f *protectedFileFixture) ReleaseStoryMedia(ctx context.Context, _ *filev1.ReleaseStoryMediaRequest) (*filev1.ReleaseStoryMediaResponse, error) {
+	return &filev1.ReleaseStoryMediaResponse{}, f.lifecycleOwner(ctx, "story")
+}
 func (f *protectedFileFixture) IssueFileAccessCapability(ctx context.Context, req *filev1.IssueFileAccessCapabilityRequest) (*filev1.IssueFileAccessCapabilityResponse, error) {
 	owner := map[filev1.FileReferenceOwnerType]string{
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE:        "messaging",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STICKER:        "messaging",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_GIF_ASSET:      "messaging",
-		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY:          "user",
+		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY:          "story",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR: "user",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR:    "chat",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR:   "space",
@@ -68,12 +74,14 @@ func TestFileLifecycleRoutesAuthenticateExactOwnerThroughMTLS(t *testing.T) {
 		{filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, "space", &filev1.ApplySpaceLifecycleFenceRequest{}, &filev1.ApplySpaceLifecycleFenceResponse{}},
 		{filev1.FileService_PurgeSpace_FullMethodName, "space", &filev1.PurgeSpaceRequest{}, &filev1.PurgeSpaceResponse{}},
 		{filev1.FileService_GetSpacePurgeReceipt_FullMethodName, "space", &filev1.GetSpacePurgeReceiptRequest{}, &filev1.GetSpacePurgeReceiptResponse{}},
+		{filev1.FileService_ClaimStoryMedia_FullMethodName, "story", &filev1.ClaimStoryMediaRequest{}, &filev1.ClaimStoryMediaResponse{}},
+		{filev1.FileService_ReleaseStoryMedia_FullMethodName, "story", &filev1.ReleaseStoryMediaRequest{}, &filev1.ReleaseStoryMediaResponse{}},
 	}
 	for ownerType, owner := range map[filev1.FileReferenceOwnerType]string{
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE:        "messaging",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STICKER:        "messaging",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_GIF_ASSET:      "messaging",
-		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY:          "user",
+		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY:          "story",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR: "user",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR:    "chat",
 		filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_SPACE_AVATAR:   "space",
@@ -110,6 +118,7 @@ func TestFileLifecycleRoutesAuthenticateExactOwnerThroughMTLS(t *testing.T) {
 			require.NoError(t, invoke(tc.owner))
 			require.Equal(t, before+1, f.service.calls.Load())
 			wrong := "story"
+			if tc.owner=="story" {wrong="user"}
 			require.Equal(t, codes.PermissionDenied, status.Code(invoke(wrong)))
 			require.Equal(t, before+1, f.service.calls.Load())
 		})

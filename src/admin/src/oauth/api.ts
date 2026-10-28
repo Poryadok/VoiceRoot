@@ -1,5 +1,7 @@
+import { configuredApiBase } from "../runtimeConfig";
+
 export function apiBaseUrl(): string {
-  return import.meta.env.VITE_VOICE_API_BASE ?? "http://127.0.0.1:18080";
+  return configuredApiBase();
 }
 
 export function oauthClientIdValue(): string {

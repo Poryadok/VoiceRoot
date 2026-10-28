@@ -522,7 +522,17 @@ func TestR23FileReadAccess_LegacyAmbiguityAndBulkAreFailClosed(t *testing.T) {
 	_, err := client.AcquireFileReferences(r23ServiceContext(t, ctx, "messaging", filev1.FileService_AcquireFileReferences_FullMethodName, otherSpaceAcquire), otherSpaceAcquire)
 	require.NoError(t, err, "Acquire creates or confirms the other Space's canonical LIVE lifecycle fence")
 	require.Equal(t, "LIVE", r23SpaceFenceState(t, ctx, pool, uuid.MustParse(otherSpaceReference.GetScopeSpaceId())), "missing fence is fail-closed; the positive selector requires observed canonical LIVE state")
-	storyCapability := issueR23Capability(t, ctx, client, "user", subject, storyReference, filev1.FileReadSurface_FILE_READ_SURFACE_URL)
+	wrongStoryIssuer := &filev1.IssueFileAccessCapabilityRequest{
+		ProtocolVersion:  1,
+		OperationId:      uuid.NewString(),
+		Reference:        storyReference,
+		SubjectProfileId: subject.String(),
+		AllowedSurfaces:  []filev1.FileReadSurface{filev1.FileReadSurface_FILE_READ_SURFACE_URL},
+		ExpiresAt:        timestamppb.New(time.Now().UTC().Add(30 * time.Minute)),
+	}
+	_, err = client.IssueFileAccessCapability(r23ServiceContext(t, ctx, "user", filev1.FileService_IssueFileAccessCapability_FullMethodName, wrongStoryIssuer), wrongStoryIssuer)
+	require.Equal(t, codes.PermissionDenied, status.Code(err), "User cannot issue capabilities for Story-owned references")
+	storyCapability := issueR23Capability(t, ctx, client, "story", subject, storyReference, filev1.FileReadSurface_FILE_READ_SURFACE_URL)
 	profileCapability := issueR23Capability(t, ctx, client, "user", subject, profileReference, filev1.FileReadSurface_FILE_READ_SURFACE_URL)
 	otherSpaceCapability := issueR23Capability(t, ctx, client, "messaging", subject, otherSpaceReference, filev1.FileReadSurface_FILE_READ_SURFACE_URL)
 	_, err = client.GetFileURL(r23UserContext(ctx, uuid.New(), subject), &filev1.GetFileURLRequest{FileId: ambiguousFile.String()})

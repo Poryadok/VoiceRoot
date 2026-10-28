@@ -522,6 +522,7 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 | Voice R22.3 D1 | Из `src/backend/voice`: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`; Testcontainers владеет изолированной PostgreSQL DB и cleanup, shared Compose data не используется. |
 | Auth (Java) | `cd src/backend/auth && mvn -B test` (как **`make auth-test-ci`** / CI); образ и smoke — Docker, см. CI ниже |
 | Developer Portal | `cd src/developer-portal && npm ci && npm test && npm run build` (как job **`developer-portal`** в CI) |
+| Admin / Portal runtime config | Run each app's `npm test`, `npm run lint`, `npm run build`; from root run `node src/admin/browser/runtime-config.mjs src/admin/dist admin` and repeat with `src/developer-portal/dist portal`. Run `python3 src/admin/browser/runtime-config-manifest-test.py`, `python3 scripts/prod/frontend-runtime-render_test.py`, and `python3 scripts/staging/check-frontend-runtime-config_test.py`. The Chromium test checks one built asset identity across two origin bindings, missing/invalid/wrong-origin zero-API behavior and Retry. |
 
 Дополнительно: **`make build-all-breaking`** — то же + `buf breaking` против локальной ветки `master` (на PR в CI база другая — см. ниже). Хостовый buf: `make buf-lint`, `make buf-format`, `make buf-breaking`. После ручного прогона интеграционных тестов без `build-all`: **`make testcontainers-prune`** (удаляет только контейнеры с label `org.testcontainers`, не трогает `voice-*` compose). Контракт path-filter / promote matrix / **`ci-gate`**: **`make -j4 ci-script-tests-pr`** для текущих inputs; **`make ci-script-tests`** включает полный исторический аудит (parity с job `staging-stack-lock` drift-check — **`make image-catalog-drift-check`**). Проверка exact current merge запускается отдельно, команды ниже.
 
@@ -743,6 +744,24 @@ live smoke duration, provider coverage or product acceptance.
   production record, producer map or history ledger. Focused tests run through
   `make ci-script-tests`; no ACTIVE A3/v6/MM/provider deployment is implied or
   required for this dormant/restrictive source unit.
+
+### Space Voice leave failure diagnostics
+
+The real public leave helper adds a locally generated `X-Request-Id` and emits
+`VOICE503_DIAGNOSTIC` only before a non-204 failure. Its strict HTTP 204 assertion,
+received-RTP assertions and SDK-close/deferred-leave order remain unchanged.
+The diagnostic reads at most 4,097 bytes and emits only closed public error/message
+inventory and the validated local request ID; arbitrary bodies, headers, JWTs,
+DSNs and reader errors are never logged.
+
+From `src/backend/gateway`, run `go test -run
+'^TestComposeSpaceLeaveDiagnostic(AllowsOnlyPublicInventory|RejectsUnsafeInput|BoundsBodyRead)$' .`
+for the ordinary privacy checks. The offline real-helper probe is
+`CGO_ENABLED=1 go test -tags=live -run
+'^TestComposeSpaceLeaveDiagnosticPreservesStrictStatus$' .` on Linux with the
+existing LiveKit native build dependencies. It uses a private loopback HTTP
+fixture and subprocess to verify HTTP 204 success, strict HTTP 503 failure, request correlation
+and redaction; it does not run a service stack or reproduce a historical CI cause.
 
 ### E2E по фичам
 

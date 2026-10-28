@@ -150,40 +150,17 @@ if [ -n "${VOICE_DEVELOPER_PORTAL_INGRESS_HOST:-}" ]; then
     exit 1
   fi
 
-  if [ -n "${VOICE_GATEWAY_INGRESS_HOST:-}" ]; then
-    expected_api_base="https://${VOICE_GATEWAY_INGRESS_HOST}"
-    expected_api_base="${expected_api_base%/}"
-    portal_js_path="$(echo "${portal_root_body}" | grep -oE '/assets/[^"]+\.js' | head -1 || true)"
-    if [ -n "${portal_js_path}" ]; then
-      if command -v kubectl >/dev/null 2>&1; then
-        echo "Smoke: check deployed developer portal bundle VITE_VOICE_API_BASE"
-        if ! MSYS_NO_PATHCONV=1 kubectl exec -n "${VOICE_K8S_NAMESPACE:-voice-staging}" deploy/voice-developer-portal -- \
-          grep -Fq "${expected_api_base}" "/usr/share/nginx/html${portal_js_path}"; then
-          echo "developer portal bundle missing baked VITE_VOICE_API_BASE=${expected_api_base}"
-          exit 1
-        fi
-      else
-        echo "Smoke: GET ${PORTAL_URL}${portal_js_path} (developer portal bundle VITE_VOICE_API_BASE)"
-        portal_js_tmp="$(mktemp)"
-        portal_js_code="$(curl -sS --connect-timeout 5 --max-time 30 --retry 2 --retry-all-errors \
-          -o "${portal_js_tmp}" -w "%{http_code}" "${PORTAL_URL}${portal_js_path}" || echo "000")"
-        portal_js_body="$(tr -d '\r' < "${portal_js_tmp}")"
-        rm -f "${portal_js_tmp}"
-        if [ "${portal_js_code}" != "200" ]; then
-          echo "developer portal asset fetch failed: HTTP ${portal_js_code} for ${portal_js_path}"
-          exit 1
-        fi
-        if ! echo "${portal_js_body}" | grep -qF "${expected_api_base}"; then
-          echo "developer portal bundle missing baked VITE_VOICE_API_BASE=${expected_api_base}"
-          exit 1
-        fi
-      fi
-    else
-      echo "Smoke: warning — could not find portal JS asset in index.html (skip VITE_VOICE_API_BASE check)"
-    fi
-  else
-    echo "Smoke: skipping developer portal VITE_VOICE_API_BASE check (VOICE_GATEWAY_INGRESS_HOST not set)"
+  echo "Smoke: GET ${PORTAL_URL}/voice-runtime-config.json (developer portal binding)"
+  portal_config_tmp="$(mktemp)"
+  portal_config_code="$(curl -q -sS --connect-timeout 5 --max-time 15 \
+    -o "${portal_config_tmp}" -w "%{http_code}" "${PORTAL_URL}/voice-runtime-config.json" || echo "000")"
+  if [ "${portal_config_code}" != "200" ] || ! python3 "${ROOT}/scripts/staging/check-frontend-runtime-config.py" \
+      "${PORTAL_URL}" "https://${VOICE_GATEWAY_INGRESS_HOST:?Gateway ingress host required}" < "${portal_config_tmp}"; then
+    rm -f "${portal_config_tmp}"
+    echo "developer portal runtime config failed: HTTP ${portal_config_code} or wrong public origins"
+    exit 1
   fi
+  rm -f "${portal_config_tmp}"
 else
   echo "Smoke: skipping developer portal checks (VOICE_DEVELOPER_PORTAL_INGRESS_HOST not set)"
 fi
@@ -230,6 +207,18 @@ if [ -n "${VOICE_ADMIN_INGRESS_HOST:-}" ]; then
     echo "admin callback route failed: HTTP ${admin_cb_code}"
     exit 1
   fi
+
+  echo "Smoke: GET ${ADMIN_URL}/voice-runtime-config.json (admin binding)"
+  admin_config_tmp="$(mktemp)"
+  admin_config_code="$(curl -q -sS --connect-timeout 5 --max-time 15 \
+    -o "${admin_config_tmp}" -w "%{http_code}" "${ADMIN_URL}/voice-runtime-config.json" || echo "000")"
+  if [ "${admin_config_code}" != "200" ] || ! python3 "${ROOT}/scripts/staging/check-frontend-runtime-config.py" \
+      "${ADMIN_URL}" "https://${VOICE_GATEWAY_INGRESS_HOST:?Gateway ingress host required}" < "${admin_config_tmp}"; then
+    rm -f "${admin_config_tmp}"
+    echo "admin runtime config failed: HTTP ${admin_config_code} or wrong public origins"
+    exit 1
+  fi
+  rm -f "${admin_config_tmp}"
 else
   echo "Smoke: skipping admin checks (VOICE_ADMIN_INGRESS_HOST not set)"
 fi

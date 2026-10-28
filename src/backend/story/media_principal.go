@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -15,12 +17,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 
+	"google.golang.org/protobuf/proto"
 	filev1 "voice.app/voice/file/v1"
 	storyv1 "voice.app/voice/story/v1"
 	"voice/backend/pkg/grpcclient"
@@ -30,6 +34,72 @@ import (
 type signedStoryMediaClient struct {
 	filev1.FileServiceClient
 	issuer *principal.Issuer
+}
+
+func (c *signedStoryMediaClient) storyReferenceContext(ctx context.Context, rpc string, req proto.Message) (context.Context, error) {
+	hash, err := principal.RequestHash(req)
+	if err != nil {
+		return nil, err
+	}
+	id := uuid.NewString()
+	token, err := c.issuer.IssueService(principal.ServiceInput{Audience: "file", RPC: rpc, RequestID: id, RequestHash: hash})
+	if err != nil {
+		return nil, err
+	}
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs("authorization", "Bearer "+token, "x-request-id", id)), nil
+}
+
+func (c *signedStoryMediaClient) ClaimStoryMedia(ctx context.Context, story, file, author uuid.UUID, expected storyv1.StoryMediaType) error {
+	op := uuid.NewSHA1(uuid.NameSpaceURL, []byte("voice.story.media.acquire.v1:"+story.String()))
+	req := &filev1.ClaimStoryMediaRequest{OperationId: op.String(), StoryId: story.String(), FileId: file.String(), AuthorProfileId: author.String(), ExpectedStoryType: expected}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	bound, err := c.storyReferenceContext(ctx, filev1.FileService_ClaimStoryMedia_FullMethodName, req)
+	if err != nil {
+		return err
+	}
+	response, err := c.FileServiceClient.ClaimStoryMedia(bound, req)
+	if err != nil {
+		return err
+	}
+	if !validStoryReferenceReceipt(req, response.GetOperationId(), response.GetReceiptId(), response.GetRequestSha256()) {
+		return errors.New("invalid File claim receipt")
+	}
+	return nil
+}
+
+func (c *signedStoryMediaClient) ReleaseStoryMedia(ctx context.Context, story, file string) error {
+	req := &filev1.ReleaseStoryMediaRequest{OperationId: story, StoryId: story, FileId: file}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	bound, err := c.storyReferenceContext(ctx, filev1.FileService_ReleaseStoryMedia_FullMethodName, req)
+	if err != nil {
+		return err
+	}
+	response, err := c.FileServiceClient.ReleaseStoryMedia(bound, req)
+	if err != nil {
+		return err
+	}
+	if !validStoryReferenceReceipt(req, response.GetOperationId(), response.GetReceiptId(), response.GetRequestSha256()) {
+		return errors.New("invalid File release receipt")
+	}
+	return nil
+}
+
+func validStoryReferenceReceipt(req interface {
+	proto.Message
+	GetOperationId() string
+}, operation, receipt string, hash []byte) bool {
+	id, err := uuid.Parse(receipt)
+	if err != nil || id == uuid.Nil || id.String() != receipt || operation != req.GetOperationId() {
+		return false
+	}
+	wire, err := proto.MarshalOptions{Deterministic: true}.Marshal(req)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256(append(append([]byte(req.ProtoReflect().Descriptor().FullName()), 0), wire...))
+	return bytes.Equal(hash, digest[:])
 }
 
 func (c *signedStoryMediaClient) ValidateStoryMedia(ctx context.Context, fileID, authorID uuid.UUID, expected storyv1.StoryMediaType) error {
@@ -109,7 +179,7 @@ func loadSignedStoryMediaClientFromEnv() (*signedStoryMediaClient, *grpc.ClientC
 		return nil, nil, nil, errors.New("invalid File principal TLS client certificate/key")
 	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots, ServerName: strings.TrimSpace(os.Getenv("FILE_PRINCIPAL_TLS_SERVER_NAME")), Certificates: []tls.Certificate{clientCert}}
-	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	conn, err := grpc.NewClient(grpcclient.DialTarget(addr), grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)), grpc.WithDisableRetry())
 	if err != nil {
 		return nil, nil, nil, err
 	}
