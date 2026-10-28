@@ -170,6 +170,70 @@ class GISLifecycleContract(unittest.TestCase):
         account = existing.service_account_preflight(kube, deployment['spec']['template']['spec'])
         return kube, binding, account
 
+    def test_restart_runs_hub_first_and_gis_proof_before_marker(self):
+        # Existing retirement CAS fixture models the core workloads; GIS owned
+        # readiness comes from ReadyKube. Storage sealing and pod drain are I/O seams.
+        import operator_retirement_test as retirement_fixture
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = retirement_fixture.RetirementActionTests().fixture(folder)
+            context = fixture[2]['context']
+            objects = copy.deepcopy(fixture[4])
+            marker_key = ('configmap', 'voice-nats-generation')
+            objects[marker_key]['data']['phase'] = 'rollout-verified'
+            ready, binding, account = self.ready_fixture()
+            deployment = copy.deepcopy(ready.objects[gis.DEPLOYMENT])
+            deployment['spec']['replicas'] = 0
+            ready.objects[gis.DEPLOYMENT] = copy.deepcopy(deployment)
+            objects[('deployment', 'voice-gameintegration')] = deployment
+            ready_proof = []
+
+            class CombinedKube(retirement_fixture.FakeKube):
+                def get(inner, kind, name):
+                    if (kind.lower(), name) == ('deployment', 'voice-gameintegration'):
+                        return super().get(kind, name)
+                    if kind.lower() in ('namespace', 'serviceaccount', 'pod') or (kind.lower(), name) == ('service', 'voice-gameintegration'):
+                        return ready.get(kind, name)
+                    return super().get(kind, name)
+                def run(inner, args, body=None, timeout=30):
+                    return ready.run(args, body=body)
+                def cas(inner, kind, row, patches):
+                    if kind.lower() == 'configmap' and row['metadata']['name'] == 'voice-nats-generation':
+                        self.assertEqual(len(ready_proof), 1)
+                    result = super().cas(kind, row, patches)
+                    if (kind.lower(), row['metadata']['name']) == ('deployment', 'voice-gameintegration'):
+                        ready.objects[gis.DEPLOYMENT] = copy.deepcopy(result)
+                    return result
+
+            kube = CombinedKube(objects)
+            stage = object.__new__(runtime_stage.RolloutStage)
+            stage.kube = kube
+            stage.operation = fixture[2]['operation']
+            stage.expected = context['expected']
+            stage.marker = copy.deepcopy(objects[marker_key])
+            stage.final_claim = context['final_claim']
+            stage.snapshots = copy.deepcopy(context['snapshots'])
+            stage.snapshots['voice-gameintegration'] = copy.deepcopy(deployment)
+            stage.no_pods = lambda _names: None
+            stage.seal_before_business_resume = lambda: None
+            stage.save = lambda _event: None
+            progress = []
+            stage.closed_preservation_release = lambda _stage, action, name=None: progress.append((action, name))
+            def start_guard(resumed):
+                existing.verify_phase(binding, resumed.kube, 'paused-target')
+                self.assertEqual(existing.service_account_preflight(resumed.kube,
+                    binding['target']['spec']['template']['spec']), account)
+            stage.gis_start_guard = start_guard
+            stage.gis_ready_proof = lambda resumed: ready_proof.append(existing.verify_ready(binding, resumed.kube, account))
+            result = stage.restart()
+            self.assertTrue(result['verified'])
+            scales = [name for kind, name, patches in kube.patches if kind == 'deployment'
+                and any(item['path'] == '/spec/replicas' for item in patches)]
+            self.assertEqual(scales[0], runtime_stage.HUB)
+            self.assertIn('voice-gameintegration', scales)
+            self.assertEqual(progress[0], ('scale-intent', runtime_stage.HUB))
+            self.assertEqual(progress[-2:], [('release-intent', None), ('release-result', None)])
+            self.assertEqual(kube.objects[marker_key]['data']['phase'], 'active')
+
     def test_release_requires_fresh_owned_ready_endpoint_and_runtime_image(self):
         kube, binding, account = self.ready_fixture()
         stage = object.__new__(runtime_stage.RolloutStage)
