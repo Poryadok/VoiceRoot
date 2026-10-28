@@ -8,7 +8,7 @@ import subprocess
 
 import story_media_backup as backup
 
-ALLOWED_DATABASES = frozenset(('auth_db', 'bot_db', 'chat_db', 'file_db', 'game_integration_db',
+ALLOWED_DATABASES = frozenset(('auth_db', 'bot_db', 'chat_db', 'file_db', 'game_integration_db', 'gateway_db',
     'matchmaking_db', 'messaging_db', 'moderation_db', 'notification_db', 'realtime_db',
     'role_db', 'search_db', 'social_db', 'space_db', 'story_db', 'subscription_db', 'user_db', 'voice_db'))
 DOMAIN = b'voice-postgres-cohort-backup-v1\0'
