@@ -27,7 +27,7 @@ func newStoryJWKSHTTPSServer(lookup func(string) (string, bool), document []byte
 		return nil, false, nil
 	}
 	if values[0] == "" || values[1] == "" || values[2] == "" || len(document) == 0 {
-		return nil, true, errors.New("Story HTTPS JWKS address, TLS certificate, key and public keys are required")
+		return nil, true, errors.New("story HTTPS JWKS address, TLS certificate, key and public keys are required")
 	}
 	certificate, err := tls.LoadX509KeyPair(values[1], values[2])
 	if err != nil {
@@ -45,7 +45,7 @@ func newStoryJWKSHTTPSServer(lookup func(string) (string, bool), document []byte
 		}
 	}
 	if now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) || !serverAuth || leaf.IsCA {
-		return nil, true, errors.New("Story HTTPS JWKS certificate is not currently valid for a server")
+		return nil, true, errors.New("story HTTPS JWKS certificate is not currently valid for a server")
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
