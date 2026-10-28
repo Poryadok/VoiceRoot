@@ -8,11 +8,35 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
 
 from auth_flyway_upgrade_qualification import snapshot_protected, source_catalog, validate_admission, validate_backup_inputs, validate_history, validate_markers
+from auth_flyway_upgrade_qualification_docker import OwnedDocker
 
 
 class QualificationContract(unittest.TestCase):
+    def test_resource_removal_is_journaled_before_effect(self):
+        class Journal:
+            def __init__(self): self.state={}; self.snapshots=[]
+            def save(self): self.snapshots.append(copy.deepcopy(self.state))
+            def guard(self): pass
+        journal=Journal(); cid='a'*64
+        def run(command, **kwargs):
+            args=command[1:]
+            if args[:2] == ['info','--format']: out=b'linux\n'
+            elif args[0] == 'inspect':
+                out=json.dumps([{'Id':cid,'Image':'sha256:'+'b'*64,'Config':{'Labels':{'voice.test.owner':'auth-flyway-qualification'}}}]).encode()
+            elif args[0] == 'rm':
+                self.assertEqual(journal.snapshots[-1]['flyway_clone']['resources'][0]['state'],'removing'); out=b''
+            else: out=b''
+            return SimpleNamespace(returncode=0,stdout=out)
+        with patch('auth_flyway_upgrade_qualification_docker.subprocess.run',side_effect=run):
+            owned=OwnedDocker(journal)
+            owned.records.append({'id':cid,'image_id':'sha256:'+'b'*64,'state':'owned','volumes':[]})
+            owned.save(); owned.cleanup()
+        self.assertEqual(journal.state['flyway_clone']['resources'][0]['state'],'removed')
+
     def test_protected_input_is_bounded_finite_and_detached(self):
         value = {'nested': ['original']}
         saved = snapshot_protected(value)

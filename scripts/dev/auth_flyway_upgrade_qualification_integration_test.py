@@ -16,6 +16,12 @@ from auth_user_adoption import Journal
 from auth_user_adoption_runtime import QUALIFIED_TOOLS, backup_catalog_queries, digest, operator_fingerprint, source_config
 from auth_flyway_upgrade_qualification import qualify, source_catalog
 from auth_flyway_upgrade_qualification_docker import OwnedDocker
+from auth_flyway_upgrade_qualification_cohort import qualify_cohort
+import story_media_backup_cohort as cohort
+import story_media_backup_cohort_finalize as finalize
+import story_media_backup_cohort_restore as cohort_restore
+import story_media_backup_restore as media_restore
+from story_media_backup_restore_integration_test import Journal as FixtureRestoreJournal
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -126,6 +132,63 @@ class RealFlywayQualification(unittest.TestCase):
                     self.assertEqual(receipt['backup_binding']['source_sha'], source)
                 finally:
                     journal.close()
+                # The real cohort transport uses raw key bytes and a distinct
+                # authenticated manifest. This receipt is synthetic, not DEV evidence.
+                for name, raw in migrations.items():
+                    (root / 'src/backend/auth/src/main/resources/db/migration' / name).write_bytes(raw)
+                gate = 'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql'
+                (root / gate).write_bytes(subprocess.run(['git','-C',str(root),'show',source+':'+gate],
+                                                       check=True,capture_output=True).stdout)
+                cohort_dir = base / 'cohort'; cohort_dir.mkdir(mode=0o700)
+                cohort_key = bytes(range(32)); dbs=['auth_db']
+                cohort_catalog = {'auth_db':json.loads(psql('auth_db',cohort_restore.AUTH_CATALOG))}
+                cohort_roles = json.loads(psql('postgres',media_restore.role_catalog_sql()))
+                hashes = {name:hashlib.sha256(raw).hexdigest() for name,raw in migrations.items()}
+                plans = {'auth_db':{'engine':'flyway','from':26,'to':26,'files':hashes}}
+                metadata={'catalog':cohort_catalog,'roles':cohort_roles,'migrations':plans}
+                engine={'namespace_uid':'33333333-3333-3333-3333-333333333333',
+                    'pod_uid':'44444444-4444-4444-4444-444444444444','pvc_uid':'55555555-5555-5555-5555-555555555555',
+                    'pv_uid':'66666666-6666-6666-6666-666666666666','container_id':'containerd://'+'d'*64,'restart_count':7}
+                operation='media-c1-'+'a'*32
+                binding={'operation_id':operation,'snapshot_id':'capture-'+'b'*32,'source_sha':source,
+                    'project':'voice','resource':'DEV','actor':'scheduled_devops',
+                    'claim':'11111111-1111-1111-1111-111111111111','window':'22222222-2222-2222-2222-222222222222',
+                    'generation':3,'revision':4,'databases':dbs,
+                    'sources':{'auth_db':{'engine':engine,'server_start':'fixture','database_oid':1},
+                               'roles':{'engine':engine,'server_start':'fixture'}},
+                    'restore_inputs':{'catalog_sha256':digest(cohort_catalog),'roles_catalog_sha256':digest(cohort_roles),
+                        'migration_catalog_sha256':digest(plans),'postgres_image':QUALIFIED_TOOLS['postgres'],
+                        'migrate_image':QUALIFIED_TOOLS['migrate'],'migrate_binary_sha256':'6'*64,'postgres_major':16}}
+                manifest = cohort.export(cohort_dir,cohort_key,binding,dbs,
+                    lambda member,out:out.write(blobs[member+'.enc']))
+                dump_receipts={}
+                for index,member in enumerate(('auth_db','roles')):
+                    dump_receipts[member]={'operation_id':operation,'snapshot_id':binding['snapshot_id'],'member':member,
+                        'pod_uid':engine['pod_uid'],'pvc_uid':engine['pvc_uid'],'pv_uid':engine['pv_uid'],
+                        'container_id':engine['container_id'],'restart_count':7,'server_start':'fixture',
+                        'database_oid':binding['sources'][member].get('database_oid'),
+                        'attempt_nonce':f'{index+1:032x}','exit':0,'scope':'dump-terminal-only'}
+                binding,manifest=finalize.finalize(cohort_dir,cohort_key,binding,dbs,manifest,dump_receipts)
+                restore_receipt=cohort_restore.qualify(cohort_dir,cohort_key,binding,dbs,manifest,metadata,root,
+                    QUALIFIED_TOOLS['postgres'],QUALIFIED_TOOLS['migrate'],FixtureRestoreJournal())
+                custody={'schema':'voice-cohort-custody-v1','destination':'github:Poryadok/VoiceRoot',
+                    'artifact_id':23,'operation_id':operation,'snapshot_id':binding['snapshot_id'],
+                    'challenge':'f'*32,'run_id':42,'head_sha':source,'bundle_bytes':100,'bundle_sha256':'f'*64}
+                admitted={'source_sha':source,'target':32,'flyway_enabled':False,'selector_mode':'absent',
+                    'persistence':'jdbc','plan_sha256':'a'*64,'custody_sha256':digest(custody),
+                    'restore_sha256':digest(restore_receipt)}
+                class SyntheticJournal:
+                    def __init__(self): self.state={}; self.stages=[]
+                    def save(self): pass
+                    def guard(self): pass
+                    def stage(self,name,status): self.stages.append((name,status))
+                    def uncertain(self): raise RuntimeError('fixture outcome uncertain')
+                cohort_journal=SyntheticJournal()
+                result=qualify_cohort(root,cohort_dir,cohort_key,binding,dbs,manifest,metadata,custody,
+                                      restore_receipt,admitted,cohort_journal)
+                self.assertEqual(result['expected_after_markers'],result['after_markers'])
+                self.assertEqual(result['cleanup'],'confirmed')
+                self.assertEqual(cohort_journal.stages,[('flyway-migrate','pending'),('flyway-migrate','done')])
             finally:
                 owned.cleanup(); fixture_journal.close()
 
