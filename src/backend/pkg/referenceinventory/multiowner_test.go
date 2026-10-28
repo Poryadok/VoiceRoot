@@ -42,3 +42,15 @@ func TestCompareIncludesKindSubresourceAndScope(t *testing.T) {
 	a.Key.ScopeSpaceId = b.Key.ScopeSpaceId
 	require.Zero(t, Compare(a, b))
 }
+
+func TestOwnerChatBindingIsCanonicalAndMessageOnly(t *testing.T) {
+	id := identityFixture()
+	e := entryFixture()
+	e.OwnerChatId = proto.String(uuid.NewString())
+	require.Error(t, ValidateEntryForIdentity(e, id, false), "Story cannot carry Messaging owner context")
+	id.SourceService, id.SourceComponent = "messaging", "messaging.message.v1"
+	e.Key.OwnerType = 1
+	require.NoError(t, ValidateEntryForIdentity(e, id, false))
+	e.OwnerChatId = proto.String("not-a-uuid")
+	require.Error(t, ValidateEntryForIdentity(e, id, false))
+}

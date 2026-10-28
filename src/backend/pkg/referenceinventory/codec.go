@@ -126,6 +126,9 @@ func validateEntry(e *commonv1.ReferenceInventoryEntry, allowRetired bool, owner
 	if e.AuthorProfileId != nil && !UUID(*e.AuthorProfileId) {
 		return ErrInvalid
 	}
+	if e.OwnerChatId != nil && (owner != 1 || !UUID(*e.OwnerChatId)) {
+		return ErrInvalid
+	}
 	if e.Retired {
 		if !allowRetired || len(e.Reasons) != 0 {
 			return ErrInvalid
