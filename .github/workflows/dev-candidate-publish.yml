@@ -32,6 +32,10 @@ on:
       - scripts/dev/media_backup_readback_test.py
       - scripts/dev/media_restore_journal.py
       - scripts/dev/media_restore_journal_test.py
+      - scripts/dev/frontend_runtime_adoption.py
+      - scripts/dev/frontend_runtime_adoption_test.py
+      - scripts/dev/frontend_runtime_executor.py
+      - scripts/dev/frontend_runtime_executor_test.py
       - .github/workflows/dev-media-backup-upload.yml
       - scripts/dev/story_media_backup_custody.py
       - scripts/dev/resource_fencing.py
@@ -80,6 +84,8 @@ jobs:
           python -B scripts/dev/media_backup_capture_operation_test.py
           python -B scripts/dev/media_backup_readback_test.py
           python -B scripts/dev/media_restore_journal_test.py
+          python -B scripts/dev/frontend_runtime_adoption_test.py
+          python -B scripts/dev/frontend_runtime_executor_test.py
 
   publish:
     name: Publish exact DEV candidate
