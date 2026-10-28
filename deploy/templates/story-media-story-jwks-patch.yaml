@@ -1,0 +1,16 @@
+# Optional direct HTTPS JWKS listener for a private service route.
+spec:
+  template:
+    spec:
+      containers:
+        - name: story
+          ports:
+            - {name: principal-jwks, containerPort: 8443}
+          env:
+            - {name: STORY_PRINCIPAL_JWKS_HTTPS_LISTEN, value: ":8443"}
+            - {name: STORY_PRINCIPAL_JWKS_TLS_CERT_FILE, value: /run/story-jwks/tls.crt}
+            - {name: STORY_PRINCIPAL_JWKS_TLS_KEY_FILE, value: /run/story-jwks/tls.key}
+          volumeMounts:
+            - {name: story-jwks-tls, mountPath: /run/story-jwks, readOnly: true}
+      volumes:
+        - {name: story-jwks-tls, secret: {secretName: voice-story-jwks-tls}}

@@ -1,0 +1,26 @@
+# Messaging JWKS source for the protected File listener. Owner connections remain disabled.
+# Secret subPath mounts are immutable snapshots: rotate keys via a reviewed pod rollout.
+spec:
+  template:
+    spec:
+      containers:
+        - name: messaging
+          ports:
+            - {name: principal-jwks, containerPort: 8443}
+          env:
+            - {name: MESSAGING_PURGE_PRINCIPAL_SIGNING_KEYS_DIR, value: /run/messaging-principal}
+            - {name: MESSAGING_PURGE_PRINCIPAL_ACTIVE_KID, value: current}
+            - {name: MESSAGING_PURGE_PRINCIPAL_JWKS_LISTEN, value: ":8443"}
+            - {name: MESSAGING_PURGE_PRINCIPAL_TLS_CERT_FILE, value: /run/messaging-jwks/tls.crt}
+            - {name: MESSAGING_PURGE_PRINCIPAL_TLS_KEY_FILE, value: /run/messaging-jwks/tls.key}
+            - {name: MESSAGING_PURGE_PRINCIPAL_CLIENT_CA_FILE, value: /run/messaging-jwks-client-ca/ca.crt}
+          volumeMounts:
+            - {name: messaging-signing, mountPath: /run/messaging-principal/current.pem, subPath: current.pem, readOnly: true}
+            - {name: messaging-signing, mountPath: /run/messaging-principal/next.pem, subPath: next.pem, readOnly: true}
+            - {name: messaging-jwks-tls, mountPath: /run/messaging-jwks, readOnly: true}
+            - {name: messaging-jwks-client-ca, mountPath: /run/messaging-jwks-client-ca, readOnly: true}
+      volumes:
+        - name: messaging-signing
+          secret: {secretName: __MESSAGING_SIGNING_SECRET__, defaultMode: 0444}
+        - {name: messaging-jwks-tls, secret: {secretName: voice-messaging-jwks-tls}}
+        - {name: messaging-jwks-client-ca, secret: {secretName: voice-messaging-jwks-client-ca}}
