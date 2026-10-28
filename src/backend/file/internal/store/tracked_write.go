@@ -269,13 +269,17 @@ func CanCollectTrackedObjectTx(ctx context.Context, tx pgx.Tx, file uuid.UUID, k
 	if tx == nil || file == uuid.Nil || key == "" {
 		return false, ErrTrackedWrite
 	}
-	var blob *uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT blob_id FROM files WHERE id=$1`, file).Scan(&blob); err != nil {
+	if inventory, err := inventoryHoldsExistTx(ctx, tx); err != nil {
 		return false, err
-	}
-	if blob != nil {
-		if held, err := inventoryBlobHeldTx(ctx, tx, *blob); err != nil || held {
+	} else if inventory {
+		var blob *uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT blob_id FROM files WHERE id=$1`, file).Scan(&blob); err != nil {
 			return false, err
+		}
+		if blob != nil {
+			if held, err := inventoryBlobHeldTx(ctx, tx, *blob); err != nil || held {
+				return false, err
+			}
 		}
 	}
 	exists, err := trackedWriteLedgerExists(ctx, tx)

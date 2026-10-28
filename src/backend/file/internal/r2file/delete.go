@@ -3,9 +3,12 @@ package r2file
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
@@ -23,10 +26,14 @@ func (p *S3R2Presigner) DeleteObject(ctx context.Context, key string) error {
 	if key == "" {
 		return fmt.Errorf("r2_key required")
 	}
+	transport := awshttp.NewBuildableClient().GetTransport()
+	transport.DisableKeepAlives = true
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	_, err := p.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(p.bucket),
 		Key:    aws.String(key),
-	})
+	}, func(options *s3.Options) { options.RetryMaxAttempts = 1; options.HTTPClient = client })
 	return err
 }
 

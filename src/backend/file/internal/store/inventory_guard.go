@@ -46,14 +46,20 @@ func BeginInventoryMutation(ctx context.Context, pool *pgxpool.Pool, destructive
 }
 
 func inventoryBlobHeldTx(ctx context.Context, tx pgx.Tx, blob uuid.UUID) (bool, error) {
-	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT to_regclass('file_reference_inventory_holds') IS NOT NULL`).Scan(&exists); err != nil {
+	exists, err := inventoryHoldsExistTx(ctx, tx)
+	if err != nil {
 		return true, err
 	}
 	if !exists {
 		return false, nil
 	}
 	var held bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_holds WHERE blob_id=$1)`, blob).Scan(&held)
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_holds WHERE blob_id=$1)`, blob).Scan(&held)
 	return held, err
+}
+
+func inventoryHoldsExistTx(ctx context.Context, tx pgx.Tx) (bool, error) {
+	var exists bool
+	err := tx.QueryRow(ctx, `SELECT to_regclass('file_reference_inventory_holds') IS NOT NULL`).Scan(&exists)
+	return exists, err
 }

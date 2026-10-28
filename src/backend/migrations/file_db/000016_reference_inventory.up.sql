@@ -67,4 +67,18 @@ CREATE TABLE file_reference_inventory_holds (
 );
 CREATE INDEX file_reference_inventory_holds_blob ON file_reference_inventory_holds(blob_id);
 
+-- Per-key storage attempts survive local transaction/connection loss. Legacy
+-- object keys are not claimed to be storage-side generations. No clock clears
+-- STARTED/UNSETTLED, and a new cohort cannot claim their remote work drained.
+CREATE TABLE file_reference_inventory_deletes (
+ attempt_id uuid PRIMARY KEY,
+ object_key text NOT NULL CHECK(object_key<>''),
+ guard_generation bigint NOT NULL CHECK(guard_generation>0),
+ state text NOT NULL CHECK(state IN ('STARTED','ACKED','UNSETTLED','NOT_SENT')),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ acknowledged_at timestamptz
+);
+CREATE UNIQUE INDEX file_reference_inventory_unsettled_key
+ ON file_reference_inventory_deletes(object_key) WHERE state IN ('STARTED','UNSETTLED');
+
 COMMIT;

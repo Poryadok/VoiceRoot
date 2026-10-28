@@ -122,9 +122,11 @@ func TestInventoryIssuesCohortAndJournalGaps(t *testing.T) {
 	author := uuid.New()
 	terminal := uuid.New()
 	seedStoryMediaFile(t, ctx, pool, terminal, author, "image", "deleted", "clean", nil, false, nil, nil)
+	processing := uuid.New()
+	seedStoryMediaFile(t, ctx, pool, processing, author, "image", "processing", "skipped", nil, false, nil, nil)
 	observed := terminal.String()
 	issue := uuid.NewString()
-	entries := []*commonv1.ReferenceInventoryEntry{inventoryEntry(uuid.New(), uuid.New(), author), inventoryEntry(terminal, uuid.New(), author), {IssueId: &issue, IssueKind: 2, ObservedFileId: &observed, OwnerRevision: 1}}
+	entries := []*commonv1.ReferenceInventoryEntry{inventoryEntry(uuid.New(), uuid.New(), author), inventoryEntry(terminal, uuid.New(), author), inventoryEntry(processing, uuid.New(), author), {IssueId: &issue, IssueKind: 2, ObservedFileId: &observed, OwnerRevision: 1}}
 	sort.Slice(entries, func(i, j int) bool { return inv.Compare(entries[i], entries[j]) < 0 })
 	page := &commonv1.ReferenceInventoryPage{Identity: id, BoundaryRevision: 1, Entries: entries}
 	d, err := inv.Describe([]*commonv1.ReferenceInventoryPage{page}, id, 1)
@@ -134,12 +136,15 @@ func TestInventoryIssuesCohortAndJournalGaps(t *testing.T) {
 	require.NoError(t, files.ApplyInventoryPage(ctx, op, page))
 	var issues, holds int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_reference_inventory_items WHERE issue_reason IS NOT NULL`).Scan(&issues))
-	require.Equal(t, 3, issues)
+	require.Equal(t, 4, issues)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM file_reference_inventory_holds`).Scan(&holds))
-	require.Equal(t, 2, holds, "known terminal blobs remain held")
+	require.Equal(t, 3, holds, "known terminal and processing blobs remain held")
 	row, err := files.GetFileByID(ctx, terminal)
 	require.NoError(t, err)
 	require.Equal(t, "deleted", row.Status)
+	row, err = files.GetFileByID(ctx, processing)
+	require.NoError(t, err)
+	require.Equal(t, "processing", row.Status)
 	other := proto.Clone(id).(*commonv1.ReferenceInventoryIdentity)
 	other.RestoreCohortId = uuid.NewString()
 	other.SnapshotId = uuid.NewString()
