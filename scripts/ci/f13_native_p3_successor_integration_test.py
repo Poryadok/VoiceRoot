@@ -508,12 +508,15 @@ class RealGitSuccessorTest(unittest.TestCase):
     def test_inventory_source_guard_rejects_content_mode_and_missing_paths(self):
         current = git('rev-parse', 'HEAD')
         name = sorted(INVENTORY_VOICE_PATHS)[0]
-        for variant in ('content', 'mode', 'missing_one', 'missing_all'):
+        self.assertEqual(reviewed_catalog_voice_additions(self.record['source'], self.record), set())
+        for variant in ('content', 'mode', 'missing_one', 'missing_all', 'missing_both_sets'):
             with tempfile.TemporaryDirectory() as directory:
                 env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
                 git('read-tree', current, env=env)
                 if variant.startswith('missing_'):
-                    removed = sorted(INVENTORY_VOICE_PATHS) if variant == 'missing_all' else [name]
+                    removed = (sorted(INVENTORY_VOICE_PATHS | CATALOG_VOICE_PATHS)
+                               if variant == 'missing_both_sets' else
+                               sorted(INVENTORY_VOICE_PATHS) if variant == 'missing_all' else [name])
                     git('update-index', '--force-remove', '--', *removed, env=env)
                 else:
                     entry = legacy.entry(ROOT, current, name)
