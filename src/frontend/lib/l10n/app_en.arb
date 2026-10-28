@@ -1690,5 +1690,13 @@
   "gameCatalogPopular": "Popular",
   "gameCatalogRecent": "Recent",
   "gameCatalogRecentError": "Could not load recent games",
-  "gameCatalogSearchResults": "Search results"
+  "gameCatalogSearchResults": "Search results",
+  "composerVoiceHold": "Hold to record · slide up to lock",
+  "composerVoicePermission": "Microphone access is required. Allow access and try again.",
+  "composerVoiceProcessing": "Preparing recording…",
+  "composerVoiceTooShort": "Record at least 1 second.",
+  "composerVoiceError": "Recording failed. Try again.",
+  "composerVoiceStop": "Finish recording",
+  "composerVoiceCancel": "Cancel recording",
+  "composerVoiceLocked": "Recording locked"
 }

@@ -93,8 +93,82 @@ On a host with this repository and the intended kubeconfig:
 
 ```sh
 python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex>
-python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply
+python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply --ttenrec-url http://192.168.0.109:30990 --resource-context /private/dev-operation.json
 ```
+
+Apply requires the current TT `voice/DEV` resource in `held/deploy`, its exact
+revision, and a private JSON context with exactly these fields (replace every
+placeholder with actual authority and pinned artifacts):
+
+```json
+{
+  "project": "voice",
+  "resource": "DEV",
+  "actor": "ACTUAL_OPERATOR",
+  "claim": "CURRENT_CANONICAL_CLAIM_UUID",
+  "generation": 1,
+  "window": "CURRENT_CANONICAL_WINDOW_UUID",
+  "revision": 1,
+  "operation_id": "UNIQUE_EXTERNAL_OPERATION_ID",
+  "commit": "FULL_CANDIDATE_COMMIT",
+  "images": {"voice-user/user": "registry/user@sha256:REAL_MANIFEST_DIGEST"}
+}
+```
+
+The candidate in TT must match the complete context commit/image map exactly;
+keys identify `workload/container`. This updater changes only the selected main
+app containers. Before entering deploy, observe their actual image map and
+qualified source commit under the new claim. After the deploy checkpoint, the
+updater compares that observation with fresh Kubernetes reads under its existing
+lock and requires the observed commit to be an ancestor of the candidate in the
+local Git repository. Missing source provenance, missing commits or an older
+candidate fail closed. This is an additional qualification gate for this executor;
+TT also supports image-only observations for other operators. Git ancestry does
+not attest image contents: independently qualify the commit/image association.
+An intentional rollback needs its own reviewed compatibility/reconciliation packet;
+do not relabel old images as a newer candidate or bypass this gate.
+
+`voice-dev-image-update-fence` is a permanent ConfigMap high-water mark, independent
+of the existing transient updater lock. It records project/resource, claim,
+generation/window/revision, operation ID, pinned candidate, last step and actual
+completion. Each write stage rechecks TT and this journal using UID/RV CAS.
+Closed generations and the immediately preceding operation ID cannot be replayed.
+Operation IDs must be unique; the journal retains the last executor, not a global
+deduplication registry. A new claim,
+including one for the same actor, cannot overwrite an active/uncertain executor.
+Do not delete or edit the fence to unlock a rollout. An interrupted executor needs
+an explicitly reviewed reconciliation of its process, submitted Kubernetes
+requests, workload version, persistent journal and updater lock before further
+execution; this command supplies no recovery/unlock flag.
+
+The guarantee is cooperative admission between stages. Kubernetes cannot revoke
+an already submitted `kubectl` request when TT changes ownership. Recovery must
+therefore establish that the old executor and its requests are settled before
+confirm-safe or a new writer. Manual/unintegrated kubectl and the other operator
+scripts remain outside this fence; all existing operational locks still apply.
+
+On an unknown/partial result, the updater retains its lock and marks its durable
+journal uncertain before attempting a revision-guarded TT `release` with
+`safety=uncertain` and the external operation ID. A lost TT response is not retried:
+reread the resource card/history and journal first. Failure to reach TT leaves the
+local safety gate closed and prints `DEV_RESOURCE_RECOVERY_REQUIRED`.
+If the initial lock CREATE response is unknown, the executor journal does not
+exist yet. Its context-bearing lock request carries the external operation and
+authority; reconcile the actual lock and TT notification even when the journal
+is absent. The updater neither retries CREATE nor deletes an uncertain lock.
+Successful completion closes only this executor; it neither releases the TT
+resource nor records task checks or a deployment. Register the actual completed
+deployment with its exact claim/revision/artifacts, then retain the resource
+through real checks or use TT offer/accept. Task ownership/tester transfer remains
+separate. A product FAIL after a safely completed rollout can use TT safe release;
+an unknown migration/apply cannot.
+
+Host-only checks: `python -B scripts/dev/resource_fencing_test.py`,
+`python -B scripts/dev/update_fencing_test.py`, and
+`python -B scripts/dev/update_images_test.py`. These are synthetic adapter tests,
+not coordinated stand acceptance. The STAGING workflow's installed root bridge
+and captured runner are separate executors; changing this DEV tool does not
+claim to fence them or an unintegrated `render-and-apply.sh` caller.
 
 Repeat `--image` for multiple services. First command previews with server
 dry-run; second updates only main app images and waits for rollout. Only the
@@ -104,7 +178,164 @@ uncertain mutation retains `voice-dev-image-update-lock`. Inspect the Deployment
 rollout and lock UID before manually resolving it; do not blindly delete it.
 The updater never resets stores, applies migrations or changes configuration.
 
-### Exact candidate publication
+### Existing Auth/User credential adoption
+
+`auth_user_adoption.py` is the bounded existing-data route for the retained
+`voice-dev` namespace UID `15950fc8-0392-4053-9156-e95e78b596f9`, Auth clean
+Flyway1..26 and User clean migrate19. It is separate from fresh bootstrap,
+reset and global credential rotation. It preserves `voice` migration/object
+ownership, global `POSTGRES_PASSWORD`, existing JWT/TOTP/storage keys and all
+noncandidate workload specs. Auth stays Java. Never use this route on staging,
+production, a recreated namespace or a different schema baseline.
+
+Run the reviewed immutable operator package on the DEV host with Python3,
+OpenSSL and the existing kubeconfig. Every Kubernetes call fixes kubeconfig
+`/home/pmd/.kube/config`, context `default`, namespace `voice-dev`; transport
+errors never print raw Kubernetes/SQL/HTTP payloads. The common
+`voice-dev-image-update-lock` is atomic CREATE and is retained on uncertainty.
+There is no force-unlock, role ALTER/rekey, automatic database DOWN/restore or
+automatic rollback. The tool does not create deployment/PASS/acceptance records
+or release the tracker resource.
+
+The input manifest contains `operation` (unique lowercase name, maximum31
+characters), full `source_sha`, exact `operator_sha256`, two immutable
+`products` refs (`auth`,`user`), producer-qualified `runtime_ids` arrays, three
+immutable `tools` refs (`postgres`,`flyway`,`migrate`), `recovery_mode`, and
+`evidence`. Obtain the operator digest with
+`auth_user_adoption_runtime.operator_fingerprint(package_root)` in Linux.
+The fingerprint covers regular-file modes and bytes for the complete operator,
+both role SQL sources, every actual Auth/User migration SQL file, and the
+canonical barrier catalog query. Editing SQL/catalog content or mode before
+prepare invalidates approved qualification before live reads/dry-runs; the
+first observed local source is not treated as provenance.
+Each evidence entry binds a local JSON file by `path` and SHA256 `sha256`.
+Required record kinds are `image_provenance`, `runtime_roles`, `recovery` and
+`operator_review`. Each names its kind, `status: PASS`, exact product source,
+operator digest, products and an actual retained evidence reference. Image
+proof additionally binds exact runtime IDs, actual `node_accessibility: true`
+and scope `published_oci` or `qualified_node_import`; a local build ID alone
+is insufficient. Recovery and operator records name the actual independent
+Dimas-8 review; recovery binds the selected mode. `qualified_image_restore`
+requires original-OCI qualification. A recovered executable recipe is not that
+proof. `reviewed_forward_only` requires its own actual reviewed recovery record.
+These records are provenance references, not self-attesting booleans or new
+human permission gates: preserve the underlying executed proof/review and do
+not manufacture a PASS wrapper for missing evidence.
+The three tool refs must exactly match `QUALIFIED_TOOLS` in the reviewed
+runtime module (PostgreSQL16, Flyway11.3.0, migrate4.18.1 command-conformance
+receipt). The legacy shared admin password must be a URL-safe issuance value;
+an unexpected encoding is refused before mutation, never fixed by rotation.
+
+After the candidate and operator qualify, acquire/reconcile the actual DEV
+resource for this task and the complete mixed image package. Only Auth/User
+may differ; retain all other49-map entries and do not attribute their sources
+to the two candidate images. The prepare command performs actual read-only
+inventory and server dry-runs, validates defaulted Job specs, generates one
+private credential pair, and stores immutable original intent. Its output is
+sanitized; journal contents are private0700/0600 and must not be attached to TT.
+Both planned apps are checked for resolved shared-admin/opposite-service
+credentials across aliases, literals, ConfigMaps and mounted projections;
+legitimate R2/NATS/TLS material and own-role bindings remain intact.
+
+```sh
+python3 scripts/dev/auth_user_adoption.py prepare --manifest /private/candidate.json --journal /private/operation
+# Record the fresh baseline-observation.json under the actual resource claim,
+# advance the actual task/resource deploy gates, preserving the same window.
+python3 scripts/dev/auth_user_adoption.py run --journal /private/operation
+```
+
+The first run creates only the owned updater lock and encrypted backup set,
+then stops pending actual off-node restore qualification. Copy ciphertexts,
+`backup-manifest.json` and the separately custodied `backup.key` through the
+authorized private channel. No plaintext dumps are written by the exporter.
+AES256-CBC/PBKDF2 encryption is authenticated by a separately checked HMAC; the
+manifest binds the operation, resource/window, original catalog and source.
+Run the verifier off-node against existing immutable OpenSSL tooling and
+caller-owned Docker Linux PostgreSQL16, without ports or shared volumes:
+
+```sh
+python scripts/dev/auth_user_adoption_restore.py --backup-directory PRIVATE_COPY --operation OPERATION --tools-image sha256:TOOLS_IMAGE_ID --output PRIVATE_REPORT.json
+python3 scripts/dev/auth_user_adoption.py import-backup --journal /private/operation --backup-report /private/restored-report.json
+python3 scripts/dev/auth_user_adoption.py run --journal /private/operation
+```
+
+The verifier checks encrypted copy identity before decryption and binds inspection, execution
+and cleanup to that container's immutable ID. Cleanup requires verified owner
+and private mounts; uncertain creation/ownership retains a private
+`restore-recovery-*.json` receipt and never deletes by the mutable name.
+Successful cleanup also requires the observed anonymous data volumes absent.
+It restores both archives and password-free owner-role metadata into an empty private cluster,
+and compares actual schema/object ownership, default privileges and real
+migration history. Each dump has its own consistent snapshot; this is not a
+cross-service snapshot while apps write. A backup does not authorize restoring
+over newer user writes. Private fixture reports are explicitly ineligible for
+the actual DEV backup gate. The whole operation has a15-minute source deadline;
+expiry prevents further writes and retains recovery state. Do not begin while
+waiting for unrelated builds/publication or assume expiry releases a lock.
+
+After backup qualification, the same run resumes from terminal owned receipts
+using the exact original credentials. It creates immutable operation SQL and
+runtime Secret objects, runs real admin-owned Flyway/migrate Jobs, strictly
+creates absent runtime roles without password ALTER, applies canonical grants,
+then serially updates Auth and User through full-spec UID/resourceVersion CAS.
+Actual configured Space must remain the same Ready peer; the operator neither
+clears its address nor restarts it. A client timeout is not server completion:
+Jobs, migration state and attributable PostgreSQL activity must reconcile.
+Unknown/failed/dirty effects are not retried or adopted. No runtime role owns
+persistent data; User retains ownDB TEMP and ledger SELECT, and the Auth barrier
+retains owner/PUBLIC SELECT with no direct runtime ACL.
+After Auth migration, the guard admits only V31's exact owner/function/source,
+enabled binding and DDL tag contract using the canonical catalog predicates.
+Premigration state remains empty; unknown/altered triggers remain rejected.
+Completed grant receipts freeze the full canonical ACL/default digest, which
+is rechecked before later effects and lock release.
+
+Completion requires actual source-qualified runtime IDs, old Pod/ReplicaSet and
+old admin-session drain, ownDB allow/oppositeDB42501 denial with correct
+credentials, canonical ACL/history/ownership, and one owned public
+signup/fixture OTP/verification/fresh login/privacy/JWT-to-User-row flow. Tokens
+and OTPs are never logged; the fresh session is logged out. The bounded account
+is retained with private ownership intent for documented deletion; the tool
+does not raw-delete rows or reset shared throttles. An ambiguous public
+registration is not blindly repeated.
+
+```sh
+python3 scripts/dev/auth_user_adoption.py observe --journal /private/operation
+# Record only an actual completed rollout/check with current workflow/resource
+# guards. Green private tests do not create a DEV PASS or final acceptance.
+python3 scripts/dev/auth_user_adoption.py finish --journal /private/operation
+```
+
+`finish` freshly verifies the full state and drains before deleting only the
+exact owned lock UID/resourceVersion. A lost delete response is reconciled by
+actual absence; a later owner's lock is never removed. Then obtain another
+fresh version observation and use the supported tracker resource release.
+On partial/uncertain effects retain journal, lock and `recovery_required` and
+reconcile terminal Jobs/sessions before any recovery decision. No shared role
+revocation, global password rotation, data destruction or implicit provider
+activation is part of this route.
+Before any migration/role/rollout effect intent exists, `abort --journal ...`
+may close an unchanged-data operation only after actual owned server activity
+has stopped and original state/authority revalidate. It deletes only its exact
+owned lock; unused immutable source/Secret artifacts and the private journal
+remain attributable. An aborted journal can never start effects again. Once a
+DB/rollout intent exists, abort refuses and retains recovery state.
+
+Focused checks use Docker Linux:
+
+```sh
+docker run --rm --network none --mount type=bind,source=REPO,target=/repo,readonly -w /repo/scripts/dev python:3.12-alpine python -m unittest auth_user_adoption_test auth_user_adoption_runtime_test auth_user_adoption_backup_test auth_user_adoption_smoke_test
+python scripts/dev/auth_user_adoption_pg.py
+```
+
+The second command orchestrates only labeled disposable Linux containers. Its
+`--fresh-baseline` option intentionally reproduces the unsafe rekey when the
+fresh-only script is replayed; it must fail. The candidate path proves strict
+collision/no-rotation, data/ACL/default grants, real server versus client
+timeouts, authenticated archive restore and corruption rejection. It does not
+qualify actual DEV backup custody, old-image rollback or configured topology.
+
+### Exact candidate publication (workflow)
 
 `DEV candidate image publication` is a standalone publish-only Actions workflow.
 After normal review/integration, dispatch its default-branch publisher with the
@@ -115,7 +346,7 @@ gh workflow run dev-candidate-publish.yml --ref master \
   -f product_sha=31a04a471c604488bedd5b442039dfdf0434f9c3
 ```
 
-This bounded consumer accepts only two reviewed product selections. The default
+This bounded consumer accepts only the reviewed product selections below. The default
 `31a04a471c604488bedd5b442039dfdf0434f9c3` selection builds the eight
 required DEV variants in one serial lane: Web, Admin, Developer Portal, Auth,
 User, Notification, Realtime and the native Space installer. The source checkout
@@ -130,6 +361,17 @@ the default eight-image candidate. Its build labels, embedded JAR/binary source,
 pulled configuration and receipts bind this selected source independently of
 the publisher commit. Fresh builds produce new image/config digests; earlier
 local f194 images and their digests are not substituted or overwritten.
+
+For the frozen `0d75a990dae5d9672f1b13e2ed346f8850e3c036` release qualification
+consumer, the same publish-only workflow selects only `file`. It builds from
+`src/backend/file/Dockerfile` with context `src/backend`, no source build args,
+and a run-specific `file:dev-<product>-<run>-<attempt>` tag. Its dedicated
+BuildKit container is capped at 2 CPU and 4 GiB, with one build in the workflow's
+serial lane. The receipt binds the separate product and publisher checkouts,
+source tree hashes, actual invocation, registry manifest/config digests and
+pulled `/service` ELF hash. The OCI revision label binds the selected product;
+the File binary has no embedded source SHA. This publication is artifact evidence
+only; File schema migration, DEV checks and STAGING acceptance remain separate.
 
 This selection is a fresh candidate. Earlier `4e88e14e` image/package receipts
 remain historical; they do not qualify this commit or replace its new immutable

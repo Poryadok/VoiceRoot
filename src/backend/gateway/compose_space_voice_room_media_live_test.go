@@ -502,12 +502,17 @@ func TestRequestComposeJoinTokenCapsPersistentReadinessRetries(t *testing.T) {
 
 func leaveComposeSpaceVoiceRoom(t *testing.T, client *http.Client, base, accessToken, voiceRoomID string) {
 	t.Helper()
+	diagnosticID := fmt.Sprintf("voice503-leave-%d", time.Now().UnixNano())
 	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/voice/rooms/"+voiceRoomID+"/leave", nil)
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("X-Request-Id", diagnosticID)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		logComposeSpaceLeaveDiagnostic(t, resp, diagnosticID)
+	}
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 

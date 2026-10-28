@@ -1592,5 +1592,13 @@
   "gameCatalogPopular": "Популярные",
   "gameCatalogRecent": "Недавние",
   "gameCatalogRecentError": "Не удалось загрузить недавние игры",
-  "gameCatalogSearchResults": "Результаты поиска"
+  "gameCatalogSearchResults": "Результаты поиска",
+  "composerVoiceHold": "Удерживайте для записи · вверх — закрепить",
+  "composerVoicePermission": "Разрешите доступ к микрофону и повторите.",
+  "composerVoiceProcessing": "Подготовка записи…",
+  "composerVoiceTooShort": "Запишите не менее 1 секунды.",
+  "composerVoiceError": "Не удалось записать. Повторите.",
+  "composerVoiceStop": "Завершить запись",
+  "composerVoiceCancel": "Отменить запись",
+  "composerVoiceLocked": "Запись закреплена"
 }
