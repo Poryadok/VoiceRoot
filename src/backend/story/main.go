@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"log/slog"
 	"net"
@@ -19,6 +20,7 @@ import (
 	"voice/backend/pkg/runtimeconfig"
 	"voice/backend/story/internal/clients"
 	grpcsvc "voice/backend/story/internal/grpcsvc"
+	"voice/backend/story/internal/inventorygrpc"
 	"voice/backend/story/internal/jobs"
 	"voice/backend/story/internal/privacy"
 	"voice/backend/story/internal/store"
@@ -31,6 +33,10 @@ const serviceName = "story"
 
 func main() {
 	logger := httpserver.NewLogger(serviceName)
+	inventoryConfig, inventoryEnabled, err := inventorygrpc.LoadFromEnv(os.LookupEnv)
+	if err != nil {
+		log.Fatalf("story reference inventory config: %v", err)
+	}
 	mediaClient, mediaConn, publicJWKS, err := loadSignedStoryMediaClientFromEnv()
 	if err != nil {
 		log.Fatalf("story media principal config: %v", err)
@@ -50,7 +56,11 @@ func main() {
 	}
 
 	var grpcSrv *grpc.Server
+	var inventoryErrors <-chan error
 	dbURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if inventoryEnabled && dbURL == "" {
+		log.Fatal("story reference inventory requires DATABASE_URL")
+	}
 	if dbURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.PostgresConnectTimeoutFromEnv())
 		pool, err := postgres.NewPool(ctx, dbURL)
@@ -65,6 +75,20 @@ func main() {
 			log.Fatalf("grpc listen: %v", err)
 		}
 		st := &store.StoryStore{Pool: pool}
+		inventory, err := startReferenceInventory(serviceCtx, inventoryConfig, inventoryEnabled, st, logger)
+		if err != nil {
+			log.Fatalf("story reference inventory startup: %v", err)
+		}
+		if inventory != nil {
+			inventoryErrors = inventory.errors
+			defer func() {
+				ctx, cancel := context.WithTimeout(context.Background(), runtimeconfig.ShutdownTimeoutFromEnv())
+				defer cancel()
+				if err := inventory.Close(ctx); err != nil {
+					logger.Error("story reference inventory shutdown", slog.Any("error", err))
+				}
+			}()
+		}
 		svc := grpcsvc.NewStoryGRPC(st)
 		if natsURL := strings.TrimSpace(os.Getenv("NATS_URL")); natsURL != "" {
 			pub, err := storyevents.NewJetStreamPublisher(natsURL)
@@ -91,7 +115,7 @@ func main() {
 			fileDeleter = mediaClient
 		}
 		grpcSrv = grpc.NewServer(grpcmw.ServerOptions(logger)...)
-		storyv1.RegisterStoryServiceServer(grpcSrv, svc)
+		registerOrdinaryStoryServices(grpcSrv, svc)
 		go func() {
 			if err := grpcSrv.Serve(lis); err != nil {
 				log.Fatalf("grpc serve: %v", err)
@@ -128,6 +152,10 @@ func main() {
 	}()
 
 	select {
+	case err := <-inventoryErrors:
+		if err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			log.Fatalf("story reference inventory serve: %v", err)
+		}
 	case err := <-errCh:
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
@@ -142,4 +170,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+}
+
+func registerOrdinaryStoryServices(server grpc.ServiceRegistrar, svc storyv1.StoryServiceServer) {
+	storyv1.RegisterStoryServiceServer(server, svc)
 }

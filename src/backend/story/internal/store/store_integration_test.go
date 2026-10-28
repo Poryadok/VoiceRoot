@@ -29,7 +29,9 @@ func migrationSQL(t *testing.T) string {
 	require.NoError(t, err)
 	b7, err := os.ReadFile(filepath.Join(dir, "000007_media_reference_intents.up.sql"))
 	require.NoError(t, err)
-	return string(b1) + "\n" + string(b2) + "\n" + string(b3) + "\n" + string(b4) + "\n" + string(b7)
+	b8, err := os.ReadFile(filepath.Join(dir, "000008_reference_inventory.up.sql"))
+	require.NoError(t, err)
+	return string(b1) + "\n" + string(b2) + "\n" + string(b3) + "\n" + string(b4) + "\n" + string(b7) + "\n" + string(b8)
 }
 
 func startStoryStore(t *testing.T) *store.StoryStore {

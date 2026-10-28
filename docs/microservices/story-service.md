@@ -403,3 +403,35 @@ require reconciliation and current negative subject/object/operation/cohort
 admission. Terminal-erased must differ from ordinary MM NotFound; absent history
 cannot authorize fresh Register. Local SQL scrub, physical copies and installed
 admission need separate proofs. See the [producer ExecPlan](../testing/be011-lfp-consent-producer-exec-plan.md).
+
+### Private reference inventory export
+
+`StoryReferenceInventoryService` is a separate File-only mTLS and signed-principal
+listener. Begin materializes immutable, deterministically hashed pages of at most
+1000 entries; Page and Changes bind the complete installation/restore/migration,
+File/owner incarnation, component, writer version and snapshot identity. It never
+uses viewer listings or forwarded Gateway identity. Seal remains fail-closed.
+
+Migration `000008_reference_inventory` installs a transactional owner gate and
+counter. Ownership mutations always lock that gate before Story rows and advance
+the counter. Before the first committed snapshot no identifier journal/cache is
+collected. Begin derives all retained, creation-pending, release-pending and
+unresolved entries from authoritative rows at cut B, initializes tuple state and
+enables capture atomically. Every later committed revision has a complete ordered
+absolute-state journal assignment, including empty revisions. Rollback consumes no
+revision; retries replay the original snapshot. Capture persists independently of
+exporter configuration, and later snapshots do not erase earlier consumer ranges.
+Historical invalid bindings and independent covers without a retained Story pin
+are counted unresolved. No historical export invokes `ClaimStoryMedia`.
+
+The optional `STORY_REFERENCE_INVENTORY_` configuration is complete-or-absent:
+`GRPC_LISTEN`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `CLIENT_CA_FILE`,
+`REPLAY_REDIS_ADDR`, `FILE_JWKS_URL`, `JWKS_CA_FILE`; optional
+`REPLAY_REDIS_PASSWORD` and paired `JWKS_CLIENT_CERT_FILE`/`JWKS_CLIENT_KEY_FILE`.
+Missing trust/replay or an ordinary listener cannot serve inventory. No public
+admin endpoint or environment value creates a migration authority.
+
+Incomplete/unacknowledged snapshots and journal evidence have no 30-day expiry;
+P30 starts only on completion/ack and dependency-safe compaction is separate work.
+This protective export is not a global writer seal or release activation. See the
+[execution plan](../testing/be096-reference-inventory-exec-plan.md).

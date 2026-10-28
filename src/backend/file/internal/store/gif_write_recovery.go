@@ -62,7 +62,7 @@ WHERE blob_id=$1 AND state<>'GC_COMPLETE'
 // last-reference retirement while an old executor is still in flight. It never
 // infers remote quiescence from time, lease loss, HEAD or an administrator flag.
 func (s *FilesStore) ReconcileRetiredGIFWritesOnce(ctx context.Context) (bool, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}

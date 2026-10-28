@@ -24,7 +24,7 @@ func (s *FilesStore) PurgeCatalogProfile(ctx context.Context, actor catalogasset
 	// Commit closure separately: subsequent erasure failure still leaves all late
 	// READY publishers denied. Never hold gate locks while waiting for File locks
 	// (the READY trigger takes those locks in the opposite direction).
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ generation=CASE WHEN file_catalog_actor_gates.state='LIVE' THEN EXCLUDED.generat
 		return err
 	}
 
-	tx, err = s.Pool.Begin(ctx)
+	tx, err = BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return err
 	}

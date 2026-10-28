@@ -70,7 +70,7 @@ func recordPreviewChange(ctx context.Context, tx pgx.Tx, before, after FileRow) 
 }
 
 func (s *FilesStore) withPreviewMutation(ctx context.Context, id uuid.UUID, mutate func(pgx.Tx) (FileRow, error)) (FileRow, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return FileRow{}, err
 	}
@@ -95,7 +95,7 @@ func (s *FilesStore) withPreviewMutation(ctx context.Context, id uuid.UUID, muta
 func (s *FilesStore) DispatchPreviewEvent(ctx context.Context, publish func(context.Context, []byte) error) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}
