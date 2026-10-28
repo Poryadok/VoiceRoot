@@ -47,8 +47,9 @@ class CustodyTest(unittest.TestCase):
                         if fault == 'member':
                             backup.verify(self.root, self.key, self.binding, self.manifest)
                         else:
-                            custody.readback_extract('fixture-token', self.artifact, 23, path,
-                                                    self.key, self.binding, self.destination)
+                            with patch.object(custody.transport, '_download', side_effect=RuntimeError('unexpected network')):
+                                custody.readback_extract('fixture-token', self.artifact, 23, path,
+                                                        self.key, self.binding, self.destination)
                     except (backup.BackupError, custody.CustodyError):
                         return
                     raise RuntimeError('FIFO was accepted')
