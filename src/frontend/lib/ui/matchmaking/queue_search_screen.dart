@@ -29,6 +29,7 @@ class QueueSearchScreen extends ConsumerStatefulWidget {
 
   final CatalogGame game;
   final GameMode mode;
+
   /// When set, uses space-scoped queue (StartSpaceQueue).
   final String? spaceId;
 
@@ -52,13 +53,17 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     super.initState();
     final regions = widget.game.config.regions;
     if (regions.isNotEmpty) _region = regions.first;
-    if (widget.mode.roles.isNotEmpty) _role = widget.mode.roles.first.name;
+    if (widget.mode.rolesRequired && widget.mode.roles.isNotEmpty) {
+      _role = widget.mode.roles.first.name;
+    }
     if (widget.mode.ranks.isNotEmpty) {
       _rank = widget.mode.ranks.first.name;
       _soughtMin = widget.mode.ranks.first.name;
       _soughtMax = widget.mode.ranks.last.name;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _tryPrefillFromProfile());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _tryPrefillFromProfile(),
+    );
   }
 
   void _tryPrefillFromProfile() {
@@ -76,7 +81,10 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final matched = entry;
     setState(() {
       if (matched.region.isNotEmpty) _region = matched.region;
-      if (matched.role != null && matched.role!.isNotEmpty) _role = matched.role;
+      if (matched.role != null &&
+          widget.mode.roles.any((role) => role.name == matched.role)) {
+        _role = matched.role;
+      }
       if (matched.rank != null && matched.rank!.isNotEmpty) {
         _rank = matched.rank;
         _soughtMin = matched.rank;
@@ -92,7 +100,9 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     final voice = VoiceColors.of(context);
     final myProfile = ref.watch(myPlayerProfileProvider);
     if (myProfile.hasValue && !_prefilledFromProfile) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _tryPrefillFromProfile());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _tryPrefillFromProfile(),
+      );
     }
     final globalSession = ref.watch(activeSearchSessionProvider);
     final searchState = ref.watch(matchmakingSearchControllerProvider);
@@ -112,8 +122,10 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       }
     });
 
-    ref.listen<MatchmakingSearchState>(matchmakingSearchControllerProvider,
-        (prev, next) {
+    ref.listen<MatchmakingSearchState>(matchmakingSearchControllerProvider, (
+      prev,
+      next,
+    ) {
       if (next.recoveryReason == SearchRecoveryReason.timeout && mounted) {
         setState(() => _session = null);
       }
@@ -125,7 +137,10 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(widget.game.name, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            widget.game.name,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(widget.mode.name, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
@@ -158,9 +173,12 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: VoiceCompactBanner(
                   key: QueueSearchScreen.nudgeBannerKey,
-                  message: '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
+                  message:
+                      '${l10n.queueSearchNudgeTitle}. ${l10n.queueSearchNudgeBody}',
                   tone: VoiceBannerTone.warning,
-                  actionLabel: MaterialLocalizations.of(context).closeButtonLabel,
+                  actionLabel: MaterialLocalizations.of(
+                    context,
+                  ).closeButtonLabel,
                   onAction: () => ref
                       .read(matchmakingSearchControllerProvider.notifier)
                       .dismissNudge(),
@@ -266,10 +284,7 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
       (criteria['self'] as Map<String, dynamic>)['rank'] = _rank;
     }
     if (_soughtMin != null && _soughtMax != null) {
-      criteria['sought'] = {
-        'rank_min': _soughtMin,
-        'rank_max': _soughtMax,
-      };
+      criteria['sought'] = {'rank_min': _soughtMin, 'rank_max': _soughtMax};
     }
     return criteria;
   }
