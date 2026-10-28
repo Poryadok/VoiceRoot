@@ -49,6 +49,7 @@ class AuthFlywayJournal:
             self.source_catalog = copy.deepcopy(source_metadata['migrations']['auth_db']['files'])
             if not isinstance(self.source_catalog,dict) or not self.source_catalog: raise ValueError()
             if ('cohort-auth-flyway' in self.p.journal.state['steps'] or
+                    'cohort-auth-flyway-private' in self.p.journal.state['steps'] or
                     'cohort_auth_flyway' in row): raise ValueError()
             self.record = {'status':'pending','operation_id':actual['operation_id'],
                            'snapshot_id':actual['snapshot_id'],'source_sha':actual['source_sha'],
@@ -80,8 +81,21 @@ class AuthFlywayJournal:
                 or str(rd['receipt'].get('run_id')) != planned['run_id']
                 or not isinstance(rs,dict) or set(rs) != {'status','intent','receipt'} or rs['status'] != 'done'
                 or row.get('cohort_restore') != rs or _digest(rs['receipt']) != self.hashes['restore_sha256']): raise ValueError()
+        artifact=rd['intent'].get('binding')
+        if (set(rd['intent']) != {'status','artifact_id','binding','manifest_sha256','invocation_nonce'}
+                or type(rd['intent'].get('artifact_id')) is not int or rd['intent']['artifact_id'] <= 0
+                or not isinstance(artifact,dict) or set(artifact) != {'operation_id','snapshot_id','challenge','bundle_bytes','bundle_sha256','run_id','head_sha','created_at'}
+                or rd['intent'].get('status') != 'pending'
+                or rd['receipt'] != {'schema':'voice-cohort-custody-v1','destination':'github:Poryadok/VoiceRoot',
+                    'artifact_id':rd['intent']['artifact_id'], **{k:v for k,v in artifact.items() if k != 'created_at'}}
+                or any(artifact.get(k) != planned[k] for k in ('operation_id','snapshot_id','challenge','bundle_bytes','bundle_sha256'))
+                or artifact.get('head_sha') != planned['source_sha'] or type(artifact.get('run_id')) is not int
+                or str(artifact['run_id']) != planned['run_id']): raise ValueError()
         ri, rr = rs['intent'], rs['receipt']
-        if (ri.get('operation_id') != binding['operation_id'] or ri.get('snapshot_id') != binding['snapshot_id']
+        if (not isinstance(ri,dict) or set(ri) != {'status','operation_id','snapshot_id','invocation_nonce','manifest_sha256','artifact_id'}
+                or ri.get('status') != 'pending' or not isinstance(rr,dict)
+                or set(rr) != {'operation_id','snapshot_id','source_sha','manifest_sha256','databases','scope','cleanup'}
+                or ri.get('operation_id') != binding['operation_id'] or ri.get('snapshot_id') != binding['snapshot_id']
                 or ri.get('invocation_nonce') != p.invocation or ri.get('manifest_sha256') != marker['manifest_sha256']
                 or ri.get('artifact_id') != rd['receipt']['artifact_id']
                 or rr.get('operation_id') != binding['operation_id'] or rr.get('snapshot_id') != binding['snapshot_id']
@@ -108,6 +122,8 @@ class AuthFlywayJournal:
                 or self.p.journal.state['steps'].get('cohort-restore') != self.restored
                 or self.p.journal.state['steps'].get('cohort-auth-flyway') != self.record
                 or row.get('cohort_auth_flyway') != self.record): raise ValueError()
+        if self.record['status'] == 'done' and _digest(self.p.journal.state['steps']['cohort-auth-flyway-private']) != self.record['receipt_sha256']:
+            raise ValueError()
         return row
 
     def _poison(self):
@@ -185,6 +201,12 @@ class AuthFlywayJournal:
                         or receipt.get('scope') != 'isolated-auth-clone-only' or receipt.get('cleanup') != 'confirmed'
                         or receipt.get('resources') != resources): raise ValueError()
                 _assert_gone(resources)
+                self._guard_common()
+                # The common local Journal is mode 0600 and fsyncs before this
+                # CAS. The public ledger receives only the receipt hash.
+                if 'cohort-auth-flyway-private' in self.p.journal.state['steps']: raise ValueError()
+                self.p.journal.state['steps']['cohort-auth-flyway-private']=copy.deepcopy(receipt)
+                self.p.journal.save()
                 self._guard_common()
                 target['status']='done'; target['receipt_sha256']=_digest(receipt)
             self._commit(target)

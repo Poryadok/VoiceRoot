@@ -75,6 +75,7 @@ class CloneJournalTest(unittest.TestCase):
         row=self.base.base.ledger.row
         self.assertEqual(row['cohort_auth_flyway']['status'],'done')
         self.assertNotIn('never-copy-this-private-payload',str(row))
+        self.assertEqual(self.base.journal.state['steps']['cohort-auth-flyway-private'], self.receipt(resources))
         self.assertEqual(row['cohort_restore_resources']['postgres']['status'],'removed')
 
     def test_drift_after_pending_is_uncertain(self):
@@ -111,6 +112,16 @@ class CloneJournalTest(unittest.TestCase):
         self.base.base.ledger.row['cohort_auth_flyway']['nonce']='0'*32
         with self.assertRaises(adapter.CloneJournalError): journal.guard()
         self.assertEqual(self.base.base.ledger.row['status'],'uncertain')
+
+    def test_consistent_forged_custody_still_fails_plan_binding(self):
+        local=self.base.journal.state['steps']['cohort-readback']
+        local['receipt']['bundle_sha256']='f'*64
+        local['intent']['binding']['bundle_sha256']='f'*64
+        self.base.base.ledger.row['cohort_readback']=copy.deepcopy(local)
+        forged=digest(local['receipt'])
+        with patch.object(restore, '_source'), self.assertRaises(adapter.CloneJournalError):
+            adapter.AuthFlywayJournal(self.base.phase,lambda:None,self.base.binding,self.manifest_sha,
+                                      forged,digest(self.restore),self.plan_sha,self.metadata)
 
 
 if __name__ == '__main__': unittest.main()
