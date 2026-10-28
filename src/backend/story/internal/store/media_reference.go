@@ -20,11 +20,30 @@ func (s *StoryStore) CreateStoryWithMedia(ctx context.Context, in CreateStoryInp
 		return nil, errors.New("media acquisition is required")
 	}
 	id := uuid.New()
-	_, err := s.Pool.Exec(ctx, `INSERT INTO story_media_reference_intents(story_id,media_file_id,available_at) VALUES($1,$2,now()+interval '1 minute')`, id, *in.MediaFileID)
+	intentTx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.Pool.Begin(ctx)
+	defer func() { _ = intentTx.Rollback(ctx) }()
+	installed, err := inventoryInstalled(ctx, intentTx)
+	if err != nil {
+		return nil, err
+	}
+	if installed {
+		_, err = intentTx.Exec(ctx, `INSERT INTO story_media_reference_intents(story_id,media_file_id,author_profile_id,media_type,available_at) VALUES($1,$2,$3,$4,now()+interval '1 minute')`, id, *in.MediaFileID, in.AuthorProfileID, in.Type)
+	} else {
+		_, err = intentTx.Exec(ctx, `INSERT INTO story_media_reference_intents(story_id,media_file_id,available_at) VALUES($1,$2,now()+interval '1 minute')`, id, *in.MediaFileID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err = recordInventory(ctx, intentTx, []uuid.UUID{id}); err != nil {
+		return nil, err
+	}
+	if err = intentTx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +68,9 @@ func (s *StoryStore) CreateStoryWithMedia(ctx context.Context, in CreateStoryInp
 	if _, err = tx.Exec(ctx, `DELETE FROM story_media_reference_intents WHERE story_id=$1`, id); err != nil {
 		return nil, err
 	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{id}); err != nil {
+		return nil, err
+	}
 	if err = tx.Commit(ctx); err != nil {
 		return nil, err
 	}
@@ -62,7 +84,7 @@ func (s *StoryStore) RecoverAbandonedMedia(ctx context.Context, release func(con
 	if s == nil || s.Pool == nil || release == nil {
 		return false, ErrNotImplemented
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := s.beginInventoryTx(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -92,6 +114,18 @@ func (s *StoryStore) RecoverAbandonedMedia(ctx context.Context, release func(con
 		return false, err
 	}
 	if _, err = tx.Exec(ctx, `DELETE FROM story_media_reference_intents WHERE story_id=$1`, story); err != nil {
+		return false, err
+	}
+	installed, err := inventoryInstalled(ctx, tx)
+	if err != nil {
+		return false, err
+	}
+	if installed {
+		if _, err = tx.Exec(ctx, `INSERT INTO story_reference_inventory_retirements(story_id,media_file_id,operation_id) VALUES($1,$2,$1) ON CONFLICT DO NOTHING`, story, file); err != nil {
+			return false, err
+		}
+	}
+	if err = recordInventory(ctx, tx, []uuid.UUID{story}); err != nil {
 		return false, err
 	}
 	if err = tx.Commit(ctx); err != nil {

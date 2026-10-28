@@ -39,10 +39,11 @@ remain MISSING. Independent highlight-cover ownership is counted unresolved.
 ## Milestones
 
 - [x] Accepted design, custody and coherent combined source established.
-- [ ] Typed deterministic inventory format and strict validation tests.
-- [ ] Story transactional gate/counter, retained+pending+unresolved materialization,
+- [x] Typed deterministic inventory format and strict validation tests.
+- [x] Story transactional gate/counter, retained+pending+unresolved materialization,
   immutable pages and complete absolute-state journal revisions.
-- [ ] File-only protected exporter and real request-bound pull client.
+- [x] File-only protected exporter; D118 source integrated, real TLS/JWKS/Redis
+  transport tests passed. Request-bound File pull client is D117's slice.
 - [ ] File barrier, immutable import/cursors/conflicts and protective holds;
   actual GC claim/pre-DELETE and alternate destructive paths respect them.
 - [ ] Real PostgreSQL concurrency, replay, migration rollback and protected
