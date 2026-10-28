@@ -1681,5 +1681,13 @@
   "addGameModeDuplicate": "Use a different name for each mode.",
   "chatLinkPreviewLoading": "Loading link preview…",
   "chatLinkPreviewUnavailable": "Preview unavailable",
-  "chatLinkPreviewRetry": "Retry"
+  "chatLinkPreviewRetry": "Retry",
+  "composerVoiceHold": "Hold to record · slide up to lock",
+  "composerVoicePermission": "Microphone access is required. Allow access and try again.",
+  "composerVoiceProcessing": "Preparing recording…",
+  "composerVoiceTooShort": "Record at least 1 second.",
+  "composerVoiceError": "Recording failed. Try again.",
+  "composerVoiceStop": "Finish recording",
+  "composerVoiceCancel": "Cancel recording",
+  "composerVoiceLocked": "Recording locked"
 }
