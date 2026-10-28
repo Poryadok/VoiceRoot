@@ -136,7 +136,13 @@ def validate(receipt, registry, tag, mode, changed, source_root):
     if not re.fullmatch(r'[a-f0-9]{12}',receipt['operation']) or not UUID.fullmatch(receipt['namespace_uid']):
         raise Blocked('rollout_receipt_identity_invalid')
     target=receipt['target']
-    if set(target)!={'registry','tag','mode','changed_services','source_hashes','template_hashes','input_template_hashes','images','manifest_sha256','migration_sha256','nonnats_sha256'} or target['registry']!=registry or target['tag']!=tag or target['mode']!=mode or target['changed_services']!=sorted(set(changed)):
+    target_fields={'registry','tag','mode','changed_services','source_hashes','template_hashes','input_template_hashes','images','manifest_sha256','migration_sha256','nonnats_sha256'}
+    if 'gis_existing_normalized_sha256' in target:
+        if ('resource_fence' not in receipt or not isinstance(target['gis_existing_normalized_sha256'],str)
+                or not SHA.fullmatch(target['gis_existing_normalized_sha256'])):
+            raise Blocked('gis_existing_target_binding_invalid')
+        target_fields.add('gis_existing_normalized_sha256')
+    if set(target)!=target_fields or target['registry']!=registry or target['tag']!=tag or target['mode']!=mode or target['changed_services']!=sorted(set(changed)):
         raise Blocked('rollout_target_changed')
     if mode not in ('full','app-only','images-only') or not isinstance(target['source_hashes'],dict) or not 1<=len(target['source_hashes'])<=2048:
         raise Blocked('rollout_target_invalid')
