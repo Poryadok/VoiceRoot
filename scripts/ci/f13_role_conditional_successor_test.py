@@ -87,14 +87,39 @@ class RoleSuccessorTest(unittest.TestCase):
             'src/backend/chat/pb/voice/chat/v1/chat.pb.go',
             'src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go',
             'src/backend/file/pb/voice/file/v1/file.pb.go',
+            'src/backend/file/pb/voice/file/v1/file_grpc.pb.go',
             'src/backend/pkg/integrationtest/migrations.go'})
+        story_file_grpc = 'src/backend/file/pb/voice/file/v1/file_grpc.pb.go'
+        reviewed_story_source = 'f38e45008308e5309e0a371a411afb4c7bace6ae'
+        reviewed_entry = {'mode':'100644','type':'blob',
+                          'oid':'6d88bec7977afd2364341c7a6d3073b2f5f35abe'}
+        self.assertEqual(legacy.entry(ROOT,reviewed_story_source,story_file_grpc),reviewed_entry)
+        self.assertEqual(legacy.entry(ROOT,self.actual_head,story_file_grpc),reviewed_entry)
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        reviewed_story_source,self.actual_head]).returncode,0)
         self.assertEqual(set(self.removed_package_paths),{
             'src/backend/chat/pb/voice/chat/v1/catalog_assets.pb.go',
             'src/backend/chat/pb/voice/chat/v1/catalog_assets_grpc.pb.go',
             'src/backend/file/pb/voice/file/v1/catalog_assets.pb.go',
             'src/backend/file/pb/voice/file/v1/catalog_assets_grpc.pb.go',
             'src/backend/pkg/authoritysource/gis_state.go',
-            'src/backend/pkg/authoritysource/gis_state_test.go'})
+            'src/backend/pkg/authoritysource/gis_state_test.go',
+            'src/backend/user/pb/voice/common/v1/reference_inventory.pb.go',
+            'src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go',
+            'src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go'})
+        inventory_source = '0a65f54010e834fcdea5ee0d0d64844c1889f158'
+        inventory_entries = {
+            'src/backend/user/pb/voice/common/v1/reference_inventory.pb.go': '9311529c5aaf5b56e31102c4a0fb7b7c3e47ade0',
+            'src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go': 'b505d59b968af59177acd22ad5161a748d48efcc',
+            'src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go': '06656fe9cd9478cbacde07b63eacb6b32bef5035',
+        }
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        inventory_source,self.actual_head]).returncode,0)
+        for path, oid in inventory_entries.items():
+            with self.subTest(path=path):
+                expected = {'mode':'100644','type':'blob','oid':oid}
+                self.assertEqual(legacy.entry(ROOT,inventory_source,path),expected)
+                self.assertEqual(legacy.entry(ROOT,self.actual_head,path),expected)
         self.assertEqual(git('rev-list','--parents','-n','1',self.target).split(),
                          [self.target,self.actual_head])
         self.assertEqual(set(git('diff','--name-only',self.actual_head,self.target).splitlines()),

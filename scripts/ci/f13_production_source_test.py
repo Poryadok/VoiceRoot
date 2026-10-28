@@ -133,7 +133,21 @@ class ProductionSourceTest(unittest.TestCase):
         subprocess.run(['git','clone','--shared','--no-checkout',str(ROOT),str(candidate)],check=True,capture_output=True)
         revision=git('rev-parse','HEAD')
         ROOT=candidate;source.ROOT=candidate;history.ROOT=candidate
-        git('checkout','--detach',revision)
+        cls.actual_head=revision
+        # Reconstruct only the historical bootstrap context in this private
+        # clone. Current executed carrier bytes remain bound to the fixture;
+        # unrelated current source is never treated as production authority.
+        with tempfile.TemporaryDirectory() as folder:
+            env=dict(os.environ,GIT_INDEX_FILE=str(Path(folder)/'index'))
+            git('read-tree',source.BOOTSTRAP_RECORD_COMMIT,env=env)
+            for name in source.SUCCESSOR_CARRIERS:
+                entry=source.gitutil.entry(ROOT,revision,name)
+                if entry['mode']!='100644' or entry['type']!='blob':
+                    raise ValueError('fixture_current_carrier_entry')
+                git('update-index','--add','--cacheinfo',
+                    entry['mode']+','+entry['oid']+','+name,env=env)
+            fixture=cls.commit(git('write-tree',env=env),[source.BOOTSTRAP_RECORD_COMMIT])
+        git('checkout','--detach',fixture)
         cls.original=git('rev-parse','HEAD')
         cls.event_base=source.INTEGRATION_EVENT_BASE
         cls.target=cls.commit(git('rev-parse',cls.original+'^{tree}'),[cls.event_base,cls.original])
@@ -174,6 +188,13 @@ class ProductionSourceTest(unittest.TestCase):
         self.assertEqual(value['historical_collector'],source.HISTORICAL_SCOPE)
         self.assertNotEqual(value['base'],value['historical_collector']['base'])
         self.assertFalse(value['admission']);self.assertFalse(value['current_or_future_path_authority'])
+
+    def test_actual_head_outside_historical_context_is_rejected(self):
+        target=self.commit(git('rev-parse',self.actual_head+'^{tree}'),
+                           [self.event_base,self.actual_head])
+        git('update-ref','HEAD',target);os.environ['GITHUB_SHA']=target
+        with self.assertRaisesRegex(ValueError,'production_only_reviewed_carrier_delta'):
+            source.qualify(ROOT)
 
     def test_foreign_repo_same_carrier_tree_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
