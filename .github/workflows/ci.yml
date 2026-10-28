@@ -294,6 +294,9 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Verify compiled source build contract
+        if: matrix.shard == 'policy'
+        run: python3 scripts/ci/compiled_source_build_test.py
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -1105,6 +1108,8 @@ jobs:
         service: ${{ fromJSON(needs.changes.outputs.build_go_services) }}
     steps:
       - uses: actions/checkout@v5
+      - name: Verify compiled source build contract
+        run: python3 scripts/ci/compiled_source_build_test.py
       - name: Docker build context and Dockerfile
         id: dockerctx
         shell: bash
@@ -1132,6 +1137,7 @@ jobs:
           context: ${{ steps.dockerctx.outputs.context }}
           file: ${{ steps.dockerctx.outputs.file }}
           push: true
+          build-args: ${{ contains(fromJSON('["user","realtime","notification"]'), matrix.service) && format('VOICE_SOURCE_SHA={0}', github.sha) || '' }}
           tags: ${{ steps.image.outputs.base }}/${{ matrix.service }}:${{ github.sha }}
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
