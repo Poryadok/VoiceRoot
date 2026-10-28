@@ -15,6 +15,13 @@ import (
 	"testing"
 )
 
+func logComposeSpaceLeaveDiagnostic(t *testing.T, resp *http.Response, requestID string) {
+	t.Helper()
+	d := composeSpaceLeavePublicDiagnostic(resp.Body, resp.StatusCode, requestID)
+	raw, _ := json.Marshal(d) // All output fields are primitive and closed/locally validated.
+	t.Logf("VOICE503_DIAGNOSTIC %s", raw)
+}
+
 func TestComposeSpaceLeaveDiagnosticPreservesStrictStatus(t *testing.T) {
 	for _, mode := range []string{"204", "503"} {
 		t.Run(mode, func(t *testing.T) {

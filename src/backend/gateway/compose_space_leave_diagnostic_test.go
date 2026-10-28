@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/http"
 	"strings"
 	"testing"
 )
@@ -81,13 +80,6 @@ func composeSpaceLeavePublicDiagnostic(body io.Reader, status int, requestID str
 		d.Message = "absent"
 	}
 	return d
-}
-
-func logComposeSpaceLeaveDiagnostic(t *testing.T, resp *http.Response, requestID string) {
-	t.Helper()
-	d := composeSpaceLeavePublicDiagnostic(resp.Body, resp.StatusCode, requestID)
-	raw, _ := json.Marshal(d) // All output fields are primitive and closed/locally validated.
-	t.Logf("VOICE503_DIAGNOSTIC %s", raw)
 }
 
 func TestComposeSpaceLeaveDiagnosticAllowsOnlyPublicInventory(t *testing.T) {
