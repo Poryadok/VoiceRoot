@@ -24,6 +24,9 @@ on:
       - scripts/dev/media_backup_upload_phase_test.py
       - scripts/dev/media_backup_upload_run.py
       - scripts/dev/media_backup_upload_run_test.py
+      - scripts/dev/media_backup_upload_runner.py
+      - scripts/dev/media_backup_upload_runner_test.py
+      - .github/workflows/dev-media-backup-upload.yml
       - scripts/dev/story_media_backup_custody.py
       - scripts/dev/resource_fencing.py
       - scripts/dev/update_images.py
@@ -67,6 +70,7 @@ jobs:
           python -B scripts/dev/media_backup_phase_test.py
           python -B scripts/dev/media_backup_upload_phase_test.py
           python -B scripts/dev/media_backup_upload_run_test.py
+          python -B scripts/dev/media_backup_upload_runner_test.py
 
   publish:
     name: Publish exact DEV candidate

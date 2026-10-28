@@ -17,12 +17,10 @@ class RecoveryRequired(RuntimeError):
     pass
 
 
-def claim(fence, client, lock, namespace_uid, environment, challenge):
-    attempted = False
-    try:
-        required = {'GITHUB_REPOSITORY', 'GITHUB_EVENT_NAME', 'GITHUB_REF', 'GITHUB_WORKFLOW_REF',
+def validate_environment(fence, environment, challenge):
+    required = {'GITHUB_REPOSITORY', 'GITHUB_EVENT_NAME', 'GITHUB_REF', 'GITHUB_WORKFLOW_REF',
                     'GITHUB_SHA', 'GITHUB_WORKFLOW_SHA', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'}
-        if (not isinstance(environment, dict) or not required <= environment.keys() or
+    if (not isinstance(environment, dict) or not required <= environment.keys() or
                 environment['GITHUB_REPOSITORY'] != REPOSITORY or environment['GITHUB_EVENT_NAME'] != 'workflow_dispatch' or
                 environment['GITHUB_REF'] != 'refs/heads/master' or environment['GITHUB_WORKFLOW_REF'] != WORKFLOW_REF or
                 environment['GITHUB_SHA'] != fence.context['commit'] or
@@ -31,7 +29,13 @@ def claim(fence, client, lock, namespace_uid, environment, challenge):
                 not re.fullmatch(r'[1-9][0-9]{0,19}', environment['GITHUB_RUN_ID']) or
                 environment['GITHUB_RUN_ATTEMPT'] != '1' or not isinstance(challenge, str) or
                 not re.fullmatch(r'[0-9a-f]{32}', challenge)):
-            raise RecoveryRequired('workflow identity invalid')
+        raise RecoveryRequired('workflow identity invalid')
+
+
+def claim(fence, client, lock, namespace_uid, environment, challenge):
+    attempted = False
+    try:
+        validate_environment(fence, environment, challenge)
         media_operation_guard.verify(fence, client, lock, namespace_uid)
         row, revision = fence.ledger.read()
         planned = row.get('backup_upload') if isinstance(row, dict) else None
