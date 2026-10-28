@@ -39,6 +39,33 @@ class SignalTLSTests(unittest.TestCase):
         self.assertEqual(client.writes,[])
         with self.assertRaises(ValueError): tls.owned({'metadata':{'name':tls.NS,'labels':{}}},namespace=True)
 
+    def test_https_file_bucket_preserves_signed_path_and_gateway_fallback(self):
+        obj=tls.ingress(True,'api-dev.comrade.click')
+        paths=obj['spec']['rules'][0]['http']['paths']
+        self.assertEqual(paths,[
+            {'path':'/','pathType':'Prefix','backend':{'service':{'name':'voice-gateway','port':{'number':8080}}}},
+            {'path':'/voice-dev-files','pathType':'Prefix','backend':{'service':{'name':'voice-minio','port':{'number':9000}}}},
+        ])
+        self.assertEqual(obj['spec']['tls'],[{'hosts':['api-dev.comrade.click'],'secretName':tls.SECRET}])
+        self.assertEqual(obj['metadata']['annotations'],{'traefik.ingress.kubernetes.io/router.entrypoints':'websecure'})
+        def backend(path):
+            matching=[row for row in paths if row['path']=='/' or path==row['path'] or path.startswith(row['path']+'/')]
+            return max(matching,key=lambda row:len(row['path']))['backend']['service']['name']
+        for path in ('/voice-dev-files','/voice-dev-files/attachments/owned/file.png'):
+            self.assertEqual(backend(path),'voice-minio')
+        for path in ('/api/v1/files/upload','/health','/voice-dev-files-other/owned'):
+            self.assertEqual(backend(path),'voice-gateway')
+
+    def test_file_bucket_route_does_not_change_acme_or_other_https_hosts(self):
+        for host in tls.ROUTES:
+            challenge=tls.ingress(False,host)
+            self.assertEqual(len(challenge['spec']['rules'][0]['http']['paths']),1)
+            self.assertEqual(challenge['spec']['rules'][0]['http']['paths'][0]['path'],'/.well-known/acme-challenge/')
+            if host!='api-dev.comrade.click':
+                paths=tls.ingress(True,host)['spec']['rules'][0]['http']['paths']
+                self.assertEqual(len(paths),1)
+                self.assertEqual(paths[0]['path'],'/')
+
     def test_subprocess_failure_never_exports_secret_stdout_or_stderr(self):
         with patch.object(tls.subprocess,'run',return_value=SimpleNamespace(returncode=1,stdout=b'PRIVATE-SECRET',stderr=b'PRIVATE-SECRET')):
             with self.assertRaises(RuntimeError) as caught:

@@ -120,6 +120,12 @@ def ingress(secure,host=HOST):
              'backend':{'service':{'name':service,'port':{'number':port}}}}]}}]}}
     if secure:
         obj['spec']['tls']=[{'hosts':[host],'secretName':SECRET}]
+        if host=='api-dev.comrade.click':
+            # Keep the signed bucket/object path intact; Kubernetes Prefix
+            # routing selects this specific path over the Gateway fallback.
+            obj['spec']['rules'][0]['http']['paths'].append({
+                'path':'/voice-dev-files','pathType':'Prefix',
+                'backend':{'service':{'name':'voice-minio','port':{'number':9000}}}})
     return obj
 
 

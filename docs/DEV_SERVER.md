@@ -270,6 +270,14 @@ Wildcard и staging-записи не менялись. Ранее proxied-ма�
 отдельные Ingress; HTTPS — в соответствующие dev Services. LiveKit использует
 TCP31081 / UDP31082 для media; доступность страницы не доказывает работу UDP.
 
+The HTTPS API ingress also preserves the exact `/voice-dev-files` bucket
+prefix to `voice-minio:9000`, before the ordinary Gateway fallback. Presigned
+File URLs keep their original host and complete bucket/object path; no path
+rewrite, wildcard host, or TLS exception is used. The ACME HTTP route and the
+other four HTTPS hosts retain their existing backends. A source update does
+not update the installed operator or the live ingress automatically: qualify
+and apply that bounded configuration change under a fresh DEV resource claim.
+
 Root-only ACME state: `/home/voice-dev/tls/` (0700). Установленный операторский
 скрипт: `/home/voice-dev/operator/signal_tls.py`. Daily systemd timer
 `voice-dev-signaling-tls-renew.timer` вызывает `renew`; реальный renewal/no-op
