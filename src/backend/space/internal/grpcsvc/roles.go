@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -87,14 +88,29 @@ func (s *SpaceGRPC) requireSpaceOwnerForProfile(ctx context.Context, spaceID, ca
 }
 
 func (s *SpaceGRPC) bootstrapSpaceRoles(ctx context.Context, spaceID, ownerProfileID uuid.UUID) error {
-	if s.Roles == nil {
-		return nil
+	if s == nil || s.OwnershipRoles == nil || s.PrincipalIssuer == nil {
+		return status.Error(codes.Unavailable, "protected owner bootstrap runtime unavailable")
 	}
-	_, err := s.Roles.BootstrapSpaceRoles(ctx, &rolev1.BootstrapSpaceRolesRequest{
+	req := &rolev1.BootstrapSpaceRolesRequest{
 		SpaceId:        spaceID.String(),
 		OwnerProfileId: ownerProfileID.String(),
-	})
-	return err
+	}
+	// A durable Space retry repeats the same owner binding with a fresh signed
+	// dispatch. The ordinary Role listener cannot establish bootstrap authority.
+	signed, err := s.ownershipRoleContext(ctx, req, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName, uuid.New())
+	if err != nil {
+		return err
+	}
+	bounded, cancel := context.WithTimeout(signed, 5*time.Second)
+	defer cancel()
+	response, err := s.OwnershipRoles.BootstrapSpaceRoles(bounded, req)
+	if err != nil {
+		return err
+	}
+	if response == nil || len(response.ProtoReflect().GetUnknown()) != 0 {
+		return status.Error(codes.Unavailable, "owner bootstrap outcome unavailable")
+	}
+	return nil
 }
 
 func (s *SpaceGRPC) assignDefaultMemberRole(ctx context.Context, spaceID, profileID uuid.UUID) error {

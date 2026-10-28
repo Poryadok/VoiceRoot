@@ -278,6 +278,9 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	for _, o := range opts {
 		o(svc)
 	}
+	if svc.OwnershipRoles == nil {
+		svc.OwnershipRoles, svc.PrincipalIssuer = newBootstrapLedgerFixture(t, svc.Roles)
+	}
 	if !svc.skipJoinBlockDefaults {
 		if svc.Blocks == nil {
 			svc.Blocks = permissiveJoinBlocks{}
