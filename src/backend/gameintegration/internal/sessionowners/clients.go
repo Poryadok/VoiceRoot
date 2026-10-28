@@ -237,7 +237,7 @@ func (c *Clients) applyVoiceRoster(ctx context.Context, owner registry.SessionOw
 	}
 	response, err := c.voice.ApplyGameSessionRoster(callCtx, request)
 	if err != nil {
-		return registry.SessionOwnerReceipt{}, err
+		return registry.SessionOwnerReceipt{}, classifyOwnerError(err, owner, gisowner.VoiceDomain, gisowner.VoiceRosterRPC)
 	}
 	receiptID, err := parseUUID(response.GetReceiptId())
 	if err != nil {

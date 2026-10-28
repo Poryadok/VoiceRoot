@@ -137,6 +137,7 @@ func TestWinningClosePersistsTypedOwnerRejectionCustody(t *testing.T) {
 		{name: "chat roster operation conflict is unresolved", stage: "chat_roster", category: "operation_conflict", prior: 1},
 		{name: "chat roster resource conflict is unresolved", stage: "chat_roster", category: "resource_conflict", prior: 1},
 		{name: "voice provision conflict is unresolved", stage: "voice_provision", category: "operation_conflict", prior: 2},
+		{name: "voice roster conflict is unresolved", stage: "voice_roster", category: "operation_conflict", prior: 3},
 		{name: "role revoked is no effect and still closes voice", stage: "role_apply", category: "terminal_revoked", prior: 4, noEffect: true},
 		{name: "role operation conflict is unresolved", stage: "role_apply", category: "operation_conflict", prior: 4},
 	}
@@ -174,6 +175,8 @@ func TestWinningClosePersistsTypedOwnerRejectionCustody(t *testing.T) {
 				adapters.SyncChatRoster = reject
 			case "voice_provision":
 				adapters.ProvisionVoice = reject
+			case "voice_roster":
+				adapters.ApplyVoiceRoster = reject
 			case "role_apply":
 				adapters.ApplyRoleGrants = reject
 			}
@@ -351,6 +354,7 @@ func TestPermanentTypedOwnerRejectionsDurablyFailAndCleanUp(t *testing.T) {
 		{name: "chat create conflict", stage: "chat_create", category: "operation_conflict"},
 		{name: "chat roster missing after create receipt", stage: "chat_roster", category: "resource_missing", prior: 1},
 		{name: "voice provision conflict", stage: "voice_provision", category: "operation_conflict", prior: 2},
+		{name: "voice roster conflict", stage: "voice_roster", category: "operation_conflict", prior: 3, voiceExists: true},
 		{name: "role apply after voice provision", stage: "role_apply", category: "terminal_revoked", prior: 4, voiceExists: true},
 	}
 	for _, rejected := range stages {
@@ -371,6 +375,8 @@ func TestPermanentTypedOwnerRejectionsDurablyFailAndCleanUp(t *testing.T) {
 				adapters.SyncChatRoster = ownerCall(rejected.stage)
 			case "voice_provision":
 				adapters.ProvisionVoice = ownerCall(rejected.stage)
+			case "voice_roster":
+				adapters.ApplyVoiceRoster = ownerCall(rejected.stage)
 			case "role_apply":
 				adapters.ApplyRoleGrants = ownerCall(rejected.stage)
 			}
