@@ -34,6 +34,7 @@ done
 tmp_parent="$(cd "${TMPDIR:-/tmp}" && pwd -P)"
 state_dir="$(mktemp -d "${tmp_parent}/voice-story-ttl-delete.XXXXXXXX")"
 fixture_dir="${state_dir}/phase0-fixture"
+native_evidence_dir="${state_dir}/space-native-evidence"
 compose_env="${state_dir}/compose.env"
 limits_file="${state_dir}/limits.yml"
 started=false
@@ -56,6 +57,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+mkdir -- "$native_evidence_dir"
+export SPACE_NATIVE_EVIDENCE_DIR="$native_evidence_dir"
 unset PHASE0_MATCHSQUAD_FIXTURE_UID
 if python3 -c 'import os,sys;sys.exit(0 if os.name=="posix" else 1)'; then
   export PHASE0_MATCHSQUAD_FIXTURE_UID=65532

@@ -104,6 +104,8 @@ def main():
     started_seconds = started / 1_000_000_000
     run_dir = RUNS / proof_id
     run_dir.mkdir(parents=True, exist_ok=False)
+    native_evidence = run_dir / "space-native-evidence"
+    native_evidence.mkdir()
     fixture = run_dir / "phase0-fixture"
     env_file = run_dir / "compose.env"
     limits = run_dir / "limits.yml"
@@ -136,6 +138,7 @@ def main():
     env.update({name: str(base_port + index) for index, name in enumerate(ports)})
     env.update(COMPOSE_PROJECT_NAME=project, STORY_TTL_DEV="30s",
                PHASE0_FIXTURE_DIR=fixture.as_posix(), COMPOSE_PARALLEL_LIMIT="2",
+               SPACE_NATIVE_EVIDENCE_DIR=native_evidence.as_posix(),
                MINIO_ROOT_USER="voice-minio", MINIO_ROOT_PASSWORD="voice-minio-dev",
                FILE_R2_ENDPOINT=f"http://host.docker.internal:{base_port+9}",
                FILE_R2_REGION="us-east-1", FILE_R2_ACCESS_KEY_ID="voice-minio",
