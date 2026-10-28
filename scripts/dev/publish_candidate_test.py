@@ -25,6 +25,18 @@ DIGEST = 'sha256:' + 'b' * 64
 
 
 class PublisherTests(unittest.TestCase):
+    def test_reviewed_pr998_product_selects_only_media_cohort(self):
+        product = 'ec214b28747a4552eb89f4e431fc018aa82f023a'
+        plan = publisher.build_plan(product, P, '12345', '2')
+        self.assertEqual(plan['product_sha'], product)
+        self.assertEqual(plan['publisher_sha'], P)
+        self.assertEqual(set(plan['components']), {'file', 'story', 'messaging'})
+        for name, row in plan['components'].items():
+            self.assertEqual(row['dockerfile'], 'src/backend/' + name + '/Dockerfile')
+            self.assertEqual(row['platform'], 'linux/amd64')
+        with self.assertRaisesRegex(publisher.Refused, 'unselected_product'):
+            publisher.build_plan('b2b566f1103e29058da0e8b786cbd8f0dd028d83', P, '12345', '2')
+
     def test_story_file_pair_requires_selected_exact_product_and_outputs(self):
         candidate = 'e' * 40
         with mock.patch.dict(publisher.PRODUCT_COMPONENTS, {candidate: ('file', 'story')}):

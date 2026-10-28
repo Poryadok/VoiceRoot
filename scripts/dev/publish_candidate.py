@@ -20,6 +20,7 @@ PRODUCT = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 AUTH_USER_PRODUCT = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
 FROZEN_FILE_PRODUCT = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
 FROZEN_WEB_PRODUCT = 'df00a393e03feb176439a50bfe5605f32c16b322'
+MEDIA_PRODUCT = 'ec214b28747a4552eb89f4e431fc018aa82f023a'
 WEB_WORKFLOW = '.github/workflows/source-web-publish.yml'
 WEB_JOB_NAME = 'Publish exact source Web image'
 # Each reviewed source has its own bounded consumer; never admit arbitrary SHAs.
@@ -28,6 +29,7 @@ PRODUCT_COMPONENTS = {
               'notification', 'realtime', 'space-native-migrate'),
     AUTH_USER_PRODUCT: ('auth', 'user'),
     FROZEN_FILE_PRODUCT: ('file',),
+    MEDIA_PRODUCT: ('file', 'story', 'messaging'),
 }
 MEDIA_SERVICES = ('file', 'story', 'messaging')
 REPOSITORY = 'Poryadok/VoiceRoot'
