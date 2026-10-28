@@ -11,7 +11,7 @@ import (
 func validSessionInputForRevision(revision int64) CreateSessionInput {
 	return CreateSessionInput{
 		OperationID: uuid.MustParse("00000000-0000-4000-8000-000000000003"),
-		Kind: "match", ExternalKey: "match-1", DisplayName: "Match",
+		Kind:        "match", ExternalKey: "match-1", DisplayName: "Match",
 		RosterRevision: revision, RosterComplete: true, Members: []uuid.UUID{},
 	}
 }
@@ -21,6 +21,19 @@ func TestValidateCreateRejectsUnsafeRosterRevisions(t *testing.T) {
 		require.Error(t, ValidateCreateSessionInput(validSessionInputForRevision(revision)))
 	}
 	require.NoError(t, ValidateCreateSessionInput(validSessionInputForRevision(9007199254740991)))
+}
+
+func TestValidateRosterUpdateRejectsUnsafeRevisionsBeforeCanonicalization(t *testing.T) {
+	principal := SessionPrincipal{ApplicationID: uuid.New(), EnvironmentID: uuid.New()}
+	sessionID := uuid.New()
+	input := SessionRosterUpdateInput{OperationID: uuid.New(), RosterRevision: 9007199254740991, RosterComplete: true, Members: []uuid.UUID{}}
+	require.NoError(t, ValidateSessionRosterUpdateInput(input))
+	for _, revision := range []int64{9007199254740992, 9007199254740993} {
+		input.RosterRevision = revision
+		require.Error(t, ValidateSessionRosterUpdateInput(input))
+		_, err := sessionRosterMutationHash(principal, sessionID, input)
+		require.Error(t, err)
+	}
 }
 
 func TestValidateCreateEnforcesUTF8AndDisplayNameScalarLimits(t *testing.T) {

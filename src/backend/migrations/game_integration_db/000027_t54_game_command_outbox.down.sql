@@ -1,0 +1,10 @@
+DROP TABLE gis_game_command_outbox;
+ALTER TABLE gis_game_action_operations
+  DROP COLUMN command_id,
+  DROP COLUMN arguments_json,
+  DROP COLUMN action_type,
+  DROP COLUMN binding_revision,
+  DROP COLUMN character_binding_id;
+ALTER TABLE gis_game_action_invocations
+  DROP COLUMN binding_revision,
+  DROP COLUMN character_binding_id;

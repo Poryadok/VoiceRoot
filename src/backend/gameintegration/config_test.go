@@ -29,6 +29,15 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	require.Equal(t, ":8080", config.ListenAddr)
 	require.Equal(t, values["DATABASE_URL"], config.DatabaseURL)
 	require.Empty(t, config.OperatorAccounts)
+	require.Empty(t, config.CommunitySpaceTemplates, "community bootstrap is closed until runtime template allowlist is configured")
+	values["GAME_INTEGRATION_SPACE_TEMPLATE_IDS"] = "guild-default"
+	config, err = loadConfig(func(name string) string { return values[name] })
+	require.NoError(t, err)
+	require.Contains(t, config.CommunitySpaceTemplates, "guild-default")
+	values["GAME_INTEGRATION_SPACE_TEMPLATE_IDS"] = "guild-premium"
+	_, err = loadConfig(func(name string) string { return values[name] })
+	require.ErrorContains(t, err, "GAME_INTEGRATION_SPACE_TEMPLATE_IDS")
+	values["GAME_INTEGRATION_SPACE_TEMPLATE_IDS"] = ""
 	operatorID := uuid.New()
 	values["GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS"] = operatorID.String()
 	config, err = loadConfig(func(name string) string { return values[name] })
@@ -72,6 +81,25 @@ func TestLoadConfigRejectsMissingAuthorityAndDatabase(t *testing.T) {
 	values["GIS_AUTH_GAME_BINDING_BASE_URL"] = "https://auth:9443"
 	_, err = loadConfig(func(name string) string { return values[name] })
 	require.ErrorContains(t, err, "must be configured together")
+}
+
+func TestLoadConfigRequiresCommunitySpaceAddressAndServiceCredentialTogether(t *testing.T) {
+	values := map[string]string{
+		"DATABASE_URL":                  "postgres://game@localhost/game_integration_db",
+		"GAME_INTEGRATION_REDIS_ADDR":   "localhost:6379",
+		"GAME_INTEGRATION_JWKS_URL":     "https://auth.example/jwks",
+		"GAME_INTEGRATION_JWT_ISSUER":   "https://auth.example",
+		"GAME_INTEGRATION_JWT_AUDIENCE": "voice",
+	}
+	getenv := func(name string) string { return values[name] }
+	values["GAME_INTEGRATION_SPACE_GRPC_ADDR"] = "space:9000"
+	_, err := loadConfig(getenv)
+	require.ErrorContains(t, err, "must be configured together")
+	values["GAME_INTEGRATION_SPACE_S2S_TOKEN"] = "test-secret"
+	config, err := loadConfig(getenv)
+	require.NoError(t, err)
+	require.Equal(t, "space:9000", config.CommunitySpaceAddr)
+	require.Equal(t, "test-secret", config.CommunitySpaceToken)
 }
 
 func TestLoadConfigRequiresBotProofURLAndDedicatedKeyTogether(t *testing.T) {
