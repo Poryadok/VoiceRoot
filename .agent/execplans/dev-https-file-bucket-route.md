@@ -19,6 +19,11 @@ one owned pending File/blob remain. DEV was safely released130/gen32.
 - strictPrefixMatching is false; use Exact bucket root and Prefix bucket-slash
   so sibling names remain outside the route.
 - Namespace authority and server dry-run accepted the separate fixed companion.
+- Read-only network probes found Traefik→Gateway8080 reachable but
+  Traefik→MinIO9000 refused; MinIO was healthy from inside DEV and the Traefik
+  namespace had no egress policy. Existing DEV ingress isolation excludes9000.
+  A separate policy permits only the exact observed Traefik namespace+Pod
+  selectors into app=voice-minio TCP9000, leaving console9001 and other paths out.
 - Canonical certificate renewal publishes its ten fixed Ingress names and
   fixed Secret, with no list/prune action. The companion is outside selection.
   A focused renewal test keeps that separation explicit.
@@ -30,6 +35,8 @@ existing exact host/Secret/class/entrypoint, without rewriting signed paths.
 Controller references: [versioned provider source](https://github.com/traefik/traefik/blob/v3.6.6/pkg/provider/kubernetes/ingress/kubernetes.go),
 [strict-prefix defaults](https://doc.traefik.io/traefik/v3.6/reference/install-configuration/providers/kubernetes/kubernetes-ingress/)
 and [rule priority](https://doc.traefik.io/traefik/v3.6/reference/routing-configuration/http/routing/rules-and-priority/).
+The policy uses one combined namespace/Pod peer, following the
+[NetworkPolicy selector contract](https://kubernetes.io/docs/concepts/services-networking/network-policies/#behavior-of-to-and-from-selectors).
 The separately bounded immutable-image probe passed eight rule/host cases with
 networknone and its owned container removed. It uses the file provider to test
 the actual binary's predicates/priority; Kubernetes adapter coexistence remains
@@ -42,13 +49,13 @@ exercised by that fixture.
 2. Freeze configuration source/manifest and a reviewed immutable live operation;
    inspect fresh actual49pins, Filef358/schema13, pending owned object and all
    existing Ingress/TLS metadata. Acquire DEV atomically only for execution.
-3. Create only the previously absent owned companion under actual TT and
+3. Create only the previously absent owned Ingress and NetworkPolicy companions under actual TT and
    updater locks; no existing issuer/Ingress/Secret/application/store changes.
 4. Prove actual controller/TLS/backend routing and preserved API/other hosts.
    Reconcile pending upload state/object absence before any reviewed retry.
 5. Qualify the immutable File artifact in a separately explicit image-only
    package if needed; preserve existing13 and owned data. No new build/relabel.
-6. On failure, remove only the exact owned companion UID/resourceVersion and
+6. On failure, remove only the exact owned companion UIDs/resourceVersions and
    recover the image separately if changed; preserve all other resources/data.
    Settle actual operations, observe and safely release the resource.
 

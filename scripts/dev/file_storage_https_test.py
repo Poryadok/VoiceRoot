@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -76,8 +77,40 @@ class FileStorageHTTPSTests(unittest.TestCase):
         tool=Path(__file__).with_name('file_storage_https.py')
         rendered=subprocess.run([sys.executable,str(tool),'render'],capture_output=True,text=True)
         self.assertEqual(rendered.returncode,0)
+        self.assertEqual([r['kind'] for r in json.loads(rendered.stdout)['items']],['Ingress','NetworkPolicy'])
         rejected=subprocess.run([sys.executable,str(tool),'apply'],capture_output=True,text=True)
         self.assertNotEqual(rejected.returncode,0)
+
+    def test_edge_policy_is_only_exact_controller_to_minio_s3(self):
+        policy=storage.network_policy();spec=policy['spec']
+        self.assertEqual(policy['metadata']['name'],'voice-dev-file-storage-edge')
+        self.assertEqual(policy['metadata']['namespace'],'voice-dev')
+        self.assertEqual(spec['podSelector'],{'matchLabels':{'app':'voice-minio'}})
+        self.assertEqual(spec['policyTypes'],['Ingress'])
+        self.assertNotIn('egress',spec)
+        self.assertEqual(len(spec['ingress']),1)
+        rule=spec['ingress'][0]
+        self.assertEqual(rule['ports'],[{'protocol':'TCP','port':9000}])
+        self.assertEqual(len(rule['from']),1)
+        peer=rule['from'][0]
+        self.assertEqual(set(peer),{'namespaceSelector','podSelector'})
+        self.assertEqual(peer['namespaceSelector'],{'matchLabels':{'kubernetes.io/metadata.name':'traefik'}})
+        self.assertEqual(peer['podSelector'],{'matchLabels':{'app.kubernetes.io/name':'traefik','app.kubernetes.io/instance':'traefik-traefik'}})
+        def allowed(namespace,labels,target,port,protocol='TCP'):
+            return (namespace=='traefik' and
+                    all(labels.get(k)==v for k,v in peer['podSelector']['matchLabels'].items()) and
+                    all(target.get(k)==v for k,v in spec['podSelector']['matchLabels'].items()) and
+                    port==9000 and protocol=='TCP')
+        controller={'app.kubernetes.io/name':'traefik','app.kubernetes.io/instance':'traefik-traefik'}
+        self.assertTrue(allowed('traefik',controller,{'app':'voice-minio'},9000))
+        self.assertTrue(allowed('traefik',controller,{'app':'voice-minio','extra':'label'},9000))
+        self.assertFalse(allowed('traefik',controller,{'app':'voice-minio'},9000,'UDP'))
+        for namespace,labels,target,port in [
+                ('voice-staging',controller,{'app':'voice-minio'},9000),
+                ('traefik',{'app.kubernetes.io/name':'other'}, {'app':'voice-minio'},9000),
+                ('traefik',controller,{'app':'voice-gateway'},9000),
+                ('traefik',controller,{'app':'voice-minio'},9001)]:
+            self.assertFalse(allowed(namespace,labels,target,port))
 
 
 if __name__=='__main__':unittest.main()

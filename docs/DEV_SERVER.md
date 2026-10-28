@@ -270,7 +270,7 @@ Wildcard и staging-записи не менялись. Ранее proxied-ма�
 отдельные Ingress; HTTPS — в соответствующие dev Services. LiveKit использует
 TCP31081 / UDP31082 для media; доступность страницы не доказывает работу UDP.
 
-The File bucket uses a separately owned companion Ingress
+The File bucket uses separately owned companion resources: Ingress
 `voice-dev-file-storage-https`, rendered by
 `python3 scripts/dev/file_storage_https.py render`. It reuses the existing
 `api-dev.comrade.click` host, `websecure` entrypoint and
@@ -279,6 +279,15 @@ The File bucket uses a separately owned companion Ingress
 host or object path. The pair is intentional: the observed Traefik3.6.6
 controller has `strictPrefixMatching=false`, so a bare bucket prefix would
 also capture sibling names such as `/voice-dev-files-other`.
+
+NetworkPolicy `voice-dev-file-storage-edge` adds only TCP9000 into Pods
+selected by `app=voice-minio`, from the `traefik` namespace **and** its observed
+controller Pod labels (`name=traefik`, `instance=traefik-traefik` under
+`app.kubernetes.io`). Both peer selectors must match. The existing isolation
+policy admits the controller only on web/API ports; read-only probes showed
+Gateway8080 reachable and MinIO9000 refused from Traefik while MinIO was healthy
+inside DEV. The companion leaves existing policies, console9001, other Pods,
+ports, namespaces and all egress permissions unchanged.
 
 The certificate operator continues to own only its ten derived Ingress names
 and fixed TLS Secret. Its canonical renewal path publishes those named objects
