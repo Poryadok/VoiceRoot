@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { startChrome } from './runtime-config-startup.mjs';
 
-test('startup timeout retains bounded redacted diagnostics and settles the child', async () => {
+// Descendant custody uses Linux /proc; non-Linux retains the profile instead.
+const linuxTest = (name, fn) => test(name, { skip: process.platform !== 'linux' }, fn);
+
+linuxTest('startup timeout retains bounded redacted diagnostics and settles the child', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'voice-chrome-test-'));
   const child = startChrome(process.execPath, ['-e', `
     process.on('SIGTERM', () => {});
@@ -32,7 +35,7 @@ test('startup timeout retains bounded redacted diagnostics and settles the child
   }
 });
 
-test('missing executable is reported without an unhandled spawn error', async () => {
+linuxTest('missing executable is reported without an unhandled spawn error', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'voice-chrome-test-'));
   const child = startChrome('/no/such/chrome', [], profile);
   try {
@@ -44,7 +47,7 @@ test('missing executable is reported without an unhandled spawn error', async ()
   }
 });
 
-for (const dropMarker of [false, true]) test(`escaped descendant prevents profile deletion (marker removed: ${dropMarker})`, async () => {
+for (const dropMarker of [false, true]) linuxTest(`escaped descendant prevents profile deletion (marker removed: ${dropMarker})`, async () => {
   const profile = await mkdtemp(join(tmpdir(), 'voice-chrome-test-'));
   const pidFile = join(profile, 'escaped.pid');
   const child = startChrome(process.execPath, ['-e', `
