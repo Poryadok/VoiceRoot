@@ -19,7 +19,7 @@ func (s *FilesStore) ProcessPDFThumbnailOnce(ctx context.Context,
 	prepare func(context.Context, FileRow) ([]byte, bool, error),
 	put func(context.Context, TrackedWriteIntent, []byte) error,
 ) (bool, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}
@@ -105,7 +105,7 @@ ORDER BY f.updated_at,f.id FOR NO KEY UPDATE OF f SKIP LOCKED LIMIT 1`).Scan(&id
 }
 
 func (s *FilesStore) publishPDFThumbnail(ctx context.Context, id uuid.UUID, key string, generation uuid.UUID) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return err
 	}

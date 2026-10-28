@@ -51,7 +51,7 @@ func (s *FileGRPC) AcquireFileReferences(ctx context.Context, req *filev1.Acquir
 	} else if found {
 		return replay, nil
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -147,7 +147,7 @@ func (s *FileGRPC) ReleaseFileReferences(ctx context.Context, req *filev1.Releas
 	} else if found {
 		return replay, nil
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, true)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -223,7 +223,7 @@ func (s *FileGRPC) GetFileReferenceGCStatus(ctx context.Context, req *filev1.Get
 	if err != nil || !bytes.Equal(releaseHash, req.GetReleaseRequestSha256()) {
 		return nil, status.Error(codes.FailedPrecondition, "release request hash does not match exact references")
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Unavailable, "File GC status is unavailable")
 	}
@@ -365,7 +365,7 @@ func (s *FileGRPC) IssueFileAccessCapability(ctx context.Context, req *filev1.Is
 	} else if found {
 		return replay, nil
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -441,7 +441,7 @@ func (s *FileGRPC) PrepareSpaceDeletionReferenceManifest(ctx context.Context, re
 		return replay, nil
 	}
 	chatBytes, _ := proto.MarshalOptions{Deterministic: true}.Marshal(req.GetChatManifest())
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -534,7 +534,7 @@ func (s *FileGRPC) RegisterSpaceDeletionReferenceChunk(ctx context.Context, req 
 	} else if !errors.Is(loadErr, pgx.ErrNoRows) {
 		return nil, status.Error(codes.Internal, loadErr.Error())
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -618,7 +618,7 @@ func (s *FileGRPC) ApplySpaceLifecycleFence(ctx context.Context, req *filev1.App
 	} else if found {
 		return replay, nil
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -709,7 +709,7 @@ func (s *FileGRPC) ReleaseSpaceDeletionProducerReferences(ctx context.Context, r
 	} else if !errors.Is(loadErr, pgx.ErrNoRows) {
 		return nil, status.Error(codes.Internal, loadErr.Error())
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, true)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -801,7 +801,7 @@ func (s *FileGRPC) PurgeSpace(ctx context.Context, req *filev1.PurgeSpaceRequest
 	} else if !errors.Is(loadErr, pgx.ErrNoRows) {
 		return nil, status.Error(codes.Internal, loadErr.Error())
 	}
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, true)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -879,7 +879,7 @@ func (s *FileGRPC) GetSpacePurgeReceipt(ctx context.Context, req *filev1.GetSpac
 }
 
 func (s *FileGRPC) fileAccessibleBySelector(ctx context.Context, fileID, profileID uuid.UUID, selector *filev1.FileAccessSelector, surface filev1.FileReadSurface) (store.FileRow, error) {
-	tx, err := s.files.Pool.Begin(ctx)
+	tx, err := store.BeginInventoryMutation(ctx, s.files.Pool, false)
 	if err != nil {
 		return store.FileRow{}, status.Error(codes.Internal, err.Error())
 	}
