@@ -233,6 +233,14 @@ const ResolveMessageAttachmentPreviewResponse$json = {
       '6': '.voice.events.v1.FilePreviewSnapshot',
       '10': 'snapshot'
     },
+    {
+      '1': 'audio_no_generic_preview',
+      '3': 3,
+      '4': 1,
+      '5': 11,
+      '6': '.voice.file.v1.AudioNoGenericPreview',
+      '10': 'audioNoGenericPreview'
+    },
   ],
 };
 
@@ -242,7 +250,24 @@ final $typed_data.Uint8List resolveMessageAttachmentPreviewResponseDescriptor =
         'CidSZXNvbHZlTWVzc2FnZUF0dGFjaG1lbnRQcmV2aWV3UmVzcG9uc2USPQoJcmVmZXJlbmNlGA'
         'EgASgLMh8udm9pY2UuZmlsZS52MS5GaWxlUmVmZXJlbmNlS2V5UglyZWZlcmVuY2USQAoIc25h'
         'cHNob3QYAiABKAsyJC52b2ljZS5ldmVudHMudjEuRmlsZVByZXZpZXdTbmFwc2hvdFIIc25hcH'
-        'Nob3Q=');
+        'Nob3QSXQoYYXVkaW9fbm9fZ2VuZXJpY19wcmV2aWV3GAMgASgLMiQudm9pY2UuZmlsZS52MS5B'
+        'dWRpb05vR2VuZXJpY1ByZXZpZXdSFWF1ZGlvTm9HZW5lcmljUHJldmlldw==');
+
+@$core.Deprecated('Use audioNoGenericPreviewDescriptor instead')
+const AudioNoGenericPreview$json = {
+  '1': 'AudioNoGenericPreview',
+  '2': [
+    {'1': 'protocol_version', '3': 1, '4': 1, '5': 13, '10': 'protocolVersion'},
+    {'1': 'file_id', '3': 2, '4': 1, '5': 9, '10': 'fileId'},
+    {'1': 'status', '3': 3, '4': 1, '5': 9, '10': 'status'},
+  ],
+};
+
+/// Descriptor for `AudioNoGenericPreview`. Decode as a `google.protobuf.DescriptorProto`.
+final $typed_data.Uint8List audioNoGenericPreviewDescriptor = $convert.base64Decode(
+    'ChVBdWRpb05vR2VuZXJpY1ByZXZpZXcSKQoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoDVIPcHJvdG'
+    '9jb2xWZXJzaW9uEhcKB2ZpbGVfaWQYAiABKAlSBmZpbGVJZBIWCgZzdGF0dXMYAyABKAlSBnN0'
+    'YXR1cw==');
 
 @$core.Deprecated('Use validateStoryMediaRequestDescriptor instead')
 const ValidateStoryMediaRequest$json = {

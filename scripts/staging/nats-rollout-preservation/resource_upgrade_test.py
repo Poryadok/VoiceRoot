@@ -18,8 +18,15 @@ class UpgradeTests(unittest.TestCase):
         return {p:hashlib.sha256(p.encode() if p in installer.TT_FENCING_BINARY_MEMBERS else (root/p).read_bytes()).hexdigest()
             for p in installer.TT_FENCING_PREDECESSOR_MEMBERS|{installer.TT_FENCING_NEW_MEMBER}}
 
+    def historical_binding(self):
+        # The finite TT transition is pinned to f8624086; Bot9's later
+        # preflight is not an authorized successor for this historical path.
+        binding=self.binding()
+        binding['nats-rollout-preservation/bot_migration.py']='d41d2c245ce2f1b5dce7c45b7f56a576b7fb7b1c38fc1713f162de522ce2770f'
+        return binding
+
     def test_closed_predecessor_preserves_all_unchanged_binary_pins(self):
-        current=self.binding();old=installer.tt_fencing_predecessor(current)
+        current=self.historical_binding();old=installer.tt_fencing_predecessor(current)
         self.assertEqual(len(old),85);self.assertNotIn(installer.TT_FENCING_NEW_MEMBER,old)
         self.assertEqual(set(old),installer.TT_FENCING_PREDECESSOR_MEMBERS)
         for key in old:
@@ -28,7 +35,7 @@ class UpgradeTests(unittest.TestCase):
             self.assertEqual(old[key],current[key])
 
     def test_missing_extra_swapped_unsafe_or_bad_hash_member_is_refused(self):
-        valid=self.binding()
+        valid=self.historical_binding()
         cases=[{k:v for k,v in valid.items() if k!='configure-kubectl-ci.sh'},
                dict(valid,foreign='a'*64),dict(valid,**{'../escape':'a'*64}),
                dict(valid,**{'nats-known-baseline/kernel':'not-a-hash'}),
@@ -37,8 +44,12 @@ class UpgradeTests(unittest.TestCase):
         for row in cases:
             with self.assertRaises(installer.Blocked):installer.tt_fencing_predecessor(row)
 
+    def test_current_bot9_source_is_not_an_authorized_tt_successor(self):
+        with self.assertRaisesRegex(installer.Blocked, 'bridge_tt_upgrade_predecessor_source_drift'):
+            installer.tt_fencing_predecessor(self.binding())
+
     def test_upgrade_uses_only_fixed_source_transition_and_exact_full_predecessor(self):
-        current=self.binding();old=installer.tt_fencing_predecessor(current)
+        current=self.historical_binding();old=installer.tt_fencing_predecessor(current)
         expected=hashlib.sha256(json.dumps(old,sort_keys=True,separators=(',',':')).encode()).hexdigest()
         with patch.object(installer.root_cli,'code_binding',return_value=current),patch.object(installer,'_upgrade_idle_transition') as apply:
             installer.upgrade_idle_tt_resource_fencing_v1(Path('/reviewed-code'))

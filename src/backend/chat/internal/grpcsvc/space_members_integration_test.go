@@ -5,13 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	chatv1 "voice.app/voice/chat/v1"
 	commonv1 "voice.app/voice/common/v1"
+	rolev1 "voice.app/voice/role/v1"
 
 	"voice/backend/chat/internal/store"
 	"voice/backend/pkg/integrationtest"
@@ -24,6 +29,58 @@ func applySpaceMigration(t *testing.T, ctx context.Context, pool *pgxpool.Pool) 
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, string(sqlBytes))
 	require.NoError(t, err)
+}
+
+type measuredChatViewRole struct {
+	rolev1.RoleServiceClient
+	allowed bool
+	err     error
+	calls   int
+}
+
+func (r *measuredChatViewRole) CheckPermission(_ context.Context, req *rolev1.CheckPermissionRequest, _ ...grpc.CallOption) (*rolev1.CheckPermissionResponse, error) {
+	r.calls++
+	time.Sleep(20 * time.Millisecond)
+	if r.err != nil {
+		return nil, r.err
+	}
+	return &rolev1.CheckPermissionResponse{Allowed: r.allowed}, nil
+}
+
+func TestGetChat_SpaceRoleAuthorityAndMembershipCost(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+	ctx := context.Background()
+	chatPool := startChatPostgresForTest(t, ctx)
+	applyChatMigration(t, ctx, chatPool)
+	spacePool := integrationtest.StartPostgres(t, ctx, "spacedb_role_cost", "")
+	applySpaceMigration(t, ctx, spacePool)
+	chatID, spaceID, owner, member := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	seedSpaceChannelChat(t, ctx, chatPool, spacePool, chatID, spaceID, owner, member, "general")
+	role := &measuredChatViewRole{allowed: true}
+	client, cleanup := startChatGRPCTestServer(t, chatPool, nil, nil, nil, WithSpaceMembers(&store.SpaceMembersStore{Pool: spacePool}), func(c *ChatGRPC) { c.Roles = role })
+	t.Cleanup(cleanup)
+	caller := withAccountProfileCtx(ctx, uuid.New(), member)
+	start := time.Now()
+	response, err := client.GetChat(caller, &chatv1.GetChatRequest{ChatId: chatID.String()})
+	getElapsed := time.Since(start)
+	require.NoError(t, err)
+	require.Equal(t, chatID.String(), response.GetChat().GetId())
+	require.Equal(t, 1, role.calls)
+	role.calls = 0
+	start = time.Now()
+	_, err = client.ListMembers(caller, &chatv1.ListMembersRequest{ChatId: chatID.String()})
+	listElapsed := time.Since(start)
+	require.NoError(t, err)
+	require.Equal(t, 3, role.calls)
+	t.Logf("GetChat=%s role_calls=1 ListMembers=%s role_calls=3", getElapsed, listElapsed)
+	role.allowed = false
+	_, err = client.GetChat(caller, &chatv1.GetChatRequest{ChatId: chatID.String()})
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+	role.err = status.Error(codes.Unavailable, "role unavailable")
+	_, err = client.GetChat(caller, &chatv1.GetChatRequest{ChatId: chatID.String()})
+	require.NotEqual(t, codes.OK, status.Code(err))
 }
 
 func seedSpaceChannelChat(t *testing.T, ctx context.Context, chatPool *pgxpool.Pool, spacePool *pgxpool.Pool, chatID, spaceID, owner, member uuid.UUID, name string) {
