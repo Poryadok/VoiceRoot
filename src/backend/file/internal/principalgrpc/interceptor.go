@@ -22,6 +22,8 @@ func IsProtectedMethod(method string) bool {
 		filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName,
 		filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName,
 		filev1.FileService_ValidateStoryMedia_FullMethodName,
+		filev1.FileService_ClaimStoryMedia_FullMethodName,
+		filev1.FileService_ReleaseStoryMedia_FullMethodName,
 		filev1.FileService_ResolveMessageAttachmentPreview_FullMethodName,
 		filev1.FileService_AcquireFileReferences_FullMethodName,
 		filev1.FileService_ReleaseFileReferences_FullMethodName,
@@ -88,7 +90,7 @@ func expectedIssuerForMethod(method string) string {
 	case filev1.CatalogAssetService_ValidateCatalogAsset_FullMethodName,
 		filev1.CatalogAssetService_LookupCatalogAsset_FullMethodName:
 		return "messaging"
-	case filev1.FileService_ValidateStoryMedia_FullMethodName:
+	case filev1.FileService_ValidateStoryMedia_FullMethodName, filev1.FileService_ClaimStoryMedia_FullMethodName, filev1.FileService_ReleaseStoryMedia_FullMethodName:
 		return "story"
 	case filev1.FileService_PrepareSpaceDeletionReferenceManifest_FullMethodName, filev1.FileService_ApplySpaceLifecycleFence_FullMethodName, filev1.FileService_PurgeSpace_FullMethodName, filev1.FileService_GetSpacePurgeReceipt_FullMethodName:
 		return "space"
@@ -113,7 +115,9 @@ func expectedIssuerForRequest(method string, request any) string {
 		switch r.GetReference().GetOwnerType() {
 		case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE, filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STICKER, filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_GIF_ASSET:
 			return "messaging"
-		case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY, filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR:
+		case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY:
+			return "story"
+		case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR:
 			return "user"
 		case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR:
 			return "chat"

@@ -1,6 +1,14 @@
-# Developer Portal static site ([bots.md](../../docs/features/bots.md)). Build image with VITE_VOICE_API_BASE + VITE_OAUTH_CLIENT_ID
-# matching voice-auth OAuth env — see docs/DEPLOYMENT.md.
+# Developer Portal: runtime-required image with environment-owned public API binding.
 # Substitute __IMAGE_REGISTRY__ / __IMAGE_TAG__ / __DEVELOPER_PORTAL_INGRESS_HOST__ before apply.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-developer-portal-runtime-config
+  namespace: voice-prod
+data:
+  voice-runtime-config.json: |
+    {"version":1,"app_origin":"https://__DEVELOPER_PORTAL_INGRESS_HOST__","api_base_url":"https://__GATEWAY_INGRESS_HOST__"}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -24,12 +32,21 @@ spec:
       containers:
         - name: portal
           image: __IMAGE_REGISTRY__/developer-portal:__IMAGE_TAG__
+          volumeMounts:
+            - name: runtime-config
+              mountPath: /usr/share/nginx/html/voice-runtime-config.json
+              subPath: voice-runtime-config.json
+              readOnly: true
           resources:
             requests: {cpu: 10m, memory: 32Mi}
             limits: {cpu: 100m, memory: 64Mi}
           ports: [{containerPort: 80, name: http}]
           readinessProbe: {httpGet: {path: /, port: http}, periodSeconds: 5}
           livenessProbe: {httpGet: {path: /, port: http}, periodSeconds: 15}
+      volumes:
+        - name: runtime-config
+          configMap:
+            name: voice-developer-portal-runtime-config
 ---
 apiVersion: v1
 kind: Service

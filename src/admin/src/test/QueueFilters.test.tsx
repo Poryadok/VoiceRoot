@@ -43,7 +43,7 @@ function renderQueue() {
 
 describe("QueuePage filters", () => {
   beforeEach(() => {
-    vi.stubEnv("VITE_VOICE_API_BASE", "http://gateway.test");
+    vi.stubEnv("VITE_VOICE_API_BASE", "https://gateway.test");
     vi.stubEnv("VITE_STAFF_TOKEN", "token");
     vi.stubGlobal(
       "fetch",
@@ -60,7 +60,7 @@ describe("QueuePage filters", () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        "http://gateway.test/api/v1/admin/moderation/reports?status=pending&queue=content",
+        "https://gateway.test/api/v1/admin/moderation/reports?status=pending&queue=content",
         expect.objectContaining({
           headers: expect.any(Headers),
         }),
@@ -77,7 +77,7 @@ describe("QueuePage filters", () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenLastCalledWith(
-        "http://gateway.test/api/v1/admin/moderation/reports?status=pending&queue=spaces",
+        "https://gateway.test/api/v1/admin/moderation/reports?status=pending&queue=spaces",
         expect.any(Object),
       );
     });
@@ -92,7 +92,7 @@ describe("QueuePage filters", () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenLastCalledWith(
-        "http://gateway.test/api/v1/admin/moderation/reports?status=reviewing&queue=content",
+        "https://gateway.test/api/v1/admin/moderation/reports?status=reviewing&queue=content",
         expect.any(Object),
       );
     });

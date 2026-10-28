@@ -201,6 +201,11 @@ checkout репозитория, Python3 и kubeconfig нужного класт
    Qualify the rendered config/source/hash separately. First adoption needs an
    authorized config/template migration; image-only updates preserve old config.
    See [immutable web binding](DEPLOYMENT.md#immutable-web-promotion-and-environment-binding).
+    Admin and Developer Portal likewise require separate read-only runtime config
+    projections, binding `admin-dev.comrade.click` and
+    `developers-dev.comrade.click` respectively to `api-dev.comrade.click`.
+    Their images must be the same immutable refs later used in STAGING; the
+    initial config/template adoption is a separate authorized migration.
    Schema changes still require separately prepared DEV migrations from the same source.
 3. Предварительно сохранить текущие image pins и выполнить preview:
 
@@ -214,7 +219,7 @@ python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/use
 создан из актуальных staging workload inputs и dev credentials):
 
 ```sh
-python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply
+python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply --ttenrec-url http://192.168.0.109:30990 --resource-context /private/dev-operation.json
 kubectl -n voice-dev get deploy,sts,pvc
 curl --fail https://api-dev.comrade.click/health
 ```
@@ -226,10 +231,30 @@ dry-run. Apply меняет только образы основных app conta
 Namespace ownership, ConfigMap lock и UID/resourceVersion CAS защищают target
 и конкурентные обновления.
 
+Apply также требует актуальный TT `voice/DEV` claim/generation/window/revision,
+внешний operation ID и точный immutable candidate из JSON context. Формат и
+порядок observe → deploy → apply описаны в
+[операторском контракте updater](../scripts/dev/README.md#updating-wip).
+Свежие Kubernetes image pins сверяются с наблюдением текущего claim; известный
+source commit наблюдения должен быть предком candidate. Если provenance текущих
+образов неизвестен, сначала нужна отдельная квалификация, а не выдуманный commit.
+Постоянный ConfigMap `voice-dev-image-update-fence` хранит поколение и результат
+executor, не удаляется при снятии обычного updater lock и запрещает replay либо
+запись поверх незавершённой операции. TT и журнал проверяются перед каждым
+write stage; неизвестный/частичный результат удерживает lock и требует recovery.
+Уже отправленный Kubernetes request нельзя отозвать изменением TT claim: перед
+recover/confirm-safe необходимо сверить старый процесс и фактическое завершение
+его запросов. Прямой kubectl и другие operator scripts этим updater не fenced.
+Успех команды не освобождает TT окно и не создаёт deployment/check записи:
+оператор регистрирует только фактический rollout, затем удерживает ресурс через
+проверки либо передаёт через offer/accept отдельно от task ownership.
+
 При неудаче lock `voice-dev-image-update-lock` сохраняется. Сначала проверить
 rollout, Deployment и UID lock, затем решать причину; автоматического force/unlock
-и отката нет. Для отката image-only изменения повторно применить прежние
-digest через updater. Это не откатывает схему БД или уже записанные данные.
+и отката нет. Повторное применение прежних digest для отката image-only изменения
+требует отдельного reviewed compatibility/reconciliation packet; обычный
+updater отклоняет candidate, который откатывает известный source commit.
+Это не откатывает схему БД или уже записанные данные.
 
 Первые web/admin/portal images собраны из
 `e0d875ba612517cd7aac3b184a2deff41cb0fec3` и импортированы локально, без публикации

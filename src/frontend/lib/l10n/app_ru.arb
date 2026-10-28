@@ -1584,6 +1584,15 @@
   "chatLinkPreviewLoading": "Загружаем предпросмотр ссылки…",
   "chatLinkPreviewUnavailable": "Предпросмотр недоступен",
   "chatLinkPreviewRetry": "Повторить",
+  "gameCatalogAll": "Все игры",
+  "gameCatalogBrowseAll": "Все игры",
+  "gameCatalogChanged": "Каталог изменился. Начните просмотр заново, чтобы увидеть актуальные игры.",
+  "gameCatalogClearSearch": "Очистить поиск",
+  "gameCatalogLoadMore": "Загрузить ещё игры",
+  "gameCatalogPopular": "Популярные",
+  "gameCatalogRecent": "Недавние",
+  "gameCatalogRecentError": "Не удалось загрузить недавние игры",
+  "gameCatalogSearchResults": "Результаты поиска",
   "composerVoiceHold": "Удерживайте для записи · вверх — закрепить",
   "composerVoicePermission": "Разрешите доступ к микрофону и повторите.",
   "composerVoiceProcessing": "Подготовка записи…",
@@ -1591,5 +1600,6 @@
   "composerVoiceError": "Не удалось записать. Повторите.",
   "composerVoiceStop": "Завершить запись",
   "composerVoiceCancel": "Отменить запись",
-  "composerVoiceLocked": "Запись закреплена"
+  "composerVoiceLocked": "Запись закреплена",
+  "queueSearchNoRolePreference": "Без предпочтения роли"
 }

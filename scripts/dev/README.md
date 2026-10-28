@@ -93,8 +93,82 @@ On a host with this repository and the intended kubeconfig:
 
 ```sh
 python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex>
-python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply
+python3 scripts/dev/update_images.py --image user=ghcr.io/poryadok/voiceroot/user@sha256:<64hex> --apply --ttenrec-url http://192.168.0.109:30990 --resource-context /private/dev-operation.json
 ```
+
+Apply requires the current TT `voice/DEV` resource in `held/deploy`, its exact
+revision, and a private JSON context with exactly these fields (replace every
+placeholder with actual authority and pinned artifacts):
+
+```json
+{
+  "project": "voice",
+  "resource": "DEV",
+  "actor": "ACTUAL_OPERATOR",
+  "claim": "CURRENT_CANONICAL_CLAIM_UUID",
+  "generation": 1,
+  "window": "CURRENT_CANONICAL_WINDOW_UUID",
+  "revision": 1,
+  "operation_id": "UNIQUE_EXTERNAL_OPERATION_ID",
+  "commit": "FULL_CANDIDATE_COMMIT",
+  "images": {"voice-user/user": "registry/user@sha256:REAL_MANIFEST_DIGEST"}
+}
+```
+
+The candidate in TT must match the complete context commit/image map exactly;
+keys identify `workload/container`. This updater changes only the selected main
+app containers. Before entering deploy, observe their actual image map and
+qualified source commit under the new claim. After the deploy checkpoint, the
+updater compares that observation with fresh Kubernetes reads under its existing
+lock and requires the observed commit to be an ancestor of the candidate in the
+local Git repository. Missing source provenance, missing commits or an older
+candidate fail closed. This is an additional qualification gate for this executor;
+TT also supports image-only observations for other operators. Git ancestry does
+not attest image contents: independently qualify the commit/image association.
+An intentional rollback needs its own reviewed compatibility/reconciliation packet;
+do not relabel old images as a newer candidate or bypass this gate.
+
+`voice-dev-image-update-fence` is a permanent ConfigMap high-water mark, independent
+of the existing transient updater lock. It records project/resource, claim,
+generation/window/revision, operation ID, pinned candidate, last step and actual
+completion. Each write stage rechecks TT and this journal using UID/RV CAS.
+Closed generations and the immediately preceding operation ID cannot be replayed.
+Operation IDs must be unique; the journal retains the last executor, not a global
+deduplication registry. A new claim,
+including one for the same actor, cannot overwrite an active/uncertain executor.
+Do not delete or edit the fence to unlock a rollout. An interrupted executor needs
+an explicitly reviewed reconciliation of its process, submitted Kubernetes
+requests, workload version, persistent journal and updater lock before further
+execution; this command supplies no recovery/unlock flag.
+
+The guarantee is cooperative admission between stages. Kubernetes cannot revoke
+an already submitted `kubectl` request when TT changes ownership. Recovery must
+therefore establish that the old executor and its requests are settled before
+confirm-safe or a new writer. Manual/unintegrated kubectl and the other operator
+scripts remain outside this fence; all existing operational locks still apply.
+
+On an unknown/partial result, the updater retains its lock and marks its durable
+journal uncertain before attempting a revision-guarded TT `release` with
+`safety=uncertain` and the external operation ID. A lost TT response is not retried:
+reread the resource card/history and journal first. Failure to reach TT leaves the
+local safety gate closed and prints `DEV_RESOURCE_RECOVERY_REQUIRED`.
+If the initial lock CREATE response is unknown, the executor journal does not
+exist yet. Its context-bearing lock request carries the external operation and
+authority; reconcile the actual lock and TT notification even when the journal
+is absent. The updater neither retries CREATE nor deletes an uncertain lock.
+Successful completion closes only this executor; it neither releases the TT
+resource nor records task checks or a deployment. Register the actual completed
+deployment with its exact claim/revision/artifacts, then retain the resource
+through real checks or use TT offer/accept. Task ownership/tester transfer remains
+separate. A product FAIL after a safely completed rollout can use TT safe release;
+an unknown migration/apply cannot.
+
+Host-only checks: `python -B scripts/dev/resource_fencing_test.py`,
+`python -B scripts/dev/update_fencing_test.py`, and
+`python -B scripts/dev/update_images_test.py`. These are synthetic adapter tests,
+not coordinated stand acceptance. The STAGING workflow's installed root bridge
+and captured runner are separate executors; changing this DEV tool does not
+claim to fence them or an unintegrated `render-and-apply.sh` caller.
 
 Repeat `--image` for multiple services. First command previews with server
 dry-run; second updates only main app images and waits for rollout. Only the

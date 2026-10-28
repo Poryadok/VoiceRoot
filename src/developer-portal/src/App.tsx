@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { OAuthCallback } from './OAuthCallback';
-import { apiBase, apiFetch, oauthClientId, oauthDisabled } from './oauth/api';
+import { apiBaseUrl, apiFetch, oauthClientId, oauthDisabled } from './oauth/api';
 import { callbackRedirectUri } from './oauth/callback';
 import { buildAuthorizeUrl, randomCodeVerifier, s256Challenge } from './oauth/pkce';
 import { clearSession, getAccessToken, isLoggedIn, setAccessToken, setPkceVerifier, setOAuthState } from './oauth/session';
@@ -297,7 +297,7 @@ function Portal() {
     setOAuthState(state);
     const redirectUri = callbackRedirectUri(window.location.origin);
     const url = buildAuthorizeUrl({
-      apiBase,
+      apiBase: apiBaseUrl(),
       clientId: oauthClientId,
       redirectUri,
       state,

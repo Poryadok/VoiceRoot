@@ -1041,7 +1041,9 @@ func ownerService(id filev1.FileReferenceOwnerType) string {
 	switch id {
 	case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_MESSAGE, filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STICKER, filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_GIF_ASSET:
 		return "messaging"
-	case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY, filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR:
+	case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_STORY:
+		return "story"
+	case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_PROFILE_AVATAR:
 		return "user"
 	case filev1.FileReferenceOwnerType_FILE_REFERENCE_OWNER_TYPE_CHAT_AVATAR:
 		return "chat"

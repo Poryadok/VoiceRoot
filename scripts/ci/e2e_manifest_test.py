@@ -88,6 +88,26 @@ class ManifestTest(unittest.TestCase):
                                         'make compose-file-attachment' in step.get('run', '')
                                         for step in steps[installs[0] + 1:]))
 
+    def test_compose_smoke_uses_one_project_for_startup_and_live_reads(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())
+        job = workflow['jobs']['compose-e2e']
+        project = job.get('env', {}).get('COMPOSE_PROJECT_NAME', '')
+        self.assertTrue(project, 'Compose startup and live reads need a job-wide project binding')
+        names = []
+        for run_id, attempt in [('101', '1'), ('102', '1'), ('101', '2')]:
+            resolved = project.replace('${{ github.run_id }}', run_id).replace(
+                '${{ github.run_attempt }}', attempt)
+            self.assertRegex(resolved, r'^[a-z0-9][a-z0-9_-]*$')
+            names.append(resolved)
+        self.assertEqual(len(set(names)), len(names), 'Each run and retry needs a distinct disposable project')
+        commands = ('docker compose', 'make compose-migrate-all', 'compose-e2e-smoke.sh')
+        stages = [step for step in job['steps']
+                  if any(command in step.get('run', '') for command in commands)]
+        self.assertTrue(stages)
+        for step in stages:
+            with self.subTest(step=step.get('name')):
+                self.assertEqual(step.get('env', {}).get('COMPOSE_PROJECT_NAME', project), project)
+
     def test_runner_parser_failure_precedes_any_external_work(self):
         for runner in ['compose-e2e-smoke.sh', 'compose-e2e-live.sh']:
             with self.subTest(runner=runner), tempfile.TemporaryDirectory() as directory:
