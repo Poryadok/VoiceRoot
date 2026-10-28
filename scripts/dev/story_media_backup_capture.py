@@ -140,7 +140,9 @@ class Producer:
             raise CaptureError('capture precondition unavailable') from None
         try:
             # begin must guard, persist pending and fence before permitting exec.
-            self.journal.begin(member)
+            nonce = self.journal.begin(member)
+            if not isinstance(nonce, str) or not re.fullmatch(r'[0-9a-f]{32}', nonce):
+                raise CaptureUncertain('capture attempt identity unavailable')
             self._check()
             script = ('export PGPASSWORD="$POSTGRES_PASSWORD"; export PGAPPNAME=voice-media-backup; '
                       'export PGOPTIONS="-c statement_timeout=60000 -c lock_timeout=5000"; ')
@@ -158,7 +160,7 @@ class Producer:
                 'snapshot_id': self.expected['snapshot_id'], 'pod_uid': self.expected['pod_uid'],
                 'pvc_uid': self.expected['pvc_uid'], 'pv_uid': self.expected['pv_uid'],
                 'container_id': self.expected['container_id'], 'restart_count': self.expected['restart_count'],
-                'exit': 0, 'scope': 'dump-terminal-only'})
+                'exit': 0, 'attempt_nonce': nonce, 'scope': 'dump-terminal-only'})
         except BaseException:
             try:
                 self.journal.uncertain(member)

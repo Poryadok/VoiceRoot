@@ -17,6 +17,7 @@ class Journal:
             raise RuntimeError('replay refused')
         self.pending.add(member)
         self.events.append(('begin', member))
+        return 'a' * 32
 
     def uncertain(self, member):
         self.events.append(('uncertain', member))
@@ -99,7 +100,7 @@ class CaptureTest(unittest.TestCase):
         self.assertEqual(self.journal.events[-1][2], {'operation_id': 'op', 'member': 'file_db',
                          'snapshot_id': 'snap', 'pod_uid': 'pod', 'pvc_uid': 'pvc', 'pv_uid': 'pvu',
                          'container_id': 'containerd://abc', 'restart_count': 0, 'exit': 0,
-                         'scope': 'dump-terminal-only'})
+                         'attempt_nonce': 'a' * 32, 'scope': 'dump-terminal-only'})
         self.assertNotIn('private fixture', repr(self.journal.events))
 
     def test_unknown_exit_or_changed_identity_remains_uncertain_and_no_replay(self):
@@ -135,6 +136,15 @@ class CaptureTest(unittest.TestCase):
                 self.setUp(); self.fault = fault
                 with self.assertRaises(capture.CaptureError): self.make()('file_db', io.BytesIO())
                 self.assertEqual(self.execs, 0)
+
+    def test_invalid_durable_attempt_nonce_cannot_start_dump(self):
+        for nonce in (None, '', 'a' * 31, 'G' * 32):
+            with self.subTest(nonce=nonce):
+                self.setUp()
+                self.journal.begin = lambda member: nonce
+                with self.assertRaises(capture.CaptureUncertain): self.make()('file_db', io.BytesIO())
+                self.assertEqual(self.execs, 0)
+                self.assertEqual(self.journal.events[-1], ('uncertain', 'file_db'))
 
 
 if __name__ == '__main__': unittest.main()

@@ -17,6 +17,9 @@ checks, plus a durable `journal` implementing `begin(member)`,
 `uncertain(member)` and `complete(member, receipt)`. No default authority or
 journal exists. `begin` must guard, durably record the unique pending attempt,
 fence the step and guard again; a previously pending attempt must not replay.
+It must return the matching 32-character lowercase hexadecimal ledger nonce;
+an absent or malformed nonce leaves the attempt uncertain without starting a
+dump. The nonce is included in the terminal receipt and verified by the journal.
 `uncertain` must retain the lock and persist uncertainty for reconciliation;
 `complete` must bind the exact immutable operation/member/identity values.
 
