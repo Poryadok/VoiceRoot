@@ -29,7 +29,7 @@
 | Bot Service          | `bot_db`          | —                         | —                                |
 | Game Integration Service | `game_integration_db` | — | Current app/env registry, credentials, installations, registry operations; target bindings, sessions, resource mappings, managed grants |
 | Federation Service   | `federation_db` (planned, **not provisioned**) | —                         | Nodes, placements, snapshots, lease nonces, and append-only Q11 denial audit |
-| Story Service        | `story_db`        | —                         | медиа через File, R2; durable archive-media deletion outbox |
+| Story Service        | `story_db`        | —                         | медиа через File, R2; durable exact-release outbox, pending media acquisition intents and bounded deletion replay receipts |
 | Analytics Service    | —                 | —                           | JetStream durable backlog + ClickHouse (`voice` DB) |
 
 Разделение Redis между Gateway и Auth: [ARCHITECTURE_REQUIREMENTS.md](ARCHITECTURE_REQUIREMENTS.md) («Redis: API Gateway и Auth Service»).
