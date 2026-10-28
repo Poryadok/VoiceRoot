@@ -22,6 +22,29 @@ SPEC.loader.exec_module(bootstrap)
 
 
 class ComposeBootstrapEnvironmentTests(unittest.TestCase):
+    def test_t40_roster_credential_requires_explicit_fixture_opt_in(self):
+        for include_roster in (False, True):
+            with self.subTest(include_roster=include_roster):
+                scopes = []
+
+                def api(method, url, body=None, token=None, idempotency_key=None):
+                    if url.endswith("/auth/validate"):
+                        return 200, {"user_id": "operator"}
+                    if url.endswith("/applications"):
+                        return 201, {"application_id": "app"}
+                    if url.endswith("/admissions/sandbox"):
+                        return 201, {"environment_id": "env"}
+                    scopes.append(body["scopes"])
+                    return 201, {"credential_id": "credential", "scopes": body["scopes"], "secret": "vgi1_fixture"}
+
+                with patch.object(bootstrap, "api", side_effect=api):
+                    result = bootstrap.sandbox_app(SimpleNamespace(gateway_base="http://fixture"),
+                                                   "fixture", "owner-token", "operator-token", "operator",
+                                                   include_roster=include_roster)
+                self.assertEqual(scopes, [["game.sessions.manage"], ["game.roster.write"]] if include_roster
+                                 else [["game.sessions.manage"]])
+                self.assertEqual(bool(result.get("roster_secret")), include_roster)
+
     def test_member_profile_ids_are_sorted_for_gis_validation(self):
         self.assertEqual(
             bootstrap.canonical_member_profile_ids(
@@ -109,6 +132,21 @@ class ComposeBootstrapEnvironmentTests(unittest.TestCase):
             self.assertEqual(values["T31_E2E_OPERATOR_ACCOUNT_ID"], "operator-id")
             self.assertEqual(values["T31_GAME_SERVER_CREDENTIAL"], "target-secret")
             self.assertEqual(values["T31_OTHER_GAME_SERVER_CREDENTIAL"], "other-secret")
+
+    def test_public_matrix_environment_keeps_distinct_scoped_credentials(self):
+        with tempfile.TemporaryDirectory(prefix="voice-t40-compose-env-") as directory:
+            root = Path(directory)
+            env_file = root / "compose.env"
+            app = {"application_id": "app", "environment_id": "env", "secret": "session-secret",
+                   "roster_secret": "roster-secret"}
+            other = {"application_id": "other-app", "environment_id": "other-env", "secret": "other-secret"}
+            for event_id in ("bootstrap-pending", "active-event"):
+                bootstrap.write_compose_env(env_file, root, root, "operator-id", app, other, event_id)
+                values = dict(line.split("=", 1) for line in env_file.read_text(encoding="ascii").splitlines())
+                self.assertEqual(values.get("T40_APPLICATION_ID"), "app")
+                self.assertEqual(values.get("T40_ENVIRONMENT_ID"), "env")
+                self.assertEqual(values.get("T40_GAME_SERVER_CREDENTIAL"), "session-secret")
+                self.assertEqual(values.get("T40_GAME_ROSTER_CREDENTIAL"), "roster-secret")
 
 
 if __name__ == "__main__":

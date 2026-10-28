@@ -16,7 +16,7 @@ import (
 
 func TestCreateResourceMappingReplaysExactReceiptWithNewStoreAndPool(t *testing.T) {
 	ctx := context.Background()
-	pool := startT12Postgres(t, ctx)
+	pool := startT32ResourceMappingPostgres(t, ctx)
 	store := &Store{Pool: pool}
 	app, env := createBindingTestEnvironment(t, ctx, store)
 	in := resourceMappingInput(app, env, "chat", "match:one", uuid.New())
@@ -48,7 +48,7 @@ func TestCreateResourceMappingReplaysExactReceiptWithNewStoreAndPool(t *testing.
 
 func TestCreateResourceMappingConcurrentExactRetriesReturnSameReceipt(t *testing.T) {
 	ctx := context.Background()
-	store := &Store{Pool: startT12Postgres(t, ctx)}
+	store := &Store{Pool: startT32ResourceMappingPostgres(t, ctx)}
 	app, env := createBindingTestEnvironment(t, ctx, store)
 	in := resourceMappingInput(app, env, "chat", "match:concurrent", uuid.New())
 	in.ChatID = in.ResourceID
@@ -104,7 +104,7 @@ func TestT30ResourceMappingMigrationDownAndUp(t *testing.T) {
 
 func TestCreateResourceMappingCannotRemapScopedExternalKey(t *testing.T) {
 	ctx := context.Background()
-	store := &Store{Pool: startT12Postgres(t, ctx)}
+	store := &Store{Pool: startT32ResourceMappingPostgres(t, ctx)}
 	app, env := createBindingTestEnvironment(t, ctx, store)
 	chat := resourceMappingInput(app, env, "chat", "match:one", uuid.New())
 	first, err := store.CreateResourceMapping(ctx, chat)
@@ -138,7 +138,7 @@ func TestCreateResourceMappingCannotRemapScopedExternalKey(t *testing.T) {
 
 func TestCreateResourceMappingSameExternalKeyIsIndependentAcrossScopes(t *testing.T) {
 	ctx := context.Background()
-	store := &Store{Pool: startT12Postgres(t, ctx)}
+	store := &Store{Pool: startT32ResourceMappingPostgres(t, ctx)}
 	appA, envA := createBindingTestEnvironment(t, ctx, store)
 	appB, envB := createBindingTestEnvironment(t, ctx, store)
 	firstInput := resourceMappingInput(appA, envA, "space", "party:shared-text", uuid.New())
@@ -167,7 +167,7 @@ func TestCreateResourceMappingSameExternalKeyIsIndependentAcrossScopes(t *testin
 
 func TestCreateResourceMappingRequiresExactChatReceiptForChatAndVoice(t *testing.T) {
 	ctx := context.Background()
-	store := &Store{Pool: startT12Postgres(t, ctx)}
+	store := &Store{Pool: startT32ResourceMappingPostgres(t, ctx)}
 	app, env := createBindingTestEnvironment(t, ctx, store)
 	chat := resourceMappingInput(app, env, "chat", "match:chat", uuid.New())
 	chat.ChatID = chat.ResourceID
@@ -207,7 +207,7 @@ func TestCreateResourceMappingRequiresExactChatReceiptForChatAndVoice(t *testing
 
 func TestAuthorizeAppBindingChatRequiresExactActiveTuple(t *testing.T) {
 	ctx := context.Background()
-	pool := startT12Postgres(t, ctx)
+	pool := startT32ResourceMappingPostgres(t, ctx)
 	store := &Store{Pool: pool}
 	app, env := createBindingTestEnvironment(t, ctx, store)
 	bindingID := uuid.New()
@@ -317,6 +317,19 @@ func TestAuthorizeAppBindingChatRequiresExactActiveTuple(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, allowed, "revoked GIS bindings fail closed")
 	require.Zero(t, revision)
+}
+
+func startT32ResourceMappingPostgres(t *testing.T, ctx context.Context) *pgxpool.Pool {
+	t.Helper()
+	pool := startT12Postgres(t, ctx)
+	migrations := filepath.Join("..", "..", "..", "migrations", "game_integration_db")
+	for _, name := range []string{"000012_t31_sessions.up.sql", "000014_t31_operation_scope_identity.up.sql", "000015_t32_session_authority.up.sql", "000016_t32_session_retention.up.sql"} {
+		body, err := os.ReadFile(filepath.Join(migrations, name))
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(body))
+		require.NoError(t, err)
+	}
+	return pool
 }
 
 func resourceMappingInput(appID, envID uuid.UUID, kind, externalKey string, resourceID uuid.UUID) ResourceMappingInput {

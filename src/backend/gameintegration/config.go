@@ -22,6 +22,9 @@ type config struct {
 	JWTIssuer                    string
 	JWTAudience                  string
 	OperatorAccounts             map[uuid.UUID]struct{}
+	CommunitySpaceTemplates      map[string]struct{}
+	CommunitySpaceAddr           string
+	CommunitySpaceToken          string
 	CredentialKey                []byte
 	AuthWorkloadKey              []byte
 	BotAuthorityURL              string
@@ -52,16 +55,21 @@ func loadConfig(getenv func(string) string) (config, error) {
 		return config{}, fmt.Errorf("environment reader not configured")
 	}
 	c := config{
-		ListenAddr:      strings.TrimSpace(getenv("LISTEN_ADDR")),
-		DatabaseURL:     strings.TrimSpace(getenv("DATABASE_URL")),
-		RedisAddr:       strings.TrimSpace(getenv("GAME_INTEGRATION_REDIS_ADDR")),
-		JWKSURL:         strings.TrimSpace(getenv("GAME_INTEGRATION_JWKS_URL")),
-		JWTIssuer:       strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_ISSUER")),
-		JWTAudience:     strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_AUDIENCE")),
-		BotAuthorityURL: strings.TrimSpace(getenv("BOT_INTERNAL_URL")),
+		ListenAddr:          strings.TrimSpace(getenv("LISTEN_ADDR")),
+		DatabaseURL:         strings.TrimSpace(getenv("DATABASE_URL")),
+		RedisAddr:           strings.TrimSpace(getenv("GAME_INTEGRATION_REDIS_ADDR")),
+		JWKSURL:             strings.TrimSpace(getenv("GAME_INTEGRATION_JWKS_URL")),
+		JWTIssuer:           strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_ISSUER")),
+		JWTAudience:         strings.TrimSpace(getenv("GAME_INTEGRATION_JWT_AUDIENCE")),
+		BotAuthorityURL:     strings.TrimSpace(getenv("BOT_INTERNAL_URL")),
+		CommunitySpaceAddr:  strings.TrimSpace(getenv("GAME_INTEGRATION_SPACE_GRPC_ADDR")),
+		CommunitySpaceToken: strings.TrimSpace(getenv("GAME_INTEGRATION_SPACE_S2S_TOKEN")),
 	}
 	if c.ListenAddr == "" {
 		c.ListenAddr = ":8080"
+	}
+	if (c.CommunitySpaceAddr == "") != (c.CommunitySpaceToken == "") {
+		return config{}, fmt.Errorf("GAME_INTEGRATION_SPACE_GRPC_ADDR and GAME_INTEGRATION_SPACE_S2S_TOKEN must be configured together")
 	}
 	for _, value := range []struct {
 		name string
@@ -99,6 +107,17 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 	}
 	c.OperatorAccounts = make(map[uuid.UUID]struct{})
+	c.CommunitySpaceTemplates = make(map[string]struct{})
+	for _, raw := range strings.Split(getenv("GAME_INTEGRATION_SPACE_TEMPLATE_IDS"), ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if raw != "guild-default" {
+			return config{}, fmt.Errorf("invalid GAME_INTEGRATION_SPACE_TEMPLATE_IDS")
+		}
+		c.CommunitySpaceTemplates[raw] = struct{}{}
+	}
 	for _, raw := range strings.Split(getenv("GAME_INTEGRATION_OPERATOR_ACCOUNT_IDS"), ",") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {

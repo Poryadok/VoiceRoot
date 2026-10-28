@@ -12,7 +12,7 @@ import (
 
 func TestResolveAppNotificationChatUsesLiveScopeRecipientAndConsent(t *testing.T) {
 	ctx := context.Background()
-	pool := startT12Postgres(t, ctx)
+	pool := startT32ResourceMappingPostgres(t, ctx)
 	store := &Store{Pool: pool}
 	migrationDir := filepath.Join("..", "..", "..", "migrations", "game_integration_db")
 	migration, err := os.ReadFile(filepath.Join(migrationDir, "000031_t58_app_notification_consent.up.sql"))

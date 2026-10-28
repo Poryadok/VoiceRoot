@@ -1,0 +1,1 @@
+DROP TABLE gis_game_command_execution_permits;
