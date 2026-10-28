@@ -157,6 +157,10 @@ func TestCommunityOwnerRecoveryFreezesReopensAndFencesStaleGenerations(t *testin
 	_, err = store.OpenCommunityBootstrap(ctx, OpenCommunityBootstrapInput{OperationID: uuid.New(), ApplicationID: principal.ApplicationID, EnvironmentID: principal.EnvironmentID, OwnerAccountID: ownerAccount, OwnerProfileID: ownerProfile, CorporationKey: "corp-recovery", TemplateID: "guild-default"})
 	require.ErrorIs(t, err, ErrInvalidApplication, "old Owner cannot reopen GIS writes during recovery")
 
+	// Parent suspension must not disable protected security cancellation or
+	// recovery of this nonempty community; ordinary bootstrap has its own gate.
+	_, err = store.Pool.Exec(ctx, `UPDATE applications SET status='suspended',revision=revision+1 WHERE id=$1`, principal.ApplicationID)
+	require.NoError(t, err)
 	operator, secondOperator := uuid.New(), uuid.New()
 	cancelled, err := store.CancelCommunityOwnerRecovery(ctx, principal.ApplicationID, firstID, operator)
 	require.NoError(t, err)

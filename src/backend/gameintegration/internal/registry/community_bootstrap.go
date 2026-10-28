@@ -42,6 +42,9 @@ type OwnerAuthority struct {
 }
 
 type OwnerRecoveryOperation struct {
+	// TargetSpaceID is resolved from current locked authority for dispatch;
+	// SpaceID remains the nullable durable operation result.
+	TargetSpaceID          uuid.UUID
 	OperationID            uuid.UUID
 	ApplicationID          uuid.UUID
 	EnvironmentID          uuid.UUID
@@ -140,6 +143,12 @@ func (s *Store) OpenCommunityOwnerRecovery(ctx context.Context, in OpenOwnerReco
 		}
 		if !bytesEqual(savedHash, requestHash[:]) || op.ReplacementAccountID != in.ReplacementAccountID || op.ReplacementProfileID != in.ReplacementProfileID || op.PreviousOwnerAccountID != authority.OwnerAccountID || op.PreviousOwnerProfileID != authority.OwnerProfileID {
 			return OwnerRecoveryOperation{}, ErrOwnerRecoveryConflict
+		}
+		if op.Status == "approved" {
+			if !authority.SpaceID.Valid || uuid.UUID(authority.SpaceID.Bytes) == uuid.Nil {
+				return OwnerRecoveryOperation{}, ErrOwnerRecoveryConflict
+			}
+			op.TargetSpaceID = uuid.UUID(authority.SpaceID.Bytes)
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return OwnerRecoveryOperation{}, fmt.Errorf("commit owner recovery replay: %w", err)
@@ -464,13 +473,14 @@ func (s *Store) OpenCommunityBootstrap(ctx context.Context, input OpenCommunityB
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var owner uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT owner_account_id FROM applications WHERE id=$1 FOR SHARE`, in.ApplicationID).Scan(&owner); err != nil {
+	var appStatus string
+	if err := tx.QueryRow(ctx, `SELECT owner_account_id,status FROM applications WHERE id=$1 FOR SHARE`, in.ApplicationID).Scan(&owner, &appStatus); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return CommunityBootstrapOperation{}, ErrInvalidApplication
 		}
 		return CommunityBootstrapOperation{}, fmt.Errorf("read community application: %w", err)
 	}
-	if owner != in.OwnerAccountID {
+	if owner != in.OwnerAccountID || (appStatus != "sandbox" && appStatus != "active") {
 		return CommunityBootstrapOperation{}, ErrInvalidApplication
 	}
 	var envApp uuid.UUID
@@ -545,6 +555,11 @@ func (s *Store) ApproveCommunityBootstrap(ctx context.Context, applicationID, op
 	if op.ApplicationID != applicationID || op.OwnerAccountID == operatorID {
 		return CommunityBootstrapOperation{}, ErrInvalidApplication
 	}
+	if op.Status != "succeeded" {
+		if err := requireCommunityBootstrapParent(ctx, tx, op.ApplicationID, op.EnvironmentID); err != nil {
+			return CommunityBootstrapOperation{}, err
+		}
+	}
 	authority, err := loadOwnerAuthorityForUpdate(ctx, tx, op.ApplicationID, op.EnvironmentID, op.CorporationKey)
 	if err != nil {
 		return CommunityBootstrapOperation{}, err
@@ -599,6 +614,11 @@ func (s *Store) CompleteCommunityBootstrap(ctx context.Context, operationID, own
 	}
 	if op.OwnerAccountID != ownerAccountID {
 		return CommunityBootstrapOperation{}, ErrInvalidApplication
+	}
+	if op.Status != "succeeded" {
+		if err := requireCommunityBootstrapParent(ctx, tx, op.ApplicationID, op.EnvironmentID); err != nil {
+			return CommunityBootstrapOperation{}, err
+		}
 	}
 	authority, err := loadOwnerAuthorityForUpdate(ctx, tx, op.ApplicationID, op.EnvironmentID, op.CorporationKey)
 	if err != nil {
@@ -686,4 +706,32 @@ func loadCommunityBootstrap(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Commu
 
 func loadCommunityBootstrapForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (CommunityBootstrapOperation, error) {
 	return scanCommunityBootstrap(tx.QueryRow(ctx, communityBootstrapSelect+` WHERE operation_id=$1 FOR UPDATE`, id))
+}
+
+// requireCommunityBootstrapParent admits normal provisioning only while its
+// parent remains active. Security recovery/cancellation deliberately use their
+// own frozen-authority rules rather than this normal-provisioning gate.
+func requireCommunityBootstrapParent(ctx context.Context, tx pgx.Tx, applicationID, environmentID uuid.UUID) error {
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM applications WHERE id=$1 FOR SHARE`, applicationID).Scan(&status); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidApplication
+		}
+		return fmt.Errorf("read community bootstrap parent: %w", err)
+	}
+	if status != "sandbox" && status != "active" {
+		return ErrInvalidApplication
+	}
+	var envApp uuid.UUID
+	var kind, envStatus string
+	if err := tx.QueryRow(ctx, `SELECT application_id,kind,status FROM environments WHERE id=$1 FOR SHARE`, environmentID).Scan(&envApp, &kind, &envStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidApplication
+		}
+		return fmt.Errorf("read community bootstrap environment: %w", err)
+	}
+	if envApp != applicationID || kind != "sandbox" || envStatus != "active" {
+		return ErrInvalidApplication
+	}
+	return nil
 }
