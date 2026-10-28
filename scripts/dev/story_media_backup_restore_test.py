@@ -27,6 +27,11 @@ class MigrationInputsTest(unittest.TestCase):
                         'migration_catalog_sha256': digest(plans), 'postgres_image': pg, 'migrate_image': tool,
                         'migrate_binary_sha256': 'e' * 64, 'postgres_major': 16}}
         restore._source_binding(binding, metadata, pg, tool)
+        binding['operation_id'] = 'media-c2-' + 'a'*32
+        restore._source_binding(binding, metadata, pg, tool)
+        binding['operation_id'] = 'media-c3-' + 'a'*32
+        with self.assertRaises(restore.RestoreError): restore._source_binding(binding, metadata, pg, tool)
+        binding['operation_id'] = 'media-c2-' + 'a'*32
         metadata['catalog']['file_db']['database_owner'] = 'foreign'
         with self.assertRaises(restore.RestoreError): restore._source_binding(binding, metadata, pg, tool)
 

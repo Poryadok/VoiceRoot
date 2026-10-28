@@ -224,7 +224,7 @@ def readback_extract(token, binding, artifact_id, bundle, key, expected_binding,
                 'created_at', 'bundle_bytes', 'bundle_sha256'}
         if (not isinstance(token, str) or not token or '\r' in token or '\n' in token
                 or not isinstance(binding, dict) or set(binding) != keys
-                or not re.fullmatch(r'media-c1-[a-f0-9]{32}', binding['operation_id'])
+                or not re.fullmatch(r'media-c[12]-[a-f0-9]{32}', binding['operation_id'])
                 or not re.fullmatch(r'capture-[a-f0-9]{32}', binding['snapshot_id'])
                 or not re.fullmatch(r'[a-f0-9]{32}', binding['challenge'])
                 or type(binding['run_id']) is not int or binding['run_id'] <= 0
@@ -283,9 +283,27 @@ def readback_extract(token, binding, artifact_id, bundle, key, expected_binding,
             offset = tail.rfind(b'PK\x05\x06')
             if offset < 0 or len(tail) != offset + 22:
                 _fail()
-            _, disk, directory_disk, disk_count, total_count, directory_bytes, _, comment = struct.unpack('<4s4H2LH', tail[offset:])
+            _, disk, directory_disk, disk_count, total_count, directory_bytes, directory_offset, comment = struct.unpack('<4s4H2LH', tail[offset:])
             if disk or directory_disk or disk_count != 1 or total_count != 1 or directory_bytes > 8192 or comment:
                 _fail()
+            end_offset = count - len(tail) + offset
+            if end_offset >= 20:
+                remote.seek(end_offset - 20)
+                locator = remote.read(20)
+                if locator[:4] == b'PK\x06\x07':
+                    _, locator_disk, record_offset, disks = struct.unpack('<4sLQL', locator)
+                    if locator_disk != 0 or disks != 1 or record_offset + 56 != end_offset - 20:
+                        _fail()
+                    remote.seek(record_offset)
+                    record = remote.read(56)
+                    if len(record) != 56:
+                        _fail()
+                    signature, size, _, _, z_disk, z_directory_disk, z_disk_count, z_count, z_bytes, z_offset = struct.unpack('<4sQHHLLQQQQ', record)
+                    if (signature != b'PK\x06\x06' or size != 44 or z_disk or z_directory_disk or
+                            z_disk_count != 1 or z_count != 1 or z_bytes > 8192 or z_offset + z_bytes > record_offset):
+                        _fail()
+                elif directory_offset + directory_bytes > end_offset:
+                    _fail()
             remote.seek(0)
             with zipfile.ZipFile(remote) as archive:
                 items = archive.infolist()

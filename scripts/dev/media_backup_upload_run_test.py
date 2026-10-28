@@ -1,5 +1,6 @@
 """One-shot GitHub run binding, with no GitHub or live cluster writes."""
 import copy
+import json
 import unittest
 from unittest import mock
 
@@ -30,6 +31,23 @@ class RunTest(unittest.TestCase):
         self.assertEqual(actual['status'], 'upload-running')
         self.assertEqual(actual['run_id'], '123')
         with self.assertRaises(runner.RecoveryRequired): self.claim()
+
+    def test_cycle_two_binds_and_third_cycle_is_refused(self):
+        def set_cycle(cycle):
+            operation = 'media-c' + str(cycle) + '-' + 'a'*32
+            base = self.test.base
+            base.fence.context['operation_id'] = operation
+            base.ledger.row['operation_id'] = operation
+            base.ledger.row['backup_upload']['operation_id'] = operation
+            base.ledger.row['backup_invocation']['operation_id'] = operation
+            self.planned['operation_id'] = operation
+            base.lock['data']['resource_operation'] = operation
+            base.lock['data']['resource_context'] = json.dumps(base.fence.context, sort_keys=True, separators=(',', ':'))
+            self.test.phases.client.lock = base.lock
+        set_cycle(3)
+        with self.assertRaises(runner.RecoveryRequired): self.claim()
+        set_cycle(2)
+        self.assertEqual(self.claim()['operation_id'], 'media-c2-' + 'a'*32)
 
     def test_wrong_repo_ref_source_attempt_or_challenge_never_binds(self):
         for field, value in (('GITHUB_REPOSITORY', 'other/repo'), ('GITHUB_REF', 'refs/heads/other'),

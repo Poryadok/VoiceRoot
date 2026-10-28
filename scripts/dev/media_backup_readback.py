@@ -129,7 +129,7 @@ def run(phases, token, key, bundle, destination, drain):
                 not phases._owned_invocation(current) or current.get('backup_upload') != planned or
                 current.get('backup_readback') != intent):
             raise ReadbackError('readback fence changed')
-        done = {'status': 'done', 'receipt': copy.deepcopy(receipt)}
+        done = {'status': 'done', 'intent': copy.deepcopy(intent), 'receipt': copy.deepcopy(receipt)}
         phases.journal.state['steps']['backup-readback'] = done
         phases.journal.save()
         current['backup_readback'] = copy.deepcopy(done)

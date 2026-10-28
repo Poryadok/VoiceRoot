@@ -79,7 +79,7 @@ def unique_object(pairs):
 
 def stage(environment, operation, challenge, repo_root):
     if (os.geteuid() != OPERATOR_UID or not isinstance(operation, str) or
-            not re.fullmatch(r'media-c1-[0-9a-f]{32}', operation) or
+            not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', operation) or
             not isinstance(challenge, str) or not re.fullmatch(r'[0-9a-f]{32}', challenge)):
         raise Refused('fixed Linux operator identity required')
     source = environment.get('GITHUB_SHA', '')
@@ -192,7 +192,7 @@ def stage(environment, operation, challenge, repo_root):
 
 def mark_failed(environment, operation, challenge, repo_root):
     if (os.geteuid() != OPERATOR_UID or not isinstance(operation, str) or
-            not re.fullmatch(r'media-c1-[0-9a-f]{32}', operation)):
+            not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', operation)):
         raise Refused('fixed Linux operator identity required')
     source = environment.get('GITHUB_SHA', '')
     publish_candidate.source_snapshot(Path(repo_root), source)

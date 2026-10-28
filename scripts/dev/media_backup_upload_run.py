@@ -45,7 +45,7 @@ def claim(fence, client, lock, namespace_uid, environment, challenge):
         if (not fence.owned(row) or row.get('status') != 'active' or not isinstance(planned, dict) or
                 set(planned) != required_plan or planned['status'] != 'dispatch-pending' or
                 planned['operation_id'] != fence.context['operation_id'] or
-                not isinstance(planned['operation_id'], str) or not re.fullmatch(r'media-c1-[0-9a-f]{32}', planned['operation_id']) or
+                not isinstance(planned['operation_id'], str) or not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', planned['operation_id']) or
                 not isinstance(planned['invocation_nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', planned['invocation_nonce']) or
                 planned['source_sha'] != fence.context['commit'] or planned['workflow_sha'] != environment['GITHUB_SHA'] or
                 planned['challenge'] != challenge or not isinstance(invocation, dict) or

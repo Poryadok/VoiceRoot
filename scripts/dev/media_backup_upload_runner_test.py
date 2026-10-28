@@ -114,4 +114,24 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(self.base.ledger.row['status'], 'uncertain')
 
 
+class SecondCycleRunnerTest(RunnerTest):
+    def setUp(self):
+        original = fixture.PhaseTest.setUp
+        def second_cycle(base):
+            original(base)
+            operation = 'media-c2-' + 'a'*32
+            base.context['operation_id'] = operation
+            base.fence.context['operation_id'] = operation
+            base.ledger.row['operation_id'] = operation
+            base.lock['data']['resource_operation'] = operation
+            base.lock['data']['resource_context'] = json.dumps(base.context, sort_keys=True, separators=(',', ':'))
+            base.intent['resource_context'] = base.context
+        with mock.patch.object(fixture.PhaseTest, 'setUp', second_cycle):
+            super().setUp()
+
+    def test_third_cycle_is_refused_before_stage(self):
+        with self.assertRaises(runner.Refused):
+            runner.stage(self.env, 'media-c3-'+'a'*32, self.planned['challenge'], Path.cwd())
+
+
 if __name__ == '__main__': unittest.main()
