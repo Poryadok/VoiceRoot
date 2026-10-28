@@ -87,7 +87,16 @@ class RoleSuccessorTest(unittest.TestCase):
             'src/backend/chat/pb/voice/chat/v1/chat.pb.go',
             'src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go',
             'src/backend/file/pb/voice/file/v1/file.pb.go',
+            'src/backend/file/pb/voice/file/v1/file_grpc.pb.go',
             'src/backend/pkg/integrationtest/migrations.go'})
+        story_file_grpc = 'src/backend/file/pb/voice/file/v1/file_grpc.pb.go'
+        reviewed_story_source = 'f38e45008308e5309e0a371a411afb4c7bace6ae'
+        reviewed_entry = {'mode':'100644','type':'blob',
+                          'oid':'6d88bec7977afd2364341c7a6d3073b2f5f35abe'}
+        self.assertEqual(legacy.entry(ROOT,reviewed_story_source,story_file_grpc),reviewed_entry)
+        self.assertEqual(legacy.entry(ROOT,self.actual_head,story_file_grpc),reviewed_entry)
+        self.assertEqual(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',
+                                        reviewed_story_source,self.actual_head]).returncode,0)
         self.assertEqual(set(self.removed_package_paths),{
             'src/backend/chat/pb/voice/chat/v1/catalog_assets.pb.go',
             'src/backend/chat/pb/voice/chat/v1/catalog_assets_grpc.pb.go',
