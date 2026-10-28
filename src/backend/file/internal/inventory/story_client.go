@@ -50,12 +50,19 @@ func (c *StorySource) signed(ctx context.Context, rpc string, request proto.Mess
 	if c == nil || c.client == nil || c.issuer == nil {
 		return nil, nil, inv.ErrUnavailable
 	}
+	return signedInventoryRequest(ctx, c.issuer, "story", rpc, request)
+}
+
+func signedInventoryRequest(ctx context.Context, issuer *principal.Issuer, audience, rpc string, request proto.Message) (context.Context, context.CancelFunc, error) {
+	if issuer == nil {
+		return nil, nil, inv.ErrUnavailable
+	}
 	hash, err := principal.RequestHash(request)
 	if err != nil {
 		return nil, nil, err
 	}
 	id := uuid.NewString()
-	token, err := c.issuer.IssueService(principal.ServiceInput{Audience: "story", RPC: rpc, RequestID: id, RequestHash: hash})
+	token, err := issuer.IssueService(principal.ServiceInput{Audience: audience, RPC: rpc, RequestID: id, RequestHash: hash})
 	if err != nil {
 		return nil, nil, err
 	}

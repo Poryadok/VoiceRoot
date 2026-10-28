@@ -57,7 +57,16 @@ func UUID(s string) bool {
 }
 
 func ValidateIdentity(id *commonv1.ReferenceInventoryIdentity) error {
-	if Strict(id) != nil || id.ProtocolVersion != 1 || id.WriterProtocolVersion != 1 || id.SourceService != "story" || id.SourceComponent != "story.media.v1" {
+	if ValidateOwnerIdentity(id) != nil || id.SourceService != "story" || id.SourceComponent != "story.media.v1" {
+		return ErrInvalid
+	}
+	return nil
+}
+
+// ValidateOwnerIdentity validates the closed multi-owner registry. The older
+// ValidateIdentity remains Story-only for existing Story exporter callers.
+func ValidateOwnerIdentity(id *commonv1.ReferenceInventoryIdentity) error {
+	if Strict(id) != nil || id.ProtocolVersion != 1 || id.WriterProtocolVersion != 1 || ComponentOwner(id.SourceService, id.SourceComponent) == 0 {
 		return ErrInvalid
 	}
 	for _, s := range []string{id.InstallationId, id.RestoreCohortId, id.MigrationId, id.FileIncarnationId, id.OwnerIncarnationId, id.SnapshotId} {
@@ -68,13 +77,49 @@ func ValidateIdentity(id *commonv1.ReferenceInventoryIdentity) error {
 	return nil
 }
 
+// ComponentOwner is the closed v1 coverage policy, not exporter availability or
+// an activation declaration. Unresolved catalog/pending-write key shapes deny.
+func ComponentOwner(service, component string) commonv1.ReferenceInventoryOwnerType {
+	switch service + "/" + component {
+	case "story/story.media.v1":
+		return 2
+	case "user/user.profile-avatar.v1":
+		return 3
+	case "chat/chat.chat-avatar.v1":
+		return 4
+	case "space/space.space-avatar.v1":
+		return 5
+	case "messaging/messaging.message.v1":
+		return 1
+	case "messaging/messaging.sticker-usage.v1":
+		return 6
+	case "messaging/messaging.gif-usage.v1":
+		return 7
+	case "file/file.upload-session.v1":
+		return 8
+	default:
+		return 0
+	}
+}
+
 func ValidateEntry(e *commonv1.ReferenceInventoryEntry, allowRetired bool) error {
+	return validateEntry(e, allowRetired, 2)
+}
+
+func ValidateEntryForIdentity(e *commonv1.ReferenceInventoryEntry, id *commonv1.ReferenceInventoryIdentity, allowRetired bool) error {
+	if ValidateOwnerIdentity(id) != nil {
+		return ErrInvalid
+	}
+	return validateEntry(e, allowRetired, ComponentOwner(id.SourceService, id.SourceComponent))
+}
+
+func validateEntry(e *commonv1.ReferenceInventoryEntry, allowRetired bool, owner commonv1.ReferenceInventoryOwnerType) error {
 	if Strict(e) != nil {
 		return ErrInvalid
 	}
 	if e.Key != nil {
 		k := e.Key
-		if !UUID(k.FileId) || !UUID(k.OwnerId) || k.OwnerType != commonv1.ReferenceInventoryOwnerType_REFERENCE_INVENTORY_OWNER_TYPE_STORY || k.SubresourceId != nil || k.ScopeSpaceId != nil {
+		if !UUID(k.FileId) || !UUID(k.OwnerId) || k.OwnerType != owner || (owner == 2 && (k.SubresourceId != nil || k.ScopeSpaceId != nil)) || (k.SubresourceId != nil && !UUID(*k.SubresourceId)) || (k.ScopeSpaceId != nil && !UUID(*k.ScopeSpaceId)) {
 			return ErrInvalid
 		}
 	}
@@ -90,11 +135,14 @@ func ValidateEntry(e *commonv1.ReferenceInventoryEntry, allowRetired bool) error
 	if e.AuthorProfileId != nil && !UUID(*e.AuthorProfileId) {
 		return ErrInvalid
 	}
+	if e.OwnerChatId != nil && (owner != 1 || !UUID(*e.OwnerChatId)) {
+		return ErrInvalid
+	}
 	if e.Retired {
 		if !allowRetired || len(e.Reasons) != 0 {
 			return ErrInvalid
 		}
-	} else if e.IssueKind == 0 && (e.MediaType != "photo" && e.MediaType != "video") {
+	} else if owner == 2 && e.IssueKind == 0 && (e.MediaType != "photo" && e.MediaType != "video") {
 		for _, reason := range e.Reasons {
 			if reason != commonv1.ReferenceInventoryProtectionReason_REFERENCE_INVENTORY_PROTECTION_REASON_RELEASE_PENDING {
 				return ErrInvalid
@@ -129,21 +177,52 @@ func Compare(a, b *commonv1.ReferenceInventoryEntry) int {
 		av, bv := uuid.MustParse(a.GetIssueId()), uuid.MustParse(b.GetIssueId())
 		return bytes.Compare(av[:], bv[:])
 	}
-	for _, pair := range [][2]string{{a.Key.FileId, b.Key.FileId}, {a.Key.OwnerId, b.Key.OwnerId}} {
+	av, bv := uuid.MustParse(a.Key.FileId), uuid.MustParse(b.Key.FileId)
+	if c := bytes.Compare(av[:], bv[:]); c != 0 {
+		return c
+	}
+	if a.Key.OwnerType < b.Key.OwnerType {
+		return -1
+	}
+	if a.Key.OwnerType > b.Key.OwnerType {
+		return 1
+	}
+	for _, pair := range [][2]string{{a.Key.OwnerId, b.Key.OwnerId}} {
 		av, bv := uuid.MustParse(pair[0]), uuid.MustParse(pair[1])
 		if c := bytes.Compare(av[:], bv[:]); c != 0 {
 			return c
+		}
+	}
+	for _, pair := range [][2]*string{{a.Key.SubresourceId, b.Key.SubresourceId}, {a.Key.ScopeSpaceId, b.Key.ScopeSpaceId}} {
+		if pair[0] == nil && pair[1] != nil {
+			return -1
+		}
+		if pair[0] != nil && pair[1] == nil {
+			return 1
+		}
+		if pair[0] != nil {
+			av, bv := uuid.MustParse(*pair[0]), uuid.MustParse(*pair[1])
+			if c := bytes.Compare(av[:], bv[:]); c != 0 {
+				return c
+			}
 		}
 	}
 	return 0
 }
 
 func ValidateStoryPage(p *commonv1.ReferenceInventoryPage) error {
-	if Strict(p) != nil || ValidateIdentity(p.Identity) != nil || len(p.Entries) == 0 || len(p.Entries) > PageSize {
+	if p.GetIdentity().GetSourceService() != "story" || p.GetIdentity().GetSourceComponent() != "story.media.v1" {
+		return ErrInvalid
+	}
+	return ValidatePage(p)
+}
+
+func ValidatePage(p *commonv1.ReferenceInventoryPage) error {
+	if Strict(p) != nil || ValidateOwnerIdentity(p.Identity) != nil || len(p.Entries) == 0 || len(p.Entries) > PageSize {
 		return ErrInvalid
 	}
 	for i, entry := range p.Entries {
-		if ValidateEntry(entry, false) != nil || entry.OwnerRevision > p.BoundaryRevision || (i > 0 && Compare(p.Entries[i-1], entry) >= 0) {
+		if ValidateEntryForIdentity(entry, p.Identity, false) != nil || entry.OwnerRevision > p.BoundaryRevision || (i > 0 && Compare(p.Entries[i-1], entry) >= 0) {
 			return ErrInvalid
 		}
 	}
@@ -167,13 +246,13 @@ func Encode(m proto.Message) ([]byte, []byte, error) {
 }
 
 func Describe(pages []*commonv1.ReferenceInventoryPage, id *commonv1.ReferenceInventoryIdentity, boundary uint64) (*commonv1.ReferenceInventoryDescriptor, error) {
-	if ValidateIdentity(id) != nil {
+	if ValidateOwnerIdentity(id) != nil {
 		return nil, ErrInvalid
 	}
 	m := &commonv1.InventoryManifest{Identity: proto.Clone(id).(*commonv1.ReferenceInventoryIdentity), BoundaryRevision: boundary}
 	var last *commonv1.ReferenceInventoryEntry
 	for i, p := range pages {
-		if ValidateStoryPage(p) != nil || !proto.Equal(p.Identity, id) || p.BoundaryRevision != boundary || p.PageIndex != uint32(i) || (i < len(pages)-1 && len(p.Entries) != PageSize) || (last != nil && Compare(last, p.Entries[0]) >= 0) {
+		if ValidatePage(p) != nil || !proto.Equal(p.Identity, id) || p.BoundaryRevision != boundary || p.PageIndex != uint32(i) || (i < len(pages)-1 && len(p.Entries) != PageSize) || (last != nil && Compare(last, p.Entries[0]) >= 0) {
 			return nil, ErrInvalid
 		}
 		_, hash, err := Encode(p)
@@ -197,7 +276,7 @@ func Describe(pages []*commonv1.ReferenceInventoryPage, id *commonv1.ReferenceIn
 }
 
 func ValidateDescriptor(d *commonv1.ReferenceInventoryDescriptor) error {
-	if Strict(d) != nil || d.Manifest == nil || ValidateIdentity(d.Manifest.Identity) != nil || d.Manifest.UnresolvedCount > d.Manifest.TotalCount {
+	if Strict(d) != nil || d.Manifest == nil || ValidateOwnerIdentity(d.Manifest.Identity) != nil || d.Manifest.UnresolvedCount > d.Manifest.TotalCount {
 		return ErrInvalid
 	}
 	var count uint64
@@ -215,7 +294,7 @@ func ValidateDescriptor(d *commonv1.ReferenceInventoryDescriptor) error {
 }
 
 func ValidateCommittedPage(d *commonv1.ReferenceInventoryDescriptor, p *commonv1.ReferenceInventoryPage) error {
-	if ValidateDescriptor(d) != nil || ValidateStoryPage(p) != nil || !proto.Equal(p.Identity, d.Manifest.Identity) || p.BoundaryRevision != d.Manifest.BoundaryRevision || int(p.PageIndex) >= len(d.Manifest.Commitments) {
+	if ValidateDescriptor(d) != nil || ValidatePage(p) != nil || !proto.Equal(p.Identity, d.Manifest.Identity) || p.BoundaryRevision != d.Manifest.BoundaryRevision || int(p.PageIndex) >= len(d.Manifest.Commitments) {
 		return ErrInvalid
 	}
 	c := d.Manifest.Commitments[p.PageIndex]
@@ -227,7 +306,7 @@ func ValidateCommittedPage(d *commonv1.ReferenceInventoryDescriptor, p *commonv1
 }
 
 func ValidateChanges(r *commonv1.ReadReferenceInventoryChangesResponse, id *commonv1.ReferenceInventoryIdentity, after uint64) error {
-	if Strict(r) != nil || ValidateIdentity(r.Identity) != nil || !proto.Equal(r.Identity, id) || after < r.RetainedFloor || after > r.HighWatermark || len(r.Revisions) > PageSize || (len(r.Revisions) == 0 && after != r.HighWatermark) {
+	if Strict(r) != nil || ValidateOwnerIdentity(r.Identity) != nil || !proto.Equal(r.Identity, id) || after < r.RetainedFloor || after > r.HighWatermark || len(r.Revisions) > PageSize || (len(r.Revisions) == 0 && after != r.HighWatermark) {
 		return ErrInvalid
 	}
 	for i, revision := range r.Revisions {
@@ -235,7 +314,7 @@ func ValidateChanges(r *commonv1.ReadReferenceInventoryChangesResponse, id *comm
 			return fmt.Errorf("%w: incomplete journal revision", ErrInvalid)
 		}
 		for j, entry := range revision.Entries {
-			if ValidateEntry(entry, true) != nil || entry.OwnerRevision != revision.Revision || (j > 0 && Compare(revision.Entries[j-1], entry) >= 0) {
+			if ValidateEntryForIdentity(entry, id, true) != nil || entry.OwnerRevision != revision.Revision || (j > 0 && Compare(revision.Entries[j-1], entry) >= 0) {
 				return ErrInvalid
 			}
 		}
