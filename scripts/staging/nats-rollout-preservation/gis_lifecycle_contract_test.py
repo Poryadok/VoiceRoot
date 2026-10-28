@@ -1,5 +1,6 @@
 """Cross-stage GIS contract using actual capture, compiler and normalizer."""
 import copy
+import contextlib
 import datetime as dt
 import hashlib
 import inspect
@@ -714,6 +715,93 @@ class GISLifecycleContract(unittest.TestCase):
                     self.assertEqual('resource_fence' in checkpoint, 'tt-bind' in order)
                     scale.assert_not_called()
                     kube.cas.assert_not_called()
+
+    def test_prepare_and_authorize_share_qualified_binding_and_tt_target(self):
+        # Actual capture, normalization, TT Session and authorization. Fence,
+        # prepared and storage guards plus archive/migration I/O are simulated.
+        _, first, receipt = fixtures.first_install()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'installed').mkdir()
+            original = root / ('rollout-' + first['operation'])
+            original.mkdir()
+            (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
+            (root / 'installed' / 'active-release.json').write_text(json.dumps({
+                'gis_first_install_transition': {'operation': first['operation'],
+                    'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+            def read(path, **_kwargs):
+                return json.loads(Path(path).read_text(encoding='utf-8'))
+            kube = copy.deepcopy(self.kube)
+            get = kube.get
+            def capacity(kind, name):
+                row = get(kind, name)
+                if kind == 'pvc': row['status'] = {'capacity': {'storage': '1Gi'}}
+                return row
+            kube.get = capacity
+            captured = runtime_stage.RolloutStage.capture(kube, '123456abcdef', lambda _: None,
+                ['voice-gameintegration'], gis_binding=self.binding)
+            pack = self.compiled_target(captured)
+            nonnats = {'actions': [], 'checks': []}
+            pack['target']['nonnats_sha256'] = gis.digest(nonnats)
+            base = root / 'rollout-123456abcdef'
+            base.mkdir()
+            (base / 'apply-manifests.json').write_text(json.dumps(pack['manifests']), encoding='utf-8')
+            (root / 'kernel').write_bytes(b'fixture')
+            ctx = resource_claim_test.context()
+            ctx.update(commit=pack['target']['tag'], images=copy.deepcopy(pack['target']['images']))
+            card = resource_claim_test.card(ctx)
+            card['observed']['images'] = copy.deepcopy(captured.old_images)
+            helper = {'nats-rollout-preservation/resource_claim.py': 'e' * 64}
+            session = resource_claim.Session(ctx, '123456abcdef', gis.digest(helper),
+                lambda: copy.deepcopy(card), resource_claim_test.MemoryJournal())
+            session.admit(start=True)
+            cut = {'manifest': {'archive_sha256': '6' * 64}, 'census': {'fixture': 'cut'}}
+            cut['census_sha256'] = gis.digest(cut['census'])
+            def fence(stage):
+                kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
+                stage.marker['data'].setdefault('previousGeneration', 'previous')
+            with contextlib.ExitStack() as stack:
+                for seam in (
+                    patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read),
+                    patch.object(transaction, 'private_json', side_effect=read),
+                    patch.object(transaction.migrations, 'preflight', return_value={}),
+                    patch.object(transaction.migrations, 'execute', return_value=[]),
+                    patch.object(transaction.space_safeguards, 'preflight', return_value=None),
+                    patch.object(transaction.space_safeguards, 'combined_capacity', return_value={}),
+                    patch.object(transaction.space_safeguards, 'before_migrate'),
+                    patch.object(transaction.space_safeguards, 'after_migrate', return_value={}),
+                    patch.object(transaction.nonnats_runtime, 'preflight', return_value={}),
+                    patch.object(transaction.nonnats_runtime, 'verify'),
+                    patch.object(transaction.nonnats_plan, 'revalidate'), patch.object(source_plan, 'verify_db_init'),
+                    patch.object(transaction, 'native_preflight', return_value={}),
+                    patch.object(transaction, 'capture_inputs', return_value={}),
+                    patch.object(transaction, 'require_original_live_census', return_value={}),
+                    patch.object(transaction, 'capture_cut', return_value=copy.deepcopy(cut)),
+                    patch.object(transaction, 'DockerRuntime'), patch.object(transaction, 'verify_archive', return_value=True),
+                    patch.object(transaction, 'revalidate_inputs'),
+                    patch.object(runtime_stage.RolloutStage, 'fence', autospec=True, side_effect=fence),
+                    patch.object(runtime_stage.RolloutStage, 'verify_final_storage'),
+                    patch.object(runtime_stage.RolloutStage, 'prepared')):
+                    stack.enter_context(seam)
+                state = transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                    helper, [], nonnats, resource_session=session, gis_binding=self.binding,
+                    gis_source_authority=self.source_fixture())
+                self.assertEqual((state['phase'], state['status']), ('AWAITING_OFF_NODE', 'WAITING'))
+                bound = copy.deepcopy(state['gis_binding'])
+                self.assertEqual(state['target']['gis_existing_normalized_sha256'], gis.digest(state['gis_normalized_pair']))
+                self.assertEqual(state['resource_fence'], session.binding())
+                self.assertEqual(session.binding()['target_sha256'], gis.digest(state['target']))
+                existing.verify_phase(bound, kube, 'paused-old')
+                authorization = transaction.authorize(kube, base, state, cut['manifest']['archive_sha256'],
+                    state['cut']['manifest_sha256'], {})
+                self.assertEqual((state['phase'], state['status']), ('PAUSED_APPLY', 'WAITING'))
+                self.assertEqual(state['gis_binding'], bound)
+                self.assertEqual(authorization['target'], state['target'])
+                self.assertEqual(authorization['resource_fence'], session.binding())
+                session.require_binding(authorization['resource_fence'])
+                self.assertEqual(resource_claim.historical_binding(state), session.binding())
+                self.assertEqual(json.loads((base / 'apply-authorization.json').read_text(encoding='utf-8')), authorization)
+                self.assertEqual(json.loads((base / 'checkpoint.json').read_text(encoding='utf-8')), state)
 
     def test_full_update_records_source_selected_service_account(self):
         for mode in ('full', 'app-only'):
