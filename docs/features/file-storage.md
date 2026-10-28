@@ -53,6 +53,7 @@ Premium-файлов. E2E всегда остаётся `created_at + P90D`. В�
 | Видео                       | ffmpeg, 720p, умеренный битрейт                | ≤15 MB         |
 | Video note (круглое видео)  | ffmpeg, квадрат/crop, короткий клип (≤60 сек)  | ≤5 MB          |
 | Music (audio attach)        | metadata extract; хранится как audio             | ≤10 MB         |
+| Audio (voice-note upload)   | metadata extract; хранится как audio             | ≤10 MB         |
 | Article (rich payload)      | HTML/instant-view snapshot + optional thumb      | ≤2 MB payload  |
 | Location (static map tile)  | client-generated or server map preview image   | ≤500 KB        |
 | Документы, архивы, прочее   | Хранятся как есть (без дополнительного сжатия) | ≤10 MB         |

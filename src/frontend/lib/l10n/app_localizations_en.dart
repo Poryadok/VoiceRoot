@@ -4016,4 +4016,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatLinkPreviewRetry => 'Retry';
+
+  @override
+  String get composerVoiceHold => 'Hold to record · slide up to lock';
+
+  @override
+  String get composerVoicePermission =>
+      'Microphone access is required. Allow access and try again.';
+
+  @override
+  String get composerVoiceProcessing => 'Preparing recording…';
+
+  @override
+  String get composerVoiceTooShort => 'Record at least 1 second.';
+
+  @override
+  String get composerVoiceError => 'Recording failed. Try again.';
+
+  @override
+  String get composerVoiceStop => 'Finish recording';
+
+  @override
+  String get composerVoiceCancel => 'Cancel recording';
+
+  @override
+  String get composerVoiceLocked => 'Recording locked';
 }

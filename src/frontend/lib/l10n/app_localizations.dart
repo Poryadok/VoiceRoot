@@ -7297,6 +7297,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry'**
   String get chatLinkPreviewRetry;
+
+  /// No description provided for @composerVoiceHold.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to record · slide up to lock'**
+  String get composerVoiceHold;
+
+  /// No description provided for @composerVoicePermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access is required. Allow access and try again.'**
+  String get composerVoicePermission;
+
+  /// No description provided for @composerVoiceProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing recording…'**
+  String get composerVoiceProcessing;
+
+  /// No description provided for @composerVoiceTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Record at least 1 second.'**
+  String get composerVoiceTooShort;
+
+  /// No description provided for @composerVoiceError.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording failed. Try again.'**
+  String get composerVoiceError;
+
+  /// No description provided for @composerVoiceStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish recording'**
+  String get composerVoiceStop;
+
+  /// No description provided for @composerVoiceCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel recording'**
+  String get composerVoiceCancel;
+
+  /// No description provided for @composerVoiceLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording locked'**
+  String get composerVoiceLocked;
 }
 
 class _AppLocalizationsDelegate

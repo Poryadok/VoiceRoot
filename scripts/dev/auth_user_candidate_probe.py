@@ -40,8 +40,9 @@ def probe_resource_card():
     card=resource_card()
     with urllib.request.urlopen('http://192.168.0.109:30990/api/projects/voice/tasks/A1-DEV-AUTH-USER-CREDENTIAL-ADOPTION',timeout=10) as response:
         task=json.load(response)
+    artifact_review=task.get('status')=='review' and card.get('phase')=='prepare'
     require(task.get('owner')=='Dimas-16' and task.get('assignee')=='Dimas-16' and
-            task.get('status') in ('dev_ready_for_deploy','dev_deploying') and not task.get('review_required'),
+            (artifact_review or task.get('status') in ('dev_ready_for_deploy','dev_deploying')) and not task.get('review_required'),
             'actual adoption task ownership/stage/review gate not eligible for candidate preflight')
     return card
 
@@ -283,7 +284,7 @@ def deadline_job(operation):
     pod['spec']['terminationGracePeriodSeconds']=1
     return {'apiVersion':'batch/v1','kind':'Job','metadata':{
         'namespace':'voice-dev','name':'voice-db-deadline-'+operation,'labels':pod['metadata']['labels']},
-        'spec':{'activeDeadlineSeconds':5,'backoffLimit':0,'parallelism':1,'completions':1,
+        'spec':{'activeDeadlineSeconds':15,'backoffLimit':0,'parallelism':1,'completions':1,
                 'template':{'metadata':{'labels':copy.deepcopy(pod['metadata']['labels'])},'spec':pod['spec']}}}
 
 
@@ -438,6 +439,48 @@ def deadline_receipt(job,pods,uid):
         raise RecoveryRequired('actual deadline container start/finish absent') from None
     return {'job_uid':uid,'pod_uid':pod['metadata']['uid'],'container_id':containers[0]['containerID'],
             'started_at':terminal['startedAt'],'finished_at':terminal['finishedAt'],'reason':'DeadlineExceeded'}
+
+
+def deadline_start(pod,uid):
+    """Actual container identity, also comparable after its terminal transition."""
+    metadata=pod.get('metadata',{});owners=[o for o in metadata.get('ownerReferences',[]) if o.get('controller')]
+    require(len(owners)==1 and owners[0].get('uid')==uid and owners[0].get('kind')=='Job','deadline start owner changed')
+    statuses=pod.get('status',{}).get('containerStatuses',[])
+    require(len(statuses)==1 and statuses[0].get('name')=='artifact','deadline start container missing')
+    status=statuses[0];state=status.get('state',{})
+    require(pod.get('status',{}).get('phase') in ('Running','Failed') and
+            (state.get('running') or state.get('terminated')) and not status.get('restartCount',0),
+            'deadline container has not actually started or restarted')
+    item=IMAGES['user'];allowed={item['ref'],item['ref'].split('@')[1],item['config'],
+        'docker-pullable://'+item['ref'],'docker://'+item['config'],'containerd://'+item['config']}
+    require(status.get('imageID') in allowed,'deadline start image is not admitted candidate')
+    result={'job_uid':uid,'pod_uid':metadata.get('uid'),'pod_name':metadata.get('name'),
+        'node':pod.get('spec',{}).get('nodeName'),'container_id':status.get('containerID'),
+        'image_id':status['imageID'],'started_at':(state.get('running') or state.get('terminated')).get('startedAt')}
+    require(all(isinstance(v,str) and 0<len(v)<=512 for v in result.values()),'deadline start identity incomplete')
+    return result
+
+
+def absent_deadline_receipt(job,started,child,uid):
+    # A Job condition alone never proves that an admitted sleep container ran.
+    keys={'job_uid','pod_uid','pod_name','node','container_id','image_id','started_at'}
+    require(isinstance(started,dict) and set(started)==keys and started['job_uid']==uid and
+            child=={'uid':started['pod_uid'],'name':started['pod_name']} and
+            all(isinstance(v,str) and 0<len(v)<=512 for v in started.values()),'durable deadline start identity absent')
+    status=job.get('status',{});conditions=status.get('conditions',[])
+    failed=[c for c in conditions if c.get('type')=='Failed' and c.get('status')=='True']
+    require(job.get('metadata',{}).get('uid')==uid and len(failed)==1 and
+            failed[0].get('reason')=='DeadlineExceeded' and not status.get('active') and status.get('failed',0)>=1 and
+            not any(c.get('type')=='Complete' and c.get('status')=='True' for c in conditions),
+            'same actual terminal deadline Job required after child absence')
+    try:
+        began=datetime.datetime.fromisoformat(started['started_at'].replace('Z','+00:00'))
+        ended=datetime.datetime.fromisoformat(failed[0]['lastTransitionTime'].replace('Z','+00:00'))
+        require(began.tzinfo and ended.tzinfo and (ended-began).total_seconds()>=1,'deadline start/failure order invalid')
+    except (KeyError,TypeError,ValueError):
+        raise RecoveryRequired('actual deadline failure timestamp absent') from None
+    return {**started,'deadline_at':failed[0]['lastTransitionTime'],'reason':'DeadlineExceeded',
+            'child_terminal_evidence':'absent_after_deadline'} # No invented container finishedAt.
 
 
 class ProbeController:
@@ -692,8 +735,24 @@ class ProbeController:
         conditions=actual.get('status',{}).get('conditions',[])
         require(not any(c.get('type')=='Complete' and c.get('status')=='True' for c in conditions),
                 'deadline Job completed without enforcing deadline')
-        if not any(c.get('type')=='Failed' and c.get('status')=='True' for c in conditions):return None
-        receipt=deadline_receipt(actual,self._deadline_children(record),record['uid'])
+        failed=any(c.get('type')=='Failed' and c.get('status')=='True' for c in conditions)
+        children=self._deadline_children(record)
+        require(len(children)<=1,'deadline owned Pod set unexpected')
+        if children:
+            child=children[0];identity={k:child['metadata'][k] for k in ('uid','name')}
+            require(not record.get('child_identity') or record['child_identity']==identity,'deadline child replaced')
+            if not record.get('child_identity'):
+                record['child_identity']=identity;self.journal.save()
+            if record.get('started_observation'):
+                require(deadline_start(child,record['uid'])==record['started_observation'],'deadline started container changed')
+            elif child.get('status',{}).get('phase')=='Running':
+                require(not failed,'deadline start was not observed before terminal Job')
+                record['started_observation']=deadline_start(child,record['uid']);self.journal.save()
+        elif record.get('child_identity'):
+            require(not self._get('pod',record['child_identity']['name']),'saved deadline child still present or replaced')
+        if not failed:return None
+        if children:receipt=deadline_receipt(actual,children,record['uid'])
+        else:receipt=absent_deadline_receipt(actual,record.get('started_observation'),record.get('child_identity'),record['uid'])
         record.update(state='observed',receipt=receipt);self.journal.save();return copy.deepcopy(receipt)
 
     def cleanup_deadline(self):

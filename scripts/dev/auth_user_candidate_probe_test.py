@@ -81,6 +81,24 @@ class FakeKube:
 
 
 class CandidateContractTest(unittest.TestCase):
+    def test_owned_review_can_qualify_artifacts_only_in_prepare_without_fake_stage_advancement(self):
+        card=model_card();task={'status':'review','owner':'Dimas-16','assignee':'Dimas-16','review_required':False}
+        class Response:
+            def read(self):return json.dumps(task).encode()
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+        with patch('auth_user_adoption_runtime.resource_card',return_value=card),patch('urllib.request.urlopen',return_value=Response()):
+            self.assertEqual(probe.probe_resource_card(),card)
+            for fault in ('phase','owner','assignee','impact','in-progress'):
+                with self.subTest(fault=fault):
+                    if fault=='phase':card['phase']='deploy'
+                    if fault=='owner':task['owner']='other'
+                    if fault=='assignee':task['assignee']='other'
+                    if fault=='impact':task['review_required']=True
+                    if fault=='in-progress':task['status']='in_progress'
+                    with self.assertRaises(RecoveryRequired):probe.probe_resource_card()
+                    card['phase']='prepare';task.update(status='review',owner='Dimas-16',assignee='Dimas-16',review_required=False)
+
     def test_actual_retained_prepare_card_and_typed_version_can_prepare(self):
         fixture=json.loads((pathlib.Path(__file__).parent/'testdata/auth-user-probe-resource-prepare.json').read_text())
         card=fixture['card'];self.assertTrue(fixture['provenance']['historical_only'])
@@ -290,6 +308,78 @@ class CandidateContractTest(unittest.TestCase):
         controller,journal,kube,calls=self.controller();controller.acquire_lock()
         with self.assertRaises(RecoveryRequired):controller.finish()
         self.assertFalse(any(x.get('kind')=='DeleteOptions' for x in kube.writes))
+
+    def running_deadline(self):
+        controller,journal,kube,calls=self.controller();controller.acquire_lock();controller.create_deadline([])
+        record=journal.state['probe_deadline'];name=record['body']['metadata']['name']
+        job=kube.objects[('job',name)]
+        job['status']={'active':1,'startTime':'2026-10-27T20:00:00Z'}
+        child=copy.deepcopy(job['spec']['template']);child.update(apiVersion='v1',kind='Pod')
+        child['metadata'].update(namespace='voice-dev',name=name+'-child',uid='started-child',resourceVersion='2',
+            ownerReferences=[{'uid':record['uid'],'kind':'Job','controller':True}])
+        child['spec']['nodeName']='actual-node'
+        child['status']={'phase':'Running','containerStatuses':[{'name':'artifact','containerID':'containerd://started',
+            'imageID':probe.IMAGES['user']['ref'],'restartCount':0,
+            'state':{'running':{'startedAt':'2026-10-27T20:00:03Z'}}}]}
+        kube.objects[('pod',name+'-child')]=child
+        return controller,journal,kube,job,child
+
+    def deadline_failed(self,job):
+        job['status']={'active':0,'failed':1,'conditions':[{'type':'Failed','status':'True',
+            'reason':'DeadlineExceeded','lastTransitionTime':'2026-10-27T20:00:15Z'}]}
+
+    def test_actual_running_child_is_durable_before_deadline_removes_it(self):
+        controller,journal,kube,job,child=self.running_deadline()
+        self.assertIsNone(controller.observe_deadline())
+        kube.objects.pop(('pod',child['metadata']['name']));self.deadline_failed(job)
+        receipt=controller.observe_deadline()
+        self.assertEqual(receipt['pod_uid'],'started-child')
+        self.assertEqual(receipt['container_id'],'containerd://started')
+        self.assertEqual(receipt['child_terminal_evidence'],'absent_after_deadline')
+        self.assertNotIn('finished_at',receipt) # Job failure time is not container finishedAt.
+        started=[s['probe_deadline']['started_observation'] for s in journal.saved
+                 if s.get('probe_deadline',{}).get('started_observation')]
+        self.assertTrue(started)
+        self.assertEqual(started[0]['pod_uid'],'started-child')
+        self.assertEqual(started[0]['image_id'],probe.IMAGES['user']['ref'])
+        kube.auto_finish=True;controller.cleanup_deadline()
+        self.assertEqual(journal.state['probe_deadline']['state'],'absent')
+        self.assertFalse(kube.objects.get(('job',job['metadata']['name'])))
+
+    def test_deadline_start_cannot_follow_a_replaced_or_changed_child(self):
+        for fault in ('uid','container','image','start','restart','owner','multiple'):
+            controller,journal,kube,job,child=self.running_deadline()
+            self.assertIsNone(controller.observe_deadline())
+            if fault=='uid':child['metadata']['uid']='replacement'
+            if fault=='container':child['status']['containerStatuses'][0]['containerID']='containerd://replacement'
+            if fault=='image':child['status']['containerStatuses'][0]['imageID']='unknown'
+            if fault=='start':child['status']['containerStatuses'][0]['state']['running']['startedAt']='2026-10-27T20:00:04Z'
+            if fault=='restart':child['status']['containerStatuses'][0]['restartCount']=1
+            if fault=='owner':child['metadata']['ownerReferences'][0]['uid']='another-job'
+            if fault=='multiple':
+                second=copy.deepcopy(child);second['metadata'].update(name=child['metadata']['name']+'-second',uid='second')
+                kube.objects[('pod',second['metadata']['name'])]=second
+            with self.subTest(fault=fault),self.assertRaises(RecoveryRequired):controller.observe_deadline()
+
+    def test_first_start_observation_cannot_be_invented_after_job_failure(self):
+        controller,journal,kube,job,child=self.running_deadline();self.deadline_failed(job)
+        with self.assertRaises(RecoveryRequired):controller.observe_deadline()
+        self.assertNotIn('started_observation',journal.state['probe_deadline'])
+
+    def test_absent_child_requires_recorded_start_and_actual_timed_deadline(self):
+        for fault in ('no-start','no-time','early-time','wrong-reason','complete','replaced-name'):
+            controller,journal,kube,job,child=self.running_deadline()
+            if fault!='no-start':controller.observe_deadline()
+            kube.objects.pop(('pod',child['metadata']['name']));self.deadline_failed(job)
+            condition=job['status']['conditions'][0]
+            if fault=='no-time':condition.pop('lastTransitionTime')
+            if fault=='early-time':condition['lastTransitionTime']='2026-10-27T20:00:02Z'
+            if fault=='wrong-reason':condition['reason']='BackoffLimitExceeded'
+            if fault=='complete':job['status']['conditions'].append({'type':'Complete','status':'True'})
+            if fault=='replaced-name':
+                other=copy.deepcopy(child);other['metadata'].update(uid='replacement',ownerReferences=[])
+                kube.objects[('pod',child['metadata']['name'])]=other
+            with self.subTest(fault=fault),self.assertRaises(RecoveryRequired):controller.observe_deadline()
 
     def test_deadline_cleanup_waits_for_actual_terminal_child_and_gc_absence(self):
         controller,journal,kube,calls=self.controller();controller.acquire_lock();controller.create_deadline([])

@@ -177,7 +177,7 @@ file_references (дедупликация)
 | `article_thumb` | OG/thumb for Article attach | ≤2 MB |
 | `location_map` | Static map tile | ≤500 KB |
 
-**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), `STICKER` (3, static only), and `MUSIC` (6). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music requires chat context, audio MIME and ≤10 MiB stored bytes, including encrypted overhead. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. The remaining intended values are:
+**`intent` field:** `RequestUploadRequest.intent` implements `UNSPECIFIED` (legacy MIME processing), `GIF` (2), `STICKER` (3, static only), `MUSIC` (6), and `AUDIO` (7). Intent is persisted at request admission and cannot be changed at confirm. GIF is an authenticated upload API slice described below; provider imports, picker and GIF messaging are separate. Other values below remain the target specification, not implemented processing branches. Music and Audio require chat context and ≤10 MiB stored bytes, including encrypted overhead. Audio admits MP3, FLAC, Ogg, and WAVE MIME types. Plaintext processing supports MP3, FLAC, Ogg Opus/Vorbis/FLAC and PCM/IEEE-float WAVE; encrypted files bypass server extraction and derive tags only in the client. Audio metadata uses the File metadata fields and generic processed notification; only Music emits the Music stream event. The remaining intended values are:
 
 ```protobuf
 enum UploadIntent {
@@ -196,7 +196,7 @@ enum UploadIntent {
 
 message RequestUploadRequest {
   // … existing fields (original_name, mime_type, size_bytes, context_chat, is_e2e) …
-  UploadIntent intent = 8;              // spec — not yet in proto
+  UploadIntent intent = 8;
   // Remote URLs are not public upload parameters; see protected catalog import.
 }
 ```
@@ -468,10 +468,13 @@ Story to re-evaluate. `GetFileMetadata` remains Gateway-only.
 | `Unavailable` | Listener or persistence is unavailable |
 
 The protected listener uses `FILE_PRINCIPAL_GRPC_LISTEN`,
-`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE` and
+`FILE_PRINCIPAL_TLS_CERT_FILE`, `FILE_PRINCIPAL_TLS_KEY_FILE`,
+`FILE_PRINCIPAL_CLIENT_CA_FILE` to verify Story's client certificate, and
 `FILE_PRINCIPAL_REPLAY_REDIS_ADDR` (optional password via
 `FILE_PRINCIPAL_REPLAY_REDIS_PASSWORD`). `S2S_JWKS_URLS_JSON` must contain the
-Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root. Cache
+Story HTTPS endpoint; `S2S_JWKS_CA_FILE` adds its private trust root, and
+`S2S_JWKS_CLIENT_CERT_FILE`/`S2S_JWKS_CLIENT_KEY_FILE` present File's client
+certificate to that endpoint. Cache
 settings follow Phase-0 defaults of 30s/2m/5s. Partial configuration fails startup.
 The ordinary listener returns `Unavailable` for validation and the protected
 listener rejects all other methods. See Story's deployment runbook and
