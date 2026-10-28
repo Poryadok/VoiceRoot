@@ -95,7 +95,7 @@ def validate_request(raw, previous_raw):
         require(value["cycle"] == 1, "first_request_cycle")
     else:
         previous = parse_request(previous_raw)
-        require(previous["cycle"] == 1 and value["cycle"] == 2
+        require(value["cycle"] in (previous["cycle"], previous["cycle"] + 1)
                 and previous["request_id"] != value["request_id"], "request_transition")
     return value
 

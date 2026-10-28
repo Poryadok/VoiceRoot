@@ -42,6 +42,13 @@ class CanonicalPackageTests(unittest.TestCase):
         second = json.dumps({"schema": "voice-full-application-build-request-v1", "cycle": 2, "request_id": "2" * 32}).encode()
         p.validate_request(second, raw)
         with self.assertRaises(ValueError): p.validate_request(second, None)
+        retry1 = json.dumps({"schema": "voice-full-application-build-request-v1", "cycle": 1, "request_id": "3" * 32}).encode()
+        retry2 = json.dumps({"schema": "voice-full-application-build-request-v1", "cycle": 2, "request_id": "4" * 32}).encode()
+        p.validate_request(retry1, raw)
+        p.validate_request(retry2, second)
+        with self.assertRaises(ValueError): p.validate_request(retry1, second)
+        same_id = json.dumps({"schema": "voice-full-application-build-request-v1", "cycle": 2, "request_id": "1" * 32}).encode()
+        with self.assertRaises(ValueError): p.validate_request(same_id, raw)
         for invalid in (b'{}', b'{"schema":"voice-full-application-build-request-v1","cycle":1,"cycle":2,"request_id":"11111111111111111111111111111111"}',
                         b'{"schema":"voice-full-application-build-request-v1","cycle":3,"request_id":"11111111111111111111111111111111"}'):
             with self.assertRaises(ValueError): p.validate_request(invalid, None)

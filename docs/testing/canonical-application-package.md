@@ -1,8 +1,10 @@
 # Canonical application package capture
 
 For a reviewed full-build request, use the successful **master push** CI run,
-its exact source SHA and attempt. The request must be included in that push and
-follow the cycle 1 → cycle 2 transition. The script checks all 23 application
+its exact source SHA and attempt. The request must be included in that push;
+cycle 1 may advance to cycle 2, and either cycle may be retried with a new
+request ID. A request does not establish that a deployment cycle completed.
+The script checks all 23 application
 build/push jobs, the renderer, no image promotion, no automatic staging deploy,
 the canonical stack lock, and the registry's immutable linux/amd64 identities.
 
