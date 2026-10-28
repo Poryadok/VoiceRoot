@@ -3,6 +3,9 @@
 The invoking master workflow and its GitHub environment are trusted. The
 operation must already own the DEV claim, common lock and permanent ledger.
 This command never uploads keys or kubeconfig and never retries an effect.
+The private upload copy is frozen after validation: no cooperating process may
+modify or remove it until upload and authenticated remote readback complete.
+Runner loss or an uncertain result retains the lock for reconciliation.
 """
 import hashlib
 import json
