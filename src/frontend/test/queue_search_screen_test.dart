@@ -81,7 +81,7 @@ void main() {
     expect(find.byKey(QueueSearchScreen.searchingStateKey), findsNothing);
   });
 
-  testWidgets('optional role is not required to start the queue', (
+  testWidgets('optional role can be omitted or selected for the queue', (
     tester,
   ) async {
     final game = CatalogGame(
@@ -107,15 +107,23 @@ void main() {
         ],
       ),
     );
+    final postedCriteria = <Map<String, dynamic>>[];
     var searchPosts = 0;
     final client = MockClient((req) async {
       if (req.method == 'POST' &&
           req.url.path == '/api/v1/matchmaking/search') {
         searchPosts++;
+        postedCriteria.add(
+          jsonDecode(
+                (jsonDecode(req.body) as Map<String, dynamic>)['criteriaJson']
+                    as String,
+              )
+              as Map<String, dynamic>,
+        );
         return http.Response(
           jsonEncode({
             'search_session': {
-              'id': 'optional-session',
+              'id': 'optional-session-$searchPosts',
               'profile_id': 'profile',
               'game_id': game.id,
               'mode': 'Casual',
@@ -125,6 +133,10 @@ void main() {
           }),
           200,
         );
+      }
+      if (req.method == 'DELETE' &&
+          req.url.path.startsWith('/api/v1/matchmaking/search/')) {
+        return http.Response('{}', 200);
       }
       return http.Response('{}', 200);
     });
@@ -169,8 +181,29 @@ void main() {
     await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-
     expect(searchPosts, 1);
+    expect(
+      (postedCriteria.single['self'] as Map<String, dynamic>),
+      isNot(contains('role')),
+    );
+
+    await tester.tap(find.byKey(QueueSearchScreen.cancelButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    final roleDropdown = find.byType(DropdownButtonFormField<String>).at(1);
+    await tester.tap(roleDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tank').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(QueueSearchScreen.startButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(searchPosts, 2);
+    expect(
+      (postedCriteria.last['self'] as Map<String, dynamic>)['role'],
+      'Tank',
+    );
   });
 
   testWidgets(

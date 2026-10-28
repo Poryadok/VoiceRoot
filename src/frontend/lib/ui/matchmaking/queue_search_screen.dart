@@ -209,12 +209,16 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
               items: widget.game.config.regions,
               onChanged: (v) => setState(() => _region = v),
             ),
-            if (widget.mode.rolesRequired && widget.mode.roles.isNotEmpty)
+            if (widget.mode.roles.isNotEmpty)
               _dropdown(
                 label: l10n.queueSearchRole,
                 value: _role,
                 items: widget.mode.roles.map((r) => r.name).toList(),
-                onChanged: (v) => setState(() => _role = v),
+                emptyOptionLabel: widget.mode.rolesRequired
+                    ? null
+                    : l10n.queueSearchNoRolePreference,
+                onChanged: (v) =>
+                    setState(() => _role = v?.isEmpty == true ? null : v),
               ),
             if (widget.mode.rankRequired && widget.mode.ranks.isNotEmpty) ...[
               _dropdown(
@@ -257,6 +261,7 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
     required String? value,
     required List<String> items,
     required ValueChanged<String?> onChanged,
+    String? emptyOptionLabel,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -264,6 +269,8 @@ class _QueueSearchScreenState extends ConsumerState<QueueSearchScreen> {
         initialValue: value,
         decoration: InputDecoration(labelText: label),
         items: [
+          if (emptyOptionLabel != null)
+            DropdownMenuItem(value: '', child: Text(emptyOptionLabel)),
           for (final item in items)
             DropdownMenuItem(value: item, child: Text(item)),
         ],
