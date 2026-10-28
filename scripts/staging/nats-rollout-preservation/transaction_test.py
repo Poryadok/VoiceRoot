@@ -485,6 +485,8 @@ class FullOriginStoryRollbackTests(unittest.TestCase):
             with ExitStack() as stack:
                 stack.enter_context(patch.object(bridge_root,'INSTALLED',installed))
                 stack.enter_context(patch.object(bridge_root,'Kube',return_value=kube))
+                # This rollback compiler fixture does not model a GIS pair.
+                stack.enter_context(patch('gis_existing_update.load_authority',return_value=None))
                 capture=stack.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
                 stack.enter_context(patch.object(bridge_root.source_authority,'capture_source',
                     return_value={'source_sha':'a'*40,'images':{'story':'ghcr.io/poryadok/voiceroot/story@sha256:'+'e'*64}}))

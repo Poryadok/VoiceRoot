@@ -512,10 +512,14 @@ class RolloutStage(Staging):
         if row['data']['phase']!='rollout-verified':raise Blocked('rollout_unverified_release_forbidden')
         if 'voice-gameintegration' in self.snapshots and not callable(getattr(self,'gis_ready_proof',None)):
             raise Blocked('gis_existing_ready_proof_missing')
+        if 'voice-gameintegration' in self.snapshots and not callable(getattr(self,'gis_start_guard',None)):
+            raise Blocked('gis_existing_start_guard_missing')
         core={HUB,'voice-gateway',PRINCIPAL_PUBLISHER,*('voice-'+s for s in LEAVES)}
         for name in sorted(set(self.snapshots)-core):
             ledger=getattr(self,'finish_ledger',None)
-            if ledger is None or name in ledger.record['pending']:self.scale(name,1)
+            if ledger is None or name in ledger.record['pending']:
+                if name=='voice-gameintegration':self.gis_start_guard(self)
+                self.scale(name,1)
             self.wait_ready(name)
         if 'voice-gameintegration' in self.snapshots:
             self.gis_ready_proof(self)

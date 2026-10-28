@@ -376,6 +376,9 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
         state['kernel_sha256']=file_sha(base/'kernel')
         if gis_binding is not None:
+            existing.verify_phase(state['gis_binding'],kube,'active')
+            if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+                raise Blocked('gis_existing_service_account_changed')
             raise Blocked('gis_existing_lifecycle_incomplete')
     except Exception as error:
         import deployment_report
@@ -789,9 +792,18 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         state['preservation']=verify_post_apply(runtime,stage.final_path,baseline,stage.verify_final_storage)
         stage.verified();state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
+        if state.get('gis_binding') is not None:
+            import gis_existing_update as existing
+            if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+                raise Blocked('gis_existing_service_account_changed')
         attach_closed_preservation(base,state,stage,resume_authority)
         if state.get('gis_binding') is not None:
             import gis_existing_update as existing
+            def gis_start_guard(resumed):
+                existing.verify_phase(state['gis_binding'],resumed.kube,'paused-target')
+                if existing.service_account_preflight(resumed.kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+                    raise Blocked('gis_existing_service_account_changed')
+            stage.gis_start_guard=gis_start_guard
             def gis_ready_proof(resumed):
                 state['gis_ready_proof']=existing.verify_ready(state['gis_binding'],resumed.kube,
                     state['gis_service_account'])
@@ -966,6 +978,12 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
     stage.finish_guard=lambda action,name=None,replicas=None:rollback_resume_authority()
     try:
         rollback_resume_authority()
+        if state.get('gis_binding') is not None:
+            import gis_existing_update as existing
+            try:existing.verify_phase(state['gis_binding'],kube,'paused-old')
+            except existing.gis.Blocked:
+                try:existing.verify_phase(state['gis_binding'],kube,'paused-target')
+                except existing.gis.Blocked:raise Blocked('gis_existing_rollback_pair_changed') from None
         if state['phase']!='ROLLBACK_TEMPLATES':stage.adopt_rollback_target(receipt,claim_rv)
         state['phase']='ROLLBACK_TEMPLATES';save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
