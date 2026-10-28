@@ -8,6 +8,7 @@ and executed in a Linux Docker CLI container with the Docker socket attached.
 import hashlib
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 import secrets
@@ -90,6 +91,22 @@ def diagnostic_command(args):
         return {"exit": "timeout", "output": "Docker diagnostic exceeded 20 seconds"}
     except (OSError, subprocess.SubprocessError, UnicodeError) as error:
         return {"exit": "error", "output": str(error)[-1000:]}
+
+
+def file_validation_metrics(container):
+    """Capture only bounded public gRPC status counters, never credentials."""
+    try:
+        result = subprocess.run(["docker", "exec", container, "sh", "-c",
+                                 "set -o pipefail; wget -qO- http://127.0.0.1:8080/metrics | head -c 1048577"], cwd=ROOT,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                check=False, timeout=20)
+        truncated = len(result.stdout) > 1048576
+        pattern = re.compile(r'grpc_server_handled_total\{grpc_code="(OK|Canceled|Unknown|InvalidArgument|DeadlineExceeded|NotFound|AlreadyExists|PermissionDenied|ResourceExhausted|FailedPrecondition|Aborted|OutOfRange|Unimplemented|Internal|Unavailable|DataLoss|Unauthenticated)",grpc_method="ValidateStoryMedia",grpc_service="voice\.file\.v1\.FileService"\} [0-9.eE+-]+')
+        lines = [line for line in result.stdout.decode("utf-8", "replace").splitlines()
+                 if len(line) <= 300 and pattern.fullmatch(line)] if not truncated else []
+        return {"exit": result.returncode, "truncated": truncated, "series": lines[:20]}
+    except (OSError, subprocess.SubprocessError, UnicodeError) as error:
+        return {"exit": "error", "series": [], "error_type": type(error).__name__}
 
 
 def main():
@@ -244,6 +261,8 @@ def main():
                         "logs": diagnostic_command(["logs", "--tail", "100", container]),
                     }
                 receipt["diagnostics"] = diagnostics
+                if "file" in rows:
+                    receipt["file_validation_metrics"] = file_validation_metrics(rows["file"]["id"])
                 receipt_path.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
             finally:
                 call([*compose, "down", "--remove-orphans", "--volumes"], env=env, timeout=300)
