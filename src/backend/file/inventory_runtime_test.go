@@ -33,3 +33,31 @@ func TestStoryInventoryRuntimeRequiresCompleteTrustGroup(t *testing.T) {
 	require.ErrorContains(t, err, "file principal runtime")
 	require.Nil(t, source)
 }
+
+func TestMessagingInventoryRuntimeRequiresCompleteTrustGroup(t *testing.T) {
+	for _, name := range storyInventorySettings {
+		name := messagingInventoryPrefix + name
+		old, set := os.LookupEnv(name)
+		require.NoError(t, os.Unsetenv(name))
+		t.Cleanup(func() {
+			if set {
+				_ = os.Setenv(name, old)
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		})
+	}
+	source, err := loadMessagingInventorySource(nil)
+	require.NoError(t, err)
+	require.Nil(t, source)
+	t.Setenv(messagingInventoryPrefix+"GRPC_ADDR", "messaging:9093")
+	source, err = loadMessagingInventorySource(nil)
+	require.Error(t, err)
+	require.Nil(t, source)
+	for _, name := range storyInventorySettings {
+		t.Setenv(messagingInventoryPrefix+name, "configured")
+	}
+	source, err = loadMessagingInventorySource(nil)
+	require.ErrorContains(t, err, "file principal runtime")
+	require.Nil(t, source)
+}

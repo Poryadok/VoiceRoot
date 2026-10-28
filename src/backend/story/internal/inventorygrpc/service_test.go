@@ -153,6 +153,21 @@ func TestInventoryBeginRequiresFileAndReturnsExactDescriptor(t *testing.T) {
 	}
 }
 
+func TestInventoryBeginRejectsAnotherRegisteredOwner(t *testing.T) {
+	id := identity()
+	id.SourceService, id.SourceComponent = "messaging", "messaging.message.v1"
+	descriptor, err := referenceinventory.Describe(nil, id, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := &memoryStore{descriptor: descriptor}
+	req := &commonv1.BeginReferenceInventoryRequest{OperationId: uuid.NewString(), Identity: id}
+	_, err = New(st).BeginReferenceInventory(fileContext(BeginMethod, req), req)
+	if status.Code(err) != codes.InvalidArgument || st.calls != 0 {
+		t.Fatalf("Messaging identity reached Story store: %v calls=%d", err, st.calls)
+	}
+}
+
 func TestInventoryRejectsNestedUnknownAndCannotSeal(t *testing.T) {
 	id := identity()
 	st := &memoryStore{}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,7 +85,7 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 	if s == nil || s.Pool == nil {
 		return inv.ErrUnavailable
 	}
-	if op == uuid.Nil || inv.ValidateIdentity(id) != nil {
+	if op == uuid.Nil || inv.ValidateOwnerIdentity(id) != nil {
 		return inv.ErrInvalid
 	}
 	raw, _, err := inv.Encode(id)
@@ -121,7 +122,7 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 		return err
 	}
 	var alreadyBound bool
-	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_imports WHERE migration_id=$1)`, id.MigrationId).Scan(&alreadyBound); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_imports WHERE migration_id=$1 AND component=$2)`, id.MigrationId, id.SourceComponent).Scan(&alreadyBound); err != nil {
 		return err
 	}
 	if alreadyBound {
@@ -144,7 +145,7 @@ func (s *FilesStore) CreateInventoryOperation(ctx context.Context, op uuid.UUID,
 			return err
 		}
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO file_reference_inventory_imports(operation_id,migration_id,snapshot_id,identity_bytes) VALUES($1,$2,$3,$4)`, op, id.MigrationId, id.SnapshotId, raw); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO file_reference_inventory_imports(operation_id,migration_id,snapshot_id,identity_bytes,component) VALUES($1,$2,$3,$4,$5)`, op, id.MigrationId, id.SnapshotId, raw, id.SourceComponent); err != nil {
 		return err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_gate SET blocked=true,generation=generation+1 WHERE singleton`); err != nil {
@@ -221,7 +222,7 @@ func blockInventoryTx(ctx context.Context, tx pgx.Tx, op uuid.UUID, reason strin
 	if _, err := tx.Exec(ctx, `UPDATE file_reference_inventory_imports SET state='BLOCKED',blocked_reason=$2 WHERE operation_id=$1`, op, reason); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE file_reference_inventory_components SET state='BLOCKED' WHERE migration_id=(SELECT migration_id FROM file_reference_inventory_imports WHERE operation_id=$1) AND component='story.media.v1'`, op); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE file_reference_inventory_components SET state='BLOCKED' WHERE (migration_id,component)=(SELECT migration_id,component FROM file_reference_inventory_imports WHERE operation_id=$1)`, op); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -268,7 +269,7 @@ func (s *FilesStore) SaveInventoryDescriptor(ctx context.Context, op uuid.UUID, 
 	if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_imports SET descriptor_bytes=$2,cursor_revision=$3,state=$4 WHERE operation_id=$1`, op, raw, int64(d.Manifest.BoundaryRevision), state); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_components SET state=$2 WHERE migration_id=$1 AND component='story.media.v1'`, o.Identity.MigrationId, state); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_components SET state=$2 WHERE migration_id=$1 AND component=$3`, o.Identity.MigrationId, state, o.Identity.SourceComponent); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
@@ -358,7 +359,7 @@ func (s *FilesStore) ApplyInventoryPage(ctx context.Context, op uuid.UUID, p *co
 		if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_imports SET state='CATCHING_UP' WHERE operation_id=$1`, op); err != nil {
 			return err
 		}
-		if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_components SET state='CATCHING_UP' WHERE migration_id=$1 AND component='story.media.v1'`, o.Identity.MigrationId); err != nil {
+		if _, err = tx.Exec(ctx, `UPDATE file_reference_inventory_components SET state='CATCHING_UP' WHERE migration_id=$1 AND component=$2`, o.Identity.MigrationId, o.Identity.SourceComponent); err != nil {
 			return err
 		}
 	}
@@ -416,7 +417,13 @@ func inventoryItemKey(e *commonv1.ReferenceInventoryEntry) string {
 	if e.Key == nil {
 		return "issue:" + e.GetIssueId()
 	}
-	return "key:" + e.Key.FileId + "/" + e.Key.OwnerId
+	optional := func(s *string) string {
+		if s == nil {
+			return "-"
+		}
+		return *s
+	}
+	return "key:" + e.Key.FileId + "/" + strconv.FormatInt(int64(e.Key.OwnerType), 10) + "/" + e.Key.OwnerId + "/" + optional(e.Key.SubresourceId) + "/" + optional(e.Key.ScopeSpaceId)
 }
 
 // All File locks precede all sorted blob locks. Neither hold creation nor a
@@ -527,14 +534,17 @@ func applyInventoryEntry(ctx context.Context, tx pgx.Tx, op uuid.UUID, e *common
 		issue = "source issue"
 	}
 	var owner any
+	isStory := e.Key != nil && e.Key.OwnerType == 2
 	if e.Key != nil {
 		owner = e.Key.OwnerId
 		var conflicting bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_items WHERE operation_id=$1 AND owner_id=$2 AND file_id<>$3)`, op, owner, f).Scan(&conflicting); err != nil {
-			return err
-		}
-		if conflicting {
-			issue = "inventory binding conflict"
+		if isStory {
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_reference_inventory_items WHERE operation_id=$1 AND owner_id=$2 AND file_id<>$3)`, op, owner, f).Scan(&conflicting); err != nil {
+				return err
+			}
+			if conflicting {
+				issue = "inventory binding conflict"
+			}
 		}
 	}
 	var blob *uuid.UUID
@@ -553,13 +563,13 @@ func applyInventoryEntry(ctx context.Context, tx pgx.Tx, op uuid.UUID, e *common
 		} else if state != "ready" {
 			issue = "unusable file"
 		}
-		if e.AuthorProfileId != nil && *e.AuthorProfileId != uploader.String() {
+		if isStory && e.AuthorProfileId != nil && *e.AuthorProfileId != uploader.String() {
 			issue = "author conflict"
 		}
-		if chat != nil || e2e || (story != nil && (e.Key == nil || story.String() != e.Key.OwnerId)) {
+		if isStory && (chat != nil || e2e || (story != nil && story.String() != e.Key.OwnerId)) {
 			issue = "context conflict"
 		}
-		if (e.MediaType == "photo" && kind != "image") || (e.MediaType == "video" && kind != "video") {
+		if isStory && ((e.MediaType == "photo" && kind != "image") || (e.MediaType == "video" && kind != "video")) {
 			issue = "type conflict"
 		}
 		if scan != "clean" && scan != "skipped" {
@@ -583,13 +593,24 @@ func applyInventoryEntry(ctx context.Context, tx pgx.Tx, op uuid.UUID, e *common
 				}
 			}
 		}
-		if e.Key != nil {
+		if isStory {
 			var conflict bool
 			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_references WHERE owner_type=2 AND owner_id=$1 AND (file_id<>$2 OR released_at IS NOT NULL OR subresource_id IS NOT NULL OR scope_space_id IS NOT NULL))`, e.Key.OwnerId, f).Scan(&conflict); err != nil {
 				return err
 			}
 			if conflict && !e.Retired {
 				issue = "reference binding conflict"
+			}
+		} else if e.Key != nil && !e.Retired {
+			// An upload's chat or uploader is not authority for a Message tuple.
+			// Require an existing exact reference; missing historical proof remains
+			// unresolved while the blob hold protects it.
+			var exact bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM file_references WHERE owner_type=$1 AND owner_id=$2 AND file_id=$3 AND subresource_id IS NOT DISTINCT FROM $4::uuid AND scope_space_id IS NOT DISTINCT FROM $5::uuid AND released_at IS NULL)`, int32(e.Key.OwnerType), e.Key.OwnerId, f, e.Key.SubresourceId, e.Key.ScopeSpaceId).Scan(&exact); err != nil {
+				return err
+			}
+			if !exact {
+				issue = "unresolved historical binding"
 			}
 		}
 	}
@@ -608,10 +629,16 @@ func nullableInventoryUUID(s string) any {
 }
 
 func (s *FilesStore) PendingInventoryOperations(ctx context.Context, limit int) ([]uuid.UUID, error) {
+	return s.PendingInventoryOperationsAfter(ctx, limit, uuid.Nil)
+}
+
+// PendingInventoryOperationsAfter allows the worker to rotate through every
+// pending operation even when some sources are unavailable indefinitely.
+func (s *FilesStore) PendingInventoryOperationsAfter(ctx context.Context, limit int, after uuid.UUID) ([]uuid.UUID, error) {
 	if limit < 1 || limit > 100 {
 		return nil, inv.ErrInvalid
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT i.operation_id FROM file_reference_inventory_imports i JOIN file_reference_inventory_cohorts c USING(migration_id) WHERE i.state<>'BLOCKED' AND c.state='MIGRATING' ORDER BY i.created_at,i.operation_id LIMIT $1`, limit)
+	rows, err := s.Pool.Query(ctx, `SELECT i.operation_id FROM file_reference_inventory_imports i JOIN file_reference_inventory_cohorts c USING(migration_id) WHERE i.state<>'BLOCKED' AND c.state='MIGRATING' AND i.operation_id>$2 ORDER BY i.operation_id LIMIT $1`, limit, after)
 	if err != nil {
 		return nil, err
 	}

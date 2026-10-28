@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package voice.messaging.v1;
+
+import "voice/common/v1/reference_inventory.proto";
+
+option go_package = "voice.app/voice/messaging/v1;messagingv1";
+
+// Private protective migration export; cannot attest global File activation.
+service MessagingReferenceInventoryService {
+  // @voice.security=protected;callers=service:file
+  rpc BeginReferenceInventory(BeginReferenceInventoryRequest) returns (BeginReferenceInventoryResponse);
+  // @voice.security=protected;callers=service:file
+  rpc ReadReferenceInventoryPage(ReadReferenceInventoryPageRequest) returns (ReadReferenceInventoryPageResponse);
+  // @voice.security=protected;callers=service:file
+  rpc ReadReferenceInventoryChanges(ReadReferenceInventoryChangesRequest) returns (ReadReferenceInventoryChangesResponse);
+  // @voice.security=protected;callers=service:file
+  rpc SealReferenceInventory(SealReferenceInventoryRequest) returns (SealReferenceInventoryResponse);
+}
+
+message BeginReferenceInventoryRequest {
+  voice.common.v1.BeginReferenceInventoryRequest inventory = 1;
+}
+message BeginReferenceInventoryResponse {
+  voice.common.v1.BeginReferenceInventoryResponse inventory = 1;
+}
+message ReadReferenceInventoryPageRequest {
+  voice.common.v1.ReadReferenceInventoryPageRequest inventory = 1;
+}
+message ReadReferenceInventoryPageResponse {
+  voice.common.v1.ReadReferenceInventoryPageResponse inventory = 1;
+}
+message ReadReferenceInventoryChangesRequest {
+  voice.common.v1.ReadReferenceInventoryChangesRequest inventory = 1;
+}
+message ReadReferenceInventoryChangesResponse {
+  voice.common.v1.ReadReferenceInventoryChangesResponse inventory = 1;
+}
+message SealReferenceInventoryRequest {
+  voice.common.v1.SealReferenceInventoryRequest inventory = 1;
+}
+message SealReferenceInventoryResponse {
+  voice.common.v1.SealReferenceInventoryResponse inventory = 1;
+}

@@ -308,6 +308,7 @@ class ReferenceInventoryEntry extends $pb.GeneratedMessage {
     ReferenceInventoryIssueKind? issueKind,
     $core.bool? retired,
     $core.String? observedFileId,
+    $core.String? ownerChatId,
   }) {
     final result = create();
     if (key != null) result.key = key;
@@ -321,6 +322,7 @@ class ReferenceInventoryEntry extends $pb.GeneratedMessage {
     if (issueKind != null) result.issueKind = issueKind;
     if (retired != null) result.retired = retired;
     if (observedFileId != null) result.observedFileId = observedFileId;
+    if (ownerChatId != null) result.ownerChatId = ownerChatId;
     return result;
   }
 
@@ -357,6 +359,7 @@ class ReferenceInventoryEntry extends $pb.GeneratedMessage {
         enumValues: ReferenceInventoryIssueKind.values)
     ..aOB(9, _omitFieldNames ? '' : 'retired')
     ..aOS(10, _omitFieldNames ? '' : 'observedFileId')
+    ..aOS(11, _omitFieldNames ? '' : 'ownerChatId')
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -459,6 +462,16 @@ class ReferenceInventoryEntry extends $pb.GeneratedMessage {
   $core.bool hasObservedFileId() => $_has(9);
   @$pb.TagNumber(10)
   void clearObservedFileId() => $_clearField(10);
+
+  /// Persisted owner context only; not File upload context or Space authority.
+  @$pb.TagNumber(11)
+  $core.String get ownerChatId => $_getSZ(10);
+  @$pb.TagNumber(11)
+  set ownerChatId($core.String value) => $_setString(10, value);
+  @$pb.TagNumber(11)
+  $core.bool hasOwnerChatId() => $_has(10);
+  @$pb.TagNumber(11)
+  void clearOwnerChatId() => $_clearField(11);
 }
 
 class ReferenceInventoryPage extends $pb.GeneratedMessage {

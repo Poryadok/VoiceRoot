@@ -98,6 +98,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(ChatRoomPanel.inputKey), findsOneWidget);
+    expect(find.byKey(const Key('voice_note_mic')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.enterText(
+      find.byKey(ChatRoomPanel.inputKey),
+      'Draft at text scale 1.5',
+    );
+    await tester.pumpAndSettle();
+
     expect(find.byKey(ChatRoomPanel.sendKey), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

@@ -185,6 +185,9 @@ messaging_pb.SendMessageRequest sendMessageRequestToProto({
           ),
     mentionsJson: MessageMention.encodeJson(mentions),
     sendSilent: sendSilent,
+    contentType: attachments.any((a) => a.type == 'voice_message')
+        ? MessageContentType.MESSAGE_CONTENT_TYPE_VOICE
+        : null,
   );
   if (isE2e) {
     request.isE2e = true;
@@ -589,13 +592,16 @@ file_pb.RequestUploadRequest requestUploadToProto({
   ChatType chatType = ChatType.CHAT_TYPE_DM,
   bool isE2e = false,
   bool music = false,
+  bool voiceNote = false,
   String? storyId,
 }) {
   final request = file_pb.RequestUploadRequest(
     originalName: originalName,
     mimeType: mimeType,
     sizeBytes: Int64(sizeBytes),
-    intent: music
+    intent: voiceNote
+        ? file_pb.UploadIntent.UPLOAD_INTENT_AUDIO
+        : music
         ? file_pb.UploadIntent.UPLOAD_INTENT_MUSIC
         : file_pb.UploadIntent.UPLOAD_INTENT_UNSPECIFIED,
     contextChat: chatId == null || chatId.isEmpty

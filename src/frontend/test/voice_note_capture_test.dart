@@ -110,6 +110,65 @@ void main() {
       messenger.setMockMethodCallHandler(channel, null);
     }
   });
+  test(
+    'idle local recorder lifecycle never creates a native backend',
+    () async {
+      const channel = MethodChannel('com.llfbandit.record/messages');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final calls = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return null;
+      });
+      try {
+        final local = LocalVoiceNoteRecorder();
+        final subscription = local.amplitudes.listen((_) {});
+        await subscription.cancel();
+        await local.cancel();
+        await local.dispose();
+        await expectLater(local.stop(), throwsStateError);
+        await expectLater(local.hasPermission(), throwsStateError);
+        await expectLater(local.start(), throwsStateError);
+        expect(calls, isEmpty);
+      } finally {
+        messenger.setMockMethodCallHandler(channel, null);
+      }
+    },
+  );
+  test(
+    'permission explicitly creates one backend and cleanup is idempotent',
+    () async {
+      const channel = MethodChannel('com.llfbandit.record/messages');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      final calls = <String>[];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        calls.add(call.method);
+        return call.method == 'hasPermission' ? false : null;
+      });
+      try {
+        final local = LocalVoiceNoteRecorder();
+        expect(calls, isEmpty);
+        expect(await local.hasPermission(), isFalse);
+        expect(await local.hasPermission(), isFalse);
+        await expectLater(local.stop(), throwsStateError);
+        await local.cancel();
+        await local.dispose();
+        await local.dispose();
+        expect(calls.where((method) => method == 'create'), hasLength(1));
+        expect(
+          calls.where((method) => method == 'hasPermission'),
+          hasLength(2),
+        );
+        expect(calls.where((method) => method == 'cancel'), hasLength(1));
+        expect(calls.where((method) => method == 'dispose'), hasLength(1));
+        expect(calls, isNot(contains('stop')));
+      } finally {
+        messenger.setMockMethodCallHandler(channel, null);
+      }
+    },
+  );
   for (final activation in [
     LogicalKeyboardKey.enter,
     LogicalKeyboardKey.space,

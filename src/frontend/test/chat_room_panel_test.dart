@@ -83,6 +83,7 @@ void main() {
       find.byKey(ChatRoomPanel.inputKey),
       'Unsent after failure',
     );
+    await tester.pump();
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pumpAndSettle();
     expect(harness.bodies, hasLength(1));
@@ -243,6 +244,7 @@ void main() {
     harness.container.read(chatReplyTargetProvider('chat-abc').notifier).state =
         _retryReply;
     await tester.pumpAndSettle();
+    await tester.pump();
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pumpAndSettle();
 
@@ -283,6 +285,7 @@ void main() {
           find.byKey(ChatRoomPanel.inputKey),
           'Retry draft',
         );
+        await tester.pump();
         await tester.tap(find.byKey(ChatRoomPanel.sendKey));
         await tester.pumpAndSettle();
 
@@ -364,6 +367,7 @@ void main() {
           find.byKey(ChatRoomPanel.inputKey),
           'Private A draft',
         );
+        await tester.pump();
         await tester.tap(find.byKey(ChatRoomPanel.sendKey));
         await tester.pumpAndSettle();
         final retry = tester
@@ -427,6 +431,7 @@ void main() {
         find.byKey(ChatRoomPanel.inputKey),
         'Pending text',
       );
+      await tester.pump();
       await tester.tap(find.byKey(ChatRoomPanel.sendKey));
       await tester.pump();
       harness.container
@@ -469,6 +474,7 @@ void main() {
         find.byKey(ChatRoomPanel.inputKey),
         'Original text',
       );
+      await tester.pump();
       await tester.tap(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
       final retry = tester
@@ -513,6 +519,7 @@ void main() {
           find.byKey(ChatRoomPanel.inputKey),
           'Failed text',
         );
+        await tester.pump();
         await tester.tap(find.byKey(ChatRoomPanel.sendKey));
         await tester.pumpAndSettle();
         harness.room.state = harness.room.state.copyWith(
@@ -555,6 +562,7 @@ void main() {
         find.byKey(ChatRoomPanel.inputKey),
         'Original text',
       );
+      await tester.pump();
       await tester.tap(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(ChatRoomPanel.inputKey), 'Newer text');
@@ -604,6 +612,7 @@ void main() {
       find.byKey(ChatRoomPanel.inputKey),
       'Retained reply body',
     );
+    await tester.pump();
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pumpAndSettle();
     expect(harness.bodies, hasLength(1));
@@ -655,6 +664,7 @@ void main() {
       find.byKey(ChatRoomPanel.inputKey),
       'Private A text',
     );
+    await tester.pump();
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pump();
     final auth = harness.container.read(authControllerProvider.notifier);
@@ -1325,6 +1335,7 @@ void main() {
       find.byKey(ChatRoomPanel.inputKey),
       'Draft stays here',
     );
+    await tester.pump();
     await tester.tap(find.byKey(ChatRoomPanel.sendKey));
     await tester.pumpAndSettle();
 
@@ -1481,6 +1492,7 @@ void main() {
       ];
       for (final invalidState in invalidMenuStates) {
         chatListController.state = invalidState;
+        await tester.pump();
         await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
         await tester.pumpAndSettle();
         expect(find.byType(ComposerSendMenu), findsOneWidget);
@@ -1493,6 +1505,7 @@ void main() {
         profileId: 'prof-test',
         items: [dmItem],
       );
+      await tester.pump();
       await tester.longPress(find.byKey(ChatRoomPanel.sendKey));
       await tester.pumpAndSettle();
       expect(find.byType(ComposerSendMenu), findsOneWidget);

@@ -242,11 +242,21 @@ const ReferenceInventoryEntry$json = {
       '10': 'observedFileId',
       '17': true
     },
+    {
+      '1': 'owner_chat_id',
+      '3': 11,
+      '4': 1,
+      '5': 9,
+      '9': 3,
+      '10': 'ownerChatId',
+      '17': true
+    },
   ],
   '8': [
     {'1': '_author_profile_id'},
     {'1': '_issue_id'},
     {'1': '_observed_file_id'},
+    {'1': '_owner_chat_id'},
   ],
 };
 
@@ -261,8 +271,9 @@ final $typed_data.Uint8List referenceInventoryEntryDescriptor = $convert.base64D
     'Cghpc3N1ZV9pZBgHIAEoCUgBUgdpc3N1ZUlkiAEBEksKCmlzc3VlX2tpbmQYCCABKA4yLC52b2'
     'ljZS5jb21tb24udjEuUmVmZXJlbmNlSW52ZW50b3J5SXNzdWVLaW5kUglpc3N1ZUtpbmQSGAoH'
     'cmV0aXJlZBgJIAEoCFIHcmV0aXJlZBItChBvYnNlcnZlZF9maWxlX2lkGAogASgJSAJSDm9ic2'
-    'VydmVkRmlsZUlkiAEBQhQKEl9hdXRob3JfcHJvZmlsZV9pZEILCglfaXNzdWVfaWRCEwoRX29i'
-    'c2VydmVkX2ZpbGVfaWQ=');
+    'VydmVkRmlsZUlkiAEBEicKDW93bmVyX2NoYXRfaWQYCyABKAlIA1ILb3duZXJDaGF0SWSIAQFC'
+    'FAoSX2F1dGhvcl9wcm9maWxlX2lkQgsKCV9pc3N1ZV9pZEITChFfb2JzZXJ2ZWRfZmlsZV9pZE'
+    'IQCg5fb3duZXJfY2hhdF9pZA==');
 
 @$core.Deprecated('Use referenceInventoryPageDescriptor instead')
 const ReferenceInventoryPage$json = {
