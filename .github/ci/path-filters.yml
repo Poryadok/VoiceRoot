@@ -1,6 +1,9 @@
 # Path filters for CI tier 1 (PR / push). Sync service paths with Makefile GO_SERVICES.
 # Global / shared paths widen blast radius (run all Go services, full flutter, etc.).
 
+full_application_request:
+  - .github/ci/full-application-build-request.json
+
 global:
   - scripts/dev/generate-phase0-fixture.py
   - docker/phase0/**
