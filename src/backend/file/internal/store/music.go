@@ -11,7 +11,7 @@ import (
 )
 
 func (s *FilesStore) markUnavailableWithMusicEvent(ctx context.Context, id uuid.UUID, status string) error {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func markUnavailableWithMusicEventTx(ctx context.Context, tx pgx.Tx, row FileRow
 // ApplyAudioProcessing commits metadata and its processing event together. No clock value serves as
 // a revision; retries consume the same durable snapshot.
 func (s *FilesStore) ApplyAudioProcessing(ctx context.Context, id uuid.UUID, title, artist, album string, duration int32) (FileRow, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return FileRow{}, err
 	}
@@ -144,7 +144,7 @@ WHERE id=$1 AND status='processing' AND upload_intent='audio' AND file_type='aud
 func (s *FilesStore) DispatchMusicEvent(ctx context.Context, publish func(context.Context, []byte) error) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}

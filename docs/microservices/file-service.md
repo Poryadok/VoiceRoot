@@ -605,3 +605,36 @@ Activation requires sealed deterministic backfills from every owner, dual-write
 catch-up, a `LIVE` fence for every Space-scoped reference and zero remaining
 file_id-only callers. Full lifecycle/operation receipts retain 30 days after
 completion; permanent compact PURGED fence state survives identifier reuse.
+
+### Protective historical inventory importer
+
+The dedicated Story inventory protocol is consumed only by File's private worker.
+Trusted controller composition must first commit `CreateInventoryOperation` with
+the full identity. Migration `000016_reference_inventory` then blocks destructive
+work before any remote snapshot call. The worker pulls signed/mTLS Story pages
+outside File transactions and atomically records immutable receipts, cursor,
+counted issues and private blob holds under the cohort/File/blob locks. Exact
+replay is idempotent; changed bytes or identity block the operation. The compiled
+coverage commitment includes service, component, closed owner kinds and writer
+version; unknown catalog/pending-write key shapes and all other owners stay
+MISSING. No caller can select a smaller coverage set or activate a cohort.
+
+Holds protect bytes without creating a readable reference/capability, admitting
+historical media or reviving terminal Files. Unknown/missing/terminal/processing,
+wrong-context or conflicting rows remain issues. Negative journal state cannot
+drop final protection during migration. GC claim and pre-DELETE, alias mutation,
+uploader/error/catalog/derivative cleanup use the same barrier. Non-GC storage
+deletes durably record STARTED before I/O; ambiguous requests retain STARTED or
+UNSETTLED and prohibit a new proof window. A local transaction lock does not
+pretend to drain an already submitted object-store request.
+
+Optional `FILE_STORY_REFERENCE_INVENTORY_` client settings are complete-or-absent:
+`GRPC_ADDR`, `TLS_CA_FILE`, `TLS_SERVER_NAME`, `TLS_CERT_FILE`, `TLS_KEY_FILE`.
+They reuse File's actual signing principal and process only durable DB operations;
+configuration does not invent installation/restore IDs or authority.
+
+The global release provider remains nil. All-owner inventory/seals, writer and
+reader cutover, Space fences, immutable storage-key generations and external
+non-rollback restore/drain control remain prerequisites. Incomplete/unacknowledged
+receipts/holds cannot expire merely after P30; completion-based compaction is not
+implemented here. See the [execution plan](../testing/be096-reference-inventory-exec-plan.md).

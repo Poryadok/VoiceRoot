@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package voice.story.v1;
+
+import "voice/common/v1/reference_inventory.proto";
+
+option go_package = "voice.app/voice/story/v1;storyv1";
+
+// Private migration endpoint. It does not attest global File activation.
+service StoryReferenceInventoryService {
+  // @voice.security=protected;callers=service:file
+  rpc BeginReferenceInventory(voice.common.v1.BeginReferenceInventoryRequest) returns (voice.common.v1.BeginReferenceInventoryResponse);
+  // @voice.security=protected;callers=service:file
+  rpc ReadReferenceInventoryPage(voice.common.v1.ReadReferenceInventoryPageRequest) returns (voice.common.v1.ReadReferenceInventoryPageResponse);
+  // @voice.security=protected;callers=service:file
+  rpc ReadReferenceInventoryChanges(voice.common.v1.ReadReferenceInventoryChangesRequest) returns (voice.common.v1.ReadReferenceInventoryChangesResponse);
+  // @voice.security=protected;callers=service:file
+  rpc SealReferenceInventory(voice.common.v1.SealReferenceInventoryRequest) returns (voice.common.v1.SealReferenceInventoryResponse);
+}

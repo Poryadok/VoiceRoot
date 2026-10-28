@@ -49,7 +49,7 @@ func loadGIFRepresentations(ctx context.Context, q fileRowQueryer, row *FileRow)
 // ConfirmGIFUpload serializes confirmation with deletion and creates exactly one
 // durable job. The caller has verified the source bytes against sha.
 func (s *FilesStore) ConfirmGIFUpload(ctx context.Context, id uuid.UUID, sha string) (FileRow, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return FileRow{}, err
 	}
@@ -104,7 +104,7 @@ type GIFJob struct {
 // its database lease is180 seconds. A tracked STARTED/UNSETTLED write remains
 // pinned independently of these scheduling bounds; elapsed time is not fencing.
 func (s *FilesStore) ClaimGIFJob(ctx context.Context) (*GIFJob, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (s *FilesStore) ClaimGIFJob(ctx context.Context) (*GIFJob, error) {
 // FinishGIFJob atomically publishes only the winning live attempt. A stale or
 // deleted attempt leaves its declared keys eligible for durable cleanup.
 func (s *FilesStore) FinishGIFJob(ctx context.Context, job *GIFJob, full, thumb *Representation, width, height, duration int32, failed bool) (bool, error) {
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}
@@ -264,7 +264,7 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	if deleter == nil {
 		return false, nil
 	}
-	tx, err := s.Pool.Begin(ctx)
+	tx, err := BeginInventoryMutation(ctx, s.Pool, true)
 	if err != nil {
 		return false, err
 	}
@@ -308,12 +308,46 @@ func (s *FilesStore) CleanupGIFOnce(ctx context.Context, deleter r2file.ObjectDe
 	}
 	// Recheck after the File lock with a fresh snapshot. A Start that won the
 	// lock before this cleanup may have submitted a PUT since candidate selection.
+	if inventory, e := inventoryHoldsExistTx(ctx, tx); e != nil {
+		return false, e
+	} else if inventory {
+		var blob uuid.UUID
+		if err = tx.QueryRow(ctx, `SELECT b.blob_id FROM files f JOIN file_blobs b ON b.blob_id=f.blob_id WHERE f.id=$1 FOR UPDATE OF b`, id).Scan(&blob); err != nil {
+			return false, err
+		}
+	}
 	collect, err := CanCollectTrackedObjectTx(ctx, tx, id, key)
 	if err != nil || !collect {
 		return false, err
 	}
-	if err = deleter.DeleteObject(ctx, key); err != nil {
+	var deleteAttempt uuid.UUID
+	if inventory, e := inventoryHoldsExistTx(ctx, tx); e != nil {
+		return false, e
+	} else if inventory {
+		generation, e := LockInventoryGuardTx(ctx, tx, true)
+		if e != nil {
+			return false, e
+		}
+		// The outer physical transaction retains the shared guard. Commit the
+		// insert-only attempt through the pool, without reacquiring that guard
+		// behind an exclusive cohort waiter or releasing File/blob authority.
+		deleteAttempt, e = insertInventoryDelete(ctx, s.Pool, key, generation)
+		if e != nil {
+			return false, e
+		}
+	}
+	deleteCtx, cancel := context.WithTimeout(guardedInventoryDeleteContext(ctx), 5*time.Second)
+	defer cancel()
+	if err = deleter.DeleteObject(deleteCtx, key); err != nil {
+		if deleteAttempt != uuid.Nil {
+			return false, finishInventoryDeleteTx(tx, deleteAttempt, err)
+		}
 		return false, err
+	}
+	if deleteAttempt != uuid.Nil {
+		if err = setInventoryDeleteOutcomeTx(ctx, tx, deleteAttempt, nil); err != nil {
+			return false, err
+		}
 	}
 	// Public upload clients have no trusted storage completion/fence channel.
 	// Keep their original discoverable after URL expiry and repeat deletion at

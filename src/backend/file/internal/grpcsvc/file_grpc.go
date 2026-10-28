@@ -150,6 +150,9 @@ type FileGRPC struct {
 }
 
 func New(deps Deps) *FileGRPC {
+	if deps.Files != nil {
+		deps.Deleter = deps.Files.InventoryGuardedDeleter(deps.Deleter)
+	}
 	clock := deps.Clock
 	if clock == nil {
 		clock = realClock{}

@@ -7,6 +7,8 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import re
+import stat
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import encrypted_cut
@@ -25,6 +27,106 @@ V5_BINDING='23b26ad5478e01d4b00abf171d29a5d210c6c2fbf6284826cf9e3a84cfd73a9a'
 CECCB_INSTALLED_BINDING='ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032'
 SOURCE_CAPTURE_INSTALLED_BINDING='65717bd51213624f7c0890e97b2cdf1ef9149f57fb27f22f3bdbebca5fb963e5'
 SEARCH_BOOTSTRAP_INSTALLED_BINDING='a025ffb62b4c0716a44611c4ac00fe9cae60b8bcb5e8b48204b44a62dc541749'
+
+# Closed source predecessor, not an assertion about the actual installed host.
+# Unchanged members/binaries must exactly match the reviewed successor bundle.
+TT_FENCING_PREDECESSOR_SOURCE='f8624086f71d2d4baf1d1ae6cf6461246254960f'
+TT_FENCING_NEW_MEMBER='nats-rollout-preservation/resource_claim.py'
+TT_FENCING_BINARY_MEMBERS=frozenset(('nats-known-baseline/kernel','nats-rollout-preservation/bootstrap-renewer','nats-rollout-preservation/story-current4-probe'))
+TT_FENCING_SOURCE_COHORT='db189b10d4417e8baea025645eb11c20711ae6942a09cbddb3026ca7c8fa9dfb'
+TT_FENCING_PREDECESSOR_MEMBERS=frozenset('''
+configure-kubectl-ci.sh mail-only-patch.py
+nats-known-baseline/commands.py nats-known-baseline/controller.py
+nats-known-baseline/deployed-contract.json nats-known-baseline/docker_runtime.py
+nats-known-baseline/kernel nats-known-baseline/root_main.py nats-known-baseline/scenario.py nats-known-baseline/stage_runtime.py
+nats-rollout-preservation/actor_auth.py nats-rollout-preservation/actor_permissions.py nats-rollout-preservation/actor_root.py
+nats-rollout-preservation/actor_verification.py nats-rollout-preservation/apply.py nats-rollout-preservation/bootstrap-renewer
+nats-rollout-preservation/bootstrap_auth.py nats-rollout-preservation/bootstrap_enrollment.py nats-rollout-preservation/bootstrap_renewal.py
+nats-rollout-preservation/bootstrap_root.py nats-rollout-preservation/bootstrap_selection.py nats-rollout-preservation/bot_migration.py
+nats-rollout-preservation/bridge.py nats-rollout-preservation/bridge_client.py nats-rollout-preservation/bridge_root.py
+nats-rollout-preservation/closed-seal-source-policies.json nats-rollout-preservation/closed_archive.py nats-rollout-preservation/closed_durable.py
+nats-rollout-preservation/compiler.py nats-rollout-preservation/deployment_report.py nats-rollout-preservation/encrypted_cut.py
+nats-rollout-preservation/errors.py nats-rollout-preservation/expired_admission.py nats-rollout-preservation/expired_finish.py
+nats-rollout-preservation/expired_proof.py nats-rollout-preservation/expired_recovery.py nats-rollout-preservation/expired_transport.py
+nats-rollout-preservation/gis_first_install.py nats-rollout-preservation/gis_prerequisite.py nats-rollout-preservation/github_custody.py
+nats-rollout-preservation/guard.py nats-rollout-preservation/hub_bridge_identity.py nats-rollout-preservation/hub_bridge_unit.py
+nats-rollout-preservation/installer.py nats-rollout-preservation/migrations.py nats-rollout-preservation/native_store.py
+nats-rollout-preservation/nats_active_contract.py nats-rollout-preservation/nats_contract_actor.py nats-rollout-preservation/nats_contract_custody.py
+nats-rollout-preservation/nats_contract_plan.py nats-rollout-preservation/nats_deliver_all.py nats-rollout-preservation/nats_migration.py
+nats-rollout-preservation/nats_root_plan.py nats-rollout-preservation/nonnats_plan.py nats-rollout-preservation/nonnats_runtime.py
+nats-rollout-preservation/normalize.py nats-rollout-preservation/operator_reset.py nats-rollout-preservation/operator_retirement.py
+nats-rollout-preservation/paused_recovery.py nats-rollout-preservation/prebuild_disposition.py nats-rollout-preservation/prebuild_v5_disposition.py
+nats-rollout-preservation/preserve.py nats-rollout-preservation/preserved_upload.py nats-rollout-preservation/provisional.py
+nats-rollout-preservation/release_policy_wiring.py nats-rollout-preservation/renderer_execution.py nats-rollout-preservation/renderer_root.py
+nats-rollout-preservation/renderer_transition.py nats-rollout-preservation/rollout_census.py nats-rollout-preservation/root_cli.py
+nats-rollout-preservation/runner.py nats-rollout-preservation/runtime_stage.py nats-rollout-preservation/source_authority.py
+nats-rollout-preservation/source_plan.py nats-rollout-preservation/space_authority.py nats-rollout-preservation/space_backup.py
+nats-rollout-preservation/space_migration.py nats-rollout-preservation/space_restore.py nats-rollout-preservation/space_safeguards.py
+nats-rollout-preservation/story-current4-probe nats-rollout-preservation/story_fixture.py nats-rollout-preservation/story_witness.py
+nats-rollout-preservation/transaction.py nats-rollout-preservation/v8_upgrade.py nats-rollout-preservation/workflow_entry.py
+'''.split())
+TT_FENCING_OLD_HASHES={
+    'nats-known-baseline/commands.py':'a517af1827659ead7719ed3da91bc55720c33c5e13362d66593065fde61fd001',
+    'nats-rollout-preservation/apply.py':'ac499d9247828d146122998764c97d4c6f6bffa236719d6c4f4b4e73d0685b1f',
+    'nats-rollout-preservation/bridge.py':'4c71a808b960f4cb843a7936d6102405239b012a3eec08d9bcbea6be11beb361',
+    'nats-rollout-preservation/bridge_client.py':'97095d062a67aa19379968724e8cce5d107119379ca2f1cfdd1fd353e28bdaee',
+    'nats-rollout-preservation/bridge_root.py':'efa249bc5e1135e7267918a1daee0ec28d0bde25d0e17f23a37049d378224792',
+    'nats-rollout-preservation/guard.py':'620ab93827d62cf337e801888df722311a7fd7a5aa7a5d64ca7073a8000d07bd',
+    'nats-rollout-preservation/installer.py':'4b7ee50c2a0a055f0eb2b8804077562ce390b559597bafcee71b1f7277f1abef',
+    'nats-rollout-preservation/root_cli.py':'99a57ebd6afe46b777b0996599a4ea84894326dff87138f2ddb8f375fac2114a',
+    'nats-rollout-preservation/runner.py':'0b4531220247fcff6f4a5fda2ce2e50fdd77b084dfa9c3ace2f7f113bfbf4c4b',
+    'nats-rollout-preservation/transaction.py':'0edca65b21d555a349c1a8b3413677d27e1a833e371d5387f84576c5b01e9cd4',
+}
+
+
+def tt_fencing_predecessor(binding):
+    if (not isinstance(binding,dict) or set(binding)!=TT_FENCING_PREDECESSOR_MEMBERS|{TT_FENCING_NEW_MEMBER}
+        or any(not isinstance(v,str) or not re.fullmatch('[a-f0-9]{64}',v) for v in binding.values())):
+        raise Blocked('bridge_tt_upgrade_successor_members_invalid')
+    previous={name:TT_FENCING_OLD_HASHES.get(name,binding[name]) for name in TT_FENCING_PREDECESSOR_MEMBERS}
+    source={name:value for name,value in previous.items() if name not in TT_FENCING_BINARY_MEMBERS}
+    if hashlib.sha256(json.dumps(source,sort_keys=True,separators=(',',':')).encode()).hexdigest()!=TT_FENCING_SOURCE_COHORT:
+        raise Blocked('bridge_tt_upgrade_predecessor_source_drift')
+    return previous
+
+
+def tt_code_inventory(code,binding):
+    code=Path(code);seen=set();paths=list(code.rglob('*'))
+    if len(paths)>256:raise Blocked('bridge_tt_upgrade_inventory_bound')
+    directories={'.'}
+    for name in binding:
+        directories.update(p.as_posix() for p in Path(name).parents)
+    cache_directories={(Path(p)/'__pycache__').as_posix() for p in directories}
+    for path in paths:
+        relative=path.relative_to(code).as_posix();info=path.lstat()
+        if info.st_uid!=0 or info.st_mode&0o022 or stat.S_ISLNK(info.st_mode):raise Blocked('bridge_tt_upgrade_inventory_untrusted')
+        if stat.S_ISDIR(info.st_mode):
+            if relative not in directories|cache_directories:raise Blocked('bridge_tt_upgrade_unlisted_member')
+            continue
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:raise Blocked('bridge_tt_upgrade_inventory_untrusted')
+        if relative in binding or relative=='capture-manifest.json':seen.add(relative);continue
+        match=re.fullmatch(r'(.+)\.cpython-[0-9]+(?:\.opt-[0-9]+)?\.pyc',path.name)
+        source=(path.parent.parent/(match[1]+'.py')).relative_to(code).as_posix() if match else None
+        if path.parent.name!='__pycache__' or source not in binding:raise Blocked('bridge_tt_upgrade_unlisted_member')
+    if seen!=set(binding)|{'capture-manifest.json'}:raise Blocked('bridge_tt_upgrade_missing_member')
+
+
+def tt_resource_journal_snapshot(installed):
+    import resource_claim
+    path=Path(installed)/resource_claim.JOURNAL
+    try:
+        row=resource_claim.trusted_json(path,missing=True)
+        if row is None:return {str(path):None}
+        expected={'schema','context','operation','helper_sha256','target_sha256','status','phase','actual'}
+        if (set(row)!=expected or row['schema']!='voice-staging-resource-fence-v1' or row['status']!='complete'
+            or row['phase']!='finished' or not re.fullmatch('[a-f0-9]{12}',row['operation'])
+            or any(not re.fullmatch('[a-f0-9]{64}',row[key]) for key in ('helper_sha256','target_sha256'))):
+            raise ValueError('unresolved journal')
+        resource_claim.validate(row['context'])
+        if row['actual']!=row['context']['images']:raise ValueError('unknown actual version')
+        return {str(path):hashlib.sha256(path.read_bytes()).hexdigest()}
+    except (OSError,ValueError,TypeError,KeyError,RuntimeError):
+        raise Blocked('bridge_tt_upgrade_resource_reconciliation_required') from None
 
 def binding_sha(code):
     return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -208,6 +310,13 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
         inbox.chmod(0o700)
         try:
             if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
+            tt_protected={}
+            tt_copies=()
+            if version=='idle-tt-resource-fencing-v1':
+                tt_protected=tt_resource_journal_snapshot(installed)
+                tt_copies=(code,installed/'code',installed/('code-'+version+'-staged'),installed/('code-'+previous_version+'-preserved'))
+                for copy in tt_copies:
+                    if copy.exists():tt_code_inventory(copy,root_cli.code_binding(copy))
             journals={str(path):hashlib.sha256(retirement.private_bytes(path,2<<20,group_read=directory=='responses')).hexdigest()
                 for directory in ('journal','responses') for path in (installed/directory).iterdir()}
             source_workspaces={}
@@ -219,6 +328,7 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                 if path.stem[:12] in retirement.SEARCH_BOOTSTRAP_REJECTIONS:source_workspaces[path.name]=accepted
                 if path.name==retirement.STORY_PREFENCE_NONCE+'.json':source_workspaces[path.name]=accepted
             protected={str(installed/'policy.json'):hashlib.sha256(retirement.private_bytes(installed/'policy.json',2<<20)).hexdigest()}
+            protected.update(tt_protected)
             abandonment=installed/retirement.PENDING_ABANDONMENT_NAME
             try:abandonment.lstat()
             except FileNotFoundError:protected[str(abandonment)]=None
@@ -230,6 +340,8 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
             witnesses=story_witness.registry_snapshot()
             if kube.get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
             _upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid,predecessor,version,previous_version)
+            for copy in tt_copies:
+                if copy.exists():tt_code_inventory(copy,root_cli.code_binding(copy))
             if story_witness.registry_snapshot()!=witnesses or kube.get('configmap','voice-nats-generation')!=marker:
                 raise Blocked('bridge_upgrade_marker_changed')
             for name,wanted in {**checkpoints,**journals,**protected}.items():
@@ -284,6 +396,14 @@ def upgrade_idle_story_fixture_v1(code):
     _upgrade_idle_transition(code,'7f5b901d8429f2d560bb7f71481baabfd90ad2303cfd1b06c8569d94ff87920b',
         'idle-story-fixture-v1','story-7f5b',
         'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_STORY_FIXTURE_V1_KEYS_POLICY_HISTORY_PRESERVED')
+
+
+def upgrade_idle_tt_resource_fencing_v1(code):
+    """Exact finite source transition; never accept a caller's expected hash."""
+    binding=root_cli.code_binding(Path(code));previous=tt_fencing_predecessor(binding)
+    predecessor=hashlib.sha256(json.dumps(previous,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    _upgrade_idle_transition(code,predecessor,'idle-tt-resource-fencing-v1','tt-predecessor-f8624086',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_TT_RESOURCE_FENCING_V1_HISTORY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -363,8 +483,9 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1 | --upgrade-idle-media-v1 | --upgrade-idle-story-fixture-v1')
-    if sys.argv[1]=='--upgrade-idle-story-fixture-v1':upgrade_idle_story_fixture_v1(Path(__file__).resolve().parents[1])
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-idle-tt-resource-fencing-v1 | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1 | --upgrade-idle-media-v1 | --upgrade-idle-story-fixture-v1')
+    if sys.argv[1]=='--upgrade-idle-tt-resource-fencing-v1':upgrade_idle_tt_resource_fencing_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-story-fixture-v1':upgrade_idle_story_fixture_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-media-v1':upgrade_idle_media_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-expiry-reset-v1':upgrade_idle_expiry_reset_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle':upgrade_idle(Path(__file__).resolve().parents[1])

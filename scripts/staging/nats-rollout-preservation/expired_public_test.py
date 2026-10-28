@@ -6,7 +6,9 @@ import bridge,bridge_client,bridge_root
 
 class PublicRecoveryTests(unittest.TestCase):
     def environment(self):
-        return {'GITHUB_RUN_ID':'99','GITHUB_RUN_ATTEMPT':'1','GITHUB_JOB':'deploy','GITHUB_SHA':'a'*40,'GITHUB_TOKEN':'synthetic-token'}
+        from resource_claim_test import context
+        return {'GITHUB_RUN_ID':'99','GITHUB_RUN_ATTEMPT':'1','GITHUB_JOB':'deploy','GITHUB_SHA':'a'*40,'GITHUB_TOKEN':'synthetic-token',
+            'VOICE_TTENREC_CONTEXT':json.dumps(context())}
     def rows(self):
         op='3340764a7d24';nonce='b'*64
         return [(['prepare-expired-native',op,'99'],'_prepare_expired_native'),
@@ -99,12 +101,12 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('deployment_report.py',bundle.ROLLOUT)
         self.assertIn('nats_deliver_all.py',bundle.ROLLOUT)
         self.assertIn('release_policy_wiring.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,85)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,86)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}
-            for index in range(85):
+            for index in range(86):
                 name='module'+str(index)+'.py';raw=('pinned source '+str(index)).encode()
                 path=code/name;path.write_bytes(raw);path.chmod(0o440);manifest[name]=hashlib.sha256(raw).hexdigest()
             def write():
