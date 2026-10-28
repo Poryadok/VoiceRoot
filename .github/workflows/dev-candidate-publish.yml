@@ -48,6 +48,8 @@ on:
       - scripts/dev/cohort_upload_runner_test.py
       - scripts/dev/realtime_secret_phase.py
       - scripts/dev/realtime_secret_phase_test.py
+      - scripts/dev/realtime_p3_adoption.py
+      - scripts/dev/realtime_p3_adoption_test.py
       - .github/workflows/dev-cohort-backup-upload.yml
       - scripts/dev/story_media_backup_cohort_finalize.py
       - scripts/dev/story_media_backup_cohort_finalize_test.py
@@ -107,6 +109,7 @@ jobs:
           python -B scripts/dev/cohort_upload_run_test.py
           python -B scripts/dev/cohort_upload_runner_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
+          python -B scripts/dev/realtime_p3_adoption_test.py
           python -B scripts/dev/story_media_backup_cohort_finalize_test.py
 
   publish:
