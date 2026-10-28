@@ -212,7 +212,7 @@ type sessionMembershipBarrier struct {
 	release chan struct{}
 }
 
-func (m *sessionMembershipBarrier) ListMembers(ctx context.Context, req *chatv1.ListMembersRequest, opts ...grpc.CallOption) (*chatv1.ListMembersResponse, error) {
+func (m *sessionMembershipBarrier) GetChat(ctx context.Context, req *chatv1.GetChatRequest, opts ...grpc.CallOption) (*chatv1.GetChatResponse, error) {
 	if m.calls.Add(1) == 2 {
 		close(m.entered)
 		select {
@@ -221,7 +221,7 @@ func (m *sessionMembershipBarrier) ListMembers(ctx context.Context, req *chatv1.
 			return nil, ctx.Err()
 		}
 	}
-	return m.allowMembershipClient.ListMembers(ctx, req, opts...)
+	return m.allowMembershipClient.GetChat(ctx, req, opts...)
 }
 
 func TestWaitingSlashReplyCannotSurviveRemoteRotation(t *testing.T) {
