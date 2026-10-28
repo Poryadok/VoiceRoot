@@ -222,10 +222,18 @@ def qualify(root, admission, backup_directory, manifest, report, operation, tool
     receipt = None
     try:
         def decrypt(name):
-            cid = docker.create(tools_image, ['-i', '--network', 'none', '-e', 'VOICE_BACKUP_KEY=' + key,
-                         '--entrypoint', 'openssl'], ['enc', '-d', '-aes-256-cbc', '-pbkdf2', '-iter',
-                                                    '200000', '-pass', 'env:VOICE_BACKUP_KEY'])
-            return call('start', '-a', '-i', cid, data=encrypted[name])
+            read_fd, write_fd = os.pipe()
+            try:
+                os.write(write_fd, key.encode() + b'\n'); os.close(write_fd); write_fd = -1
+                result = subprocess.run(['openssl','enc','-d','-aes-256-cbc','-pbkdf2','-iter','200000',
+                    '-pass','file:/proc/self/fd/' + str(read_fd)], input=encrypted[name], capture_output=True,
+                    pass_fds=(read_fd,), timeout=180)
+                if result.returncode:
+                    raise ValueError('private backup decryption failed')
+                return result.stdout
+            finally:
+                os.close(read_fd)
+                if write_fd >= 0: os.close(write_fd)
         role_sql = decrypt('roles.enc').decode('utf-8')
         if re.search(r'\bPASSWORD\s', role_sql, re.I) or role_sql.count('CREATE ROLE voice;') != 1:
             raise ValueError('role archive is not admitted')
