@@ -41,8 +41,8 @@ class PublisherTests(unittest.TestCase):
     def test_frozen_web_output_requires_runtime_loader_and_no_environment_urls(self):
         source = 'df00a393e03feb176439a50bfe5605f32c16b322'
         main = b'voice-runtime-config.json'
-        boot = b'fixture'
         main_name = 'main.' + hashlib.sha256(main).hexdigest() + '.dart.js'
+        boot = main_name.encode()
         boot_name = 'flutter_bootstrap.' + hashlib.sha256(boot).hexdigest() + '.js'
         manifest = {'schema': 'voice-web-assets-v1',
                     'main': {'path': main_name, 'sha256': hashlib.sha256(main).hexdigest(), 'bytes': len(main)},

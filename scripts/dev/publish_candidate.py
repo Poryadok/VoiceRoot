@@ -152,6 +152,7 @@ def verify_output(component, files, product, expected_sql=None):
             require(row.get('path') == name and isinstance(data, bytes) and row.get('bytes') == len(data)
                     and hashlib.sha256(data).hexdigest() == sha, 'web_asset_identity')
         require(manifest['bootstrap']['path'].encode() in files['index.html'], 'web_index_binding')
+        require(manifest['main']['path'].encode() in files[manifest['bootstrap']['path']], 'web_bootstrap_binding')
         return {'verified': True, 'files': {k: {'sha256': hashlib.sha256(v).hexdigest(), 'bytes': len(v)}
                                           for k, v in sorted(files.items())}}
     require(product in PRODUCT_COMPONENTS, 'output_source_or_inventory')
