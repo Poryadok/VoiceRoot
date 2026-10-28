@@ -20,6 +20,7 @@ PRODUCT = '31a04a471c604488bedd5b442039dfdf0434f9c3'
 AUTH_USER_PRODUCT = 'f1946355a084bed4c62a602ec1dc04e2d57e52ee'
 FROZEN_FILE_PRODUCT = '0d75a990dae5d9672f1b13e2ed346f8850e3c036'
 FROZEN_WEB_PRODUCT = 'df00a393e03feb176439a50bfe5605f32c16b322'
+MEDIA_PRODUCT = 'ec214b28747a4552eb89f4e431fc018aa82f023a'
 WEB_WORKFLOW = '.github/workflows/source-web-publish.yml'
 WEB_JOB_NAME = 'Publish exact source Web image'
 # Each reviewed source has its own bounded consumer; never admit arbitrary SHAs.
@@ -28,7 +29,9 @@ PRODUCT_COMPONENTS = {
               'notification', 'realtime', 'space-native-migrate'),
     AUTH_USER_PRODUCT: ('auth', 'user'),
     FROZEN_FILE_PRODUCT: ('file',),
+    MEDIA_PRODUCT: ('file', 'story', 'messaging'),
 }
+MEDIA_SERVICES = ('file', 'story', 'messaging')
 REPOSITORY = 'Poryadok/VoiceRoot'
 REGISTRY = 'ghcr.io/poryadok/voiceroot'
 WORKFLOW = '.github/workflows/dev-candidate-publish.yml'
@@ -62,8 +65,8 @@ def build_plan(product, publisher, run_id, attempt, *, route='dev'):
                 'run_attempt': int(attempt), 'components': components}
     for name in PRODUCT_COMPONENTS[product]:
         args = {}
-        if name == 'file':
-            context, dockerfile = 'src/backend', 'src/backend/file/Dockerfile'
+        if name in MEDIA_SERVICES:
+            context, dockerfile = 'src/backend', 'src/backend/' + name + '/Dockerfile'
         elif name == 'space-native-migrate':
             context, dockerfile = '.', 'src/backend/space/Dockerfile.native-migrate'
             args = {'SOURCE_REVISION': product}
@@ -80,7 +83,7 @@ def build_plan(product, publisher, run_id, attempt, *, route='dev'):
                      'VOICE_LIVEKIT_URL': 'wss://livekit-dev.comrade.click'} if name == 'web' else
                     {'VITE_VOICE_API_BASE': 'https://api-dev.comrade.click',
                      'VITE_OAUTH_CLIENT_ID': 'voice-' + name, 'VITE_OAUTH_DISABLED': 'false'})
-        component = name if product == FROZEN_FILE_PRODUCT else 'dev-' + name
+        component = name if name in MEDIA_SERVICES else 'dev-' + name
         components[component] = {'context': context, 'dockerfile': dockerfile,
             'build_args': args, 'platform': 'linux/amd64',
             'tag': REGISTRY + '/' + component + ':dev-' + product + '-' + run_id + '-' + attempt}
@@ -156,11 +159,12 @@ def verify_output(component, files, product, expected_sql=None):
         return {'verified': True, 'files': {k: {'sha256': hashlib.sha256(v).hexdigest(), 'bytes': len(v)}
                                           for k, v in sorted(files.items())}}
     require(product in PRODUCT_COMPONENTS, 'output_source_or_inventory')
-    selected = {'file'} if product == FROZEN_FILE_PRODUCT else {
-        'dev-' + name for name in PRODUCT_COMPONENTS[product]}
+    selected = {name if name in MEDIA_SERVICES else 'dev-' + name
+                for name in PRODUCT_COMPONENTS[product]}
     require(component in selected and files, 'output_source_or_inventory')
-    if component == 'file':
-        require(set(files) == {'service'} and files['service'].startswith(b'\x7fELF'), 'file_binary_missing')
+    if component in MEDIA_SERVICES:
+        require(set(files) == {'service'} and files['service'].startswith(b'\x7fELF'),
+                component + '_binary_missing')
     elif component == 'dev-auth':
         with zipfile.ZipFile(io.BytesIO(files['auth.jar'])) as archive:
             require(archive.read('BOOT-INF/classes/voice-build-source.sha').decode().strip() == product,
@@ -270,6 +274,25 @@ def source_snapshot(root, expected):
     return {'source_sha': expected, 'git_tree_sha256': hashlib.sha256(tree).hexdigest(), 'files': files}
 
 
+def story_file_migrations(snapshot, *, include_messaging=False):
+    """Record selected source SQL, without claiming live schema compatibility."""
+    files = snapshot.get('files')
+    require(isinstance(files, dict), 'migration_snapshot_missing')
+    selected = {}
+    databases = ('file_db', 'story_db', 'messaging_db') if include_messaging else ('file_db', 'story_db')
+    for database in databases:
+        prefix = 'src/backend/migrations/' + database + '/'
+        rows = {name: value for name, value in files.items()
+                if name.startswith(prefix) and name.endswith('.sql')}
+        require(rows and all(re.fullmatch(r'[0-9a-f]{64}', value) for value in rows.values()),
+                'migration_inventory_missing')
+        for direction in ('.up.sql', '.down.sql'):
+            require(any(name.endswith(direction) for name in rows), 'migration_direction_missing')
+        selected.update(rows)
+    return {'source_sha': snapshot['source_sha'], 'files': dict(sorted(selected.items())),
+            'live_schema_qualified': False}
+
+
 def pulled_output(component, runtime_ref, config_digest, product_root, registry, repository, output, *, product):
     config = registry.get(repository, 'blobs/' + config_digest)
     verify_config_source(decode_manifest(config, config_digest), product)
@@ -285,7 +308,7 @@ def pulled_output(component, runtime_ref, config_digest, product_root, registry,
             if component == 'dev-auth':
                 paths = {'auth.jar': '/auth.jar', 'auth-roots.pem': '/etc/ssl/certs/ca-certificates.crt',
                          'auth-cacerts': '/opt/java/openjdk/lib/security/cacerts'}
-            elif component in ('file', 'dev-user', 'dev-notification', 'dev-realtime'):
+            elif component in (*MEDIA_SERVICES, 'dev-user', 'dev-notification', 'dev-realtime'):
                 paths = {'service': '/service'}
             elif component == 'dev-space-native-migrate':
                 paths = {'native-migrate': '/usr/local/bin/native-migrate', 'migrations': '/migrations'}
@@ -348,6 +371,10 @@ def publish(product_root, publisher_root, output, env, *, route='dev'):
     write(output / 'product-source.json', product_source)
     write(output / 'publisher-source.json', publisher_source)
     write(output / 'publication-plan.json', plan)
+    media_components = set(PRODUCT_COMPONENTS.get(product, ()))
+    if {'file', 'story'} <= media_components:
+        write(output / 'story-file-migrations.json', story_file_migrations(
+            product_source, include_messaging='messaging' in media_components))
     registry = Registry(env['GITHUB_ACTOR'], env['GH_TOKEN'])
     for row in plan['components'].values():
         repository, tag = row['tag'].removeprefix('ghcr.io/').rsplit(':', 1)
@@ -362,7 +389,7 @@ def publish(product_root, publisher_root, output, env, *, route='dev'):
             args += ['--build-arg', key + '=' + value]
         args.append(str(product_root / row['context']))
         with (file_builder(plan['run_id'], plan['run_attempt'])
-              if product == FROZEN_FILE_PRODUCT else nullcontext(None)) as builder:
+              if component in MEDIA_SERVICES else nullcontext(None)) as builder:
             if builder:
                 args[3:3] = ['--builder', builder]
             write(output / (component + '-invocation.json'), {'command': args, 'product_sha': product, **authority})

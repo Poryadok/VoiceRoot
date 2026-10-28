@@ -366,18 +366,26 @@ configured HTTPS ingress. The File consumer always verifies the TLS chain and
 server name; no plaintext fallback is introduced.
 
 Deployment owners provision Secret `voice-story-principal-keys` with exactly two
-`<kid>.pem` keys; `voice-file-principal-tls` with `tls.crt`/`tls.key` and SAN
-`voice-file-principal.<namespace>.svc`; `voice-principal-trust` with `ca.crt`
-trusting both File and Story HTTPS JWKS certificates; `voice-story-file-client-tls`
+`<kid>.pem` keys; `voice-file-principal-grpc-tls` with `tls.crt`/`tls.key` and SAN
+`voice-file-principal.<namespace>.svc`; `voice-file-principal-client-ca` with
+`ca.crt` for client certificates accepted by the File principal listener; and
+`voice-principal-trust` with `ca.crt`
+trusting the File server and both Story and Messaging HTTPS JWKS certificates;
+`voice-file-jwks-client-tls` with the client certificate and key accepted by the
+configured JWKS endpoints; `voice-story-file-client-tls`
 with `tls.crt`/`tls.key` issued by that existing trust authority for Story's
-client-auth connection to File; `voice-story-jwks-tls` for
+client-auth connection to File, issued by a CA in `voice-file-principal-client-ca`;
+`voice-story-jwks-tls` for
 the HTTPS ingress; and `voice-file-replay` with Redis `password` (empty only for
-an intentionally unauthenticated isolated Redis). Never put private keys into
-ConfigMaps or Git.
+an intentionally unauthenticated isolated Redis). The File principal gRPC TLS
+Secret is separate from any existing File JWKS TLS Secret; preserve existing
+trust and provision the listener identity without rotating unrelated consumers.
+Never put private keys into ConfigMaps or Git.
 
-Substitute namespace, ingress class, JWKS host, replay Redis address and active
+Substitute namespace, ingress class, Story JWKS host, exact trusted Messaging JWKS
+URL, replay Redis address and active
 key ID in the three [deployment templates](../../deploy/templates/story-media-principal-network.yaml).
-Apply the network resources, then apply
+For the ingress route, apply the network resources, then apply
 [File patch](../../deploy/templates/story-media-file-patch.yaml) and
 [Story patch](../../deploy/templates/story-media-story-patch.yaml) with
 `kubectl patch deployment voice-file --type strategic --patch-file <file>` and
@@ -385,6 +393,29 @@ the analogous `voice-story` command in the selected namespace. Deploy File
 first; enable Story signing and its HTTPS JWKS route before accepting media.
 No plaintext fallback exists. Service metrics expose gRPC deny codes without
 credentials or media/profile identifiers.
+
+File's required Messaging issuer must already publish its actual current/next
+keys through the protected Messaging JWKS listener. The optional
+[Messaging patch](../../deploy/templates/story-media-messaging-patch.yaml)
+uses regular-file Secret `subPath` mounts because the Messaging signer rejects
+symlinks. Set its signing Secret name to an immutable, versioned reviewed key
+set. These mounts do not receive Secret updates in a running pod: rotation
+requires a controlled pod rollout and a verified overlap of published keys.
+The patch enables the signer and JWKS only, not the File/Search purge owner
+connections. Issue the JWKS server and client certificates under their reviewed
+trust domains before applying it; the separate
+[Messaging JWKS Service](../../deploy/templates/story-media-messaging-service.yaml)
+provides port 8443. Template wiring alone is not a TLS proof.
+
+Alternatively to the ingress, the [direct Story HTTPS patch](../../deploy/templates/story-media-story-jwks-patch.yaml)
+and [Service](../../deploy/templates/story-media-story-jwks-service.yaml) expose
+the dedicated listener inside the namespace. For this direct route, select only
+the File Service and NetworkPolicy from `story-media-principal-network.yaml`;
+do not apply its Ingress. Both Story and Messaging JWKS URLs
+must match the DNS SANs of their respective server certificates; an endpoint is
+usable only after its TLS chain and, for Messaging, File's client certificate
+are verified. Existing NetworkPolicies may allow broader in-namespace traffic;
+the Services themselves are not an access restriction.
 
 Before enabling production traffic, verify TLS trust, the two public JWKS keys,
 successful clean image admission, forbidden foreign/chat-scoped media, ordinary

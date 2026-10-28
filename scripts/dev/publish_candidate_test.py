@@ -25,6 +25,124 @@ DIGEST = 'sha256:' + 'b' * 64
 
 
 class PublisherTests(unittest.TestCase):
+    def test_reviewed_pr998_product_selects_only_media_cohort(self):
+        product = 'ec214b28747a4552eb89f4e431fc018aa82f023a'
+        plan = publisher.build_plan(product, P, '12345', '2')
+        self.assertEqual(plan['product_sha'], product)
+        self.assertEqual(plan['publisher_sha'], P)
+        self.assertEqual(set(plan['components']), {'file', 'story', 'messaging'})
+        for name, row in plan['components'].items():
+            self.assertEqual(row['dockerfile'], 'src/backend/' + name + '/Dockerfile')
+            self.assertEqual(row['platform'], 'linux/amd64')
+        with self.assertRaisesRegex(publisher.Refused, 'unselected_product'):
+            publisher.build_plan('b2b566f1103e29058da0e8b786cbd8f0dd028d83', P, '12345', '2')
+
+    def test_story_file_pair_requires_selected_exact_product_and_outputs(self):
+        candidate = 'e' * 40
+        with mock.patch.dict(publisher.PRODUCT_COMPONENTS, {candidate: ('file', 'story')}):
+            plan = publisher.build_plan(candidate, P, '12345', '2')
+            self.assertEqual(set(plan['components']), {'file', 'story'})
+            for name in ('file', 'story'):
+                row = plan['components'][name]
+                self.assertEqual(row['context'], 'src/backend')
+                self.assertEqual(row['dockerfile'], 'src/backend/' + name + '/Dockerfile')
+                self.assertEqual(row['tag'], publisher.REGISTRY + '/' + name + ':dev-' + candidate + '-12345-2')
+                publisher.verify_output(name, {'service': b'\x7fELFbinary'}, candidate)
+                with self.assertRaises(publisher.Refused):
+                    publisher.verify_output(name, {'service': b'invalid'}, candidate)
+            with self.assertRaises(publisher.Refused):
+                publisher.build_plan('f' * 40, P, '12345', '2')
+
+    def test_selected_messaging_dependency_uses_its_source_image(self):
+        candidate = 'e' * 40
+        with mock.patch.dict(publisher.PRODUCT_COMPONENTS, {candidate: ('file', 'story', 'messaging')}):
+            plan = publisher.build_plan(candidate, P, '12345', '2')
+            self.assertEqual(set(plan['components']), {'file', 'story', 'messaging'})
+            row = plan['components']['messaging']
+            self.assertEqual((row['context'], row['dockerfile']),
+                             ('src/backend', 'src/backend/messaging/Dockerfile'))
+            self.assertEqual(row['tag'], publisher.REGISTRY + '/messaging:dev-' + candidate + '-12345-2')
+            publisher.verify_output('messaging', {'service': b'\x7fELFbinary'}, candidate)
+            with self.assertRaises(publisher.Refused):
+                publisher.verify_output('messaging', {'service': b'invalid'}, candidate)
+
+    def test_media_cohort_publication_preserves_distinct_source_and_receipts(self):
+        product = 'e' * 40
+        env = {'PRODUCT_SHA': product, 'PUBLISHER_SHA': P, 'GITHUB_RUN_ID': '12345',
+               'GITHUB_RUN_ATTEMPT': '2', 'GITHUB_REPOSITORY': publisher.REPOSITORY,
+               'GITHUB_REF': 'refs/heads/master', 'GITHUB_ACTOR': 'fixture', 'GH_TOKEN': 'fixture'}
+        run = {'id': 12345, 'run_attempt': 2, 'head_sha': P, 'event': 'workflow_dispatch',
+               'path': publisher.WORKFLOW, 'repository': {'full_name': publisher.REPOSITORY}}
+        jobs = {'jobs': [{'id': 67890, 'run_id': 12345, 'head_sha': P, 'name': publisher.JOB_NAME}]}
+        manifest = json.dumps({'config': {'digest': DIGEST}}).encode()
+        platform = 'sha256:' + hashlib.sha256(manifest).hexdigest()
+        index = json.dumps({'manifests': [{'digest': platform,
+            'platform': {'os': 'linux', 'architecture': 'amd64'}}]}).encode()
+        digest = 'sha256:' + hashlib.sha256(index).hexdigest()
+        registry = mock.Mock()
+        registry.get.side_effect = lambda repository, path, absent=False: (
+            None if absent else manifest if path == 'manifests/' + platform else index)
+        builds = []
+        def command(args, **kwargs):
+            if args[0] == 'gh':
+                return json.dumps(jobs if '/jobs?' in args[-1] else run).encode()
+            if args[:3] == ['docker', 'buildx', 'build']:
+                self.assertIn('org.opencontainers.image.revision=' + product, args)
+                Path(args[args.index('--metadata-file') + 1]).write_text(json.dumps({'containerimage.digest': digest}))
+                builds.append(args)
+            return b''
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.dict(publisher.PRODUCT_COMPONENTS, {product: ('file', 'story', 'messaging')}), \
+                mock.patch.object(publisher, 'source_snapshot', side_effect=lambda root, sha: {
+                    'source_sha': sha, 'files': {
+                        'src/backend/migrations/file_db/000001_initial.up.sql': 'a' * 64,
+                        'src/backend/migrations/file_db/000001_initial.down.sql': 'b' * 64,
+                        'src/backend/migrations/story_db/000001_initial.up.sql': 'c' * 64,
+                        'src/backend/migrations/story_db/000001_initial.down.sql': 'd' * 64,
+                        'src/backend/migrations/messaging_db/000001_initial.up.sql': 'a' * 64,
+                        'src/backend/migrations/messaging_db/000001_initial.down.sql': 'b' * 64}}), \
+                mock.patch.object(publisher, 'Registry', return_value=registry), \
+                mock.patch.object(publisher, 'command', side_effect=command), \
+                mock.patch.object(publisher, 'pulled_output', return_value={'verified': True}):
+            output = Path(folder) / 'evidence'
+            publisher.publish(Path(folder), Path(folder), output, env)
+            receipt = json.loads((output / 'published-images.json').read_bytes())
+            self.assertEqual(receipt['product_sha'], product)
+            self.assertEqual(receipt['publisher_sha'], P)
+            self.assertEqual({row['component'] for row in receipt['images']}, {'file', 'story', 'messaging'})
+            self.assertTrue(all(row['product_sha'] == product and row['publisher_sha'] == P for row in receipt['images']))
+            self.assertFalse(receipt['runtime_qualified'])
+            self.assertFalse(receipt['deployment_performed'])
+            self.assertEqual(len(builds), 3)
+            migrations = json.loads((output / 'story-file-migrations.json').read_bytes())
+            self.assertEqual(migrations['source_sha'], product)
+            self.assertEqual(len(migrations['files']), 6)
+
+    def test_story_file_migration_inventory_rejects_missing_or_malformed(self):
+        with self.assertRaises(publisher.Refused):
+            publisher.story_file_migrations({'source_sha': 'e' * 40, 'files': {}})
+        with self.assertRaises(publisher.Refused):
+            publisher.story_file_migrations({'source_sha': 'e' * 40, 'files': {
+                'src/backend/migrations/file_db/000001_initial.up.sql': 'bad',
+                'src/backend/migrations/story_db/000001_initial.up.sql': 'a' * 64}})
+        with self.assertRaisesRegex(publisher.Refused, '^migration_direction_missing$'):
+            publisher.story_file_migrations({'source_sha': 'e' * 40, 'files': {
+                'src/backend/migrations/file_db/000001_initial.up.sql': 'a' * 64,
+                'src/backend/migrations/story_db/000001_initial.up.sql': 'b' * 64,
+                'src/backend/migrations/story_db/000001_initial.down.sql': 'c' * 64}})
+
+    def test_messaging_dependency_includes_its_migration_inventory(self):
+        files = {f'src/backend/migrations/{database}/000001_init.{direction}.sql': 'a' * 64
+                 for database in ('file_db', 'story_db', 'messaging_db') for direction in ('up', 'down')}
+        inventory = publisher.story_file_migrations({'source_sha': 'e' * 40, 'files': files},
+                                                    include_messaging=True)
+        self.assertEqual(inventory['files'], files)
+        self.assertFalse(inventory['live_schema_qualified'])
+        del files['src/backend/migrations/messaging_db/000001_init.up.sql']
+        with self.assertRaises(publisher.Refused):
+            publisher.story_file_migrations({'source_sha': 'e' * 40, 'files': files},
+                                            include_messaging=True)
+
     def test_frozen_web_route_is_separate_and_source_bound(self):
         source = 'df00a393e03feb176439a50bfe5605f32c16b322'
         plan = publisher.build_plan(source, P, '12345', '2', route='web')
