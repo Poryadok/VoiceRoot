@@ -1,0 +1,388 @@
+"""Fenced writer retirement and target-aware replica restoration.
+
+The central operator owns writer selection, complete namespace Job/CronJob/HPA
+inventory, shared authority and the real database observer. Admission is bound
+to journal.intent['writer_cut']: controllers are exact Kubernetes objects,
+guards is a dict of complete jobs/cronjobs/hpas lists projected by inventory(),
+linked contains job and cronjob UIDs whose effects must be terminal, and
+session_scope is the caller-qualified database/role scope. The supplied
+probe(scope) must perform actual bounded read-only observation and return
+{'scope': scope, 'active_sessions': 0, 'active_transactions': 0}; fake callbacks
+are test fixtures only. No claim of generic external I/O quiescence is made.
+
+Use drain() once, then verify_drained() around backup operations under the same
+fence. resume(targets) accepts separately caller-admitted CURRENT workload
+objects and restores only the original replica counts, never old templates.
+Every effect is one-shot; after any uncertain response retain the common lock
+and reconcile the private journal, ledger and actual effects without replay.
+"""
+import copy
+import hashlib
+import json
+import os
+import re
+import secrets
+import subprocess
+import time
+
+import frontend_runtime_executor
+import media_operation_guard
+
+
+class RecoveryRequired(RuntimeError):
+    pass
+
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def inventory(items):
+    """Retain complete identity, owner references, spec and status privately."""
+    out = []
+    for item in items:
+        m = item['metadata']
+        out.append({'metadata': {k: copy.deepcopy(m[k]) for k in
+                    ('name', 'namespace', 'uid', 'resourceVersion', 'ownerReferences', 'deletionTimestamp') if k in m},
+                    'spec': copy.deepcopy(item.get('spec', {})), 'status': copy.deepcopy(item.get('status', {}))})
+    return sorted(out, key=lambda x: x['metadata']['uid'])
+
+
+class WriterCut:
+    def __init__(self, journal, fence, client, lock, namespace_uid, admission, probe):
+        self.journal, self.fence, self.client = journal, fence, client
+        self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
+        self.intent, self.admission = copy.deepcopy(journal.intent), copy.deepcopy(admission)
+        self.probe = probe
+        self.invocation = secrets.token_hex(16)
+        self.started = self.drained = self.poisoned = False
+        self.retired_rs = set()
+        self._identity()
+
+    def _identity(self):
+        a = self.admission
+        if (self.poisoned or self.journal.poisoned or self.journal.intent != self.intent or
+                self.journal.state.get('intent') != self.intent or self.intent.get('resource_context') != self.fence.context or
+                self.intent.get('namespace_uid') != self.namespace_uid or self.intent.get('writer_cut') != a or
+                type(self.client) is not frontend_runtime_executor.KubectlTransport or
+                self.client.journal is not self.journal or getattr(self.fence.ledger, 'client', None) is not self.client or
+                not callable(self.probe) or not isinstance(a, dict) or set(a) != {'controllers', 'guards', 'linked', 'session_scope'} or
+                not isinstance(a['controllers'], list) or not a['controllers'] or
+                not isinstance(a['session_scope'], dict) or not a['session_scope'] or
+                not isinstance(a['guards'], dict) or set(a['guards']) != {'jobs', 'cronjobs', 'hpas'} or
+                not isinstance(a['linked'], dict) or set(a['linked']) != {'jobs', 'cronjobs'}):
+            raise RecoveryRequired('writer cut identity invalid')
+        keys = set()
+        for obj in a['controllers']:
+            self._workload(obj)
+            key = (obj['kind'], obj['metadata']['name'])
+            if key in keys: raise RecoveryRequired('duplicate writer')
+            keys.add(key)
+        if len({o['metadata']['uid'] for o in a['controllers']}) != len(keys):
+            raise RecoveryRequired('duplicate writer UID')
+        for kind in ('jobs', 'cronjobs', 'hpas'):
+            rows = a['guards'][kind]
+            if not isinstance(rows, list) or inventory(rows) != rows:
+                raise RecoveryRequired('guard inventory invalid or unordered')
+            ids = [r['metadata']['uid'] for r in rows]
+            if len(ids) != len(set(ids)):
+                raise RecoveryRequired('duplicate guard UID')
+        for kind in ('jobs', 'cronjobs'):
+            linked = a['linked'][kind]
+            ids = {r['metadata']['uid'] for r in a['guards'][kind]}
+            if not isinstance(linked, list) or len(linked) != len(set(linked)) or not set(linked) <= ids:
+                raise RecoveryRequired('linked guard set invalid')
+
+    @staticmethod
+    def _workload(obj):
+        try:
+            meta, spec = obj['metadata'], obj['spec']
+            name = meta['name']
+            if (obj['kind'] not in ('Deployment', 'StatefulSet') or meta['namespace'] != 'voice-dev' or
+                    not isinstance(name, str) or not re.fullmatch(r'[a-z0-9]([-a-z0-9]*[a-z0-9])?', name) or
+                    len(name) > 253 or not meta['uid'] or not meta['resourceVersion'] or meta.get('deletionTimestamp') or
+                    type(spec['replicas']) is not int or spec['replicas'] < 0):
+                raise RecoveryRequired('invalid writer identity')
+        except (KeyError, TypeError):
+            raise RecoveryRequired('invalid writer identity') from None
+
+    def _guard(self):
+        self._identity()
+        media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+        if self.started:
+            row, _ = self.fence.ledger.read()
+            if not self._owned(row): raise RecoveryRequired('writer invocation ownership changed')
+
+    def _uncertain(self):
+        self.poisoned = True
+        try: self.fence.uncertain('writer cut outcome uncertain')
+        except BaseException: pass
+        raise RecoveryRequired('writer cut uncertain; retain lock and reconcile') from None
+
+    def _owned(self, row):
+        return (self.fence.owned(row) and row.get('status') == 'active' and
+                row.get('writer_cut_invocation') == {'nonce': self.invocation,
+                                                      'operation_id': self.fence.context['operation_id']})
+
+    def _start(self):
+        if self.started: return
+        steps = self.journal.state['steps']
+        if 'writer-cut-invocation' in steps:
+            raise RecoveryRequired('previous invocation requires reconciliation')
+        steps['writer-cut-invocation'] = {'status': 'pending', 'nonce': self.invocation}
+        self.journal.save()
+        self.fence.authority()
+        row, revision = self.fence.ledger.read()
+        if not self.fence.owned(row) or row.get('status') != 'active' or 'writer_cut_invocation' in row:
+            raise RecoveryRequired('writer invocation already owned')
+        row['writer_cut_invocation'] = {'nonce': self.invocation, 'operation_id': self.fence.context['operation_id']}
+        self.fence.ledger.write(revision, row)
+        self._guard()
+        current, _ = self.fence.ledger.read()
+        if not self._owned(current): raise RecoveryRequired('writer invocation changed')
+        steps['writer-cut-invocation']['status'] = 'owned'
+        self.journal.save()
+        self.started = True
+
+    def _reserve(self, name, details):
+        steps = self.journal.state['steps']
+        if name in steps: raise RecoveryRequired('writer effect already attempted')
+        record = {'status': 'pending', 'nonce': secrets.token_hex(16), 'details_sha256': digest(details)}
+        steps[name] = record | {'details': copy.deepcopy(details)}
+        self.journal.save()
+        self.fence.authority()
+        row, rev = self.fence.ledger.read()
+        effects = row.get('writer_cut_effects', {})
+        if (not self._owned(row) or not isinstance(effects, dict) or name in effects or
+                any(not isinstance(v, dict) or v.get('status') != 'done' for v in effects.values())):
+            raise RecoveryRequired('writer effect already pending')
+        row['writer_cut_effects'] = copy.deepcopy(effects) | {name: record}
+        row['step'] = name
+        self.fence.ledger.write(rev, row)
+        self._guard()
+        current, _ = self.fence.ledger.read()
+        if not self._owned(current) or current.get('writer_cut_effects', {}).get(name) != record:
+            raise RecoveryRequired('writer reservation changed')
+        return record
+
+    def _complete(self, name, record, receipt):
+        self._guard()
+        row, revision = self.fence.ledger.read()
+        if not self._owned(row) or row.get('writer_cut_effects', {}).get(name) != record:
+            raise RecoveryRequired('writer reservation changed')
+        self.journal.state['steps'][name].update(status='done', receipt=copy.deepcopy(receipt))
+        self.journal.save()
+        row['writer_cut_effects'][name] = record | {'status': 'done', 'receipt_sha256': digest(receipt)}
+        row['step'] = name + '-done'
+        self.fence.ledger.write(revision, row)
+        self._guard()
+
+    def _get(self, kind, name):
+        return self.client.call('get', kind.lower(), name, '-o', 'json')
+
+    def _guards(self):
+        mapping = {'jobs': 'jobs', 'cronjobs': 'cronjobs', 'hpas': 'horizontalpodautoscalers'}
+        selected = {(o['kind'], o['metadata']['name']) for o in self.admission['controllers']}
+        for kind, resource in mapping.items():
+            actual = inventory(self.client.call('get', resource, '-o', 'json')['items'])
+            if actual != self.admission['guards'][kind]:
+                raise RecoveryRequired('guard inventory changed')
+            for item in actual:
+                uid, spec, status = item['metadata']['uid'], item['spec'], item['status']
+                if kind == 'hpas' and (spec.get('scaleTargetRef', {}).get('kind'),
+                                       spec.get('scaleTargetRef', {}).get('name')) in selected:
+                    raise RecoveryRequired('writer HPA must be separately retired')
+                if kind == 'cronjobs' and uid in self.admission['linked']['cronjobs']:
+                    if spec.get('suspend') is not True or status.get('active'):
+                        raise RecoveryRequired('linked CronJob not suspended')
+                if kind == 'jobs' and uid in self.admission['linked']['jobs']:
+                    terminal = any(c.get('type') in ('Complete', 'Failed') and c.get('status') == 'True'
+                                   for c in status.get('conditions', []))
+                    if status.get('active', 0) or not terminal:
+                        raise RecoveryRequired('linked Job not terminal')
+
+    def _patch(self, kind, name, patch):
+        filename = '.writer-patch-' + secrets.token_hex(16)
+        fd = os.open(filename, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=self.journal.dirfd)
+        try:
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(json.dumps(patch, separators=(',', ':')).encode())
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.fsync(self.journal.dirfd)
+            path = str(self.journal.path / filename)
+            result = subprocess.run(frontend_runtime_executor.KubectlTransport.PREFIX +
+                ['patch', kind.lower(), name, '--type=json', '--patch-file=' + path, '-o', 'json'],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=25, check=True)
+            return json.loads(result.stdout)
+        finally:
+            os.unlink(filename, dir_fd=self.journal.dirfd)
+            os.fsync(self.journal.dirfd)
+
+    def _effect(self, phase, source, replicas):
+        kind, meta = source['kind'], source['metadata']
+        original = copy.deepcopy(source['spec'])
+        target = copy.deepcopy(original)
+        target['replicas'] = replicas
+        patch = [{'op': 'test', 'path': '/metadata/uid', 'value': meta['uid']},
+                 {'op': 'test', 'path': '/metadata/resourceVersion', 'value': meta['resourceVersion']},
+                 {'op': 'test', 'path': '/spec', 'value': original},
+                 {'op': 'replace', 'path': '/spec/replicas', 'value': replicas}]
+        name = 'writer-' + phase + '-' + kind.lower() + '-' + meta['name']
+        record = self._reserve(name, {'source': source, 'target_spec': target})
+        self._guards()
+        self._guard()
+        row, _ = self.fence.ledger.read()
+        if not self._owned(row) or row.get('writer_cut_effects', {}).get(name) != record:
+            raise RecoveryRequired('writer reservation changed before submission')
+        result = self._patch(kind, meta['name'], patch)
+        actual = self._get(kind, meta['name'])
+        for item in (result, actual):
+            if (item.get('kind') != kind or item.get('metadata', {}).get('uid') != meta['uid'] or
+                    item.get('metadata', {}).get('namespace') != 'voice-dev' or
+                    item.get('metadata', {}).get('name') != meta['name'] or
+                    not item.get('metadata', {}).get('resourceVersion') or
+                    type(item.get('metadata', {}).get('generation')) is not int or item.get('spec') != target):
+                raise RecoveryRequired('writer effect identity mismatch')
+        if result['metadata']['generation'] != actual['metadata']['generation']:
+            raise RecoveryRequired('writer generation changed before reobservation')
+        receipt = {'uid': meta['uid'], 'spec_sha256': digest(target),
+                   'responseResourceVersion': result['metadata']['resourceVersion'],
+                   'resourceVersion': actual['metadata']['resourceVersion'], 'generation': actual['metadata']['generation']}
+        self._complete(name, record, receipt)
+        return receipt
+
+    @staticmethod
+    def _owner(meta, kind):
+        owners = [o for o in meta.get('ownerReferences', []) if o.get('controller') is True and o.get('kind') == kind]
+        return owners[0].get('uid') if len(owners) == 1 else None
+
+    def _pods_drained(self, controllers=None):
+        controllers = self.admission['controllers'] if controllers is None else controllers
+        deployment_ids = {o['metadata']['uid'] for o in controllers if o['kind'] == 'Deployment'}
+        stateful_ids = {o['metadata']['uid'] for o in controllers if o['kind'] == 'StatefulSet'}
+        rs = self.client.call('get', 'replicasets', '-o', 'json')['items']
+        all_rs = {r['metadata']['uid'] for r in rs}
+        rs_ids = self.retired_rs | {r['metadata']['uid'] for r in rs if self._owner(r['metadata'], 'Deployment') in deployment_ids}
+        pods = self.client.call('get', 'pods', '-o', 'json')['items']
+        for pod in pods:
+            meta = pod['metadata']
+            owners = [o for o in meta.get('ownerReferences', []) if o.get('controller') is True]
+            if (pod.get('status', {}).get('phase') not in ('Succeeded', 'Failed') and
+                    (len(owners) != 1 or owners[0].get('kind') not in ('ReplicaSet', 'StatefulSet', 'Job', 'DaemonSet')
+                     or not owners[0].get('uid'))):
+                return False
+            rs_owner = self._owner(meta, 'ReplicaSet')
+            if rs_owner and rs_owner not in all_rs and pod.get('status', {}).get('phase') not in ('Succeeded', 'Failed'):
+                return False
+            if self._owner(meta, 'ReplicaSet') in rs_ids or self._owner(meta, 'StatefulSet') in stateful_ids:
+                return False
+            if self._owner(meta, 'Job') in self.admission['linked']['jobs']:
+                if pod.get('status', {}).get('phase') not in ('Succeeded', 'Failed'):
+                    return False
+        return True
+
+    def _retired(self):
+        for original in self.admission['controllers']:
+            actual = self._get(original['kind'], original['metadata']['name'])
+            expected = copy.deepcopy(original['spec'])
+            expected['replicas'] = 0
+            meta, status = actual.get('metadata', {}), actual.get('status', {})
+            name = 'writer-drain-' + original['kind'].lower() + '-' + original['metadata']['name']
+            saved = self.journal.state['steps'].get(name, {})
+            if (meta.get('uid') != original['metadata']['uid'] or meta.get('namespace') != 'voice-dev'
+                    or actual.get('spec') != expected or meta.get('deletionTimestamp') or
+                    saved.get('status') != 'done' or meta.get('generation') != saved.get('receipt', {}).get('generation')):
+                raise RecoveryRequired('retired writer changed')
+            generation, observed = meta.get('generation'), status.get('observedGeneration')
+            if (type(generation) is not int or type(observed) is not int or observed < generation
+                    or status.get('replicas', 0) != 0 or status.get('readyReplicas', 0) != 0):
+                return False
+        return self._pods_drained()
+
+    def verify_drained(self):
+        if not self.drained: raise RecoveryRequired('writer drain not completed')
+        try:
+            self._guard()
+            self._guards()
+            if not self._retired(): raise RecoveryRequired('writer controllers or pods not retired')
+            scope = copy.deepcopy(self.admission['session_scope'])
+            receipt = self.probe(scope)
+            if (not isinstance(receipt, dict) or set(receipt) != {'scope', 'active_sessions', 'active_transactions'} or
+                    receipt['scope'] != self.admission['session_scope'] or
+                    type(receipt['active_sessions']) is not int or receipt['active_sessions'] != 0 or
+                    type(receipt['active_transactions']) is not int or receipt['active_transactions'] != 0):
+                raise RecoveryRequired('writer sessions remain or observation invalid')
+            self._guard()
+            self._guards()
+            if not self._retired(): raise RecoveryRequired('writer changed during observation')
+            return copy.deepcopy(receipt)
+        except BaseException:
+            self._uncertain()
+
+    def drain(self):
+        try:
+            self._guard()
+            self._start()
+            self._guards()
+            deployment_ids = {o['metadata']['uid'] for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
+            replicasets = self.client.call('get', 'replicasets', '-o', 'json')['items']
+            self.retired_rs = {r['metadata']['uid'] for r in replicasets if self._owner(r['metadata'], 'Deployment') in deployment_ids}
+            self.journal.state['steps']['writer-cut-old-replicasets'] = {'uids': sorted(self.retired_rs)}
+            self.journal.save()
+            for source in self.admission['controllers']:
+                current = self._get(source['kind'], source['metadata']['name'])
+                if (current.get('metadata', {}).get('uid') != source['metadata']['uid'] or
+                        current.get('metadata', {}).get('resourceVersion') != source['metadata']['resourceVersion'] or
+                        current.get('spec') != source['spec']):
+                    raise RecoveryRequired('writer source changed')
+            for source in self.admission['controllers']:
+                self._effect('drain', source, 0)
+            self.drained = True
+            deadline = time.monotonic() + 180
+            while not self._retired():
+                self._guard()
+                self._guards()
+                if time.monotonic() >= deadline: raise RecoveryRequired('writer pods not retired')
+                time.sleep(2)
+            record = self._reserve('writer-cut-drained', {'session_scope': self.admission['session_scope']})
+            receipt = self.verify_drained()
+            self._complete('writer-cut-drained', record, receipt)
+            return receipt
+        except BaseException:
+            self._uncertain()
+
+    def resume(self, targets):
+        try:
+            if not self.drained or not isinstance(targets, list) or len(targets) != len(self.admission['controllers']):
+                raise RecoveryRequired('current target admission required')
+            self._guard()
+            self._guards()
+            original = {(x['kind'], x['metadata']['name']): x for x in self.admission['controllers']}
+            seen = set()
+            for target in targets:
+                self._workload(target)
+                key = (target['kind'], target['metadata']['name'])
+                if key not in original or key in seen or target['spec']['replicas'] != 0:
+                    raise RecoveryRequired('target scope or paused replica count invalid')
+                seen.add(key)
+                current = self._get(*key)
+                if (current.get('metadata', {}).get('uid') != target['metadata']['uid'] or
+                        current.get('metadata', {}).get('resourceVersion') != target['metadata']['resourceVersion'] or
+                        current.get('spec') != target['spec']):
+                    raise RecoveryRequired('current target changed')
+                generation = current.get('metadata', {}).get('generation')
+                status = current.get('status', {})
+                if (type(generation) is not int or type(status.get('observedGeneration')) is not int or
+                        status['observedGeneration'] < generation or status.get('replicas', 0) != 0 or
+                        status.get('readyReplicas', 0) != 0):
+                    raise RecoveryRequired('current target not retired')
+            if not self._pods_drained() or not self._pods_drained(targets):
+                raise RecoveryRequired('current or predecessor writer pods remain')
+            for target in targets:
+                key = (target['kind'], target['metadata']['name'])
+                self._effect('resume', target, original[key]['spec']['replicas'])
+            self.drained = False
+            return {'status': 'replicas-restored', 'count': len(seen)}
+        except BaseException:
+            self._uncertain()
