@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage isolated DEV media identities offline; never apply or export secrets."""
+"""Stage DEV media identities offline; export only to an explicitly managed pipe."""
 import argparse
 import base64
 import fcntl
@@ -232,7 +232,7 @@ def validate_packet(packet, ca_keys, operation, source):
             validate_signer(key, public_keys)
 
 
-def load_stage(root, operation, source):
+def load_stage(root, operation, source, export=False):
     folder = root / operation
     safe_directory(folder)
     expected = {'stage.json', *(name + '.key' for name in DOMAINS)}
@@ -256,10 +256,10 @@ def load_stage(root, operation, source):
             raise ValueError('issuer staged CA changed')
     packet = json.loads(raw)
     validate_packet(packet, ca_keys, operation, source)
-    return receipt
+    return raw if export else receipt
 
 
-def stage(state_dir, operation, source):
+def stage(state_dir, operation, source, export_sink=None):
     if not OPERATION.fullmatch(operation) or not HASH.fullmatch(source):
         raise ValueError('issuer identity invalid')
     if hashlib.sha256(Path(__file__).read_bytes()).hexdigest() != source:
@@ -277,6 +277,13 @@ def stage(state_dir, operation, source):
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError('issuer busy') from None
+        if export_sink is not None:
+            children = [path for path in root.iterdir() if path.name != '.lock']
+            if children != [root / operation]:
+                raise ValueError('issuer existing stage required for export')
+            raw = load_stage(root, operation, source, export=True)
+            export_sink(raw)
+            return None
         return stage_locked(root, operation, source)
     finally:
         os.close(fd)
@@ -317,10 +324,19 @@ def main():
     parser.add_argument('--state-dir', default='/state')
     parser.add_argument('--operation', required=True)
     parser.add_argument('--issuer-source-sha256', required=True)
+    parser.add_argument('--export-packet', action='store_true')
     args = parser.parse_args()
     try:
-        receipt = stage(args.state_dir, args.operation, args.issuer_source_sha256)
-        print(json.dumps(receipt, sort_keys=True))
+        if args.export_packet:
+            if not stat.S_ISFIFO(os.fstat(sys.stdout.fileno()).st_mode):
+                raise ValueError('packet export requires a pipe')
+            def send(raw):
+                sys.stdout.buffer.write(raw)
+                sys.stdout.buffer.flush()
+            stage(args.state_dir, args.operation, args.issuer_source_sha256, export_sink=send)
+        else:
+            receipt = stage(args.state_dir, args.operation, args.issuer_source_sha256)
+            print(json.dumps(receipt, sort_keys=True))
     except (OSError, ValueError, KeyError, TypeError, AttributeError, UnicodeError, subprocess.SubprocessError):
         print('issuer stage failed closed; preserve state for reconciliation', file=sys.stderr)
         return 1
