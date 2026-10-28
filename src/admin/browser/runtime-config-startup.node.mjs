@@ -15,9 +15,16 @@ linuxTest('startup timeout retains bounded redacted diagnostics and settles the 
     console.error('Authorization: Bearer SECRET_SENTINEL profile=' + process.argv[1]);
     console.error('DBus /dbus/bus.cc DevTools listening on ws://user:PASS_SENTINEL@host/?code=CODE_SENTINEL&unknown=OTHER_SENTINEL');
     console.error('x'.repeat(9000));
+    require('node:fs').writeFileSync(process.argv[1] + '/started', 'ready');
     setInterval(() => {}, 1000);
   `, profile], profile);
   try {
+    let started = false;
+    for (let i = 0; i < 200 && !started; i++) {
+      try { started = (await readFile(join(profile, 'started'), 'utf8')) === 'ready'; }
+      catch { await new Promise(resolve => setTimeout(resolve, 25)); }
+    }
+    assert.ok(started, 'synthetic Chrome did not start');
     assert.equal(await child.port(500), undefined);
     const diagnostic = child.diagnostic();
     assert.equal(diagnostic.state, 'port_missing');
