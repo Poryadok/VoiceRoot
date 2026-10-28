@@ -17,6 +17,37 @@ class CohortFinalizeError(Exception):
     pass
 
 
+def validate_binding(binding, databases):
+    """Reject malformed operation and restore identity before any dump."""
+    members = cohort._members(binding, databases)
+    if (set(binding) != BINDING_KEYS or (binding['project'], binding['resource'], binding['actor'])
+            != ('voice', 'DEV', 'scheduled_devops') or type(binding['generation']) is not int
+            or binding['generation'] <= 0 or type(binding['revision']) is not int or binding['revision'] <= 0):
+        raise CohortFinalizeError('cohort binding invalid')
+    for name in ('claim', 'window'):
+        if not isinstance(binding[name], str) or str(uuid.UUID(binding[name])) != binding[name]:
+            raise CohortFinalizeError('cohort binding invalid')
+    engine = binding['sources']['roles']['engine']
+    for name in ('namespace_uid', 'pod_uid', 'pvc_uid', 'pv_uid'):
+        if not isinstance(engine.get(name), str) or str(uuid.UUID(engine[name])) != engine[name]:
+            raise CohortFinalizeError('cohort engine invalid')
+    if (not isinstance(engine.get('container_id'), str)
+            or not re.fullmatch(r'containerd://[0-9a-f]{64}', engine['container_id'])
+            or type(engine.get('restart_count')) is not int or engine['restart_count'] < 0):
+        raise CohortFinalizeError('cohort engine invalid')
+    inputs = binding['restore_inputs']
+    if not isinstance(inputs, dict) or set(inputs) != RESTORE_KEYS:
+        raise CohortFinalizeError('cohort restore binding invalid')
+    for name in ('catalog_sha256', 'roles_catalog_sha256', 'migration_catalog_sha256', 'migrate_binary_sha256'):
+        if not isinstance(inputs[name], str) or not re.fullmatch(r'[0-9a-f]{64}', inputs[name]):
+            raise CohortFinalizeError('cohort restore binding invalid')
+    if (not isinstance(inputs['postgres_image'], str) or not IMAGE.fullmatch(inputs['postgres_image'])
+            or not isinstance(inputs['migrate_image'], str) or not IMAGE.fullmatch(inputs['migrate_image'])
+            or type(inputs['postgres_major']) is not int or inputs['postgres_major'] != 16):
+        raise CohortFinalizeError('cohort restore binding invalid')
+    return members
+
+
 def finalize(root, key, binding, databases, manifest, receipts):
     """Authenticate receipt bindings; caller verifies real ledger authority."""
     try:
@@ -26,32 +57,8 @@ def finalize(root, key, binding, databases, manifest, receipts):
         snapshot = json.loads(raw)
         binding, databases, manifest, receipts = (snapshot['binding'], snapshot['databases'],
                                                   snapshot['manifest'], snapshot['receipts'])
-        members = cohort._members(binding, databases)
-        if (set(binding) != BINDING_KEYS or (binding['project'], binding['resource'], binding['actor'])
-                != ('voice', 'DEV', 'scheduled_devops') or type(binding['generation']) is not int
-                or binding['generation'] <= 0 or type(binding['revision']) is not int or binding['revision'] <= 0):
-            raise CohortFinalizeError('cohort binding invalid')
-        for name in ('claim', 'window'):
-            if not isinstance(binding[name], str) or str(uuid.UUID(binding[name])) != binding[name]:
-                raise CohortFinalizeError('cohort binding invalid')
+        members = validate_binding(binding, databases)
         engine = binding['sources']['roles']['engine']
-        for name in ('namespace_uid', 'pod_uid', 'pvc_uid', 'pv_uid'):
-            if not isinstance(engine.get(name), str) or str(uuid.UUID(engine[name])) != engine[name]:
-                raise CohortFinalizeError('cohort engine invalid')
-        if (not isinstance(engine.get('container_id'), str)
-                or not re.fullmatch(r'containerd://[0-9a-f]{64}', engine['container_id'])
-                or type(engine.get('restart_count')) is not int or engine['restart_count'] < 0):
-            raise CohortFinalizeError('cohort engine invalid')
-        inputs = binding['restore_inputs']
-        if not isinstance(inputs, dict) or set(inputs) != RESTORE_KEYS:
-            raise CohortFinalizeError('cohort restore binding invalid')
-        for name in ('catalog_sha256', 'roles_catalog_sha256', 'migration_catalog_sha256', 'migrate_binary_sha256'):
-            if not isinstance(inputs[name], str) or not re.fullmatch(r'[0-9a-f]{64}', inputs[name]):
-                raise CohortFinalizeError('cohort restore binding invalid')
-        if (not isinstance(inputs['postgres_image'], str) or not IMAGE.fullmatch(inputs['postgres_image'])
-                or not isinstance(inputs['migrate_image'], str) or not IMAGE.fullmatch(inputs['migrate_image'])
-                or type(inputs['postgres_major']) is not int or inputs['postgres_major'] != 16):
-            raise CohortFinalizeError('cohort restore binding invalid')
         if not isinstance(receipts, dict) or set(receipts) != members:
             raise CohortFinalizeError('cohort receipt set invalid')
         hashes = {}; nonces = set()
