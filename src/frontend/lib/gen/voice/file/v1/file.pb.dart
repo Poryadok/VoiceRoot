@@ -111,10 +111,13 @@ class ResolveMessageAttachmentPreviewResponse extends $pb.GeneratedMessage {
   factory ResolveMessageAttachmentPreviewResponse({
     FileReferenceKey? reference,
     $1.FilePreviewSnapshot? snapshot,
+    AudioNoGenericPreview? audioNoGenericPreview,
   }) {
     final result = create();
     if (reference != null) result.reference = reference;
     if (snapshot != null) result.snapshot = snapshot;
+    if (audioNoGenericPreview != null)
+      result.audioNoGenericPreview = audioNoGenericPreview;
     return result;
   }
 
@@ -136,6 +139,9 @@ class ResolveMessageAttachmentPreviewResponse extends $pb.GeneratedMessage {
         subBuilder: FileReferenceKey.create)
     ..aOM<$1.FilePreviewSnapshot>(2, _omitFieldNames ? '' : 'snapshot',
         subBuilder: $1.FilePreviewSnapshot.create)
+    ..aOM<AudioNoGenericPreview>(
+        3, _omitFieldNames ? '' : 'audioNoGenericPreview',
+        subBuilder: AudioNoGenericPreview.create)
     ..hasRequiredFields = false;
 
   @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
@@ -182,6 +188,100 @@ class ResolveMessageAttachmentPreviewResponse extends $pb.GeneratedMessage {
   void clearSnapshot() => $_clearField(2);
   @$pb.TagNumber(2)
   $1.FilePreviewSnapshot ensureSnapshot() => $_ensure(1);
+
+  @$pb.TagNumber(3)
+  AudioNoGenericPreview get audioNoGenericPreview => $_getN(2);
+  @$pb.TagNumber(3)
+  set audioNoGenericPreview(AudioNoGenericPreview value) =>
+      $_setField(3, value);
+  @$pb.TagNumber(3)
+  $core.bool hasAudioNoGenericPreview() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearAudioNoGenericPreview() => $_clearField(3);
+  @$pb.TagNumber(3)
+  AudioNoGenericPreview ensureAudioNoGenericPreview() => $_ensure(2);
+}
+
+/// @voice.unknown_fields=reject
+/// A protected exact-reference observation, not a snapshot or viewer capability.
+class AudioNoGenericPreview extends $pb.GeneratedMessage {
+  factory AudioNoGenericPreview({
+    $core.int? protocolVersion,
+    $core.String? fileId,
+    $core.String? status,
+  }) {
+    final result = create();
+    if (protocolVersion != null) result.protocolVersion = protocolVersion;
+    if (fileId != null) result.fileId = fileId;
+    if (status != null) result.status = status;
+    return result;
+  }
+
+  AudioNoGenericPreview._();
+
+  factory AudioNoGenericPreview.fromBuffer($core.List<$core.int> data,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromBuffer(data, registry);
+  factory AudioNoGenericPreview.fromJson($core.String json,
+          [$pb.ExtensionRegistry registry = $pb.ExtensionRegistry.EMPTY]) =>
+      create()..mergeFromJson(json, registry);
+
+  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
+      _omitMessageNames ? '' : 'AudioNoGenericPreview',
+      package: const $pb.PackageName(_omitMessageNames ? '' : 'voice.file.v1'),
+      createEmptyInstance: create)
+    ..aI(1, _omitFieldNames ? '' : 'protocolVersion',
+        fieldType: $pb.PbFieldType.OU3)
+    ..aOS(2, _omitFieldNames ? '' : 'fileId')
+    ..aOS(3, _omitFieldNames ? '' : 'status')
+    ..hasRequiredFields = false;
+
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AudioNoGenericPreview clone() => deepCopy();
+  @$core.Deprecated('See https://github.com/google/protobuf.dart/issues/998.')
+  AudioNoGenericPreview copyWith(
+          void Function(AudioNoGenericPreview) updates) =>
+      super.copyWith((message) => updates(message as AudioNoGenericPreview))
+          as AudioNoGenericPreview;
+
+  @$core.override
+  $pb.BuilderInfo get info_ => _i;
+
+  @$core.pragma('dart2js:noInline')
+  static AudioNoGenericPreview create() => AudioNoGenericPreview._();
+  @$core.override
+  AudioNoGenericPreview createEmptyInstance() => create();
+  @$core.pragma('dart2js:noInline')
+  static AudioNoGenericPreview getDefault() => _defaultInstance ??=
+      $pb.GeneratedMessage.$_defaultFor<AudioNoGenericPreview>(create);
+  static AudioNoGenericPreview? _defaultInstance;
+
+  @$pb.TagNumber(1)
+  $core.int get protocolVersion => $_getIZ(0);
+  @$pb.TagNumber(1)
+  set protocolVersion($core.int value) => $_setUnsignedInt32(0, value);
+  @$pb.TagNumber(1)
+  $core.bool hasProtocolVersion() => $_has(0);
+  @$pb.TagNumber(1)
+  void clearProtocolVersion() => $_clearField(1);
+
+  @$pb.TagNumber(2)
+  $core.String get fileId => $_getSZ(1);
+  @$pb.TagNumber(2)
+  set fileId($core.String value) => $_setString(1, value);
+  @$pb.TagNumber(2)
+  $core.bool hasFileId() => $_has(1);
+  @$pb.TagNumber(2)
+  void clearFileId() => $_clearField(2);
+
+  @$pb.TagNumber(3)
+  $core.String get status => $_getSZ(2);
+  @$pb.TagNumber(3)
+  set status($core.String value) => $_setString(2, value);
+  @$pb.TagNumber(3)
+  $core.bool hasStatus() => $_has(2);
+  @$pb.TagNumber(3)
+  void clearStatus() => $_clearField(3);
 }
 
 /// @voice.unknown_fields=reject

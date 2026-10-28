@@ -5,6 +5,7 @@ class PrerequisiteError(ValueError):pass
 # Bot007 excludes legacy empty message tokens; nonempty interaction identities
 # remain unique under every supported schema.
 # Bot008 adds membership evidence tables without changing this token index.
+# Bot009 adds session epochs without changing this token uniqueness rule.
 SQL="""BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '30s';
 SELECT json_build_object('database',current_database(),
@@ -26,7 +27,7 @@ def required(plan):
 def verify(row):
     keys={'database','version','dirty','duplicate_token_groups'}
     if (not isinstance(row,dict) or set(row)!=keys or row['database']!='bot_db'
-        or type(row['version']) is not int or not 1<=row['version']<=8
+        or type(row['version']) is not int or not 1<=row['version']<=9
         or row['dirty'] is not False or type(row['duplicate_token_groups']) is not int
         or row['duplicate_token_groups']!=0):
         raise PrerequisiteError('bot_forward_constraint_prerequisite_failed')

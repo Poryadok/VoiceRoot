@@ -100,6 +100,13 @@ type fakeChatClient struct {
 	allowCreate           <-chan struct{}
 }
 
+func (f *fakeChatClient) GetChat(_ context.Context, req *chatv1.GetChatRequest) (*chatv1.GetChatResponse, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return &chatv1.GetChatResponse{Chat: &chatv1.Chat{Id: req.GetChatId()}}, nil
+}
+
 func (f *fakeChatClient) ListMembers(context.Context, *chatv1.ListMembersRequest) (*chatv1.ListMembersResponse, error) {
 	if f.listErr != nil {
 		return nil, f.listErr

@@ -109,6 +109,15 @@ message ResolveMessageAttachmentPreviewRequest {
 message ResolveMessageAttachmentPreviewResponse {
   FileReferenceKey reference = 1;
   voice.events.v1.FilePreviewSnapshot snapshot = 2;
+  AudioNoGenericPreview audio_no_generic_preview = 3;
+}
+
+// @voice.unknown_fields=reject
+// A protected exact-reference observation, not a snapshot or viewer capability.
+message AudioNoGenericPreview {
+  uint32 protocol_version = 1;
+  string file_id = 2;
+  string status = 3;
 }
 
 // @voice.unknown_fields=reject

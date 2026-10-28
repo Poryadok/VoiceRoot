@@ -250,11 +250,12 @@ default postconditions gate restart. Already-applied16 does not repeat its
 backfill or erase later opt-ins. Bot004 duplicate non-NULL interaction tokens
 (including empty strings) are rechecked under the writer fence before any
 native contract mutation or database Job; conflicting data is not rewritten.
-The same read-only prerequisite accepts clean Bot schema versions1 through8.
+The same read-only prerequisite accepts clean Bot schema versions1 through9.
 Bot007 excludes legacy empty message tokens from the unique interaction index;
-Bot008 adds the native membership journal without changing that index. The
+Bot008 adds the native membership journal and Bot009 adds session epochs without
+changing that index. The
 prerequisite still rejects duplicate nonempty token groups, dirty state and
-versions newer than8; before Bot007 it also rejects duplicate empty tokens.
+versions newer than9; before Bot007 it also rejects duplicate empty tokens.
 
 The root-owned private `policy.json` may explicitly carry `release_policy`.
 Installation validates its source-bound profile, immutable object, digest and
