@@ -24,6 +24,22 @@ flutter test
 
 CI: [.github/workflows/ci.yml](../../.github/workflows/ci.yml) — tier 1 job `flutter` (analyze+test); tier 2 on `master` push: `flutter-windows`, Android/iOS smoke. Цель **`make build-all`** Flutter не запускает — см. [docs/TESTING.md](../../docs/TESTING.md).
 
+## Voice-note capture component
+
+Voice-note capture is a reusable `VoiceNoteCapture` control with a stable
+`LocalVoiceNoteRecorder` per keyed widget lifetime. It emits a local
+`CapturedVoiceNote` (`XFile`, measured `Duration`, `discard()`); the callback
+recipient owns the file and must discard it after consumption. Key the control
+by conversation and viewer. Capture owns recorder cancellation/disposal.
+File upload and Messaging send are the separate CL-014 composer integration.
+
+The pinned [record 6.2.0](https://pub.dev/packages/record/versions/6.2.0)
+dependency supports WAV on web, Windows, Android, iOS, macOS and Linux. Local
+output is `voice.wav` / `audio/wav`; it is not an upload format promise.
+Linux recording requires `parecord`, `pactl` and `ffmpeg` (Ubuntu:
+`pulseaudio-utils ffmpeg`); microphone permission and platform capability errors
+stay inline in the control. macOS includes the audio-input sandbox capability.
+
 ## Windows desktop release
 
 ```powershell
