@@ -110,6 +110,42 @@ def render_chat(source,app_config_keys):
     return _patch(source,target), target
 
 
+def render_space(source,app_config_keys):
+    """Add only the documented Space signer and HTTPS JWKS identity."""
+    _base(source,'space')
+    if not isinstance(app_config_keys,list) or any(not isinstance(k,str) for k in app_config_keys): raise ValueError()
+    target=copy.deepcopy(source['spec']); pod=target['template']['spec']
+    containers=[c for c in pod['containers'] if c.get('name')=='space']
+    if len(containers)!=1: raise ValueError()
+    container=containers[0]
+    env=[adoption._env('SPACE_PRINCIPAL_SIGNING_KEYS_DIR','/etc/voice/media/signing'),
+         adoption._ref('SPACE_PRINCIPAL_ACTIVE_KID','secret','voice-space-principal-signing','active-kid'),
+         adoption._env('SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE','/etc/voice/media/server/tls.key'),
+         adoption._env('SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE','/etc/voice/media/server/tls.crt'),
+         adoption._env('SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN',':8443')]
+    names={e['name'] for e in env}
+    if names & set(app_config_keys) or any(x!={'configMapRef':{'name':'voice-app-config'}} for x in container.get('envFrom',[])): raise ValueError()
+    existing=container.setdefault('env',[])
+    if (not isinstance(existing,list) or any(not isinstance(x,dict) or not isinstance(x.get('name'),str) for x in existing)
+            or len({x['name'] for x in existing})!=len(existing) or names & {x['name'] for x in existing}): raise ValueError()
+    mounts=[{'name':'media-signing','mountPath':'/etc/voice/media/signing','readOnly':True},
+            {'name':'media-server','mountPath':'/etc/voice/media/server','readOnly':True}]
+    existing_mounts=container.setdefault('volumeMounts',[])
+    if any(m.get('name') in {x['name'] for x in mounts} or any(
+            m.get('mountPath','')==x['mountPath'] or m.get('mountPath','').startswith(x['mountPath']+'/')
+            or x['mountPath'].startswith(m.get('mountPath','')+'/') for x in mounts) for m in existing_mounts): raise ValueError()
+    volumes=[{'name':'media-signing','secret':{'secretName':'voice-space-principal-signing','defaultMode':288,
+        'items':[{'key':k,'path':k} for k in ('current.pem','next.pem')]}},
+        {'name':'media-server','secret':{'secretName':'voice-space-media-server-tls','defaultMode':288,
+        'items':[{'key':k,'path':k} for k in ('tls.crt','tls.key')]}}]
+    existing_volumes=pod.setdefault('volumes',[])
+    if any(v.get('name') in {x['name'] for x in volumes} for v in existing_volumes): raise ValueError()
+    security=pod.setdefault('securityContext',{})
+    if 'fsGroup' in security and security['fsGroup']!=65532: raise ValueError()
+    security['fsGroup']=65532; existing.extend(env); existing_mounts.extend(mounts); existing_volumes.extend(volumes)
+    return _patch(source,target),target
+
+
 def verify_existing(source, predecessor_source, predecessor_receipts, predecessor_operation, service, app_config_keys):
     """Check a C1-rendered config exactly, allowing only separately admitted images.
 
@@ -122,6 +158,8 @@ def verify_existing(source, predecessor_source, predecessor_receipts, predecesso
         _, expected = render_realtime(predecessor_source,predecessor_receipts,predecessor_operation)
     elif service == 'chat':
         _, expected = render_chat(predecessor_source,app_config_keys)
+    elif service == 'space':
+        _, expected = render_space(predecessor_source,app_config_keys)
     else: raise ValueError()
     current = source['spec']; old = expected['template']['spec']['containers']; new = current['template']['spec']['containers']
     if (not isinstance(old,list) or not isinstance(new,list)

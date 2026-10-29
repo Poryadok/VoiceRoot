@@ -1,8 +1,11 @@
 import copy
 import json
+import os
+from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import full_cohort_predecessor_phase as phase
 
@@ -78,6 +81,25 @@ class P3ReceiptTests(unittest.TestCase):
 
 
 class PreBeginTests(unittest.TestCase):
+    def test_history_transport_uses_fixed_resource_endpoint_and_bounds(self):
+        class Response:
+            def __init__(self, raw): self.raw = raw
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, limit): return self.raw[:limit]
+        class Opener:
+            def __init__(self, raw): self.raw = raw
+            def open(self, url, timeout):
+                self_url.append((url, timeout))
+                return Response(self.raw)
+        self_url = []
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'{"events":[]}')):
+            self.assertEqual(phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT)), {'events':[]})
+        self.assertEqual(self_url, [(phase.TT_ENDPOINT + '/api/projects/voice/resources/DEV', 10)])
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'x' * ((2 << 20) + 1))):
+            with self.assertRaises(phase.PredecessorError):
+                phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT))
+
     def test_historical_deployment_matches_c1_not_c2(self):
         old = dict(actor='scheduled_devops', claim='old-claim', window='old-window', generation=3,
                    commit='a'*40, images={'app':'image'}, actual={'app':'image'})
@@ -160,6 +182,25 @@ class PreBeginTests(unittest.TestCase):
             document['metadata']['resourceVersion'] = '5'
             import media_operation_journal
             with tempfile.TemporaryDirectory() as parent:
+                import full_cohort_config_custody as custody
+                import full_cohort_config_custody_test as config_fixture
+                import media_backup_upload_phase
+                operation, entries, effects = config_fixture.facts()
+                self.assertEqual(operation, old['operation_id'])
+                context_keys = {'project','resource','actor','claim','generation','window','revision','operation_id','commit','images'}
+                config = {'schema':'voice-full-cohort-config-snapshot-v1',
+                          'resource_context':{k:old[k] for k in context_keys}, 'namespace_uid':'namespace',
+                          'cut_invocation':'b'*32, 'services':['chat'], 'effects':entries}
+                marker = {'schema':'voice-full-cohort-config-marker-v1','status':'done','operation_id':operation,
+                          'source_sha':old['commit'],'namespace_uid':'namespace','cut_invocation':'b'*32,
+                          'snapshot_sha256':custody.digest(config), 'effects_sha256':custody.digest(effects)}
+                old[custody.MARKER] = marker; old['backend_config_effects'] = effects
+                document['data']['executor'] = json.dumps(old)
+                root = Path(parent)/operation; root.mkdir(mode=0o700)
+                filename = root/custody.FILENAME
+                filename.write_text(json.dumps(config,sort_keys=True,separators=(',',':'))); os.chmod(filename,0o400)
+                root_patch = patch.object(media_backup_upload_phase, 'ROOT', Path(parent)); root_patch.start()
+                self.addCleanup(root_patch.stop)
                 intent = {'resource_context':ctx, 'namespace_uid':'namespace'}
                 history = dict(code='DEV', environment='dev', events=[dict(id='r11', kind='deployment',
                     actor=old['actor'], before=dict(owner=old['actor'], claim=old['claim'],
@@ -181,6 +222,11 @@ class PreBeginTests(unittest.TestCase):
                         fence.begin_with_predecessor(client,lock,'namespace',journal)
                     snapshot = phase.load(fence, client, lock, 'namespace', journal)
                     self.assertEqual(snapshot['previous_operation_id'], old['operation_id'])
+                    detached = custody.load_predecessor(fence,client,lock,'namespace',journal)
+                    self.assertEqual(detached['source_sha'], old['commit'])
+                    self.assertNotEqual(detached['source_sha'], ctx['commit'])
+                    detached['effects'].clear()
+                    self.assertTrue(custody.load_predecessor(fence,client,lock,'namespace',journal)['effects'])
                     journal.state['steps']['full-cohort-predecessor']['snapshot']['previous_commit'] = 'f'*40
                     with self.assertRaises(phase.PredecessorError): phase.load(fence, client, lock, 'namespace', journal)
 

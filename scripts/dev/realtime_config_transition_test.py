@@ -75,5 +75,18 @@ class RenderTest(unittest.TestCase):
         source['spec']['ports'].append({'name':'foreign','port':9099})
         with self.assertRaises(ValueError): transition.render_chat_service(source,{'app':'voice-chat'})
 
+    def test_space_only_adds_signer_and_https_configuration(self):
+        source=copy.deepcopy(self.chat); source['metadata']['name']='voice-space'
+        source['spec']['template']['spec']['containers'][0]['name']='space'
+        before=copy.deepcopy(source); patch,target=transition.render_space(source,[])
+        self.assertEqual(source,before); self.assertEqual(target['replicas'],0)
+        env=target['template']['spec']['containers'][0]['env']
+        self.assertEqual({e['name'] for e in env if e['name'].startswith('SPACE_')},
+            {'SPACE_PRINCIPAL_SIGNING_KEYS_DIR','SPACE_PRINCIPAL_ACTIVE_KID','SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE',
+             'SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE','SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN'})
+        self.assertEqual(target['template']['spec']['containers'][0]['image'],'old')
+        self.assertEqual(patch[2]['value'],before['spec'])
+        with self.assertRaises(ValueError): transition.render_space(source,['SPACE_PRINCIPAL_ACTIVE_KID'])
+
 
 if __name__ == '__main__': unittest.main()
