@@ -1,5 +1,7 @@
 import copy
 import json
+import os
+from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -180,6 +182,25 @@ class PreBeginTests(unittest.TestCase):
             document['metadata']['resourceVersion'] = '5'
             import media_operation_journal
             with tempfile.TemporaryDirectory() as parent:
+                import full_cohort_config_custody as custody
+                import full_cohort_config_custody_test as config_fixture
+                import media_backup_upload_phase
+                operation, entries, effects = config_fixture.facts()
+                self.assertEqual(operation, old['operation_id'])
+                context_keys = {'project','resource','actor','claim','generation','window','revision','operation_id','commit','images'}
+                config = {'schema':'voice-full-cohort-config-snapshot-v1',
+                          'resource_context':{k:old[k] for k in context_keys}, 'namespace_uid':'namespace',
+                          'cut_invocation':'b'*32, 'services':['chat'], 'effects':entries}
+                marker = {'schema':'voice-full-cohort-config-marker-v1','status':'done','operation_id':operation,
+                          'source_sha':old['commit'],'namespace_uid':'namespace','cut_invocation':'b'*32,
+                          'snapshot_sha256':custody.digest(config), 'effects_sha256':custody.digest(effects)}
+                old[custody.MARKER] = marker; old['backend_config_effects'] = effects
+                document['data']['executor'] = json.dumps(old)
+                root = Path(parent)/operation; root.mkdir(mode=0o700)
+                filename = root/custody.FILENAME
+                filename.write_text(json.dumps(config,sort_keys=True,separators=(',',':'))); os.chmod(filename,0o400)
+                root_patch = patch.object(media_backup_upload_phase, 'ROOT', Path(parent)); root_patch.start()
+                self.addCleanup(root_patch.stop)
                 intent = {'resource_context':ctx, 'namespace_uid':'namespace'}
                 history = dict(code='DEV', environment='dev', events=[dict(id='r11', kind='deployment',
                     actor=old['actor'], before=dict(owner=old['actor'], claim=old['claim'],
@@ -201,6 +222,11 @@ class PreBeginTests(unittest.TestCase):
                         fence.begin_with_predecessor(client,lock,'namespace',journal)
                     snapshot = phase.load(fence, client, lock, 'namespace', journal)
                     self.assertEqual(snapshot['previous_operation_id'], old['operation_id'])
+                    detached = custody.load_predecessor(fence,client,lock,'namespace',journal)
+                    self.assertEqual(detached['source_sha'], old['commit'])
+                    self.assertNotEqual(detached['source_sha'], ctx['commit'])
+                    detached['effects'].clear()
+                    self.assertTrue(custody.load_predecessor(fence,client,lock,'namespace',journal)['effects'])
                     journal.state['steps']['full-cohort-predecessor']['snapshot']['previous_commit'] = 'f'*40
                     with self.assertRaises(phase.PredecessorError): phase.load(fence, client, lock, 'namespace', journal)
 
