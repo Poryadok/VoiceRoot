@@ -90,7 +90,8 @@ class CryptoFixture(unittest.TestCase):
                 return result
             with mock.patch.object(parent,'require_child',return_value=plan),mock.patch.object(parent,'load_payload',side_effect=lambda s,slot,i:rawmap[i]), \
                  mock.patch.object(parent,'load_issuer',return_value=issuer,create=True),mock.patch.object(p3,'_source_and_image',return_value=(publisher,{'fixture':'not-authority'})), \
-                 mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=lambda args,body=None,timeout=30:kube_run(None,args,body,timeout))):
+                 mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=lambda args,body=None,timeout=30:kube_run(None,args,body,timeout),
+                     get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'ns'}})):
                 self.assertTrue(p3.preflight_payloads(session))
                 bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
                 with mock.patch.object(parent,'load_issuer',return_value=bad),self.assertRaises(p3.PrerequisiteError): p3.preflight_payloads(session)
@@ -102,7 +103,9 @@ class CryptoFixture(unittest.TestCase):
                         calls['lists']+=1
                         if calls['lists']==5: result['items']=[{'metadata':{'name':'voice-realtime-principal-signing'}}]
                     return result
-                with mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=late)),self.assertRaises(p3.PrerequisiteError):
+                with mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=late,get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'ns'}})),self.assertRaises(p3.PrerequisiteError):
+                    p3.preflight_payloads(session)
+                with mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=late,get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'foreign'}})),self.assertRaises(p3.PrerequisiteError):
                     p3.preflight_payloads(session)
             bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
             with self.assertRaises(crypto.CryptoError): crypto.validate_issuer_materials(generated,bad)
