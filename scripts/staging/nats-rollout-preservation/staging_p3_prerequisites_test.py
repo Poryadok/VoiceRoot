@@ -6,6 +6,23 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_service_server_allocation_has_only_exact_bounded_difference(self):
+        intended={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging'},
+                  'spec':{'type':'ClusterIP','selector':{'app':'voice-p3-principal-jwks'},'ports':[{'port':8443}],
+                          'ipFamilies':['IPv4'],'ipFamilyPolicy':'SingleStack'}}
+        actual=copy.deepcopy(intended); actual['metadata'].update(uid='owned',resourceVersion='17')
+        actual['spec'].update(clusterIP='10.20.0.7',clusterIPs=['10.20.0.7'])
+        self.assertEqual(p3.service_allocation(intended,actual),['10.20.0.7'])
+        for mutation in ('different_primary','duplicate','wrong_family','extra_spec','wrong_uid','owner'):
+            bad=copy.deepcopy(actual)
+            if mutation=='different_primary': bad['spec']['clusterIP']='10.20.0.8'
+            if mutation=='duplicate': bad['spec']['clusterIPs'].append('10.20.0.7')
+            if mutation=='wrong_family': bad['spec']['ipFamilies']=['IPv6']
+            if mutation=='extra_spec': bad['spec']['selector']['other']='unexpected'
+            if mutation=='wrong_uid': del bad['metadata']['uid']
+            if mutation=='owner': bad['metadata']['ownerReferences']=[{'uid':'foreign'}]
+            with self.subTest(mutation=mutation),self.assertRaises(p3.PrerequisiteError): p3.service_allocation(intended,bad)
+
     def test_private_plan_requires_closed_exact_inventory_and_provenance_shapes(self):
         ids=p3.inventory_intent(); digest='a'*64
         objects=[{'id':i,'kind':i.split('/')[0],'name':i.split('/')[1],

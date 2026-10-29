@@ -1,8 +1,10 @@
 """Fixed STAGING P3 object contract; pure helpers do not grant authority."""
 import base64
 import copy
+import ipaddress
 import re
 import source_plan
+import gis_first_install
 
 
 class PrerequisiteError(RuntimeError): pass
@@ -45,6 +47,30 @@ def inventory_intent():
     """Ordered fixed names only; it is not an authorization or live snapshot."""
     return [('ConfigMap/' if name=='voice-p3-principal-public' else 'Secret/')+name
             for name in ASSET_KEYS]+list(PUBLISHER)
+
+
+def service_allocation(intended,actual):
+    """Compare normalized Service intent and response; not a readback or authority."""
+    try:
+        wanted=gis_first_install.semantic(intended); live=gis_first_install.semantic(actual)
+        identity={'name':'voice-p3-principal-jwks','namespace':NAMESPACE}
+        if any(wanted['metadata'].get(k)!=v or live['metadata'].get(k)!=v for k,v in identity.items()): raise ValueError()
+        if (wanted['kind']!='Service' or wanted['apiVersion']!='v1' or wanted['spec'].get('type')!='ClusterIP'
+            or 'clusterIP' in wanted['spec'] or 'clusterIPs' in wanted['spec']): raise ValueError()
+        meta=actual['metadata']
+        if not all(isinstance(meta.get(k),str) and meta[k] for k in ('uid','resourceVersion')): raise ValueError()
+        if (meta.get('ownerReferences') or meta.get('finalizers') or meta.get('deletionTimestamp')
+            or set(actual)-{'apiVersion','kind','metadata','spec','status'}): raise ValueError()
+        primary=live['spec'].pop('clusterIP'); addresses=live['spec'].pop('clusterIPs')
+        if (not isinstance(addresses,list) or not 1<=len(addresses)<=2 or len(set(addresses))!=len(addresses)
+            or primary!=addresses[0]): raise ValueError()
+        parsed=[ipaddress.ip_address(address) for address in addresses]
+        if any(ip.is_unspecified or ip.is_multicast for ip in parsed): raise ValueError()
+        families=live['spec'].get('ipFamilies')
+        if families is not None and families!=['IPv4' if ip.version==4 else 'IPv6' for ip in parsed]: raise ValueError()
+        if live!=wanted: raise ValueError()
+        return list(addresses)
+    except Exception: raise PrerequisiteError('staging P3 Service allocation invalid') from None
 
 
 def validate_plan_shape(plan):
