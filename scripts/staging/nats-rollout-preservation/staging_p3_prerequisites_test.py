@@ -39,6 +39,13 @@ class StagingP3Contract(unittest.TestCase):
         with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
         bad=list(copy.deepcopy(args)); bad[2][0]['metadata']['namespace']='voice-dev'
         with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+        bad=list(copy.deepcopy(args)); del bad[2][0]['spec']['nodeName']; del bad[4]['metadata']['name']
+        with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+        for index in (3,4):
+            bad=list(copy.deepcopy(args)); row=bad[index][0] if index==3 else bad[index]; row['metadata']['deletionTimestamp']='now'
+            with self.subTest(index=index),self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+        bad=list(copy.deepcopy(args)); bad[3][0]['endpoints'][0]['conditions']['terminating']=True
+        with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
 
     def test_service_server_allocation_has_only_exact_bounded_difference(self):
         intended={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging'},

@@ -119,18 +119,20 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
             or 'running' not in statuses[0].get('state',{}) or not re.fullmatch(r'sha256:[0-9a-f]{64}',platform_digest)
             or not re.fullmatch(r'(?:docker-pullable|containerd)://[^@\s]+@'+re.escape(platform_digest),statuses[0].get('imageID',''))): raise ValueError()
         if (not isinstance(node_uid,str) or not node_uid or node['metadata'].get('uid')!=node_uid
-            or pod['spec'].get('nodeName')!=node['metadata'].get('name')
+            or node['metadata'].get('deletionTimestamp') or not isinstance(node['metadata'].get('name'),str)
+            or not node['metadata']['name'] or pod['spec'].get('nodeName')!=node['metadata']['name']
             or node['status'].get('nodeInfo',{}).get('operatingSystem')!='linux'
             or node['status'].get('nodeInfo',{}).get('architecture')!='amd64'
             or not any(c.get('type')=='Ready' and c.get('status')=='True' for c in node['status'].get('conditions',[]))): raise ValueError()
         matching=[s for s in slices if s.get('metadata',{}).get('labels',{}).get('kubernetes.io/service-name')=='voice-p3-principal-jwks']
         if (len(matching)!=1 or matching[0].get('metadata',{}).get('namespace')!=NAMESPACE
+            or matching[0]['metadata'].get('deletionTimestamp')
             or matching[0].get('ports')!=[{'name':'https','port':8443,'protocol':'TCP'}]): raise ValueError()
         endpoints=matching[0]['endpoints']
         if len(endpoints)!=1: raise ValueError()
         endpoint=endpoints[0]; address=ps['podIP']; ip=ipaddress.ip_address(address)
         if (ip.is_unspecified or ip.is_multicast or ip.is_loopback or ip.is_link_local or endpoint.get('addresses')!=[address]
-            or endpoint.get('conditions',{}).get('ready') is not True
+            or endpoint.get('conditions',{}).get('ready') is not True or endpoint['conditions'].get('terminating') is True
             or endpoint.get('targetRef',{}).get('kind')!='Pod' or endpoint['targetRef'].get('uid')!=pod_uid
             or endpoint['targetRef'].get('namespace')!=NAMESPACE): raise ValueError()
         return address
