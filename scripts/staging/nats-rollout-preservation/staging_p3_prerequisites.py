@@ -84,16 +84,18 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
             owners=[ref for ref in refs if ref.get('controller') is True]
             return len(owners)==1 and owners[0].get('kind')==kind and owners[0].get('uid')==uid
         meta=deployment['metadata']; status=deployment['status']; generation=meta['generation']; dep_uid=meta['uid']
-        if (not dep_uid or type(generation) is not int or generation<1 or status.get('observedGeneration')!=generation
+        if (meta.get('namespace')!=NAMESPACE or meta.get('name')!='voice-p3-principal-jwks' or meta.get('deletionTimestamp')
+            or not dep_uid or type(generation) is not int or generation<1 or status.get('observedGeneration')!=generation
             or status.get('readyReplicas')!=1 or status.get('availableReplicas')!=1): raise ValueError()
         owned=[r for r in replicasets if controller(r,'Deployment',dep_uid) and r.get('spec',{}).get('replicas',0)!=0]
         if len(owned)!=1: raise ValueError()
         rs_uid=owned[0]['metadata']['uid']
-        if not rs_uid or owned[0]['metadata'].get('deletionTimestamp') or owned[0]['spec']['replicas']!=1: raise ValueError()
+        if (not rs_uid or owned[0]['metadata'].get('namespace')!=NAMESPACE or owned[0]['metadata'].get('deletionTimestamp')
+            or owned[0]['spec']['replicas']!=1): raise ValueError()
         selected=[p for p in pods if p.get('metadata',{}).get('labels',{}).get('app')=='voice-p3-principal-jwks']
         if len(selected)!=1: raise ValueError()
         pod=selected[0]; pm=pod['metadata']; ps=pod['status']; pod_uid=pm['uid']
-        if (not pod_uid or pm.get('deletionTimestamp') or not controller(pod,'ReplicaSet',rs_uid)
+        if (not pod_uid or pm.get('namespace')!=NAMESPACE or pm.get('deletionTimestamp') or not controller(pod,'ReplicaSet',rs_uid)
             or ps.get('phase')!='Running' or [{'type':'Ready','status':'True'}][0] not in
                [{'type':v.get('type'),'status':v.get('status')} for v in ps.get('conditions',[])]): raise ValueError()
         statuses=ps['containerStatuses']
@@ -106,7 +108,8 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
             or node['status'].get('nodeInfo',{}).get('architecture')!='amd64'
             or not any(c.get('type')=='Ready' and c.get('status')=='True' for c in node['status'].get('conditions',[]))): raise ValueError()
         matching=[s for s in slices if s.get('metadata',{}).get('labels',{}).get('kubernetes.io/service-name')=='voice-p3-principal-jwks']
-        if len(matching)!=1 or matching[0].get('ports')!=[{'name':'https','port':8443,'protocol':'TCP'}]: raise ValueError()
+        if (len(matching)!=1 or matching[0].get('metadata',{}).get('namespace')!=NAMESPACE
+            or matching[0].get('ports')!=[{'name':'https','port':8443,'protocol':'TCP'}]): raise ValueError()
         endpoints=matching[0]['endpoints']
         if len(endpoints)!=1: raise ValueError()
         endpoint=endpoints[0]; address=ps['podIP']; ip=ipaddress.ip_address(address)
