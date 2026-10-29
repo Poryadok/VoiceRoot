@@ -18,7 +18,7 @@ class PostgreSQLTest(unittest.TestCase):
                                 capture_output=True, timeout=60, check=True)
         container = result.stdout.decode().strip()
         self.addCleanup(lambda: subprocess.run(['docker', 'rm', '-f', '-v', container],
-                                               capture_output=True, timeout=30))
+                                               capture_output=True, timeout=30, check=True))
         def execute(body, check=True):
             return subprocess.run(['docker', 'exec', '-i', container, 'sh', '-ceu', bootstrap._PSQL],
                                   input=body, capture_output=True, timeout=30, check=check)

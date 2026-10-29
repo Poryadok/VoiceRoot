@@ -34,7 +34,7 @@ class CompositionTest(unittest.TestCase):
                                  '-e', 'POSTGRES_USER=voice', '-e', 'POSTGRES_PASSWORD=synthetic-admin-only',
                                  'postgres:16-alpine'], capture_output=True, check=True, timeout=60)
         cid = result.stdout.decode().strip()
-        self.addCleanup(lambda: subprocess.run(['docker', 'rm', '-f', '-v', cid], capture_output=True, timeout=30))
+        self.addCleanup(lambda: subprocess.run(['docker', 'rm', '-f', '-v', cid], capture_output=True, timeout=30, check=True))
         def pg(script, body=b'', check=True):
             return subprocess.run(['docker', 'exec', '-i', cid, 'sh', '-ceu', script], input=body,
                                   capture_output=True, timeout=30, check=check)

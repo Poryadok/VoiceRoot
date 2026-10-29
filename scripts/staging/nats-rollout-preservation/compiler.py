@@ -164,7 +164,7 @@ def prebootstrap_image_inventory(source, parameters, producer):
     rows=rendered_source(source,parameters,decode_yaml)
     builder=source_plan._Source(source,parameters,decode_yaml,producer)
     source_plan._configuration(builder)
-    source_plan._application(builder)
+    source_plan._application(builder,images_only=True)
     source_plan.frontend_objects(builder,deployments_only=True)
     for action in builder.actions:
         wanted=action['manifest'];identity=(wanted['kind'],wanted['metadata']['name'])

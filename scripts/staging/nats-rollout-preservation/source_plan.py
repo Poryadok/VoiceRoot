@@ -379,7 +379,7 @@ def _leaf_monitor_config(obj):
         _fail('canonical_leaf_monitor_invalid')
 
 
-def _application(builder):
+def _application(builder, *, images_only=False):
     p = builder.p
     apps = []
     gis_objects = []
@@ -436,6 +436,11 @@ def _application(builder):
             if not any(e.get('name') == expected and e.get('value') == p['s3_signing_endpoint'] for e in container.get('env', [])):
                 _fail('canonical_signing_source_missing')
             builder.add('signing-endpoint', obj, action=True)
+    # The pre-bootstrap inventory needs the same rendered and normalized
+    # Deployment actions, before the missing database credential can exist.
+    # The ordinary source plan still validates every Secret reference below.
+    if images_only:
+        return
     # Derive every non-NATS Secret ref/key from canonical rendered Pod specs.
     refs = {}
     def visit(value):
