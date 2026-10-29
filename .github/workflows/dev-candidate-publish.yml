@@ -54,6 +54,8 @@ on:
       - scripts/dev/realtime_migration_verify_test.py
       - scripts/dev/realtime_migration_job.py
       - scripts/dev/realtime_migration_job_test.py
+      - scripts/dev/writer_cut_pg_probe.py
+      - scripts/dev/writer_cut_pg_probe_test.py
       - scripts/dev/realtime_db_provision.py
       - scripts/dev/realtime_db_provision_test.py
       - scripts/dev/realtime_db_provision_journal_test.py
@@ -121,6 +123,7 @@ jobs:
           python -B scripts/dev/realtime_secret_provision_test.py
           python -B scripts/dev/realtime_migration_verify_test.py
           python -B scripts/dev/realtime_migration_job_test.py
+          python -B scripts/dev/writer_cut_pg_probe_test.py
           python -B scripts/dev/realtime_db_provision_test.py
           python -B scripts/dev/realtime_db_provision_journal_test.py
           python -B scripts/dev/realtime_p3_adoption_test.py
