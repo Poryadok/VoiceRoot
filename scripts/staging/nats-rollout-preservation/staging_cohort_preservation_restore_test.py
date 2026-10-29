@@ -106,13 +106,41 @@ class RestoreTransportTests(unittest.TestCase):
                         cut={'manifest':native,'manifest_sha256':owner._file_identity(base/'rollout-before-manifest.json')['sha256'],
                             'census_sha256':'f'*64}
                         binding=owner._encrypt(session,{'dispatcher_run_id':123,'head_sha':session.context['commit']},cut)
-                        restored=encrypted_cut.decrypt_verify(base,recovery,binding,lambda _: {'external_nats_fixture':True},cohort_session=session)
+                        owner._write(owner._base(session)/'native-cut.json',cut)
+                        owner._write(owner._base(session)/'paused.json',{'external_paused_stage_fixture':True})
+                        state=owner._state(session);state.update(status='AWAITING_OFF_NODE',cipher_binding=binding,
+                            initial_resource_fence=session.binding())
+                        owner._save_state(session,state)
+                        import bridge_root
+                        import github_custody
+                        import staging_cohort_preservation_auxiliary as auxiliary
+                        # Actual Actions type/Session and production continuation;
+                        # installed source admission, remote artifact retrieval,
+                        # NATS and absence of an existing auxiliary are fixtures.
+                        with patch.object(bridge_root.root_cli,'code_binding',return_value={}):actions=bridge_root.Actions(source/'scripts'/'staging')
+                        actions.tt_session=session
+                        request={'operation':session.operation,'action':'authorize','token':'fixture-only','artifact_id':42}
+                        custody={'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
+                            **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
+                            'artifact_id':42,'verified':True}
+                        with patch.object(github_custody,'verify_artifact',return_value=custody) as remote,\
+                            patch.object(owner,'_native_readback',return_value={'external_nats_fixture':True}),\
+                            patch.object(auxiliary,'resume',return_value=None):
+                            qualified=owner.qualify_offnode(actions,request)
+                            self.assertEqual(owner.qualify_offnode(actions,request),qualified)
+                            self.assertEqual(remote.call_count,1)
+                        self.assertEqual(owner.load_qualified(session),qualified)
+                        restored=owner._read(owner._base(session)/'decrypted-restore.json')
                         self.assertEqual(restored['cohort_readback']['cleanup'],'verified')
                         self.assertNotIn('cohort-before.key',restored['members'])
                         offnode=owner._read(owner._base(session)/'offnode-restore.json')
                         self.assertNotEqual(offnode['nonce'],receipt['nonce'])
                         self.assertEqual(offnode['proof']['databases'],receipt['proof']['databases'])
                         owner._no_pending(session)
+                        altered=copy.deepcopy(offnode);altered['status']='PENDING'
+                        owner.save(owner._base(session)/'offnode-restore.json',altered)
+                        with self.assertRaisesRegex(Exception,'cohort_qualification_changed'):
+                            owner.load_qualified(session)
         finally:
             docker('rm','-f','-v',cid)
 
