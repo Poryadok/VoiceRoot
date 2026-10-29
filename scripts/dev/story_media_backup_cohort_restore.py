@@ -18,8 +18,8 @@ GO_SQL = re.compile(r'([0-9]{6})_[a-z0-9_]+\.(up|down)\.sql')
 FLYWAY_SQL = re.compile(r'V([0-9]+)__[A-Za-z0-9_]+\.sql')
 MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 64 * 1024 * 1024
-GO_HISTORY = "(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)\n FROM schema_migrations)"
-AUTH_HISTORY = "(SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM flyway_schema_history)"
+GO_HISTORY = "(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)\n FROM public.schema_migrations)"
+AUTH_HISTORY = "(SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM public.flyway_schema_history)"
 AUTH_CATALOG = media_restore.CATALOG.replace(GO_HISTORY, AUTH_HISTORY)
 GATEWAY_HISTORY = "json_build_object('schema_migrations',to_regclass('public.schema_migrations') IS NOT NULL,'flyway_schema_history',to_regclass('public.flyway_schema_history') IS NOT NULL)"
 GATEWAY_CATALOG = media_restore.CATALOG.replace(GO_HISTORY, GATEWAY_HISTORY)
@@ -281,10 +281,17 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
                 actual=json.loads(sql(db,unmanaged.CATALOG_SQL))
                 unmanaged.restore_result(source_metadata['catalog'][db],actual)
                 continue
-            owner = media_restore._quote_identifier(source_metadata['catalog'][db]['database_owner'])
-            media_restore._psql(postgres, admin, 'postgres', 'CREATE DATABASE ' + db + ' OWNER ' + owner)
-            _decrypt_command(root, key, binding, databases, manifest, db,
-                             [postgres, 'pg_restore', '-U', admin, '--exit-on-error', '-d', db])
+            if full_catalog:
+                _decrypt_command(root,key,binding,databases,manifest,db,
+                    [postgres,'pg_restore','-U',admin,'--exit-on-error','--create','-d',maintenance])
+                unmanaged.verify_restored_properties(
+                    lambda name,sql:media_restore._psql(postgres,admin,name,sql),db,
+                    binding['full_catalog']['properties'][db])
+            else:
+                owner = media_restore._quote_identifier(source_metadata['catalog'][db]['database_owner'])
+                media_restore._psql(postgres, admin, 'postgres', 'CREATE DATABASE ' + db + ' OWNER ' + owner)
+                _decrypt_command(root, key, binding, databases, manifest, db,
+                                 [postgres, 'pg_restore', '-U', admin, '--exit-on-error', '-d', db])
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             if json.loads(media_restore._psql(postgres, admin, db, query)) != source_metadata['catalog'][db]:
                 raise CohortRestoreError('restored database catalog differs')
@@ -307,6 +314,10 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
                 media_restore._docker('exec', '-e', 'VOICE_RESTORE_URL=' + url, postgres, 'sh', '-ec', command)
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             actual = json.loads(media_restore._psql(postgres, admin, db, query))
+            if full_catalog:
+                unmanaged.verify_restored_properties(
+                    lambda name,sql:media_restore._psql(postgres,admin,name,sql),db,
+                    binding['full_catalog']['properties'][db])
             if mode == 'restore-only':
                 if actual != source_metadata['catalog'][db]:
                     raise CohortRestoreError('unchanged catalog or ledger drift')

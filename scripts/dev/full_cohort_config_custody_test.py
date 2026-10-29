@@ -98,6 +98,24 @@ class ConfigRecordsTest(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaises(custody.CustodyError):
                 custody.checked_records(operation, 'b'*32, ['chat'], local, ledger)
 
+    def test_fixed_space_service_is_preserved_but_arbitrary_service_rejected(self):
+        operation, local, ledger = facts()
+        name = 'backend-config-service-voice-space'
+        source = {'apiVersion':'v1','kind':'Service',
+                  'metadata':{'name':'voice-space','namespace':'voice-dev','uid':'space'},
+                  'spec':{'ports':[]}}
+        target = {'ports':[{'name':'https','port':8443}]}
+        details = {'operation_id':operation,'invocation_nonce':'b'*32,'source':source,'target_spec':target,'patch':[]}
+        receipt = {'uid':'space','spec_sha256':custody.digest(target),'responseResourceVersion':'5','resourceVersion':'6'}
+        entry = {'status':'done','nonce':'d'*32,'details_sha256':custody.digest(details),'details':details,'receipt':receipt}
+        local[name] = entry
+        ledger[name] = {'status':'done','nonce':entry['nonce'],'details_sha256':entry['details_sha256'],
+                        'receipt_sha256':custody.digest(receipt)}
+        self.assertIn(name, custody.checked_records(operation,'b'*32,['chat'],local,ledger))
+        local[name.replace('space','other')] = local.pop(name)
+        ledger[name.replace('space','other')] = ledger.pop(name)
+        with self.assertRaises(custody.CustodyError): custody.checked_records(operation,'b'*32,['chat'],local,ledger)
+
     def test_real_cut_journals_and_ledger_seal_then_reopen(self):
         import media_backup_upload_phase
         import media_operation_journal

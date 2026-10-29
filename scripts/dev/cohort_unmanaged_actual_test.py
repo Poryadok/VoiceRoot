@@ -83,6 +83,25 @@ class UnmanagedActualTest(unittest.TestCase):
             with self.assertRaises(unmanaged.UnmanagedError):unmanaged.verify_catalog_phase(phase,'token',changed)
         with self.assertRaises(phases.CohortPhaseError):
             phases.CohortPhases(SimpleNamespace(intent={'cohort_binding':binding}),object(),'token')
+        cut=object.__new__(affected.writer_cut.WriterCut)
+        probe=object.__new__(affected.CatalogScopedProbe)
+        probe.catalog=probe._bound_catalog=phase;probe.token=probe._bound_token='token'
+        cut.probe=probe;cut.provision_successor={'fixture':True};cut.effective_session=None
+        with patch.object(affected.FullCatalogPhase,'verify_receipt',return_value=receipt), \
+             patch.object(affected.FullCatalogPhase,'verify_current',side_effect=AssertionError('original cannot be current')), \
+             patch.object(affected,'verify_provisioned_catalog',return_value={'fixture':'successor'},create=True) as successor:
+            self.assertEqual(unmanaged.verify_catalog_phase(phase,'token',binding,cut),receipt)
+            successor.assert_called_once_with(probe,cut)
+            probe.token='different'
+            with self.assertRaises(unmanaged.UnmanagedError):unmanaged.verify_catalog_phase(phase,'token',binding,cut)
+        probe.token='token';cut.effective_session={'fixture':True}
+        with patch.object(affected.FullCatalogPhase,'verify_receipt',return_value=receipt), \
+             patch.object(affected,'verify_effective_catalog',return_value={'fixture':'effective'}) as successor:
+            self.assertEqual(unmanaged.verify_catalog_phase(phase,'token',binding,cut),receipt)
+            successor.assert_called_once_with(probe,cut)
+        with patch.object(affected.FullCatalogPhase,'verify_receipt',return_value=receipt), \
+             patch.object(affected,'verify_effective_catalog',side_effect=RuntimeError('changed')):
+            with self.assertRaises(unmanaged.UnmanagedError):unmanaged.verify_catalog_phase(phase,'token',binding,cut)
 
     def test_extra_plan_is_only_restore_only_in_full_catalog_mode(self):
         plan={'engine':'unmanaged','from':None,'to':None,'files':{}}
@@ -95,6 +114,29 @@ class UnmanagedActualTest(unittest.TestCase):
     def test_service_databases_restore_before_mutating_disposable_template(self):
         self.assertEqual(restore.restore_order(['extra_db','postgres','template1','voice_db']),
                          ['voice_db','extra_db','postgres','template1'])
+
+    def test_cut_binding_requires_original_scope_and_matching_ledger(self):
+        owner=object.__new__(phases.CohortPhases)
+        ledger=SimpleNamespace(read=lambda:({'status':'active'},('uid','rv')))
+        fence=SimpleNamespace(context={'operation_id':'fixture'},ledger=ledger)
+        owner.phases=SimpleNamespace(fence=fence,lock={'uid':'lock'},namespace_uid='ns')
+        owner.binding={'full_catalog':{}};owner.catalog_phase=object();owner.catalog_token='token'
+        owner._catalog_cut=owner._bound_catalog_cut=None
+        cut=object.__new__(affected.writer_cut.WriterCut)
+        cut.fence=fence;cut.lock={'uid':'lock'};cut.namespace_uid='ns'
+        cut.provision_successor=cut.effective_session=cut.migration=None
+        receipt={'engine':{'identity':'fixture'},'server_start':'now','all_databases':{'postgres':7,'template0':8}}
+        scope={'engine':receipt['engine'],'server_start':'now','databases':['postgres','template0'],
+               'database_oids':receipt['all_databases']}
+        cut.admission={'session_scope':scope}
+        with patch.object(phases.CohortPhases,'_guard'),patch.object(affected.writer_cut.WriterCut,'_guard'), \
+             patch.object(unmanaged,'verify_catalog_phase',return_value=receipt):
+            owner.bind_catalog_cut(cut)
+            self.assertIs(owner._catalog_cut,cut)
+            with self.assertRaises(phases.CohortPhaseError):owner.bind_catalog_cut(cut)
+            owner._catalog_cut=owner._bound_catalog_cut=None
+            cut.admission={'session_scope':scope|{'database_oids':{'postgres':7}}}
+            with self.assertRaises(phases.CohortPhaseError):owner.bind_catalog_cut(cut)
 
 
 if __name__=='__main__':unittest.main()
