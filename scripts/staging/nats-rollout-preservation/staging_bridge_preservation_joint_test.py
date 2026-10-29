@@ -497,6 +497,12 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
        patch.object(source_authority.transport,'_request',side_effect=story_request), \
        patch.object(http.client,'HTTPSConnection',Https), \
        patch.object(urllib.request.OpenerDirector,'open',registry_open) if 'VOICE_TEST_SPACE_OCI' in os.environ else contextlib.nullcontext():
+   trace_errors=[]
+   def trace(frame,event,arg):
+    if event=='exception' and frame.f_code.co_filename.endswith('space_native_tool_identity_staging.py'):
+     trace_errors.append((frame.f_lineno,arg[0].__name__,str(arg[1])))
+    return trace
+   if 'VOICE_TEST_SPACE_OCI' in os.environ:sys.settrace(trace)
    try: producer.prepare(actions,{'mode':'app-only','token':'synthetic-ci-token','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
    except KeyError as exc:
@@ -505,7 +511,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     raise AssertionError('producer blocked: '+str(exc)) from exc
    except Exception as exc:
     if 'VOICE_TEST_SPACE_OCI' in os.environ:
-     raise AssertionError('positive producer stopped: '+type(exc).__name__+': '+str(exc)) from exc
+     raise AssertionError('positive producer stopped: '+type(exc).__name__+': '+str(exc)+' reader='+repr(trace_errors[-3:])) from exc
     if type(exc).__name__!='StagingToolError' or str(exc)!='STAGING native publication unavailable' or not github_calls:
      raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
   checkpoint=root/'installed'/'cohort-preservation'/session.operation/'checkpoint.json'
