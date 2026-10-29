@@ -42,8 +42,9 @@ def _run(args, values=()):
                 if n<=0: raise ValueError()
                 pos+=n
             os.lseek(fd,0,os.SEEK_SET); paths.append('/proc/self/fd/'+str(fd))
-        result=subprocess.run(['openssl',*[x.format(*paths) for x in args]],stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL,pass_fds=tuple(fds),timeout=30,check=True)
+        result=subprocess.run(['/usr/bin/openssl',*[x.format(*paths) for x in args]],stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL,pass_fds=tuple(fds),timeout=30,check=True,
+                              env={'PATH':'/usr/bin:/bin','LANG':'C'})
         if len(result.stdout)>262144: raise ValueError()
         return result.stdout
     except Exception: raise CryptoError('staging P3 cryptography unavailable') from None

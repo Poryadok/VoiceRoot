@@ -9,12 +9,19 @@ import socket
 import ssl
 import threading
 import unittest
+from unittest import mock
 
 import staging_p3_prerequisites_crypto as crypto
 import staging_p3_prerequisites as p3
 
 
 class CryptoFixture(unittest.TestCase):
+    def test_openssl_does_not_inherit_host_configuration(self):
+        with mock.patch.object(crypto.subprocess,'run',wraps=subprocess.run) as invoke:
+            crypto._run(['version'])
+            self.assertEqual(invoke.call_args.args[0][0],'/usr/bin/openssl')
+            self.assertEqual(invoke.call_args.kwargs['env'],{'PATH':'/usr/bin:/bin','LANG':'C'})
+
     def test_staging_issuer_and_peer_certificates_are_bound(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp); key=root/'ca.key'; cert=root/'ca.crt'; peerkey=root/'peer.key'; csr=root/'peer.csr'; peer=root/'peer.crt'; ext=root/'ext'
