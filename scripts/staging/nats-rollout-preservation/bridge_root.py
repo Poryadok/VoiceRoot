@@ -149,7 +149,7 @@ class Actions:
     def _finish_core_proofs(self,state,*,recover_only=False):
         """Verify the complete release and smoke before closing its root fence."""
         if state.get('target',{}).get('cohort_preservation_sha256') is None:return
-        import commands,resource_claim,root_main,staging_core_release,staging_cohort_preservation
+        import commands,resource_claim,root_main
         session=getattr(self,'tt_session',None)
         proof=getattr(session,'operation_lock',None)
         if (type(session) is not resource_claim.Session or commands.authority_guard!=session.check
@@ -157,6 +157,8 @@ class Actions:
             or state.get('status')!='PASS' or state.get('phase')!='POST_RESTART'):
             raise Blocked('staging_core_finish_authority_invalid')
         proof.check();session.require_binding(state.get('resource_fence'))
+        if not compiler.full_application_target(state['target']):return
+        import staging_core_release,staging_cohort_preservation
         base=guard.ROOT/('rollout-'+session.operation)
         if recover_only and not os.path.lexists(base/'core-release.json'):
             raise Blocked('staging_core_finish_reconciliation_required')
@@ -226,7 +228,8 @@ class Actions:
         if request['action']=='finish' and state.get('status') in ('PASS','PROVISIONAL_READY'):
             if state.get('status')=='PROVISIONAL_READY' and (base/'provisional-child.json').exists():
                 raise Blocked('provisional_child_already_bound')
-            if state.get('status')=='PASS' and state.get('target',{}).get('cohort_preservation_sha256') is not None:
+            if (state.get('status')=='PASS' and state.get('target',{}).get('cohort_preservation_sha256') is not None
+                and compiler.full_application_target(state['target'])):
                 self._finish_core_proofs(state,recover_only=True)
             else:self._active_release(state)
             return summary(state)
