@@ -142,7 +142,8 @@ def _parse_url(database, value):
             raise ValueError()
         host, actual, role = schema._url(value, 'voice-dev')
         parsed = urlsplit(value)
-        if (actual != database or not schema.SAFE.fullmatch(role) or parsed.password is None):
+        if (actual != database or not schema.SAFE.fullmatch(role) or parsed.password is None or
+                parsed.username != role or parsed.netloc.count('@') != 1):
             raise ValueError()
         password = unquote(parsed.password, errors='strict')
         if not password or len(password.encode()) > 1024 or any(c in password for c in '\r\n\0'):
@@ -189,10 +190,33 @@ def qualified_plan(metadata_phase, cohort_phase, cut, token, database):
                 auth.verified_sources(cohort_phase, observed['metadata'], auth_version) != (binding, provenance)):
             raise ValueError()
         return {'database': database, 'plan': copy.deepcopy(plan), 'source': copy.deepcopy(binding['sources'][database]),
+                'credential': copy.deepcopy(observed['migration_roles'][database]),
                 'metadata_receipt_sha256': p.fence.ledger.read()[0][metadata.LEDGER]['receipt_sha256'],
                 'restore_provenance': copy.deepcopy(provenance)}
     except BaseException:
         raise MigrationError('source-qualified migrated restore unavailable') from None
+
+
+def _secret_name(operation, database):
+    if (not isinstance(operation, str) or not re.fullmatch(r'media-c[12]-[a-f0-9]{32}', operation) or
+            database not in source_plan.DATABASES):
+        raise MigrationError('migration secret identity invalid')
+    return 'voice-go-input-' + database.removesuffix('_db') + '-' + operation[-32:]
+
+
+def _secret(operation, database, credential, service_ip):
+    """Construct private operation-only credentials; never log or journal body."""
+    try:
+        name = _secret_name(operation, database)
+        if (credential['sslmode'] != 'disable' or not schema.SAFE.fullmatch(credential['role']) or
+                str(ipaddress.IPv4Address(service_ip)) != service_ip or
+                not isinstance(credential['password'], str) or not credential['password']):
+            raise ValueError()
+        return {'apiVersion': 'v1', 'kind': 'Secret', 'immutable': True, 'type': 'Opaque',
+                'metadata': {'name': name, 'namespace': 'voice-dev'},
+                'data': {'PGPASSWORD': base64.b64encode(credential['password'].encode('utf-8')).decode('ascii')}}
+    except BaseException:
+        raise MigrationError('migration credential snapshot unavailable') from None
 
 
 def render(operation, source_sha, database, files, node, route):
@@ -205,11 +229,14 @@ def render(operation, source_sha, database, files, node, route):
                 any(not isinstance(node[k], str) or not node[k] for k in ('name', 'uid', 'hostname')) or
                 not isinstance(files, dict) or not files):
             raise ValueError()
-        if (not isinstance(route, dict) or set(route) != {'host', 'service_ip'} or
+        service = database.removesuffix('_db')
+        if (not isinstance(route, dict) or set(route) != {'host', 'service_ip', 'role', 'sslmode'} or
                 route['host'] not in ('voice-postgres', 'voice-postgres.voice-dev', 'voice-postgres.voice-dev.svc',
                                       'voice-postgres.voice-dev.svc.cluster.local') or
                 not isinstance(route['service_ip'], str) or
-                str(ipaddress.IPv4Address(route['service_ip'])) != route['service_ip']):
+                str(ipaddress.IPv4Address(route['service_ip'])) != route['service_ip'] or
+                not isinstance(route['role'], str) or not schema.SAFE.fullmatch(route['role']) or
+                route['sslmode'] != 'disable' or service == 'user' and route['host'] != 'voice-postgres'):
             raise ValueError()
         data = {}
         for name, raw in sorted(files.items()):
@@ -219,24 +246,19 @@ def render(operation, source_sha, database, files, node, route):
             data[name] = raw.decode('utf-8')
         if sum(len(raw) for raw in files.values()) > 900000:
             raise ValueError()
-        service = database.removesuffix('_db')
         suffix = operation[-32:]
         name = 'voice-go-migrate-' + service + '-' + suffix
         config_name = 'voice-go-migrations-' + service + '-' + suffix
         annotation = {'voice.io/source-sha': source_sha}
         config = {'apiVersion': 'v1', 'kind': 'ConfigMap', 'immutable': True,
                   'metadata': {'name': config_name, 'namespace': 'voice-dev', 'annotations': annotation}, 'data': data}
-        if service == 'user':
-            env = [{'name': 'POSTGRES_USER', 'valueFrom': {'configMapKeyRef': {'name': 'voice-app-config', 'key': 'POSTGRES_USER'}}},
-                   {'name': 'PGPASSWORD', 'valueFrom': {'secretKeyRef': {'name': 'voice-app-secrets', 'key': 'POSTGRES_PASSWORD'}}}]
-            command = 'exec migrate -path=/migrations -database "postgres://${POSTGRES_USER}:${PGPASSWORD}@voice-postgres:5432/user_db?sslmode=disable" up'
-        else:
-            env = [{'name': 'DATABASE_URL', 'valueFrom': {'secretKeyRef': {'name': 'voice-app-secrets', 'key': service.upper() + '_DATABASE_URL'}}}]
-            command = 'exec migrate -path=/migrations -database "$DATABASE_URL" up'
-        env.extend([{'name': 'PGAPPNAME', 'value': name}, {'name': 'VOICE_DB_HOST', 'value': route['host']},
-                    {'name': 'VOICE_DB_SERVICE_IP', 'value': route['service_ip']}])
-        command = ('ips=$(getent ahostsv4 "$VOICE_DB_HOST" | awk \'{print $1}\' | sort -u); '
-                   '[ "$ips" = "$VOICE_DB_SERVICE_IP" ] || exit 1; ' + command)
+        url = 'postgres://' + route['role'] + '@' + route['service_ip'] + ':5432/' + database + '?sslmode=disable'
+        env = [{'name': 'PGPASSWORD', 'valueFrom': {'secretKeyRef': {'name': _secret_name(operation, database), 'key': 'PGPASSWORD'}}},
+               {'name': 'DATABASE_URL', 'value': url},
+               {'name': 'PGAPPNAME', 'value': name}, {'name': 'VOICE_DB_SERVICE_IP', 'value': route['service_ip']},
+               {'name': 'VOICE_DB_ROLE', 'value': route['role']}, {'name': 'VOICE_DATABASE', 'value': database}]
+        command = ('[ "$DATABASE_URL" = "postgres://$VOICE_DB_ROLE@$VOICE_DB_SERVICE_IP:5432/$VOICE_DATABASE?sslmode=disable" ] || exit 1; '
+                   'exec migrate -path=/migrations -database "$DATABASE_URL" up')
         pod = {'restartPolicy': 'Never', 'automountServiceAccountToken': False,
                'nodeSelector': {'kubernetes.io/hostname': node['hostname']},
                'containers': [{'name': 'migrate', 'image': realtime_migration_job.MIGRATE_IMAGE,
