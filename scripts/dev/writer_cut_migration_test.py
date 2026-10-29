@@ -6,6 +6,8 @@ from unittest import mock
 import writer_cut
 import writer_cut_migration as migration
 import writer_cut_test as fixture
+import full_cohort_inventory_phase
+import writer_cut_pg_probe
 
 
 class MigrationCutTest(unittest.TestCase):
@@ -116,6 +118,116 @@ class MigrationCutTest(unittest.TestCase):
         self.assertEqual(proof['controllers'][0]['uid'], 'uid-a')
         self.client.workloads[('Deployment', 'voice-a')]['spec']['template']['spec']['containers'][0]['image'] = 'foreign'
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.current_resumed_proof()
+
+    def test_resumed_proof_accepts_admitted_replacement_controller(self):
+        current = self.client.workloads[('Deployment', 'voice-a')]
+        current['metadata']['uid'] = 'new-target-uid'
+        self.cut._effect('resume', copy.deepcopy(current), 2)
+        self.assertEqual(self.cut.current_resumed_proof()['controllers'][0]['uid'], 'new-target-uid')
+
+    def test_bound_inventory_and_fixed_observer_do_not_persist_token(self):
+        class Inventory:
+            def __init__(inner):
+                inner.fence, inner.client, inner.lock = self.fence, self.client, copy.deepcopy(self.lock)
+                inner.namespace_uid = 'ns'
+                receipt = {'operation_id': self.context['operation_id'], 'qualified': True}
+                inner.journal = types.SimpleNamespace(poisoned=False, dirfd=1, lockfd=1,
+                    state={'steps': {full_cohort_inventory_phase.STEP: {'status': 'done', 'receipt': receipt}}})
+                self.ledger.row['full_cohort_inventory'] = {'status': 'done'}
+            def verify_receipt(inner, token):
+                self.assertEqual(token, 'private-token-marker')
+                return {'operation_id': self.context['operation_id'], 'qualified': True}
+        phase = Inventory()
+        empty = {'scope': self.admission['session_scope'], 'active_sessions': 0,
+                 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.object(full_cohort_inventory_phase, 'InventoryPhase', Inventory), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', return_value=empty, create=True):
+            self.cut.bind_resume_inventory(phase, 'private-token-marker')
+        self.assertNotIn('private-token-marker', repr(self.journal.state))
+        source = copy.deepcopy(self.client.workloads[('Deployment', 'voice-a')])
+        self.cut._effect('resume', source, 2)
+        def observed(cut, actual_phase, token):
+            self.assertIs(cut, self.cut)
+            self.assertIs(actual_phase, phase)
+            self.assertEqual(token, 'private-token-marker')
+            self.assertEqual(cut.current_resumed_proof()['controllers'][0]['name'], 'voice-a')
+            return {'scope': self.admission['session_scope'], 'active_sessions': 0,
+                    'active_transactions': 0, 'attributed_sessions': [{'fixture': 'writer'}]}
+        with mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', side_effect=observed, create=True):
+            self.assertEqual(len(self.cut._resumed_sessions()['attributed_sessions']), 1)
+        for field in ('active_sessions', 'active_transactions'):
+            bad = observed(self.cut, phase, 'private-token-marker'); bad[field] = 1
+            with mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', return_value=bad, create=True):
+                with self.assertRaises(writer_cut.RecoveryRequired): self.cut._resumed_sessions()
+
+    def resume_with_observer(self, unknown, drift=False):
+        self.bind()
+        self.state['job'].update(state='done', uid='first', resourceVersion='1')
+        self.state['terminal'] = 'f' * 64
+        self.pod = {'uid': 'pod-uid', 'ip': '10.1.2.3'}
+        self.phase.journal.state['steps']['job'] = {'receipt': {'job_uid': 'first', 'pod_uid': 'pod-uid'}}
+        self.cut.verify_migration_running()
+        self.cut.finish_migration()
+        class Inventory:
+            def __init__(inner):
+                inner.fence, inner.client, inner.lock = self.fence, self.client, copy.deepcopy(self.lock)
+                inner.namespace_uid = 'ns'
+                inner.journal = types.SimpleNamespace(poisoned=False, dirfd=1, lockfd=1,
+                    state={'steps': {full_cohort_inventory_phase.STEP: {'status': 'done', 'receipt': {'qualified': True}}}})
+                self.ledger.row['full_cohort_inventory'] = {'status': 'done'}
+            def verify_receipt(inner, token): return {'qualified': True}
+        empty = {'scope': self.admission['session_scope'], 'active_sessions': 0,
+                 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.object(full_cohort_inventory_phase, 'InventoryPhase', Inventory), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', return_value=empty, create=True):
+            self.cut.bind_resume_inventory(Inventory(), 'token')
+        counts = []
+        def observer(cut, phase, token):
+            counts.append(len(cut.current_resumed_proof()['controllers']))
+            return {'scope': self.admission['session_scope'], 'active_sessions': int(unknown),
+                    'active_transactions': 0, 'attributed_sessions': [{'fixture': 'first-writer'}]}
+        targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
+        guard = self.cut._migration_resume_guard
+        def after_guard():
+            guard()
+            if drift and self.cut._has_resumed_effect():
+                self.ledger.row['full_cohort_inventory'] = {'status': 'foreign'}
+                self.ledger.version += 1
+        with mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', side_effect=observer, create=True), \
+             mock.patch.object(self.cut, '_migration_resume_guard', side_effect=after_guard):
+            if unknown or drift:
+                with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+            else:
+                self.cut.resume(targets)
+        self.assertTrue(counts)
+        self.assertTrue(all(count == 1 for count in counts))
+        self.assertEqual(self.client.workloads[('StatefulSet', 'voice-b')]['spec']['replicas'], 0 if unknown or drift else 1)
+        if unknown or drift: self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_resume_uses_qualified_observer_after_first_cas(self):
+        self.resume_with_observer(False)
+
+    def test_unknown_session_blocks_second_resume_cas(self):
+        self.resume_with_observer(True)
+
+    def test_inventory_marker_drift_after_observer_blocks_next_cas(self):
+        self.resume_with_observer(False, drift=True)
+
+    def test_missing_fixed_observer_holds_before_resume_mutation(self):
+        class Inventory:
+            def __init__(inner):
+                inner.fence, inner.client, inner.lock = self.fence, self.client, copy.deepcopy(self.lock)
+                inner.namespace_uid = 'ns'
+                inner.journal = types.SimpleNamespace(poisoned=False, dirfd=1, lockfd=1,
+                    state={'steps': {full_cohort_inventory_phase.STEP: {'status': 'done', 'receipt': {'qualified': True}}}})
+                self.ledger.row['full_cohort_inventory'] = {'status': 'done'}
+            def verify_receipt(inner, token): return {'qualified': True}
+        before = len(self.client.patches)
+        with mock.patch.object(full_cohort_inventory_phase, 'InventoryPhase', Inventory), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', side_effect=RuntimeError('not qualified'), create=True):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_resume_inventory(Inventory(), 'token')
+        self.assertEqual(len(self.client.patches), before)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
 
 
 if __name__ == '__main__': unittest.main()
