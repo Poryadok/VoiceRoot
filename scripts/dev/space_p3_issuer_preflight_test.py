@@ -101,5 +101,19 @@ class PreflightTest(unittest.TestCase):
             self.assertFalse(thread.is_alive()); self.assertEqual(errors,[])
         self.assertEqual(result['ca'],self.ca); self.assertEqual(subject.verify_current(self.phase,'token'),result)
 
+    def test_exchange_requires_same_guarded_receipt_before_ready(self):
+        receipt={'ca':self.ca,'creator_secrets':self.creator,'nonce':'a'*32}
+        one,two=socket.socketpair(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        self.addCleanup(one.close); self.addCleanup(two.close)
+        with patch.object(subject,'verify_current',side_effect=[copy.deepcopy(receipt),copy.deepcopy(receipt)]):
+            self.assertEqual(subject.exchange_root_request(self.phase,'token',one),receipt)
+        request=json.loads(two.recv(65536)); self.assertEqual(request['preflight_sha256'],subject.writer_cut.digest(receipt))
+        self.assertEqual(two.recv(100),b'PREFLIGHT-READY\n')
+        changed=copy.deepcopy(receipt); changed['nonce']='b'*32
+        with patch.object(subject,'verify_current',side_effect=[copy.deepcopy(receipt),changed]):
+            with self.assertRaises(subject.PreflightError): subject.exchange_root_request(self.phase,'token',one)
+        two.recv(65536); two.settimeout(0.05)
+        with self.assertRaises(TimeoutError): two.recv(100)
+
 
 if __name__=='__main__': unittest.main()
