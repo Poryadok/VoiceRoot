@@ -363,7 +363,7 @@ def append(path, kind, frame, operation, repo, values):
     elif kind in ('exact_unit_supersession', 'exact_J_owner_permission', 'finite_J_owner_permission', 'r23_132_owner_permission'):
         name,receipt=values
         payload=dict(path=name,receipt=json.loads(Path(receipt).read_bytes()),admission=False)
-    elif kind in ('master_entry','master_wrapper_result'):
+    elif kind in ('master_entry','master_wrapper_result','history_69_capability'):
         payload=json.loads(Path(values[0]).read_bytes())
     else: raise Rejected('unknown_event_kind')
     e=dict(schema=SCHEMA,sequence=sequence,previous=previous['digest'] if previous else '0'*64,
@@ -406,23 +406,32 @@ def source_132_unit(repo):
         automatic_tree=expected['tree'],admission=False,path_authority=False)
 
 
-def boundary_132_capability(repo, merge, first, source, collector_base, collector_target):
+def boundary_132_capability(repo, merge, first, source, collector_base, collector_target, nested_scope=None):
     unit=source_132_unit(repo)
     require([merge,first,source]==[unit['merge'],*unit['parents']],'exact132_literal_tuple')
     production=production_applicability(repo)
     production_base=production['collection_base'] if production.get('type')=='F13-PRODUCTION-SOURCE-v11' else production['base']
-    require([collector_base,collector_target]==[production_base,production['source']],
-            'exact132_actual_production_outer_scope')
+    if nested_scope is None:
+        require([collector_base,collector_target]==[production_base,production['source']],
+                'exact132_actual_production_outer_scope')
+    else:
+        require(production.get('type')=='F13-PRODUCTION-SOURCE-v11'
+            and [collector_base,collector_target]==[HISTORY_69_BASE,HISTORY_69_SOURCE]
+            and nested_scope['type']=='F54_EXACT69_LIVE_132_SCOPE_v1'
+            and nested_scope['child_scope']==dict(base=collector_base,target=collector_target,
+                allow_direct_followup='true',partition_source_history='true'),
+            'exact132_actual_nested_production_scope')
     require(production['admission'] is False and production['runtime_pass'] is False
         and production['current_or_future_path_authority'] is False,'exact132_no_production_grant')
-    return dict(type='F54_EXACT132_HISTORY_CAPABILITY',unit=unit,production=production,
+    return dict(type='F54_EXACT132_NESTED_HISTORY_CAPABILITY_v1' if nested_scope is not None else 'F54_EXACT132_HISTORY_CAPABILITY',unit=unit,production=production,
+        **(dict(nested_scope=nested_scope) if nested_scope is not None else {}),
         collector_scope=dict(base=collector_base,target=collector_target,
             allow_direct_followup='true',partition_source_history='true'),
         history_boundary=unit['history_boundary'],best_bases=unit['best_bases'],admission=False)
 
 
-def composition_132_capability(repo, merge, boundary, first, source, name, result, collector_base, collector_target):
-    capability=boundary_132_capability(repo,merge,first,source,collector_base,collector_target)
+def composition_132_capability(repo, merge, boundary, first, source, name, result, collector_base, collector_target, nested_scope=None):
+    capability=boundary_132_capability(repo,merge,first,source,collector_base,collector_target,nested_scope)
     unit=capability['unit']
     require(boundary==unit['history_boundary'],'exact132_composition_boundary')
     require(name in git(repo,'diff','--name-only',boundary,source).decode().splitlines(),
@@ -480,7 +489,7 @@ def r23_132_owner_evidence(repo, state):
             'r23_132_original_true_writer_required')
     require(state['obligations'][-1]['incoming']['raw']==expected['incoming'],
             'r23_132_pending_obligation_identity')
-    context=state['frame_context'];cap=boundary_132_capability(repo,MERGE_132,*unit['parents'],context['base'],context['target'])
+    context=state['frame_context'];cap=boundary_132_capability(repo,MERGE_132,*unit['parents'],context['base'],context['target'],state['capability'].get('nested_scope'))
     require(state['capability']==cap and context['allow_direct_followup']=='true'
         and context['partition_source_history']=='true','r23_132_current_capability')
     return dict(type='F54_EXACT132_R23_OWNER_PERMISSION',source_unit_sha256=R23_132_SOURCE_UNIT_SHA,
@@ -6592,6 +6601,23 @@ def policy_context(repo, map_path, pairs, require_runtime=True):
         source_context=router_source_context(repo))
 
 
+def policy_collection_base(collection,frame):
+    entry=collection.get('master_entry')
+    if entry is not None and entry.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1':
+        require([frame['base'],frame['target']]==[entry['collection_base'],entry['source']],
+            'policy_verified_collection_and_event_bases')
+        return entry['base']
+    return frame['base']
+
+
+def verify_policy_collection_base(collection,frame,values,event):
+    require(values['base_sha']==policy_collection_base(collection,frame),'actual_collection_policy_base')
+    master=collection.get('master_entry')
+    if master is not None and master.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1':
+        require(all(event.get(k,'')==v for k,v in master['context'].items()),
+            'actual_collection_policy_master_event')
+
+
 def seal_router(repo, collection_path, collection_sha, map_path, context_path):
     collection=load_collection(repo,collection_path,collection_sha,map_path)
     # A hash is transport, not authority: reconstruct the successful source
@@ -6605,7 +6631,7 @@ def seal_router(repo, collection_path, collection_sha, map_path, context_path):
     require(set(fixed)<=set(values) and all(values[k]==v for k,v in fixed.items()),'original_fixed_checkpoint_context_not_caller_selected')
     events=[json.loads(v) for v in Path(collection['collection_trace']).read_bytes().splitlines()]
     frame=next(e['payload'] for e in events if e['kind']=='frame_enter')
-    require(values['base_sha']==frame['base'],'actual_collection_policy_base')
+    verify_policy_collection_base(collection,frame,values,context['event'])
     ancestor=lambda a,b:subprocess.run(['git','--no-replace-objects','-C',str(repo),'merge-base','--is-ancestor',a,b],capture_output=True).returncode==0
     require(values['game_checkpoint_enabled']==('true' if ancestor(fixed['accepted_game_checkpoint'],context['source_context']['target']) else 'false'),'original_Game_enabled_derivation')
     manifest=subprocess.run(['git','--no-replace-objects','-C',str(repo),'cat-file','-e',values['base_sha']+':protos/voice/r23_contract_manifest.json'],capture_output=True).returncode==0
@@ -6799,7 +6825,12 @@ def master_frame_base(entry):
     return entry['base']
 
 
-def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None, exact_J_checkpoint=None, finite_J_checkpoint=False, dc0_checkpoint=None, dc0_context=None, r23_132_checkpoint=False):
+HISTORY_69_MERGE='69cc6054dd82406e1c3f7c925dbc3466d27ea7c5'
+HISTORY_69_BASE='2c8bdf9e2f420b724575096beb4fcf5cb4ea00be'
+HISTORY_69_SOURCE='011c53f4a2be3c4e8f660fa9dc6ce40492da20e2'
+
+
+def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, range_checkpoint=None, I_checkpoint=None, deletion_checkpoint=None, manual_checkpoint=False, manual_end_checkpoint=None, manual_append_checkpoint=None, J_history_checkpoint=None, J_checkpoint=None, sealed_prefix=None, exact_J_checkpoint=None, finite_J_checkpoint=False, dc0_checkpoint=None, dc0_context=None, r23_132_checkpoint=False, history69_checkpoint=False, history132_checkpoint=False, composition132_checkpoint=False):
     global _TRACE_USED
     _TRACE_USED = True
     raw=Path(path).read_bytes()
@@ -6813,7 +6844,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     previous='0'*64;frames={};stack=[];operations={};attempts={};classified={};pending={};cumulative={};child_flags={};child_rows={};frame_rows={};carry={};failures=[];observed=set()
     expected_operations={};seen_operations={};visited={};committed={};maps={};children={};obligations={};native_bindings={}
     M_capabilities={};M_compositions={};M_ready={};M_consumed={};master_entry=None;master_wrapper=None
-    capabilities_132={};compositions_132={}
+    capabilities_132={};compositions_132={};history69={}
     J_prior_spans={};J_ready={};J_consumed={}
     J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
     terminal={};final_gates={};manual_specs={};manual_gates={};manual_associations={};manual_closed={}
@@ -6825,6 +6856,45 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         require(value['map_before']==map_binding(frame),'conserved_map_before')
         if 'prior_rows' in value:
             require([row(x) for x in value['prior_rows']]==[x for x in maps[frame] if x[0]==value['path']],'conserved_prior_rows')
+    def history69_state(prefix):
+        require(master_entry is not None and master_entry.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1'
+            and len(stack)==1 and len(frames)==1 and not failures and not pending,'history69_actual_master_root')
+        frame=stack[0];root=frames[frame];op=frame+'/'+HISTORY_69_MERGE+'/2'
+        require(root['base']==master_frame_base(master_entry)==HISTORY_69_BASE and root['target']==master_entry['source']
+            and root['allow_direct_followup']==root['partition_source_history']=='true'
+            and root['first_parent_operations'] and root['first_parent_operations'][0]==HISTORY_69_MERGE,
+            'history69_exact_original_root')
+        require(seen_operations[frame]==[(HISTORY_69_MERGE,2)] and op in attempts and op in operations
+            and op not in classified and op not in children and maps[frame]==[],'history69_exact_live_pending_operation')
+        attempt=attempts[op];value=operations[op]
+        require([value['commit'],value['parent_index'],value['first_parent'],value['boundary'],value['source_head'],value['candidates'],value['classification']]
+            ==[HISTORY_69_MERGE,2,HISTORY_69_BASE,HISTORY_69_BASE,HISTORY_69_SOURCE,[HISTORY_69_BASE],'merge']
+            and attempt['ordered_parents']==[HISTORY_69_BASE,HISTORY_69_SOURCE]
+            and attempt['candidates']==[HISTORY_69_BASE],'history69_exact_parent_and_boundary')
+        require(git(repo,'rev-list','--parents','-n','1',HISTORY_69_MERGE).decode().split()
+            ==[HISTORY_69_MERGE,HISTORY_69_BASE,HISTORY_69_SOURCE]
+            and git(repo,'merge-base','--all',HISTORY_69_BASE,HISTORY_69_SOURCE).decode().splitlines()==[HISTORY_69_BASE]
+            and git(repo,'rev-parse',HISTORY_69_MERGE+'^{tree}')==git(repo,'rev-parse',HISTORY_69_SOURCE+'^{tree}'),
+            'history69_exact_git_topology_and_result')
+        return dict(type='F54_EXACT69_NESTED_HISTORY_CAPABILITY_v1',operation=op,root_frame=frame,
+            master_entry_sha256=sha(canonical(master_entry)),attempt=attempt,operation_binding=value,map_before=map_binding(frame),
+            child_scope=dict(base=HISTORY_69_BASE,target=HISTORY_69_SOURCE,allow_direct_followup='true',partition_source_history='true'),
+            prefix=prefix,admission=False)
+    def history132_state(prefix):
+        require(master_entry is not None and master_entry.get('type')=='F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1'
+            and len(stack)==2 and not failures and not pending,'exact132_nested_live_stack')
+        root,frame=stack;parent=frame+'/'+MERGE_132+'/2';context=frames[frame]
+        parent_op=root+'/'+HISTORY_69_MERGE+'/2'
+        require(parent_op in history69 and context['parent']==root and context['parent_operation']==parent_op
+            and [context[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
+                ==[HISTORY_69_BASE,HISTORY_69_SOURCE,'true','true']
+            and children.get(parent_op)==[(HISTORY_69_BASE,HISTORY_69_SOURCE,'true','true')]
+            and parent in attempts and parent not in operations and seen_operations[frame][-1]==(MERGE_132,2),
+            'exact132_nested_authenticated_parent_and_attempt')
+        return dict(type='F54_EXACT69_LIVE_132_SCOPE_v1',root_frame=root,frame=frame,operation=parent,
+            child_scope=dict(base=HISTORY_69_BASE,target=HISTORY_69_SOURCE,
+                allow_direct_followup='true',partition_source_history='true'),
+            history69_sha256=sha(canonical(history69[parent_op])),prefix=prefix,admission=False)
     def completed_132_child(operation):
         cap=capabilities_132[operation];unit=cap['unit']
         require(children.get(operation)==[(unit['history_boundary'],unit['parents'][1],'true','false')],
@@ -6869,7 +6939,12 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         require(visited.get(operation,[])==value['paths'],'complete_ordered_path_visits')
         require(committed.get(operation,[])==value['paths'],'complete_ordered_path_commits')
         if frames[operation.split('/')[0]]['partition_source_history']=='true' and value['classification']=='merge':
-            require(children.get(operation)==[(value['boundary'],value['source_head'],'true','false')],'complete_real_child_frame')
+            child_partition='true' if operation in history69 else 'false'
+            require(children.get(operation)==[(value['boundary'],value['source_head'],'true',child_partition)],'complete_real_child_frame')
+            if operation in history69:
+                matches=[name for name,data in frames.items() if data['parent_operation']==operation]
+                require(len(matches)==1 and frame_results.get(matches[0],{}).get('exit')==0
+                    and frame_results[matches[0]]['final_map']==map_binding(matches[0]),'history69_complete_child_map')
         if value['commit']==DC0_MERGE and master_entry is not None and master_entry.get('type') in ('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1','F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1'):
             manual=operation.rsplit('/',1)[0]+'/manual-result'
             require(manual in dc0_closed or allow_manual_pending,'dc0_residual_required_before_next_operation')
@@ -7106,9 +7181,21 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
                 parents=git(repo,'rev-list','--parents','-n','1',commit).decode().split()[1:]
                 expected_operations[identity].extend((commit,index) for index in ([1] if len(parents)==1 else range(2,len(parents)+1)))
             if v['parent_operation']:
+                if v['partition_source_history']=='true' and v['parent_operation'] in history69:
+                    require(sequence>1 and events[sequence-2]['kind']=='history_69_capability'
+                        and events[sequence-2]['operation']==v['parent_operation']
+                        and [v[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
+                            ==[HISTORY_69_BASE,HISTORY_69_SOURCE,'true','true'],'history69_exact_immediate_child')
                 children.setdefault(v['parent_operation'],[]).append((v['base'],v['target'],v['allow_direct_followup'],v['partition_source_history']))
             continue
         require(stack and frame==stack[-1],'current_live_frame')
+        if kind=='history_69_capability':
+            prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+            require(op not in history69 and events[sequence-2]['kind']=='operation_begin'
+                and events[sequence-2]['operation']==op,'history69_once_immediately_after_begin')
+            expected=history69_state(file_digest(prefix))
+            require(v==expected and op==expected['operation'],'history69_independently_reconstructed_capability')
+            history69[op]=v;continue
         if kind=='range_3071_branch':
             require(frame not in range_branches and op is None,'fixed3071_range_branch_before_same_state_operations')
             state=range_checkpoint_state(frame);capability=J_capabilities[state['J_operation']]
@@ -7164,9 +7251,16 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(master_entry is not None and master_entry.get('type') in ('F54_EXPLICIT_MASTER_PRODUCTION_ENTRY_v1','F54_EXPLICIT_MASTER_PRODUCTION_HISTORY_ENTRY_v1'),
                     'exact132_actual_production_master_entry')
             actual=frames[frame];attempt=attempts[op]
-            require(frame==next(iter(frames)) and [actual[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
-                ==[master_frame_base(master_entry),master_entry['source'],'true','true'],'exact132_actual_outer_frame')
-            expected=boundary_132_capability(repo,attempt['commit'],attempt['first_parent'],attempt['source_head'],actual['base'],actual['target'])
+            nested=None
+            if frame!=next(iter(frames)):
+                prefix=b''.join(raw.splitlines(keepends=True)[:sequence-1])
+                require(events[sequence-2]['kind']=='operation_attempt' and events[sequence-2]['operation']==op,
+                    'exact132_nested_immediate_attempt')
+                nested=history132_state(file_digest(prefix))
+            else:
+                require([actual[k] for k in ('base','target','allow_direct_followup','partition_source_history')]
+                    ==[master_frame_base(master_entry),master_entry['source'],'true','true'],'exact132_actual_outer_frame')
+            expected=boundary_132_capability(repo,attempt['commit'],attempt['first_parent'],attempt['source_head'],actual['base'],actual['target'],nested)
             require(v==expected and op==frame+'/'+MERGE_132+'/2','exact132_independent_complete_capability')
             capabilities_132[op]=v;continue
         if kind=='history_3071_capability':
@@ -7300,7 +7394,7 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             actual=operations[op];cap=capabilities_132[op]
             expected=composition_132_capability(repo,actual['commit'],actual['boundary'],actual['first_parent'],
                 actual['source_head'],v['path'],tree_entry(repo,actual['commit'],v['path']).rstrip('\0'),
-                cap['collector_scope']['base'],cap['collector_scope']['target'])
+                cap['collector_scope']['base'],cap['collector_scope']['target'],cap.get('nested_scope'))
             require(v==expected and v['capability_sha256']==sha(canonical(cap)),
                     'exact132_independent_whole_composition')
             compositions_132[op][v['path']]=v;continue
@@ -7638,7 +7732,22 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         (frame,name),item=next(iter(pending.items()))
         r23_permission=r23_132_owner_evidence(repo,r23_132_state(item['op'],name,file_digest(raw)))
     dc0_value=dc0_state(dc0_checkpoint,dc0_context) if dc0_checkpoint else None
-    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else r23_permission or dc0_value or range_state or I_state or J_history_state or J_state or deletion_state_value or manual_state or manual_end_value or manual_append_value or exact_J_permission or finite_state
+    history69_value=None
+    if history69_checkpoint:
+        require(history69_checkpoint is True and events[-1]['kind']=='operation_begin','history69_exact_checkpoint_phase')
+        history69_value=history69_state(file_digest(raw))
+    history132_value=None
+    if history132_checkpoint:
+        require(history132_checkpoint is True and events[-1]['kind']=='operation_attempt','exact132_nested_checkpoint_phase')
+        history132_value=history132_state(file_digest(raw))
+    composition132_value=None
+    if composition132_checkpoint:
+        require(composition132_checkpoint is True and events[-1]['kind']=='path_gate_before','exact132_composition_checkpoint_phase')
+        op=events[-1]['operation'];name=events[-1]['payload']['path']
+        require(op in capabilities_132 and op in operations and op not in classified
+            and visited.get(op,[]) and visited[op][-1]==name and not failures,'exact132_composition_live_path')
+        completed_132_child(op);composition132_value=dict(capability=capabilities_132[op],operation=op,path=name)
+    checkpoint_state=M_checkpoint_state(checkpoint,events) if checkpoint else composition132_value or history132_value or history69_value or r23_permission or dc0_value or range_state or I_state or J_history_state or J_state or deletion_state_value or manual_state or manual_end_value or manual_append_value or exact_J_permission or finite_state
     require(frames,'nonempty_producer_frames')
     require(not stack or checkpoint_state is not None,'closed_frames')
     require(checkpoint_state is not None or master_entry is None or failures or master_wrapper is not None,'successful_master_collection_requires_actual_wrapper_result')
@@ -7653,7 +7762,10 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
         J_history_checkpoint=J_history_state,J_checkpoint=J_state,J_ready=J_ready,J_consumed=J_consumed,J_prior_spans=J_prior_spans,
         terminal_dispositions=terminal_dispositions(ledger),manual_checkpoint=manual_state,manual_end_checkpoint=manual_end_value,manual_append_checkpoint=manual_append_value,manual_result_operations=manual_operations(ledger),
         exact_J_permission=exact_J_permission,**(dict(finite_J_checkpoint=finite_state) if finite_J_checkpoint else {}),
-        r23_132_permission=r23_permission,dc0_checkpoint=dc0_value,dc0_residual_operations=dc0_closed,
+        r23_132_permission=r23_permission,**(dict(history69_checkpoint=history69_value) if history69_checkpoint else {}),
+        **(dict(history132_checkpoint=history132_value) if history132_checkpoint else {}),
+        **(dict(composition132_checkpoint=composition132_value) if composition132_checkpoint else {}),
+        dc0_checkpoint=dc0_value,dc0_residual_operations=dc0_closed,
         observed_qualification='COMPLETE' if complete else 'OBSERVED_PREFIX_ONLY',admission=False)
 
 
@@ -7689,14 +7801,34 @@ def main():
                     'r23_132_actual_consumer_inputs')
             require(Path(trace).read_bytes()==raw,'r23_132_trace_unchanged_before_permission')
             print(json.dumps(receipt,sort_keys=True));return 0
+        if command=='69-history-checkpoint':
+            repo,trace=args;raw=Path(trace).read_bytes()
+            value=validate_trace(repo,trace,sha(raw),history69_checkpoint=True)['history69_checkpoint']
+            require(Path(trace).read_bytes()==raw,'history69_trace_unchanged_before_capability')
+            print(json.dumps(value,sort_keys=True));return 0
         if command=='boundary':print(json.dumps(exact_boundary(*args)));return 0
         if command=='composition':print(json.dumps(composition(*args)));return 0
         if command=='unit':print(json.dumps(load_unit(*args)));return 0
         if command=='capabilities':print(json.dumps(prepare_capabilities(*args)));return 0
         if command=='current-author-capabilities':print(json.dumps(prepare_author_capabilities(*args)));return 0
         if command=='production-capabilities':print(json.dumps(prepare_production_capabilities(*args)));return 0
-        if command=='132-boundary':print(json.dumps(boundary_132_capability(*args)));return 0
-        if command=='132-composition':print(json.dumps(composition_132_capability(*args)));return 0
+        if command=='132-boundary':
+            if len(args)==7:
+                repo,merge,first,source,base,target,trace=args;raw=Path(trace).read_bytes()
+                scope=validate_trace(repo,trace,sha(raw),history132_checkpoint=True)['history132_checkpoint']
+                require(Path(trace).read_bytes()==raw and scope['operation'].endswith('/'+merge+'/2'),
+                    'exact132_same_live_boundary_trace')
+                print(json.dumps(boundary_132_capability(repo,merge,first,source,base,target,scope)));return 0
+            print(json.dumps(boundary_132_capability(*args)));return 0
+        if command=='132-composition':
+            if len(args)==10:
+                repo,merge,boundary,first,source,name,result,base,target,trace=args;raw=Path(trace).read_bytes()
+                state=validate_trace(repo,trace,sha(raw),composition132_checkpoint=True)['composition132_checkpoint']
+                require(Path(trace).read_bytes()==raw and state['path']==name
+                    and state['operation'].endswith('/'+merge+'/2'),'exact132_same_live_composition_trace')
+                print(json.dumps(composition_132_capability(repo,merge,boundary,first,source,name,result,base,target,
+                    state['capability'].get('nested_scope'))));return 0
+            print(json.dumps(composition_132_capability(*args)));return 0
         if command=='cap-boundary':print(json.dumps(boundary_capability(*args)));return 0
         if command=='cap-entry':print(json.dumps(entry_capability(*args)));return 0
         if command=='cap-composition':print(json.dumps(composition_capability(*args)));return 0

@@ -777,9 +777,14 @@ f13_checkpoint_merge_tree_entry_matches() {
     "$(<"${bases_file}")" != "${expected_base}" ]]; then
     if [[ "${exact_merge}" == 132437c43f6f0625fae8954542f8d9c2f6aa3037 &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]]; then
+      local -a exact_132_trace=()
+      if [[ "${collector_base}" == 2c8bdf9e2f420b724575096beb4fcf5cb4ea00be &&
+        "${collector_target}" == 011c53f4a2be3c4e8f660fa9dc6ce40492da20e2 ]]; then
+        exact_132_trace=("${f13_f54_trace_file:?}")
+      fi
       exact_receipt="$(python3 "${exact_observer}" 132-composition "${repo}" "${exact_merge}" \
         "${expected_base}" "${first_parent}" "${source_head}" "${path}" "${result_entry}" \
-        "${collector_base}" "${collector_target}")" || return 1
+        "${collector_base}" "${collector_target}" "${exact_132_trace[@]}")" || return 1
       # Whole automatic-result evidence only. Existing Native owner/runtime
       # checks remain mandatory and receive no permission from this receipt.
       f13_f54_trace_event composition_132_capability "${repo}" "${exact_receipt}" || return 1
@@ -3735,8 +3740,13 @@ f13_resolve_source_base() {
   else
     if [[ "${exact_merge}" == 132437c43f6f0625fae8954542f8d9c2f6aa3037 &&
       "${exact_observer}" == "${repo}/scripts/ci/f13_f54_history.py" ]]; then
+      local -a exact_132_trace=()
+      if [[ "${collector_base}" == 2c8bdf9e2f420b724575096beb4fcf5cb4ea00be &&
+        "${collector_target}" == 011c53f4a2be3c4e8f660fa9dc6ce40492da20e2 ]]; then
+        exact_132_trace=("${f13_f54_trace_file:?}")
+      fi
       exact_receipt="$(python3 "${exact_observer}" 132-boundary "${repo}" "${exact_merge}" \
-        "${first_parent}" "${source_head}" "${collector_base}" "${collector_target}")" || return 1
+        "${first_parent}" "${source_head}" "${collector_base}" "${collector_target}" "${exact_132_trace[@]}")" || return 1
       canonical="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["history_boundary"])' "${exact_receipt}")" || return 1
       printf '%s\n' "${canonical}" >"${output_file}" || return 1
       printf '%s\n' "${bases}" >"${output_file}.candidates" || return 1
@@ -4512,8 +4522,16 @@ f13_collect_develop_contributions() {
     nested_map=""
     if [[ "${partition_source_history}" == true && "${is_direct}" != true ]]; then
       nested_map="${TMP_DIR}/f13-nested-map-${contribution_id}"
+      local nested_partition=false
+      if [[ -n "${history_binding:-}" && "${commit}" == 69cc6054dd82406e1c3f7c925dbc3466d27ea7c5 ]]; then
+        local history69_receipt="${TMP_DIR}/f54-exact69-history-capability.json"
+        [[ ! -e "${history69_receipt}" ]] || return 1
+        python3 "${f13_f54_observer}" 69-history-checkpoint "${repo}" "${f13_f54_trace_file}" >"${history69_receipt}" || return 1
+        f13_f54_trace_event history_69_capability "${repo}" "${history69_receipt}" || return 1
+        nested_partition=true
+      fi
       f13_collect_develop_contributions "${repo}" "${source_base}" "${source_head}" \
-        "${nested_map}" "${diagnostic_file}" true false || return 1
+        "${nested_map}" "${diagnostic_file}" true "${nested_partition}" || return 1
     fi
 
     : >"${TMP_DIR}/f13-unapproved-delta"

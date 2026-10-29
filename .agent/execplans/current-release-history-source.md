@@ -204,6 +204,23 @@ These two test files extend the reviewed carrier set from nine to eleven; they
 are outside Native projection/context/compiled inputs. Fresh exact-record tests
 and the unchanged full F13 run remain required. No producer trace has yet run.
 
+The first full producer on the exact eleven-carrier private fixture reached the
+real collector and failed at `exact132_actual_production_outer_scope` after
+4,297 seconds. Its sealed trace has root `[2c8,K,true,true]` and an actual first
+operation `69cc/2` whose child was `[2c8,011c,true,false]`; that false child
+omits nested source provenance needed by 132 and the earlier e675/DC0 path.
+The preserved failure is `tmp/release-history-record/full-producer-eleven-132-failure`.
+An independently reviewed decision introduces one typed, live-prefix-bound
+exception: the exact real 69cc parent opens `[2c8,011c,true,true]`, preserving
+the full child map, owners, runtime OR and every nested operation. All other
+children retain their existing partition rules. A separately typed 132 scope
+must bind that actual root/parent/child chain; old v10 root rules remain intact.
+Router policy uses the independently verified actual event base for v11 while
+the collection frame retains its distinct 2c8 base; R23 window policy remains
+on the actual event base. Synthetic real-Git transport/fold tests do not qualify
+the source. Exact pinned-source review, complete child/map/taint tests, full
+script checks and a new actual producer replay remain pending; no PASS is claimed.
+
 ## Decisions and risks
 
 Preserve all old contracts and failed diagnostics. New typed authority must
