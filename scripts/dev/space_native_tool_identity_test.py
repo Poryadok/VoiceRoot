@@ -16,6 +16,12 @@ import space_native_tool_identity as tool
 
 
 class SourceInventoryTests(unittest.TestCase):
+    def test_canonical_import_cannot_select_staging_migrations(self):
+        directory=Path(__file__).resolve().parent
+        code=("import pathlib,canonical_application_package,space_native_tool_identity as t; "
+              "assert pathlib.Path(t.migrations.__file__).resolve()==pathlib.Path('migrations.py').resolve()")
+        result=subprocess.run([sys.executable,'-B','-c',code],cwd=directory,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
     def test_isolated_compiled_probe_accepts_only_exact_post_gate_refusal(self):
         import publish_candidate
         cid='a'*64; calls=[]
@@ -56,6 +62,7 @@ class SourceInventoryTests(unittest.TestCase):
         for source in paths:
             dest=root/source.relative_to(original); dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(source,dest)
         script=root/'scripts/dev/space_native_tool_identity.py'; script.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(tool.__file__,script)
+        shutil.copyfile(original/'scripts/dev/migrations.py',script.parent/'migrations.py')
         files={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                for p in (root/'src/backend').rglob('*.go') if not p.name.endswith('_test.go')}
         for path in (root/'src/backend/migrations/space_db').iterdir():
@@ -106,7 +113,8 @@ class SourceInventoryTests(unittest.TestCase):
                  'source_inventory':source,'request':{'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'1'*32},
                  'content':{'executable_sha256':'2'*64,'migrator_sha256':'3'*64,'sql_inventory_sha256':'c'*64,
                             'embedded_values_observed':True,'runtime_receipt_verified':False,'help_exit_code':0,
-                            'compiled_gate_probe':'native51-source-gates-reached-v1'},
+                            'compiled_gate_probe':'native51-source-gates-reached-v1',
+                            'closure':{'schema':'voice-space-native-local-closure-v1','packages':{},'files':{},'raw_sha256':'9'*64}},
                  'runtime_qualified':False,'deployment_performed':False}
         self.assertEqual(tool.validate_publication(receipt,identity,source),receipt)
         for name,value in [('run_id',8),('source_sha','b'*40),('immutable_image','ghcr.io/poryadok/voiceroot/space@sha256:'+'e'*64),('runtime_qualified',True)]:
@@ -129,7 +137,8 @@ class SourceInventoryTests(unittest.TestCase):
         snapshot={'source_sha':sha,'files':{}}; inventory={'source_sha':sha,'build_source_sha256':'b'*64,'sql_inventory_sha256':'c'*64}
         context=(Path('/source'),identity,snapshot,inventory,{'cycle':1},Registry())
         proof={'executable_sha256':'d'*64,'migrator_sha256':'e'*64,'sql_inventory_sha256':'c'*64,'embedded_values_observed':True,
-               'runtime_receipt_verified':False,'help_exit_code':0,'compiled_gate_probe':'native51-source-gates-reached-v1'}
+               'runtime_receipt_verified':False,'help_exit_code':0,'compiled_gate_probe':'native51-source-gates-reached-v1',
+               'closure':{'schema':'voice-space-native-local-closure-v1','packages':{},'files':{},'raw_sha256':'9'*64}}
         request={'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'1'*32}
         context=(Path('/source'),identity,snapshot,inventory,request,Registry())
         with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ,{'RUNNER_TEMP':folder}), \

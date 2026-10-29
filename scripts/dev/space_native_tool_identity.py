@@ -7,6 +7,7 @@ import argparse
 import base64
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,12 @@ import tempfile
 import time
 import zipfile
 
-import migrations
+_migration_path = Path(__file__).resolve().with_name('migrations.py')
+_migration_spec = importlib.util.spec_from_file_location('_voice_dev_native_migrations', _migration_path)
+if _migration_spec is None or _migration_spec.loader is None:
+    raise ImportError('fixed DEV migration source unavailable')
+migrations = importlib.util.module_from_spec(_migration_spec)
+_migration_spec.loader.exec_module(migrations)
 
 
 class ToolIdentityError(RuntimeError): pass
@@ -28,7 +34,7 @@ class ToolIdentityError(RuntimeError): pass
 GATE_SOURCE_SHA256={
     'src/backend/space/internal/nativeinstaller/runner.go':'fb216adceb399966c38284f9a4df305aac265b0a31ce25ffbc31a51cc33b3c8b',
     'src/backend/space/internal/store/native_catalog_rowjson_types.go':'110c2a4c5f70cdc955ba4cb9f8d7cee424ec15176a7ab70c9c863c0d4f0dbc25',
-    'src/backend/space/cmd/native-migrate/main.go':'9c197b2d384f368fdec76fc7d69f0e09074e90beb1ef54c45b9e1315978476a0',
+    'src/backend/space/cmd/native-migrate/main.go':'9a4c0a2aa937a30ab5800ee9efbce17bd76a9064cdb855f6816f5d797f720cc9',
 }
 
 
@@ -115,13 +121,14 @@ def validate_publication(receipt,identity,inventory):
             or not re.fullmatch(r'[a-f0-9]{32}',request['request_id'])): raise ValueError()
         content=receipt['content']
         if (not isinstance(content,dict) or set(content)!={'executable_sha256','migrator_sha256','sql_inventory_sha256',
-                                                           'embedded_values_observed','runtime_receipt_verified','help_exit_code','compiled_gate_probe'}
+                                                           'embedded_values_observed','runtime_receipt_verified','help_exit_code','compiled_gate_probe','closure'}
             or any(not isinstance(content[k],str) or not re.fullmatch(r'[a-f0-9]{64}',content[k])
                    for k in ('executable_sha256','migrator_sha256','sql_inventory_sha256'))
             or content['sql_inventory_sha256']!=inventory['sql_inventory_sha256']
             or content['embedded_values_observed'] is not True or content['runtime_receipt_verified'] is not False
             or type(content['help_exit_code']) is not int or content['help_exit_code']!=0
-            or content['compiled_gate_probe']!='native51-source-gates-reached-v1'): raise ValueError()
+            or content['compiled_gate_probe']!='native51-source-gates-reached-v1'
+            or not isinstance(content['closure'],dict) or content['closure'].get('schema')!='voice-space-native-local-closure-v1'): raise ValueError()
         return copy.deepcopy(receipt)
     except Exception: raise ToolIdentityError('Space native publication receipt invalid') from None
 
@@ -225,7 +232,7 @@ def _extract_image(reference,config_digest,inventory,root):
     try:
         with tempfile.TemporaryDirectory(prefix='voice-native-tool-') as folder:
             dest=Path(folder)
-            for name,path in (('native-migrate','/usr/local/bin/native-migrate'),('migrate','/usr/local/bin/migrate'),('migrations','/migrations')):
+            for name,path in (('native-migrate','/usr/local/bin/native-migrate'),('migrate','/usr/local/bin/migrate'),('migrations','/migrations'),('closure.json','/usr/local/share/voice-native-closure.json')):
                 common.command(['docker','cp',container+':'+path,str(dest/name)])
             def read(path,limit):
                 if path.is_symlink() or not path.is_file() or path.stat().st_nlink!=1 or not 0<path.stat().st_size<=limit: raise ValueError()
@@ -240,6 +247,7 @@ def _extract_image(reference,config_digest,inventory,root):
             other={p.name:hashlib.sha256(read(p,2<<20)).hexdigest() for p in entries if p.suffix!='.sql'}
             if other!=inventory['other_files']: raise ValueError()
             proof=content_identity(inventory,binary,driver,sql)
+            proof['closure']=normalize_closure(read(dest/'closure.json',2<<20),root,common.source_snapshot(root,inventory['source_sha']))
     finally:
         common.command(['docker','rm',container])
     _run_help(reference)
@@ -281,6 +289,7 @@ def authenticated_publication(token,actor,package_receipt,root):
     import canonical_application_package as canonical
     import publish_candidate as common
     import source_authority as authority
+    import space_native_tool_identity_custody as custody
     try:
         if (not isinstance(token,str) or not token or not isinstance(actor,str) or not actor
             or Path(root).resolve()!=canonical.ROOT.resolve()): raise ValueError()
@@ -325,6 +334,7 @@ def authenticated_publication(token,actor,package_receipt,root):
         identity={'source_sha':source,'run_id':run_id,'run_attempt':attempt,
                   'tag':'ghcr.io/poryadok/voiceroot/space-native-installer:source-'+source+'-'+str(run_id)+'-'+str(attempt)}
         validate_publication(publication,identity,inventory)
+        custody._equivalent(publication['content']['closure'],snapshot)
         request=canonical.parse_request((Path(root)/canonical.REQUEST).read_bytes())
         if publication['request']!=request: raise ValueError()
         registry=common.Registry(actor,token); repository='poryadok/voiceroot/space-native-installer'
@@ -356,6 +366,72 @@ def main():
         return 1
     print('Space native tool CI evidence captured; runtime qualification remains separate')
     return 0
+
+
+def _unique_json(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result: raise ValueError()
+        result[key]=value
+    return result
+
+def normalize_closure(raw,root,snapshot):
+    """Bind builder-produced Go dependency metadata to authenticated source bytes."""
+    try:
+        if not isinstance(raw,bytes) or not 0<len(raw)<=2<<20: raise ValueError()
+        text=raw.decode('utf8'); decoder=json.JSONDecoder(object_pairs_hook=_unique_json); pos=0; packages={}; files={}
+        root=Path(root); tracked=snapshot['files']
+        def relative(value):
+            if not isinstance(value,str) or not value.startswith('/src/'): raise ValueError()
+            parts=value.removeprefix('/src/').split('/')
+            if not parts or any(not p or p in ('.','..') for p in parts): raise ValueError()
+            return 'src/backend/'+'/'.join(parts)
+        def add(name):
+            p=root/name
+            if (name not in tracked or p.is_symlink() or not p.is_file() or p.stat().st_nlink!=1 or
+                not p.resolve().is_relative_to(root.resolve()) or hashlib.sha256(p.read_bytes()).hexdigest()!=tracked[name]): raise ValueError()
+            files[name]=tracked[name]
+        while True:
+            pos=len(text)-len(text[pos:].lstrip())
+            if pos==len(text): break
+            entry,pos=decoder.raw_decode(text,pos)
+            if not isinstance(entry,dict) or entry.get('Error') or entry.get('Incomplete'): raise ValueError()
+            directory=entry.get('Dir','')
+            if not isinstance(directory,str): raise ValueError()
+            if not directory.startswith('/src/'): continue
+            directory=relative(directory)
+            if directory in packages: raise ValueError()
+            live=root/directory
+            if live.is_symlink() or not live.is_dir(): raise ValueError()
+            extensions={'.go','.s','.S','.c','.cc','.cpp','.cxx','.h','.hh','.hpp','.hxx','.f','.F','.m','.mm','.syso','.swig','.swigcxx'}
+            actual=sorted(p.name for p in live.iterdir() if p.suffix in extensions and not p.name.endswith('_test.go'))
+            expected=sorted(name.removeprefix(directory+'/') for name in tracked if name.startswith(directory+'/')
+                            and '/' not in name.removeprefix(directory+'/') and Path(name).suffix in extensions and not name.endswith('_test.go'))
+            if actual!=expected or not actual: raise ValueError()
+            listed=entry.get('GoFiles',[])+entry.get('CgoFiles',[])
+            if not isinstance(listed,list) or not listed or any(name not in actual for name in listed): raise ValueError()
+            members=[directory+'/'+name for name in actual]
+            for name in members: add(name)
+            packages[directory]=members
+            patterns=entry.get('EmbedPatterns',[]); embedded=entry.get('EmbedFiles',[])
+            if (not isinstance(patterns,list) or not isinstance(embedded,list) or sorted(patterns)!=sorted(embedded) or
+                any(not isinstance(name,str) or name.startswith('all:') or any(c in name for c in '*?[]')
+                    or name.startswith('/') or any(p in ('','.','..') for p in name.split('/')) for name in patterns)): raise ValueError()
+            for name in embedded: add(directory+'/'+name)
+            module=entry.get('Module')
+            if not isinstance(module,dict): raise ValueError()
+            module=module.get('Replace') or module
+            module_dir=relative(module['Dir'])
+            for name in ('go.mod','go.sum'):
+                path=module_dir+'/'+name
+                if path in tracked: add(path)
+                elif name=='go.mod': raise ValueError()
+        if not packages or 'src/backend/space/cmd/native-migrate' not in packages: raise ValueError()
+        workspace=[name for name in ('src/backend/go.work','src/backend/go.work.sum') if name in tracked]
+        for name in workspace: add(name)
+        return {'schema':'voice-space-native-local-closure-v1','packages':dict(sorted(packages.items())),
+                'files':dict(sorted(files.items())),'workspace':workspace,'raw_sha256':hashlib.sha256(raw).hexdigest()}
+    except Exception: raise ToolIdentityError('Space native closure invalid') from None
 
 
 def source_inventory(root,snapshot):
@@ -489,6 +565,7 @@ class SpaceNativeToolPhase:
                 'sql_inventory_sha256':inventory['sql_inventory_sha256'],'dockerfile_sha256':inventory['dockerfile_sha256'],
                 'source_manifest_sha256':inventory['source_manifest_sha256'],'executable_sha256':content['executable_sha256'],
                 'migrator_sha256':content['migrator_sha256'],'compiled_gate_probe':content['compiled_gate_probe'],
+                'closure_sha256':hashlib.sha256(json.dumps(content['closure'],sort_keys=True,separators=(',',':')).encode()).hexdigest(),
                 'nodes':copy.deepcopy(package['nodes']),'runtime_receipt_verified':False}
 
     def run(self,token):

@@ -1,6 +1,7 @@
 """Real Journal/Fence; synthetic Kube and root handoff boundaries."""
 import base64
 import copy
+import os
 from pathlib import Path
 import stat
 from types import SimpleNamespace
@@ -16,7 +17,8 @@ import space_p3_issuer_create as subject
 
 class PhaseTest(unittest.TestCase):
     def setUp(self):
-        self.base=fixture.PhaseTest('test_exact_terminal_receipt_and_no_replay'); self.base.setUp(); self.addCleanup(self.base.doCleanups)
+        self.base=fixture.PhaseTest('test_exact_terminal_receipt_and_no_replay')
+        self.addCleanup(self.checked_base_cleanup); self.base.setUp()
         self.client=fixture.Client(self.base.lock)
         roots={name:{'uid':name+'-uid','resourceVersion':'1','der_sha256':'a'*64} for name,_ in subject.ROOTS}
         intent={'resource_context':self.base.context,'namespace_uid':'ns','space_p3_create':
@@ -40,6 +42,9 @@ class PhaseTest(unittest.TestCase):
         self.getpatch=patch.object(subject,'_get',side_effect=lambda name:copy.deepcopy(self.actual.get(name)))
         self.createpatch=patch.object(subject,'_create',side_effect=self.create)
         self.getpatch.start(); self.createpatch.start(); self.addCleanup(self.getpatch.stop); self.addCleanup(self.createpatch.stop)
+
+    def checked_base_cleanup(self):
+        if not self.base.doCleanups(): raise AssertionError('nested fixture cleanup failed')
 
     def create(self,obj,dry):
         name=obj['metadata']['name']; self.calls.append((name,dry)); value=copy.deepcopy(obj)
@@ -97,6 +102,30 @@ class PhaseTest(unittest.TestCase):
         with patch.object(self.phase,'_write',side_effect=changed):
             with self.assertRaises(subject.CreateError): self.run_finish()
         self.assertFalse(self.phase.completed); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    @unittest.skipUnless(os.name=='posix' and os.geteuid()==1000,'fixed pmd UID fixture')
+    def test_prepare_owns_real_private_socket_and_is_one_shot(self):
+        parent=Path(self.base.temp.name)/'operations'; parent.mkdir(mode=0o700)
+        path=parent/self.phase.suffix; path.mkdir(mode=0o700)
+        with patch.object(subject,'SOCKET_PARENT',parent):
+            result=self.phase.prepare()
+            self.assertEqual(result['status'],'ready'); self.assertTrue((path/'packet.sock').is_socket())
+            self.assertEqual(self.base.ledger.row[subject.LEDGER],result)
+            with self.assertRaises(subject.CreateError): self.phase.prepare()
+        self.assertFalse((path/'packet.sock').exists())
+
+
+class CleanupTest(unittest.TestCase):
+    def test_nested_failure_is_reported_and_remaining_cleanups_run(self):
+        events=[]
+        class Nested(PhaseTest):
+            def runTest(self):
+                self.base.addCleanup(lambda:events.append('after-failure'))
+                def fail(): raise RuntimeError('fixture cleanup failure')
+                self.base.addCleanup(fail)
+        result=unittest.TestResult(); Nested().run(result)
+        self.assertFalse(result.wasSuccessful()); self.assertTrue(result.errors or result.failures)
+        self.assertEqual(events,['after-failure'])
 
 
 if __name__ == '__main__': unittest.main()

@@ -25,6 +25,11 @@ class SupervisorTest(unittest.TestCase):
         base=self.base
         class Client:
             def __init__(inner,journal): inner.journal=journal
+            def call(inner,*args):
+                if args[:3]==('get','namespace','voice-dev'):
+                    return {'metadata':{'name':'voice-dev','uid':'ns','labels':supervisor.media_operation_guard.LABELS}}
+                if args[:3]==('get','configmap',supervisor.media_operation_guard.LOCK):return copy.deepcopy(base.lock)
+                return {'items':[]}
         class Ledger:
             def __init__(inner,client): inner.client=client
             def read(inner): return base.ledger.read()
@@ -36,12 +41,13 @@ class SupervisorTest(unittest.TestCase):
             def mark_uncertain(inner,reason): pass
         self.client=Client(self.root_journal); check=Check(base.context)
         self.fence=resource_fencing.Fence(base.context,check,Ledger(self.client),check.mark_uncertain)
+        self.guard_patch=mock.patch.object(supervisor.media_operation_guard,'verify')
         for patcher in (mock.patch.object(supervisor.frontend_runtime_executor,'KubectlTransport',Client),
                         mock.patch.object(resource_fencing,'KubeLedger',Ledger),
                         mock.patch.object(resource_fencing,'ResourceCheck',Check),
                         mock.patch.object(supervisor.media_backup_upload_runner,'ROOT',self.root),
                         mock.patch.object(supervisor.media_backup_upload_runner,'TT','http://fixture'),
-                        mock.patch.object(supervisor.media_operation_guard,'verify')):
+                        self.guard_patch):
             patcher.start(); self.addCleanup(patcher.stop)
 
     def test_prepare_calls_owned_phases_and_never_replays(self):
@@ -71,6 +77,69 @@ class SupervisorTest(unittest.TestCase):
         self.fence.ledger.client=object()
         with self.assertRaises(supervisor.SupervisorError):
             supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
+
+    def _pre_drain_constructors(self,close_late=False,drift=False):
+        import writer_cut_test as cut_fixture
+        self.guard_patch.stop()
+        source=cut_fixture.workload('Deployment','voice-space','space-uid',1,'source-image')
+        receipt={'engine':{'namespace_uid':'ns'},'server_start':'start','all_databases':{'postgres':1,'space_db':2}}
+        plan={'writers':{'voice-space':{'uid':'other' if drift else 'space-uid','generation':1,
+            'spec_sha256':supervisor.writer_cut.digest(source['spec'])}},'global_database_oids':copy.deepcopy(receipt['all_databases'])}
+        calls=[]
+        def current(*args):
+            calls.append(None)
+            if close_late and len(calls)==3:
+                (subject.package.journal if close_late=='package' else subject.cut.journal).close()
+            return copy.deepcopy(receipt)
+        nodes=[{'name':'node','uid':'uid','hostname':'node','architecture':'amd64'}]
+        with mock.patch.object(supervisor.full_cohort_package_phase.PackagePhase,'run'), \
+             mock.patch.object(supervisor.full_cohort_image_only_baseline,'ImageOnlyPhase') as baseline, \
+             mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'run'), \
+             mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'verify_current'), \
+             mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'verify_receipt',return_value={
+                 'database_observations':{'workloads':{'realtime':[{'status':'observed'}]}}}), \
+             mock.patch.object(supervisor.full_cohort_namespace_census.NamespaceCensus,'run'), \
+             mock.patch.object(supervisor.full_cohort_namespace_census.NamespaceCensus,'verify_current'), \
+             mock.patch.object(supervisor.full_cohort_affected_plan.FullCatalogPhase,'run'), \
+             mock.patch.object(supervisor.full_cohort_affected_plan.FullCatalogPhase,'verify_current',side_effect=current), \
+             mock.patch.object(supervisor.full_cohort_affected_plan,'build',return_value=plan), \
+             mock.patch.object(supervisor.full_cohort_inventory_phase,'inventory',return_value=({}, {'voice-space':source}, {})), \
+             mock.patch.object(supervisor.space_native_tool_identity.SpaceNativeToolPhase,'run') as tool_run, \
+             mock.patch.object(supervisor.space_fresh_install_phase.SpaceFreshInstallPhase,'prepare') as space_prepare:
+            subject=supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
+            def close_phase_journals():
+                for phase_journal in reversed(subject.journals):phase_journal.close()
+            self.addCleanup(close_phase_journals)
+            subject.prepare('token','actor',1,1,nodes)
+            subject.baseline.journal=subject.journal;subject.baseline.fence=subject.fence
+            subject.baseline.client=subject.client;subject.baseline.package_phase=subject.package
+            if drift:
+                with self.assertRaises(supervisor.SupervisorError):subject.prepare_execution('token','actor')
+                self.assertIsNone(subject.cut);tool_run.assert_not_called();space_prepare.assert_not_called()
+                return
+            if close_late:
+                with self.assertRaises(supervisor.SupervisorError):subject.prepare_execution('token','actor')
+                self.assertEqual(len(calls),3);self.assertFalse(subject.cut.started)
+                with self.assertRaises(supervisor.SupervisorError):subject.prepare_execution('token','actor')
+                return
+            self.assertEqual(subject.prepare_execution('token','actor')['scope'],'pre-drain-phases-only')
+            self.assertEqual(len({id(x.journal) for x in (subject.cut,subject.physical,subject.tool,subject.space)}),4)
+            self.assertIs(subject.space.cut,subject.cut);self.assertIs(subject.physical.cut,subject.cut)
+            self.assertFalse(subject.cut.started);self.assertFalse(subject.cut.drained)
+            tool_run.assert_called_once_with('token');space_prepare.assert_called_once_with()
+            with self.assertRaises(supervisor.SupervisorError):subject.prepare_execution('token','actor')
+
+    def test_pre_drain_constructors_use_separate_journals_and_never_replay(self):
+        self._pre_drain_constructors()
+
+    def test_pre_drain_late_closed_cut_journal_refuses_success(self):
+        self._pre_drain_constructors(close_late='cut')
+
+    def test_pre_drain_late_closed_package_journal_refuses_success(self):
+        self._pre_drain_constructors(close_late='package')
+
+    def test_pre_drain_writer_identity_drift_refuses_before_phase_creation(self):
+        self._pre_drain_constructors(drift=True)
 
     def test_go_journal_is_fixed_to_source_database_set(self):
         subject=supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
@@ -118,6 +187,28 @@ class SupervisorTest(unittest.TestCase):
         step['status']='done';self.base.ledger.row.pop('image_only_baseline')
         with self.assertRaises(supervisor.SupervisorError):
             supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
+
+    def test_c2_pending_admission_cannot_reconstruct_supervisor(self):
+        import full_cohort_predecessor_phase as predecessor
+        context=copy.deepcopy(self.base.context);context['operation_id']='media-c2-'+'e'*32
+        operation=self.root/context['operation_id'];operation.mkdir(mode=0o700)
+        root_journal=media_operation_journal.Journal(operation/'journal',{
+            'resource_context':context,'namespace_uid':'ns','cohort_route_mode':'full-cohort-v1'})
+        self.addCleanup(root_journal.close)
+        client=type(self.client)(root_journal);check=type(self.fence.check)(context)
+        ledger=type(self.fence.ledger)(client);fence=resource_fencing.Fence(context,check,ledger,check.mark_uncertain)
+        snapshot={'fixture':'predecessor'};descriptor={'snapshot_sha256':predecessor.digest(snapshot)}
+        self.base.ledger.row=copy.deepcopy(context)|{'status':'active','predecessor':descriptor}
+        root_journal.state['steps']['full-cohort-predecessor']={'status':'captured','descriptor':descriptor,'snapshot':snapshot}
+        root_journal.state['steps']['predecessor-admission']={'status':'pending','descriptor':descriptor,'old_revision':['ledger','0']}
+        with self.assertRaises(supervisor.SupervisorError):
+            supervisor.Supervisor(root_journal,fence,client,self.base.lock,'ns')
+        root_journal.state['steps']['predecessor-admission']={'status':'done','descriptor':descriptor,
+            'old_revision':['ledger','0'],'new_revision':['ledger','1']}
+        self.assertIsInstance(supervisor.Supervisor(root_journal,fence,client,self.base.lock,'ns'),supervisor.Supervisor)
+        root_journal.state['steps']['full-cohort-predecessor']['snapshot']['fixture']='changed'
+        with self.assertRaises(supervisor.SupervisorError):
+            supervisor.Supervisor(root_journal,fence,client,self.base.lock,'ns')
 
     def test_wrong_journal_path_and_replaced_check_are_refused(self):
         other=media_operation_journal.Journal(self.operation/'other',self.root_journal.intent)

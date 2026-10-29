@@ -21,6 +21,7 @@ func TestCreateCommunityBootstrapIsPrivateOwnerBoundAndReplaySafe(t *testing.T) 
 	ownerAccount := uuid.New()
 	serviceCtx := authctx.WithVerifiedServiceIdentity(ctx, authctx.ServiceIdentityGameIntegration)
 	svc := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}}
+	svc.OwnershipRoles, svc.PrincipalIssuer = newBootstrapLedgerFixture(t, nil)
 	request := &spacev1.CreateCommunityBootstrapRequest{
 		OperationId: uuid.NewString(), ApplicationId: uuid.NewString(), EnvironmentId: uuid.NewString(),
 		OwnerProfileId: ownerProfile.String(), OwnerAccountId: ownerAccount.String(), CorporationKey: "corp-7", TemplateId: "guild-default",

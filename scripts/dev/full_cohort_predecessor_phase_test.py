@@ -96,7 +96,10 @@ class PreBeginTests(unittest.TestCase):
         with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'{"events":[]}')):
             self.assertEqual(phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT)), {'events':[]})
         self.assertEqual(self_url, [(phase.TT_ENDPOINT + '/api/projects/voice/resources/DEV', 10)])
-        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'x' * ((2 << 20) + 1))):
+        large=json.dumps({'events':[], 'padding':'x'*(3<<20)}).encode()
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(large)):
+            self.assertEqual(phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT))['padding'], 'x'*(3<<20))
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'x' * ((8 << 20) + 1))):
             with self.assertRaises(phase.PredecessorError):
                 phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT))
 
@@ -199,6 +202,24 @@ class PreBeginTests(unittest.TestCase):
                 root = Path(parent)/operation; root.mkdir(mode=0o700)
                 filename = root/custody.FILENAME
                 filename.write_text(json.dumps(config,sort_keys=True,separators=(',',':'))); os.chmod(filename,0o400)
+                import space_native_tool_identity_custody as tool_custody
+                inventory={'source_sha':old['commit'], 'build_source_sha256':'1'*64, 'sql_inventory_sha256':'2'*64,
+                           'dockerfile_sha256':'3'*64, 'source_manifest_sha256':'4'*64}
+                contract={'schema':'voice-space-native-local-closure-v1','packages':{},'files':{},'raw_sha256':'9'*64}
+                receipt={'operation_id':operation,'namespace_uid':'namespace','source_sha':old['commit'],
+                         **{k:inventory[k] for k in ('build_source_sha256','sql_inventory_sha256','dockerfile_sha256','source_manifest_sha256')},
+                         'runtime_receipt_verified':False,'compiled_gate_probe':'native51-source-gates-reached-v1',
+                         'closure_sha256':tool_custody.digest(contract)}
+                old['space_native_tool']={'status':'done','receipt_sha256':tool_custody.digest(receipt)}
+                tool_snapshot={'schema':'voice-space-native-tool-completion-v1','resource_context':{k:old[k] for k in context_keys},
+                               'namespace_uid':'namespace','receipt':receipt,'inventory':inventory,'contract':contract,
+                               'tool_marker':copy.deepcopy(old['space_native_tool'])}
+                old[tool_custody.MARKER]={'schema':'voice-space-native-tool-completion-marker-v1','status':'done',
+                    'operation_id':operation,'source_sha':old['commit'],'namespace_uid':'namespace',
+                    'snapshot_sha256':tool_custody.digest(tool_snapshot)}
+                toolfile=root/tool_custody.FILENAME
+                toolfile.write_text(json.dumps(tool_snapshot,sort_keys=True,separators=(',',':'))); os.chmod(toolfile,0o400)
+                document['data']['executor'] = json.dumps(old)
                 root_patch = patch.object(media_backup_upload_phase, 'ROOT', Path(parent)); root_patch.start()
                 self.addCleanup(root_patch.stop)
                 intent = {'resource_context':ctx, 'namespace_uid':'namespace'}
