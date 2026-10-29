@@ -52,6 +52,9 @@ class PackagePhaseTest(unittest.TestCase):
             'request_blob_oid':'d'*40,'lock_artifact_id':1,'lock_sha256':'e'*64,'images':self.images,
             'runtime_qualified':False,'deployment_performed':False}
         self.platforms = {k:'sha256:'+'f'*64 for k in mapped}
+        self.provenance = {key:{'requested_digest':'sha256:'+'b'*64,'requested_kind':'index',
+            'index_digest':'sha256:'+'b'*64,'index_source':'source_tag','platform_digest':self.platforms[key],
+            'config_digest':'sha256:'+'c'*64,'source_tag_digest':'sha256:'+'b'*64,'source_tag_kind':'index'} for key in mapped}
 
     def capture(self, token, sha, run, attempt, output):
         output.write_text(json.dumps(self.receipt),encoding='utf-8'); output.chmod(0o600)
@@ -59,7 +62,7 @@ class PackagePhaseTest(unittest.TestCase):
 
     def test_real_journal_and_ledger_one_shot(self):
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve',return_value=self.platforms), patch.object(admission.source,'Registry'):
+             patch.object(admission.oci,'resolve_provenance',return_value=(self.platforms,self.provenance)), patch.object(admission.source,'Registry'):
             result = self.phase.run('fixture-token','fixture-actor')
             self.assertEqual(result['platform_digests'],self.platforms)
             self.assertEqual(self.base.ledger.row['full_cohort_package']['status'],'done')
@@ -71,7 +74,7 @@ class PackagePhaseTest(unittest.TestCase):
     def test_lost_capture_or_wrong_cycle_never_succeeds(self):
         self.receipt['request']['cycle'] = 2
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve') as resolver, patch.object(admission.source,'Registry'):
+             patch.object(admission.oci,'resolve_provenance') as resolver, patch.object(admission.source,'Registry'):
             with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
             resolver.assert_not_called()
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
@@ -79,7 +82,7 @@ class PackagePhaseTest(unittest.TestCase):
     def test_image_drift_is_uncertain(self):
         self.receipt['images']['auth'] = package.REGISTRY+'/auth@sha256:'+'0'*64
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve') as resolver, patch.object(admission.source,'Registry'):
+             patch.object(admission.oci,'resolve_provenance') as resolver, patch.object(admission.source,'Registry'):
             with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
             resolver.assert_not_called()
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
@@ -109,7 +112,7 @@ class PackagePhaseTest(unittest.TestCase):
     def test_moved_master_is_not_silently_equated(self):
         self.receipt['source_equivalence'] = {'current_master_sha_after':'f'*40}
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve') as resolver, patch.object(admission.source,'Registry'):
+             patch.object(admission.oci,'resolve_provenance') as resolver, patch.object(admission.source,'Registry'):
             with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
             resolver.assert_not_called()
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
@@ -122,14 +125,14 @@ class PackagePhaseTest(unittest.TestCase):
             if row.get('full_cohort_package',{}).get('status') == 'done':
                 row['status'] = 'foreign'
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve',return_value=self.platforms), patch.object(admission.source,'Registry'), \
+             patch.object(admission.oci,'resolve_provenance',return_value=(self.platforms,self.provenance)), patch.object(admission.source,'Registry'), \
              patch.object(self.phase,'_guard',side_effect=drift):
             with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
         self.assertTrue(self.phase.poisoned)
 
     def test_verify_detects_in_place_receipt_mutation(self):
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve',return_value=self.platforms), patch.object(admission.source,'Registry'):
+             patch.object(admission.oci,'resolve_provenance',return_value=(self.platforms,self.provenance)), patch.object(admission.source,'Registry'):
             self.phase.run('fixture-token','fixture-actor')
             original = self.phase._nodes; calls = 0
             def drift():
@@ -142,7 +145,7 @@ class PackagePhaseTest(unittest.TestCase):
 
     def test_master_moved_after_package_does_not_invalidate_pinned_receipt(self):
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
-             patch.object(admission.oci,'resolve',return_value=self.platforms), patch.object(admission.source,'Registry'):
+             patch.object(admission.oci,'resolve_provenance',return_value=(self.platforms,self.provenance)), patch.object(admission.source,'Registry'):
             result=self.phase.run('fixture-token','fixture-actor')
             with patch.object(package.source,'_head',side_effect=ValueError('private sentinel')):
                 self.assertEqual(self.phase.verify_current('fixture-token'),result)
@@ -158,6 +161,9 @@ class PackagePhaseTest(unittest.TestCase):
         self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
         self.phase = admission.PackagePhase(self.journal,self.base.fence,self.client,self.base.lock,'ns')
         fixture_run = package_fixture.CanonicalPackageTests(); fixture_run.setUp()
+        for name in package.APPLICATIONS:
+            repo='poryadok/voiceroot/'+name; digest=images[name].rsplit('@',1)[1]
+            registry_fixture.objects[repo,'manifests/'+fixture_run.sha]=registry_fixture.objects[repo,'manifests/'+digest]
         run = dict(fixture_run.run, id=123); jobs = [dict(item,run_id=123) for item in fixture_run.jobs]
         request = json.dumps({'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'c'*32}).encode()
         def api(url,headers,deadline):
