@@ -2650,6 +2650,7 @@ jobs:
       - name: Build source-bound Space installer
         env:
           CANDIDATE_SHA: ${{ github.sha }}
+          CGO_ENABLED: '0'
         shell: bash
         run: |
           set -euo pipefail
@@ -2661,6 +2662,13 @@ jobs:
           docker cp "$container:/usr/local/bin/native-migrate" "$RUNNER_TEMP/native-migrate"
           docker cp "$container:/usr/local/bin/migrate" "$RUNNER_TEMP/native-migrate-driver"
           chmod 755 "$RUNNER_TEMP/native-migrate" "$RUNNER_TEMP/native-migrate-driver"
+          source_sha="$(cd src/backend && find . -type f -name '*.go' ! -name '*_test.go' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)"
+          driver_sha="$(sha256sum "$RUNNER_TEMP/native-migrate-driver" | cut -d' ' -f1)"
+          cd src/backend/space
+          go test ./internal/nativeinstaller/testdata/evidencefailure
+          go build -p 2 -trimpath \
+            -ldflags="-s -w -X voice/backend/space/internal/nativeinstaller.SourceRevision=$CANDIDATE_SHA -X voice/backend/space/internal/nativeinstaller.BuildSourceSHA256=$source_sha -X voice/backend/space/internal/nativeinstaller.MigrateSHA256=$driver_sha" \
+            -o "$RUNNER_TEMP/native-installer-evidencefailure" ./internal/nativeinstaller/testdata/evidencefailure
       - name: Run Space native installer proof
         working-directory: src/backend/space
         env:
@@ -2668,11 +2676,12 @@ jobs:
           NATIVE_INSTALLER_TEST_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
           NATIVE_INSTALLER_TEST_BINARY: ${{ runner.temp }}/native-migrate
           NATIVE_INSTALLER_TEST_MIGRATE: ${{ runner.temp }}/native-migrate-driver
+          NATIVE_INSTALLER_TEST_FAILURE_HELPER: ${{ runner.temp }}/native-installer-evidencefailure
           CANDIDATE_SHA: ${{ github.sha }}
         shell: bash
         run: |
           set +e
-          go test -json -count=1 -timeout 5m -tags=integration -run '^TestProductionFreshChainAndRetainedVerify$' ./internal/nativeinstaller > "$RUNNER_TEMP/space-native-installer-events.jsonl"
+          go test -json -count=1 -timeout 5m -tags=integration -run '^(TestProductionFreshChainAndRetainedVerify|TestCommittedPhaseFailureNeverAutoResumes)$' ./internal/nativeinstaller > "$RUNNER_TEMP/space-native-installer-events.jsonl"
           result=$?
           set -e
           python3 ../../../scripts/ci/go_integration_matrix.py produce \

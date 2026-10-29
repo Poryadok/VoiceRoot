@@ -18,6 +18,24 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_space_native_installer_receipt_requires_every_failure_boundary(self):
+        inventory = json.loads((ROOT / 'scripts/ci/space_native_installer_required.json').read_text(encoding='utf-8'))['space']
+        package = 'voice/backend/space/internal/nativeinstaller'
+        parent = 'TestCommittedPhaseFailureNeverAutoResumes'
+        phases = ('created', 'migrated44', 'trusted44', 'migrated45', 'trusted45',
+                  'migrated50', 'trusted50', 'trusted51', 'complete')
+        required = [[package, 'TestProductionFreshChainAndRetainedVerify'], [package, parent]]
+        required.extend([package, parent + '/' + phase] for phase in phases)
+        self.assertEqual(inventory, required)
+        events = [{'Package': p, 'Test': name, 'Action': action}
+                  for p, name in required for action in ('run', 'pass')]
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertEqual(receipts.verify_required(events, required, 0), [])
+        for phase in phases:
+            test = parent + '/' + phase
+            missing = [event for event in events if not (event.get('Test') == test and event['Action'] == 'pass')]
+            self.assertIn((package, test), receipts.verify_required(missing, required, 0))
+
     def test_role_space_receipt_inventory_excludes_unfinished_interactive_oracle(self):
         inventory = json.loads((ROOT / 'scripts/ci/role_space_receipt_required.json').read_text(encoding='utf-8'))
         cases = ['TestMemberAdmissionPositiveProtectedReceipt', 'TestMemberAdmissionRole25ProtectedReceipt']

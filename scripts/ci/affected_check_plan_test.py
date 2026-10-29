@@ -507,10 +507,19 @@ class AffectedCheckPlanTests(unittest.TestCase):
         build = next(step for step in job['steps'] if step.get('name') == 'Build source-bound Space installer')
         self.assertIn('Dockerfile.native-migrate', build['run'])
         self.assertIn('SOURCE_REVISION', build['run'])
+        self.assertIn('testdata/evidencefailure', build['run'])
+        self.assertIn('BuildSourceSHA256', build['run'])
         test = next(step for step in job['steps'] if step.get('name') == 'Run Space native installer proof')
         self.assertIn('TestProductionFreshChainAndRetainedVerify', test['run'])
+        self.assertIn('TestCommittedPhaseFailureNeverAutoResumes', test['run'])
+        self.assertIn('NATIVE_INSTALLER_TEST_FAILURE_HELPER', test['env'])
         self.assertIn('space_native_installer_required.json', test['run'])
         self.assertIn('--reject-skips', test['run'])
+        inventory = json.loads((ROOT / 'scripts/ci/space_native_installer_required.json').read_text(encoding='utf-8'))
+        required = {name for _, name in inventory['space']}
+        for phase in ('created', 'migrated44', 'trusted44', 'migrated45', 'trusted45',
+                      'migrated50', 'trusted50', 'trusted51', 'complete'):
+            self.assertIn('TestCommittedPhaseFailureNeverAutoResumes/' + phase, required)
         self.assertIn('job.services.postgres.ports', test['env']['NATIVE_INSTALLER_TEST_ADMIN_URL'])
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['space'], 'docker_go_services': [],

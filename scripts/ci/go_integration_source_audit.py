@@ -27,6 +27,8 @@ DEDICATED = {
         'space-autovacuum-integration',
     ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionFreshChainAndRetainedVerify'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestCommittedPhaseFailureNeverAutoResumes'):
+        'space-native-installer-integration',
 }
 
 
