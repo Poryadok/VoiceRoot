@@ -104,7 +104,7 @@ APP_SOURCES = ('deploy/staging/services.yaml', 'deploy/staging/gateway-deploymen
                'deploy/templates/network-policy-file-user-principal.yaml',
                'deploy/templates/network-policy-search-user-projection.yaml')
 DATABASES = tuple(service + '_db' for service in ('auth', 'user', 'social', 'chat', 'messaging', 'file', 'space',
-    'role', 'notification', 'matchmaking', 'gateway', 'search', 'subscription', 'moderation', 'bot', 'story', 'voice'))
+    'role', 'notification', 'matchmaking', 'gateway', 'search', 'subscription', 'moderation', 'bot', 'story', 'voice', 'realtime'))
 PG_SQL = "SELECT json_build_object('databases',(SELECT json_agg(datname ORDER BY datname) FROM pg_database WHERE datname LIKE '%\\_db'), 'authenticated',true)"
 GATEWAY_SQL = "SELECT json_build_object('columns',(SELECT json_agg(json_build_array(column_name,data_type,is_nullable) ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema='public' AND table_name='client_versions'),'primary_key',(SELECT json_agg(a.attname) FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid='public.client_versions'::regclass AND i.indisprimary),'windows_seed',EXISTS(SELECT 1 FROM client_versions WHERE platform='windows'))"
 CH_SQL = "SELECT name, engine, create_table_query FROM system.tables WHERE database='voice' ORDER BY name FORMAT JSON"
@@ -201,9 +201,21 @@ class _Source:
 
     def add(self, row, obj, action=False, private=False):
         kind, name = obj['kind'], obj['metadata']['name']
-        live = self.get(kind, name)
         if obj['metadata'].get('namespace') != NS:
             _fail('canonical_namespace_invalid')
+        if (row == 'frontends' and kind == 'ConfigMap' and name in guard.FRONTEND_BOOTSTRAP
+                and action and not private and self.p['mode'] in ('full','app-only')):
+            live = guard.frontend_live(self.kube, name)
+            if live is None:
+                try: normalized = self.kube.run(['create', '--dry-run=server', '-f', '/dev/stdin', '-o', 'json'], body=obj)
+                except Exception: _fail('canonical_normalization_failed_' + row)
+                if normalized.get('kind') != kind or normalized.get('metadata', {}).get('name') != name or normalized.get('metadata', {}).get('namespace') != NS:
+                    _fail('canonical_normalized_identity_invalid')
+                self.rows[row]['objects'].append({'kind':kind,'name':name,'namespace':NS,
+                    'desired':guard.semantic(normalized),'disposition':'create'})
+                return normalized
+        else:
+            live = self.get(kind, name)
         try:
             normalized = obj if private else self.kube.run(['apply', '--dry-run=server', '-f', '/dev/stdin', '-o', 'json'], body=obj)
         except Exception:
@@ -303,6 +315,20 @@ def _ingress(builder, app_secret, row='ingress'):
             builder.add(row, obj, action=True)
 
 
+def frontend_objects(builder, *, deployments_only=False):
+    """Plan frontend objects using the same source and live comparison."""
+    for frontend, path, host in (('developer-portal', 'deploy/staging/developer-portal.yaml', 'developer_portal_host'),
+        ('web', 'deploy/staging/flutter-web.yaml', 'web_host'), ('admin', 'deploy/staging/admin.yaml', 'admin_host')):
+        if not (builder.root / path).exists(): continue
+        for obj in builder.documents(path, 'frontends'):
+            if deployments_only and obj['kind'] != 'Deployment': continue
+            if obj['kind'] == 'Deployment':
+                _pin_images(obj, builder.p)
+                if builder.p.get('image_pull_secret'):
+                    obj['spec']['template']['spec']['imagePullSecrets'] = [{'name': builder.p['image_pull_secret']}]
+            builder.add('frontends', obj, action=True)
+
+
 def _gateway_delegated_config(obj):
     """Validate the canonical staging delegation prerequisites before planning writes."""
     if obj['metadata']['name'] != 'voice-gateway':
@@ -353,7 +379,7 @@ def _leaf_monitor_config(obj):
         _fail('canonical_leaf_monitor_invalid')
 
 
-def _application(builder):
+def _application(builder, *, images_only=False):
     p = builder.p
     apps = []
     gis_objects = []
@@ -410,6 +436,11 @@ def _application(builder):
             if not any(e.get('name') == expected and e.get('value') == p['s3_signing_endpoint'] for e in container.get('env', [])):
                 _fail('canonical_signing_source_missing')
             builder.add('signing-endpoint', obj, action=True)
+    # The pre-bootstrap inventory needs the same rendered and normalized
+    # Deployment actions, before the missing database credential can exist.
+    # The ordinary source plan still validates every Secret reference below.
+    if images_only:
+        return
     # Derive every non-NATS Secret ref/key from canonical rendered Pod specs.
     refs = {}
     def visit(value):
@@ -487,15 +518,7 @@ def compile_plan(source, parameters, decoder, kube):
                 for obj in b.documents('deploy/livekit/ingress.yaml', 'livekit-ingress', {'__INGRESS_HOST__': b.p['livekit_host']}):
                     b.add('livekit-ingress', obj, action=True)
             else: b.skip('livekit-ingress')
-            for frontend, path, host in (('developer-portal', 'deploy/staging/developer-portal.yaml', 'developer_portal_host'),
-                ('web', 'deploy/staging/flutter-web.yaml', 'web_host'), ('admin', 'deploy/staging/admin.yaml', 'admin_host')):
-                if not (b.root / path).exists(): continue
-                for obj in b.documents(path, 'frontends'):
-                    if obj['kind'] == 'Deployment':
-                        _pin_images(obj, b.p)
-                        if b.p.get('image_pull_secret'):
-                            obj['spec']['template']['spec']['imagePullSecrets'] = [{'name': b.p['image_pull_secret']}]
-                    b.add('frontends', obj, action=True)
+            frontend_objects(b)
             if not b.rows['frontends']['objects']: b.skip('frontends')
             config = b.documents('deploy/staging/configmap-app.yaml', 'domains')[0]
             b.add('domains', config, action=p['mode'] == 'full')
@@ -507,7 +530,7 @@ def compile_plan(source, parameters, decoder, kube):
             # canonical source/DSN prerequisites; never execute or recreate Jobs.
             b.read('scripts/staging/apply-migrate-jobs.sh', 'migrations')
             keys = {service.upper() + '_DATABASE_URL' for service in ('bot', 'story', 'moderation', 'subscription', 'user', 'search',
-                'social', 'chat', 'messaging', 'file', 'space', 'role', 'notification', 'matchmaking', 'voice')}
+                'social', 'chat', 'messaging', 'file', 'space', 'role', 'notification', 'matchmaking', 'voice', 'realtime')}
             keys.update(('AUTH_JWT_PRIVATE_KEY', 'AUTH_TOTP_ENCRYPTION_KEY', 'POSTGRES_PASSWORD'))
             b.secret('migrations', 'voice-app-secrets', keys)
             for database in DATABASES:
@@ -573,9 +596,9 @@ def compile_plan(source, parameters, decoder, kube):
                 _fail('unsupported_enabled_observability_reconciliation')
             b.skip('observability')
         plan = {'schema': guard.SCHEMA, 'mode': p['mode'], 'checks': [b.rows[row] for row in selected], 'actions': b.actions}
+        guard.preflight(kube, plan, p['mode'])
         if p.get('gis_first_install') is True:
             plan['gis_first_install'] = {'objects': copy.deepcopy(getattr(b, 'gis_first_install_objects', []))}
-        guard.preflight(kube, plan, p['mode'])
         return plan
     except PlanError:
         raise
