@@ -10,6 +10,7 @@ import json
 import os
 import re
 import secrets
+import ssl
 import stat
 import subprocess
 import sys
@@ -58,13 +59,31 @@ def _ca(cert):
     _run(['x509','-in','{0}','-noout','-checkend','86400'],[cert])
 
 
+def validate_issuer_key(key,cert):
+    """Validate a key pair only; this does not establish issuer authority."""
+    try:
+        _ca(cert)
+        if _run(['x509','-in','{0}','-pubkey','-noout'],[cert])!=_run(['pkey','-in','{0}','-pubout'],[key]): raise ValueError()
+    except Exception: raise CryptoError('staging P3 issuer key mismatch') from None
+
+
 def _peer(cert, ca, purpose, hostname=None):
-    args=['verify','-CAfile','{1}','-purpose','sslserver' if purpose=='serverAuth' else 'sslclient']
+    args=['verify','-trusted','{1}','-purpose','sslserver' if purpose=='serverAuth' else 'sslclient']
     if hostname: args+=['-verify_hostname',hostname]
     _run(args+['{0}'],[cert,ca]); _run(['x509','-in','{0}','-noout','-checkend','86400'],[cert])
     if hostname:
         sans=_run(['x509','-in','{0}','-noout','-ext','subjectAltName'],[cert]).decode('ascii')
         if hostname not in re.findall(r'DNS:([A-Za-z0-9.-]+)',sans): raise ValueError()
+
+
+def _validity_within(cert,issuer):
+    try:
+        def expiry(value):
+            line=_run(['x509','-in','{0}','-noout','-enddate'],[value]).decode('ascii').strip()
+            if not line.startswith('notAfter='): raise ValueError()
+            return ssl.cert_time_to_seconds(line.removeprefix('notAfter='))
+        if expiry(cert)>expiry(issuer): raise ValueError()
+    except Exception: raise CryptoError('staging P3 certificate exceeds issuer validity') from None
 
 
 def _leaf(cert,key,ca,host,purposes):
@@ -133,19 +152,12 @@ def validate_values(values, trust, space_client_cert, space_jwks_cert, space_ser
     except Exception: raise CryptoError('staging P3 material not qualified') from None
 
 
-def issue_values(ca_key_fd, ca_cert, trust, space_client_cert, space_jwks_cert, space_server_ca, replay_password):
-    """Issue fixed leaves from an already root-custodied CA descriptor, offline."""
+def issue_private_bytes(key, ca_cert, trust, space_client_cert, space_jwks_cert, space_server_ca, replay_password):
+    """Issue offline from bytes; custody and issuer authority are external."""
     try:
-        if sys.platform!='linux' or os.geteuid()!=0: raise ValueError()
-        info=os.fstat(ca_key_fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077
-                or not 0<info.st_size<=131072): raise ValueError()
-        identity=(info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
-        key=os.pread(ca_key_fd,info.st_size+1,0)
-        if len(key)!=info.st_size: raise ValueError()
-        _ca(ca_cert)
+        if not isinstance(key,bytes) or not 0<len(key)<=131072: raise ValueError()
+        validate_issuer_key(key,ca_cert)
         _run(['x509','-in','{0}','-noout','-checkend','2592000'],[ca_cert])
-        if _run(['x509','-in','{0}','-pubkey','-noout'],[ca_cert])!=_run(['pkey','-in','{0}','-pubout'],[key]): raise ValueError()
         def genkey(): return _run(['genpkey','-algorithm','RSA','-pkeyopt','rsa_keygen_bits:2048'])
         signing={'current.pem':genkey(),'next.pem':genkey()}
         values={'voice-realtime-principal-signing':signing,
@@ -157,8 +169,24 @@ def issue_values(ca_key_fd, ca_cert, trust, space_client_cert, space_jwks_cert, 
             serial='0x'+secrets.token_hex(16)
             cert=_run(['x509','-req','-in','{0}','-CA','{1}','-CAkey','{2}','-set_serial',serial,
                        '-days','30','-sha256','-extfile','{3}'],[csr,ca_cert,key,ext])
+            _validity_within(cert,ca_cert)
             values[name]={'tls.crt':cert,'tls.key':leaf_key}
         validate_values(values,trust,space_client_cert,space_jwks_cert,space_server_ca)
+        return values
+    except Exception: raise CryptoError('staging P3 issuance refused') from None
+
+
+def issue_values(ca_key_fd, ca_cert, trust, space_client_cert, space_jwks_cert, space_server_ca, replay_password):
+    """Issue fixed leaves from an already root-custodied CA descriptor, offline."""
+    try:
+        if sys.platform!='linux' or os.geteuid()!=0: raise ValueError()
+        info=os.fstat(ca_key_fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=1 or info.st_mode&0o077
+                or not 0<info.st_size<=131072): raise ValueError()
+        identity=(info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
+        key=os.pread(ca_key_fd,info.st_size+1,0)
+        if len(key)!=info.st_size: raise ValueError()
+        values=issue_private_bytes(key,ca_cert,trust,space_client_cert,space_jwks_cert,space_server_ca,replay_password)
         after=os.fstat(ca_key_fd)
         if (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)!=identity: raise ValueError()
         return values

@@ -33,10 +33,20 @@ class CryptoFixture(unittest.TestCase):
             ext.write_text('basicConstraints=critical,CA:FALSE\nsubjectAltName=DNS:voice-space.voice-staging.svc\nextendedKeyUsage=serverAuth,clientAuth\n')
             run('x509','-req','-in',csr,'-CA',cert,'-CAkey',key,'-set_serial','1234','-days','2','-extfile',ext,'-out',peer)
             ca=cert.read_bytes(); peer_cert=peer.read_bytes(); trust={name:ca for name in crypto.TRUST_KEYS}
+            crypto.validate_issuer_key(key.read_bytes(),ca)
+            with self.assertRaises(crypto.CryptoError): crypto.validate_issuer_key(peerkey.read_bytes(),ca)
+            crypto._validity_within(peer_cert,ca)
+            with self.assertRaises(crypto.CryptoError): crypto._validity_within(ca,peer_cert)
+            with mock.patch.object(crypto,'_run',wraps=crypto._run) as invoke:
+                crypto._peer(peer_cert,ca,'serverAuth','voice-space.voice-staging.svc')
+                verify=invoke.call_args_list[0].args[0]
+                self.assertIn('-trusted',verify); self.assertNotIn('-CAfile',verify)
             fd=os.open(key,os.O_RDONLY|os.O_NOFOLLOW)
             try:
                 values=crypto.issue_values(fd,ca,trust,peer_cert,peer_cert,ca,b'fixture-password')
             finally: os.close(fd)
+            generated=crypto.issue_private_bytes(key.read_bytes(),ca,trust,peer_cert,peer_cert,ca,b'fixture-password')
+            self.assertEqual(crypto.validate_values(generated,trust,peer_cert,peer_cert,ca)['scope'],'offline-material-only')
             proof=crypto.validate_values(values,trust,peer_cert,peer_cert,ca)
             self.assertEqual(proof['namespace'],'voice-staging')
             servercert=root/'server.crt'; serverkey=root/'server.key'

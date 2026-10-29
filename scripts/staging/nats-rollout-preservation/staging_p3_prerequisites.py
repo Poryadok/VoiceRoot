@@ -187,12 +187,12 @@ def validate_plan_shape(plan):
     """Check the private fixed-plan grammar; this does not authenticate evidence."""
     try:
         expected={'schema','operation','namespace_uid','source_capture_sha256','source_contract_sha256',
-                  'issuer_authority_sha256','auxiliary_image','objects','effects','preserved'}
+                  'issuer_authority_sha256','issuer_input_sha256','auxiliary_image','objects','effects','preserved'}
         if not isinstance(plan,dict) or set(plan)!=expected or plan['schema']!='voice-staging-p3-prerequisites-plan-v1': raise ValueError()
         def nonempty(x): return isinstance(x,str) and 0<len(x)<=256
         def sha(x): return isinstance(x,str) and re.fullmatch(r'[0-9a-f]{64}',x) is not None
         if not nonempty(plan['operation']) or not nonempty(plan['namespace_uid']): raise ValueError()
-        if any(not sha(plan[k]) for k in ('source_capture_sha256','source_contract_sha256','issuer_authority_sha256')): raise ValueError()
+        if any(not sha(plan[k]) for k in ('source_capture_sha256','source_contract_sha256','issuer_authority_sha256','issuer_input_sha256')): raise ValueError()
         aux=plan['auxiliary_image']
         if not isinstance(aux,dict) or set(aux)!={'workload','container','source_ref','image_ref','platform','manifest_sha256',
                                                   'config_sha256','index_sha256','source_authority_sha256'}: raise ValueError()

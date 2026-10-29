@@ -96,7 +96,7 @@ class StagingP3Contract(unittest.TestCase):
                   'namespace':'voice-staging','desired_sha256':digest,'payload_sha256':digest} for i in ids]
         plan={'schema':'voice-staging-p3-prerequisites-plan-v1','operation':'operation',
               'namespace_uid':'namespace-uid','source_capture_sha256':digest,'source_contract_sha256':digest,
-              'issuer_authority_sha256':digest,'objects':objects,'preserved':{},
+              'issuer_authority_sha256':digest,'issuer_input_sha256':digest,'objects':objects,'preserved':{},
               'effects':[{**x,'before':{'absent':True,'list_rv':'9'}} for x in objects],
               'auxiliary_image':{'workload':'voice-p3-principal-jwks','container':'jwks',
                'source_ref':'nginx:stable-alpine','image_ref':'docker.io/library/nginx@sha256:'+digest,
