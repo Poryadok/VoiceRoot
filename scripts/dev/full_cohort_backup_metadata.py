@@ -193,6 +193,8 @@ class BackupMetadataPhase:
         selected = 'postgres' if database == 'roles' else database
         if not schema.SAFE.fullmatch(selected):
             raise MetadataError('database identity invalid')
+        if schema.PSQL_SCRIPT.count('-c lock_timeout=3000') != 1:
+            raise MetadataError('database observer contract changed')
         expected = {'database': selected, 'database_oid': oid, 'role': role, 'server_start': start,
                     'read_only': 'on', 'data_directory': '/var/lib/postgresql/data', 'pg_major': 16}
         args = ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',

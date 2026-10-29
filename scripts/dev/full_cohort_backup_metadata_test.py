@@ -111,9 +111,11 @@ class PostgreSQLTest(unittest.TestCase):
         self.addCleanup(subprocess.run, ['docker', 'rm', '-f', '-v', name], check=True,
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(60):
+            logs = subprocess.run(['docker', 'logs', name], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                  check=True).stdout
             ready = subprocess.run(['docker', 'exec', name, 'pg_isready', '-U', 'postgres'],
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if ready.returncode == 0:
+            if b'PostgreSQL init process complete; ready for start up.' in logs and ready.returncode == 0:
                 break
             time.sleep(0.5)
         else:
@@ -201,3 +203,49 @@ class JournalBoundaryTest(unittest.TestCase):
                 self.phase.run('token')
         self.assertTrue(self.phase.poisoned)
         self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_typed_phase_run_and_private_readback_with_synthetic_observers(self):
+        client = object.__new__(metadata.frontend_runtime_executor.KubectlTransport)
+        client.journal = self.journal
+        self.ledger.client = client
+        package = object.__new__(metadata.package.PackagePhase)
+        inventory = object.__new__(metadata.inventory.InventoryPhase)
+        catalog_phase = object.__new__(metadata.affected.FullCatalogPhase)
+        cut = object.__new__(metadata.writer_cut.WriterCut)
+        for obj in (package, inventory, catalog_phase, cut):
+            obj.fence = self.fence; obj.lock = {}; obj.namespace_uid = 'ns'
+        inventory.package = package; catalog_phase.inventory = inventory
+        candidate = {'package_sha256': 'c' * 64}
+        package.verify_current = lambda token: candidate
+        inventory.verify_receipt = lambda token: {}
+        inventory._admin_role = lambda: 'postgres'
+        cut.verify_drained = lambda: None
+        observed = {'operation_id': self.context['operation_id'], 'source_sha': self.context['commit'],
+                    'namespace_uid': 'ns', 'engine': {'namespace_uid': 'ns'}, 'server_start': 'start',
+                    'databases': {'postgres': 1}, 'properties': {'postgres': {'allowconn': True}}}
+        catalog_phase.verify_current = lambda token: observed
+        catalog_phase.verify_receipt = lambda token: observed
+        self.ledger.row['full_cohort_db_catalog'] = {'receipt_sha256': metadata._digest(observed)}
+        operation = Path(self.tmp.name) / self.context['operation_id']
+        operation.mkdir(mode=0o700)
+        phase = metadata.BackupMetadataPhase(self.journal, self.fence, client, {}, 'ns', package,
+                                            inventory, catalog_phase, cut, metadata.canonical.ROOT)
+        def tool():
+            phase._tool_state({'status': 'removed'})
+            return 'd' * 64
+        def read(database, *args):
+            return {'roles': [], 'memberships': []} if database == 'roles' else {'database_owner': 'postgres'}
+        with mock.patch.object(metadata.media_operation_guard, 'verify'), \
+             mock.patch.object(metadata.media_backup_upload_phase, 'ROOT', Path(self.tmp.name)), \
+             mock.patch.object(metadata.schema, 'kube_engine_snapshot', return_value=lambda: observed['engine']), \
+             mock.patch.object(metadata.unmanaged, 'validate_source_catalog'), \
+             mock.patch.object(phase, '_source_files', return_value={'files': {}}), \
+             mock.patch.object(phase, '_tool_sha', side_effect=tool), mock.patch.object(phase, '_read', side_effect=read):
+            result = phase.run('token')
+            self.assertEqual(result['databases'], ['postgres'])
+            self.assertEqual(result['metadata']['migrations']['postgres']['engine'], 'unmanaged')
+            self.assertEqual(metadata.verify_completed(phase, 'token'), result)
+            with self.assertRaises(metadata.MetadataError): phase.run('token')
+            path = operation / metadata.FILENAME
+            path.write_bytes(b'{}')
+            with self.assertRaises(metadata.MetadataError): metadata.verify_completed(phase, 'token')
