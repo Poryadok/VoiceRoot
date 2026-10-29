@@ -92,7 +92,7 @@ def service_allocation(intended,actual):
     except Exception: raise PrerequisiteError('staging P3 Service allocation invalid') from None
 
 
-def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform_digest):
+def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform_digest,service):
     """Correlate snapshots only; full spec, source and fresh reads are separate."""
     try:
         def controller(row,kind,uid):
@@ -125,8 +125,14 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
             or node['status'].get('nodeInfo',{}).get('architecture')!='amd64'
             or not any(c.get('type')=='Ready' and c.get('status')=='True' for c in node['status'].get('conditions',[]))): raise ValueError()
         matching=[s for s in slices if s.get('metadata',{}).get('labels',{}).get('kubernetes.io/service-name')=='voice-p3-principal-jwks']
+        service_meta=service['metadata']; service_uid=service_meta.get('uid'); ports=service['spec']['ports']
+        if (service_meta.get('name')!='voice-p3-principal-jwks' or service_meta.get('namespace')!=NAMESPACE
+            or service_meta.get('deletionTimestamp') or not service_uid
+            or service['spec'].get('selector')!={'app':'voice-p3-principal-jwks'} or len(ports)!=1
+            or ports[0].get('name')!='https' or ports[0].get('port')!=8443 or ports[0].get('protocol','TCP')!='TCP'): raise ValueError()
         if (len(matching)!=1 or matching[0].get('metadata',{}).get('namespace')!=NAMESPACE
             or matching[0]['metadata'].get('deletionTimestamp')
+            or not controller(matching[0],'Service',service_uid)
             or matching[0].get('ports')!=[{'name':'https','port':8443,'protocol':'TCP'}]): raise ValueError()
         endpoints=matching[0]['endpoints']
         if len(endpoints)!=1: raise ValueError()

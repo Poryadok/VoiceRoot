@@ -25,12 +25,15 @@ class StagingP3Contract(unittest.TestCase):
              'spec':{'nodeName':'node'},'status':{'phase':'Running','podIP':'10.2.3.4',
              'conditions':[{'type':'Ready','status':'True'}],
              'containerStatuses':[{'name':'jwks','ready':True,'state':{'running':{}},'imageID':'docker-pullable://nginx@sha256:'+'b'*64}]}}
-        sl={'metadata':{'namespace':'voice-staging','labels':{'kubernetes.io/service-name':'voice-p3-principal-jwks'}},
+        sl={'metadata':{'namespace':'voice-staging','ownerReferences':[{'kind':'Service','uid':'svc','controller':True}],
+                        'labels':{'kubernetes.io/service-name':'voice-p3-principal-jwks'}},
             'ports':[{'name':'https','port':8443,'protocol':'TCP'}],
             'endpoints':[{'addresses':['10.2.3.4'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':'pod','namespace':'voice-staging'}}]}
         node={'metadata':{'name':'node','uid':'node-uid'},'status':{'nodeInfo':{'operatingSystem':'linux','architecture':'amd64'},
                 'conditions':[{'type':'Ready','status':'True'}]}}
-        args=(d,[rs],[pod],[sl],node,'node-uid','sha256:'+'b'*64)
+        service={'metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging','uid':'svc'},
+                 'spec':{'selector':{'app':'voice-p3-principal-jwks'},'ports':[{'name':'https','port':8443,'protocol':'TCP'}]}}
+        args=(d,[rs],[pod],[sl],node,'node-uid','sha256:'+'b'*64,service)
         self.assertEqual(p3.publisher_endpoint(*args),'10.2.3.4')
         for index in (1,2,3):
             bad=list(copy.deepcopy(args)); bad[index].append(copy.deepcopy(bad[index][0]))
@@ -45,6 +48,8 @@ class StagingP3Contract(unittest.TestCase):
             bad=list(copy.deepcopy(args)); row=bad[index][0] if index==3 else bad[index]; row['metadata']['deletionTimestamp']='now'
             with self.subTest(index=index),self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
         bad=list(copy.deepcopy(args)); bad[3][0]['endpoints'][0]['conditions']['terminating']=True
+        with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+        bad=list(copy.deepcopy(args)); bad[3][0]['metadata']['ownerReferences'][0]['uid']='foreign'
         with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
 
     def test_service_server_allocation_has_only_exact_bounded_difference(self):
