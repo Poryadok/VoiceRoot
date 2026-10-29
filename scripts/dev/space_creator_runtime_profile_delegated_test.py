@@ -164,4 +164,31 @@ class PhaseTest(unittest.TestCase):
         self.assertEqual(self.base.ledger.row['status'],'uncertain'); self.assertFalse(self.phase.completed)
 
 
+class CreatorSpaceInspectionTest(unittest.TestCase):
+    def test_creator_preflight_qualifies_existing_space_without_effects(self):
+        case=PhaseTest('test_unknown_issue_never_submits_kubernetes_write'); case.profile='creator'
+        self.addCleanup(lambda:self.assertTrue(case.doCleanups())); case.setUp()
+        material=reset.ResetMaterial(case.root); material.signer('voice-space-principal-signing',active=True)
+        obj=copy.deepcopy(material.items[-1]); name=obj['metadata']['name']
+        obj['metadata'].update(uid='space-signing',resourceVersion='3'); case.actual[name]=obj
+        case.identities[name]={'state':'present','uid':'space-signing','resourceVersion':'3','keys':sorted(metadata.MEMBERS[name])}
+        case.initial['creator_secrets']=copy.deepcopy(case.identities)
+        case.preflight.record['creator_secrets']=copy.deepcopy(case.identities)
+        case.preflight.record['receipt_sha256']=subject.writer_cut.digest(case.initial)
+        case.preflight.journal.state['steps'][case.preflight.step]=copy.deepcopy(case.preflight.record)|{'receipt':copy.deepcopy(case.initial)}
+        case.base.ledger.row[case.preflight.ledger]=copy.deepcopy(case.preflight.record); before=case.base.ledger.read()
+        with patch.object(case.base.cut,'verify_drained',side_effect=AssertionError('no drain')):
+            result=subject.inspect_space_from_creator(case.phase,'token')
+        self.assertEqual(result['profile'],'space'); self.assertEqual(set(result['present']),{name})
+        self.assertEqual(result['missing'],['voice-space-media-server-tls'])
+        self.assertEqual(case.base.ledger.read(),before); self.assertEqual(case.writes,[])
+        with self.assertRaises(subject.DelegatedError):subject.inspect_space_from_creator(case.phase,'wrong-token')
+        crypto=case.phase._crypto
+        def drift(*args,**kwargs):
+            result=crypto(*args,**kwargs); case.identities[name]['resourceVersion']='4'; return result
+        with patch.object(case.phase,'_crypto',side_effect=drift):
+            with self.assertRaises(subject.DelegatedError):subject.inspect_space_from_creator(case.phase,'token')
+        self.assertEqual(case.writes,[])
+
+
 if __name__=='__main__': unittest.main()

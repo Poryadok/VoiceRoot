@@ -153,14 +153,16 @@ class _Receiver:
         if effects is not None:self.effects=copy.deepcopy(effects)
         self._guard()
 
-    def _crypto(self,names,incoming=None):
+    def _crypto(self,names,incoming=None,*,space_inspection=False):
+        if space_inspection and (type(self) is not CreatorReceiver or incoming is not None): raise ValueError()
+        profile='space' if space_inspection else self.PROFILE
         if not names: return {}
-        if names!=sorted(set(names)) or set(names)-set(metadata.PROFILES[self.PROFILE]): raise ValueError()
+        if names!=sorted(set(names)) or set(names)-set(metadata.PROFILES[profile]): raise ValueError()
         objects=[]; jwks={}; public_keys=[]; identities=self.preflight._creator(); incoming=incoming or {}
         for name in names:
             current=incoming.get(name); identity=identities[name]
             if current is None:
-                current=_get(name,self.PROFILE)
+                current=_get(name,profile)
                 if current is None or identity.get('state')!='present' or any(current['metadata'].get(k)!=identity[k] for k in ('uid','resourceVersion')): raise ValueError()
             elif identity!={'state':'absent'}: raise ValueError()
             obj=_normalized(current,name); objects.append(obj)
@@ -174,12 +176,12 @@ class _Receiver:
                 obj['data']['active-kid']=base64.b64encode(b'current').decode('ascii')
             for key in key_names:public_keys.append(hashlib.sha256(packet.crypto._openssl(['pkey','-in','{0}','-pubout'],[values[key]])).digest())
         if len(public_keys)!=len(set(public_keys)): raise ValueError()
-        receipt={'schema':'voice-dev-peer-issuer-receipt-v1','status':'staged','profile':self.PROFILE,'object_names':names,
+        receipt={'schema':'voice-dev-peer-issuer-receipt-v1','status':'staged','profile':profile,'object_names':names,
                  'media_ca_der_sha256':self.initial['ca']['der_sha256'],'public_jwks':jwks,'runtime_qualified':False,'cluster_applied':False}
-        envelope={'schema':'voice-dev-peer-issuer-packet-v1','profile':self.PROFILE,'operation_id':self.fence.context['operation_id'],
+        envelope={'schema':'voice-dev-peer-issuer-packet-v1','profile':profile,'operation_id':self.fence.context['operation_id'],
                   'source_sha':self.fence.context['commit'],'namespace_uid':self.namespace_uid,'preflight_sha256':writer_cut.digest(self.initial),
                   'issuer_receipt':receipt,'objects':{'apiVersion':'v1','kind':'List','items':objects}}
-        packet.validate(envelope,self.PROFILE,self.fence.context['operation_id'],self.fence.context['commit'],self.namespace_uid,
+        packet.validate(envelope,profile,self.fence.context['operation_id'],self.fence.context['commit'],self.namespace_uid,
                         writer_cut.digest(self.initial),names,self.media)
         self._current(); return jwks
 
@@ -335,19 +337,30 @@ class SpaceReceiver(_Receiver): PROFILE='space'
 
 def inspect_existing(phase,token):
     """Privately qualify fixed current profile before any writer drain/effect."""
+    return _inspect(phase,token,False)
+
+
+def inspect_space_from_creator(phase,token):
+    """Qualify only Space's existing materials against the current creator preflight."""
+    return _inspect(phase,token,True)
+
+
+def _inspect(phase,token,space_inspection):
     try:
         if type(phase) not in (CreatorReceiver,SpaceReceiver) or token!=phase.token or phase.record is not None or phase.pending: raise ValueError()
+        if space_inspection and type(phase) is not CreatorReceiver: raise ValueError()
+        profile='space' if space_inspection else phase.PROFILE
         row,rev=phase._guard(); initial=preflight.verify_current(phase.preflight,token)
         if initial.get('profile')!=phase.PROFILE or set(initial.get('creator_secrets',{}))!=set(metadata.MEMBERS): raise ValueError()
         phase.initial=copy.deepcopy(initial)
         phase.media=preflight.public._value(preflight.public.common.linux_private_bytes,phase._guard,'secret','voice-media-ca','ca.crt')
         if hashlib.sha256(preflight.crypto.der(phase.media)).hexdigest()!=initial['ca']['der_sha256']: raise ValueError()
-        missing=sorted(name for name in metadata.PROFILES[phase.PROFILE] if initial['creator_secrets'][name]=={'state':'absent'})
-        present=sorted(set(metadata.PROFILES[phase.PROFILE])-set(missing)); jwks=phase._crypto(present)
+        missing=sorted(name for name in metadata.PROFILES[profile] if initial['creator_secrets'][name]=={'state':'absent'})
+        present=sorted(set(metadata.PROFILES[profile])-set(missing)); jwks=phase._crypto(present,space_inspection=space_inspection)
         if preflight.verify_current(phase.preflight,token)!=initial: raise ValueError()
         after,end=phase._guard(); phase._local()
         if after!=row or end!=rev or phase.record is not None: raise ValueError()
-        return {'schema':'voice-dev-peer-existing-v1','profile':phase.PROFILE,'operation_id':phase.fence.context['operation_id'],
+        return {'schema':'voice-dev-peer-existing-v1','profile':profile,'operation_id':phase.fence.context['operation_id'],
                 'source_sha':phase.fence.context['commit'],'namespace_uid':phase.namespace_uid,
                 'preflight_sha256':writer_cut.digest(initial),'ca':copy.deepcopy(initial['ca']),
                 'present':{name:copy.deepcopy(initial['creator_secrets'][name]) for name in present},'missing':missing,
