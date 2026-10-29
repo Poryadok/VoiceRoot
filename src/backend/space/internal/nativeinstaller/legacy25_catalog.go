@@ -71,6 +71,10 @@ func inspectLegacyCatalogTx(ctx context.Context, tx pgx.Tx, versionNumber int, e
 	if err := tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE version=$1 AND dirty=false) FROM public.schema_migrations`, versionNumber).Scan(&rows, &clean); err != nil || rows != 1 || clean != 1 {
 		return "", errors.New("legacy25 migration marker unavailable")
 	}
+	var noComposite bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace JOIN pg_class c ON c.oid=t.typrelid WHERE n.nspname='public' AND t.typtype='c' AND c.relkind='c')`).Scan(&noComposite); err != nil || !noComposite {
+		return "", errors.New("HOLD: unsupported public composite type")
+	}
 	var catalog string
 	if err := tx.QueryRow(ctx, legacy25CatalogSQL).Scan(&catalog); err != nil {
 		return "", errors.New("legacy25 catalog unavailable")
