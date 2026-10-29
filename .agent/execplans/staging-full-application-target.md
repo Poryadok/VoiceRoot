@@ -43,6 +43,17 @@ review is required; no live activation follows these tests.
   source_plan_test gis_compiler_test`. Actual tool transcript retained in chat;
   no separate raw log was captured for this run. Stage owns normalization/apply integration, so this
   checkpoint alone is not complete rollout acceptance.
+- Stage consumer 14e395ee84c3 normally merged. Actual compiler/normalizer/paused
+  apply, RootJournal/Session, terminal consumer and preservation tests pass
+  39/39 in 24.627s (synthetic external Kube/TT). Fixed smoke source import closure
+  is qualified before the cut, without executing credentials or HTTP. Missing
+  captured dependency is rejected even after module caching; final focused test
+  passes. Existing source/helper authority remains independently required.
+- Historical Space completion omission reproduced through the actual historical
+  loader and fixed in 6f0eb7edaa21; source-owned migration selection mandates the
+  nonrecursive native validator after full prior PASS ancestry. No-Space rejects
+  unexpected native records, events and dangling directory symlinks.
+- Independent review requested from release_history; no overall live sign-off.
 
 ## Validation and remaining work
 Run focused new tests red/green, then compiler/source-plan/GIS legacy tests and

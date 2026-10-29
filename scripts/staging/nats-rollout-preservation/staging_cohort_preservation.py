@@ -88,7 +88,7 @@ def _source(session,plan):
     if digest(approved['source_files'])!=plan['source_inventory_sha256']:raise Blocked('cohort_source_changed')
     for filename in ('staging_cohort_preservation.py','staging_cohort_preservation_runtime.py',
         'staging_cohort_preservation_pg.py','staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py',
-        'staging_cohort_preservation_space.py','staging_space_native.py'):
+        'staging_cohort_preservation_space.py','staging_space_native.py','staging_core_release.py'):
         name='scripts/staging/nats-rollout-preservation/'+filename
         wanted=approved['source_files'].get(name)
         if (custody['manifest'].get('nats-rollout-preservation/'+filename)!=wanted or wanted is None
@@ -342,6 +342,9 @@ def _start_cut(actions,request,approved,execution,workspace):
         'plan':plan,'status':'PREPARED','context':transaction.context(stage),'events':[],
         'contract':contract,'provenance':provenance,'initial_resource_fence':None}
     _write(base/'checkpoint.json',state)
+    # Import/custody qualification precedes every cut and prerequisite effect.
+    # This loads definitions only; no credential capture or smoke is executed.
+    _prepare_terminal_modules(session)
     # Authenticate the future published tool before the first writer-cut effect.
     # This read-only source/API phase does not require publication during coding.
     import staging_cohort_preservation_space as space
@@ -666,7 +669,8 @@ def load_auxiliary_successor(session):
 def shared_module(session,name):
     """Execute only the captured shared mechanics, with their local import closure."""
     roots={'story_media_backup_cohort','story_media_backup_cohort_restore','story_media_backup_cohort_finalize',
-        'story_media_backup_restore','cohort_unmanaged_actual','auth_user_adoption_runtime','space_native_tool_identity_staging'}
+        'story_media_backup_restore','cohort_unmanaged_actual','auth_user_adoption_runtime','space_native_tool_identity_staging',
+        'staging_core_smoke'}
     if name not in roots:raise Blocked('cohort_shared_module_forbidden')
     plan=load_plan(session);approved,_,_=_source(session,plan)
     source=guard.ROOT/'installed'/'sources'/session.operation/'scripts'/'dev';closure={}
@@ -682,7 +686,8 @@ def shared_module(session,name):
             imports=([item.name.split('.')[0] for item in node.names] if isinstance(node,ast.Import)
                 else [node.module.split('.')[0]] if isinstance(node,ast.ImportFrom) and node.module and not node.level else [])
             for dependency in imports:
-                if (source/(dependency+'.py')).exists():collect(dependency)
+                if ('scripts/dev/'+dependency+'.py' in approved['source_files']
+                    or (source/(dependency+'.py')).exists()):collect(dependency)
     collect(name)
     key=(session.operation,plan['source_inventory_sha256']);cache=_shared_cache.setdefault(key,{})
     def load(module):
@@ -706,6 +711,19 @@ def shared_module(session,name):
             cache.pop(module,None);sys.modules.pop(module,None);raise
         return value
     result=load(name);session.check();return result
+
+
+def _prepare_terminal_modules(session):
+    """Qualify the fixed postactivation consumer before any writer is stopped."""
+    plan=load_plan(session);row=session.check()
+    if row.get('phase')!='prepare' or row.get('target_sha256') is not None:
+        raise Blocked('cohort_terminal_source_phase_invalid')
+    import staging_core_release
+    if (Path(staging_core_release.__file__).resolve()!=Path(__file__).with_name('staging_core_release.py').resolve()
+        or not callable(getattr(staging_core_release,'verify_completed',None))):
+        raise Blocked('cohort_terminal_source_changed')
+    shared_module(session,'staging_core_smoke')
+    if load_plan(session)!=plan or session.check()!=row:raise Blocked('cohort_terminal_source_changed')
 
 
 def _reference(session,value):
@@ -1486,7 +1504,7 @@ def validate_historical_capture(operation):
         # Internal validator consumes the already checked PASS/source/TT chain;
         # its public wrapper calls this loader and would recurse here.
         native._validate_historical_live_completed(operation,receipt,rollout,binding)
-    elif (tool_record.get('selected') is not False or (root/'space-live').exists()
+    elif (tool_record.get('selected') is not False or os.path.lexists(root/'space-live')
           or 'native_space_migration' in rollout
           or any(event.get('kind')=='native_space_migration_complete' for event in rollout.get('events',[]))):
         raise Blocked('cohort_history_unexpected_native_completion')

@@ -16,6 +16,45 @@ import staging_cohort_preservation as preservation
 
 
 class CutEffectTests(unittest.TestCase):
+    def test_terminal_smoke_source_closure_is_loaded_before_cut_without_credentials(self):
+        """Real Session/loader; only preceding source admission is a fixture."""
+        import hashlib
+        import staging_core_release
+        modules=('staging_core_smoke','staging_core_smoke_http','staging_core_credentials','media_operation_journal')
+        with tempfile.TemporaryDirectory(dir='/root') as directory, patch.object(guard,'ROOT',Path(directory)), patch.dict(sys.modules):
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            c=context();current=card(c);journal=resource_claim.RootJournal(root)
+            session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal);session.admit(start=True)
+            base=preservation._base(session);base.mkdir(parents=True,mode=0o700)
+            source=root/'installed'/'sources'/session.operation/'scripts'/'dev';source.mkdir(parents=True,mode=0o700)
+            source_files={}
+            for name in modules:
+                raw=(Path(__file__).resolve().parents[2]/'dev'/(name+'.py')).read_bytes()
+                (source/(name+'.py')).write_bytes(raw);source_files['scripts/dev/'+name+'.py']=hashlib.sha256(raw).hexdigest()
+                sys.modules.pop(name,None)
+            plan={key:'c'*64 for key in preservation.PLAN_FIELDS}
+            plan.update(schema=preservation.SCHEMA,operation=session.operation,context=c,helper_sha256=session.helper,
+                namespace_uid='namespace',actual_before=current['observed']['images'],candidate={'commit':c['commit'],'images':c['images']},
+                source_inventory_sha256=preservation.digest(source_files))
+            preservation._write(base/'checkpoint.json',{'schema':'voice-staging-cohort-preservation-checkpoint-v1','plan':plan})
+            key=(session.operation,plan['source_inventory_sha256']);preservation._shared_cache.pop(key,None)
+            self.addCleanup(preservation._shared_cache.pop,key,None)
+            with patch.object(preservation,'_source',return_value=({'source_files':source_files},{},{})), resource_claim.command_scope(session.check):
+                with patch.object(commands,'capture',side_effect=AssertionError('must not execute smoke or commands')):
+                    preservation._prepare_terminal_modules(session)
+                    loaded=preservation.shared_module(session,'staging_core_smoke')
+                    self.assertEqual(Path(loaded.__file__),source/'staging_core_smoke.py')
+                    self.assertEqual(journal.read()['phase'],'prepare')
+                    self.assertIsNone(journal.read()['target_sha256'])
+                    self.assertFalse((root/('rollout-'+session.operation)).exists())
+                dependency=source/'staging_core_smoke_http.py';original=dependency.read_bytes();dependency.unlink()
+                # Cached Python modules cannot conceal a missing captured import.
+                with self.assertRaises(Exception):preservation._prepare_terminal_modules(session)
+                dependency.write_bytes(original)
+                (source/'staging_core_smoke_http.py').write_text('# changed source\n')
+                with self.assertRaisesRegex(preservation.Blocked,'cohort_shared_source_changed'):
+                    preservation._prepare_terminal_modules(session)
+
     def test_historical_space_migration_cannot_omit_native_completion(self):
         """Actual historical loader; synthetic protected predecessor records."""
         import hashlib
@@ -92,6 +131,10 @@ class CutEffectTests(unittest.TestCase):
             rollout['resource_fence']['target_sha256']=preservation.digest(target)
             rollout['native_space_migration']={'status':'COMPLETE'}
             preservation.save(rollout_dir/'checkpoint.json',rollout)
+            with self.assertRaisesRegex(preservation.Blocked,'cohort_history_unexpected_native_completion'):
+                preservation.validate_historical_capture(operation)
+            rollout.pop('native_space_migration');preservation.save(rollout_dir/'checkpoint.json',rollout)
+            (base/'space-live').symlink_to(base/'missing-native-directory',target_is_directory=True)
             with self.assertRaisesRegex(preservation.Blocked,'cohort_history_unexpected_native_completion'):
                 preservation.validate_historical_capture(operation)
 
