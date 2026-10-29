@@ -323,6 +323,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_test.py"
 	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_eligibility_test.py"
 	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_c2_journal_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_cut_test.py"
 	python3 "$(ROOT)/scripts/ci/full_application_request_test.py"
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
