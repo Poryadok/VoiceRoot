@@ -149,6 +149,81 @@ def verify_writer_pod(authored, job, pod, execution):
         raise RecoveryRequired('writer Pod identity unavailable') from None
 
 
+def verify_writer_successor(phase, source_root):
+    """Reconstruct a Realtime Job transition from its actual phase journal."""
+    try:
+        if type(phase) is not Migration or Path(source_root) != phase.root:
+            raise RecoveryRequired('migration phase differs')
+        phase._guard()
+        spec = phase.intent['realtime_migration']; operation = phase.fence.context['operation_id']
+        if (spec['source_sha'] != phase.fence.context['commit'] or phase.migration_steps is None or
+                phase.bound_secret is None or phase.bound_provision is None):
+            raise RecoveryRequired('migration authority unavailable')
+        snapshot_steps = copy.deepcopy(phase.migration_steps)
+        snapshot_local = copy.deepcopy(phase.journal.state['steps'])
+        snapshot_status, snapshot_invocation = phase.invocation_status, phase.invocation
+        config, planned = render(phase.root,spec['source_sha'],operation,spec['credential'],spec['image'],spec['node'])
+        config_record = snapshot_steps.get('config')
+        local_config = snapshot_local.get('config')
+        if (not isinstance(config_record,dict) or set(config_record)!={'status','nonce','details_sha256','receipt_sha256'} or
+                config_record.get('status')!='done' or not isinstance(config_record.get('nonce'),str) or
+                not re.fullmatch(r'[0-9a-f]{32}',config_record['nonce']) or
+                config_record.get('details_sha256')!=_hash(config) or not isinstance(local_config,dict) or
+                {k:v for k,v in local_config.items() if k!='receipt'}!=config_record or
+                config_record.get('receipt_sha256')!=_hash(local_config.get('receipt'))):
+            raise RecoveryRequired('migration ConfigMap receipt unavailable')
+        receipt = local_config['receipt']
+        if not isinstance(receipt,dict) or set(receipt)!={'name','uid','resourceVersion','data_sha256'}:
+            raise RecoveryRequired('migration ConfigMap receipt invalid')
+        actual = phase.client.call('get','configmap',config['metadata']['name'],'-o','json')
+        cm = actual.get('metadata',{})
+        if (actual.get('apiVersion')!='v1' or actual.get('kind')!='ConfigMap' or
+                cm.get('namespace')!='voice-dev' or cm.get('name')!=config['metadata']['name'] or
+                cm.get('uid')!=receipt.get('uid') or cm.get('resourceVersion')!=receipt.get('resourceVersion') or
+                cm.get('deletionTimestamp') or cm.get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha'] or
+                receipt.get('name')!=cm.get('name') or receipt.get('data_sha256')!=_hash(config['data']) or
+                actual.get('immutable') is not True or actual.get('data')!=config['data']):
+            raise RecoveryRequired('migration ConfigMap changed')
+        job_record = snapshot_steps.get('job')
+        state = 'absent' if job_record is None else job_record.get('status')
+        if state not in ('absent','pending','owned','done'): raise RecoveryRequired('migration Job state invalid')
+        uid = rv = terminal = job_nonce = None
+        if job_record is not None:
+            local = snapshot_local.get('job')
+            expected_keys = {'status','nonce','details_sha256'}
+            if state in ('owned','done'): expected_keys |= {'uid','resourceVersion'}
+            if state == 'done': expected_keys.add('receipt_sha256')
+            if (set(job_record)!=expected_keys or not isinstance(local,dict) or
+                    {k:v for k,v in local.items() if k!='receipt'}!=job_record or
+                    job_record.get('details_sha256')!=_hash(planned) or
+                    not isinstance(job_record.get('nonce'),str) or not re.fullmatch(r'[0-9a-f]{32}',job_record['nonce'])):
+                raise RecoveryRequired('migration Job record changed')
+            job_nonce = job_record['nonce']
+            if state in ('owned','done'):
+                uid,rv = job_record.get('uid'),job_record.get('resourceVersion')
+                if not isinstance(uid,str) or not uid or not isinstance(rv,str) or not rv:
+                    raise RecoveryRequired('migration Job UID unavailable')
+            if state == 'done':
+                terminal = job_record.get('receipt_sha256')
+                if (terminal != _hash(local.get('receipt')) or local['receipt'].get('job_uid')!=uid):
+                    raise RecoveryRequired('migration terminal receipt changed')
+        node = spec['node']
+        execution = {'database':'realtime_db','database_oid':spec['database_oid'],'role':'realtime',
+            'application_name':planned['metadata']['name'],'container_name':'migrate',
+            'node_name':node['name'],'node_uid':node['uid'],'platform_digest':spec['platform_digest']}
+        phase._guard()
+        if (phase.migration_steps != snapshot_steps or phase.journal.state['steps'] != snapshot_local or
+                phase.invocation_status != snapshot_status or phase.invocation != snapshot_invocation):
+            raise RecoveryRequired('migration state changed during observation')
+        return {'configmap':copy.deepcopy(receipt),
+                'job':{'authored':planned,'state':state,'uid':uid,'resourceVersion':rv},
+                'record':{'operation_id':operation,'source_sha':spec['source_sha'],
+                          'nonce':phase.invocation,'job_nonce':job_nonce,'terminal_sha256':terminal},
+                'execution':execution}
+    except BaseException:
+        raise RecoveryRequired('writer migration successor unavailable') from None
+
+
 class Migration:
     """One-shot guarded create and verification; uncertain outcomes retain lock.
 

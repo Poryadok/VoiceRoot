@@ -159,7 +159,7 @@ class PhaseTest(unittest.TestCase):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack','successor-drift'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -208,6 +208,8 @@ class PhaseTest(unittest.TestCase):
         client.call = api
         worker = job.Migration(secret,provision,j,renderer.root,password)
         original_reserve, original_finish = worker._reserve, worker._finish
+        original_bind = worker._bind_owned_job
+        observed_states = []
         original_write = base.ledger.write
         lost_ack = []
         def write(revision, row):
@@ -219,20 +221,43 @@ class PhaseTest(unittest.TestCase):
                 lost_ack.append(True)
                 raise TimeoutError('acknowledgement lost')
         def reserve(name, details):
+            if name=='job' and fault=='successor-drift':
+                original_guard = worker._guard; calls = 0
+                def drift_guard():
+                    nonlocal calls
+                    original_guard(); calls += 1
+                    if calls == 2:
+                        value = {'status':'pending','nonce':'e'*32,'details_sha256':job._hash(details)}
+                        worker.migration_steps['job']=copy.deepcopy(value)
+                        worker.journal.state['steps']['job']=copy.deepcopy(value)
+                        base.ledger.row['realtime_migration']['steps']['job']=copy.deepcopy(value)
+                with patch.object(worker,'_guard',side_effect=drift_guard):
+                    job.verify_writer_successor(worker,renderer.root)
+            if name=='job' and fault is None:
+                observed_states.append(job.verify_writer_successor(worker,renderer.root)['job']['state'])
             record = original_reserve(name,details)
+            if name=='job' and fault is None:
+                observed_states.append(job.verify_writer_successor(worker,renderer.root)['job']['state'])
             if fault==name: base.ledger.row['realtime_migration']['steps'][name]['nonce']='foreign'
             return record
         def finish(name, record, receipt):
             original_finish(name,record,receipt)
+            if name=='job' and fault is None:
+                observed_states.append(job.verify_writer_successor(worker,renderer.root)['job']['state'])
             if fault=='local-role' and name=='config':
                 provision.state['steps']['realtime-db-role']['nonce']='foreign'
             if fault=='terminal' and name=='job':
                 base.ledger.row['realtime_migration']['steps'][name]['receipt_sha256']='f'*64
+        def bind(record,uid,rv):
+            owned = original_bind(record,uid,rv)
+            if fault is None: observed_states.append(job.verify_writer_successor(worker,renderer.root)['job']['state'])
+            return owned
         schema = {'database_oid':13,'version':1,'dirty':False,'scope':'realtime-login-schema-readiness'}
         with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':base.context['commit'],'files':files}), \
              patch.object(job.realtime_db_provision,'KubePostgres',return_value=pg), \
              patch.object(job.realtime_migration_verify,'check',return_value=schema), \
              patch.object(worker,'_reserve',side_effect=reserve), patch.object(worker,'_finish',side_effect=finish), \
+             patch.object(worker,'_bind_owned_job',side_effect=bind), \
              patch.object(base.ledger,'write',side_effect=write):
             if fault:
                 with self.assertRaises(job.RecoveryRequired): worker.run()
@@ -243,6 +268,7 @@ class PhaseTest(unittest.TestCase):
                 return
             receipt = worker.run()
         self.assertEqual(receipt['schema'],schema)
+        self.assertEqual(observed_states,['absent','pending','owned','done'])
         self.assertEqual(j.state['steps']['job']['status'],'done')
         self.assertEqual(j.state['steps']['realtime-migration']['status'],'done')
         self.assertEqual(base.ledger.row['realtime_migration']['status'],'done')
