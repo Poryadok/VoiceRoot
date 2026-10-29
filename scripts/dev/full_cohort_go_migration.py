@@ -2,9 +2,11 @@
 import re
 import copy
 import base64
+import hashlib
 import json
 import os
 import ipaddress
+from pathlib import Path
 import selectors
 import subprocess
 import time
@@ -13,6 +15,7 @@ from urllib.parse import parse_qsl, unquote, urlsplit
 import auth_live_migration_phase as auth
 import auth_user_candidate_probe
 import cohort_backup_phases
+import cohort_restore_journal
 import frontend_runtime_executor
 import full_cohort_backup_metadata as metadata
 import full_cohort_go_migration_plan as source_plan
@@ -21,12 +24,25 @@ import media_operation_guard
 import media_operation_journal
 import realtime_migration_job
 import resource_fencing
+import secrets
 import story_media_backup_cohort_restore as restore
 import writer_cut
 
 
 class MigrationError(RuntimeError):
     pass
+
+
+def _check_clone(clone, database, role, plan, source_sha):
+    if (not isinstance(clone, dict) or set(clone) != {'database', 'role', 'from', 'to', 'source_sha', 'snapshot_id',
+                                                      'manifest_sha256', 'migration_roles_sha256', 'scope'} or
+            clone['database'] != database or clone['role'] != role or clone['from'] != plan['from'] or
+            clone['to'] != plan['to'] or clone['source_sha'] != source_sha or
+            clone['scope'] != 'isolated-clone-migration-login-only' or
+            not isinstance(clone['snapshot_id'], str) or not re.fullmatch(r'capture-[a-f0-9]{32}', clone['snapshot_id']) or
+            any(not isinstance(clone[k], str) or not re.fullmatch(r'[a-f0-9]{64}', clone[k])
+                for k in ('manifest_sha256', 'migration_roles_sha256'))):
+        raise MigrationError('clone migration authority unavailable')
 
 
 def _postgres_password():
@@ -263,7 +279,14 @@ def _private_kube(args, body=None):
             if size > 65536: raise ValueError()
             chunks.append(chunk)
         if process.wait(timeout=max(.01, deadline - time.monotonic())): raise ValueError()
-        return json.loads(b''.join(chunks))
+        raw_output = b''.join(chunks)
+        if not raw_output.strip():
+            if (len(args) != 6 or list(args[:2]) != ['get', 'secret'] or
+                    not re.fullmatch(r'voice-go-input-[a-z]+-[a-f0-9]{32}', args[2]) or
+                    list(args[3:]) != ['--ignore-not-found=true', '-o', 'json']):
+                raise ValueError()
+            return {}
+        return json.loads(raw_output)
     except BaseException:
         raise MigrationError('private Kubernetes request unavailable') from None
     finally:
@@ -313,7 +336,10 @@ class SecretSnapshot:
             self._guard(); proof = qualified_plan(self.metadata_phase, self.cohort, self.cut, self.token, self.database)
             source = proof['source']; secret = _credential(self.database, self._guard)
             safe = _login(self.database, secret, source, self._guard)
-            if safe != proof['credential'] or _credential(self.database, self._guard) != secret:
+            clone = cohort_restore_journal.verify_go_role(self.cohort, self.metadata_phase, self.token, self.database)
+            _check_clone(clone, self.database, safe['role'], proof['plan'], self.fence.context['commit'])
+            if (safe != proof['credential'] or _credential(self.database, self._guard) != secret or
+                    clone.get('source_sha') != self.fence.context['commit']):
                 raise ValueError()
             intended = _secret(self.fence.context['operation_id'], self.database, secret, source['engine']['service_ip'])
             self._guard()
@@ -326,7 +352,7 @@ class SecretSnapshot:
             marker = {'status': 'pending', 'nonce': os.urandom(16).hex(), 'operation_id': self.fence.context['operation_id'],
                       'source_sha': self.fence.context['commit'], 'database': self.database,
                       'name': intended['metadata']['name'], 'metadata_receipt_sha256': proof['metadata_receipt_sha256'],
-                      'credential': copy.deepcopy(safe)}
+                      'credential': copy.deepcopy(safe), 'clone_receipt_sha256': _hash(clone)}
             pending = True; self.journal.state['steps'][local_key] = copy.deepcopy(marker); self.journal.save()
             self._guard(); current, rev = self._ledger()
             if current != row or rev != revision or self.journal.state['steps'].get(local_key) != marker:
@@ -336,7 +362,8 @@ class SecretSnapshot:
             self._guard()
             if self._ledger()[0].get('go_migration_secrets', {}).get(self.database) != marker or \
                     _credential(self.database, self._guard) != secret or \
-                    qualified_plan(self.metadata_phase, self.cohort, self.cut, self.token, self.database) != proof:
+                    qualified_plan(self.metadata_phase, self.cohort, self.cut, self.token, self.database) != proof or \
+                    cohort_restore_journal.verify_go_role(self.cohort, self.metadata_phase, self.token, self.database) != clone:
                 raise ValueError()
             self.cut.verify_drained()
             created = _private_kube(['create', '-f', '-', '-o', 'json'], intended)
@@ -400,6 +427,57 @@ class SecretSnapshot:
         except BaseException:
             raise MigrationError('migration credential snapshot unavailable') from None
 
+    def remove(self):
+        """Delete the exact created Secret only after the caller releases its CUT binding."""
+        started = False
+        try:
+            receipt = self.verify()
+            if getattr(self.cut, 'migration', None) is not None:
+                raise ValueError()
+            done, _, _ = self._bound; key = 'go-migration-secret-' + self.database
+            row, revision = self._ledger()
+            if row.get('go_migration_secrets', {}).get(self.database) != done or self.journal.state['steps'].get(key) != done:
+                raise ValueError()
+            removing = done | {'status': 'removing'}
+            started = True; self.journal.state['steps'][key] = copy.deepcopy(removing); self.journal.save()
+            self._guard(); current, rev = self._ledger()
+            if current != row or rev != revision: raise ValueError()
+            current['go_migration_secrets'][self.database] = copy.deepcopy(removing)
+            current['step'] = key + '-removing'; self.fence.ledger.write(rev, current)
+            self._guard()
+            if self._ledger()[0].get('go_migration_secrets', {}).get(self.database) != removing: raise ValueError()
+            options = {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground',
+                       'preconditions': {'uid': receipt['uid'], 'resourceVersion': receipt['resourceVersion']}}
+            _private_kube(['delete', '--raw=/api/v1/namespaces/voice-dev/secrets/' + receipt['name'], '-f', '-'], options)
+            deadline = time.monotonic() + 60
+            while True:
+                self._guard()
+                remaining = _private_kube(['get', 'secret', receipt['name'], '--ignore-not-found=true', '-o', 'json'])
+                if not remaining: break
+                if remaining.get('metadata', {}).get('uid') != receipt['uid'] or time.monotonic() >= deadline:
+                    raise ValueError()
+                time.sleep(1)
+            self._guard(); row, rev = self._ledger()
+            if row.get('go_migration_secrets', {}).get(self.database) != removing or self.journal.state['steps'].get(key) != removing:
+                raise ValueError()
+            removed = done | {'status': 'removed'}
+            self.journal.state['steps'][key] = copy.deepcopy(removed); self.journal.save()
+            self._guard(); current, final_rev = self._ledger()
+            if current != row or final_rev != rev: raise ValueError()
+            current['go_migration_secrets'][self.database] = copy.deepcopy(removed)
+            current['step'] = key + '-removed'; self.fence.ledger.write(final_rev, current)
+            self._guard()
+            if self._ledger()[0].get('go_migration_secrets', {}).get(self.database) != removed:
+                raise ValueError()
+            self._bound = None
+            return copy.deepcopy(receipt)
+        except BaseException:
+            if started:
+                self.poisoned = True
+                try: self.fence.uncertain('Go migration secret cleanup uncertain')
+                except BaseException: pass
+            raise MigrationError('migration credential cleanup uncertain' if started else 'migration credential cleanup not admitted') from None
+
 
 def verify_writer_job(authored, actual):
     """Apply the existing exact Kubernetes Job admission checks."""
@@ -407,6 +485,11 @@ def verify_writer_job(authored, actual):
         return realtime_migration_job.verify_writer_job(authored, actual)
     except BaseException:
         raise MigrationError('migration Job identity unavailable') from None
+
+
+def verify_writer_configmap(authored, actual):
+    receipt = _config_receipt(authored, actual)
+    return {'uid': receipt['uid'], 'resourceVersion': receipt['resourceVersion']}
 
 
 def verify_writer_pod(authored, job, pod, execution):
@@ -455,6 +538,382 @@ def verify_writer_pod(authored, job, pod, execution):
         return {'uid': meta['uid'], 'ip': ip}
     except BaseException:
         raise MigrationError('migration Pod identity unavailable') from None
+
+
+def _hash(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+
+
+def _config_receipt(intended, actual, *, require_identity=True):
+    try:
+        meta = actual['metadata']
+        allowed = {'name', 'namespace', 'uid', 'resourceVersion', 'creationTimestamp', 'managedFields', 'generation', 'annotations'}
+        if (not isinstance(meta, dict) or set(meta) - allowed or actual.get('apiVersion') != 'v1' or
+                actual.get('kind') != 'ConfigMap' or actual.get('immutable') is not True or
+                actual.get('data') != intended['data'] or meta.get('name') != intended['metadata']['name'] or
+                meta.get('namespace') != 'voice-dev' or meta.get('annotations') != intended['metadata']['annotations'] or
+                require_identity and any(not isinstance(meta.get(k), str) or not meta[k] for k in ('uid', 'resourceVersion'))):
+            raise ValueError()
+        if not require_identity: return None
+        return {'name': meta['name'], 'uid': meta['uid'], 'resourceVersion': meta['resourceVersion'],
+                'data_sha256': _hash(intended['data'])}
+    except BaseException:
+        raise MigrationError('migration ConfigMap identity unavailable') from None
+
+
+class Migration:
+    """One exact Go migration under the established shared WriterCut."""
+    def __init__(self, secret):
+        if type(secret) is not SecretSnapshot:
+            raise MigrationError('migration credential phase invalid')
+        self.secret = secret
+        self.journal, self.fence, self.client = secret.journal, secret.fence, secret.client
+        self.lock, self.namespace_uid = copy.deepcopy(secret.lock), secret.namespace_uid
+        self.metadata_phase, self.cohort, self.cut = secret.metadata_phase, secret.cohort, secret.cut
+        self.token, self.database, self.root = secret.token, secret.database, secret.metadata_phase.source_root
+        self.invocation = secrets.token_hex(16)
+        self.marker = self.input = None
+        self.poisoned = False
+
+    def _guard(self):
+        if (self.poisoned or self.secret.poisoned or self.secret.journal is not self.journal or
+                self.secret.fence is not self.fence or self.secret.client is not self.client or
+                self.secret.cut is not self.cut or self.secret.metadata_phase is not self.metadata_phase or
+                self.secret.cohort is not self.cohort or self.secret.token != self.token or
+                self.secret.database != self.database or self.secret.lock != self.lock or
+                self.secret.namespace_uid != self.namespace_uid or self.metadata_phase.source_root != self.root):
+            raise MigrationError('migration phase identity changed')
+        self.secret.verify()
+        if self.marker is not None:
+            row, _ = self.fence.ledger.read()
+            if (not self.fence.owned(row) or row.get('status') != 'active' or
+                    self.marker.get('nonce') != self.invocation or self.marker.get('input_sha256') != self._input_hash() or
+                    row.get('go_migrations', {}).get(self.database) != self.marker or
+                    self.journal.state['steps'].get('go-migration-' + self.database) != self.marker):
+                raise MigrationError('migration journal changed')
+
+    def _update(self, old, new):
+        self._guard(); row, revision = self.fence.ledger.read()
+        if (not self.fence.owned(row) or row.get('status') != 'active' or
+                row.get('go_migrations', {}).get(self.database) != old):
+            raise MigrationError('migration reservation changed')
+        key = 'go-migration-' + self.database
+        if self.journal.state['steps'].get(key) != old: raise MigrationError('migration journal changed')
+        self.journal.state['steps'][key] = copy.deepcopy(new); self.journal.save()
+        self.secret._guard()
+        current, rev = self.fence.ledger.read()
+        if current != row or rev != revision: raise MigrationError('migration ledger changed')
+        current.setdefault('go_migrations', {})[self.database] = copy.deepcopy(new)
+        current['step'] = key + '-' + new['status']; self.fence.ledger.write(rev, current)
+        self.marker = copy.deepcopy(new); self._guard()
+
+    def _step(self, name, state, receipt=None):
+        old = copy.deepcopy(self.marker); new = copy.deepcopy(old)
+        new['steps'][name] = copy.deepcopy(state)
+        if receipt is not None:
+            new['steps'][name]['receipt'] = copy.deepcopy(receipt)
+        self._update(old, new)
+
+    def _objects(self):
+        if self.input is None: raise MigrationError('migration source unavailable')
+        return render(self.fence.context['operation_id'], self.fence.context['commit'], self.database,
+                      self.input['files'], self.input['node'], self.input['route'])
+
+    def _input_hash(self):
+        if self.input is None: raise MigrationError('migration source unavailable')
+        value = {k:copy.deepcopy(v) for k,v in self.input.items() if k != 'files'}
+        value['files'] = {name:hashlib.sha256(raw).hexdigest() for name,raw in self.input['files'].items()}
+        return _hash(value)
+
+    def run(self):
+        """Run exactly once; any uncertain effect retains the shared fence."""
+        pending = False
+        try:
+            self._guard()
+            proof = qualified_plan(self.metadata_phase, self.cohort, self.cut, self.token, self.database)
+            clone = cohort_restore_journal.verify_go_role(self.cohort, self.metadata_phase, self.token, self.database)
+            safe = proof['credential']
+            _check_clone(clone, self.database, safe['role'], proof['plan'], self.fence.context['commit'])
+            secret_done, credential, source = self.secret._bound
+            if (secret_done['clone_receipt_sha256'] != _hash(clone) or source != proof['source'] or
+                    {k:v for k,v in credential.items() if k != 'password'} != safe or
+                    _credential(self.database, self._guard) != credential or _login(self.database, credential, source, self._guard) != safe):
+                raise ValueError()
+            observed = metadata.verify_completed(self.metadata_phase, self.token)
+            plans = observed['metadata']['migrations']
+            files = restore.migration_inventory(self.root, observed['databases'], plans, full_catalog=True)[self.database]
+            original = observed['metadata']['catalog'][self.database]
+            engine_snapshot = schema.kube_engine_snapshot(schema.linux_private_bytes, self._guard)
+            role = self.metadata_phase.inventory._admin_role()
+            actual = self.metadata_phase._read(self.database, source['database_oid'], source['engine'], source['server_start'], role, engine_snapshot)
+            if actual != original or actual.get('history') != [{'version': proof['plan']['from'], 'dirty': False}]:
+                raise ValueError()
+            package = self.metadata_phase.package.verify_current(self.token)
+            nodes = sorted((n for n in package['nodes'] if n.get('architecture') == 'amd64'), key=lambda n:n['name'])
+            if not nodes: raise ValueError()
+            node = nodes[0]
+            route = {'host': safe['host'], 'service_ip': source['engine']['service_ip'],
+                     'role': safe['role'], 'sslmode': safe['sslmode']}
+            execution = {'database': self.database, 'database_oid': source['database_oid'], 'role': safe['role'],
+                         'application_name': 'voice-go-migrate-' + self.database.removesuffix('_db') + '-' + self.fence.context['operation_id'][-32:],
+                         'container_name': 'migrate', 'node_name': node['name'], 'node_uid': node['uid'],
+                         'platform_digest': realtime_migration_job.PLATFORMS['amd64']}
+            self.input = {'files': files, 'node': node, 'route': route, 'execution': execution,
+                          'proof': proof, 'clone': clone, 'secret': secret_done['receipt']}
+            config, job = self._objects()
+            self.cut.verify_drained(); self._guard()
+            for kind, obj in (('configmaps', config), ('jobs', job)):
+                entries = self.client.call('get', kind, '-o', 'json')['items']
+                if any(item.get('metadata', {}).get('name') == obj['metadata']['name'] for item in entries):
+                    raise ValueError()
+            row, _ = self.fence.ledger.read()
+            key = 'go-migration-' + self.database
+            if key in self.journal.state['steps'] or self.database in row.get('go_migrations', {}):
+                raise ValueError()
+            marker = {'status': 'active', 'operation_id': self.fence.context['operation_id'],
+                      'source_sha': self.fence.context['commit'], 'nonce': self.invocation,
+                      'input_sha256': self._input_hash(), 'steps': {}}
+            pending = True; self._update(None, marker)
+            config_step = {'status': 'pending', 'nonce': secrets.token_hex(16), 'details_sha256': _hash(config)}
+            self._guard(); dry_config = self.client.call('create', '--dry-run=server', '-f', '-', '-o', 'json', body=config)
+            _config_receipt(config, dry_config, require_identity=False)
+            self._step('config', config_step); self._guard(); self.cut.verify_drained()
+            created = self.client.call('create', '-f', '-', '-o', 'json', body=config)
+            config_receipt = _config_receipt(config, created)
+            fetched = self.client.call('get', 'configmap', config_receipt['name'], '-o', 'json')
+            if _config_receipt(config, fetched) != config_receipt: raise ValueError()
+            self._step('config', config_step | {'status': 'done'}, config_receipt)
+            self._guard()
+            dry = self.client.call('create', '--dry-run=server', '-f', '-', '-o', 'json', body=job)
+            dry_spec = realtime_migration_job.admitted_job(job, dry)
+            template = dry_spec['template']
+            dry_pod = {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': 'voice-go-check-' + self.fence.context['operation_id'][-32:],
+                       'namespace': 'voice-dev', 'labels': copy.deepcopy(template['metadata']['labels']),
+                       'ownerReferences': [{'apiVersion': 'batch/v1', 'kind': 'Job', 'name': job['metadata']['name'],
+                                             'uid': dry['metadata']['uid'], 'controller': True, 'blockOwnerDeletion': False}]},
+                       'spec': copy.deepcopy(template['spec'])}
+            self._guard(); admitted = self.client.call('create', '--dry-run=server', '-f', '-', '-o', 'json', body=dry_pod)
+            auth_user_candidate_probe.admitted_pod(dry_pod, admitted)
+            if admitted.get('metadata', {}).get('ownerReferences') != dry_pod['metadata']['ownerReferences']:
+                raise ValueError()
+            self._guard(); self.cut.bind_migration('go', self, self.root)
+            job_step = {'status': 'pending', 'nonce': secrets.token_hex(16), 'details_sha256': _hash(job)}
+            self._step('job', job_step)
+            self._guard(); self.cut.verify_migration_pending()
+            if (cohort_restore_journal.verify_go_role(self.cohort, self.metadata_phase, self.token, self.database) != clone or
+                    self.secret.verify() != secret_done['receipt']):
+                raise ValueError()
+            submitted = self.client.call('create', '-f', '-', '-o', 'json', body=job)
+            accepted = realtime_migration_job.admitted_job(job, submitted)
+            jm = submitted['metadata']; uid, rv = jm.get('uid'), jm.get('resourceVersion')
+            if any(not isinstance(x, str) or not x for x in (uid, rv)) or jm.get('annotations', {}).get('voice.io/source-sha') != self.fence.context['commit']:
+                raise ValueError()
+            job_step = job_step | {'status': 'owned', 'uid': uid, 'resourceVersion': rv}
+            self._step('job', job_step); deadline = time.monotonic() + 650
+            while time.monotonic() < deadline:
+                self._guard(); self.cut.verify_migration_running()
+                current = self.client.call('get', 'job', jm['name'], '-o', 'json')
+                if current.get('metadata', {}).get('uid') != uid or verify_writer_job(job, current) != accepted:
+                    raise ValueError()
+                conditions = current.get('status', {}).get('conditions', [])
+                if any(c.get('type') == 'Failed' and c.get('status') == 'True' for c in conditions):
+                    raise ValueError()
+                if any(c.get('type') == 'Complete' and c.get('status') == 'True' for c in conditions):
+                    if current.get('status', {}).get('active', 0) or current.get('status', {}).get('failed', 0): raise ValueError()
+                    pods = self.client.call('get', 'pods', '-o', 'json')['items']
+                    owned = [p for p in pods if any(o.get('controller') is True and o.get('kind') == 'Job' and o.get('uid') == uid
+                                                  for o in p.get('metadata', {}).get('ownerReferences', []))]
+                    if len(owned) != 1: raise ValueError()
+                    pod = owned[0]; identity = verify_writer_pod(job, current, pod, execution)
+                    statuses = pod['status']['containerStatuses']
+                    if pod['status'].get('phase') != 'Succeeded' or statuses[0].get('state', {}).get('terminated', {}).get('exitCode') != 0:
+                        raise ValueError()
+                    break
+                time.sleep(2)
+            else:
+                raise ValueError()
+            self._guard(); actual = self.metadata_phase._read(self.database, source['database_oid'], source['engine'],
+                                                               source['server_start'], role, engine_snapshot)
+            if actual.get('history') != [{'version': proof['plan']['to'], 'dirty': False}]: raise ValueError()
+            self.cut.verify_migration_running(); self._guard()
+            final_job = self.client.call('get', 'job', jm['name'], '-o', 'json')
+            final_pods = self.client.call('get', 'pods', '-o', 'json')['items']
+            final_owned = [p for p in final_pods if any(o.get('controller') is True and o.get('kind') == 'Job' and o.get('uid') == uid
+                                                       for o in p.get('metadata', {}).get('ownerReferences', []))]
+            if final_job != current or final_owned != [pod]: raise ValueError()
+            receipt = {'job_uid': uid, 'pod_uid': identity['uid'], 'container_id': statuses[0]['containerID'],
+                       'image_id': statuses[0]['imageID'], 'database_oid': source['database_oid'],
+                       'from': proof['plan']['from'], 'to': proof['plan']['to'], 'dirty': False}
+            self._step('job', job_step | {'status': 'done'}, receipt)
+            self.cut.finish_migration(); self._guard()
+            old = copy.deepcopy(self.marker); self._update(old, old | {'status': 'done'})
+            return copy.deepcopy(receipt)
+        except BaseException:
+            if pending:
+                self.poisoned = True
+                try: self.fence.uncertain('Go migration outcome uncertain')
+                except BaseException: pass
+            raise MigrationError('Go migration uncertain; retain fence' if pending else 'Go migration not admitted') from None
+
+    def cleanup(self):
+        """Remove only terminal owned objects, with UID/RV preconditions."""
+        started = False
+        try:
+            verify_writer_terminal(self, self.root)
+            for kind in ('job', 'configmap'):
+                self.cut.verify_migration_running(); self._guard()
+                config, job = self._objects(); intended = job if kind == 'job' else config
+                step_name = 'job' if kind == 'job' else 'config'
+                previous = copy.deepcopy(self.marker['steps'][step_name])
+                if previous['status'] != 'done': raise ValueError()
+                actual = self.client.call('get', kind, intended['metadata']['name'], '-o', 'json')
+                if kind == 'job':
+                    verify_writer_job(intended, actual)
+                    uid, rv = actual['metadata']['uid'], actual['metadata']['resourceVersion']
+                    if uid != previous['uid']: raise ValueError()
+                else:
+                    identity = _config_receipt(intended, actual)
+                    uid, rv = identity['uid'], identity['resourceVersion']
+                    if identity != previous['receipt']: raise ValueError()
+                started = True
+                self._step(step_name, previous | {'status': 'removing'})
+                self._guard()
+                prefix = '/apis/batch/v1/namespaces/voice-dev/jobs/' if kind == 'job' else '/api/v1/namespaces/voice-dev/configmaps/'
+                options = {'apiVersion': 'v1', 'kind': 'DeleteOptions', 'propagationPolicy': 'Foreground',
+                           'preconditions': {'uid': uid, 'resourceVersion': rv}}
+                self.client.call('delete', '--raw=' + prefix + intended['metadata']['name'], '-f', '-', body=options)
+                deadline = time.monotonic() + 60
+                while True:
+                    self._guard()
+                    remaining = self.client.call('get', kind, intended['metadata']['name'], '--ignore-not-found=true', '-o', 'json')
+                    pods = []
+                    if kind == 'job':
+                        rows = self.client.call('get', 'pods', '-o', 'json')['items']
+                        pods = [p for p in rows if any(o.get('controller') is True and o.get('kind') == 'Job' and o.get('uid') == uid
+                                                       for o in p.get('metadata', {}).get('ownerReferences', []))]
+                    if not remaining and not pods: break
+                    if remaining and remaining.get('metadata', {}).get('uid') != uid or time.monotonic() >= deadline:
+                        raise ValueError()
+                    time.sleep(1)
+                self._step(step_name, previous | {'status': 'removed'})
+            verify_writer_cleanup(self, self.root)
+            self.cut.accept_migration_cleanup()
+            return self.secret.remove()
+        except BaseException:
+            if started:
+                self.poisoned = True
+                try: self.fence.uncertain('Go migration cleanup outcome uncertain')
+                except BaseException: pass
+            raise MigrationError('Go cleanup uncertain; retain fence' if started else 'Go cleanup not admitted') from None
+
+
+def verify_writer_successor(phase, source_root):
+    """Reconstruct the owned ConfigMap and Job for the shared CUT observer."""
+    try:
+        if type(phase) is not Migration or Path(source_root) != phase.root:
+            raise ValueError()
+        phase._guard(); marker = copy.deepcopy(phase.marker)
+        if (not isinstance(marker, dict) or marker.get('status') not in ('active', 'done') or
+                marker.get('operation_id') != phase.fence.context['operation_id'] or
+                marker.get('source_sha') != phase.fence.context['commit'] or marker.get('nonce') != phase.invocation or
+                marker.get('input_sha256') != phase._input_hash() or not isinstance(marker.get('steps'), dict)):
+            raise ValueError()
+        config, job = phase._objects()
+        cm_step = marker['steps']['config']
+        if (set(cm_step) != {'status', 'nonce', 'details_sha256', 'receipt'} or cm_step['status'] not in ('done', 'removing', 'removed') or
+                not isinstance(cm_step['nonce'], str) or not re.fullmatch(r'[a-f0-9]{32}', cm_step['nonce']) or
+                cm_step['details_sha256'] != _hash(config)):
+            raise ValueError()
+        cm_receipt = cm_step['receipt']
+        if cm_step['status'] == 'done':
+            actual = phase.client.call('get', 'configmap', config['metadata']['name'], '-o', 'json')
+            if _config_receipt(config, actual) != cm_receipt: raise ValueError()
+        item = marker['steps'].get('job')
+        state = 'absent' if item is None else item.get('status')
+        if state not in ('absent', 'pending', 'owned', 'done', 'removing', 'removed'): raise ValueError()
+        uid = rv = job_nonce = terminal = None
+        if item is not None:
+            expected = {'status', 'nonce', 'details_sha256'}
+            if state in ('owned', 'done', 'removing', 'removed'): expected |= {'uid', 'resourceVersion'}
+            if state in ('done', 'removing', 'removed'): expected.add('receipt')
+            if (set(item) != expected or item['details_sha256'] != _hash(job) or
+                    not re.fullmatch(r'[a-f0-9]{32}', item['nonce'])):
+                raise ValueError()
+            job_nonce = item['nonce']
+            if state in ('owned', 'done', 'removing', 'removed'):
+                uid, rv = item['uid'], item['resourceVersion']
+                if any(not isinstance(x, str) or not x for x in (uid, rv)): raise ValueError()
+            if state in ('done', 'removing', 'removed'):
+                if item['receipt'].get('job_uid') != uid: raise ValueError()
+                terminal = _hash(item['receipt'])
+        execution = phase.input['execution']
+        phase._guard()
+        if phase.marker != marker: raise ValueError()
+        return {'configmap': {'authored': config, 'state': 'owned' if cm_step['status'] == 'done' else cm_step['status'],
+                              'uid': cm_receipt['uid'], 'resourceVersion': cm_receipt['resourceVersion']},
+                'job': {'authored': job, 'state': state, 'uid': uid, 'resourceVersion': rv},
+                'record': {'operation_id': marker['operation_id'], 'source_sha': marker['source_sha'],
+                           'nonce': marker['nonce'], 'job_nonce': job_nonce, 'terminal_sha256': terminal},
+                'execution': copy.deepcopy(execution)}
+    except BaseException:
+        raise MigrationError('writer migration successor unavailable') from None
+
+
+def _terminal_receipt(phase, marker):
+        step = marker['steps']['job']; receipt = step['receipt']; proof = phase.input['proof']
+        if (step['status'] not in ('done', 'removing', 'removed') or not isinstance(receipt, dict) or
+                set(receipt) != {'job_uid', 'pod_uid', 'container_id', 'image_id', 'database_oid', 'from', 'to', 'dirty'} or
+                receipt['job_uid'] != step['uid'] or receipt['database_oid'] != proof['source']['database_oid'] or
+                receipt['from'] != proof['plan']['from'] or receipt['to'] != proof['plan']['to'] or receipt['dirty'] is not False or
+                any(not isinstance(receipt[k], str) or not receipt[k] for k in ('pod_uid', 'container_id', 'image_id')) or
+                not receipt['image_id'].endswith(phase.input['execution']['platform_digest'])):
+            raise ValueError()
+        return copy.deepcopy(receipt)
+
+
+def verify_writer_terminal(phase, source_root):
+    try:
+        successor = verify_writer_successor(phase, source_root)
+        receipt = _terminal_receipt(phase, phase.marker)
+        if successor['record']['terminal_sha256'] != _hash(receipt): raise ValueError()
+        return receipt
+    except BaseException:
+        raise MigrationError('migration terminal receipt unavailable') from None
+
+
+def verify_writer_cleanup(phase, source_root):
+    try:
+        verify_writer_terminal(phase, source_root)
+        successor = verify_writer_successor(phase, source_root)
+        if successor['job']['state'] != 'removed' or successor['configmap']['state'] != 'removed':
+            raise ValueError()
+        return {'job': successor['job'], 'configmap': successor['configmap']}
+    except BaseException:
+        raise MigrationError('migration cleanup receipt unavailable') from None
+
+
+def verify_completed(phase):
+    """Verify the historical terminal record after all owned objects were removed."""
+    try:
+        if type(phase) is not Migration or phase.poisoned or phase.secret.poisoned or phase.secret._bound is not None:
+            raise ValueError()
+        phase.secret._guard(); row, _ = phase.secret._ledger(); marker = phase.marker
+        key = 'go-migration-' + phase.database; secret_key = 'go-migration-secret-' + phase.database
+        secret = phase.journal.state['steps'][secret_key]
+        if (not isinstance(marker, dict) or marker.get('status') != 'done' or marker.get('nonce') != phase.invocation or
+                marker.get('input_sha256') != phase._input_hash() or row.get('go_migrations', {}).get(phase.database) != marker or
+                phase.journal.state['steps'].get(key) != marker or marker['steps']['job']['status'] != 'removed' or
+                marker['steps']['config']['status'] != 'removed' or secret.get('status') != 'removed' or
+                row.get('go_migration_secrets', {}).get(phase.database) != secret or secret['receipt'] != phase.input['secret'] or
+                secret['clone_receipt_sha256'] != _hash(phase.input['clone'])):
+            raise ValueError()
+        receipt = _terminal_receipt(phase, marker)
+        phase.secret._guard()
+        if phase.secret._ledger()[0].get('go_migrations', {}).get(phase.database) != marker:
+            raise ValueError()
+        return receipt
+    except BaseException:
+        raise MigrationError('completed Go migration unavailable') from None
 
 
 def render(operation, source_sha, database, files, node, route):

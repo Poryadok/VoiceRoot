@@ -27,6 +27,15 @@ class RenderTest(unittest.TestCase):
         with self.assertRaises(migration.MigrationError):
             migration._secret('media-c1-' + 'a' * 32, 'chat_db', credential | {'sslmode': 'verify-full'}, '10.0.0.1')
 
+    def test_private_kubectl_empty_result_only_for_fixed_absence_lookup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'kubectl'; executable.write_text('#!/bin/sh\nexit 0\n'); executable.chmod(0o700)
+            with mock.patch.dict(os.environ, {'PATH': directory + ':' + os.environ['PATH']}):
+                name = 'voice-go-input-chat-' + 'a' * 32
+                self.assertEqual(migration._private_kube(['get', 'secret', name, '--ignore-not-found=true', '-o', 'json']), {})
+                with self.assertRaises(migration.MigrationError):
+                    migration._private_kube(['get', 'secret', name, '-o', 'json'])
+
     def test_secret_readback_checks_uid_rv_type_immutable_and_exact_private_bytes(self):
         credential = {'role': 'voice', 'sslmode': 'disable', 'password': 'fixture-password'}
         intended = migration._secret('media-c1-' + 'a' * 32, 'chat_db', credential, '10.0.0.1')
@@ -250,15 +259,21 @@ class SecretSnapshotTest(unittest.TestCase):
         client.journal = self.journal; self.base.ledger.client = client
         self.cut = SimpleNamespace(verify_drained=lambda: None)
         self.phase = migration.SecretSnapshot(self.journal, self.base.fence, client, self.base.lock, 'ns',
-                                              object(), object(), self.cut, 'token', 'chat_db')
+                                              SimpleNamespace(source_root=Path('/fixture')), object(), self.cut, 'token', 'chat_db')
         self.credential = {'role': 'voice', 'sslmode': 'disable', 'host': 'voice-postgres',
                            'password': 'fixture-secret', 'references': {'url': {'uid': 's', 'resource_version': '1'}}}
         self.safe = {k:v for k,v in self.credential.items() if k != 'password'}
         self.proof = {'source': {'engine': {'service_ip': '10.0.0.1'}, 'database_oid': 1, 'server_start': 'start'},
-                      'credential': self.safe, 'metadata_receipt_sha256': 'd' * 64}
+                      'credential': self.safe, 'metadata_receipt_sha256': 'd' * 64, 'plan': {'from': 1, 'to': 2}}
+        self.clone = {'database': 'chat_db', 'role': 'voice', 'from': 1, 'to': 2,
+                      'source_sha': self.base.context['commit'], 'snapshot_id': 'capture-' + 'a' * 32,
+                      'manifest_sha256': 'b' * 64, 'migration_roles_sha256': 'c' * 64,
+                      'scope': 'isolated-clone-migration-login-only'}
         self.created = None
         self.patches = [mock.patch.object(migration.media_operation_guard, 'verify'),
                         mock.patch.object(migration, 'qualified_plan', return_value=self.proof),
+                        mock.patch.object(migration.cohort_restore_journal, 'verify_go_role', create=True,
+                                          return_value=self.clone),
                         mock.patch.object(migration, '_credential', return_value=self.credential),
                         mock.patch.object(migration, '_login', return_value=self.safe)]
         for patch in self.patches: patch.start(); self.addCleanup(patch.stop)
@@ -301,3 +316,101 @@ class SecretSnapshotTest(unittest.TestCase):
         with mock.patch.object(migration, '_private_kube', side_effect=injected):
             with self.assertRaises(migration.MigrationError): self.phase.create()
         self.assertNotIn('go_migration_secrets', self.base.ledger.row)
+
+    def test_mismatched_clone_role_refused_before_kubernetes_effect(self):
+        clone = self.clone | {'role': 'other'}
+        with mock.patch.object(migration.cohort_restore_journal, 'verify_go_role', return_value=clone, create=True), \
+             mock.patch.object(migration, '_private_kube') as transport:
+            with self.assertRaises(migration.MigrationError): self.phase.create()
+            transport.assert_not_called()
+        self.assertNotIn('go_migration_secrets', self.base.ledger.row)
+
+    def test_job_journal_rejects_changed_input_after_reservation(self):
+        with mock.patch.object(self.phase, 'verify', return_value={'uid': 'fixture'}):
+            job = migration.Migration(self.phase)
+            job.input = {'files': {'000001_init.up.sql': b'SELECT 1;'}, 'node': {'name': 'node'}}
+            marker = {'status': 'active', 'operation_id': self.base.context['operation_id'],
+                      'source_sha': self.base.context['commit'], 'nonce': job.invocation,
+                      'input_sha256': job._input_hash(), 'steps': {}}
+            job._update(None, marker)
+            self.assertEqual(self.base.ledger.row['go_migrations']['chat_db'], marker)
+            job.input['files']['000001_init.up.sql'] = b'SELECT 2;'
+            with self.assertRaises(migration.MigrationError): job._guard()
+
+    def test_job_flow_real_journal_fence_synthetic_boundaries(self):
+        files = {'000001_init.up.sql': b'SELECT 1;', '000002_next.up.sql': b'SELECT 2;'}
+        source = self.proof['source']
+        secret_receipt = {'name': 'voice-go-input-chat-' + 'a' * 32, 'uid': 'secret-uid', 'resourceVersion': '7'}
+        secret_done = {'status': 'done', 'receipt': secret_receipt, 'clone_receipt_sha256': migration._hash(self.clone)}
+        self.phase._bound = (secret_done, self.credential, source)
+        self.journal.state['steps']['go-migration-secret-chat_db'] = copy.deepcopy(secret_done); self.journal.save()
+        self.base.ledger.row['go_migration_secrets'] = {'chat_db': copy.deepcopy(secret_done)}
+        plan = {'engine': 'golang-migrate', 'from': 1, 'to': 2, 'files': {'fixture': 'a' * 64}}
+        proof = self.proof | {'plan': plan, 'database': 'chat_db'}
+        clone = self.clone
+        self.phase.metadata_phase.inventory = SimpleNamespace(_admin_role=lambda: 'postgres')
+        self.phase.metadata_phase.package = SimpleNamespace(verify_current=lambda token: {'nodes': [
+            {'name': 'node', 'uid': 'node-uid', 'hostname': 'node', 'architecture': 'amd64'}]})
+        values = iter([{'history': [{'version': 1, 'dirty': False}]}, {'history': [{'version': 2, 'dirty': False}]}])
+        self.phase.metadata_phase._read = lambda *args: next(values)
+        before = {'history': [{'version': 1, 'dirty': False}]}
+        observed = {'databases': ['chat_db'], 'metadata': {'catalog': {'chat_db': before},
+                    'migrations': {'chat_db': plan}}}
+        state = {'cm': None, 'job': None, 'pod': None, 'bound': False, 'finished': False}
+        def call(*args, body=None):
+            if args[:2] in (('get', 'configmaps'), ('get', 'jobs')): return {'items': []}
+            if args[:2] == ('get', 'configmap'): return state['cm']
+            if args[:2] == ('get', 'job'): return state['job']
+            if args[:2] == ('get', 'pods'): return {'items': [state['pod']] if state['pod'] else []}
+            if args[0] == 'delete':
+                if '/jobs/' in args[1]: state['job'] = state['pod'] = None
+                if '/configmaps/' in args[1]: state['cm'] = None
+                return {}
+            if args[0] == 'create' and '--dry-run=server' in args:
+                if body['kind'] == 'Pod': return copy.deepcopy(body)
+                return dict(body, metadata=body['metadata'] | {'uid': 'dry-uid', 'resourceVersion': '1'})
+            if args[0] == 'create' and body['kind'] == 'ConfigMap':
+                state['cm'] = dict(body, metadata=body['metadata'] | {'uid': 'cm-uid', 'resourceVersion': '2'})
+                return state['cm']
+            if args[0] == 'create' and body['kind'] == 'Job':
+                state['job'] = dict(body, metadata=body['metadata'] | {'uid': 'job-uid', 'resourceVersion': '3'},
+                                    status={'conditions': [{'type': 'Complete', 'status': 'True'}]})
+                state['pod'] = {'metadata': {'uid': 'pod-uid', 'ownerReferences': [{'kind': 'Job', 'uid': 'job-uid', 'controller': True}]},
+                                'status': {'phase': 'Succeeded', 'containerStatuses': [{'containerID': 'cid',
+                                'imageID': 'containerd://' + migration.realtime_migration_job.PLATFORMS['amd64'],
+                                'state': {'terminated': {'exitCode': 0}}}]}}
+                return state['job']
+            raise AssertionError(args)
+        self.phase.client.call = call
+        def bind(kind, phase, root):
+            self.assertEqual(kind, 'go')
+            self.assertEqual(migration.verify_writer_successor(phase, root)['job']['state'], 'absent')
+            state['bound'] = True
+        self.cut.bind_migration = bind
+        self.cut.verify_migration_pending = lambda: self.assertTrue(state['bound'])
+        self.cut.verify_migration_running = lambda: self.assertTrue(state['bound'])
+        self.cut.finish_migration = lambda: state.update(finished=True)
+        self.cut.accept_migration_cleanup = lambda: state.update(bound=False)
+        with mock.patch.object(self.phase, 'verify', return_value=secret_receipt), \
+             mock.patch.object(migration, 'qualified_plan', return_value=proof), \
+             mock.patch.object(migration.cohort_restore_journal, 'verify_go_role', return_value=clone, create=True), \
+             mock.patch.object(migration.metadata, 'verify_completed', return_value=observed), \
+             mock.patch.object(migration.restore, 'migration_inventory', return_value={'chat_db': files}), \
+             mock.patch.object(migration.schema, 'kube_engine_snapshot', return_value=lambda: source['engine']), \
+             mock.patch.object(migration.realtime_migration_job, 'admitted_job', side_effect=lambda expected, actual: expected['spec']), \
+             mock.patch.object(migration.auth_user_candidate_probe, 'admitted_pod'), \
+             mock.patch.object(migration, 'verify_writer_job', side_effect=lambda expected, actual: expected['spec']), \
+             mock.patch.object(migration, 'verify_writer_pod', return_value={'uid': 'pod-uid', 'ip': '10.0.0.4'}), \
+             mock.patch.object(migration, '_private_kube', return_value={}):
+            phase = migration.Migration(self.phase)
+            result = phase.run()
+            self.assertTrue(state['bound'] and state['finished'])
+            self.assertEqual((result['from'], result['to'], result['dirty']), (1, 2, False))
+            self.assertEqual(self.base.ledger.row['go_migrations']['chat_db']['status'], 'done')
+            self.assertNotIn('fixture-secret', str(self.journal.state) + str(self.base.ledger.row))
+            self.assertEqual(phase.cleanup(), secret_receipt)
+            self.assertEqual(self.base.ledger.row['go_migrations']['chat_db']['steps']['job']['status'], 'removed')
+            self.assertEqual(self.base.ledger.row['go_migration_secrets']['chat_db']['status'], 'removed')
+            self.assertEqual(migration.verify_completed(phase), result)
+            self.base.ledger.row['go_migrations']['chat_db']['steps']['job']['receipt']['to'] = 99
+            with self.assertRaises(migration.MigrationError): migration.verify_completed(phase)
