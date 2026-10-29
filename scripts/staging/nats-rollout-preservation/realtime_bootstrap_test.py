@@ -10,6 +10,19 @@ import realtime_bootstrap as bootstrap
 
 
 class CatalogTests(unittest.TestCase):
+    def test_parent_drift_blocks_each_effect_after_pending_before_submit(self):
+        import sys
+        from unittest.mock import Mock
+        parent={'fixture':'protected'};module=Mock();module.load_capture.return_value={'changed':True}
+        for name,prior in (('role',()),('database',('role',)),('secret',('role','database'))):
+            state={'status':'RUNNING','steps':{k:{'status':'DONE'} for k in prior},
+                'plan':{'schema':'voice-staging-realtime-bootstrap-v2','actual_images':{'a':'b'},
+                        'prerequisites_sha256':bootstrap.digest(parent)}}
+            submit=Mock();observe=Mock(return_value={'before':True});session=Mock()
+            with self.subTest(effect=name),patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(bootstrap,'save'):
+                with self.assertRaisesRegex(bootstrap.Blocked,'parent_changed'):
+                    bootstrap._effect(session,Path('/unused'),state,name,{'before':True},'a'*64,submit,observe,lambda _:True)
+            self.assertEqual(state['steps'][name]['status'],'PENDING');submit.assert_not_called()
     def test_captured_parent_readonly_transport_is_fixed_and_one_use(self):
         import commands, resource_claim, resource_claim_test, sys
         from unittest.mock import Mock
@@ -70,6 +83,12 @@ class CatalogTests(unittest.TestCase):
                 'secret': {'uid': 'secret-uid', 'resourceVersion': '12', 'data_sha256': '1' * 64},
                 'active_marker_sha256': '2' * 64}
         bootstrap.validate_plan(plan, session)
+        parented={**plan,'schema':'voice-staging-realtime-bootstrap-v2','prerequisites_sha256':'3'*64}
+        bootstrap.validate_plan(parented,session)
+        for invalid in ({**parented,'prerequisites_sha256':'bad'},
+                        {**plan,'prerequisites_sha256':'3'*64},
+                        {k:v for k,v in parented.items() if k!='prerequisites_sha256'}):
+            with self.subTest(parented=invalid),self.assertRaises(bootstrap.Blocked):bootstrap.validate_plan(invalid,session)
         for changed in ({**plan, 'operation': '111111111111'}, {**plan, 'extra': True},
                         {**plan, 'credential_sha256': 'bad'}, {**plan, 'source_sha': 'c' * 40},
                         {**plan, 'actual_images': {'voice-realtime/realtime': 'latest'}}):
@@ -173,7 +192,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_lost_effect_response_stays_pending_and_is_not_replayed(self):
         session = SimpleNamespace(check=lambda: None)
-        state = {'status': 'RUNNING', 'steps': {}}
+        state = {'status': 'RUNNING', 'steps': {},'plan':{'schema':'voice-staging-realtime-bootstrap-v1'}}
         calls = []
         def effect():
             calls.append('submitted')

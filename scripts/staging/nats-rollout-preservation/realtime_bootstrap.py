@@ -18,13 +18,17 @@ def validate_plan(plan, session):
               'source_files_sha256', 'source_authority_sha256', 'execution_sha256', 'stage_sha256',
               'credential_sha256', 'actual_images', 'namespace_uid', 'postgres',
               'secret', 'active_marker_sha256'}
+    parented=isinstance(plan,dict) and plan.get('schema')=='voice-staging-realtime-bootstrap-v2'
+    if parented:fields.add('prerequisites_sha256')
     def nonempty(value):
         return isinstance(value, str) and bool(value)
     def meta(row, fields):
         return type(row) is dict and set(row) == fields and all(nonempty(v) for v in row.values())
     try:
         if (type(plan) is not dict or set(plan) != fields
-            or plan['schema'] != 'voice-staging-realtime-bootstrap-v1'
+            or plan['schema'] not in ('voice-staging-realtime-bootstrap-v1','voice-staging-realtime-bootstrap-v2')
+            or parented and (not isinstance(plan.get('prerequisites_sha256'),str)
+                or not re.fullmatch(r'[a-f0-9]{64}',plan['prerequisites_sha256']))
             or plan['operation'] != session.operation or plan['context'] != session.context
             or plan['helper_sha256'] != session.helper
             or not re.fullmatch(r'[a-f0-9]{12}', plan['operation'])
@@ -513,6 +517,11 @@ def _effect(session, path, state, name, before, request_sha256, submit, observe,
     save(path, state)
     session.check()
     if observe() != before: raise Blocked('realtime_bootstrap_before_changed')
+    if state['plan'].get('schema')=='voice-staging-realtime-bootstrap-v2':
+        import staging_prerequisites
+        parent=staging_prerequisites.load_capture(session,actual=state['plan']['actual_images'])
+        if digest(parent)!=state['plan']['prerequisites_sha256']:raise Blocked('realtime_bootstrap_parent_changed')
+        session.check()
     submit()
     session.check()
     after = observe()
@@ -540,6 +549,10 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
             or execution.get('head_sha') != approved['source_sha']):
             raise Blocked('realtime_bootstrap_authority_invalid')
         session.check()
+        parent=None
+        if session.check().get('phase')=='prerequisites-captured':
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(session,actual=stage.old_images)
         _verify_source_capture(session, approved, execution)
         helper_key = 'nats-rollout-preservation/realtime_bootstrap.py'
         helper_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
@@ -568,6 +581,9 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
                 'stage_sha256': digest(view), 'credential_sha256': hashlib.sha256(password).hexdigest(),
                 'actual_images': copy.deepcopy(stage.old_images), 'namespace_uid': namespace,
                 'postgres': pg, 'secret': _secret_identity(secret), 'active_marker_sha256': digest(view['marker'])}
+        if parent is not None:
+            plan['schema']='voice-staging-realtime-bootstrap-v2'
+            plan['prerequisites_sha256']=digest(parent)
         validate_plan(plan, session)
         base = _create_custody(guard.ROOT / 'installed', session.operation, password, secret)
         save(base / 'authority.json', {'approved': approved, 'execution': execution})
@@ -668,6 +684,10 @@ def validate_historical_checkpoint(checkpoint, rollout_pass_state):
         original = SimpleNamespace(context=binding['context'], operation=binding['operation'], helper=binding['helper_sha256'])
         plan, receipt, _, _ = _records(checkpoint, original)
         if rollout_pass_state['target'].get('realtime_bootstrap_sha256') != digest(receipt): raise ValueError()
+        if plan['schema']=='voice-staging-realtime-bootstrap-v2':
+            import staging_prerequisites
+            historical=staging_prerequisites.validate_historical_capture(original.operation)
+            if digest(historical)!=plan['prerequisites_sha256']:raise ValueError()
         return copy.deepcopy(plan), copy.deepcopy(receipt)
     except Exception:
         raise Blocked('realtime_bootstrap_historical_invalid') from None
@@ -690,6 +710,10 @@ def _load_completed(session, actual, rollout_target):
     view = json.loads(_read_private(base / 'stage.json'))
     password = _read_private(base / 'credential', limit=128)
     plan, receipt, final, initial_binding = _records(state, session)
+    if plan['schema']=='voice-staging-realtime-bootstrap-v2':
+        import staging_prerequisites
+        parent=staging_prerequisites.load_capture(session,actual=actual,rollout_target=rollout_target)
+        if digest(parent)!=plan['prerequisites_sha256']:raise Blocked('realtime_bootstrap_parent_changed')
     current = session.binding(); row = session.check()
     if row.get('phase') == 'realtime-bootstrap':
         if rollout_target is not None or current != initial_binding: raise Blocked('realtime_bootstrap_fence_changed')

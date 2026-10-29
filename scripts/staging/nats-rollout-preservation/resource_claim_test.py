@@ -49,6 +49,9 @@ class ResourceTests(unittest.TestCase):
             session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','deployment','voice-web','-o','json'])
             session.check(['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json'])
             session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','create','--dry-run=server','-f','/dev/stdin','-o','json'])
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','pods','-l','app=voice-nats-pvc-candidate','-o','json'])
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','--raw',
+                '/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-abc:8222/proxy/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048'])
             for args in (['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','scale','deployment','voice-web'],
                          ['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','voice-pod','--','sh'],
                          ['docker','run','anything'],['sh','-c','anything'],
@@ -56,6 +59,7 @@ class ResourceTests(unittest.TestCase):
                          ['kubectl','--namespace','voice-staging','get','pods','-o','json','--kubeconfig','/tmp/other'],
                          ['kubectl','--namespace','voice-staging','get','pods','-o','json','-A'],
                          ['kubectl','--namespace','voice-staging','get','--raw','/api/v1/namespaces/other/secrets'],
+                         ['kubectl','--namespace','voice-staging','get','pods','-l','app=other','-o','json'],
                          ['kubectl','--namespace','voice-staging','apply','--dry-run=server','--force','-f','/dev/stdin','-o','json']):
                 with self.subTest(phase=phase,args=args),self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):
                     session.check(args)
@@ -91,12 +95,42 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(journal.row['phase'],'prerequisites-captured')
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
 
+    def test_typed_prerequisite_successors_preserve_parent_binding(self):
+        for mode in ('cold','existing'):
+            session,current,journal=self.fixture();session.admit(start=True)
+            before=copy.deepcopy(current['observed']['images']);after=dict(before,**{'voice-p3-principal-jwks/jwks':'pinned'})
+            parent={'actual_before':before,'actual_after':after};parent_hash=claim.digest(parent)
+            journal.row.update(phase='prerequisites-captured',target_sha256=parent_hash);session.expected_target=parent_hash
+            prerequisites=Mock();prerequisites.load_capture.return_value=parent
+            realtime=Mock();existing=Mock();receipt={'typed':'receipt','prerequisites_sha256':parent_hash}
+            realtime.load_completed.return_value=receipt;existing.load_existing.return_value=receipt
+            target={'tag':context()['commit'],'images':context()['images'],'prerequisites_sha256':parent_hash,
+                'realtime_bootstrap_sha256':claim.digest(receipt)}
+            with patch.dict(sys.modules,{'staging_prerequisites':prerequisites,'realtime_bootstrap':realtime,
+                                        'realtime_bootstrap_existing':existing}):
+                if mode=='cold':
+                    plan={'actual_images':after,'prerequisites_sha256':parent_hash};realtime.load_plan.return_value=plan
+                    session.bind_realtime_bootstrap(plan,after)
+                    with self.assertRaisesRegex(RuntimeError,'capture_changed'):
+                        session.advance_realtime_bootstrap({k:v for k,v in target.items() if k!='prerequisites_sha256'},after)
+                    result=session.advance_realtime_bootstrap(target,after)
+                else:
+                    with self.assertRaisesRegex(RuntimeError,'target_changed'):
+                        session.advance_prerequisites_target({k:v for k,v in target.items() if k!='prerequisites_sha256'},after)
+                    result=session.advance_prerequisites_target(target,after)
+                self.assertEqual(result['target_sha256'],claim.digest(target));self.assertEqual(journal.row['phase'],'prepare')
+
     def test_realtime_bootstrap_requires_typed_transition_and_exact_receipt(self):
         session,current,journal=self.fixture();session.admit(start=True)
         actual=current['observed']['images'];plan={'actual_images':actual,'fixture':'validated separately'}
         receipt={'fixture':'root validated'}
-        module=Mock();module.load_completed.return_value=receipt
+        module=Mock();module.load_completed.return_value=receipt;module.load_plan.return_value={}
         with patch.dict(sys.modules,{'realtime_bootstrap':module}):
+            before=copy.deepcopy(journal.row)
+            with self.assertRaisesRegex(RuntimeError,'baseline_changed'):
+                session.bind_realtime_bootstrap({'actual_images':actual,'schema':'voice-staging-realtime-bootstrap-v2',
+                    'prerequisites_sha256':'0'*64},actual)
+            self.assertEqual(journal.row,before)
             first=session.bind_realtime_bootstrap(plan,actual)
             self.assertEqual(first['target_sha256'],claim.digest(plan))
             self.assertEqual(journal.row['phase'],'realtime-bootstrap')

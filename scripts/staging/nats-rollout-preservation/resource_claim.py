@@ -175,7 +175,10 @@ class Session:
                 if args[:len(prefix)+1]!=prefix+['get']:return False
                 tail=args[len(prefix)+1:]
                 if len(tail)==2 and tail[0]=='--raw':
-                    return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1]))
+                    return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1])
+                        or re.fullmatch(r'/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-[a-z0-9-]{1,100}:8222/proxy/jsz\?accounts=true&streams=true&consumers=true&config=true&limit=2048',tail[1]))
+                if len(tail)==5:
+                    return tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
                 if len(tail) not in (3,4) or tail[-2]!='-o':return False
                 if not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
                 if len(tail)==4 and not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',tail[1]):return False
@@ -185,7 +188,9 @@ class Session:
                 from stage_runtime import FENCE_TEMPLATE
                 return output in ('go-template='+IMAGE_TEMPLATE,'go-template='+FENCE_TEMPLATE)
             is_get=any(safe_get(prefix) for prefix in prefixes)
-            if args!=decode and not is_dryrun and not is_get:
+            import actor_root
+            actor_read=prefixes[0]+list(actor_root.STORY_SCHEMA_ARGS)
+            if args!=decode and args!=actor_read and not is_dryrun and not is_get:
                 raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
         # stage guards own those queries. No workload fence/apply/cleanup may
@@ -241,10 +246,18 @@ class Session:
         import realtime_bootstrap
         row=self.check();card=self.authority();observed=card.get('observed',{})
         realtime_bootstrap.validate_plan(plan,self)
-        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
-            or plan.get('actual_images')!=actual or observed.get('state')!='known'
+        parent=None
+        if row.get('phase')=='prerequisites-captured':
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(self,actual=actual)
+            if plan.get('prerequisites_sha256')!=digest(parent):raise RuntimeError('staging_prerequisites_capture_changed')
+        elif (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+              or 'prerequisites_sha256' in plan or plan.get('schema')=='voice-staging-realtime-bootstrap-v2'):
+            raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
+        if (plan.get('actual_images')!=actual or observed.get('state')!='known'
             or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
-            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual):
+            or observed.get('operation')!=card.get('operation',0)-1
+            or observed.get('images')!=(parent['actual_before'] if parent is not None else actual)):
             raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
         if self.check()!=row or self.authority()!=card:
             raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
@@ -257,15 +270,43 @@ class Session:
         row=self.check();card=self.authority();observed=card.get('observed',{})
         if row.get('phase')!='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_phase_invalid')
         receipt=realtime_bootstrap.load_completed(self,actual=actual)
+        plan=realtime_bootstrap.load_plan(self)
+        if not isinstance(target,dict) or not isinstance(plan,dict):raise RuntimeError('staging_realtime_bootstrap_target_changed')
+        parent=None
+        if 'prerequisites_sha256' in plan:
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(self,actual=actual)
+            if target.get('prerequisites_sha256')!=plan['prerequisites_sha256'] or plan['prerequisites_sha256']!=digest(parent):
+                raise RuntimeError('staging_prerequisites_capture_changed')
+        elif 'prerequisites_sha256' in target:raise RuntimeError('staging_prerequisites_capture_changed')
         if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
             or target.get('images')!=self.context['images']
             or target.get('realtime_bootstrap_sha256')!=digest(receipt)
             or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
             or observed.get('window')!=self.context['window']
-            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual):
+            or observed.get('operation')!=card.get('operation',0)-1
+            or observed.get('images')!=(parent['actual_before'] if parent is not None else actual)):
             raise RuntimeError('staging_realtime_bootstrap_target_changed')
         if self.check()!=row or self.authority()!=card:
             raise RuntimeError('staging_realtime_bootstrap_target_changed')
+        row.update(phase='prepare',target_sha256=digest(target))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
+    def advance_prerequisites_target(self,target,actual):
+        import staging_prerequisites,realtime_bootstrap_existing
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        if row.get('phase')!='prerequisites-captured':raise RuntimeError('staging_prerequisites_phase_invalid')
+        parent=staging_prerequisites.load_capture(self,actual=actual)
+        receipt=realtime_bootstrap_existing.load_existing(self,actual=actual)
+        if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
+            or not isinstance(receipt,dict) or receipt.get('prerequisites_sha256')!=digest(parent)
+            or target.get('images')!=self.context['images'] or target.get('prerequisites_sha256')!=digest(parent)
+            or target.get('realtime_bootstrap_sha256')!=digest(receipt) or observed.get('state')!='known'
+            or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=parent['actual_before']):
+            raise RuntimeError('staging_prerequisites_target_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_prerequisites_target_changed')
         row.update(phase='prepare',target_sha256=digest(target))
         self.journal.save(row);self.expected_target=row['target_sha256']
         return self.binding()
