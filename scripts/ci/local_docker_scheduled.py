@@ -9,8 +9,8 @@ from local_heavy_slots import acquire
 
 class ScheduledRun:
     @classmethod
-    def start(cls, checkout, slot_directory, engine, timeout):
-        lease = acquire(slot_directory, timeout)
+    def start(cls, checkout, slot_directory, engine, timeout, capacity=2):
+        lease = acquire(slot_directory, timeout, capacity=capacity)
         try:
             run = OwnedRun.create(checkout, engine)
         except BaseException:

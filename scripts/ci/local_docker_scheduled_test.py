@@ -34,6 +34,19 @@ class ScheduledRunTests(unittest.TestCase):
         two.close()
         self.assertNotIn(('volume', second), self.engine.resources)
 
+    def test_configured_capacity_is_enforced_through_owned_cleanup(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        resource = one.run.create_resource('network')
+        with self.assertRaises(TimeoutError):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        with self.assertRaisesRegex(ValueError, 'capacity'):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=2)
+        one.close()
+        self.assertNotIn(('network', resource), self.engine.resources)
+        later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        later.close()
+
     def test_body_failure_cleans_owned_resources_before_releasing_slot(self):
         with self.assertRaisesRegex(RuntimeError, 'body failed'):
             with ScheduledRun.start(self.root, self.slots, self.engine, 0) as run:

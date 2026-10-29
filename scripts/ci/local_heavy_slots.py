@@ -3,6 +3,7 @@ import errno
 import math
 import os
 from pathlib import Path
+import re
 import stat
 import time
 import uuid
@@ -76,8 +77,60 @@ def _try_lock(descriptor):
         return False
 
 
-def acquire(directory, timeout):
-    """Acquire one of two host-shared slots or fail without starting work.
+def _configure(directory, capacity, deadline):
+    path = directory / 'capacity.lock'
+    flags = os.O_RDWR | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    try:
+        descriptor = os.open(path, flags | os.O_CREAT | os.O_EXCL, 0o600)
+        created = True
+    except FileExistsError:
+        descriptor = os.open(path, flags)
+        created = False
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode) or path.is_symlink():
+            raise ValueError('capacity lock must be a regular file')
+        if created:
+            if os.write(descriptor, b'\0') != 1:
+                raise OSError('short capacity lock write')
+            os.fsync(descriptor)
+        else:
+            while os.fstat(descriptor).st_size == 0:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError('capacity lock initialization incomplete')
+                time.sleep(min(0.05, remaining))
+        while not _try_lock(descriptor):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError('local heavy CI capacity configuration is locked')
+            time.sleep(min(0.05, remaining))
+        for existing in directory.glob('heavy-*.lock'):
+            match = re.fullmatch(r'heavy-(0|[1-9][0-9]*)\.lock', existing.name)
+            if not match or int(match.group(1)) >= capacity:
+                raise ValueError('capacity would hide an existing slot')
+        config = directory / 'capacity'
+        if config.is_symlink():
+            raise ValueError('capacity configuration must be a regular file')
+        try:
+            config_fd = os.open(config, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                                getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+        except FileExistsError:
+            if not config.is_file() or config.read_bytes() != (str(capacity) + '\n').encode('ascii'):
+                raise ValueError('capacity configuration differs or is invalid')
+        else:
+            try:
+                value = (str(capacity) + '\n').encode('ascii')
+                if os.write(config_fd, value) != len(value):
+                    raise OSError('short capacity configuration write')
+                os.fsync(config_fd)
+            finally:
+                os.close(config_fd)
+    finally:
+        os.close(descriptor)
+
+
+def acquire(directory, timeout, capacity=2):
+    """Acquire a configured host-shared slot or fail without starting work.
 
     Callers must use the same trusted host-local directory and hold the returned
     lease through their complete resource cleanup. A crashed process leaves its
@@ -86,13 +139,16 @@ def acquire(directory, timeout):
     """
     if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout < 0:
         raise ValueError('timeout must be finite and nonnegative')
+    if type(capacity) is not int or not 1 <= capacity <= 64:
+        raise ValueError('capacity must be an integer between 1 and 64')
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     if not directory.is_dir() or directory.is_symlink():
         raise ValueError('slot directory must be a real directory')
     deadline = time.monotonic() + timeout
+    _configure(directory, capacity, deadline)
     while True:
-        for slot in range(2):
+        for slot in range(capacity):
             path = directory / ('heavy-' + str(slot) + '.lock')
             flags = os.O_RDWR | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
             try:
@@ -119,5 +175,5 @@ def acquire(directory, timeout):
             os.close(descriptor)
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise TimeoutError('both local heavy CI slots are occupied')
+            raise TimeoutError('all local heavy CI slots are occupied')
         time.sleep(min(0.05, remaining))

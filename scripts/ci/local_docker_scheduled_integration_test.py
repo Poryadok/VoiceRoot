@@ -67,6 +67,20 @@ def main():
                 raise
         verify_live(owners[1].run)
         verify_live(sentinel)
+        limited = ScheduledRun.start(checkout, checkout / 'one-slot', engine, 0, capacity=1)
+        try:
+            fixture(limited.run, image)
+            try:
+                unexpected = ScheduledRun.start(checkout, checkout / 'one-slot', engine, 0, capacity=1)
+            except TimeoutError:
+                pass
+            else:
+                unexpected.close()
+                raise RuntimeError('one-slot capacity allowed a second fixture')
+            verify_live(owners[1].run)
+            verify_live(sentinel)
+        finally:
+            limited.close()
         print('scheduled cleanup preserved the second fixture and sentinel; failure released its cleaned slot')
         print('ownership journals:', checkout)
     finally:
