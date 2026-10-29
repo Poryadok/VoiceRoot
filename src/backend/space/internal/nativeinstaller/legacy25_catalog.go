@@ -19,8 +19,8 @@ import (
 //go:embed legacy25_catalog.sql
 var legacy25CatalogSQL string
 
-const legacy25CatalogPG16SHA256 = "ab30b1233f3e0ff3e0d1b9f0644d58f6452052ab325b94f3a789648269797c7e"
-const legacy25CatalogSQLSHA256 = "ca25d6fb262a715d25e5ee33dbbe4ed2dda4df9aee21a3dd8f6663f104f960b2"
+const legacy25CatalogPG16SHA256 = "44b35397753b74dd616e3c87e60f8e61f1e37a93eb69361923767170a01193d5"
+const legacy25CatalogSQLSHA256 = "9e4b711ace946e1b60679ffc7d600289c2ef2cdba09925dbb9725df52310bcba"
 
 func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error) {
 	if ctx == nil || conn == nil {

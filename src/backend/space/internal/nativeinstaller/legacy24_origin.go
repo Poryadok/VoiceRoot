@@ -34,6 +34,7 @@ const legacy24AccessSQL = `SELECT jsonb_build_object(
  'settings',(SELECT jsonb_agg(jsonb_build_array(CASE WHEN s.setrole=0 THEN '' ELSE pg_get_userbyid(s.setrole) END,s.setconfig) ORDER BY s.setrole) FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase WHERE d.datname='space_db'),
  'schema',(SELECT jsonb_build_array(n.nspname,pg_get_userbyid(n.nspowner),n.nspacl) FROM pg_namespace n WHERE n.nspname='public'),
  'relations',(SELECT jsonb_agg(jsonb_build_array(c.relname,pg_get_userbyid(c.relowner),c.relacl) ORDER BY c.relname) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'),
+ 'columns',(SELECT jsonb_agg(jsonb_build_array(c.relname,a.attname,a.attacl) ORDER BY c.relname,a.attnum) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND a.attnum>0 AND NOT a.attisdropped),
  'sequences',(SELECT jsonb_agg(jsonb_build_array(s.schemaname,s.sequencename,s.sequenceowner,s.data_type::text,s.start_value,s.min_value,s.max_value,s.increment_by,s.cycle,s.cache_size,s.last_value) ORDER BY s.schemaname,s.sequencename) FROM pg_sequences s WHERE s.schemaname='public'),
  'functions',(SELECT jsonb_agg(jsonb_build_array(p.proname,pg_get_function_identity_arguments(p.oid),pg_get_userbyid(p.proowner),p.proacl) ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'),
  'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,pg_get_userbyid(e.extowner)) ORDER BY e.extname) FROM pg_extension e),
@@ -115,7 +116,7 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {
 	var sequenceAccess bool
-	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S' AND NOT has_sequence_privilege(session_user,c.oid,'SELECT,USAGE'))`).Scan(&sequenceAccess); err != nil || !sequenceAccess {
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S' AND NOT has_sequence_privilege(session_user,c.oid,'SELECT'))`).Scan(&sequenceAccess); err != nil || !sequenceAccess {
 		return "", errors.New("legacy24 sequence observation unavailable")
 	}
 	var digest string
@@ -124,5 +125,44 @@ func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {
 	if err := tx.QueryRow(ctx, query).Scan(&digest, &size); err != nil || size <= 0 || size > 1<<20 || len(digest) != 64 {
 		return "", errors.New("legacy24 access observation unavailable")
 	}
-	return digest, nil
+	rows, err := tx.Query(ctx, `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S' ORDER BY c.relname LIMIT 10001`)
+	if err != nil {
+		return "", errors.New("legacy24 sequence observation unavailable")
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) != nil || len(names) >= 10000 {
+			rows.Close()
+			return "", errors.New("legacy24 sequence observation unavailable")
+		}
+		names = append(names, name)
+	}
+	if rows.Err() != nil {
+		rows.Close()
+		return "", errors.New("legacy24 sequence observation unavailable")
+	}
+	rows.Close()
+	type sequenceState struct {
+		Name   string `json:"name"`
+		Last   int64  `json:"last"`
+		Called bool   `json:"called"`
+	}
+	states := make([]sequenceState, 0, len(names))
+	for _, name := range names {
+		state := sequenceState{Name: name}
+		if err = tx.QueryRow(ctx, `SELECT last_value,is_called FROM `+pgx.Identifier{"public", name}.Sanitize()).Scan(&state.Last, &state.Called); err != nil {
+			return "", errors.New("legacy24 sequence observation unavailable")
+		}
+		states = append(states, state)
+	}
+	encoded, err := json.Marshal(struct {
+		Access    string          `json:"access"`
+		Sequences []sequenceState `json:"sequences"`
+	}{digest, states})
+	if err != nil || len(encoded) > 1<<20 {
+		return "", errors.New("legacy24 access observation unavailable")
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:]), nil
 }

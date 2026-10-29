@@ -118,16 +118,18 @@ func verifyLegacy24DerivedTx(ctx context.Context, tx pgx.Tx, before map[string]l
 	if int64(len(current.Events)-len(derived.Events)) != expectedNew {
 		return errors.New("legacy24 derived outbox changed")
 	}
-	rows, err := tx.Query(ctx, `SELECT event_id::text,space_id::text,access_epoch,event_kind,voice_room_id IS NULL,profile_id IS NULL,payload=jsonb_build_object('space_id',space_id::text,'access_epoch',access_epoch) FROM public.space_voice_access_outbox`)
+	rows, err := tx.Query(ctx, `SELECT event_id::text,space_id::text,access_epoch,event_kind,voice_room_id IS NULL,profile_id IS NULL,payload=jsonb_build_object('space_id',space_id::text,'access_epoch',access_epoch),created_at FROM public.space_voice_access_outbox`)
 	if err != nil {
 		return errors.New("legacy24 derived outbox unavailable")
 	}
 	seen := make(map[string]map[int64]bool)
+	var updateTime time.Time
 	for rows.Next() {
 		var id, space, kind string
 		var epoch int64
 		var roomNull, profileNull, payloadOK bool
-		if rows.Scan(&id, &space, &epoch, &kind, &roomNull, &profileNull, &payloadOK) != nil {
+		var created time.Time
+		if rows.Scan(&id, &space, &epoch, &kind, &roomNull, &profileNull, &payloadOK, &created) != nil {
 			rows.Close()
 			return errors.New("legacy24 derived outbox unavailable")
 		}
@@ -135,10 +137,11 @@ func verifyLegacy24DerivedTx(ctx context.Context, tx pgx.Tx, before map[string]l
 			continue
 		}
 		floor, ok := derived.Floors[space]
-		if !ok || epoch <= floor.Epoch || epoch > floor.Epoch+floor.Members || kind != "voice_room_access_invalidated" || !roomNull || !profileNull || !payloadOK {
+		if !ok || epoch <= floor.Epoch || epoch > floor.Epoch+floor.Members || kind != "voice_room_access_invalidated" || !roomNull || !profileNull || !payloadOK || !created.Equal(current.Floors[space].Updated) || (!updateTime.IsZero() && !created.Equal(updateTime)) {
 			rows.Close()
 			return errors.New("legacy24 derived outbox changed")
 		}
+		updateTime = created
 		if seen[space] == nil {
 			seen[space] = make(map[int64]bool)
 		}
