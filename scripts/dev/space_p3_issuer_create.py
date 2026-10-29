@@ -196,7 +196,7 @@ class Session:
             self._guard(); self._check_roots(); self._check_workload(); self._check_created()
             self.proof=self._proof(jwks)
             self._write(handoff=self.handoff|{'status':'done','receipt':copy.deepcopy(self.proof)})
-            self._check_roots(); self._check_created(); self._guard(); self.completed=True
+            self._check_roots(); self._check_workload(); self._check_created(); self._guard(); self.completed=True
             return copy.deepcopy(self.proof)
         except BaseException:
             if self.pending and not self.completed: self._poison()

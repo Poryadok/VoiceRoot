@@ -32,7 +32,7 @@ class PhaseTest(unittest.TestCase):
         self.phase.workload={'uid':'space','generation':1,'spec_sha256':'f'*64}
         self.rootpatch=patch.object(self.phase,'_public',return_value=copy.deepcopy(self.phase.roots))
         self.workpatch=patch.object(self.phase,'_workload',return_value=copy.deepcopy(self.phase.workload))
-        self.rootpatch.start(); self.workpatch.start(); self.addCleanup(self.rootpatch.stop); self.addCleanup(self.workpatch.stop)
+        self.rootpatch.start(); self.workmock=self.workpatch.start(); self.addCleanup(self.rootpatch.stop); self.addCleanup(self.workpatch.stop)
         self.objects={name:{'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-dev'},'type':'Opaque',
                            'data':{key:base64.b64encode(('fixture-'+key).encode()).decode() for key in keys}}
                       for name,keys in subject.packet.MEMBERS.items()}
@@ -87,6 +87,16 @@ class PhaseTest(unittest.TestCase):
         self.actual['voice-space-media-server-tls']={'foreign':True}
         with self.assertRaises(subject.CreateError): self.run_finish()
         self.assertFalse(any(not dry for _,dry in self.calls))
+
+    def test_workload_changes_after_done_never_return_success(self):
+        write=self.phase._write
+        def changed(**kwargs):
+            write(**kwargs)
+            if kwargs.get('handoff',{}).get('status')=='done':
+                self.workmock.return_value=dict(self.phase.workload,generation=2)
+        with patch.object(self.phase,'_write',side_effect=changed):
+            with self.assertRaises(subject.CreateError): self.run_finish()
+        self.assertFalse(self.phase.completed); self.assertEqual(self.base.ledger.row['status'],'uncertain')
 
 
 if __name__ == '__main__': unittest.main()
