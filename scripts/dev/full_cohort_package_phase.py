@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import re
 import secrets
+import time
 
 import canonical_application_package as package
 import frontend_runtime_executor
@@ -76,10 +77,12 @@ class PackagePhase:
                 len(revision) != 2 or any(not isinstance(v,str) or not v for v in revision)):
             raise PackageError('package record changed')
 
-    def verify_current(self):
+    def verify_current(self, token):
         """Reopen the same private receipt and exact completed ledger record."""
         try:
             self._guard(); self._nodes(); row, revision = self.fence.ledger.read()
+            package.source._head(package.source._headers(token),self.fence.context['commit'],time.monotonic()+30)
+            self._guard()
             local = copy.deepcopy(self.journal.state['steps'].get(STEP))
             if not isinstance(local,dict) or not isinstance(local.get('receipt'),dict): raise PackageError('package receipt missing')
             receipt = local['receipt']; done = {k:v for k,v in local.items() if k!='receipt'}
@@ -140,6 +143,7 @@ class PackagePhase:
                     mapped != self.fence.context['images']): raise PackageError('canonical package differs')
             platform = oci.resolve(captured['images'],source.Registry(actor,token))
             if set(platform) != set(mapped): raise PackageError('platform inventory differs')
+            package.source._head(package.source._headers(token),self.fence.context['commit'],time.monotonic()+30)
             self._guard(); self._nodes(); current, rev = self.fence.ledger.read()
             self._record(current,rev,marker)
             if (self.journal.state['steps'].get(STEP) != marker or private.private_file(root,output.name,1048576)!=raw):
