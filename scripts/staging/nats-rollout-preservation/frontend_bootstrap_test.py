@@ -12,7 +12,9 @@ class Kube:
     def __init__(self):self.objects=[];self.fail=False;self.lost=False;self.creates=0
     def run(self,args,body=None):
         if args==['get','--raw','/api/v1/namespaces/voice-staging/configmaps?fieldSelector=metadata.name%3D'+NAME+'&limit=2']:
-            return {'apiVersion':'v1','kind':'ConfigMapList','metadata':{'resourceVersion':'1'},'items':copy.deepcopy(self.objects)}
+            items=copy.deepcopy(self.objects)
+            for item in items:item.pop('apiVersion',None);item.pop('kind',None)
+            return {'apiVersion':'v1','kind':'ConfigMapList','metadata':{'resourceVersion':'1'},'items':items}
         if args[0]=='create':
             self.creates+=1
             if self.fail:raise RuntimeError('lost response')
@@ -34,6 +36,14 @@ class BootstrapTests(unittest.TestCase):
             if isinstance(reply,Exception):kube.run.side_effect=reply
             else:kube.run.return_value=reply
             with self.subTest(reply=reply),self.assertRaises(plan.PlanError):plan.frontend_live(kube,NAME)
+
+    def test_catalog_rejects_conflicting_item_type(self):
+        kube=Mock();kube.run.return_value={'apiVersion':'v1','kind':'ConfigMapList','metadata':{'resourceVersion':'1'},
+            'items':[{'apiVersion':'v1','kind':'Secret','metadata':{'name':NAME,'namespace':'voice-staging'}}]}
+        with self.assertRaises(plan.PlanError):plan.frontend_live(kube,NAME)
+        kube.run.return_value['items'][0]['kind']='ConfigMap'
+        kube.run.return_value['items'][0]['metadata']['deletionTimestamp']='2026-01-01T00:00:00Z'
+        with self.assertRaises(plan.PlanError):plan.frontend_live(kube,NAME)
 
     def test_create_records_pending_then_verified_uid_and_checks_live(self):
         source,binding=fixture();kube=Kube();state={};events=[];stage=Mock()

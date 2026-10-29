@@ -5,6 +5,7 @@ import grp
 import json
 import re
 import os
+import stat
 from pathlib import Path
 import secrets
 import shutil
@@ -29,6 +30,34 @@ def save(path,row):root_save(path,row,limit=128<<20)
 
 def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
+
+def record_source_authority(session,approved,execution):
+    """Record only digests produced by this root-owned source capture."""
+    session.check()
+    if not re.fullmatch(r'[a-f0-9]{12}',session.operation):raise Blocked('bridge_source_capture_invalid')
+    row={'schema':'voice-staging-source-capture-v1','operation':session.operation,
+         'context':copy.deepcopy(session.context),'helper_sha256':session.helper,
+         'approved_sha256':transaction.canonical(approved),'execution_sha256':transaction.canonical(execution)}
+    raw=json.dumps(row,sort_keys=True,separators=(',',':')).encode()
+    parent=os.open(INSTALLED,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        pinfo=os.fstat(parent)
+        if pinfo.st_uid!=0 or pinfo.st_mode&0o022:raise Blocked('bridge_source_capture_directory_invalid')
+        try:os.mkdir('source-authority',0o700,dir_fd=parent);os.fsync(parent)
+        except FileExistsError:pass
+        dfd=os.open('source-authority',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+        try:
+            info=os.fstat(dfd)
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_mode&0o077:
+                raise Blocked('bridge_source_capture_directory_invalid')
+            fd=os.open(session.operation+'.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=dfd)
+            with os.fdopen(fd,'wb') as output:
+                output.write(raw);output.flush();os.fsync(output.fileno())
+            os.fsync(dfd)
+        finally:os.close(dfd)
+    finally:os.close(parent)
+    session.check()
+    return row
 
 def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
     """Allow only the bootstrap's proved app-secret RV change in actor proof."""
@@ -237,6 +266,9 @@ class Actions:
         self._report('source-capture','STARTED')
         approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
             if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
+        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
+            if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
+            record_source_authority(self.tt_session,approved,execution)
         lifecycle=None
         if provisional_mode or repair is not None:
             import provisional
