@@ -81,5 +81,14 @@ class StagingSmokeTest(unittest.TestCase):
         with self.assertRaises(self.module.SmokeError): self.phase.run()
         self.assertEqual(self.server.calls, [])
 
+    def test_replaced_private_journal_refuses_completed_proof(self):
+        self.phase.run()
+        original = self.phase.journal
+        self.phase.journal = object()
+        try:
+            with self.assertRaises(self.module.SmokeError): self.module.verify_completed(self.phase)
+        finally:
+            self.phase.journal = original
+
 
 if __name__ == '__main__': unittest.main()

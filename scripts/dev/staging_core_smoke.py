@@ -31,10 +31,18 @@ class StagingCoreSmoke:
         self._accounts = None
         self.receipt = None
         self.http = http.StagingHTTP()
+        self._http = self.http
+        self._journal = None
+        self._credentials = None
 
     def _guard(self):
         if (self.session is not self._refs[0] or self.release is not self._refs[1] or
-                type(self.session) is not resource_claim.Session or type(self.http) is not http.StagingHTTP):
+                type(self.session) is not resource_claim.Session or self.http is not self._http or
+                type(self.http) is not http.StagingHTTP or self.journal is not self._journal or
+                self.credentials is not self._credentials or
+                type(self.credentials) is not staging_core_credentials.CredentialInput or
+                self.credentials.journal is not self.journal or self.credentials.session is not self.session or
+                self.credentials.release is not self.release):
             raise SmokeError('STAGING smoke authority changed')
         receipt = self.credentials._guard()
         if receipt != self.receipt or self.credentials.verify() != self._accounts:
@@ -72,8 +80,10 @@ class StagingCoreSmoke:
             intent = {'resource_context': copy.deepcopy(self.session.context),
                       'operation': self.session.operation, 'release': copy.deepcopy(self.receipt)}
             self.journal = media_operation_journal.Journal(path, intent)
+            self._journal = self.journal
             attempted = True
             self.credentials = staging_core_credentials.CredentialInput(self.session, self.release, self.journal)
+            self._credentials = self.credentials
             accounts = self.credentials.capture()
             self._accounts = copy.deepcopy(accounts)
             self._guard()
