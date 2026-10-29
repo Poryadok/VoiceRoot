@@ -13,7 +13,7 @@ class ProfileDirectoryTest(unittest.TestCase):
         self.root.mkdir(parents=True,mode=0o700,exist_ok=True); (self.root/self.suffix).mkdir(mode=0o700)
         self.addCleanup(self.cleanup_dirs)
         self.supervisor=activation.supervisor_module.Supervisor.__new__(activation.supervisor_module.Supervisor)
-        self.supervisor.context={'operation_id':'media-c1-'+self.suffix}; self.supervisor._guard=mock.Mock()
+        self.supervisor.context={'operation_id':'media-c1-'+self.suffix,'project':'voice','resource':'DEV'}; self.supervisor._guard=mock.Mock()
 
     def cleanup_dirs(self):
         parent=self.root/self.suffix
@@ -28,6 +28,8 @@ class ProfileDirectoryTest(unittest.TestCase):
         self.assertEqual((self.root/self.suffix/'space').stat().st_mode & 0o777,0o700)
         with self.assertRaises(activation.ActivationError):activation._profile_directory(self.supervisor,'space')
         with self.assertRaises(activation.ActivationError):activation._profile_directory(self.supervisor,'creator')
+        self.supervisor.context['resource']='STAGING'
+        with self.assertRaises(activation.ActivationError):activation._profile_directory(self.supervisor,'role')
 
     def test_existing_symlink_is_never_adopted(self):
         (self.root/self.suffix/'role').symlink_to('/tmp',target_is_directory=True)
