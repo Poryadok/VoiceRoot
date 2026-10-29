@@ -219,7 +219,7 @@ class Registry:
         for attempt in range(2):
             bearer = self._bearer(repository)
             headers = {'Authorization': 'Bearer ' + bearer,
-                       'Accept': 'application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'}
+                       'Accept': 'application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'}
             try:
                 return self._read(urllib.request.Request('https://ghcr.io/v2/' + repository + '/' + path,
                                                         headers=headers), absent=absent)

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tarfile
 import tempfile
+import struct
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -18,6 +19,29 @@ import story_media_backup_custody as custody
 
 
 class CustodyTest(unittest.TestCase):
+    def test_zip64_central_directory_bomb_rejected_before_zipfile(self):
+        end = len(self.archive) - 22
+        zip64 = struct.pack('<4sQHHLLQQQQ', b'PK\x06\x06', 44, 45, 45, 0, 0, 1, 1, 65536, 0)
+        locator = struct.pack('<4sLQL', b'PK\x06\x07', 0, end, 1)
+        self.archive = self.archive[:end] + zip64 + locator + self.archive[end:]
+        self.metadata['size_in_bytes'] = len(self.archive)
+        with patch.object(custody.transport, '_download', side_effect=self.download), \
+             patch.object(custody.zipfile, 'ZipFile', side_effect=AssertionError('must not parse')) as parser:
+            with self.assertRaises(custody.CustodyError):
+                custody.readback_extract('fixture-token', self.artifact, 23, self.bundle,
+                                        self.key, self.binding, self.destination)
+        parser.assert_not_called()
+
+    def test_valid_bounded_zip64_readback(self):
+        end = len(self.archive) - 22
+        _, _, _, _, _, size, offset, _ = struct.unpack('<4s4H2LH', self.archive[end:])
+        zip64 = struct.pack('<4sQHHLLQQQQ', b'PK\x06\x06', 44, 45, 45, 0, 0, 1, 1, size, offset)
+        locator = struct.pack('<4sLQL', b'PK\x06\x07', 0, end, 1)
+        self.archive = self.archive[:end] + zip64 + locator + self.archive[end:]
+        self.metadata['size_in_bytes'] = len(self.archive)
+        receipt, _ = self.extract()
+        self.assertEqual(receipt['artifact_id'], 23)
+
     def test_preupload_fifo_is_rejected_without_blocking(self):
         fifo = self.root / 'fifo.tar'
         os.mkfifo(fifo, 0o600)
@@ -117,6 +141,24 @@ class CustodyTest(unittest.TestCase):
                          {'manifest.json', *(name + '.enc' for name in backup.MEMBERS)})
         self.assertNotIn(self.key.hex(), repr(receipt))
 
+    def test_second_cycle_readback_and_third_cycle_refusal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'source'; root.mkdir(mode=0o700)
+            dest = Path(directory) / 'restore'; dest.mkdir(mode=0o700)
+            binding = dict(self.binding, operation_id='media-c2-'+'a'*32)
+            manifest = backup.export(root, self.key, binding, lambda member, out: out.write(member.encode()))
+            bundle = custody.build_bundle(root, self.key, binding, manifest)
+            self.artifact['operation_id'] = binding['operation_id']
+            self.metadata['name'] = 'voice-media-backup-' + binding['operation_id'] + '-' + self.artifact['challenge']
+            self.bundle = bundle
+            self.rewrap(bundle.read_bytes())
+            with patch.object(custody.transport, '_download', side_effect=self.download):
+                receipt, _ = custody.readback_extract('fixture-token', self.artifact, 23, bundle,
+                                                     self.key, binding, dest)
+            self.assertEqual(receipt['operation_id'], binding['operation_id'])
+            bad = dict(self.artifact, operation_id='media-c3-'+'a'*32)
+            with self.assertRaises(custody.CustodyError):
+                custody.readback_extract('fixture-token', bad, 23, bundle, self.key, binding, dest)
     def test_preupload_verification_returns_only_bound_size_and_digest(self):
         result = custody.verify_bundle(self.bundle, self.key, self.binding)
         self.assertEqual(result, {'bytes': len(self.raw), 'sha256': hashlib.sha256(self.raw).hexdigest()})

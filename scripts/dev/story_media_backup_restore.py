@@ -31,7 +31,7 @@ CATALOG = """SELECT json_build_object(
  ORDER BY pg_get_userbyid(d.defaclrole),n.nspname,d.defaclobjtype),'[]'::json)
  FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace),
  'history',(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)
- FROM schema_migrations));"""
+ FROM public.schema_migrations));"""
 
 
 def role_catalog_sql(excluded=''):
@@ -189,7 +189,7 @@ def _cleanup(journal, resources):
 
 
 def _psql(cid, admin, database, sql, timeout=120):
-    return _docker('exec', '-i', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
+    return _docker('exec', '-i', '-e', 'PGOPTIONS=-c search_path=pg_catalog,public', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
                    '-U', admin, '-d', database, input=sql.encode('utf-8'), timeout=timeout)
 
 
@@ -238,7 +238,7 @@ def _source_binding(binding, metadata, postgres_image, migrate_image):
     inputs = binding.get('restore_inputs', {}) if isinstance(binding, dict) else {}
     image_pattern = r'(?:sha256:[0-9a-f]{64}|[a-z0-9][a-z0-9._/:\-]*@sha256:[0-9a-f]{64})'
     if (not isinstance(binding, dict) or not re.fullmatch(r'[0-9a-f]{40}', str(binding.get('source_sha', '')))
-            or not re.fullmatch(r'media-c1-[0-9a-f]{32}', str(binding.get('operation_id', '')))
+            or not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', str(binding.get('operation_id', '')))
             or not re.fullmatch(r'capture-[0-9a-f]{32}', str(binding.get('snapshot_id', '')))
             or not re.fullmatch(image_pattern, str(postgres_image)) or not re.fullmatch(image_pattern, str(migrate_image))
             or not isinstance(inputs, dict) or set(inputs) != {'catalog_sha256', 'roles_catalog_sha256',

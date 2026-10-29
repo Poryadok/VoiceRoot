@@ -20,7 +20,109 @@ on:
       - scripts/dev/media_operation_guard_test.py
       - scripts/dev/media_backup_phase.py
       - scripts/dev/media_backup_phase_test.py
+      - scripts/dev/media_backup_upload_phase.py
+      - scripts/dev/media_backup_upload_phase_test.py
+      - scripts/dev/media_backup_upload_run.py
+      - scripts/dev/media_backup_upload_run_test.py
+      - scripts/dev/media_backup_upload_runner.py
+      - scripts/dev/media_backup_upload_runner_test.py
+      - scripts/dev/media_backup_capture_operation.py
+      - scripts/dev/media_backup_capture_operation_test.py
+      - scripts/dev/media_backup_readback.py
+      - scripts/dev/media_backup_readback_test.py
+      - scripts/dev/media_restore_journal.py
+      - scripts/dev/media_restore_journal_test.py
+      - scripts/dev/frontend_runtime_adoption.py
+      - scripts/dev/frontend_runtime_adoption_test.py
+      - scripts/dev/frontend_runtime_executor.py
+      - scripts/dev/frontend_runtime_executor_test.py
+      - scripts/dev/cohort_backup_phases.py
+      - scripts/dev/cohort_backup_phases_test.py
+      - scripts/dev/cohort_backup_operation.py
+      - scripts/dev/cohort_backup_operation_test.py
+      - scripts/dev/cohort_upload_phase.py
+      - scripts/dev/cohort_upload_phase_test.py
+      - scripts/dev/cohort_upload_run.py
+      - scripts/dev/cohort_upload_run_test.py
+      - scripts/dev/cohort_upload_runner.py
+      - scripts/dev/cohort_upload_runner_test.py
+      - scripts/dev/cohort_dispatch.py
+      - scripts/dev/cohort_dispatch_test.py
+      - scripts/dev/cohort_readback.py
+      - scripts/dev/cohort_readback_test.py
+      - scripts/dev/cohort_restore_journal.py
+      - scripts/dev/cohort_restore_journal_test.py
+      - scripts/dev/writer_cut.py
+      - scripts/dev/writer_cut_test.py
+      - scripts/dev/writer_cut_successor_test.py
+      - scripts/dev/writer_cut_activation_test.py
+      - scripts/dev/writer_cut_migration.py
+      - scripts/dev/writer_cut_migration_test.py
+      - scripts/dev/writer_cut_migration_inventory_test.py
+      - scripts/dev/backend_config_transition*.py
+      - scripts/dev/full_cohort_image_apply.py
+      - scripts/dev/full_cohort_image_apply_test.py
+      - scripts/dev/full_cohort_image_apply_composition_test.py
+      - scripts/dev/full_cohort_oci.py
+      - scripts/dev/full_cohort_oci_test.py
+      - scripts/dev/full_cohort_package_phase.py
+      - scripts/dev/full_cohort_supervisor.py
+      - scripts/dev/full_cohort_supervisor_test.py
+      - scripts/dev/full_cohort_pg_physical_identity.py
+      - scripts/dev/full_cohort_pg_physical_identity_test.py
+      - scripts/dev/full_cohort_backup_metadata.py
+      - scripts/dev/full_cohort_backup_metadata_test.py
+      - scripts/dev/full_cohort_config_custody.py
+      - scripts/dev/full_cohort_config_custody_test.py
+      - scripts/dev/cohort_unmanaged_actual.py
+      - scripts/dev/cohort_unmanaged_actual_test.py
+      - scripts/dev/story_media_backup_cohort.py
+      - scripts/dev/story_media_backup_cohort_restore.py
+      - scripts/dev/story_media_backup_restore.py
+      - scripts/dev/full_cohort_package_phase_test.py
+      - scripts/dev/full_cohort_inventory_phase.py
+      - scripts/dev/full_cohort_inventory_phase_test.py
+      - scripts/dev/full_cohort_namespace_census.py
+      - scripts/dev/full_cohort_namespace_census_test.py
+      - scripts/dev/full_cohort_activation_plan.py
+      - scripts/dev/full_cohort_activation_plan_test.py
+      - scripts/dev/full_cohort_affected_plan.py
+      - scripts/dev/full_cohort_affected_plan_test.py
+      - scripts/dev/full_cohort_predecessor_phase.py
+      - scripts/dev/full_cohort_predecessor_phase_test.py
+      - scripts/dev/realtime_secret_phase.py
+      - scripts/dev/realtime_secret_phase_test.py
+      - scripts/dev/realtime_secret_provision.py
+      - scripts/dev/realtime_secret_provision_test.py
+      - scripts/dev/realtime_migration_verify.py
+      - scripts/dev/realtime_migration_verify_test.py
+      - scripts/dev/realtime_migration_job.py
+      - scripts/dev/realtime_migration_job_test.py
+      - scripts/dev/realtime_migration_cut_joint_test.py
+      - scripts/dev/writer_cut_pg_probe.py
+      - scripts/dev/writer_cut_pg_probe_test.py
+      - scripts/dev/writer_cut_resumed_probe.py
+      - scripts/dev/writer_cut_resumed_probe_test.py
+      - scripts/dev/realtime_db_provision.py
+      - scripts/dev/realtime_db_provision_test.py
+      - scripts/dev/realtime_db_provision_journal_test.py
+      - scripts/dev/realtime_absent_phase.py
+      - scripts/dev/realtime_absent_phase_test.py
+      - scripts/dev/realtime_p3_adoption.py
+      - scripts/dev/realtime_p3_adoption_test.py
+      - scripts/dev/realtime_p3_public_inputs.py
+      - scripts/dev/realtime_p3_public_inputs_test.py
+      - scripts/dev/realtime_p3_create_only*.py
+      - scripts/dev/realtime_p3_missing_issuer*.py
+      - scripts/dev/realtime_p3_root_*.py
+      - scripts/dev/realtime_p3_root_launch.template.sh
+      - .github/workflows/dev-cohort-backup-upload.yml
+      - scripts/dev/story_media_backup_cohort_finalize.py
+      - scripts/dev/story_media_backup_cohort_finalize_test.py
+      - .github/workflows/dev-media-backup-upload.yml
+      - scripts/dev/story_media_backup_custody.py
       - scripts/dev/resource_fencing.py
+      - scripts/dev/resource_fencing_test.py
       - scripts/dev/update_images.py
       - deploy/templates/story-media-*.yaml
   workflow_dispatch:
@@ -59,7 +161,67 @@ jobs:
           python -B scripts/dev/media_live_baseline_test.py
           python -B scripts/dev/media_operation_journal_test.py
           python -B scripts/dev/media_operation_guard_test.py
+          python -B scripts/dev/resource_fencing_test.py
           python -B scripts/dev/media_backup_phase_test.py
+          python -B scripts/dev/media_backup_upload_phase_test.py
+          python -B scripts/dev/media_backup_upload_run_test.py
+          python -B scripts/dev/media_backup_upload_runner_test.py
+          python -B scripts/dev/media_backup_capture_operation_test.py
+          python -B scripts/dev/media_backup_readback_test.py
+          python -B scripts/dev/media_restore_journal_test.py
+          python -B scripts/dev/frontend_runtime_adoption_test.py
+          python -B scripts/dev/frontend_runtime_executor_test.py
+          python -B scripts/dev/cohort_backup_phases_test.py
+          python -B scripts/dev/cohort_backup_operation_test.py
+          python -B scripts/dev/cohort_upload_phase_test.py
+          python -B scripts/dev/cohort_upload_run_test.py
+          python -B scripts/dev/cohort_upload_runner_test.py
+          python -B scripts/dev/cohort_dispatch_test.py
+          python -B scripts/dev/cohort_readback_test.py
+          python -B scripts/dev/cohort_restore_journal_test.py
+          python -B scripts/dev/writer_cut_test.py
+          python -B scripts/dev/writer_cut_successor_test.py
+          python -B scripts/dev/writer_cut_activation_test.py
+          python -B scripts/dev/writer_cut_migration_test.py
+          python -B scripts/dev/writer_cut_migration_inventory_test.py
+          python -B scripts/dev/backend_config_transition_test.py
+          python -B scripts/dev/backend_config_transition_probe_test.py
+          python -B scripts/dev/backend_config_transition_observation_test.py
+          python -B scripts/dev/backend_config_transition_deployment_test.py
+          python -B scripts/dev/backend_config_transition_composition_test.py
+          python -B scripts/dev/full_cohort_image_apply_test.py
+          python -B scripts/dev/full_cohort_image_apply_composition_test.py
+          python -B scripts/dev/full_cohort_oci_test.py
+          python -B scripts/dev/full_cohort_package_phase_test.py
+          python -B scripts/dev/full_cohort_supervisor_test.py
+          python -B scripts/dev/full_cohort_pg_physical_identity_test.py
+          python -B scripts/dev/full_cohort_backup_metadata_test.py
+          python -B scripts/dev/full_cohort_config_custody_test.py
+          python -B scripts/dev/cohort_unmanaged_actual_test.py
+          python -B scripts/dev/full_cohort_inventory_phase_test.py
+          python -B scripts/dev/full_cohort_namespace_census_test.py
+          python -B scripts/dev/full_cohort_activation_plan_test.py
+          python -B scripts/dev/full_cohort_affected_plan_test.py
+          python -B scripts/dev/full_cohort_predecessor_phase_test.py
+          python -B scripts/dev/realtime_secret_phase_test.py
+          python -B scripts/dev/realtime_secret_provision_test.py
+          python -B scripts/dev/realtime_migration_verify_test.py
+          python -B scripts/dev/realtime_migration_job_test.py
+          python -B scripts/dev/realtime_migration_cut_joint_test.py
+          python -B scripts/dev/writer_cut_pg_probe_test.py
+          python -B scripts/dev/writer_cut_resumed_probe_test.py
+          python -B scripts/dev/realtime_db_provision_test.py
+          python -B scripts/dev/realtime_db_provision_journal_test.py
+          python -B scripts/dev/realtime_absent_phase_test.py
+          python -B scripts/dev/realtime_p3_adoption_test.py
+          python -B scripts/dev/realtime_p3_public_inputs_test.py
+          python -B scripts/dev/story_media_backup_cohort_finalize_test.py
+      - name: Verify P3 operator and root handoff fixtures
+        run: |
+          docker run --rm --network none --user 1000:1000 -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo/scripts/dev golang:1.26-bookworm \
+            python3 -B -m unittest realtime_p3_create_only_test
+          docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo/scripts/dev golang:1.26-bookworm \
+            python3 -B -m unittest realtime_p3_create_only_packet_test realtime_p3_create_only_socket_test realtime_p3_create_only_source_test realtime_p3_create_only_transport_test realtime_p3_create_only_export_integration_test realtime_p3_missing_issuer_test realtime_p3_root_bundle_test realtime_p3_root_export_test
 
   publish:
     name: Publish exact DEV candidate
