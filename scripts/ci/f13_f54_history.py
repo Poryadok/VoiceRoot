@@ -6766,6 +6766,10 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
     J_capabilities={};J_compositions={};F_compositions={};range_branches={};frame_results={};I_ready={};I_consumed={}
     terminal={};final_gates={};manual_specs={};manual_gates={};manual_associations={};manual_closed={}
     dc0_specs={};dc0_closed={}
+    # Ready ledgers below are private json.loads snapshots, assigned once and
+    # never mutated. Retain only their pure canonical digest within this fold;
+    # no source, capability, Git or current-head observation is reused.
+    ready_digests={}
     def map_binding(frame):
         raw=''.join('\t'.join(parts)+'\n' for parts in maps[frame]).encode()
         return dict(bytes=len(raw),sha256=sha(raw))
@@ -7418,7 +7422,11 @@ def validate_trace(repo, path, expected_sha, complete=False, checkpoint=None, ra
             require(receipt['path']==v['path'] and receipt['incoming']==raw_binding('\t'.join(item['incoming'])),'actual_M_consumer_incoming')
             require(all(parts[i]==item['incoming'][i] for i in (0,2,3,6,7)) and parts[4:6]==item.get('rebind',item['incoming'][4:6]),'actual_M_consumer_after_gate_identity')
             require(parts[1]==item['incoming'][1] or (parts[1]=='true' and cumulative[key]),'actual_M_consumer_raw_flag')
-            require(receipt['ledger_sha256']==sha(canonical(ready_table[op])) and receipt['prior_rows']==[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==v['path']],'complete_typed_consumer_prior_ledger')
+            receipt_digest=receipt['ledger_sha256']
+            digest_key=(kind,op)
+            if digest_key not in ready_digests:
+                ready_digests[digest_key]=sha(canonical(ready_table[op]))
+            require(receipt_digest==ready_digests[digest_key] and receipt['prior_rows']==[raw_binding('\t'.join(x)) for x in maps[frame] if x[0]==v['path']],'complete_typed_consumer_prior_ledger')
             require(receipt['obligations']==ready_table[op]['required_qualification'][v['path']] and receipt['admission'] is False and v['admission'] is False,'complete_typed_consumer_evidence_not_sidecar_bit')
             require(receipt['map_before']==map_binding(frame) and receipt['transition'] in ('append','replace'),'M_transition_actual_premap')
             aggregate=cumulative[key] or ready_table[op]['required_qualification'][v['path']]['aggregate']
