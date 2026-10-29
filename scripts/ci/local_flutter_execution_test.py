@@ -36,7 +36,7 @@ class LocalFlutterExecutionTests(unittest.TestCase):
             rows = [{'type':'start'}, {'type':'suite','suite':{'id':1,'path':path}},
                     {'type':'allSuites','count':1},
                     {'type':'testStart','test':{'id':2,'suiteID':1,'name':'example','metadata':{'skip':False}}},
-                    {'type':'testDone','testID':2,'result':'success','skipped':False,'hidden':False},
+                    {'type':'testDone','testID':2,'result':'success','skipped':getattr(self, 'skipped', False),'hidden':False},
                     {'type':'done','success':True}]
             stdout.write(('\n'.join(json.dumps(row) for row in rows) + '\n').encode())
         return subprocess.CompletedProcess(command, 0)
@@ -70,6 +70,13 @@ class LocalFlutterExecutionTests(unittest.TestCase):
             result = execution.run(self.root, self.head, self.output, 'flutter')
         self.assertEqual(result['status'], 'failed')
         self.assertIn('snapshot changed', result['error'])
+
+    def test_skipped_case_is_recorded_and_fails(self):
+        self.skipped = True
+        with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(result['tests']['skipped'][0]['name'], 'example')
 
 
 if __name__ == '__main__':

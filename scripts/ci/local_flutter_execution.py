@@ -79,8 +79,11 @@ def run(root, head, output, flutter, selected=None):
             local_source_snapshot.verify_materialized(root, source, checkout)
             if label == 'test':
                 raw = out.read_bytes()
-                result['tests'] = flutter_test_events.summarize(flutter_test_events.read_events(raw), suites)
+                result['tests'] = flutter_test_events.summarize(
+                    flutter_test_events.read_events(raw), suites, reject_skips=False)
                 result['tests']['event_sha256'] = hashlib.sha256(raw).hexdigest()
+                if result['tests']['skipped']:
+                    raise ValueError('required Flutter tests were skipped')
         if local_source_snapshot.capture(root, head) != source:
             raise ValueError('source changed during execution')
     except (OSError, ValueError, json.JSONDecodeError) as error:
