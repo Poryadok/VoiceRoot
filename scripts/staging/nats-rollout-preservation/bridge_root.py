@@ -105,6 +105,39 @@ def verify_bootstrap_candidate_images(session,images,renderer_authority,first_in
     elif ordinary_target is not None:
         if candidate!={**ordinary_target,**renderer}:raise Blocked('realtime_bootstrap_candidate_changed')
 
+def capture_cohort_authorities(actions,request,approved,workspace,stage,contract):
+    """Capture the existing actor and live NATS authorities before the cut."""
+    import actor_root
+    import nats_root_plan
+    import resource_claim
+    import commands
+    session=actions.tt_session
+    if (type(actions) is not Actions or type(session) is not resource_claim.Session
+        or commands.authority_guard!=session.check or session.check().get('phase')!='prepare'
+        or request.get('mode') not in ('full','app-only') or stage.operation!=session.operation
+        or Path(workspace)!=INSTALLED/'sources'/session.operation or approved.get('source_sha')!=session.context['commit']):
+        raise Blocked('cohort_preflight_authority_invalid')
+    baseline=contract.get('consumer_pairs')
+    try:active=private_json(INSTALLED/'active-contract.json')
+    except FileNotFoundError:active=None
+    if active is not None:
+        validate_active_contract_identity(active,stage.expected,baseline);contract=active['contract']
+    names=[name.removeprefix('voice-') for name in stage.snapshots if name!=HUB]
+    actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml)
+    try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
+    except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
+    previous=private_json(guard.ROOT/'bootstrap-enrollment.json')
+    from nats_contract_plan import digest as enrollment_digest
+    if (not isinstance(enrollment,dict) or enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
+        or enrollment.get('previous_enrollment')!=previous
+        or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous)):
+        raise Blocked('enrolled_bootstrap_selection_refused')
+    nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml)
+    session.check()
+    return {'schema':'voice-staging-cohort-preflight-v1','operation':session.operation,
+            'services':names,'actor':actor,'nats':nats,'enrollment':enrollment,'contract':contract}
+
+
 class Actions:
     def resource_scope(self,request):
         import resource_claim
