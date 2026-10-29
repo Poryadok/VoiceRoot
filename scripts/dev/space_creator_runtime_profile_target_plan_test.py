@@ -134,10 +134,16 @@ class PhaseTest(unittest.TestCase):
             config=attach(subject.observed_config.CreatorConfigPhase.__new__(subject.observed_config.CreatorConfigPhase),'config')
             roots=attach(subject.jdk.TargetJdkPhase.__new__(subject.jdk.TargetJdkPhase),'jdk')
             issuer=attach(subject.preflight.PeerIssuerPreflightPhase.__new__(subject.preflight.PeerIssuerPreflightPhase),'issuer'); issuer.profile='creator'
-            trust=attach(trust_effect.TrustEffectPhase.__new__(trust_effect.TrustEffectPhase),'trust')
-            for item in (config,roots,issuer,trust): item.package=pkg
-            config.inventory=inv; roots.inventory=inv; trust.inventory=inv; trust.jdk=roots; trust.preflight=issuer
+            trust_refs=attach(types.SimpleNamespace(),'trust')
+            target_refs=attach(types.SimpleNamespace(),'target-trust')
+            for item in (config,roots,issuer): item.package=pkg
+            config.inventory=inv; roots.inventory=inv
+            issuer.step='dev-peer-issuer-preflight-creator'; issuer.ledger='dev_peer_issuer_preflight_creator'
             with mock.patch.object(subject.shared.media_operation_guard,'verify'):
+                trust=trust_effect.TrustEffectPhase(trust_refs.journal,trust_refs.fence,trust_refs.client,lock,'ns',pkg,inv,roots,issuer)
+                from space_creator_runtime_profile_target_trust import TargetTrustPhase
+                target_trust=TargetTrustPhase(target_refs.journal,target_refs.fence,target_refs.client,lock,'ns',pkg,inv,roots,issuer)
+                self.assertIs(target_trust.preflight,issuer)
                 phase=subject.TargetPlanPhase(own.journal,own.fence,own.client,lock,'ns',pkg,inv,config,roots,issuer,trust,'/source')
                 issuer_receipt={'ca':{'uid':'ca','resourceVersion':'1','der_sha256':'a'*64},'creator_secrets':{
                     name:{'state':'absent'} for name in ('voice-auth-media-server-tls','voice-gateway-media-client-tls','voice-gateway-principal-signing')}}
