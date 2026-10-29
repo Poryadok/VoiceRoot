@@ -147,3 +147,12 @@ schema/installer drift negatives using a real Root Session and synthetic Kube
 observations. Its exact argv still requires WT25's separate Session allowlist
 change; it is not an enabled live migration path. The native authority loader
 and final Go/image rehearsal remain the next joined checkpoint.
+
+The fixed load_native_authority entrypoint now joins the qualified receipt to
+the current completed off-node attempt, original archive and retained native
+command/sidecar/event records. It returns the separately observed original
+engine/database owner identity; clone identities remain rehearsal evidence.
+Local/PENDING/foreign-attempt and changed proof-digest cases are refused. The
+focused handoff test uses real Root Session/private records but explicitly
+stubs qualification, native retained-proof verification and PostgreSQL; it is
+not evidence of the pending real native clone success.
