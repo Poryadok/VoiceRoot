@@ -34,8 +34,12 @@ import resource_fencing
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
-def guarded_cohort_fixture(root, source, metadata, blobs, template_binding):
-    """Real local Journal/Fence, mocked Kubernetes/GitHub, real Docker/SQL."""
+def guarded_cohort_fixture(root, source, metadata, blobs, template_binding, after_qualify=None):
+    """Legacy fixture: real Journal/Fence and Docker/SQL; synthetic Kube/GitHub.
+
+    The optional test callback runs while the qualified journal is still open.
+    This legacy binding is not a full-catalog or live qualification.
+    """
     original_phase_setup=phase_fixture.PhaseTest.setUp
     original_template_setup=readback_fixture.fixtures.FinalizeCohortTest.setUp
     original_export=cohort.export
@@ -72,6 +76,10 @@ def guarded_cohort_fixture(root, source, metadata, blobs, template_binding):
                               custody,restore_receipt,admission,journal)
         if fixture.base.ledger.row['cohort_auth_flyway']['status'] != 'done':
             raise AssertionError('fenced Auth receipt was not committed')
+        if after_qualify is not None:
+            after_qualify(fixture=fixture,phase=fixture.phase,journal=journal,root=root,source=source,
+                          binding=fixture.binding,metadata=metadata,manifest=manifest,custody=custody,
+                          restore=restore_receipt,receipt=result)
         return result
     finally:
         if not fixture.doCleanups(): raise RuntimeError('guarded fixture cleanup failed')
