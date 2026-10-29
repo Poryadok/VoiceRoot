@@ -153,6 +153,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import bridge_root, commands, guard, resource_claim, stage_runtime, staging_prerequisites as parent
 import staging_cohort_preservation as producer
+import compiler, yaml
 sys.path.append(sys.argv[3])
 from staging_bridge_preservation_joint_test import stage_cluster_fixture
 root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
@@ -220,6 +221,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    return original_get(kind,name)
   def capture(argv,**kwargs):
    commands.authority_guard(argv)
+   if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
+    return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
    if tail[:2]==['get','--raw']:
     plural=tail[2].split('/')[5].split('?')[0]
@@ -248,6 +251,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def close(self):pass
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
        patch.object(stage_runtime.Kube,'_run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture), \
+       patch.object(compiler,'capture',side_effect=capture), \
        patch.object(http.client,'HTTPSConnection',Https):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
