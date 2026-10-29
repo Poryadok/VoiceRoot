@@ -47,12 +47,12 @@ const legacy24AccessSQL = `SELECT jsonb_build_object(
  'memberships',(SELECT jsonb_agg(jsonb_build_array(pg_get_userbyid(m.roleid),pg_get_userbyid(m.member),pg_get_userbyid(m.grantor),m.admin_option,m.inherit_option,m.set_option) ORDER BY pg_get_userbyid(m.roleid),pg_get_userbyid(m.member),pg_get_userbyid(m.grantor)) FROM pg_auth_members m)
 )::text`
 
-func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24OriginObservation, error) {
+func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (_ *legacy24OriginObservation, err error) {
 	tx, err := beginLegacySourceRead(ctx, conn)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(context.Background())
+	defer finishLegacy24Read(tx, &err)
 	if err = qualifyLegacy24InstallerTx(ctx, tx); err != nil {
 		return nil, err
 	}

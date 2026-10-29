@@ -7,6 +7,7 @@ from unittest.mock import patch
 import media_backup_phase_test as fixtures
 import media_operation_journal as journal
 import realtime_config_transition_space_service as service
+import realtime_config_transition as renderer
 
 
 class Client:
@@ -42,6 +43,22 @@ class ServiceTest(unittest.TestCase):
 
     def cleanup(self,base):
         if not base.doCleanups(): raise RuntimeError('cleanup failed')
+
+    def test_creator_target_adds_both_ports_in_one_patch_and_is_idempotent(self):
+        labels={'app':'voice-space'}
+        patch,target=renderer.render_space_creator_service(self.source,labels)
+        self.assertEqual(patch[3]['value'],target)
+        self.assertIn({'name':'principal-jwks','port':8443,'targetPort':8443,'protocol':'TCP'},target['ports'])
+        self.assertIn({'name':'gateway-lc','port':9096,'targetPort':9096,'protocol':'TCP'},target['ports'])
+        current=copy.deepcopy(self.source);current['spec']=target
+        self.assertEqual(renderer.render_space_creator_service(current,labels)[1],target)
+
+    def test_creator_target_refuses_name_port_and_target_port_conflicts(self):
+        for collision in ({'name':'gateway-lc','port':9010},
+                          {'name':'foreign','port':9096},{'name':'foreign','port':9010,'targetPort':9096},
+                          {'name':'foreign','port':9010,'targetPort':'gateway-lc'}):
+            source=copy.deepcopy(self.source);source['spec']['ports'].append(collision)
+            with self.assertRaises(ValueError):renderer.render_space_creator_service(source,{'app':'voice-space'})
 
     def test_fenced_cas_and_post_resume_historical_verifier(self):
         receipt=service.apply_space_service(self.cut,self.journal)

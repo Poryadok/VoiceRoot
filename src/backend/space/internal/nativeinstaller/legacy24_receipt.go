@@ -62,6 +62,7 @@ type legacy24Event struct {
 
 var legacy24Stages = [...]string{"source24", "trusted25", "trusted44", "trusted45", "trusted50", "trusted51", "initialized", "upgrade-complete"}
 
+// ReadLegacy24Receipt parses a complete, closed original-24 evidence stream.
 // Parsing is not authentication: the owning controller retains the actual
 // source, backup, Job, image and execution custody separately.
 func ReadLegacy24Receipt(in io.Reader) (*Legacy24Receipt, error) {
