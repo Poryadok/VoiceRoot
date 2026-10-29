@@ -259,3 +259,21 @@ tmp/preservation-native/running-authority-final.log SHA256
 2e71abe83233f713a67a0418723c430d2c02ab2a184824cd0b777b4cf0fb7209.
 This checkpoint still needs independent review and the actual Stage live-script
 PG rehearsal; synthetic Job tests do not claim a live rollout.
+
+Independent history review issued scoped CLEAR for b1a1ad8e51fe and the exact
+602384 Stage consumer. A separate actual shell fixture now passes 1/1 in
+10.436s: populated PostgreSQL16 source24 is logically dumped into a different
+owned engine; retained immutable test Tool39e executes the exact Stage upgrade
+script to51, then its exact verifier twice on a read-only private evidence
+mount. origin.json and completed.jsonl are UID65532, mode0600; the eight events
+and both file hashes remain unchanged. Output is exactly two SHA lines plus
+the fixed verification=ok marker, without publishing private evidence. The
+original database remains24 with its row, the clone retains that row at51, and
+all owned containers are removed. Earlier RED was the test expecting the old
+f49 third-SHA verifier output rather than the current602 fixed marker; no
+production parser or script was weakened. This proves shell/Tool/SQL/mount
+mechanics only, not Kubernetes scheduling, dynamic PVC/fsGroup behavior, real
+CI publication, target authority or live admission. The new test is
+staging_cohort_preservation_live_script_test.py. Final retained log
+tmp/preservation-native/live-script-final.log SHA256
+6f0b0cbd80281a22f54555b9473a018c654814621f111dfda0e1ea1e03b89cd2.
