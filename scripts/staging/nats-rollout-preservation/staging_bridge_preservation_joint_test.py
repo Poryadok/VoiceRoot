@@ -199,6 +199,12 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   assert not (root/'installed'/'prerequisites').exists()
   from root_main import save
   store_kube,store_parameters=source_plan_test.SourceTests().canonical_fixture('app-only')
+  for (kind,name),row in list(store_kube.objects.items()):
+   if kind!='PersistentVolumeClaim':continue
+   pv_name=row['spec']['volumeName']
+   store_kube.objects[('PersistentVolume',pv_name)]={'apiVersion':'v1','kind':'PersistentVolume',
+    'metadata':{'name':pv_name,'uid':'uid-'+pv_name,'resourceVersion':'1'},
+    'spec':{'claimRef':{'uid':row['metadata']['uid'],'name':name,'namespace':'voice-staging'}}}
   policy_fields=('s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host',
    'developer_portal_host','gateway_tls_secret','storage_tls_secret','minio_image','minio_mc_image',
    'minio_storage_class','minio_storage_size','web_origin')
@@ -241,7 +247,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    try:return original_get(kind.lower(),name)
    except KeyError:
     spelling={'secret':'Secret','configmap':'ConfigMap','statefulset':'StatefulSet',
-      'deployment':'Deployment','service':'Service','persistentvolumeclaim':'PersistentVolumeClaim'}
+      'deployment':'Deployment','service':'Service','persistentvolumeclaim':'PersistentVolumeClaim',
+      'pvc':'PersistentVolumeClaim','pv':'PersistentVolume'}
     return store_kube.get(spelling.get(kind,kind),name)
   def run(args,**kwargs):
    if args[:2]==['apply','--dry-run=server']:return store_kube.run(args,**kwargs)
