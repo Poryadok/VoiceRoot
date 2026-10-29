@@ -1188,7 +1188,28 @@ jobs:
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
-        run: go test -count=1 -timeout 20m ./...
+          SERVICE: ${{ matrix.service }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 20m ./... > "$RUNNER_TEMP/go-integration-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_receipts.py \
+            --events "$RUNNER_TEMP/go-integration-events.jsonl" --exit-code "$result" \
+            --summary "$RUNNER_TEMP/go-integration-summary.json" --service "$SERVICE" \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Upload Go integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-integration-${{ matrix.service }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/go-integration-events.jsonl
+            ${{ runner.temp }}/go-integration-summary.json
+          if-no-files-found: warn
+          retention-days: 14
 
   staging-images-push:
     needs: changes

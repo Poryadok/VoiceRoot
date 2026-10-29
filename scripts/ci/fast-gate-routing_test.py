@@ -246,7 +246,11 @@ class FastGateRoutingTests(unittest.TestCase):
         docker_step = next(s for s in steps if s.get('name') == 'Require Docker for Go integration')
         test_step = next(s for s in steps if s.get('name', '').startswith('Go integration test'))
         self.assertLess(steps.index(docker_step), steps.index(test_step))
-        self.assertIn('go test -count=1', test_step['run'])
+        self.assertIn('go test -json -count=1', test_step['run'])
+        self.assertIn('go_integration_receipts.py', test_step['run'])
+        artifact = next(s for s in steps if s.get('name') == 'Upload Go integration diagnostics')
+        self.assertEqual(artifact['if'], 'always()')
+        self.assertIn('matrix.service', artifact['with']['name'])
         with tempfile.TemporaryDirectory() as directory:
             command = Path(directory) / 'docker'
             command.write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
@@ -258,6 +262,36 @@ class FastGateRoutingTests(unittest.TestCase):
             command.write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
             result = subprocess.run([policy.bash(), '-c', docker_step['run']], env=env,
                                     text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_go_integration_diagnostics_preserve_failure(self):
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        steps = workflow['jobs']['backend-go-integration-pr']['steps']
+        run = next(s['run'] for s in steps if s.get('name', '').startswith('Go integration test'))
+        with tempfile.TemporaryDirectory() as directory:
+            go = Path(directory) / 'go'
+            lines = [
+                {'Package': 'voice/backend/chat/store', 'Test': 'TestCase', 'Action': 'run'},
+                {'Package': 'voice/backend/chat/store', 'Test': 'TestCase', 'Action': 'fail'},
+                {'Package': 'voice/backend/chat/store', 'Action': 'fail'},
+            ]
+            payload = ''.join(json.dumps(line) + '\n' for line in lines)
+            go.write_text('#!/bin/sh\ncat <<\'EVENTS\'\n' + payload + 'EVENTS\nexit 1\n', encoding='utf-8')
+            go.chmod(0o755)
+            env = dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'],
+                       RUNNER_TEMP=Path(directory).as_posix(), SERVICE='chat',
+                       CANDIDATE_SHA='a' * 40, GITHUB_RUN_ID='123', GITHUB_RUN_ATTEMPT='1',
+                       PYTHONDONTWRITEBYTECODE='1')
+            result = subprocess.run([policy.bash(), '-c', run], cwd=ROOT / 'src/backend/chat',
+                                    env=env, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            summary = json.loads((Path(directory) / 'go-integration-summary.json').read_text())
+            self.assertEqual(summary['counts']['fail'], 1)
+            self.assertEqual(summary['exit_code'], 1)
+            successful = payload.replace('"Action": "fail"', '"Action": "pass"')
+            go.write_text('#!/bin/sh\ncat <<\'EVENTS\'\n' + successful + 'EVENTS\nexit 0\n', encoding='utf-8')
+            result = subprocess.run([policy.bash(), '-c', run], cwd=ROOT / 'src/backend/chat',
+                                    env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
 

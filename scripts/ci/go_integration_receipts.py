@@ -1,5 +1,6 @@
 """Verify explicit required integration cases in Go's JSON event stream."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -19,6 +20,27 @@ def read_events(text):
             raise ValueError('invalid Go test event shape')
         events.append(event)
     return events
+
+
+def summarize_events(events):
+    counts = {'pass': 0, 'skip': 0, 'fail': 0}
+    skipped = []
+    packages = {}
+    for event in events:
+        action = event.get('Action')
+        package = event.get('Package')
+        test = event.get('Test')
+        if action not in counts or not isinstance(package, str):
+            continue
+        if isinstance(test, str):
+            counts[action] += 1
+            if action == 'skip':
+                skipped.append([package, test])
+        elif test is None:
+            if package in packages:
+                raise ValueError('duplicate package terminal event')
+            packages[package] = action
+    return {'counts': counts, 'skipped': sorted(skipped), 'packages': dict(sorted(packages.items()))}
 
 
 def verify_required(events, required, exit_code):
@@ -45,6 +67,7 @@ def verify_required(events, required, exit_code):
 def verify_matrix(services, inventory, receipts, identity):
     if (not isinstance(identity, dict) or set(identity) != {'candidate', 'run', 'attempt'} or
             not isinstance(identity['candidate'], str) or not re.fullmatch(r'[0-9a-f]{40}', identity['candidate']) or
+            identity['candidate'] == '0' * 40 or
             any(not isinstance(identity[key], str) or not re.fullmatch(r'[1-9][0-9]*', identity[key])
                 for key in ('run', 'attempt')) or
             not isinstance(services, list) or any(not isinstance(s, str) or
@@ -102,12 +125,31 @@ def make_receipt(service, identity, inventory, events, exit_code):
 def main():
     parser = argparse.ArgumentParser(description='Require one exact Go integration test result')
     parser.add_argument('--events', required=True)
-    parser.add_argument('--package', required=True)
-    parser.add_argument('--test', required=True)
+    parser.add_argument('--package')
+    parser.add_argument('--test')
     parser.add_argument('--exit-code', required=True, type=int)
+    parser.add_argument('--summary')
+    parser.add_argument('--service')
+    parser.add_argument('--candidate')
+    parser.add_argument('--run')
+    parser.add_argument('--attempt')
     args = parser.parse_args()
     try:
-        events = read_events(Path(args.events).read_text(encoding='utf-8'))
+        raw = Path(args.events).read_bytes()
+        events = read_events(raw.decode('utf-8'))
+        if args.summary:
+            identity = {'candidate': args.candidate, 'run': args.run, 'attempt': args.attempt}
+            # Reuse matrix input validation; this produces a diagnostic, not a PASS receipt.
+            verify_matrix([args.service], {}, [], identity)
+            summary = summarize_events(events)
+            summary.update(schema='voice-go-integration-diagnostic-v1', service=args.service,
+                           identity=identity, exit_code=args.exit_code,
+                           event_sha256=hashlib.sha256(raw).hexdigest())
+            Path(args.summary).write_text(json.dumps(summary, sort_keys=True, indent=2) + '\n', encoding='utf-8')
+            print(json.dumps(summary, sort_keys=True))
+            return 0 if args.exit_code == 0 else 1
+        if not args.package or not args.test:
+            raise ValueError('package and test are required for case verification')
         failures = verify_required(events, [(args.package, args.test)], args.exit_code)
         if failures:
             raise ValueError('required integration case did not complete successfully')

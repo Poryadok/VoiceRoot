@@ -45,6 +45,19 @@ class GoIntegrationReceiptTests(unittest.TestCase):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 receipts.read_events(text)
 
+    def test_summary_counts_named_cases_and_preserves_skips(self):
+        events = [
+            {'Package': 'voice/backend/chat/store', 'Test': 'TestA', 'Action': 'run'},
+            {'Package': 'voice/backend/chat/store', 'Test': 'TestA', 'Action': 'pass'},
+            {'Package': 'voice/backend/chat/store', 'Test': 'TestB', 'Action': 'run'},
+            {'Package': 'voice/backend/chat/store', 'Test': 'TestB', 'Action': 'skip'},
+            {'Package': 'voice/backend/chat/store', 'Action': 'pass'},
+        ]
+        summary = receipts.summarize_events(events)
+        self.assertEqual(summary['counts'], {'pass': 1, 'skip': 1, 'fail': 0})
+        self.assertEqual(summary['skipped'], [['voice/backend/chat/store', 'TestB']])
+        self.assertEqual(summary['packages'], {'voice/backend/chat/store': 'pass'})
+
     def test_cli_rejects_skipped_required_case(self):
         package = 'voice/backend/analytics/internal/store'
         name = 'TestClickHouseInsertBatch'
@@ -61,6 +74,23 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                                       capture_output=True, text=True)
             self.assertEqual(run('pass').returncode, 0)
             self.assertNotEqual(run('skip').returncode, 0)
+
+    def test_cli_writes_source_bound_diagnostic_summary_on_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'events.jsonl'
+            out = Path(directory) / 'summary.json'
+            events = [{'Package': 'voice/backend/chat/store', 'Test': 'TestA', 'Action': 'run'},
+                      {'Package': 'voice/backend/chat/store', 'Test': 'TestA', 'Action': 'fail'},
+                      {'Package': 'voice/backend/chat/store', 'Action': 'fail'}]
+            path.write_text(''.join(json.dumps(e) + '\n' for e in events), encoding='utf-8')
+            result = subprocess.run([sys.executable, str(ROOT / 'scripts/ci/go_integration_receipts.py'),
+                '--events', str(path), '--exit-code', '1', '--summary', str(out), '--service', 'chat',
+                '--candidate', 'a' * 40, '--run', '123', '--attempt', '1'], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            summary = json.loads(out.read_text(encoding='utf-8'))
+            self.assertEqual(summary['identity']['candidate'], 'a' * 40)
+            self.assertEqual(summary['counts']['fail'], 1)
+            self.assertEqual(summary['exit_code'], 1)
 
     def test_real_go_json_distinguishes_pass_and_skip(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -98,6 +128,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                                                [dict(receipt, events=wrong_events)], identity))
         with self.assertRaises(ValueError):
             receipts.verify_matrix(['../chat'], required, [receipt], identity)
+        with self.assertRaises(ValueError):
+            receipts.verify_matrix(['chat'], required, [receipt], dict(identity, candidate='0' * 40))
 
     def test_receipt_requires_exact_selected_case_inventory(self):
         identity = {'candidate': 'a' * 40, 'run': '123', 'attempt': '2'}
