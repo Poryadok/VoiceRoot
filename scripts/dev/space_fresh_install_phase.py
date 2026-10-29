@@ -454,6 +454,43 @@ def verify_native_completed_before_runtime(phase,token):
     except BaseException:raise SpaceFreshError('Space native completion unavailable') from None
 
 
+def verify_historical(phase,token):
+    """Authenticate completed Space evidence without observing current PG or CUT.
+
+    The catalog is the recorded post-install catalog, not a current observation.
+    The central typed successor composes it with later qualified transitions.
+    """
+    try:
+        import space_fresh_install_phase_runtime as runtime
+        if type(phase) is not SpaceFreshInstallPhase or token!=phase.token:raise ValueError()
+        before=phase._read();details=before[0]
+        if details['state']!='done' or set(details['resources'])!={'sql','provision','evidence','verify'}:raise ValueError()
+        for key in ('sql','provision','verify'):
+            record=details['resources'][key]
+            if record['state']!='removed' or not record.get('uid'):raise ValueError()
+            if key!='sql' and (record.get('terminal') is not True or not record.get('pod')):raise ValueError()
+        evidence=details['resources']['evidence']
+        if (evidence['state']!='owned' or not evidence.get('uid') or
+            evidence['authored']['data']!={'prior.jsonl':details['native_log']}):raise ValueError()
+        if (native_tool.verify_completed(phase.tool,token)!=details['tool'] or
+            phase.catalog.verify_receipt(token)!=details['catalog'] or
+            physical_identity.verify_receipt(phase.physical,token)!=details['physical'] or
+            runtime.verify_receipt(phase.runtime,token)!=details['runtime']):raise ValueError()
+        identity=events.completed(details['native_log'].encode(),phase._expected_events(details),old_oid=details['old_oid'])
+        records=[json.loads(line,object_pairs_hook=events._unique) for line in details['native_log'].splitlines()]
+        if (identity!={k:details[k] for k in ('run_id','new_oid','role')} or
+            records[-1]['receipt']!=details['native_receipt'] or
+            json.loads(details['verified_log'],object_pairs_hook=events._unique)!=
+                {'event':'verified','receipt':details['native_receipt']}):raise ValueError()
+        _check_catalog(details['catalog'],details['final_catalog'],'done',details['old_oid'],details['new_oid'])
+        result={'operation_id':phase.context['operation_id'],'source_sha':phase.context['commit'],
+            'namespace_uid':phase.namespace_uid,'old_oid':details['old_oid'],'new_oid':details['new_oid'],
+            'catalog':copy.deepcopy(details['final_catalog']),'original_catalog_sha256':_digest(details['catalog']),
+            'receipt_sha256':before[3]['marker']['details_sha256']}
+        phase._stable(before);return result
+    except BaseException:raise SpaceFreshError('Space historical evidence unavailable') from None
+
+
 def verify_completed(phase,token):
     try:
         import space_fresh_install_phase_runtime as runtime

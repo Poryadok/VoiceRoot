@@ -112,7 +112,8 @@ class PhaseTest(unittest.TestCase):
                 self.receipt={'new_oid':proof['new_oid'],'role':'space_runtime','scope':'synthetic-runtime'}
                 return copy.deepcopy(self.receipt)
         self.runtime_module=types.SimpleNamespace(SpaceRuntimeRolePhase=Runtime,
-            verify_completed=lambda p,token:copy.deepcopy(p.receipt),verify_prepared=lambda p,token:copy.deepcopy(p.prepared))
+            verify_completed=lambda p,token:copy.deepcopy(p.receipt),verify_receipt=lambda p,token:copy.deepcopy(p.receipt),
+            verify_prepared=lambda p,token:copy.deepcopy(p.prepared))
         self.patches=[mock.patch.dict(sys.modules,{'space_fresh_install_phase_runtime':self.runtime_module}),
             mock.patch.object(pg_module,'KubeSpacePostgres',PG),
             mock.patch.object(physical_module,'verify_receipt',return_value=self.physical_receipt,create=True),
@@ -177,6 +178,30 @@ class PhaseTest(unittest.TestCase):
         self.assertTrue(p.poisoned);self.assertEqual(self.backing.row['status'],'uncertain')
         with self.assertRaises(phase_module.SpaceFreshError):p.run()
         self.assertEqual(self.drops,[11])
+
+    def test_historical_receipt_does_not_claim_current_catalog(self):
+        p=self.phase();completed=p.run()
+        with mock.patch.object(p,'_catalog',side_effect=AssertionError('no current PG read')), \
+             mock.patch.object(p.pg,'snapshot',side_effect=AssertionError('no PG read')), \
+             mock.patch.object(self.runtime_module,'verify_completed',side_effect=AssertionError('historical runtime only')):
+            receipt=phase_module.verify_historical(p,'token')
+        self.assertEqual(receipt['new_oid'],42)
+        self.assertEqual(receipt['catalog'],completed['catalog'])
+        self.assertEqual(receipt['original_catalog_sha256'],phase_module._digest(self.original))
+        receipt['catalog']['all_databases']['space_db']=999
+        self.assertEqual(phase_module.verify_historical(p,'token')['catalog']['all_databases']['space_db'],42)
+
+    def test_historical_final_guard_local_drift_is_rejected(self):
+        p=self.phase();p.run();original=p._guard
+        def mutate():
+            original()
+            self.journal.state['steps'].pop(phase_module.STEP,None)
+        with mock.patch.object(p,'_stable',wraps=p._stable) as stable:
+            original_stable=stable._mock_wraps
+            def final(before):
+                with mock.patch.object(p,'_guard',side_effect=mutate):original_stable(before)
+            stable.side_effect=final
+            with self.assertRaises(phase_module.SpaceFreshError):phase_module.verify_historical(p,'token')
 
     def test_missing_reset_intent_has_no_effect(self):
         del self.journal.intent['space_fresh_install']
