@@ -296,6 +296,12 @@ class ProtectedAnchorTests(unittest.TestCase):
                   'actual_images': self.ctx['images'], 'namespace_uid': 'ns', 'anchor': ancestry['anchor'],
                   'active_release': ancestry['active_release'],
                   'live': {'postgres': plan['postgres'], 'role_oid': 13, 'database_oid': 29, 'owner_oid': 13, 'secret': secret}}
+        parented={**record,'schema':'voice-staging-realtime-bootstrap-existing-v2','prerequisites_sha256':'4'*64}
+        existing._validate_record(parented)
+        for invalid in ({**parented,'prerequisites_sha256':'bad'},
+                        {**record,'prerequisites_sha256':'4'*64},
+                        {k:v for k,v in parented.items() if k!='prerequisites_sha256'}):
+            with self.assertRaises(existing.Blocked):existing._validate_record(invalid)
         target = {'tag': self.ctx['commit'], 'images': self.ctx['images'], 'manifest_sha256': 'e' * 64,
                   'realtime_bootstrap_sha256': existing.digest(record)}
         state = {'operation': op2, 'status': 'PASS', 'phase': 'POST_RESTART', 'fence_status': 'RELEASED',
