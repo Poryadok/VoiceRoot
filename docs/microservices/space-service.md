@@ -716,6 +716,15 @@ ordinary rights require matching published generation/operation/receipt and
 fresh owner eligibility. Unknown/error is unavailable. This remains a bounded
 owner observation under the snapshot limitation above, not distributed ACID.
 
+Community roster publication commits its Space-owned episode before checking
+the native Role projection. Space uses a fresh request-bound `service:space`
+`GetMemberRoles` on the dedicated Role listener to confirm the fixed managed
+Member role; it never selects today's default join role or calls generic
+`AssignRole`/`RevokeRole`. Native Role derives that baseline from fresh community
+authority. After source departure, Space confirms its absence while retaining
+independent ordinary membership. Unknown Role outcomes remain unavailable;
+retry reuses the durable roster receipt and repeats the protected observation.
+
 Leave/kick/ban/purge invalidate pending candidates under the same Space fence,
 advance the permanent ordinary generation and persist typed removal work even
 if no membership row exists. Account ban invalidates all pending profile aliases
