@@ -35,6 +35,8 @@ class ConfigTest(unittest.TestCase):
     def test_space_issuer_only_reports_fixed_category(self):
         self.assertEqual(config.category('auth','S2S_JWKS_URLS_JSON','{"space":"https://voice-space:8443/.well-known/jwks.json","private":"value"}'),'expected')
         self.assertEqual(config.category('auth','S2S_JWKS_URLS_JSON','{"space":"https://other"}'),'different')
+        self.assertEqual(config.category('auth','AUTH_GRPC_TLS_CERT_FILE','/etc/voice/media/server/tls.crt'),'expected')
+        self.assertEqual(config.category('auth','AUTH_GRPC_TLS_CERT_FILE','/elsewhere'),'different')
 
     def test_unknown_reference_and_value_expansion_are_rejected(self):
         def read(*_): raise AssertionError('unknown key must not be fetched')

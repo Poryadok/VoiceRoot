@@ -36,7 +36,9 @@ FIELDS={
 EXPECTED={'USER_GRPC_ADDR':'voice-user:9090','SOCIAL_GRPC_ADDR':'voice-social:9090',
           'GATEWAY_JWT_ISSUER':'voice-auth','GATEWAY_JWT_AUDIENCE':'voice-client',
           'GATEWAY_JWKS_URL':'http://voice-auth:8080/api/v1/auth/.well-known/jwks.json',
-          'AUTH_SESSION_FLOOR_GRPC_PORT':'9092','ROLE_PRINCIPAL_GRPC_LISTEN':':9091'}
+          'AUTH_SESSION_FLOOR_GRPC_PORT':'9092','AUTH_GRPC_TLS_CERT_FILE':'/etc/voice/media/server/tls.crt',
+          'AUTH_GRPC_TLS_KEY_FILE':'/etc/voice/media/server/tls.key',
+          'AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE':'/etc/voice/media/ca/ca.crt','ROLE_PRINCIPAL_GRPC_LISTEN':':9091'}
 KEYS=frozenset(name for names in FIELDS.values() for name in names)|{'REDIS_ADDR','active-kid'}
 
 
