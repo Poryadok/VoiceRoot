@@ -115,6 +115,27 @@ class PhaseTest(unittest.TestCase):
             config.inventory=inv; roots.inventory=inv; trust.inventory=inv; trust.jdk=roots; trust.preflight=issuer
             with mock.patch.object(subject.shared.media_operation_guard,'verify'):
                 phase=subject.TargetPlanPhase(own.journal,own.fence,own.client,lock,'ns',pkg,inv,config,roots,issuer,trust,'/source')
+                issuer_receipt={'ca':{'uid':'ca','resourceVersion':'1','der_sha256':'a'*64},'creator_secrets':{
+                    name:{'state':'absent'} for name in ('voice-auth-media-server-tls','voice-gateway-media-client-tls','voice-gateway-principal-signing')}}
+                jdk_receipt={'image':'image','root_fingerprints':['b'*64]}
+                prepared={'mode':'create','old':None,'media_ca':issuer_receipt['ca'],
+                    'jdk_receipt_sha256':subject.writer_cut.digest(jdk_receipt),'issuer_receipt_sha256':subject.writer_cut.digest(issuer_receipt),
+                    'root_count':1,'operation_id':context['operation_id'],'source_sha':context['commit'],'namespace_uid':'ns'}
+                trust.record={'status':'prepared','plan_sha256':subject.writer_cut.digest(prepared)}
+                trust.journal.state['steps'][trust_effect.STEP]=copy.deepcopy(trust.record)
+                trust.journal.state['steps'][trust_effect.PLAN_STEP]=copy.deepcopy(prepared)
+                backing.row[trust_effect.LEDGER]=copy.deepcopy(trust.record)
+                trust._guard=mock.Mock(); trust._ledger=backing.read; trust._dependencies=mock.Mock(return_value=(jdk_receipt,issuer_receipt))
+                trust._ca=mock.Mock(); trust._read_store=mock.Mock(return_value=(None,None)); trust._key=mock.Mock(return_value=b'key')
+                trust._locals=mock.Mock(); phase._inventory=mock.Mock(return_value={'projection':{}})
+                phase._package=mock.Mock(return_value={'images':{'voice-auth/auth':'image'}})
+                with mock.patch.object(subject.observed_config,'verify_completed',return_value={}), \
+                     mock.patch.object(subject.jdk,'verify_completed',return_value=jdk_receipt), \
+                     mock.patch.object(subject.preflight,'verify_current',return_value=issuer_receipt):
+                    self.assertEqual(phase._evidence('token')[-1],prepared)
+                    trust.journal.state['steps'][trust_effect.PLAN_STEP]['mode']='replace'
+                    with self.assertRaises(trust_effect.TrustEffectError): phase._evidence('token')
+                    trust.journal.state['steps'][trust_effect.PLAN_STEP]=copy.deepcopy(prepared)
                 receipt={'config_sha256':subject.writer_cut.digest({'fixed':'config'}),'scope':'fixture'}
                 targets={'auth':{'source':{},'config_target':{},'image_target':{}}}
                 phase._evidence=mock.Mock(return_value=()); phase._capture=mock.Mock(return_value=(copy.deepcopy(receipt),copy.deepcopy(targets)))
@@ -123,6 +144,12 @@ class PhaseTest(unittest.TestCase):
                 self.assertEqual(subject.verify_current(phase,'token','actor')['targets'],targets)
                 with mock.patch.object(subject.observed_config,'verify_receipt',return_value={'fixed':'config'}):
                     self.assertEqual(subject.verify_receipt(phase,'token')['targets'],targets)
+                def tamper(*args):
+                    phase.journal.state['steps'][subject.STEP]['private_targets']['auth']['config_target']['drift']=True
+                    return copy.deepcopy(receipt),copy.deepcopy(targets)
+                phase._capture.side_effect=tamper
+                with self.assertRaises(subject.TargetPlanError): subject.verify_current(phase,'token','actor')
+                phase._capture.side_effect=None
                 phase.journal.state['steps'][subject.STEP]['private_targets']['auth']['config_target']['drift']=True
                 with self.assertRaises(subject.TargetPlanError): subject.verify_current(phase,'token','actor')
 
