@@ -199,7 +199,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     return json.dumps({'apiVersion':'apps/v1','kind':'DeploymentList','metadata':{'resourceVersion':'1'},'items':[]}).encode()
    raise AssertionError('unexpected external command '+repr(tail))
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
-       patch.object(stage_runtime.Kube,'run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture):
+       patch.object(stage_runtime.Kube,'_run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
    except FileNotFoundError as exc:
