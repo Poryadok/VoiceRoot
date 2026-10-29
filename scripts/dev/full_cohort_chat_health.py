@@ -7,6 +7,7 @@ verifiers; missing dependencies fail closed and are not deployment admission.
 """
 import base64
 import copy
+import contextlib
 import ipaddress
 import json
 import os
@@ -14,14 +15,35 @@ from pathlib import Path
 import re
 import secrets
 import selectors
+import signal
 import socket
 import ssl
 import subprocess
 import time
+import threading
 
 
 class HealthError(RuntimeError):
     pass
+
+
+class _Deadline(BaseException):
+    pass
+
+
+@contextlib.contextmanager
+def _bounded_observation(seconds):
+    if threading.current_thread() is not threading.main_thread(): raise HealthError('Chat health requires main thread')
+    old_handler = signal.getsignal(signal.SIGALRM)
+    if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0): raise HealthError('Chat health timer already in use')
+    def expired(signum, frame): raise _Deadline()
+    signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 
 def _unique(pairs):
@@ -30,6 +52,15 @@ def _unique(pairs):
         if key in result: raise ValueError()
         result[key] = value
     return result
+
+
+def _authority_call(function, *args):
+    """An unavailable protected dependency is never a resumable health result."""
+    import full_cohort_schema_metadata as common
+    try:
+        return function(*args)
+    except Exception:
+        raise common.GuardLost('Chat health dependency unavailable') from None
 
 
 def check_health(raw):
@@ -176,12 +207,18 @@ def _workloads(client, image_phase, cut, package):
             row.get('full_cohort_invocation') != {'nonce':image_phase.invocation,
                                                    'operation_id':image_phase.fence.context['operation_id']}):
         raise HealthError('Chat image authority unavailable')
-    image_phase._records(row); image_phase._accounts()
-    proof = cut.current_resumed_proof()
+    _authority_call(image_phase._records, row); _authority_call(image_phase._accounts)
+    proof = _authority_call(cut.current_resumed_proof)
     selected = [x for x in proof['controllers'] if x.get('kind') == 'Deployment' and x.get('name') == 'voice-chat']
     if len(selected) != 1: raise HealthError('resumed Chat controller unavailable')
     target = selected[0]; replicas = target['replicas']
     if type(replicas) is not int or not 1 <= replicas <= 64: raise HealthError('resumed Chat replicas unavailable')
+    image_record = image_phase.journal.state['steps'].get('full-cohort-image-voice-chat', {})
+    image_receipt = image_record.get('receipt', {})
+    if (image_record.get('status') != 'done' or image_receipt.get('uid') != target['uid'] or
+            image_receipt.get('spec') != image_phase._target('voice-chat') or
+            not image_receipt.get('resourceVersion')):
+        raise HealthError('Chat image effect unavailable')
     if (package['images'].get('voice-chat/chat') != image_phase.fence.context['images'].get('voice-chat/chat') or
             package['platform_digests'].get('voice-chat/chat') !=
             image_phase.intent['full_cohort']['platform_digests'].get('voice-chat/chat')):
@@ -253,7 +290,7 @@ def _workloads(client, image_phase, cut, package):
     if set(targets) != {p['uid'] for p in result} or any(
             targets[p['uid']] != {'name':p['name'], 'addresses':[p['ip']]} for p in result):
         raise HealthError('Chat endpoint target changed')
-    common._fence(cut._guard); common._fence(image_phase._guard); image_phase._accounts()
+    common._fence(cut._guard); common._fence(image_phase._guard); _authority_call(image_phase._accounts)
     return {'controller_uid':target['uid'], 'generation':target['generation'],
             'spec_sha256':_digest(target['spec']), 'pods':sorted(result, key=lambda item:item['name']),
             'service':{'uid':sm['uid'], 'resourceVersion':sm['resourceVersion'], 'cluster_ip':spec['clusterIP']},
@@ -331,13 +368,13 @@ class ChatHealthPhase:
         import realtime_config_transition as config
         if self.fence.context['operation_id'].startswith('media-c1-'):
             import realtime_config_transition_inputs as inputs
-            proof = inputs.observe(cut, self.p3_session, self.migration, self.source_root)
+            proof = _authority_call(inputs.observe, cut, self.p3_session, self.migration, self.source_root)
         else:
             import realtime_p3_existing as existing
-            proof = existing.verify_reuse(self.fence, self.client, self.lock, self.namespace_uid,
-                                          self.predecessor_journal, self.source_root)
-        deployment = config.verify_deployment_successor(cut, self.config_journal, 'chat')
-        service = config.verify_chat_service(cut, self.config_journal)
+            proof = _authority_call(existing.verify_reuse, self.fence, self.client, self.lock, self.namespace_uid,
+                                    self.predecessor_journal, self.source_root)
+        deployment = _authority_call(config.verify_deployment_successor, cut, self.config_journal, 'chat')
+        service = _authority_call(config.verify_chat_service, cut, self.config_journal)
         if (set(deployment) != {'source','target_spec','receipt','ledger_record'} or
                 set(service) != {'source','target_spec','receipt','ledger_record'}):
             raise HealthError('Chat config authority unavailable')
@@ -350,6 +387,10 @@ class ChatHealthPhase:
                 'deployment':deployment, 'service':service}
 
     def _observe(self, token, cut):
+        with _bounded_observation(180):
+            return self._observe_bounded(token, cut)
+
+    def _observe_bounded(self, token, cut):
         import hashlib
         deadline = time.monotonic() + 180
         def guarded():
@@ -357,9 +398,9 @@ class ChatHealthPhase:
             self._guard(cut)
             if time.monotonic() >= deadline: raise HealthError('Chat health deadline elapsed')
         guarded()
-        package = self.package_phase.verify_current(token)
+        package = _authority_call(self.package_phase.verify_current, token)
         source = self._source(cut)
-        resumed = [item for item in cut.current_resumed_proof()['controllers']
+        resumed = [item for item in _authority_call(cut.current_resumed_proof)['controllers']
                    if item.get('kind') == 'Deployment' and item.get('name') == 'voice-chat']
         if len(resumed) != 1: raise HealthError('Chat controller not resumed')
         expected = copy.deepcopy(source['deployment']['target_spec'])
@@ -369,7 +410,8 @@ class ChatHealthPhase:
         expected['replicas'] = resumed[0]['replicas']
         if expected != resumed[0]['spec']: raise HealthError('Chat config successor differs')
         snapshot = _workloads(self.client, self.image_phase, cut, package)
-        if source['service']['receipt']['uid'] != snapshot['service']['uid']:
+        if any(source['service']['receipt'].get(key) != snapshot['service'][key]
+               for key in ('uid', 'resourceVersion')):
             raise HealthError('Chat Service identity differs')
         material = _private_material(source['secret'], source['ca'], guarded)
         ca_der = ssl.PEM_cert_to_DER_cert(material[2].decode('ascii'))
@@ -440,6 +482,8 @@ def verify_completed(phase, cut, token):
         return copy.deepcopy(receipt)
     except common.GuardLost:
         raise
+    except _Deadline:
+        raise HealthError('Chat health deadline elapsed') from None
     except Exception:
         phase._guard(cut)
         raise HealthError('completed Chat health unavailable') from None
