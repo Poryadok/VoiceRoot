@@ -224,7 +224,8 @@ class FullCohortImageApply:
             if cut.journal.state['steps'].get(key) != value:
                 raise RecoveryRequired('cut journal lineage changed')
         for key in cut.journal.state['steps']:
-            if key not in capture.cut_steps and (not self.verifying or not key.startswith('writer-resume-')):
+            allowed = key.startswith('writer-resume-') or key == 'writer-cut-resume-inventory'
+            if key not in capture.cut_steps and (not self.verifying or not allowed):
                 raise RecoveryRequired('unexpected cut journal step')
         config = capture.config_journal
         if (config is not cut.config_journal or cut.config_snapshot != capture.config_snapshot
@@ -624,6 +625,41 @@ class FullCohortImageApply:
                 raise RecoveryRequired('writer resume receipt invalid')
             generations[name] = expected_generation
         return generations
+
+    def verify_activation_lineage(self):
+        """Read the completed source-owned image receipts for activation admission."""
+        entered = False
+        try:
+            if not self.started or self.verifying:
+                raise RecoveryRequired('image invocation not available')
+            self.verifying = True
+            entered = True
+            self._guard()
+            row, _ = self.fence.ledger.read()
+            self._records(row)
+            self._writer_records(row)
+            receipts = {}
+            for name in CATALOG:
+                local = self.journal.state['steps'].get('full-cohort-image-' + name, {})
+                receipt = local.get('receipt', {})
+                if (local.get('status') != 'done' or receipt.get('uid') != self.intent['full_cohort']['workloads'][name]['uid']
+                        or receipt.get('spec') != self._target(name) or not receipt.get('resourceVersion')):
+                    raise RecoveryRequired('image receipt incomplete')
+                receipts[name] = copy.deepcopy(receipt)
+            self._guard()
+            row, _ = self.fence.ledger.read()
+            self._records(row)
+            self._writer_records(row)
+            if any(self.journal.state['steps'].get('full-cohort-image-' + name, {}).get('receipt') != receipt
+                   for name, receipt in receipts.items()):
+                raise RecoveryRequired('image receipts changed during activation check')
+            return {'operation_id': self.fence.context['operation_id'], 'source_sha': self.fence.context['commit'],
+                    'images': receipts}
+        except BaseException:
+            self._uncertain()
+        finally:
+            if entered:
+                self.verifying = False
 
     def verify_after_resume(self):
         try:

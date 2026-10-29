@@ -266,6 +266,20 @@ class FullCohortTest(unittest.TestCase):
         with self.assertRaises(cohort.RecoveryRequired): phase.apply()
         self.assertEqual(self.client.patches, 0)
 
+    def test_activation_lineage_reads_only_completed_qualified_image_receipts(self):
+        phase = self.new()
+        phase.apply()
+        before = self.client.patches
+        result = phase.verify_activation_lineage()
+        self.assertEqual(len(result['images']), 23)
+        self.assertEqual(self.client.patches, before)
+        self.assertFalse(phase.verifying)
+        step = 'full-cohort-image-voice-auth'
+        phase.journal.state['steps'][step]['receipt']['spec']['replicas'] = 7
+        with self.assertRaises(cohort.RecoveryRequired): phase.verify_activation_lineage()
+        self.assertFalse(phase.verifying)
+        self.assertEqual(self.client.patches, before)
+
     def test_already_target_images_are_observed_without_a_patch(self):
         names = ('voice-web', 'voice-admin', 'voice-developer-portal')
         for name in names:
