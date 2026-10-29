@@ -26,6 +26,12 @@ class Joined(Exception):
 
 class BridgePrerequisiteComposition(unittest.TestCase):
     def test_real_bridge_runs_parent_and_captures_its_receipt(self):
+        self._exercise()
+
+    def test_missing_issuer_refuses_before_any_effect_via_bridge(self):
+        self._exercise('missing-issuer')
+
+    def _exercise(self, fault=None):
         original = prereq.run_prepare
 
         def joined(actions, request, approved, execution, workspace):
@@ -59,8 +65,12 @@ class BridgePrerequisiteComposition(unittest.TestCase):
                  patch.object(source_authority, 'capture_source', side_effect=source), \
                  patch.object(bridge_root, 'Kube', return_value=stage.kube), \
                  patch.object(runtime_stage.RolloutStage, 'capture', side_effect=capture):
-                with self.assertRaises(ReachedPolicy):
+                if fault == 'missing-issuer':
                     actions._prepare(request)
+                    self.fail('missing issuer unexpectedly admitted')
+                else:
+                    with self.assertRaises(ReachedPolicy):
+                        actions._prepare(request)
             row = session.check()
             self.assertEqual(row['phase'], 'prerequisites-captured')
             record = prereq.load_capture(session, actual=stage.old_images)
@@ -70,8 +80,11 @@ class BridgePrerequisiteComposition(unittest.TestCase):
 
         fixture = staging_prerequisites_test.PrepareCompositionTests()
         with patch.object(prereq, 'run_prepare', side_effect=joined):
-            with self.assertRaises(Joined):
-                fixture._cold_prepare()
+            if fault:
+                fixture._cold_prepare(fault)
+            else:
+                with self.assertRaises(Joined):
+                    fixture._cold_prepare()
 
 
 if __name__ == '__main__':
