@@ -44,6 +44,10 @@ ci_global:
   - '!scripts/ci/gate-latency_test.py'
 
 ci_scripts:
+  # Complete chain fixture imports plus its actual restore-only SQL inputs.
+  - scripts/dev/story_media_backup*.py
+  - scripts/staging/github_custody.py
+  - src/backend/migrations/voice_db/**
   - scripts/ci/**
   - scripts/release/capability_manifest*.py
   - scripts/release/client_compatibility*.py

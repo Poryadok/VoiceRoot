@@ -5,6 +5,10 @@ on:
     branches: [master]
     paths:
       - .github/workflows/dev-candidate-publish.yml
+      - scripts/ci/story-media-cohort-chain*
+      - scripts/dev/story_media_backup*.py
+      - scripts/staging/github_custody.py
+      - src/backend/migrations/voice_db/**
       - scripts/dev/publish_candidate.py
       - scripts/dev/publish_candidate_test.py
       - scripts/dev/story-media-pki-issuer/**
@@ -206,6 +210,8 @@ jobs:
             python3 -B -m unittest realtime_p3_create_only_test
           docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo/scripts/dev golang:1.26-bookworm \
             python3 -B -m unittest realtime_p3_create_only_packet_test realtime_p3_create_only_socket_test realtime_p3_create_only_source_test realtime_p3_create_only_transport_test realtime_p3_create_only_export_integration_test realtime_p3_missing_issuer_test realtime_p3_root_bundle_test realtime_p3_root_export_test
+      - name: Verify encrypted cohort capture and isolated restore chain
+        run: bash scripts/ci/story-media-cohort-chain.sh
 
   publish:
     name: Publish exact DEV candidate
