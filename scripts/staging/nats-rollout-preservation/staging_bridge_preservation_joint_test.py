@@ -197,7 +197,10 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   policy_fields=('s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host',
    'developer_portal_host','gateway_tls_secret','storage_tls_secret','minio_image','minio_mc_image',
    'minio_storage_class','minio_storage_size','web_origin')
-  save(root/'installed'/'policy.json',{key:store_parameters[key] for key in policy_fields if key in store_parameters})
+  import staging_release_policy_prepare as policy_child
+  selected_policy={key:store_parameters[key] for key in policy_fields if key in store_parameters}
+  selected_policy['release_policy']=policy_child.staging_descriptor(c['commit'])
+  save(root/'installed'/'policy.json',selected_policy)
   inputs=root/'installed'/'prerequisite-inputs';inputs.mkdir(mode=0o700)
   def openssl(*args):
    subprocess.run(['/usr/bin/openssl',*map(str,args)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
