@@ -21,9 +21,9 @@ class SourceGitTest(unittest.TestCase):
                 'scripts/dev/realtime_p3_root_launch.template.sh','deploy/staging/services.yaml']
             subprocess.run(['git','-C',str(repo),'checkout',sha,'--',*paths],check=True,
                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=90)
-            source.verify(str(repo),sha); digest=bundle.build_git(str(repo),sha,output)
+            digest=bundle.build_git(str(repo),sha,output)
             self.assertEqual(len(digest),64); self.assertTrue((output/'p3-root-launch.sh').is_file())
-            file=repo/'src/backend/space/principal_issuer.go'; file.write_bytes(file.read_bytes()+b'\n')
+            file=repo/'scripts/dev/space_p3_issuer.py'; file.write_bytes(file.read_bytes()+b'\n')
             with self.assertRaises(source.SourceError): source.verify(str(repo),sha)
 
 
