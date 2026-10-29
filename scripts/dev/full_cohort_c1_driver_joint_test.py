@@ -91,6 +91,17 @@ class ExternalKube:
             if args[-1]==schema.AUTH_ENV_POLICY:return b'ok'
             value=self.runtime[args[9]].get(args[-1])
             return b'M' if value is None else b'P'+value.encode()
+        if args[9]=='--raw':
+            path=args[10].split('?',1)[0]
+            name='namespace' if path=='/api/v1/namespaces/voice-dev' else path.rsplit('/',1)[-1]
+            if name=='persistentvolumeclaims':name='pvcs'
+            return json.dumps(self.docs[name]).encode()
+        if args[9]=='configmap' and args[-1]=='json':
+            name=args[10]; return json.dumps({'kind':'ConfigMap','metadata':{'name':name,'namespace':'voice-dev',
+                'uid':'config-'+name,'resourceVersion':'1'},'data':copy.deepcopy(self.configs[name])}).encode()
+        if args[9]=='secret' and 'range $k' in args[-1]:
+            name=args[10]; keys=self.secrets[name]
+            return ('secret-'+name+'\t1\n'+'\n'.join(sorted(keys))+'\n').encode()
         return json.dumps(self.objects[args[9],args[10]]).encode()
 
     def enable_census(self):
@@ -99,6 +110,7 @@ class ExternalKube:
         import full_cohort_namespace_census_test as census_fixture
         root,docs=census_fixture.SnapshotTest().fixture()
         docs['namespace']['metadata']['uid']='namespace'
+        docs['namespace']['metadata']['labels']={'voice.environment':'dev','app.kubernetes.io/managed-by':'voice-dev'}
         model={row['metadata']['name']:row for row in self.apps.deployments}
         old_pods={row['metadata']['name']:row for row in self.apps.pods}
         for deployment in docs['deployments']['items']:
@@ -129,6 +141,27 @@ class ExternalKube:
         self.objects['persistentvolume','pv-one']['spec']['claimRef']['uid']=pvc['metadata']['uid']
         self.objects['endpoints','voice-postgres']['subsets'][0]['addresses'][0]['targetRef']['uid']=pgpod['metadata']['uid']
         self.objects['endpointslices','-l']['items'][0]['endpoints'][0]['targetRef']['uid']=pgpod['metadata']['uid']
+        self.configs={'voice-dev-mail':{'server.mjs':(root/'docker/verification-stub/server.mjs').read_text(encoding='utf8')},
+                      'voice-nats-hub-config':{'nats.conf':'synthetic'},'voice-livekit-config':{'livekit.yaml':'synthetic'}}
+        self.secrets={'voice-app-secrets':{'DATABASE_URL'}}
+        def refs(value):
+            if isinstance(value,dict):
+                for key,child in value.items():
+                    if isinstance(child,dict) and key in ('configMap','configMapRef','configMapKeyRef'):
+                        name=child.get('name'); entries=self.configs.setdefault(name,{}) if name else None
+                        if entries is not None:
+                            if child.get('key'):entries.setdefault(child['key'],'synthetic')
+                            for item in child.get('items',[]):entries.setdefault(item['key'],'synthetic')
+                    if isinstance(child,dict) and key in ('secret','secretRef','secretKeyRef'):
+                        name=child.get('name',child.get('secretName')); entries=self.secrets.setdefault(name,set()) if name else None
+                        if entries is not None:
+                            if child.get('key'):entries.add(child['key'])
+                            entries.update(item['key'] for item in child.get('items',[]))
+                    refs(child)
+            elif isinstance(value,list):
+                for item in value:refs(item)
+        for kind in ('deployments','statefulsets'):
+            for obj in docs[kind]['items']:refs(obj['spec']['template']['spec'])
         self.docs=docs
         return root
 
@@ -251,6 +284,22 @@ class DriverJointTest(unittest.TestCase):
                     with self.assertRaises(ValueError):affected._full_catalog(work.owner.catalog,engine,'fixture-start')
                 self.assertEqual(result['all_databases']['user_db'],42)
                 self.assertEqual(result['excluded']['template0']['reason'],'connections_disabled_zero_activity')
+
+    def test_census_uses_same_raw_kube_objects_under_real_guard(self):
+        case=fixture.RealPreflightTest('test_pre_supervisor_hook_uses_the_real_root_facade')
+        created=[]; self.addCleanup(checked_nested,case,created); original=fixture.writer_cut_test.WriterCutTest
+        def make(*args):
+            base=checked_base(original(*args)); created.append(base); return base
+        with patch.object(fixture.writer_cut_test,'WriterCutTest',side_effect=make):
+            with case.phases() as work:
+                kube=ExternalKube(); root=kube.enable_census(); kube.docs['namespace']['metadata']['uid']=work.owner.namespace_uid
+                process=ExternalPostgres(kube)
+                with patch.object(schema,'_bounded_process',side_effect=process.process):
+                    self.assertEqual(len(work.owner.census._read('deployments')['items']),28)
+                    self.assertEqual(work.owner.census._read('namespace')['metadata']['uid'],work.owner.namespace_uid)
+                    self.assertEqual(work.owner.census._config('voice-dev-mail')['data']['server.mjs'],
+                                     (root/'docker/verification-stub/server.mjs').read_text(encoding='utf8'))
+                    self.assertIn('DATABASE_URL',work.owner.census._secret_metadata('voice-app-secrets')['keys'])
 
     def test_changed_tt_generation_refuses_before_package_effect(self):
         """Exercise the real driver, supervisor, journals and fence without a live claim."""
