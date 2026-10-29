@@ -383,7 +383,8 @@ class FullCohortImageApply:
         if inventory is not None:
             details = {'operation_id': self.fence.context['operation_id'],
                        'cut_invocation': cut.invocation, 'inventory_sha256': inventory['receipt_sha256']}
-            if inventory_step['details'] != details or inventory_step['receipt'] != details:
+            if (inventory_step['details'] != details or inventory_step['receipt'] != details or
+                    not cut._resume_inventory_matches(row)):
                 raise RecoveryRequired('resume inventory receipt changed')
         histories = getattr(cut, 'migration_history', [])
         active = getattr(cut, 'migration', None)

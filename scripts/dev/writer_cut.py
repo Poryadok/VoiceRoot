@@ -312,6 +312,7 @@ class WriterCut:
         row, _ = self.fence.ledger.read()
         if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
                 not self._config_effects_match(row) or
+                (phase == 'resume' and not self._resume_inventory_matches(row)) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed before submission')
         result = self._patch(kind, meta['name'], patch)
@@ -642,11 +643,16 @@ class WriterCut:
             right, rrev = inventory_phase.fence.ledger.read()
             if left != right or lrev != rrev or not self._owned(left):
                 raise RecoveryRequired('resume inventory ledger changed')
+            local = copy.deepcopy(inventory_phase.journal.state['steps'][full_cohort_inventory_phase.STEP])
+            marker = {k: v for k, v in local.items() if k != 'receipt'}
+            if local.get('receipt') != receipt or left.get('full_cohort_inventory') != marker:
+                raise RecoveryRequired('resume inventory marker changed')
             details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
                        'inventory_sha256': digest(receipt)}
             record = self._reserve('writer-cut-resume-inventory', details)
             self._complete('writer-cut-resume-inventory', record, details)
-            self.resume_inventory = {'phase': inventory_phase, 'token': token, 'receipt_sha256': digest(receipt)}
+            self.resume_inventory = {'phase': inventory_phase, 'token': token, 'receipt_sha256': digest(receipt),
+                                     'local': local, 'marker': marker}
             observed = self._resumed_sessions()
             if observed['attributed_sessions']:
                 raise RecoveryRequired('sessions precede writer resume')
@@ -657,6 +663,17 @@ class WriterCut:
     def _has_resumed_effect(self):
         return any(k.startswith('writer-resume-') and v.get('status') == 'done'
                    for k, v in self.journal.state['steps'].items() if isinstance(v, dict))
+
+    def _resume_inventory_matches(self, row):
+        if self.resume_inventory is None:
+            return self.migration is None and not self.migration_history
+        import full_cohort_inventory_phase
+        binding = self.resume_inventory
+        phase = binding['phase']
+        return (not phase.journal.poisoned and phase.journal.dirfd is not None and phase.journal.lockfd is not None and
+                phase.journal.state['steps'].get(full_cohort_inventory_phase.STEP) == binding['local'] and
+                row.get('full_cohort_inventory') == binding['marker'] and
+                digest(binding['local']['receipt']) == binding['receipt_sha256'])
 
     def _resumed_sessions(self):
         import writer_cut_pg_probe

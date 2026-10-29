@@ -130,6 +130,10 @@ class MigrationCutTest(unittest.TestCase):
             def __init__(inner):
                 inner.fence, inner.client, inner.lock = self.fence, self.client, copy.deepcopy(self.lock)
                 inner.namespace_uid = 'ns'
+                receipt = {'operation_id': self.context['operation_id'], 'qualified': True}
+                inner.journal = types.SimpleNamespace(poisoned=False, dirfd=1, lockfd=1,
+                    state={'steps': {full_cohort_inventory_phase.STEP: {'status': 'done', 'receipt': receipt}}})
+                self.ledger.row['full_cohort_inventory'] = {'status': 'done'}
             def verify_receipt(inner, token):
                 self.assertEqual(token, 'private-token-marker')
                 return {'operation_id': self.context['operation_id'], 'qualified': True}
@@ -156,7 +160,7 @@ class MigrationCutTest(unittest.TestCase):
             with mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', return_value=bad, create=True):
                 with self.assertRaises(writer_cut.RecoveryRequired): self.cut._resumed_sessions()
 
-    def resume_with_observer(self, unknown):
+    def resume_with_observer(self, unknown, drift=False):
         self.bind()
         self.state['job'].update(state='done', uid='first', resourceVersion='1')
         self.state['terminal'] = 'f' * 64
@@ -168,6 +172,9 @@ class MigrationCutTest(unittest.TestCase):
             def __init__(inner):
                 inner.fence, inner.client, inner.lock = self.fence, self.client, copy.deepcopy(self.lock)
                 inner.namespace_uid = 'ns'
+                inner.journal = types.SimpleNamespace(poisoned=False, dirfd=1, lockfd=1,
+                    state={'steps': {full_cohort_inventory_phase.STEP: {'status': 'done', 'receipt': {'qualified': True}}}})
+                self.ledger.row['full_cohort_inventory'] = {'status': 'done'}
             def verify_receipt(inner, token): return {'qualified': True}
         empty = {'scope': self.admission['session_scope'], 'active_sessions': 0,
                  'active_transactions': 0, 'attributed_sessions': []}
@@ -180,15 +187,22 @@ class MigrationCutTest(unittest.TestCase):
             return {'scope': self.admission['session_scope'], 'active_sessions': int(unknown),
                     'active_transactions': 0, 'attributed_sessions': [{'fixture': 'first-writer'}]}
         targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
-        with mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', side_effect=observer, create=True):
-            if unknown:
+        guard = self.cut._migration_resume_guard
+        def after_guard():
+            guard()
+            if drift and self.cut._has_resumed_effect():
+                self.ledger.row['full_cohort_inventory'] = {'status': 'foreign'}
+                self.ledger.version += 1
+        with mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', side_effect=observer, create=True), \
+             mock.patch.object(self.cut, '_migration_resume_guard', side_effect=after_guard):
+            if unknown or drift:
                 with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
             else:
                 self.cut.resume(targets)
         self.assertTrue(counts)
         self.assertTrue(all(count == 1 for count in counts))
-        self.assertEqual(self.client.workloads[('StatefulSet', 'voice-b')]['spec']['replicas'], 0 if unknown else 1)
-        if unknown: self.assertEqual(self.ledger.row['status'], 'uncertain')
+        self.assertEqual(self.client.workloads[('StatefulSet', 'voice-b')]['spec']['replicas'], 0 if unknown or drift else 1)
+        if unknown or drift: self.assertEqual(self.ledger.row['status'], 'uncertain')
 
     def test_resume_uses_qualified_observer_after_first_cas(self):
         self.resume_with_observer(False)
@@ -196,11 +210,17 @@ class MigrationCutTest(unittest.TestCase):
     def test_unknown_session_blocks_second_resume_cas(self):
         self.resume_with_observer(True)
 
+    def test_inventory_marker_drift_after_observer_blocks_next_cas(self):
+        self.resume_with_observer(False, drift=True)
+
     def test_missing_fixed_observer_holds_before_resume_mutation(self):
         class Inventory:
             def __init__(inner):
                 inner.fence, inner.client, inner.lock = self.fence, self.client, copy.deepcopy(self.lock)
                 inner.namespace_uid = 'ns'
+                inner.journal = types.SimpleNamespace(poisoned=False, dirfd=1, lockfd=1,
+                    state={'steps': {full_cohort_inventory_phase.STEP: {'status': 'done', 'receipt': {'qualified': True}}}})
+                self.ledger.row['full_cohort_inventory'] = {'status': 'done'}
             def verify_receipt(inner, token): return {'qualified': True}
         before = len(self.client.patches)
         with mock.patch.object(full_cohort_inventory_phase, 'InventoryPhase', Inventory), \
