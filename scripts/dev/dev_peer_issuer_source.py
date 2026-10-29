@@ -5,7 +5,7 @@ import re
 import realtime_p3_create_only_source as source
 
 # Set only after the whole fixed issuer/installer payload is reviewed.
-REVIEWED_SOURCE='df9f81006c6dfb4a5737fe7eb3a93bce4cf10c58'
+REVIEWED_SOURCE='7602f104bd4731aa91b9005d86c2d6c3a3f26760'
 FILES=('dev_peer_issuer_metadata.py','dev_peer_issuer_preflight.py','dev_peer_issuer_service.py','dev_peer_issuer_authority.py',
        'dev_peer_issuer_client.py','dev_peer_issuer_packet.py','dev_peer_issuer_material.py','dev_peer_issuer_installer.py',
        'space_p3_issuer_preflight_metadata_root.py','space_p3_issuer_preflight_root.py',
