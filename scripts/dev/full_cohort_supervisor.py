@@ -26,6 +26,9 @@ import canonical_application_package
 import full_cohort_pg_physical_identity
 import space_fresh_install_phase
 import space_native_tool_identity
+import space_creator_runtime_profile_config
+import space_creator_runtime_profile_jdk
+import space_p3_issuer_preflight
 import writer_cut
 
 
@@ -110,6 +113,8 @@ class Supervisor:
         self.journals = []
         self.package = self.inventory = self.catalog = self.realtime_absent = self.census = self.baseline = None
         self.cut = self.physical = self.tool = self.space = None
+        self.creator_config = self.target_jdk = self.issuer_preflight = None
+        self._creator_preparation_started = False
         self._execution_preparation_started = False
         self._guard()
 
@@ -155,7 +160,8 @@ class Supervisor:
     def _open(self, name, extra):
         go_names={'go-migration-'+db+'-journal' for db in full_cohort_go_migration_plan.DATABASES}
         if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal', 'namespace-census-journal',
-                        'writer-cut-journal', 'physical-journal', 'space-native-tool-journal', 'space-fresh-install-journal') and name not in go_names:
+                        'writer-cut-journal', 'physical-journal', 'space-native-tool-journal', 'space-fresh-install-journal',
+                        'creator-config-journal', 'target-jdk-journal', 'space-issuer-preflight-journal') and name not in go_names:
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']
@@ -285,7 +291,120 @@ class Supervisor:
                     self.space.cut is not self.cut or self.space.physical is not self.physical or
                     self.space.tool is not self.tool or self.physical.cut is not self.cut or
                     self.cut.admission!=admission or self.cut.started or self.cut.drained):raise ValueError()
-            self._execution_refs=refs;self._execution_token=token
+            self._execution_refs=refs;self._execution_token=token;self._execution_actor=actor
+            self._execution_fixed=(fixed,copy.deepcopy(actor),root_custody,facades)
             return {'operation_id':self.context['operation_id'],'scope':'pre-drain-phases-only'}
         except BaseException:
             raise SupervisorError('execution preparation incomplete; reconcile before retry') from None
+
+    def _creator_guard(self, token):
+        refs=(self.package,self.inventory,self.catalog,self.census,self.baseline,self.cut,self.physical,self.tool,self.space)
+        if (not hasattr(self,'_execution_refs') or token!=self._execution_token or
+                any(a is not b for a,b in zip(refs,self._execution_refs)) or
+                self.cut.started or self.cut.drained):
+            raise SupervisorError('creator pre-drain authority unavailable')
+        self._guard(); self.cut._identity(); self.space._identity()
+
+    def _creator_authority(self):
+        fixed,actor,root_custody,facades=self._execution_fixed
+        return (self._execution_fixed,self._execution_refs,copy.deepcopy((fixed,actor,root_custody)),
+                tuple((p,j,f,c,ledger,copy.deepcopy(intent),custody) for p,j,f,c,ledger,intent,custody in facades))
+
+    def _creator_final(self,token,phases,locals_,authority):
+        saved,saved_refs,values,saved_facades=authority
+        if self._execution_fixed is not saved or self._execution_refs is not saved_refs:raise ValueError()
+        refs=(self.package,self.inventory,self.catalog,self.census,self.baseline,self.cut,self.physical,self.tool,self.space)
+        fixed,actor,root_custody,facades=self._execution_fixed
+        if ((fixed,actor,root_custody)!=values or len(facades)!=len(saved_facades) or
+                any(any(a is not b for a,b in zip(current[:5],original[:5])) or current[5:]!=original[5:]
+                    for current,original in zip(facades,saved_facades))):raise ValueError()
+        if (token!=self._execution_token or any(a is not b for a,b in zip(refs,self._execution_refs)) or
+                any(a is not b for a,b in zip(phases,(self.creator_config,self.target_jdk,self.issuer_preflight))) or
+                (self.context,self.lock,self.namespace_uid,self.intent)!=fixed or self._execution_actor!=actor or
+                self.cut.started or self.cut.drained or self.journal is not self._journal or
+                self.fence is not self._fence or self.client is not self._client or
+                self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
+                self.fence.context!=self.context or self.client.journal is not self.journal or
+                self.fence.ledger.client is not self.client or self.fence.check is not self._check or
+                self._check.context!=self.context or self._check.endpoint!=media_backup_upload_runner.TT or
+                getattr(self.fence.on_uncertain,'__self__',None) is not self._check or
+                getattr(self.fence.on_uncertain,'__func__',None) is not resource_fencing.ResourceCheck.mark_uncertain or
+                space_native_tool_identity.SpaceNativeToolPhase._custody(self.journal)!=root_custody or
+                any(p.journal is not j or p.fence is not f or p.client is not c or f.ledger is not ledger or
+                    c.journal is not j or ledger.client is not c or f.context!=self.context or
+                    p.lock!=self.lock or p.namespace_uid!=self.namespace_uid or j.poisoned or
+                    j.intent!=intent or j.state.get('intent')!=intent or
+                    space_native_tool_identity.SpaceNativeToolPhase._custody(j)!=custody
+                    for p,j,f,c,ledger,intent,custody in facades) or
+                any((p.journal.state['steps'],p.record)!=local for p,local in zip(phases,locals_))):raise ValueError()
+        self.cut._identity();self.space._identity()
+        for phase in phases:phase._local()
+
+    def prepare_creator_inputs(self,token):
+        """Start fixed pre-drain observations and the root custody handshake.
+
+        This is not a complete release admission and does not stop writers.
+        """
+        if self._creator_preparation_started:
+            raise SupervisorError('creator preparation already attempted; reconcile')
+        self._creator_preparation_started=True
+        try:
+            authority=self._creator_authority()
+            self._creator_guard(token)
+            j,f,c=self._open('creator-config-journal',{})
+            self.creator_config=space_creator_runtime_profile_config.CreatorConfigPhase(
+                j,f,c,self.lock,self.namespace_uid,self.package,self.inventory)
+            self.creator_config.run(token)
+            j,f,c=self._open('target-jdk-journal',{})
+            self.target_jdk=space_creator_runtime_profile_jdk.TargetJdkPhase(
+                j,f,c,self.lock,self.namespace_uid,self.package,self.inventory)
+            self.target_jdk.run(token,self._execution_actor)
+            j,f,c=self._open('space-issuer-preflight-journal',{'space_issuer_preflight':{
+                'source_root':str(canonical_application_package.ROOT),'source_sha':self.context['commit']}})
+            self.issuer_preflight=space_p3_issuer_preflight.IssuerPreflightPhase(
+                j,f,c,self.lock,self.namespace_uid,self.package,self.cut,str(canonical_application_package.ROOT),token)
+            phases=(self.creator_config,self.target_jdk,self.issuer_preflight)
+            ready=self.issuer_preflight.prepare()
+            issuer_local=copy.deepcopy((self.issuer_preflight.journal.state['steps'],self.issuer_preflight.record))
+            self._creator_guard(token)
+            space_creator_runtime_profile_config.verify_completed(self.creator_config,token)
+            config_local=copy.deepcopy((self.creator_config.journal.state['steps'],self.creator_config.record))
+            space_creator_runtime_profile_jdk.verify_completed(self.target_jdk,token)
+            jdk_local=copy.deepcopy((self.target_jdk.journal.state['steps'],self.target_jdk.record))
+            self._creator_guard(token)
+            self._creator_final(token,phases,(config_local,jdk_local,issuer_local),authority)
+            self._creator_refs=phases
+            return ready
+        except BaseException:
+            if self.issuer_preflight is not None:
+                if self.issuer_preflight.pending:self.issuer_preflight._uncertain()
+                try:self.issuer_preflight.close()
+                except BaseException:pass
+            raise SupervisorError('creator preparation incomplete; reconcile before retry') from None
+
+    def finish_creator_inputs(self,token):
+        """Finish the root handshake; further typed release gates still apply."""
+        try:
+            authority=self._creator_authority(); phases=self._creator_refs
+            self._creator_guard(token)
+            if any(x is None for x in (self.creator_config,self.target_jdk,self.issuer_preflight)):raise ValueError()
+            initial=tuple(copy.deepcopy((p.journal.state['steps'],p.record)) for p in phases)
+            if self._creator_refs is not phases:raise ValueError()
+            self._creator_final(token,phases,initial,authority)
+            receipt=self.issuer_preflight.finish()
+            space_creator_runtime_profile_config.verify_completed(self.creator_config,token)
+            config_local=copy.deepcopy((self.creator_config.journal.state['steps'],self.creator_config.record))
+            space_creator_runtime_profile_jdk.verify_completed(self.target_jdk,token)
+            jdk_local=copy.deepcopy((self.target_jdk.journal.state['steps'],self.target_jdk.record))
+            if space_p3_issuer_preflight.verify_current(self.issuer_preflight,token)!=receipt:raise ValueError()
+            issuer_local=copy.deepcopy((self.issuer_preflight.journal.state['steps'],self.issuer_preflight.record))
+            self._creator_guard(token)
+            if self._creator_refs is not phases:raise ValueError()
+            self._creator_final(token,phases,(config_local,jdk_local,issuer_local),authority)
+            return {'operation_id':self.context['operation_id'],'scope':'creator-inputs-only'}
+        except BaseException:
+            if self.issuer_preflight is not None and self.issuer_preflight.pending:
+                self.issuer_preflight._uncertain()
+                try:self.issuer_preflight.close()
+                except BaseException:pass
+            raise SupervisorError('creator custody incomplete; reconcile before retry') from None

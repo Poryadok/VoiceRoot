@@ -137,6 +137,16 @@ def validate(receipt, registry, tag, mode, changed, source_root):
         raise Blocked('rollout_receipt_identity_invalid')
     target=receipt['target']
     target_fields={'registry','tag','mode','changed_services','source_hashes','template_hashes','input_template_hashes','images','manifest_sha256','migration_sha256','nonnats_sha256'}
+    if 'prerequisites_sha256' in target:
+        if ('resource_fence' not in receipt or 'realtime_bootstrap_sha256' not in target
+            or not isinstance(target['prerequisites_sha256'],str) or not SHA.fullmatch(target['prerequisites_sha256'])):
+            raise Blocked('staging_prerequisites_target_invalid')
+        target_fields.add('prerequisites_sha256')
+    if 'cohort_preservation_sha256' in target:
+        if ('resource_fence' not in receipt or 'prerequisites_sha256' not in target
+            or not isinstance(target['cohort_preservation_sha256'],str) or not SHA.fullmatch(target['cohort_preservation_sha256'])):
+            raise Blocked('cohort_preservation_target_invalid')
+        target_fields.add('cohort_preservation_sha256')
     if 'gis_first_install_sha256' in target or 'gis_first_install_normalized_sha256' in target:
         if ('resource_fence' not in receipt or any(not isinstance(target.get(key),str) or not SHA.fullmatch(target[key])
             for key in ('gis_first_install_sha256','gis_first_install_normalized_sha256'))):

@@ -10,6 +10,75 @@ import realtime_bootstrap as bootstrap
 
 
 class CatalogTests(unittest.TestCase):
+    @unittest.skipUnless(__import__('os').name == 'posix' and __import__('os').geteuid() == 0,
+                         'private custody requires isolated Linux root')
+    def test_source_authority_uses_bounded_large_custody_without_expanding_journal_limit(self):
+        import json, os, guard, resource_claim
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(dir='/root') as folder:
+            root=Path(folder);base=root/'installed'/'realtime-bootstrap'/('a'*12)
+            base.mkdir(parents=True,mode=0o700)
+            approved={'source_files':{'path/%05d'%i:'a'*64 for i in range(9000)}}
+            execution={'head_sha':'b'*40};authority={'approved':approved,'execution':execution}
+            path=base/'authority.json';path.write_text(json.dumps(authority));path.chmod(0o600)
+            self.assertGreater(path.stat().st_size,65536)
+            with self.assertRaises(RuntimeError):resource_claim.trusted_json(path)
+            self.assertEqual(resource_claim.trusted_json(path,limit=2<<20),authority)
+            session=Mock(operation='a'*12);view={'fixture':True}
+            plan={'source_authority_sha256':bootstrap.digest(approved),
+                  'source_files_sha256':bootstrap.digest(approved['source_files']),
+                  'execution_sha256':bootstrap.digest(execution),'namespace_uid':'ns',
+                  'postgres':{'system_identifier':'123'}}
+            with patch.object(guard,'ROOT',root),patch.object(bootstrap,'_verify_source_capture'), \
+                 patch.object(bootstrap,'_source_contract'),patch.object(bootstrap,'engine_snapshot',return_value=('ns',{})), \
+                 patch.object(bootstrap,'_system_identifier',return_value='123'),patch.object(bootstrap,'_check_stage'):
+                bootstrap._check_live(session,object(),plan,view)
+                path.chmod(0o622)
+                with self.assertRaises(RuntimeError):bootstrap._check_live(session,object(),plan,view)
+            path.chmod(0o600);path.write_bytes(b' '*(2<<20)+b' ')
+            with self.assertRaises(RuntimeError):resource_claim.trusted_json(path,limit=2<<20)
+            with self.assertRaises(ValueError):resource_claim.trusted_json(path,limit=3<<20)
+
+    def test_parent_drift_blocks_each_effect_after_pending_before_submit(self):
+        import sys
+        from unittest.mock import Mock
+        parent={'fixture':'protected'};module=Mock();module.load_capture.return_value={'changed':True}
+        for name,prior in (('role',()),('database',('role',)),('secret',('role','database'))):
+            state={'status':'RUNNING','steps':{k:{'status':'DONE'} for k in prior},
+                'plan':{'schema':'voice-staging-realtime-bootstrap-v2','actual_images':{'a':'b'},
+                        'prerequisites_sha256':bootstrap.digest(parent)}}
+            submit=Mock();observe=Mock(return_value={'before':True});session=Mock()
+            with self.subTest(effect=name),patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(bootstrap,'save'):
+                with self.assertRaisesRegex(bootstrap.Blocked,'parent_changed'):
+                    bootstrap._effect(session,Path('/unused'),state,name,{'before':True},'a'*64,submit,observe,lambda _:True)
+            self.assertEqual(state['steps'][name]['status'],'PENDING');submit.assert_not_called()
+    def test_captured_parent_readonly_transport_is_fixed_and_one_use(self):
+        import commands, resource_claim, resource_claim_test, sys
+        from unittest.mock import Mock
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        session.admit(start=True);session.journal.row.update(phase='prerequisites-captured',target_sha256='d'*64)
+        session.expected_target='d'*64
+        calls=[]
+        def capture(argv,*,body,**kwargs):
+            session.check(argv);calls.append((argv,body));return b'42\n'
+        module=Mock();module.load_capture.return_value={'protected':'fixture'}
+        with patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(commands,'authority_guard',session.check), \
+             patch.object(commands,'capture',side_effect=capture):
+            self.assertEqual(bootstrap._capture_readonly('system_identifier'),b'42\n')
+            self.assertEqual(calls[0][1],b'SELECT system_identifier FROM pg_control_system();\n')
+            self.assertIsNone(session._prerequisite_readonly_permit)
+            with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(bootstrap._COMMAND)
+            with self.assertRaises(bootstrap.Blocked):bootstrap._capture_readonly('CREATE ROLE realtime')
+            with self.assertRaises(bootstrap.Blocked):bootstrap._capture_readonly('runtime_auth',b'x'*32+b'\n')
+            commands.capture.side_effect=RuntimeError('lost')
+            with self.assertRaisesRegex(RuntimeError,'lost'):bootstrap._capture_readonly('catalog')
+            self.assertIsNone(session._prerequisite_readonly_permit)
+            self.assertEqual(module.load_capture.call_count,3)
+            module.load_capture.side_effect=[{'protected':'fixture'},bootstrap.Blocked('parent_changed')]
+            commands.capture.side_effect=capture
+            with self.assertRaisesRegex(bootstrap.Blocked,'parent_changed'):bootstrap._capture_readonly('catalog')
+            self.assertIsNone(session._prerequisite_readonly_permit)
     def test_existing_database_or_role_is_never_adopted(self):
         for catalog in ({'role': None, 'database': {'oid': 42}},
                         {'role': {'oid': 41}, 'database': None},
@@ -47,6 +116,12 @@ class CatalogTests(unittest.TestCase):
                 'secret': {'uid': 'secret-uid', 'resourceVersion': '12', 'data_sha256': '1' * 64},
                 'active_marker_sha256': '2' * 64}
         bootstrap.validate_plan(plan, session)
+        parented={**plan,'schema':'voice-staging-realtime-bootstrap-v2','prerequisites_sha256':'3'*64}
+        bootstrap.validate_plan(parented,session)
+        for invalid in ({**parented,'prerequisites_sha256':'bad'},
+                        {**plan,'prerequisites_sha256':'3'*64},
+                        {k:v for k,v in parented.items() if k!='prerequisites_sha256'}):
+            with self.subTest(parented=invalid),self.assertRaises(bootstrap.Blocked):bootstrap.validate_plan(invalid,session)
         for changed in ({**plan, 'operation': '111111111111'}, {**plan, 'extra': True},
                         {**plan, 'credential_sha256': 'bad'}, {**plan, 'source_sha': 'c' * 40},
                         {**plan, 'actual_images': {'voice-realtime/realtime': 'latest'}}):
@@ -150,7 +225,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_lost_effect_response_stays_pending_and_is_not_replayed(self):
         session = SimpleNamespace(check=lambda: None)
-        state = {'status': 'RUNNING', 'steps': {}}
+        state = {'status': 'RUNNING', 'steps': {},'plan':{'schema':'voice-staging-realtime-bootstrap-v1'}}
         calls = []
         def effect():
             calls.append('submitted')
