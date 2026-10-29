@@ -368,7 +368,10 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
       'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'00000000-0000-4000-8000-000000000101'}]},
       'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}]}
    if args[:2]==['get','--raw'] and ':8222/proxy/jsz?' in args[-1]:
-    if nats_runtime is not None:return nats_runtime.monitor_jsz(nats_broker)
+    if nats_runtime is not None:
+     broker_id=nats_runtime.owned[nats_broker]['id']
+     return json.loads(subprocess.check_output(['docker','exec',broker_id,'/bin/busybox','wget','-q','-O','-',
+      'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048']))
     from nats_contract_plan_test import live
     import nats_contract_plan as contract
     from rollout_census_test import CREATED
@@ -431,7 +434,11 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     if kind=='deployment':
      obj['metadata']['generation']+=1
      if name==stage_runtime.HUB and obj['spec']['replicas']==0:
-      if nats_runtime is not None:nats_runtime.stop(nats_broker)
+      if nats_runtime is not None:
+       broker_id=nats_runtime.owned[nats_broker]['id']
+       subprocess.run(['docker','stop','--time','10',broker_id],check=True,stdout=subprocess.DEVNULL)
+       actual=json.loads(subprocess.check_output(['docker','inspect',broker_id]))[0]
+       assert actual['Id']==broker_id and actual['State']['Running'] is False and actual['State']['ExitCode']==0
       hub=cluster.objects[('pod','voice-fixture-hub')]
       hub['metadata']['deletionTimestamp']='2025-01-01T00:00:01Z'
       state=hub['status']['containerStatuses'][0]
