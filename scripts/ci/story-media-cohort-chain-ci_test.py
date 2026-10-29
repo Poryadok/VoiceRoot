@@ -16,11 +16,12 @@ class ChainRoutingTests(unittest.TestCase):
         for path in ('scripts/dev/story_media_backup_cohort_chain_test.py',
                      'scripts/dev/story_media_backup_capture_test.py',
                      'scripts/dev/story_media_backup_restore.py',
-                     'scripts/staging/github_custody.py',
-                     'src/backend/migrations/voice_db/000015_fixture.up.sql',
+                     'scripts/staging/nats-rollout-preservation/github_custody.py',
+                     'src/backend/migrations/voice_db/000015_space_admission_ownership.up.sql',
                      'scripts/ci/story-media-cohort-chain.sh',
                      'scripts/ci/story-media-cohort-chain.Dockerfile'):
             with self.subTest(path=path):
+                self.assertTrue((ROOT / path).is_file(), path)
                 self.assertTrue(any(fnmatch.fnmatchcase(path, p) for p in filters['ci_scripts']))
                 self.assertTrue(any(fnmatch.fnmatchcase(path, p) for p in paths))
 

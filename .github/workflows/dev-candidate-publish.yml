@@ -7,7 +7,7 @@ on:
       - .github/workflows/dev-candidate-publish.yml
       - scripts/ci/story-media-cohort-chain*
       - scripts/dev/story_media_backup*.py
-      - scripts/staging/github_custody.py
+      - scripts/staging/nats-rollout-preservation/github_custody.py
       - src/backend/migrations/voice_db/**
       - scripts/dev/publish_candidate.py
       - scripts/dev/publish_candidate_test.py
