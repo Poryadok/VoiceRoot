@@ -2,6 +2,8 @@ import copy
 import base64
 import hashlib
 import json
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock,patch
@@ -10,6 +12,27 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_lost_create_reply_stays_pending_and_cannot_be_replayed(self):
+        import commands, guard, resource_claim
+        from staging_cohort_preservation_test import CutEffectTests
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(native.owner,'_source'):
+                session,_=CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+                calls=[]
+                def lost(argv,**kwargs):
+                    commands.authority_guard(argv);calls.append(argv)
+                    raise RuntimeError('create_response_lost')
+                argv=native.owner.PREFIX+['create','-f','/dev/stdin','-o','json']
+                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=lost):
+                    with self.assertRaisesRegex(RuntimeError,'create_response_lost'):
+                        native._mutate(session,'space-inspect-create',argv,b'{}')
+                    with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                        native._mutate(session,'space-inspect-create',argv,b'{}')
+                self.assertEqual(len(calls),1)
+                record=native.owner._read(native.owner._base(session)/'effects'/'space-inspect-create.json')
+                self.assertEqual(record['status'],'PENDING')
+
     def test_rejects_admission_injected_container_or_host_access(self):
         session=SimpleNamespace(operation='a'*12)
         tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
