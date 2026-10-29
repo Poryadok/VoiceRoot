@@ -208,3 +208,28 @@ explicit fixtures, while the executable, PostgreSQL, archive, CMS, clone,
 native verification and off-node authority loader remain real. The final log
 is tmp/preservation-native/native-inspector-bound.log. Whole source-backed
 _start_cut integration remains with WT30; this checkpoint does not replace it.
+
+The separate V7 populated native fixture now passes (1/1, 47.388s) on the
+unchanged Stage 83a862506c62 transition implementation. It uses the actual pinned
+NATS 2.12.12 server, signed disposable bootstrap/business credentials, real
+RootJournal/Session and plan binding, actual source compiler, native decoder
+9fced2b6eb7ca33d744ceceb1550774ee7a3a6f423c1a3561ab2d3afba107548,
+closed archive, apply_contract, and post-census verifier. Six old streams and
+four explicit-ACK durables include three real pending social messages; all
+16 old message/consumer-state native files remain exact. Only the empty reminder
+stream and its durable are added. A second copy loses the reply after a real
+CREATE: one mutation-issued event remains, retry is refused without another
+issued event or adopted result. The original archive hash never changes, and
+owned containers are removed. No transition, native decoder or post-proof is
+mocked. The TT card and physical PVC/fence are disposable external identities;
+the fixture does not prove release/source admission, actual off-node custody,
+active delivery/ACK advancement, full Stage integration, or live authorization.
+The test-only source is nats_reminder_native_clone_test.py. Retained command is
+tmp/preservation-native/reminder-native-command.json; final log
+reminder-native-third.log SHA256
+e6dbc24353fafc073c010fd85bf13c7236ef120b4147c05f7774d101790e0eff.
+The immutable dependency archive is reminder-native-source.tar SHA256
+82b9a1c1bdc0bda31046510ef67d1936e0bef25d077d6b44a88cd760c1b190c6.
+Earlier failures were fixture setup (missing installed directory and a V4 actor
+used to read V5 voice/user streams); production checks were unchanged. V7 source
+selection remains disabled pending Stage ownership and independent review.
