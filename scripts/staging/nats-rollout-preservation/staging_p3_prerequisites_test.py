@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 from pathlib import Path
 
@@ -6,6 +7,24 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_private_material_payload_roundtrip_is_exact(self):
+        values={name:{key:b'value' for key in keys} for name,keys in p3.ASSET_KEYS.items()}
+        rows=p3.material_objects(values)
+        for row in rows: row['metadata']['annotations']={'voice.poryadok.io/prerequisites-operation':'op'}
+        encode=lambda row:json.dumps(row,sort_keys=True,separators=(',',':')).encode()
+        payloads={row['kind']+'/'+row['metadata']['name']:encode(row) for row in rows}
+        operations={key:'op' for key in payloads}
+        self.assertEqual(p3.decode_material_payloads(payloads,operations),values)
+        mixed=copy.deepcopy(rows); mixed[0]['metadata']['annotations']['voice.poryadok.io/prerequisites-operation']='prior'
+        mixed_payloads={row['kind']+'/'+row['metadata']['name']:encode(row) for row in mixed}
+        mixed_ops={**operations,mixed[0]['kind']+'/'+mixed[0]['metadata']['name']:'prior'}
+        self.assertEqual(p3.decode_material_payloads(mixed_payloads,mixed_ops),values)
+        with self.assertRaises(p3.PrerequisiteError): p3.decode_material_payloads(mixed_payloads,operations)
+        bad=copy.deepcopy(payloads); key=next(iter(bad)); bad[key]+=b' '
+        with self.assertRaises(p3.PrerequisiteError): p3.decode_material_payloads(bad,operations)
+        changed=copy.deepcopy(rows[0]); changed['metadata']['annotations']['foreign']='yes'; bad=copy.deepcopy(payloads); bad[changed['kind']+'/'+changed['metadata']['name']]=encode(changed)
+        with self.assertRaises(p3.PrerequisiteError): p3.decode_material_payloads(bad,operations)
+
     def test_operation_marker_only_on_exact_fixed_object_set(self):
         rows=[{'kind':key.split('/')[0],'metadata':{'name':key.split('/')[1],'namespace':'voice-staging'}}
               for key in reversed(p3.inventory_intent())]

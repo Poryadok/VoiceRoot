@@ -3,6 +3,7 @@ import base64
 import copy
 import hashlib
 import ipaddress
+import json
 import re
 import socket
 import ssl
@@ -255,6 +256,38 @@ def material_objects(values):
                                'type':'kubernetes.io/tls' if name in TLS_NAMES else 'Opaque','data':data})
         return result
     except Exception: raise PrerequisiteError('staging P3 material invalid') from None
+
+
+def decode_material_payloads(payloads,operations):
+    """Decode private payloads; operations must come from authenticated provenance."""
+    try:
+        ids=inventory_intent()[:len(ASSET_KEYS)]
+        if (not isinstance(payloads,dict) or set(payloads)!=set(ids) or not isinstance(operations,dict)
+            or set(operations)!=set(ids) or any(not isinstance(x,str) or not x for x in operations.values())): raise ValueError()
+        def unique(pairs):
+            result={}
+            for k,v in pairs:
+                if k in result: raise ValueError()
+                result[k]=v
+            return result
+        values={}; decoded=[]
+        for ident in ids:
+            raw=payloads[ident]
+            if not isinstance(raw,bytes) or not 0<len(raw)<=1048576: raise ValueError()
+            obj=json.loads(raw,object_pairs_hook=unique)
+            if json.dumps(obj,sort_keys=True,separators=(',',':'),allow_nan=False).encode()!=raw: raise ValueError()
+            kind,name=ident.split('/'); data=obj['data']
+            if not isinstance(data,dict) or set(data)!=ASSET_KEYS[name]: raise ValueError()
+            values[name]={key:(value.encode('utf-8') if kind=='ConfigMap' else base64.b64decode(value,validate=True))
+                          for key,value in data.items()}
+            decoded.append(obj)
+        expected=material_objects(values)
+        for obj in expected:
+            ident=obj['kind']+'/'+obj['metadata']['name']
+            obj['metadata']['annotations']={'voice.poryadok.io/prerequisites-operation':operations[ident]}
+        if decoded!=expected: raise ValueError()
+        return values
+    except Exception: raise PrerequisiteError('staging P3 private payload invalid') from None
 
 
 def classify_inventory(cycle, current, protected_receipt):
