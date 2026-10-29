@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,9 +53,12 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	const space = "11111111-1111-4111-8111-111111111111"
 	const owner = "22222222-2222-4222-8222-222222222222"
 	const member = "33333333-3333-4333-8333-333333333333"
+	const member2 = "44444444-4444-4444-8444-444444444444"
 	_, err = conn.Exec(ctx, `INSERT INTO public.spaces(id,name,owner_profile_id) VALUES($1,'legacy fixture',$2)`, space, owner)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `INSERT INTO public.space_members(space_id,profile_id,nickname) VALUES($1,$2,'member fixture')`, space, member)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO public.space_members(space_id,profile_id,nickname) VALUES($1,$2,'second fixture')`, space, member2)
 	require.NoError(t, err)
 	dataHash := func() string {
 		var value string
@@ -132,11 +136,24 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		var beforeEpoch int64
 		require.NoError(t, conn.QueryRow(ctx, `SELECT access_epoch FROM public.space_voice_access_epochs WHERE space_id=$1`, space).Scan(&beforeEpoch))
 		var priorID, priorRow string
-		require.NoError(t, conn.QueryRow(ctx, `SELECT event_id::text,to_jsonb(o)::text FROM public.space_voice_access_outbox o WHERE space_id=$1`, space).Scan(&priorID, &priorRow))
+		require.NoError(t, conn.QueryRow(ctx, `SELECT event_id::text,to_jsonb(o)::text FROM public.space_voice_access_outbox o WHERE space_id=$1 ORDER BY access_epoch LIMIT 1`, space).Scan(&priorID, &priorRow))
 		require.NoError(t, conn.Close(ctx))
 		migrate("44")
 		conn, err = pgx.Connect(ctx, target.String())
 		require.NoError(t, err)
+		checkTx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+		require.NoError(t, err)
+		_, err = checkTx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`)
+		require.NoError(t, err)
+		require.NoError(t, verifyLegacy24DerivedTx(ctx, checkTx, preimage, origin.Derived))
+		wrong := *origin.Derived
+		wrong.Events = make(map[string]legacy24OldEvent, len(origin.Derived.Events))
+		for id, event := range origin.Derived.Events {
+			wrong.Events[id] = event
+		}
+		wrong.Events[priorID] = legacy24OldEvent{Hash: strings.Repeat("f", 64)}
+		require.Error(t, verifyLegacy24DerivedTx(ctx, checkTx, preimage, &wrong), "altered prior event cannot be preserved")
+		require.NoError(t, checkTx.Commit(ctx))
 		after, err := captureLegacy25Projection(ctx, conn, preimage)
 		require.NoError(t, err)
 		for table, old := range preimage {
@@ -147,12 +164,12 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		}
 		var epoch int64
 		require.NoError(t, conn.QueryRow(ctx, `SELECT access_epoch FROM public.space_voice_access_epochs WHERE space_id=$1`, space).Scan(&epoch))
-		require.Equal(t, beforeEpoch+1, epoch, "one legacy member backfill increments its source floor once")
+		require.Equal(t, beforeEpoch+2, epoch, "each legacy member backfill increments its source floor once")
 		var priorAfter string
 		require.NoError(t, conn.QueryRow(ctx, `SELECT to_jsonb(o)::text FROM public.space_voice_access_outbox o WHERE event_id=$1`, priorID).Scan(&priorAfter))
 		require.Equal(t, priorRow, priorAfter, "original outbox event is retained exactly")
 		var newCount int
-		require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.space_voice_access_outbox WHERE space_id=$1 AND access_epoch=$2 AND event_kind='voice_room_access_invalidated' AND voice_room_id IS NULL AND profile_id IS NULL AND payload=jsonb_build_object('space_id',$1::text,'access_epoch',$2::bigint)`, space, epoch).Scan(&newCount))
-		require.Equal(t, 1, newCount)
+		require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.space_voice_access_outbox WHERE space_id=$1 AND access_epoch>$2 AND access_epoch<=$3 AND event_kind='voice_room_access_invalidated' AND voice_room_id IS NULL AND profile_id IS NULL AND payload=jsonb_build_object('space_id',$1::text,'access_epoch',access_epoch)`, space, beforeEpoch, epoch).Scan(&newCount))
+		require.Equal(t, 2, newCount)
 	})
 }

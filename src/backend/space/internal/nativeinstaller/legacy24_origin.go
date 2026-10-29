@@ -8,6 +8,7 @@ import (
 	"errors"
 	"regexp"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"voice/backend/space/internal/store"
 )
@@ -20,6 +21,8 @@ type legacy24OriginObservation struct {
 	PreimageSHA256 string                            `json:"preimage_sha256"`
 	AccessSHA256   string                            `json:"access_sha256"`
 	Rows           map[string]legacy25TableDigest    `json:"rows"`
+	Derived        *legacy24Derived                  `json:"derived"`
+	Spaces         []string                          `json:"spaces"`
 }
 
 // The complete source-owned public object set was fixed by the catalog
@@ -62,7 +65,41 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	if err != nil {
 		return nil, err
 	}
-	encoded, err := json.Marshal(rows)
+	derived, err := captureLegacy24DerivedTx(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := tx.Query(ctx, `SELECT id::text FROM public.spaces ORDER BY id LIMIT 1000001`)
+	if err != nil {
+		return nil, errors.New("legacy24 spaces unavailable")
+	}
+	spaces := make([]string, 0)
+	for ids.Next() {
+		var id string
+		if ids.Scan(&id) != nil || len(spaces) >= 1000000 {
+			ids.Close()
+			return nil, errors.New("legacy24 spaces unavailable")
+		}
+		parsed, parseErr := uuid.Parse(id)
+		if parseErr != nil || parsed == uuid.Nil || parsed.String() != id {
+			ids.Close()
+			return nil, errors.New("legacy24 spaces unavailable")
+		}
+		spaces = append(spaces, id)
+	}
+	if ids.Err() != nil {
+		ids.Close()
+		return nil, errors.New("legacy24 spaces unavailable")
+	}
+	ids.Close()
+	if uint64(len(spaces)) != rows["spaces"].Count {
+		return nil, errors.New("legacy24 spaces unavailable")
+	}
+	encoded, err := json.Marshal(struct {
+		Rows    map[string]legacy25TableDigest `json:"rows"`
+		Derived *legacy24Derived               `json:"derived"`
+		Spaces  []string                       `json:"spaces"`
+	}{rows, derived, spaces})
 	if err != nil || len(encoded) > 1<<20 {
 		return nil, errors.New("legacy24 preimage unavailable")
 	}
@@ -72,7 +109,7 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	}
 	return &legacy24OriginObservation{Target: &store.NativeInstallerSourceFacts{Version: 24, DatabaseSystemID: system,
 		DatabaseName: name, DatabaseOID: oid, InstallerRole: role}, CatalogSHA256: catalog,
-		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, Rows: rows}, nil
+		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, Rows: rows, Derived: derived, Spaces: spaces}, nil
 }
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {
