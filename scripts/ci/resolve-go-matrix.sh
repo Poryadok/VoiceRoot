@@ -7,6 +7,7 @@
 # space<->user/role, voice<->realtime; any Go service change also runs gateway tests.
 # Trade-off: wider CI than minimal path filter; narrower than global.
 set -euo pipefail
+command -v jq >/dev/null || { echo 'resolve-go-matrix: jq is required' >&2; exit 1; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 GO_SERVICES=(
@@ -18,7 +19,17 @@ GO_SERVICES=(
 filter_val() {
   local key="$1"
   if [[ -n "${FILTER_JSON:-}" ]]; then
-    [[ "$(echo "${FILTER_JSON}" | jq -r --arg k "${key}" '.[$k] // "false"')" == "true" ]]
+    local value
+    value="$(printf '%s' "${FILTER_JSON}" | jq -r --arg k "${key}" '.[$k] // "false"')" || {
+      echo "resolve-go-matrix: cannot read filter ${key}" >&2
+      exit 1
+    }
+    value="${value%$'\r'}"
+    case "$value" in
+      true) return 0 ;;
+      false) return 1 ;;
+      *) echo "resolve-go-matrix: invalid filter ${key}" >&2; exit 1 ;;
+    esac
   else
     local env_key="FILTER_${key}"
     [[ "${!env_key:-}" == "true" ]]
@@ -136,10 +147,11 @@ fi
 # Docker source consumers are independent of S2S test edges. Include their
 # ordinary checks too, so every selected build has a backend-go matrix entry.
 docker_json="$(python3 "${ROOT}/scripts/ci/resolve-go-docker-matrix.py")"
+docker_services="$(printf '%s' "${docker_json}" | jq -r '.[]')"
 while IFS= read -r svc; do
   svc="${svc%$'\r'}"
   [[ -n "${svc}" ]] && add_unique "${svc}"
-done < <(echo "${docker_json}" | jq -r '.[]')
+done <<<"${docker_services}"
 
 # Preserve existing RPC-neighbour and source-consumer coverage for full tests.
 for svc in "${services[@]}"; do

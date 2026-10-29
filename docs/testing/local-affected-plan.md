@@ -20,6 +20,11 @@ or establish a passing preflight. Revalidate source inputs around actual
 execution and use the hosted merge-candidate gate; do not use this plan as a
 merge or release approval.
 
+The Go matrix resolver requires `jq`; a missing or failing `jq`, invalid filter
+output, or a failed Docker-consumer parse stops planning. It accepts CRLF output
+from Windows `jq` without dropping selected services. Install a working `jq`
+before running the local planner.
+
 For a Flutter run captured with `flutter test --reporter json`,
 `python scripts/ci/flutter_test_events.py --events <log> --suite <absolute-test-file>`
 checks the expected suite, visible test starts and completions, runner outcome,
@@ -42,3 +47,11 @@ and exits nonzero even when those checks pass: SDK, package, generated and
 ambient inputs are not fully bound, opt-in live skips need classification, and
 the complete affected-check preflight and Docker scheduler are not integrated.
 Do not use this diagnostic as a passing preflight or PR handoff receipt.
+
+The local source snapshot, Flutter execution diagnostic and Flutter event
+parser, including their fixture tests, are explicit local-only CI inputs. A PR
+touching only those files still runs the CI script test shards and the current
+diff contract; it does not select the broad hosted component matrix solely for
+those paths. The hosted affected planner calls the snapshot only for local
+plans. Changes to the planner, workflow, filters, Makefile, or an unknown CI
+helper continue to widen the hosted checks.

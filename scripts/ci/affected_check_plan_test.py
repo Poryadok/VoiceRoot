@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import tempfile
 import subprocess
 import sys
@@ -145,6 +146,47 @@ class AffectedCheckPlanTests(unittest.TestCase):
                          'notification', 'realtime'} <= set(matrix['integration_go_services']))
         self.assertTrue(matrix['run_go'])
         self.assertTrue(matrix['run_pkg'])
+
+    def test_go_resolver_rejects_malformed_filter_json(self):
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else 'bash'
+        env = dict(os.environ, FILTER_JSON='{invalid', FORCE_FULL='false')
+        with tempfile.TemporaryDirectory() as directory:
+            env['GITHUB_OUTPUT'] = str(Path(directory) / 'output')
+            result = subprocess.run([bash, str(ROOT / 'scripts/ci/resolve-go-matrix.sh')],
+                                    cwd=ROOT, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_go_resolver_refuses_missing_jq(self):
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else shutil.which('bash')
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, PATH=directory, FILTER_JSON='{"svc_chat":"true"}', FORCE_FULL='false')
+            result = subprocess.run([bash, str(ROOT / 'scripts/ci/resolve-go-matrix.sh')],
+                                    cwd=ROOT, env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn('jq is required', result.stderr)
+
+    def test_go_resolver_handles_crlf_and_rejects_jq_failure(self):
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else 'bash'
+        real_jq = subprocess.check_output([bash, '-c', 'command -v jq'], text=True).strip()
+        with tempfile.TemporaryDirectory() as directory:
+            shim = Path(directory) / 'jq'
+            env = dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'])
+            shim.write_text('#!/usr/bin/env bash\nset -o pipefail\n' + shlex.quote(real_jq) +
+                            ' "$@" | tr -d "\\r" | sed "s/$/\\r/"\n', encoding='utf-8')
+            shim.chmod(0o755)
+            with mock.patch.dict(os.environ, env):
+                matrix = planner.resolve_go_matrix(ROOT, {'code': True, 'svc_chat': True})
+            self.assertIn('chat', matrix['integration_go_services'])
+            shim.write_text('#!/usr/bin/env bash\nif [[ "$1" == -r && "$2" == --arg ]]; then exit 42; fi\n'
+                            'exec ' + shlex.quote(real_jq) + ' "$@"\n', encoding='utf-8')
+            with mock.patch.dict(os.environ, env):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    planner.resolve_go_matrix(ROOT, {'code': True, 'svc_chat': True})
+            shim.write_text('#!/usr/bin/env bash\nif [[ "$1" == -r && "$2" == ".[]" ]]; then exit 42; fi\n'
+                            'exec ' + shlex.quote(real_jq) + ' "$@"\n', encoding='utf-8')
+            with mock.patch.dict(os.environ, env):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    planner.resolve_go_matrix(ROOT, {'code': True, 'svc_chat': True})
 
     def test_migration_only_selects_owner_and_event_consumers(self):
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
@@ -415,6 +457,27 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn(path, matched['t31'])
         self.assertIn(path, planner.unclassified_paths(matched))
         self.assertTrue(planner.effective_filters(matched)['ci_global'])
+
+    def test_local_only_flutter_diagnostics_do_not_widen_hosted_scope(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [],
+                  'integration_go_services': [], 'run_go': False, 'run_pkg': False}
+        for path in ('scripts/ci/local_source_snapshot.py',
+                     'scripts/ci/local_source_snapshot_test.py',
+                     'scripts/ci/local_flutter_execution.py',
+                     'scripts/ci/local_flutter_execution_test.py',
+                     'scripts/ci/flutter_test_events.py',
+                     'scripts/ci/flutter_test_events_test.py'):
+            with self.subTest(path=path):
+                matched = planner.match_filters(rules, [path])
+                plan = planner.make_plan(matched, matrix)
+                self.assertFalse(plan['filters']['ci_global'])
+                self.assertIn('ci-script-tests', plan['checks'])
+                self.assertNotIn('flutter', plan['checks'])
+                self.assertNotIn('backend-go', plan['checks'])
+        mixed = planner.match_filters(rules, ['scripts/ci/local_flutter_execution.py',
+                                              'scripts/ci/new_unclassified_helper.py'])
+        self.assertTrue(planner.effective_filters(mixed)['ci_global'])
 
     def test_realtime_lifecycle_proof_follows_affected_integration(self):
         import yaml

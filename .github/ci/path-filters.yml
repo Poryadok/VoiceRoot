@@ -42,6 +42,14 @@ ci_global:
   - '!scripts/ci/t31-startup-diagnostics_test.py'
   - '!scripts/ci/gate-latency.py'
   - '!scripts/ci/gate-latency_test.py'
+  # Local-only planning and Flutter diagnostics have no hosted execution path;
+  # their fixture tests remain in ci-script-tests.
+  - '!scripts/ci/local_source_snapshot.py'
+  - '!scripts/ci/local_source_snapshot_test.py'
+  - '!scripts/ci/local_flutter_execution.py'
+  - '!scripts/ci/local_flutter_execution_test.py'
+  - '!scripts/ci/flutter_test_events.py'
+  - '!scripts/ci/flutter_test_events_test.py'
 
 ci_scripts:
   # Complete chain fixture imports plus its actual restore-only SQL inputs.
