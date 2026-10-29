@@ -14,10 +14,15 @@ def parse(raw):
     return result
 
 
-def compare(jdk_output,store_output,media_sha256):
+def compare_roots(original,store_output,media_sha256):
     if not isinstance(media_sha256,str) or not re.fullmatch(r'[a-f0-9]{64}',media_sha256): raise ValueError('media certificate invalid')
+    if not isinstance(original,set) or not original or any(not isinstance(x,str) or not re.fullmatch(r'[a-f0-9]{64}',x) for x in original): raise ValueError('JDK roots invalid')
     if re.findall(rb'^Keystore type: ([^\r\n]+)\r?$',store_output,re.MULTILINE)!=[b'PKCS12']: raise ValueError('trust store type invalid')
-    original=parse(jdk_output); selected=parse(store_output)
+    selected=parse(store_output)
     if media_sha256 in original or selected!=original|{media_sha256}: raise ValueError('trust roots differ')
     return {'root_count':len(original),'store_count':len(selected),'media_ca_sha256':media_sha256,
             'scope':'public-truststore-only-no-https-or-issuer-custody'}
+
+
+def compare(jdk_output,store_output,media_sha256):
+    return compare_roots(parse(jdk_output),store_output,media_sha256)
