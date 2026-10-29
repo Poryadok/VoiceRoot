@@ -124,11 +124,19 @@ class NativeSpaceTests(unittest.TestCase):
                     for p in (source/prefix).rglob('*.sql')}}
                 actual_capture=commands.capture
                 def capture(argv,**kwargs):
+                    for fixed in (pg.IDENTITY_ARGS,pg.SPACE_IDENTITY_ARGS):
+                        if argv==owner.PREFIX+fixed:
+                            commands.authority_guard(argv)
+                            return docker('exec',cid,*fixed[fixed.index('--')+1:])
                     if argv[:len(pg.EXEC)]==pg.EXEC:
                         commands.authority_guard(argv)
                         return docker('exec','-i',cid,*argv[len(pg.EXEC):],body=kwargs.get('body'))
                     return actual_capture(argv,**kwargs)
                 def popen(argv,*args,**kwargs):
+                    for fixed in (pg.IDENTITY_ARGS,pg.SPACE_IDENTITY_ARGS):
+                        if argv==owner.PREFIX+fixed:
+                            argv=DOCKER+['exec',cid,*fixed[fixed.index('--')+1:]]
+                            break
                     if argv[:len(pg.EXEC)]==pg.EXEC:argv=DOCKER+['exec','-i',cid,*argv[len(pg.EXEC):]]
                     return original_popen(argv,*args,**kwargs)
                 namespace='11111111-1111-4111-8111-111111111111'
@@ -160,6 +168,10 @@ class NativeSpaceTests(unittest.TestCase):
                     with resource_claim.command_scope(session.check):
                         archive=owner._capture_archive(session)
                         self.assertEqual(set(archive['databases']),{'postgres','template1','space_db'})
+                        original_identity=pg.guard_space_identity(session)
+                        self.assertEqual(original_identity['database_owner'],'postgres')
+                        self.assertEqual(original_identity['installer_role'],'postgres')
+                        self.assertEqual(original_identity['database_oid'],owner._read(base/'catalog.json')['databases']['space_db'])
                         failures=[]
                         def trace(frame,event,arg):
                             if event=='exception' and ('cohort' in frame.f_code.co_filename or 'commands.py' in frame.f_code.co_filename):
