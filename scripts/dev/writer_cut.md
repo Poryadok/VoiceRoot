@@ -77,6 +77,13 @@ POST; later IP/application-name matching correlates sessions and does not prove
 cryptographic peer identity or provide atomic revocation. Unknown or ambiguous
 network attribution holds the operation.
 
+After a completed Realtime migration, `bind_realtime_scope()` binds its actual
+database OID to the original pinned engine and scope. The original databases and
+OIDs remain intact; `current_effective_session_scope()` revalidates the completed
+source record and recomputes the only allowed addition. A Realtime writer without
+qualified scope evidence holds. A separate C2 no-op scope producer is still
+required before that path can be admitted.
+
 Before restoring writers after a registered migration, bind the authenticated
 inventory via `bind_resume_inventory(inventory_phase, token)`. The token remains
 in memory; only the receipt digest enters the protected journal and ledger. The

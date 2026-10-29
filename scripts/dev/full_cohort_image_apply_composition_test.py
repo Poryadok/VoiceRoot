@@ -14,6 +14,8 @@ import resource_fencing
 import writer_cut
 import writer_cut_pg_probe
 import full_cohort_inventory_phase
+import full_cohort_activation_plan
+import full_cohort_package_phase
 
 
 class Composition(unittest.TestCase):
@@ -22,6 +24,10 @@ class Composition(unittest.TestCase):
 
     def _activate(self, cut, targets, image_phase):
         """Exercise real staged cut with synthetic source phase evidence."""
+        scope_match = mock.patch.object(cut, '_effective_scope_matches', return_value=True)
+        scope_value = mock.patch.object(cut, 'current_effective_session_scope', return_value=cut.admission['session_scope'])
+        scope_match.start(); scope_value.start()
+        self.addCleanup(scope_match.stop); self.addCleanup(scope_value.stop)
         class Inventory:
             def __init__(inner):
                 inner.fence, inner.client, inner.lock, inner.namespace_uid = cut.fence, cut.client, cut.lock, 'ns'
@@ -40,29 +46,26 @@ class Composition(unittest.TestCase):
         inventory_patch.start(); observer_patch.start()
         self.addCleanup(inventory_patch.stop); self.addCleanup(observer_patch.stop)
         cut.bind_resume_inventory(Inventory(), 'token')
-        priority = {'voice-space': 1, 'voice-chat': 2, 'voice-realtime': 3}
-        targets.sort(key=lambda x: (priority.get(x['metadata']['name'], 0), x['metadata']['name']))
-        ordered = [{'kind': x['kind'], 'name': x['metadata']['name'], 'uid': x['metadata']['uid'],
-                    'generation': x['metadata']['generation'], 'spec': copy.deepcopy(x['spec'])} for x in targets]
-        plan = {'operation_id': self.context['operation_id'], 'namespace_uid': 'ns', 'source_sha': self.context['commit'],
-                'cut_invocation': cut.invocation, 'package_sha256': 'a' * 64, 'ordered': ordered,
-                'barriers': ['space_health', 'publisher_health', 'chat_health']}
-        class ActivationPhase:
+        class Package:
             def __init__(inner):
-                inner.fence, inner.client, inner.lock, inner.namespace_uid = cut.fence, cut.client, cut.lock, 'ns'
-                inner.journal = journal.Journal(Path(self.temp.name) / 'fake-activation-plan',
-                    {'resource_context': self.context, 'namespace_uid': 'ns'})
-                self.addCleanup(inner.journal.close)
-                marker = {'status': 'done', 'nonce': '2' * 32, 'operation_id': self.context['operation_id'],
-                          'receipt_sha256': writer_cut.digest(plan)}
-                inner.journal.state['steps']['full-cohort-activation-plan'] = marker | {'receipt': copy.deepcopy(plan)}
-                inner.journal.save(); self.ledger.row['full_cohort_activation_plan'] = marker
-        def verify_plan(*args):
-            image_phase.verify_activation_lineage()
-            return copy.deepcopy(plan)
-        module = SimpleNamespace(ActivationPhase=ActivationPhase, verify_completed=verify_plan)
-        patch = mock.patch.dict(sys.modules, {'full_cohort_activation_plan': module}); patch.start(); self.addCleanup(patch.stop)
-        cut.prepare_activation(ActivationPhase(), 'token')
+                inner.fence, inner.lock, inner.namespace_uid = cut.fence, cut.lock, 'ns'
+            def verify_current(inner, token): return {'package_sha256': 'a' * 64}
+        package_patch = mock.patch.object(full_cohort_package_phase, 'PackagePhase', Package)
+        package_patch.start(); self.addCleanup(package_patch.stop)
+        source_journal = journal.Journal(Path(self.temp.name) / 'actual-activation-plan',
+            {'resource_context': self.context, 'namespace_uid': 'ns'})
+        self.addCleanup(source_journal.close)
+        source_client = copy.copy(cut.client); source_client.journal = source_journal
+        backing = self.ledger
+        class LedgerView:
+            client = source_client
+            def read(_): return backing.read()
+            def write(_, revision, row): return backing.write(revision, row)
+        source_fence = resource_fencing.Fence(self.context, lambda: copy.deepcopy(self.card), LedgerView())
+        phase = full_cohort_activation_plan.ActivationPhase(source_journal, source_fence, source_client,
+                                                            self.lock, 'ns', Package(), image_phase, cut)
+        phase.run('token')
+        cut.prepare_activation(phase, 'token')
         for barrier, module_name, class_name in (
                 ('space_health', 'realtime_config_transition_space_health', 'SpaceHealthPhase'),
                 ('publisher_health', 'realtime_jwks_publisher_health', 'PublisherHealthPhase'),

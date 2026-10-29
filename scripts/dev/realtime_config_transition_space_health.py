@@ -29,11 +29,17 @@ class SpaceHealthPhase:
         self.intent=copy.deepcopy(journal.intent); self.plan=self.intent.get('realtime_space_health'); self.record=None
         if (type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal or fence.ledger.client is not client
                 or type(package) is not full_cohort_package_phase.PackagePhase or type(cut) is not writer_cut.WriterCut
-                or type(plan_phase) is not planned.SpacePlanPhase or type(image_phase) is not full_cohort_image_apply.FullCohortImageApply
-                or plan_phase.cut is not cut or any(x.fence.context!=fence.context for x in (package,cut,image_phase))
+                or type(image_phase) is not full_cohort_image_apply.FullCohortImageApply
+                or any(x.fence.context!=fence.context for x in (package,cut,image_phase))
                 or any(x.lock!=lock or x.namespace_uid!=namespace_uid for x in (package,cut,image_phase))
                 or self.intent.get('resource_context')!=fence.context or self.intent.get('namespace_uid')!=namespace_uid
                 or not isinstance(self.plan,dict) or set(self.plan)!={'source_root','space_pod','destination'}): raise HealthError('Space health identity unavailable')
+        if type(plan_phase) is planned.SpacePlanPhase:
+            if plan_phase.cut is not cut: raise HealthError('Space plan identity unavailable')
+        else:
+            import space_p3_issuer_create as issuer
+            if (type(plan_phase) is not issuer.Session or plan_phase.fence.context!=fence.context
+                    or plan_phase.lock!=lock or plan_phase.namespace_uid!=namespace_uid): raise HealthError('Space issuer identity unavailable')
 
     def _guard(self):
         if self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent: raise ValueError()
@@ -45,7 +51,18 @@ class SpaceHealthPhase:
 
     def _sources(self,token):
         self._guard(); self.image_phase._guard()
-        expected=planned.verify(self.plan_phase,self.cut,token)
+        if type(self.plan_phase) is planned.SpacePlanPhase:
+            expected=planned.verify(self.plan_phase,self.cut,token)
+        else:
+            import space_p3_issuer_create as issuer
+            expected=issuer.verify_completed(self.plan_phase)
+            row,revision=self.fence.ledger.read()
+            if (self.plan_phase.fence.ledger.read()!=(row,revision)
+                    or expected.get('schema')!='voice-dev-space-p3-issuer-v1'
+                    or expected.get('operation_id')!=self.fence.context['operation_id']
+                    or expected.get('source_sha')!=self.fence.context['commit']
+                    or expected.get('namespace_uid')!=self.namespace_uid
+                    or expected.get('scope')!='space-two-secret-create-only'): raise ValueError()
         package=self.package.verify_current(token); proof=self.cut.current_resumed_proof()
         spaces=[x for x in proof['controllers'] if x.get('kind')=='Deployment' and x.get('name')=='voice-space']
         if len(spaces)!=1 or type(spaces[0].get('replicas')) is not int or spaces[0]['replicas']<1: raise ValueError()
@@ -77,7 +94,7 @@ class SpaceHealthPhase:
         pending=False
         try:
             expected,package,resumed=self._sources(token)
-            if self.plan['source_root']!=self.plan_phase.plan['source_root']: raise ValueError()
+            if type(self.plan_phase) is planned.SpacePlanPhase and self.plan['source_root']!=self.plan_phase.plan['source_root']: raise ValueError()
             pod=self._pod(resumed); row,rev=self.fence.ledger.read()
             if STEP in self.journal.state['steps'] or LEDGER in row: raise ValueError()
             record={'status':'pending','nonce':secrets.token_hex(16),'operation_id':self.fence.context['operation_id'],
@@ -93,9 +110,10 @@ class SpaceHealthPhase:
             result=space.capture(self.plan['source_root'],self.fence.context['commit'],authority,self.plan['space_pod'],
                                  self.namespace_uid,self._guard,self.plan['destination'])
             if result['identity']['workload']['pod_uid']!=pod['uid']: raise ValueError()
-            planned_bytes=base64.b64decode(expected['observation']['jwks_bytes'],validate=True)
+            planned_document=(json.loads(base64.b64decode(expected['observation']['jwks_bytes'],validate=True))
+                              if type(self.plan_phase) is planned.SpacePlanPhase else expected['public_jwks'])
             # Both parsers enforce the source-defined closed two-key RSA shape.
-            if json.loads(planned_bytes)!=json.loads(result['jwks_bytes']): raise ValueError()
+            if planned_document!=json.loads(result['jwks_bytes']): raise ValueError()
             if self._pod(resumed)!=pod: raise ValueError()
             next_expected,next_package,next_resumed=self._sources(token)
             if next_expected!=expected or next_package!=package or next_resumed!=resumed: raise ValueError()

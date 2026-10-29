@@ -31,6 +31,11 @@ class TestResume(unittest.TestCase):
                 if inner.fault=='app-image': value['spec']['containers'][0]['image']='other'
                 if inner.fault=='runtime-image': value['status']['containerStatuses'][0]['imageID']='sha256:'+'b'*64
                 if inner.fault=='node': value['spec']['nodeName']='other'
+                if inner.fault=='pending': value['status']={'phase':'Pending','containerStatuses':[]}
+                if inner.fault=='pending-to-running' and inner.calls==1:
+                    value['status']={'phase':'Pending','containerStatuses':[]}
+                if inner.fault=='pending-running':
+                    value['status']={'phase':'Pending','containerStatuses':[{'name':'user','state':{'running':{}}}]}
                 return {'items':[value]}
         class Cut:
             def __init__(inner):
@@ -87,6 +92,16 @@ class TestResume(unittest.TestCase):
         second=copy.deepcopy(first); second['nodes'][0]['name']='other'
         with patch.object(self.phase.package,'verify_current',side_effect=[first,second]):
             with self.assertRaises(probe.pg.ProbeError): self.run_session()
+
+    def test_pending_pod_without_running_container_does_not_require_ip(self):
+        self.cut.client.fault='pending'
+        value={'server_start':'start','can_read':True,'matched':1,'prepared':0,'sessions':[]}
+        with patch.object(probe.metadata,'linux_psql',return_value=json.dumps(value)):
+            self.assertEqual(probe.inspect_resumed(self.cut,self.phase,'token')['active_sessions'],0)
+            for fault in ('pending-to-running','pending-running'):
+                self.cut.client.fault=fault; self.cut.client.calls=0
+                with self.subTest(fault=fault), self.assertRaises(probe.pg.ProbeError):
+                    probe.inspect_resumed(self.cut,self.phase,'token')
 
     def test_known_nats_leaf_only(self):
         leaf={'name':'nats-leaf','image':probe.NATS_IMAGE,'args':['-c','/etc/nats/leaf.conf','-a','127.0.0.1','-m','8222'],

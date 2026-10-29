@@ -73,7 +73,7 @@ class WriterCut:
         self.journal, self.fence, self.client = journal, fence, client
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.intent, self.admission = copy.deepcopy(journal.intent), copy.deepcopy(admission)
-        self.probe = probe
+        self.probe = self._initial_probe = probe
         self.invocation = secrets.token_hex(16)
         self.started = self.drained = self.poisoned = False
         self.retired_rs = set()
@@ -84,6 +84,7 @@ class WriterCut:
         self.migration_history = []
         self.resume_inventory = None
         self.auth_successor = None
+        self.effective_session = None
         self.activation = None
         self.pending_activation_health = None
         self._identity()
@@ -95,7 +96,8 @@ class WriterCut:
                 self.intent.get('namespace_uid') != self.namespace_uid or self.intent.get('writer_cut') != a or
                 type(self.client) is not frontend_runtime_executor.KubectlTransport or
                 self.client.journal is not self.journal or getattr(self.fence.ledger, 'client', None) is not self.client or
-                not callable(self.probe) or not isinstance(a, dict) or set(a) != {'controllers', 'guards', 'linked', 'session_scope'} or
+                not callable(self.probe) or self.probe is not self._initial_probe or
+                not isinstance(a, dict) or set(a) != {'controllers', 'guards', 'linked', 'session_scope'} or
                 not isinstance(a['controllers'], list) or not a['controllers'] or
                 not isinstance(a['session_scope'], dict) or not a['session_scope'] or
                 not isinstance(a['guards'], dict) or set(a['guards']) != {'jobs', 'cronjobs', 'hpas'} or
@@ -151,7 +153,8 @@ class WriterCut:
                     name in ('writer-cut-drained', 'writer-cut-config-plan') or
                     name.startswith('writer-cut-config-successor-') or name.startswith('writer-cut-migration-') or
                     name in ('writer-cut-resume-inventory', 'writer-cut-auth-successor', 'writer-cut-activation-plan',
-                             'writer-cut-space-health', 'writer-cut-publisher-health', 'writer-cut-chat-health')):
+                             'writer-cut-space-health', 'writer-cut-publisher-health', 'writer-cut-chat-health',
+                             'writer-cut-realtime-scope')):
                 continue
             if name == exclude: continue
             if (not isinstance(entry, dict) or entry.get('status') not in ('pending', 'done') or
@@ -329,6 +332,7 @@ class WriterCut:
                 not self._config_effects_match(row) or
                 (phase == 'resume' and not self._resume_inventory_matches(row)) or
                 (phase == 'resume' and not self._auth_successor_matches(row)) or
+                (phase == 'resume' and not self._effective_scope_matches(row)) or
                 (phase == 'resume' and not self._activation_matches(row)) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed before submission')
@@ -559,13 +563,13 @@ class WriterCut:
                     'stable': copy.deepcopy(state['stable'])}
             binding = {'kind': kind, 'phase': phase, 'root': source_root, 'plan': plan, 'finished': False,
                        'job_uid': None, 'pod_uid': None, 'config_uid': state['configmap'].get('uid')}
+            self.migration = binding
             state, pod = migration.observe(self, binding)
             receipt = migration.sessions(self, state, pod)
             if receipt['attributed_sessions']:
                 raise RecoveryRequired('migration sessions precede Job')
             step = 'writer-cut-migration-plan-' + state['stable']['nonce']
             record = self._reserve(step, {'kind': kind, 'plan': plan})
-            self.migration = binding
             self._complete(step, record, {'operation_id': self.fence.context['operation_id'],
                                            'plan_sha256': digest(plan)})
             return copy.deepcopy(plan)
@@ -684,6 +688,79 @@ class WriterCut:
         row, _ = self.fence.ledger.read()
         if not self._auth_successor_matches(row): raise RecoveryRequired('Auth successor changed during check')
 
+    def bind_realtime_scope(self):
+        """Bind a newly provisioned Realtime DB from its completed migration."""
+        import writer_cut_migration as migration
+        try:
+            binding = self.migration
+            if (self.effective_session is not None or binding is None or binding['kind'] != 'realtime' or
+                    not binding['finished'] or any(k.startswith('writer-resume-') for k in self.journal.state['steps'])):
+                raise RecoveryRequired('Realtime scope successor unavailable')
+            self._guard(); self._guards()
+            _, state = migration.normalized(self, 'realtime', binding['phase'], binding['root'])
+            execution = state['execution']; phase = binding['phase']; scope = copy.deepcopy(self.admission['session_scope'])
+            if (phase.invocation_status != 'done' or state['job']['state'] != 'done' or
+                    state['terminal'] != binding['terminal'] or execution['database'] != 'realtime_db' or
+                    execution['role'] != 'realtime' or type(execution['database_oid']) is not int or
+                    execution['database_oid'] <= 0 or phase.intent['realtime_migration']['engine'] != scope['engine']):
+                raise RecoveryRequired('Realtime scope authority differs')
+            prior = scope['database_oids'].get('realtime_db')
+            if prior is not None and prior != execution['database_oid']:
+                raise RecoveryRequired('Realtime database OID changed')
+            scope['database_oids']['realtime_db'] = execution['database_oid']
+            scope['databases'] = sorted(scope['database_oids'])
+            if len(set(scope['database_oids'].values())) != len(scope['database_oids']):
+                raise RecoveryRequired('database OID collision')
+            row, _ = self.fence.ledger.read()
+            markers = {k: copy.deepcopy(row.get(k)) for k in ('realtime_migration', 'realtime_secret', 'realtime_db_provision')}
+            steps = copy.deepcopy(phase.journal.state['steps'])
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                       'original_scope_sha256': digest(self.admission['session_scope']), 'scope_sha256': digest(scope),
+                       'migration_terminal_sha256': state['terminal']}
+            record = self._reserve('writer-cut-realtime-scope', details)
+            self._complete('writer-cut-realtime-scope', record, details)
+            self.effective_session = {'scope': scope, 'phase': phase, 'steps': steps, 'markers': markers,
+                                      'terminal': state['terminal'], 'details': copy.deepcopy(details)}
+            self.current_effective_session_scope()
+            return copy.deepcopy(details)
+        except BaseException:
+            self._uncertain()
+
+    def _effective_scope_matches(self, row):
+        if self.effective_session is None:
+            return ((self.migration is None or self.migration.get('kind') != 'realtime') and
+                    not any(o['metadata']['name'] == 'voice-realtime' for o in self.admission['controllers']))
+        binding = self.effective_session; source = binding['phase'].journal
+        step = self.journal.state['steps'].get('writer-cut-realtime-scope', {})
+        return (not source.poisoned and source.dirfd is not None and source.lockfd is not None and
+                source.state['steps'] == binding['steps'] and
+                step.get('status') == 'done' and step.get('details') == binding['details'] and
+                step.get('receipt') == binding['details'] and
+                binding['details']['scope_sha256'] == digest(binding['scope']) and
+                binding['details']['original_scope_sha256'] == digest(self.admission['session_scope']) and
+                all(row.get(k) == value for k, value in binding['markers'].items()))
+
+    def current_effective_session_scope(self):
+        import writer_cut_migration as migration
+        self._guard()
+        row, _ = self.fence.ledger.read()
+        if not self._effective_scope_matches(row):
+            raise RecoveryRequired('Realtime session scope is not qualified')
+        if self.effective_session is None:
+            return copy.deepcopy(self.admission['session_scope'])
+        binding = self.effective_session
+        _, state = migration.normalized(self, 'realtime', binding['phase'], self.migration['root'])
+        expected = copy.deepcopy(self.admission['session_scope'])
+        expected['database_oids']['realtime_db'] = state['execution']['database_oid']
+        expected['databases'] = sorted(expected['database_oids'])
+        if (not self.migration['finished'] or state['terminal'] != binding['terminal'] or
+                binding['details']['migration_terminal_sha256'] != state['terminal'] or binding['scope'] != expected):
+            raise RecoveryRequired('Realtime scope successor changed')
+        self._guard()
+        row, _ = self.fence.ledger.read()
+        if not self._effective_scope_matches(row): raise RecoveryRequired('Realtime scope changed during observation')
+        return copy.deepcopy(binding['scope'])
+
     def bind_resume_inventory(self, inventory_phase, token):
         """Bind authenticated pre-cut routes without persisting the token."""
         import full_cohort_inventory_phase
@@ -754,7 +831,7 @@ class WriterCut:
         observed = writer_cut_pg_probe.inspect_resumed(self, phase, bound['token'])
         if (not isinstance(observed, dict) or set(observed) !=
                 {'scope', 'active_sessions', 'active_transactions', 'attributed_sessions'} or
-                observed['scope'] != self.admission['session_scope'] or
+                observed['scope'] != self.current_effective_session_scope() or
                 type(observed['active_sessions']) is not int or observed['active_sessions'] != 0 or
                 type(observed['active_transactions']) is not int or observed['active_transactions'] != 0 or
                 not isinstance(observed['attributed_sessions'], list)):

@@ -17,7 +17,7 @@ import writer_cut_pg_probe as pg
 NATS_IMAGE='nats:2.12.12-alpine@sha256:2ca98656a279b2d88cfdf2b8c3f0d5d7f3941ae9dc2ab12ebaa92d83e0f4ccdb'
 
 
-def _leaf_identity(cut, receipt, controller, pod):
+def _leaf_identity(cut, receipt, controller, pod, pending=False):
     """Admit only the existing source-known NATS leaf under the cooperative boundary."""
     name=controller['name']; workload=name[6:]; spec=pod['spec']
     originals=[x for x in cut.admission['controllers'] if x.get('kind')=='Deployment' and x.get('metadata',{}).get('name')==name]
@@ -49,7 +49,8 @@ def _leaf_identity(cut, receipt, controller, pod):
         raise pg.ProbeError('leaf source changed')
     statuses=[x for x in pod.get('status',{}).get('containerStatuses',[]) if x.get('name')=='nats-leaf']
     historical=[c['image_id'] for p in receipt['projection'][workload]['pods'] for c in p['containers'] if c['name']=='nats-leaf']
-    if (len(statuses)!=1 or not historical or len(set(historical))!=1 or statuses[0].get('imageID')!=historical[0] or
+    if not historical or len(set(historical))!=1: raise pg.ProbeError('leaf baseline invalid')
+    if not pending and (len(statuses)!=1 or statuses[0].get('imageID')!=historical[0] or
             not statuses[0].get('containerID') or type(statuses[0].get('restartCount')) is not int or
             not isinstance(statuses[0].get('state',{}).get('running'),dict)):
         raise pg.ProbeError('leaf runtime identity invalid')
@@ -59,6 +60,7 @@ def _leaf_identity(cut, receipt, controller, pod):
         raise pg.ProbeError('leaf config identity invalid')
     value=configmap.get('data',{}).get('leaf.conf')
     if not isinstance(value,str) or not value or len(value.encode())>65536: raise pg.ProbeError('leaf config invalid')
+    if pending: return ('pending',m['uid'],m['resourceVersion'])
     args=['kubectl','--kubeconfig','/home/pmd/.kube/config','--context','default','--namespace','voice-dev',
           '--request-timeout=15s','exec',pod['metadata']['name'],'-c','nats-leaf','--','cat','/etc/nats/leaf.conf']
     cut._guard(); mounted=metadata.linux_private_bytes(args); cut._guard()
@@ -127,9 +129,12 @@ def inspect_resumed(cut, phase, token):
                 if owner not in rs or pod.get('status',{}).get('phase') in ('Succeeded','Failed'): continue
                 m=pod.get('metadata',{}); status=pod.get('status',{}); spec=pod.get('spec',{})
                 uid,ip=m.get('uid'),status.get('podIP')
+                pending_without_ip=(status.get('phase')=='Pending' and ip is None and
+                    not any(isinstance(s.get('state',{}).get('running'),dict) for s in status.get('containerStatuses',[])) and
+                    not any(isinstance(s.get('state',{}).get('running'),dict) for s in status.get('initContainerStatuses',[])))
                 if (not isinstance(uid,str) or not uid or m.get('namespace')!='voice-dev' or
                         m.get('deletionTimestamp') or spec.get('hostNetwork',False) is not False or
-                        not isinstance(ip,str) or str(ipaddress.ip_address(ip))!=ip or ip in ips):
+                        (not pending_without_ip and (not isinstance(ip,str) or str(ipaddress.ip_address(ip))!=ip or ip in ips))):
                     raise pg.ProbeError('pod network identity invalid')
                 appname=metadata.CONTAINERS[rs[owner][6:]]
                 containers=spec.get('containers',[])
@@ -137,7 +142,7 @@ def inspect_resumed(cut, phase, token):
                 if (len(names)!=len(set(names)) or set(names) not in ({appname},{appname,'nats-leaf'}) or
                         spec.get('ephemeralContainers',[]) or spec.get('initContainers',[])):
                     raise pg.ProbeError('shared pod network not qualified')
-                leaf=_leaf_identity(cut,receipt,expected[rs[owner]],pod) if 'nats-leaf' in names else None
+                leaf=_leaf_identity(cut,receipt,expected[rs[owner]],pod,pending_without_ip) if 'nats-leaf' in names else None
                 statuses=[s for s in status.get('containerStatuses',[]) if s.get('name')==appname]
                 if status.get('phase')=='Running' and (len(statuses)!=1 or not statuses[0].get('containerID') or
                         not statuses[0].get('imageID') or
@@ -153,8 +158,9 @@ def inspect_resumed(cut, phase, token):
                             image_match.group(1)!=package['platform_digests'].get(image_key) or
                             spec.get('nodeName') not in {n['name'] for n in package['nodes']}):
                         raise pg.ProbeError('application image identity invalid')
-                identity=(statuses[0]['containerID'],statuses[0]['restartCount'],statuses[0]['imageID']) if len(statuses)==1 else (None,None,None)
-                ips.add(ip); current.append((rs[owner],m['name'],uid,ip,status.get('phase'),*identity,leaf))
+                identity=(statuses[0].get('containerID'),statuses[0].get('restartCount'),statuses[0].get('imageID')) if len(statuses)==1 else (None,None,None)
+                if ip is not None: ips.add(ip)
+                current.append((rs[owner],m['name'],uid,ip,status.get('phase'),*identity,leaf))
             cut._guard()
             return sorted(current)
         before=sample(); allowed=set(); admin=phase._admin_role()

@@ -1,6 +1,7 @@
 import base64
 import copy
 import hashlib
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -88,6 +89,18 @@ class HealthTest(unittest.TestCase):
         with patch.object(self.subject,'_sources',side_effect=sources):
             with self.assertRaises(health.HealthError): self.subject.run('token')
         self.assertEqual(calls,3); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_newly_issued_public_jwks_is_expected_not_old_http(self):
+        class Issuer: pass
+        issuer=Issuer(); issuer.fence=self.base.fence; issuer.lock=self.base.lock; issuer.namespace_uid='ns'
+        proof={'schema':'voice-dev-space-p3-issuer-v1','operation_id':self.base.context['operation_id'],
+            'source_sha':self.base.context['commit'],'namespace_uid':'ns','public_jwks':{'keys':[]},
+            'scope':'space-two-secret-create-only'}
+        module=SimpleNamespace(Session=Issuer,verify_completed=lambda _:copy.deepcopy(proof))
+        with patch.dict(sys.modules,{'space_p3_issuer_create':module}):
+            subject=health.SpaceHealthPhase(self.journal,self.base.fence,self.client,self.base.lock,'ns',self.package,self.cut,issuer,self.image)
+            receipt=subject.run('token')
+            self.assertEqual(health.verify_completed(subject,self.cut,'token'),receipt)
 
 
 if __name__=='__main__': unittest.main()

@@ -43,12 +43,14 @@ class FenceTests(unittest.TestCase):
         import full_cohort_predecessor_phase as predecessor
         context=identity(); context['operation_id']='media-c2-'+'a'*32
         ledger=MemoryLedger(); ledger.row={'status':'complete'}
-        notices=[]; fence=fencing.Fence(context,lambda:card(context),ledger,on_uncertain=notices.append)
+        notices=[]; check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
         def lost(previous,row):
             ledger.row=copy.deepcopy(row); ledger.revision+=1
             raise OSError('reply lost')
-        with patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), \
-             patch.object(ledger,'write',side_effect=lost):
+        with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+             patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=lambda obj,reason:notices.append(reason)), \
+             patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), patch.object(ledger,'write',side_effect=lost):
+            fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
             with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',None)
         self.assertEqual(ledger.row['status'],'active')
         self.assertEqual(ledger.row['predecessor']['snapshot_sha256'],'d'*64)
@@ -63,11 +65,12 @@ class FenceTests(unittest.TestCase):
         import full_cohort_predecessor_phase as predecessor
         context=identity(); context['operation_id']='media-c2-'+'a'*32
         ledger=MemoryLedger(); ledger.row={'status':'complete'}
-        def failed_notice(reason): raise RuntimeError('notice failed')
-        fence=fencing.Fence(context,lambda:card(context),ledger,on_uncertain=failed_notice)
+        check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
         def lost(previous,row): ledger.row=copy.deepcopy(row); raise OSError('reply lost')
-        with patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), \
-             patch.object(ledger,'write',side_effect=lost):
+        with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+             patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=RuntimeError('notice failed')), \
+             patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), patch.object(ledger,'write',side_effect=lost):
+            fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
             with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',None)
         self.assertEqual(ledger.row['status'],'active')
 
