@@ -31,6 +31,38 @@ IDENTITY_SQL="SELECT json_build_object('system_identifier',(SELECT system_identi
 IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',
     'export PGPASSWORD="$POSTGRES_PASSWORD"; export PGOPTIONS="-c default_transaction_read_only=on -c search_path=pg_catalog,public,pg_temp"; exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -c "$1"',
     '--',IDENTITY_SQL]
+SPACE_IDENTITY_SQL="""SELECT pg_catalog.json_build_object(
+ 'database_name',pg_catalog.current_database(),'database_oid',d.oid::bigint,
+ 'database_owner',pg_catalog.pg_get_userbyid(d.datdba),
+ 'schema_owner',(SELECT pg_catalog.pg_get_userbyid(n.nspowner) FROM pg_catalog.pg_namespace n WHERE n.nspname='public'),
+ 'installer_role',session_user) FROM pg_catalog.pg_database d WHERE d.datname=pg_catalog.current_database()"""
+SPACE_IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',
+    'export PGPASSWORD="$POSTGRES_PASSWORD"; export PGOPTIONS="-c default_transaction_read_only=on -c search_path=pg_catalog,public,pg_temp"; exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d space_db -c "$1"',
+    '--',SPACE_IDENTITY_SQL]
+
+
+def guard_space_identity(session):
+    """Observe the original Space database and owner on the preserved engine."""
+    from stage_runtime import Kube
+    before=guard_identity(session);base=owner._base(session)
+    archive=owner._read(base/'archive-record.json')
+    catalog=owner._record(session,'catalog.json',archive['catalog_ref'],'voice-staging-cohort-catalog-v1')
+    metadata=owner._record(session,'metadata.json',archive['metadata_ref'],'voice-staging-cohort-metadata-v1')
+    original=metadata['source']['catalog']['space_db'];role=original['database_owner']
+    expected={'database_name':'space_db','database_oid':catalog['databases']['space_db'],
+        'database_owner':role,'schema_owner':role,'installer_role':role}
+    if (metadata['catalog_sha256']!=owner.digest(catalog) or original['schema_owner']!=role
+        or catalog['properties']['space_db']['owner']!=role
+        or not isinstance(role,str) or not SAFE.fullmatch(role)):
+        raise Blocked('cohort_space_identity_changed')
+    value=Kube().run(list(SPACE_IDENTITY_ARGS))
+    if (value!=expected or type(value.get('database_oid')) is not int
+        or guard_identity(session)!=before
+        or owner._record(session,'catalog.json',archive['catalog_ref'],'voice-staging-cohort-catalog-v1')!=catalog
+        or owner._record(session,'metadata.json',archive['metadata_ref'],'voice-staging-cohort-metadata-v1')!=metadata
+        or owner._read(base/'archive-record.json')!=archive):
+        raise Blocked('cohort_space_identity_changed')
+    return {**before,**copy.deepcopy(value)}
 
 
 def guard_identity(session):

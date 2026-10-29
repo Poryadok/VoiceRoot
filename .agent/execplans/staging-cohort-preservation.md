@@ -138,3 +138,12 @@ old-policy/candidate-source circular dependency found by the WT30 joint test.
 Prepared/source/policy drift negatives and the focused suite pass (13/13,
 1.551s). Native inspect-before-cut, logical restore profile resolution and the
 unified actual bridge fixture remain outstanding; live deployment stays HOLD.
+
+The future live native handoff now has a fixed read-only Space identity query:
+original database OID, database/schema owner and installer role must match the
+protected catalog/metadata, with the physical engine checked before and after.
+The capability test failed before implementation, then passed with OID/owner/
+schema/installer drift negatives using a real Root Session and synthetic Kube
+observations. Its exact argv still requires WT25's separate Session allowlist
+change; it is not an enabled live migration path. The native authority loader
+and final Go/image rehearsal remain the next joined checkpoint.
