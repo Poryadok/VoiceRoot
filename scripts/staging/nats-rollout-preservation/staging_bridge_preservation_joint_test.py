@@ -273,7 +273,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    'subsets':[{'addresses':[{'ip':'10.0.0.2','targetRef':{'kind':'Pod','uid':pg_pod}}],'ports':[{'port':5432}]}]}
   pg_slice={'metadata':pgmeta('pg-slice','pg-slice-uid'),'ports':[{'port':5432}],
    'endpoints':[{'addresses':['10.0.0.2'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':pg_pod}}]}
-  nats_secrets={};bootstrap_configmaps={}
+  nats_secrets={};bootstrap_configmaps={};inspector_job={};inspector_pod={};inspector_log=b''
   if 'VOICE_TEST_NATS_INPUTS' in os.environ:
    import actor_root, bootstrap_auth, bootstrap_selection
    nats=Path(os.environ['VOICE_TEST_NATS_INPUTS']);config=(nats/'server.conf').read_text()
@@ -308,6 +308,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    bootstrap_selection.ACCOUNT_SHA=synthetic_account_sha
   def get(kind,name):
    session.check()
+   if kind.lower()=='job' and inspector_job and name==inspector_job['metadata']['name']:return copy.deepcopy(inspector_job)
+   if kind.lower()=='pod' and inspector_pod and name==inspector_pod['metadata']['name']:return copy.deepcopy(inspector_pod)
    if kind.lower()=='secret' and name in nats_secrets:return copy.deepcopy(nats_secrets[name])
    if kind.lower()=='configmap' and name in bootstrap_configmaps:return copy.deepcopy(bootstrap_configmaps[name])
    if (kind.lower(),name) in pg_objects:return copy.deepcopy(pg_objects[(kind.lower(),name)])
@@ -362,6 +364,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    if args[:2]==['apply','--dry-run=server']:return store_kube.run(args,**kwargs)
    return cluster.run(args,**kwargs)
   def capture(argv,**kwargs):
+   global inspector_log
    commands.authority_guard(argv)
    if 'VOICE_TEST_SPACE_OCI' in os.environ and argv[4:7]==['exec','-i','voice-postgres-0']:
     return subprocess.check_output(['docker','exec','-i',pg_container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1',
@@ -382,6 +385,39 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
     return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail==['create','-f','/dev/stdin','-o','json']:
+    value=json.loads(kwargs['body']);assert value['kind']=='Job' and value['metadata']['name']=='voice-space-inspect-'+session.operation
+    image=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())
+    tool=subprocess.check_output(['docker','create','--label','voice.test.owner=wt30-joint','--network','container:'+pg_container,
+     '--read-only','--cap-drop','ALL','--memory','512m','--pids-limit','128',
+     '-e','PGHOST=127.0.0.1','-e','PGPORT=5432','-e','PGUSER='+pg_user,'-e','PGPASSWORD='+pg_password.decode(),
+     '-e','PGSSLMODE=disable','-e','SPACE_NATIVE_REQUIRED_SOURCE_SHA256='+image['inventory']['build_source_sha256'],
+     'voice-wt30-native-tool:46b6e99','-mode','inspect-legacy24','-migrations-dir','/migrations',
+     '-migrate','/usr/local/bin/migrate'],text=True).strip()
+    try:
+     subprocess.run(['docker','start',tool],check=True,stdout=subprocess.DEVNULL)
+     assert subprocess.check_output(['docker','wait',tool],text=True,timeout=180).strip()=='0'
+     inspector_log=subprocess.check_output(['docker','logs',tool])
+    finally:subprocess.run(['docker','rm','-f','-v',tool],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    jobuid='00000000-0000-4000-8000-000000000021';poduid='00000000-0000-4000-8000-000000000022'
+    value['metadata'].update(uid=jobuid,resourceVersion='1');value['status']={'succeeded':1}
+    inspector_job.update(value)
+    inspector_pod.update({'metadata':{'name':'inspect-pod','namespace':'voice-staging','uid':poduid,'resourceVersion':'1',
+      'ownerReferences':[{'controller':True,'kind':'Job','uid':jobuid}]},
+     'spec':{**copy.deepcopy(value['spec']['template']['spec']),'nodeName':'pmdebook'},
+     'status':{'containerStatuses':[{'name':'inspect','imageID':image['identity']['immutable_image'],
+       'state':{'terminated':{'exitCode':0}}}]}})
+    return json.dumps(value).encode()
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:2]==['get','--raw'] and '/jobs?' in tail[2]:
+    return json.dumps({'apiVersion':'batch/v1','kind':'JobList','metadata':{'resourceVersion':'1'},
+     'items':[copy.deepcopy(inspector_job)] if inspector_job else []}).encode()
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:2]==['get','pods'] and len(tail)>3 and tail[2]=='-l' and tail[3].startswith('job-name='):
+    return json.dumps({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'1'},
+     'items':[copy.deepcopy(inspector_pod)] if inspector_pod else []}).encode()
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail==['logs','inspect-pod','-c','inspect']:return inspector_log
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:2]==['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/voice-space-inspect-'+session.operation]:
+    inspector_job.clear();inspector_pod.clear()
+    return json.dumps({'apiVersion':'v1','kind':'Status','status':'Success'}).encode()
    if tail[:2]==['get','--raw']:
     plural=tail[2].split('/')[5].split('?')[0]
     kind={'secrets':'Secret','configmaps':'ConfigMap','services':'Service'}[plural]
