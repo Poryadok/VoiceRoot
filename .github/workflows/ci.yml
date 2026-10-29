@@ -1937,11 +1937,17 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install PyYAML==6.0.3
+      - run: python -m pip install --target "$RUNNER_TEMP/cohort-pydeps" PyYAML==6.0.3
       - name: Prepare pinned test images
         run: |
           docker pull postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6
           test "$(docker image inspect postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6 --format '{{.Id}}')" = 'sha256:75f5a96988cdf694a215073c3e9c001b706b371e2f94df3967f2efdec2787f6b'
           docker pull migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539
+          docker pull python:3.12-bookworm
+      - name: Verify isolated issuer and preflight fixtures
+        run: |
+          docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
+            python -B -c "import sys, unittest; names=['space_p3_issuer_preflight_test','space_p3_issuer_preflight_root_test','space_p3_issuer_preflight_metadata_root_test','space_creator_runtime_profile_issuer_packet_test','space_creator_runtime_profile_issuer_test','space_creator_runtime_profile_issuer_export_test','space_creator_runtime_profile_issuer_stage_test','space_creator_runtime_profile_issuer_bundle_test','space_creator_runtime_profile_issuer_joint_test','space_creator_runtime_profile_issuer_launcher_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 33)"
       - name: Verify backup and Go consumer with synthetic external boundaries
         working-directory: scripts/dev
         run: |
