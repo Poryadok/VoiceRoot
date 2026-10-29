@@ -259,6 +259,23 @@ class Migration:
                 not realtime_secret_phase.valid_revision(revision)):
             raise RecoveryRequired('terminal effect changed')
 
+    def _bind_owned_job(self, record, uid, resource_version):
+        """Durably bind the accepted create response before observing its Pod."""
+        self._check_step('job',record)
+        if (record.get('status')!='pending' or not isinstance(uid,str) or not uid or
+                not isinstance(resource_version,str) or not resource_version):
+            raise RecoveryRequired('created Job identity invalid')
+        row, revision = self.fence.ledger.read()
+        if not self._owned(row) or row['realtime_migration']['steps'].get('job') != record:
+            raise RecoveryRequired('Job pending record changed')
+        owned = record | {'status':'owned','uid':uid,'resourceVersion':resource_version}
+        self.journal.state['steps']['job'] = copy.deepcopy(owned); self.journal.save()
+        row['realtime_migration']['steps']['job'] = copy.deepcopy(owned)
+        self.fence.ledger.write(revision,row)
+        self.migration_steps['job'] = copy.deepcopy(owned)
+        self._check_step('job',owned)
+        return owned
+
     def run(self):
         pending = False
         try:
@@ -378,6 +395,7 @@ class Migration:
             jm = created['metadata']; uid = jm['uid']
             if (not jm.get('resourceVersion') or jm.get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha']):
                 raise RecoveryRequired('created Job metadata changed')
+            record = self._bind_owned_job(record,uid,jm['resourceVersion'])
             deadline = time.monotonic()+650
             while time.monotonic()<deadline:
                 inputs()

@@ -159,7 +159,7 @@ class PhaseTest(unittest.TestCase):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','local-role','lost-job','pod-image','job-label','dryrun','dryrun-pod','invocation-ack'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -212,6 +212,9 @@ class PhaseTest(unittest.TestCase):
         lost_ack = []
         def write(revision, row):
             original_write(revision,row)
+            if fault=='owned-ack' and row.get('realtime_migration',{}).get('steps',{}).get('job',{}).get('status')=='owned' and not lost_ack:
+                lost_ack.append(True)
+                raise TimeoutError('owned acknowledgement lost')
             if fault=='invocation-ack' and row.get('realtime_migration',{}).get('status')=='done' and not lost_ack:
                 lost_ack.append(True)
                 raise TimeoutError('acknowledgement lost')
