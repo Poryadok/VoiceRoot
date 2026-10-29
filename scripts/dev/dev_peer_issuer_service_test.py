@@ -59,6 +59,16 @@ class ServiceTests(unittest.TestCase):
         result, reply, verify, check = self.invoke(True, 'bad')
         self.assertEqual((result, reply, verify, check), (['rejected'], b'', 0, 0))
 
+    def test_legacy_reservations_hold_even_if_names_are_now_absent(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(service, 'ROOT', Path(temp)):
+            for profile, name in [('creator', 'space-creator-issuance.once'), ('space', 'space-p3-issuance.once')]:
+                marker = Path(temp) / name
+                service._assert_no_legacy(profile)
+                marker.write_text('unreconciled')
+                with self.assertRaises(ValueError):
+                    service._assert_no_legacy(profile)
+                marker.unlink()
+
 
 class IssuanceTests(unittest.TestCase):
     @classmethod
