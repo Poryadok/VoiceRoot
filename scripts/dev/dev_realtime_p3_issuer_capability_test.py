@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 import dev_peer_issuer_preflight as peer
 import dev_realtime_p3_issuer_capability as subject
+import dev_realtime_p3_issuer_service as root_service
+import dev_peer_issuer_service as peer_service
 import media_backup_phase_test as fixture
 import media_operation_journal as journal
 import realtime_jwks_publisher_phase_test as shared
@@ -150,6 +152,33 @@ class CapabilityTest(unittest.TestCase):
                 subject.metadata.check_principal({'der_sha256': digest})
                 with self.assertRaises(ValueError):
                     subject.metadata.check_principal({'der_sha256': 'f' * 64})
+
+    def test_actual_capability_service_handshake_without_space_leaf(self):
+        record = self.cap.prepare()
+        observed = []
+        def observe(namespace_uid, context, lock, media, principal, space=None):
+            observed.append(space)
+            return copy.deepcopy(self.seven), {'principal': b'fixture', 'media': b'fixture'}
+        endpoint = self.directory / self.creator.suffix / 'realtime' / 'custody.sock'
+        result = []
+        def root():
+            try:
+                root_service.capability_check(peer_service, record['operation_id'], record['source_sha'], os.getpid(), 7)
+                result.append('ok')
+            except Exception as error:
+                result.append(type(error).__name__)
+        with patch.object(peer_service, '_path', return_value=endpoint), \
+             patch.object(peer_service.root_export, '_pmd_uid', return_value=0), \
+             patch.object(peer_service.root_export, '_start_ticks', return_value=7), \
+             patch.object(root_service.metadata, 'observe', side_effect=observe):
+            thread = threading.Thread(target=root)
+            thread.start()
+            try: receipt = self.cap.finish()
+            finally: thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result, ['ok'])
+        self.assertEqual(observed, [None])
+        self.assertEqual(receipt, subject.verify_current(self.cap, 'token'))
 
 
 if __name__ == '__main__':
