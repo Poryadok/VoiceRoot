@@ -16,6 +16,9 @@ class CompleteBundleTests(unittest.TestCase):
             self.assertEqual(members['nats-rollout-preservation/story-current4-probe'],kernel.read_bytes())
             manifest=json.loads(members['capture-manifest.json'])
             self.assertEqual(set(manifest),set(members)-{'capture-manifest.json'})
+            import staging_prerequisites
+            self.assertTrue(staging_prerequisites.REQUIRED_HELPERS <= set(manifest))
+            self.assertNotIn('scripts/deploy/staging_p3_auxiliary_image.py', manifest)
             tree=ast.parse((source/'realtime_bootstrap_existing.py').read_bytes())
             assignments=[node for node in tree.body if isinstance(node,ast.Assign) and
                          len(node.targets)==1 and isinstance(node.targets[0],ast.Name) and node.targets[0].id=='SOURCE_HELPERS']
@@ -199,19 +202,21 @@ class WorkflowLauncherTests(unittest.TestCase):
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
             self.launch(root)
 
-    def test_workflow_accepts_87_and_89_and_rejects_90_members(self):
+    def test_workflow_accepts_87_89_94_and_rejects_95_members(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
             manifest={}
-            names=['nats-rollout-preservation/bridge_client.py','nats-rollout-preservation/resource_claim.py']+['module%d.py'%n for n in range(87)]
+            names=['nats-rollout-preservation/bridge_client.py','nats-rollout-preservation/resource_claim.py']+['module%d.py'%n for n in range(92)]
             for name in names:
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
                 raw=('fixture '+name).encode();path.write_bytes(raw);path.chmod(0o400)
                 manifest[name]=hashlib.sha256(raw).hexdigest()
-            last=[(name,manifest.pop(name)) for name in ('module85.py','module86.py')]
+            last=[(name,manifest.pop(name)) for name in ('module85.py','module86.py','module87.py','module88.py','module89.py','module90.py','module91.py')]
             index=code/'capture-manifest.json';index.write_text(json.dumps(manifest));index.chmod(0o400)
             self.launch(root)
-            manifest.update(last);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            manifest.update(last[:2]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            self.launch(root)
+            manifest.update(last[2:]);index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             self.launch(root)
             manifest['extra.py']='a'*64;index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
             with self.assertRaises(SystemExit):self.launch(root)
@@ -232,7 +237,7 @@ class WorkflowLauncherTests(unittest.TestCase):
                     elif failure=='parent':manifest['../outside']='a'*64
                     elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
                     elif failure=='overbound':
-                        for index in range(90-len(manifest)):manifest['extra'+str(index)]='a'*64
+                        for index in range(95-len(manifest)):manifest['extra'+str(index)]='a'*64
                     elif failure=='directory-mode':code.chmod(0o720)
                     elif failure=='member-mode':target.chmod(0o420)
                     elif failure=='member-owner':os.chown(target,1000,0)
