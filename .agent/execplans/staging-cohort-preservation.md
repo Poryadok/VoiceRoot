@@ -233,3 +233,29 @@ The immutable dependency archive is reminder-native-source.tar SHA256
 Earlier failures were fixture setup (missing installed directory and a V4 actor
 used to read V5 voice/user streams); production checks were unchanged. V7 source
 selection remains disabled pending Stage ownership and independent review.
+
+The live Space reviewer found that normal authority polling opens space_db,
+conflicting with the Go upgrade AND verifier's exclusive-session requirement.
+The fixed load_native_authority_during_job now infers only an upgrade or verify
+Job from protected DONE-create records, checks the exact current Session/target,
+closed predecessor, source-reconstructed document/body, response-owned UID and
+complete Job spec, and rejects PENDING/deletion/closed/replaced jobs. It retains
+the same qualified off-node/tool/rehearsal authority and original OID/owner from
+bound catalog/metadata, while fresh SQL uses only the existing postgres identity
+query. The ordinary full Space identity loader remains required before submit
+and after terminal completion. No caller mode, image, path or skip flag exists.
+The 602384f64a20 Stage consumer was normally merged, not independently approved
+by this author. Real RootSession/private-record tests cover both jobs, exact
+postgres-only SQL, wrong body/binding/UID/spec, PENDING and deletion refusal;
+Kubernetes and previous qualification are explicit controlled boundaries.
+
+WT30's source-backed integration independently exposed the default 256 KiB
+public_read limit at the fixed kernel capture. Only that pinned decoder read now
+uses its existing 32 MiB binary bound and exact BINARY_PINS hash. The real
+10,212,957-byte kernel regression reproduces the default-limit refusal, proves
+the fixed read, and rejects changed bytes and oversize input. Generic read caps
+are unchanged. Combined focused producer/Stage tests pass 37/37 in 3.408s; log
+tmp/preservation-native/running-authority-final.log SHA256
+2e71abe83233f713a67a0418723c430d2c02ab2a184824cd0b777b4cf0fb7209.
+This checkpoint still needs independent review and the actual Stage live-script
+PG rehearsal; synthetic Job tests do not claim a live rollout.

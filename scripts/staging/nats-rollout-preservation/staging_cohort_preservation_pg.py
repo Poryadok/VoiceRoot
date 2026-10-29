@@ -41,10 +41,9 @@ SPACE_IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',
     '--',SPACE_IDENTITY_SQL]
 
 
-def guard_space_identity(session):
-    """Observe the original Space database and owner on the preserved engine."""
-    from stage_runtime import Kube
-    before=guard_identity(session);base=owner._base(session)
+def _space_original(session):
+    """Only protected archive catalog/metadata; this does not open space_db."""
+    base=owner._base(session)
     archive=owner._read(base/'archive-record.json')
     catalog=owner._record(session,'catalog.json',archive['catalog_ref'],'voice-staging-cohort-catalog-v1')
     metadata=owner._record(session,'metadata.json',archive['metadata_ref'],'voice-staging-cohort-metadata-v1')
@@ -53,8 +52,25 @@ def guard_space_identity(session):
         'database_owner':role,'schema_owner':role,'installer_role':role}
     if (metadata['catalog_sha256']!=owner.digest(catalog) or original['schema_owner']!=role
         or catalog['properties']['space_db']['owner']!=role
-        or not isinstance(role,str) or not SAFE.fullmatch(role)):
+        or not isinstance(role,str) or not SAFE.fullmatch(role)
+        or type(expected['database_oid']) is not int or expected['database_oid']<=0):
         raise Blocked('cohort_space_identity_changed')
+    return archive,catalog,metadata,expected
+
+
+def _preserved_space_identity(session):
+    """Internal running-upgrade observation; live SQL connects only postgres."""
+    before=guard_identity(session);captured=_space_original(session)
+    if guard_identity(session)!=before or _space_original(session)!=captured:
+        raise Blocked('cohort_space_identity_changed')
+    return {**before,**copy.deepcopy(captured[3])}
+
+
+def guard_space_identity(session):
+    """Observe the original Space database and owner on the preserved engine."""
+    from stage_runtime import Kube
+    before=guard_identity(session);base=owner._base(session)
+    archive,catalog,metadata,expected=_space_original(session)
     value=Kube().run(list(SPACE_IDENTITY_ARGS))
     if (value!=expected or type(value.get('database_oid')) is not int
         or guard_identity(session)!=before

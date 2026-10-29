@@ -335,9 +335,7 @@ def _start_cut(actions,request,approved,execution,workspace):
     try:enrollment=root_main.private_json(guard.ROOT/'bootstrap-enrollment.json')
     except FileNotFoundError:enrollment=None
     provenance=root_main.capture_inputs(stage.kube,runtime,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
-    kernel=root_main.public_read(actions.code/'nats-known-baseline'/'kernel')
-    if hashlib.sha256(kernel).hexdigest()!=private.BINARY_PINS['nats-known-baseline/kernel']:
-        raise Blocked('cohort_native_kernel_changed')
+    kernel=_captured_native_kernel(actions.code)
     private._private_write(runtime/'kernel',kernel)
     os.chmod(runtime/'kernel',0o550);os.chown(runtime/'kernel',0,65532)
     state={'schema':'voice-staging-cohort-preservation-checkpoint-v1','operation':session.operation,
@@ -852,6 +850,20 @@ def load_native_space_rehearsal(session):
 def load_native_authority(session):
     from staging_cohort_preservation_space import load_native_authority as load
     return load(session)
+
+
+def load_native_authority_during_job(session):
+    from staging_cohort_preservation_space import load_native_authority_during_job as load
+    return load(session)
+
+
+def _captured_native_kernel(code):
+    """Read only the fixed pinned decoder with its existing 32 MiB bound."""
+    import root_main
+    raw=root_main.public_read(code/'nats-known-baseline'/'kernel',limit=32<<20)
+    if hashlib.sha256(raw).hexdigest()!=private.BINARY_PINS['nats-known-baseline/kernel']:
+        raise Blocked('cohort_native_kernel_changed')
+    return raw
 
 
 def _end_restore(session,proof):
