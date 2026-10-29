@@ -31,7 +31,7 @@ CATALOG = """SELECT json_build_object(
  ORDER BY pg_get_userbyid(d.defaclrole),n.nspname,d.defaclobjtype),'[]'::json)
  FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace),
  'history',(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)
- FROM schema_migrations));"""
+ FROM public.schema_migrations));"""
 
 
 def role_catalog_sql(excluded=''):
@@ -189,7 +189,7 @@ def _cleanup(journal, resources):
 
 
 def _psql(cid, admin, database, sql, timeout=120):
-    return _docker('exec', '-i', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
+    return _docker('exec', '-i', '-e', 'PGOPTIONS=-c search_path=pg_catalog,public', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
                    '-U', admin, '-d', database, input=sql.encode('utf-8'), timeout=timeout)
 
 

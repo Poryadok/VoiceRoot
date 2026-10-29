@@ -12,13 +12,14 @@ import threading
 
 import story_media_backup_cohort as cohort
 import story_media_backup_restore as media_restore
+import cohort_unmanaged_actual as unmanaged
 
 GO_SQL = re.compile(r'([0-9]{6})_[a-z0-9_]+\.(up|down)\.sql')
 FLYWAY_SQL = re.compile(r'V([0-9]+)__[A-Za-z0-9_]+\.sql')
 MAX_FILE = 4 * 1024 * 1024
 MAX_TOTAL = 64 * 1024 * 1024
-GO_HISTORY = "(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)\n FROM schema_migrations)"
-AUTH_HISTORY = "(SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM flyway_schema_history)"
+GO_HISTORY = "(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)\n FROM public.schema_migrations)"
+AUTH_HISTORY = "(SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM public.flyway_schema_history)"
 AUTH_CATALOG = media_restore.CATALOG.replace(GO_HISTORY, AUTH_HISTORY)
 GATEWAY_HISTORY = "json_build_object('schema_migrations',to_regclass('public.schema_migrations') IS NOT NULL,'flyway_schema_history',to_regclass('public.flyway_schema_history') IS NOT NULL)"
 GATEWAY_CATALOG = media_restore.CATALOG.replace(GO_HISTORY, GATEWAY_HISTORY)
@@ -28,7 +29,16 @@ class CohortRestoreError(Exception):
     pass
 
 
-def classify_plan(database, plan):
+def restore_order(databases):
+    """Restore legacy service databases before changing disposable template0."""
+    return sorted(databases,key=lambda name:(name not in cohort.ALLOWED_DATABASES,name))
+
+
+def classify_plan(database, plan, full_catalog=False):
+    if database not in cohort.ALLOWED_DATABASES and full_catalog:
+        if (isinstance(plan,dict) and plan == {'engine':'unmanaged','from':None,'to':None,'files':{}}):
+            return 'restore-only'
+        raise CohortRestoreError('unmanaged database plan invalid')
     if database == 'gateway_db':
         if (isinstance(plan, dict) and set(plan) == {'engine', 'from', 'to', 'files'}
                 and plan['engine'] == 'unmanaged' and plan['from'] is None and plan['to'] is None
@@ -49,7 +59,7 @@ def classify_plan(database, plan):
     return 'migrate'
 
 
-def migration_inventory(root, databases, plans):
+def migration_inventory(root, databases, plans, full_catalog=False):
     try:
         if (not isinstance(databases, list) or not databases or databases != sorted(set(databases))
                 or not isinstance(plans, dict) or set(plans) != set(databases)):
@@ -58,7 +68,10 @@ def migration_inventory(root, databases, plans):
         result = {}; total = 0
         try:
             for db in databases:
-                mode = classify_plan(db, plans[db])
+                mode = classify_plan(db, plans[db],full_catalog)
+                if full_catalog and db not in cohort.ALLOWED_DATABASES:
+                    result[db] = {}
+                    continue
                 components = (['src', 'backend', 'auth', 'src', 'main', 'resources', 'db', 'migration']
                               if db == 'auth_db' else ['src', 'backend', 'migrations', db])
                 folder = os.dup(rootfd)
@@ -138,8 +151,13 @@ def _source(binding, databases, metadata, postgres_image, migrate_image):
     if AUTH_CATALOG == media_restore.CATALOG or GATEWAY_CATALOG == media_restore.CATALOG:
         raise CohortRestoreError('cohort catalog query unavailable')
     for db in databases:
-        mode = classify_plan(db, metadata['migrations'][db])
+        full_catalog='full_catalog' in binding
+        mode = classify_plan(db, metadata['migrations'][db],full_catalog)
         catalog = metadata['catalog'][db]
+        if full_catalog and db not in cohort.ALLOWED_DATABASES:
+            try: unmanaged.validate_source_catalog(catalog,binding['full_catalog']['properties'][db])
+            except unmanaged.UnmanagedError: raise CohortRestoreError('unmanaged source catalog invalid') from None
+            continue
         if not isinstance(catalog, dict) or set(catalog) != {'database_owner', 'schema_owner', 'schema_acl',
                                                              'objects', 'defaults', 'history'}:
             raise CohortRestoreError('cohort catalog invalid')
@@ -207,7 +225,8 @@ def _install_go(cid, sources, plans, changed):
         'mkdir -p /tmp/voice-cohort-migrations && tar -xf - -C /tmp/voice-cohort-migrations', input=payload.getvalue())
 
 
-def qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal):
+def qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal,
+            catalog_phase=None, catalog_token=None):
     """Restore a caller-authorized exact set; this does not prove its completeness."""
     if any(not callable(getattr(journal, name, None)) for name in ('begin', 'created', 'begin_remove', 'removed', 'uncertain')):
         raise CohortRestoreError('cohort resource journal required')
@@ -220,13 +239,16 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
         snapshot = json.loads(raw)
         binding, databases, manifest, source_metadata = (snapshot['binding'], snapshot['databases'],
                                                          snapshot['manifest'], snapshot['metadata'])
+        full_catalog='full_catalog' in binding
+        if full_catalog: unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
+        elif catalog_phase is not None or catalog_token is not None: raise CohortRestoreError('unexpected catalog authority')
         _source(binding, databases, source_metadata, postgres_image, migrate_image)
         cohort.verify(root, key, binding, databases, manifest)
-        sources = migration_inventory(source_root, databases, source_metadata['migrations'])
+        sources = migration_inventory(source_root, databases, source_metadata['migrations'],full_catalog)
         if media_restore._docker('info', '--format', '{{.OSType}}').strip() != b'linux':
             raise CohortRestoreError('Linux Docker required')
         postgres_id = media_restore._check_image(postgres_image)
-        changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db]) == 'migrate']
+        changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
         migrate_id = media_restore._check_image(migrate_image) if changed else None
         admin = 'voice_cohort_' + secrets.token_hex(12); password = secrets.token_hex(24)
         postgres = media_restore._create(journal, resources, 'postgres', postgres_id,
@@ -241,11 +263,35 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
                          [postgres, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', admin, '-d', 'postgres'])
         if json.loads(media_restore._psql(postgres, admin, 'postgres', media_restore.role_catalog_sql(admin))) != source_metadata['roles']:
             raise CohortRestoreError('restored role catalog differs')
-        for db in databases:
-            owner = media_restore._quote_identifier(source_metadata['catalog'][db]['database_owner'])
-            media_restore._psql(postgres, admin, 'postgres', 'CREATE DATABASE ' + db + ' OWNER ' + owner)
-            _decrypt_command(root, key, binding, databases, manifest, db,
-                             [postgres, 'pg_restore', '-U', admin, '--exit-on-error', '-d', db])
+        maintenance=None
+        if full_catalog:
+            maintenance='voice_cohort_private_'+secrets.token_hex(16)
+            if maintenance in binding['full_catalog']['properties']:
+                raise CohortRestoreError('maintenance database collides with source')
+            media_restore._psql(postgres,admin,'postgres','CREATE DATABASE '+media_restore._quote_identifier(maintenance)+' TEMPLATE template0')
+        for db in restore_order(databases):
+            if full_catalog and db not in cohort.ALLOWED_DATABASES:
+                sql=lambda name,statement:media_restore._psql(postgres,admin,name,statement)
+                unmanaged.prepare_disposable_template(sql,source_metadata['catalog'][db],maintenance)
+                if db in ('postgres','template1'): unmanaged.prepare_disposable_database(sql,db,maintenance)
+                _decrypt_command(root,key,binding,databases,manifest,db,
+                    [postgres,'pg_restore','-U',admin,'--exit-on-error','--create','-d',maintenance])
+                if binding['full_catalog']['properties'][db]['template']:
+                    sql(maintenance,'ALTER DATABASE '+media_restore._quote_identifier(db)+' IS_TEMPLATE true')
+                actual=json.loads(sql(db,unmanaged.CATALOG_SQL))
+                unmanaged.restore_result(source_metadata['catalog'][db],actual)
+                continue
+            if full_catalog:
+                _decrypt_command(root,key,binding,databases,manifest,db,
+                    [postgres,'pg_restore','-U',admin,'--exit-on-error','--create','-d',maintenance])
+                unmanaged.verify_restored_properties(
+                    lambda name,sql:media_restore._psql(postgres,admin,name,sql),db,
+                    binding['full_catalog']['properties'][db])
+            else:
+                owner = media_restore._quote_identifier(source_metadata['catalog'][db]['database_owner'])
+                media_restore._psql(postgres, admin, 'postgres', 'CREATE DATABASE ' + db + ' OWNER ' + owner)
+                _decrypt_command(root, key, binding, databases, manifest, db,
+                                 [postgres, 'pg_restore', '-U', admin, '--exit-on-error', '-d', db])
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             if json.loads(media_restore._psql(postgres, admin, db, query)) != source_metadata['catalog'][db]:
                 raise CohortRestoreError('restored database catalog differs')
@@ -256,19 +302,29 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
         results = {}
         for db in databases:
             plan = source_metadata['migrations'][db]
-            mode = classify_plan(db, plan)
+            mode = classify_plan(db, plan,full_catalog)
+            if full_catalog and db not in cohort.ALLOWED_DATABASES:
+                actual=json.loads(media_restore._psql(postgres,admin,db,unmanaged.CATALOG_SQL))
+                unmanaged.restore_result(source_metadata['catalog'][db],actual)
+                results[db]={'mode':'restore-only','from':None,'to':None}
+                continue
             if mode == 'migrate':
                 url = 'postgres://' + admin + ':' + password + '@127.0.0.1:5432/' + db + '?sslmode=disable'
                 command = 'exec /tmp/voice-migrate -path /tmp/voice-cohort-migrations/' + db + ' -database "$VOICE_RESTORE_URL" up'
                 media_restore._docker('exec', '-e', 'VOICE_RESTORE_URL=' + url, postgres, 'sh', '-ec', command)
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             actual = json.loads(media_restore._psql(postgres, admin, db, query))
+            if full_catalog:
+                unmanaged.verify_restored_properties(
+                    lambda name,sql:media_restore._psql(postgres,admin,name,sql),db,
+                    binding['full_catalog']['properties'][db])
             if mode == 'restore-only':
                 if actual != source_metadata['catalog'][db]:
                     raise CohortRestoreError('unchanged catalog or ledger drift')
             elif actual['history'] != [{'version': plan['to'], 'dirty': False}]:
                 raise CohortRestoreError('migrated ledger differs')
             results[db] = {'mode': mode, 'from': plan['from'], 'to': plan['to']}
+        if full_catalog: unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
         receipt = {'operation_id': binding['operation_id'], 'snapshot_id': binding['snapshot_id'], 'source_sha': binding['source_sha'],
                    'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':'),
                        ensure_ascii=True, allow_nan=False).encode('ascii')).hexdigest(),

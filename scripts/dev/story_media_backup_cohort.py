@@ -24,8 +24,18 @@ def _canonical(value):
 
 
 def _members(binding, databases):
+    full = binding.get('full_catalog') if isinstance(binding,dict) else None
+    if full is not None:
+        if (not isinstance(full,dict) or set(full)!={'receipt_sha256','properties'} or
+                not isinstance(full['receipt_sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',full['receipt_sha256']) or
+                not isinstance(full['properties'],dict) or not 1<=len(full['properties'])<=128 or
+                any(not isinstance(name,str) or not re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_]{0,62}',name) or name=='roles' or
+                    not isinstance(value,dict) or type(value.get('allowconn')) is not bool
+                    for name,value in full['properties'].items()) or
+                databases!=sorted(name for name,value in full['properties'].items() if value['allowconn'])):
+            raise CohortError('full cohort catalog invalid')
     if (not isinstance(binding, dict) or not isinstance(databases, list) or not databases
-            or any(not isinstance(db, str) or db not in ALLOWED_DATABASES for db in databases)
+            or any(not isinstance(db, str) or (full is None and db not in ALLOWED_DATABASES) for db in databases)
             or databases != sorted(set(databases)) or binding.get('databases') != databases
             or not isinstance(binding.get('operation_id'), str)
             or not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', binding['operation_id'])
