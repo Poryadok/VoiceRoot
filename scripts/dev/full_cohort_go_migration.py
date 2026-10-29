@@ -1,4 +1,8 @@
-"""Generic Go migration objects. Rendering alone grants no execution authority."""
+"""Fenced generic Go migrations with source, backup and clone-role evidence.
+
+The shared WriterCut and its source-owned Go observer must be installed by the
+consumer. Guarded observations are not an atomic lock against external writers.
+"""
 import re
 import copy
 import base64
@@ -757,6 +761,7 @@ class Migration:
             if (cohort_restore_journal.verify_go_role(self.cohort, self.metadata_phase, self.token, self.database) != clone or
                     self.secret.verify() != secret_done['receipt']):
                 raise ValueError()
+            self.cut.verify_migration_pending(); self._guard()
             submitted = self.client.call('create', '-f', '-', '-o', 'json', body=job)
             accepted = verify_writer_job(job, submitted)
             jm = submitted['metadata']; uid, rv = jm.get('uid'), jm.get('resourceVersion')
