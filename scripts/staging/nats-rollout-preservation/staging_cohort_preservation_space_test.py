@@ -29,6 +29,7 @@ import resource_claim
 import staging_cohort_preservation as owner
 import staging_cohort_preservation_pg as pg
 import staging_cohort_preservation_space as native
+import staging_space_native as inspector
 import staging_cohort_preservation_test as cut_tests
 from staging_cohort_preservation_runtime import DOCKER
 from auth_user_adoption_runtime import QUALIFIED_TOOLS
@@ -167,6 +168,14 @@ class NativeSpaceTests(unittest.TestCase):
                     for p in (source/prefix).rglob('*.sql')}}
                 actual_capture=commands.capture
                 def capture(argv,**kwargs):
+                    # The future CI/registry binding is synthetic; the built
+                    # config and executable used by both native clones are real.
+                    if argv==DOCKER+['--config',str(owner._base(session)/'tool-pull-auth'),'pull','--platform','linux/amd64',publication['immutable_image']]:
+                        commands.authority_guard(argv);return b'fixture registry transport\n'
+                    if argv==DOCKER+['image','inspect',publication['immutable_image']]:
+                        commands.authority_guard(argv)
+                        value=json.loads(docker('image','inspect',image));value[0]['RepoDigests']=[publication['immutable_image']]
+                        return json.dumps(value).encode()
                     for fixed in (pg.IDENTITY_ARGS,pg.SPACE_IDENTITY_ARGS):
                         if argv==owner.PREFIX+fixed:
                             commands.authority_guard(argv)
@@ -188,6 +197,7 @@ class NativeSpaceTests(unittest.TestCase):
                 with patch.object(guard,'ROOT',root),patch.object(owner,'_source',return_value=(approved,{},{})),\
                     patch.object(owner,'revalidate_paused'),patch.object(owner,'shared_module',side_effect=lambda s,m:importlib.import_module(m)),\
                     patch('realtime_bootstrap.engine_snapshot',return_value=(namespace,engine)),\
+                    patch.object(inspector,'load_retained_inspection',side_effect=lambda s:owner._read(owner._base(s)/'space-inspection.json')),\
                     patch.object(commands,'capture',side_effect=capture),patch.object(subprocess,'Popen',side_effect=popen):
                     c=cut_tests.context();c['commit']=revision;card=cut_tests.card(c)
                     session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
@@ -209,6 +219,9 @@ class NativeSpaceTests(unittest.TestCase):
                     import shutil
                     shutil.copytree(source/'src/backend/migrations',workspace/'src/backend/migrations')
                     with resource_claim.command_scope(session.check):
+                        state=owner._state(session);state['initial_resource_fence']=session.binding();owner.save(base/'checkpoint.json',state)
+                        owner._write(base/'space-inspection.json',{'external_kube_source_inspection_fixture':True})
+                        native.prepare_tool(session,'fixture-only')
                         archive=owner._capture_archive(session)
                         self.assertEqual(set(archive['databases']),{'postgres','template1','space_db'})
                         original_identity=pg.guard_space_identity(session)
