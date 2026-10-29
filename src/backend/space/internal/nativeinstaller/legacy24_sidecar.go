@@ -55,11 +55,12 @@ func validLegacy24OriginBinding(origin *legacy24OriginObservation, receipt *Lega
 		return false
 	}
 	encoded, err := json.Marshal(struct {
-		Rows    map[string]legacy25TableDigest `json:"rows"`
-		Derived *legacy24Derived               `json:"derived"`
-		Spaces  []string                       `json:"spaces"`
-		Extras  []legacy24Extra                `json:"extras"`
-	}{origin.Rows, origin.Derived, origin.Spaces, origin.Extras})
+		Rows               map[string]legacy25TableDigest `json:"rows"`
+		Derived            *legacy24Derived               `json:"derived"`
+		Spaces             []string                       `json:"spaces"`
+		Extras             []legacy24Extra                `json:"extras"`
+		StableAccessSHA256 string                         `json:"stable_access_sha256"`
+	}{origin.Rows, origin.Derived, origin.Spaces, origin.Extras, origin.StableAccessSHA256})
 	if err != nil || len(encoded) > 1<<20 {
 		return false
 	}
