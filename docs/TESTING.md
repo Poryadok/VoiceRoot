@@ -175,6 +175,8 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
   and lost owner locks. The test creates/drops only its previously absent
   `space_db`; discard the private server afterward. This checks the window guard,
   not the full migration chain or a hosted failure's backend inventory.
+  Required CI executes this same test in the `backend-go` Space matrix entry
+  with an owned digest-pinned PostgreSQL 16 container and unconditional cleanup.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 - Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
   затем `go test ./internal/roomlifecycle -count=1`, `go test -race
