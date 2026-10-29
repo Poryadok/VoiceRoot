@@ -39,7 +39,7 @@ def validate(row):
     # The schema is deliberately fixed to the reviewed current4 compatibility gate.
     import actor_root
     if (database['name']!='story_db' or type(database['version']) is not int or database['version']!=4
-        or database['dirty'] is not False or database['up_sha256']!=actor_root.STORY_UP
+        or database['dirty'] is not False or database['up_sha256']!=actor_root.STORY_CURRENT4_UP
         or database['catalog_before_sha256']!=database['catalog_after_sha256']):fail()
     digest(database['catalog_before_sha256'])
     fixture=row['fixture'];fields(fixture,'contract_sha256 input_sha256 source_sha256 result_sha256 cases positive_exit negative_exit missing_profile_code row_count cleanup_verified')
