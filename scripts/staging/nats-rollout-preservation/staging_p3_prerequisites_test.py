@@ -6,6 +6,17 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_operation_marker_only_on_exact_fixed_object_set(self):
+        rows=[{'kind':key.split('/')[0],'metadata':{'name':key.split('/')[1],'namespace':'voice-staging'}}
+              for key in reversed(p3.inventory_intent())]
+        out=p3.mark_operation(rows,'bound-operation')
+        self.assertEqual([row['kind']+'/'+row['metadata']['name'] for row in out],p3.inventory_intent())
+        self.assertTrue(all(row['metadata']['annotations']=={'voice.poryadok.io/prerequisites-operation':'bound-operation'} for row in out))
+        self.assertNotIn('annotations',rows[0]['metadata'])
+        wrong=copy.deepcopy(rows); wrong[0]['metadata']['annotations']={'voice.poryadok.io/prerequisites-operation':'foreign'}
+        with self.assertRaises(p3.PrerequisiteError): p3.mark_operation(wrong,'bound-operation')
+        with self.assertRaises(p3.PrerequisiteError): p3.mark_operation(rows[:-1],'bound-operation')
+
     def test_publisher_endpoint_requires_owned_single_ready_pod_and_exact_image(self):
         d={'metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging','uid':'dep','generation':2},'status':{'observedGeneration':2,'readyReplicas':1,'availableReplicas':1}}
         rs={'metadata':{'namespace':'voice-staging','uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'dep','controller':True}]},'spec':{'replicas':1}}

@@ -52,6 +52,22 @@ def inventory_intent():
             for name in ASSET_KEYS]+list(PUBLISHER)
 
 
+def mark_operation(objects,operation):
+    """Build private payloads; caller must derive operation from the root session."""
+    try:
+        if not isinstance(operation,str) or not 0<len(operation)<=256 or not isinstance(objects,list): raise ValueError()
+        rows={}
+        for obj in copy.deepcopy(objects):
+            meta=obj['metadata']; ident=obj['kind']+'/'+meta['name']
+            if ident not in inventory_intent() or ident in rows or meta.get('namespace')!=NAMESPACE: raise ValueError()
+            annotations=meta.setdefault('annotations',{})
+            if not isinstance(annotations,dict) or 'voice.poryadok.io/prerequisites-operation' in annotations: raise ValueError()
+            annotations['voice.poryadok.io/prerequisites-operation']=operation; rows[ident]=obj
+        if set(rows)!=set(inventory_intent()): raise ValueError()
+        return [rows[ident] for ident in inventory_intent()]
+    except Exception: raise PrerequisiteError('staging P3 operation payload invalid') from None
+
+
 def service_allocation(intended,actual):
     """Compare normalized Service intent and response; not a readback or authority."""
     try:
