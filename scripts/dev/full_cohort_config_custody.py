@@ -38,7 +38,8 @@ def checked_records(operation, invocation, services, local, ledger):
                 not isinstance(local, dict) or not isinstance(ledger, dict)):
             raise ValueError()
         expected = {'backend-config-deployment-voice-' + name for name in services}
-        allowed_service = {'backend-config-service-voice-chat', 'backend-config-service-voice-realtime'}
+        allowed_service = {'backend-config-service-voice-chat', 'backend-config-service-voice-realtime',
+                           'backend-config-service-voice-space'}
         names = set(local)
         if not expected <= names or names - expected - allowed_service or names != set(ledger): raise ValueError()
         for name in names:
