@@ -9,6 +9,7 @@ import stat
 import subprocess
 import tarfile
 import threading
+from urllib.parse import quote
 
 import story_media_backup_cohort as cohort
 import story_media_backup_restore as media_restore
@@ -225,8 +226,54 @@ def _install_go(cid, sources, plans, changed):
         'mkdir -p /tmp/voice-cohort-migrations && tar -xf - -C /tmp/voice-cohort-migrations', input=payload.getvalue())
 
 
+def _qualified_roles(phase, token, catalog_phase, binding, databases, metadata, changed):
+    # Imported here because metadata itself imports this module.
+    import full_cohort_backup_metadata as source
+    if (type(phase) is not source.BackupMetadataPhase or phase.catalog is not catalog_phase
+            or phase.fence.context != catalog_phase.fence.context or phase.lock != catalog_phase.lock
+            or phase.namespace_uid != catalog_phase.namespace_uid
+            or phase.fence.ledger.read() != catalog_phase.fence.ledger.read()):
+        raise CohortRestoreError('migration source authority mismatch')
+    result = source.verify_completed(phase, token)
+    if (result['operation_id'] != binding['operation_id'] or result['source_sha'] != binding['source_sha']
+            or result['databases'] != databases or result['sources'] != binding['sources']
+            or result['full_catalog'] != binding['full_catalog'] or result['restore_inputs'] != binding['restore_inputs']
+            or result['metadata'] != metadata or set(result['migration_roles']) != set(changed)):
+        raise CohortRestoreError('migration source receipt mismatch')
+    roles = result['migration_roles']
+    for db in changed:
+        role = roles[db]['role']
+        matches = [r for r in metadata['roles']['roles'] if r['name'] == role]
+        if len(matches) != 1 or matches[0]['login'] is not True:
+            raise CohortRestoreError('migration login absent from source')
+    if phase.fence.ledger.read() != catalog_phase.fence.ledger.read():
+        raise CohortRestoreError('migration source ledger changed')
+    return roles
+
+
+def _run_go_as_role(cid, admin, db, role):
+    """Run the pinned migration binary as a restored login, with a clone-only password."""
+    password = secrets.token_hex(32)
+    statement = 'ALTER ROLE ' + media_restore._quote_identifier(role) + " PASSWORD '" + password + "'"
+    media_restore._docker('exec', '-i', cid, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1',
+                         '-U', admin, '-d', db, input=statement.encode('utf8'))
+    wrapper = 'IFS= read -r PGPASSWORD; export PGPASSWORD; exec "$@"'
+    def run(*command):
+        return media_restore._docker('exec', '-i', cid, 'sh', '-ec', wrapper, 'role-login', *command,
+                                    input=(password + '\n').encode('ascii'))
+    identity_sql = "SELECT json_build_array(session_user,current_user)"
+    def identity():
+        actual = json.loads(run('psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1',
+                                '-U', role, '-d', db, '-c', identity_sql))
+        if actual != [role, role]: raise CohortRestoreError('clone login identity mismatch')
+    identity()
+    url = 'postgres://' + quote(role, safe='') + '@127.0.0.1:5432/' + quote(db, safe='') + '?sslmode=disable'
+    run('/tmp/voice-migrate', '-path', '/tmp/voice-cohort-migrations/' + db, '-database', url, 'up')
+    identity()
+
+
 def qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal,
-            catalog_phase=None, catalog_token=None):
+            catalog_phase=None, catalog_token=None, metadata_phase=None, metadata_token=None):
     """Restore a caller-authorized exact set; this does not prove its completeness."""
     if any(not callable(getattr(journal, name, None)) for name in ('begin', 'created', 'begin_remove', 'removed', 'uncertain')):
         raise CohortRestoreError('cohort resource journal required')
@@ -249,16 +296,27 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
             raise CohortRestoreError('Linux Docker required')
         postgres_id = media_restore._check_image(postgres_image)
         changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
+        migration_roles = (_qualified_roles(metadata_phase, metadata_token, catalog_phase, binding, databases,
+                                            source_metadata, changed) if full_catalog and changed else {})
+        if not (full_catalog and changed) and (metadata_phase is not None or metadata_token is not None):
+            raise CohortRestoreError('unexpected migration authority')
         migrate_id = media_restore._check_image(migrate_image) if changed else None
         admin = 'voice_cohort_' + secrets.token_hex(12); password = secrets.token_hex(24)
+        password_name = 'voice-cohort-password-' + secrets.token_hex(16)
         postgres = media_restore._create(journal, resources, 'postgres', postgres_id,
-                                          ['-e', 'POSTGRES_USER=' + admin, '-e', 'POSTGRES_PASSWORD=' + password])
+                                          ['-e', 'POSTGRES_USER=' + admin, '-e', 'POSTGRES_PASSWORD_FILE=/tmp/' + password_name])
+        payload = io.BytesIO()
+        with tarfile.open(fileobj=payload,mode='w',format=tarfile.USTAR_FORMAT) as archive:
+            entry=tarfile.TarInfo(password_name);entry.mode=0o600;entry.size=len(password)
+            archive.addfile(entry,io.BytesIO(password.encode('ascii')))
+        media_restore._docker('cp','-',postgres+':/tmp/',input=payload.getvalue())
         if changed:
             tool_container = media_restore._create(journal, resources, 'migrate', migrate_id, ['--entrypoint', '/bin/true'])
             tool = media_restore._tool_bytes(tool_container, binding['restore_inputs']['migrate_binary_sha256'])
         media_restore._docker('start', postgres)
         if media_restore._ready_major(postgres, admin) != 16:
             raise CohortRestoreError('postgres major mismatch')
+        media_restore._docker('exec',postgres,'rm','-f','--','/tmp/'+password_name)
         _decrypt_command(root, key, binding, databases, manifest, 'roles',
                          [postgres, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', admin, '-d', 'postgres'])
         if json.loads(media_restore._psql(postgres, admin, 'postgres', media_restore.role_catalog_sql(admin))) != source_metadata['roles']:
@@ -309,9 +367,10 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
                 results[db]={'mode':'restore-only','from':None,'to':None}
                 continue
             if mode == 'migrate':
-                url = 'postgres://' + admin + ':' + password + '@127.0.0.1:5432/' + db + '?sslmode=disable'
-                command = 'exec /tmp/voice-migrate -path /tmp/voice-cohort-migrations/' + db + ' -database "$VOICE_RESTORE_URL" up'
-                media_restore._docker('exec', '-e', 'VOICE_RESTORE_URL=' + url, postgres, 'sh', '-ec', command)
+                if full_catalog:
+                    _run_go_as_role(postgres, admin, db, migration_roles[db]['role'])
+                else:
+                    _run_go_as_role(postgres, admin, db, admin)
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             actual = json.loads(media_restore._psql(postgres, admin, db, query))
             if full_catalog:
@@ -324,11 +383,17 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
             elif actual['history'] != [{'version': plan['to'], 'dirty': False}]:
                 raise CohortRestoreError('migrated ledger differs')
             results[db] = {'mode': mode, 'from': plan['from'], 'to': plan['to']}
-        if full_catalog: unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
+        if full_catalog:
+            unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
+            if changed and _qualified_roles(metadata_phase,metadata_token,catalog_phase,binding,databases,source_metadata,changed) != migration_roles:
+                raise CohortRestoreError('migration source authority changed')
         receipt = {'operation_id': binding['operation_id'], 'snapshot_id': binding['snapshot_id'], 'source_sha': binding['source_sha'],
                    'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':'),
                        ensure_ascii=True, allow_nan=False).encode('ascii')).hexdigest(),
                    'databases': results, 'scope': 'selected-cohort-roles-catalog-and-ledger-only'}
+        if migration_roles:
+            receipt['migration_logins'] = {db: {'role': migration_roles[db]['role'], 'from': results[db]['from'],
+                                                'to': results[db]['to']} for db in changed}
     except media_restore.RestoreUncertain:
         raise CohortRestoreError('cohort resources uncertain; retain operation') from None
     except Exception:
