@@ -128,6 +128,39 @@ class SupervisorTest(unittest.TestCase):
             self.assertFalse(subject.cut.started);self.assertFalse(subject.cut.drained)
             tool_run.assert_called_once_with('token');space_prepare.assert_called_once_with()
             with self.assertRaises(supervisor.SupervisorError):subject.prepare_execution('token','actor')
+            if creator in ('rootless','rootless-peer-close','rootless-config-drift','rootless-package',
+                           'rootless-inventory','rootless-jdk-lock','rootless-peer-lock'):
+                def peer_verify(*args):
+                    if creator=='rootless-peer-close':subject.peer_target.journal.close()
+                    if creator=='rootless-config-drift':subject.creator_config.journal.state['steps']['drift']={}
+                    if creator=='rootless-package':subject.package.journal.state['steps'].pop('protected')
+                    if creator=='rootless-inventory':subject.inventory.journal.state['steps'].pop('protected')
+                    if creator=='rootless-jdk-lock':subject.target_jdk.lock['metadata']['uid']='foreign'
+                    if creator=='rootless-peer-lock':subject.peer_target.lock['metadata']['uid']='foreign'
+                    return {'scope':'fixture'}
+                with mock.patch.object(supervisor.space_creator_runtime_profile_config.CreatorConfigPhase,'run') as config_run, \
+                     mock.patch.object(supervisor.space_creator_runtime_profile_jdk.TargetJdkPhase,'run') as jdk_run, \
+                     mock.patch.object(supervisor.space_creator_runtime_profile_config,'verify_completed'), \
+                     mock.patch.object(supervisor.space_creator_runtime_profile_jdk,'verify_completed'), \
+                     mock.patch.object(supervisor.space_creator_peer_phase.PeerTargetPhase,'run',return_value={'scope':'fixture'}) as peer_run, \
+                     mock.patch.object(supervisor.space_creator_peer_phase,'verify_current',side_effect=peer_verify), \
+                     mock.patch.object(supervisor.space_p3_issuer_preflight.IssuerPreflightPhase,'prepare') as issuer_prepare:
+                    self.assertEqual(subject.prepare_rootless_creator_base('token')['scope'],'rootless-creator-base-only')
+                    if creator=='rootless-package':subject.package.journal.state['steps']['protected']={'status':'done'}
+                    if creator=='rootless-inventory':subject.inventory.journal.state['steps']['protected']={'status':'done'}
+                    if creator!='rootless':
+                        with self.assertRaises(supervisor.SupervisorError):subject.prepare_peer_targets('token')
+                        with self.assertRaises(supervisor.SupervisorError):subject.prepare_peer_targets('token')
+                        self.assertFalse(subject.cut.started);issuer_prepare.assert_not_called()
+                        return
+                    self.assertEqual(subject.prepare_peer_targets('token')['scope'],'static-peer-targets-only')
+                    config_run.assert_called_once_with('token');jdk_run.assert_called_once_with('token','actor')
+                    peer_run.assert_called_once_with('token');issuer_prepare.assert_not_called()
+                    self.assertIs(subject.peer_target.config,subject.creator_config)
+                    self.assertIsNone(subject.issuer_preflight);self.assertFalse(subject.cut.started)
+                    with self.assertRaises(supervisor.SupervisorError):subject.prepare_rootless_creator_base('token')
+                    with self.assertRaises(supervisor.SupervisorError):subject.prepare_peer_targets('token')
+                return
             if creator:
                 def late_jdk(*args):
                     if creator=='late':subject.target_jdk.journal.close()
@@ -162,6 +195,27 @@ class SupervisorTest(unittest.TestCase):
 
     def test_creator_inputs_are_typed_and_pre_drain(self):
         self._pre_drain_constructors(creator=True)
+
+    def test_rootless_creator_base_and_peer_plan_do_not_start_issuer_or_drain(self):
+        self._pre_drain_constructors(creator='rootless')
+
+    def test_rootless_peer_closed_during_final_callback_is_refused(self):
+        self._pre_drain_constructors(creator='rootless-peer-close')
+
+    def test_rootless_config_drift_during_peer_callback_is_refused(self):
+        self._pre_drain_constructors(creator='rootless-config-drift')
+
+    def test_rootless_package_evidence_removal_is_refused(self):
+        self._pre_drain_constructors(creator='rootless-package')
+
+    def test_rootless_inventory_evidence_removal_is_refused(self):
+        self._pre_drain_constructors(creator='rootless-inventory')
+
+    def test_rootless_jdk_lock_drift_is_refused(self):
+        self._pre_drain_constructors(creator='rootless-jdk-lock')
+
+    def test_rootless_peer_lock_drift_is_refused(self):
+        self._pre_drain_constructors(creator='rootless-peer-lock')
 
     def test_creator_input_late_closed_jdk_fails_and_cannot_replay(self):
         self._pre_drain_constructors(creator='late')

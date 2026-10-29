@@ -13,7 +13,7 @@ import (
 // verifyLegacy24Intermediate observes the real migration 25 in one snapshot.
 // The originating observation must come from observeLegacy24Origin before DDL;
 // the owning controller is responsible for custody and maintenance authority.
-func verifyLegacy24Intermediate(ctx context.Context, conn *pgx.Conn, origin *legacy24OriginObservation) (*Legacy24Intermediate, error) {
+func verifyLegacy24Intermediate(ctx context.Context, conn *pgx.Conn, origin *legacy24OriginObservation) (_ *Legacy24Intermediate, err error) {
 	if origin == nil || origin.Target == nil || origin.Derived == nil {
 		return nil, errors.New("HOLD: missing legacy24 origin")
 	}
@@ -21,7 +21,7 @@ func verifyLegacy24Intermediate(ctx context.Context, conn *pgx.Conn, origin *leg
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(context.Background())
+	defer finishLegacy24Read(tx, &err)
 	catalog, err := inspectLegacy25CatalogTx(ctx, tx)
 	if err != nil {
 		return nil, errors.New("HOLD: intermediate25 catalog mismatch")

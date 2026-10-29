@@ -11,10 +11,11 @@ import secrets
 import stat
 
 import realtime_p3_create_only_transport as private
+import dev_peer_issuer_preflight as issuer
+import dev_peer_issuer_metadata as peer_metadata
 import space_creator_runtime_profile_jdk as jdk
 import space_creator_runtime_profile_target_trust as target
 import space_creator_runtime_profile_trust as trust
-import space_p3_issuer_preflight as issuer
 import writer_cut
 
 STEP = 'space-creator-trust-effect'
@@ -74,14 +75,62 @@ def _mac(key, data):
     return hmac.new(key, b'voice-creator-trust-secret-v1\0' + raw, hashlib.sha256).hexdigest()
 
 
-class TrustEffectPhase(target.TargetTrustPhase):
+class TrustEffectPhase(jdk.TargetJdkPhase):
     """One protected create/CAS attempt; unknown outcomes require reconciliation."""
 
     def __init__(self, journal, fence, client, lock, namespace_uid, package, inventory, jdk_phase, preflight_phase):
-        super().__init__(journal, fence, client, lock, namespace_uid, package, inventory, jdk_phase, preflight_phase)
-        if not re.fullmatch(r'media-c1-[a-f0-9]{32}', fence.context.get('operation_id', '')):
-            raise TrustEffectError('C1 operation required')
+        super().__init__(journal, fence, client, lock, namespace_uid, package, inventory)
+        if (not re.fullmatch(r'media-c1-[a-f0-9]{32}', fence.context.get('operation_id', '')) or
+                type(jdk_phase) is not jdk.TargetJdkPhase or type(preflight_phase) is not issuer.PeerIssuerPreflightPhase or
+                preflight_phase.profile != 'creator' or jdk_phase.package is not package or jdk_phase.inventory is not inventory or
+                preflight_phase.package is not package or any(item.fence.context != fence.context or item.lock != lock or
+                item.namespace_uid != namespace_uid for item in (jdk_phase, preflight_phase))):
+            raise TrustEffectError('C1 peer trust identity unavailable')
+        self.jdk, self.preflight = jdk_phase, preflight_phase
+        self._target_refs = (jdk_phase, preflight_phase)
         self.key_identity = None
+
+    def _locals(self, row, jdk_digest, preflight_digest):
+        try:
+            self._local(); self.jdk._local(); self.preflight._local()
+            if self._target_refs != (self.jdk, self.preflight) or self.preflight.profile != 'creator': raise ValueError()
+            local = self.jdk.journal.state['steps'][jdk.STEP]
+            marker = {key: value for key, value in local.items() if key != 'receipt'}
+            prelocal = self.preflight.journal.state['steps'][self.preflight.step]
+            if (marker != self.jdk.record or row.get(jdk.LEDGER) != marker or marker.get('status') != 'done' or
+                    marker.get('receipt_sha256') != jdk_digest or jdk_digest != writer_cut.digest(local.get('receipt')) or
+                    row.get(self.preflight.ledger) != self.preflight.record or self.preflight.record.get('status') != 'done' or
+                    self.preflight.record.get('receipt_sha256') != preflight_digest or
+                    preflight_digest != writer_cut.digest(prelocal.get('receipt'))): raise ValueError()
+        except BaseException: raise target.metadata.GuardLost('peer trust custody unavailable') from None
+
+    def _dependencies(self, token):
+        try:
+            if (self._target_refs != (self.jdk, self.preflight) or type(self.preflight) is not issuer.PeerIssuerPreflightPhase or
+                    self.preflight.profile != 'creator'): raise ValueError()
+            self._guard(); row, revision = self._ledger()
+            roots = jdk.verify_completed(self.jdk, token); source = issuer.verify_current(self.preflight, token)
+            required = {'schema', 'operation_id', 'source_sha', 'namespace_uid', 'nonce', 'context_sha256',
+                        'lock', 'ca', 'creator_secrets', 'scope', 'profile'}
+            if (type(source) is not dict or set(source) != required or source['schema'] != 'voice-dev-peer-custody-v1' or
+                    source['profile'] != 'creator' or source['scope'] != 'root-peer-custody-available-not-issued' or
+                    source['operation_id'] != self.fence.context['operation_id'] or source['source_sha'] != self.fence.context['commit'] or
+                    source['namespace_uid'] != self.namespace_uid or source['context_sha256'] != writer_cut.digest(self.fence.context) or
+                    source['lock'] != {key: self.lock['metadata'][key] for key in ('uid', 'resourceVersion')} or
+                    not isinstance(source['nonce'], str) or not re.fullmatch(r'[a-f0-9]{32}', source['nonce']) or
+                    type(source['creator_secrets']) is not dict or set(source['creator_secrets']) != set(peer_metadata.MEMBERS)):
+                raise ValueError()
+            for name, item in source['creator_secrets'].items():
+                if item == {'state': 'absent'}: continue
+                if (type(item) is not dict or set(item) != {'state', 'uid', 'resourceVersion', 'keys'} or
+                        item['state'] != 'present' or any(not isinstance(item[key], str) or not item[key] for key in ('uid', 'resourceVersion')) or
+                        item['keys'] != sorted(peer_metadata.MEMBERS[name])): raise ValueError()
+            self._guard()
+            if (self._ledger() != (row, revision) or self.jdk._ledger() != (row, revision) or
+                    self.preflight.fence.ledger.read() != (row, revision)): raise ValueError()
+            self._locals(row, writer_cut.digest(roots), writer_cut.digest(source))
+            return roots, source
+        except BaseException: raise target.metadata.GuardLost('peer trust dependency unavailable') from None
 
     def _state(self, value):
         self._guard(); row, revision = self._ledger()

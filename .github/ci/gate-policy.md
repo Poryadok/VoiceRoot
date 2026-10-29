@@ -66,6 +66,11 @@ with a warm compilation cache and failure after a source mutation.
 
 ## PR scope and image verification
 
+On selected PRs, Auth Maven/Testcontainers and the Auth image build execute in
+independent jobs against the same checked-out candidate. The gate requires both
+to succeed. Master retains the existing sequential test, image load, smoke and
+publish path. A cold image cache still performs the full image build.
+
 Path detection uses dorny v4 `some-with-excludes`: positive globs select inputs
 and negative globs exclude them. Docs-only changes still require the current
 diff contract. Mixed docs/code changes retain checks for their code inputs.

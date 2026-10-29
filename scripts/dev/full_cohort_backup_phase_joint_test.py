@@ -28,6 +28,8 @@ import cohort_upload_run
 import frontend_runtime_executor
 import full_cohort_backup_metadata as metadata
 import full_cohort_backup_phase as backup
+import full_cohort_image_only_baseline as baseline
+import full_cohort_image_only_baseline_test as baseline_fixture
 import full_cohort_inventory_phase as inventory
 import full_cohort_namespace_census as census
 import full_cohort_package_phase as package
@@ -45,6 +47,45 @@ from story_media_backup_capture_integration_test import cleanup_fixture
 import update_images
 import writer_cut
 import writer_cut_test
+
+
+def fixture_begin_image_only(work):
+    """Run the real admission using synthetic predecessor ledger and TT history."""
+    base, fence = work.base, work.fence
+    previous = copy.deepcopy(base.context)
+    previous.update(generation=2, revision=1, operation_id='media-c1-' + 'b' * 32,
+                    claim='33333333-3333-4333-8333-333333333333',
+                    window='44444444-4444-4444-8444-444444444444',
+                    commit='b' * 40, status='complete')
+    previous['actual'] = copy.deepcopy(previous['images'])
+    base.ledger.row = copy.deepcopy(previous)
+    history = baseline_fixture.HistoryTests().history()
+    event = history['events'][0]
+    for card in (event['before'], event['after']):
+        card.update(owner=previous['actor'], claim=previous['claim'], window=previous['window'],
+                    generation=previous['generation'])
+        card['candidate'].update(commit=previous['commit'], images=copy.deepcopy(previous['images']))
+    event['after']['observed'].update(actor=previous['actor'], claim=previous['claim'],
+                                      window=previous['window'], commit=previous['commit'],
+                                      images=copy.deepcopy(previous['images']))
+    observed = copy.deepcopy(event['after']['observed'])
+    base.card.update(operation=3, observed=observed)
+    prior = copy.deepcopy(event['after'])
+    for revision in (2, 3):
+        next_card = copy.deepcopy(prior)
+        next_card['revision'] = revision
+        history['events'].append({'id': 'r' + str(revision), 'kind': 'checkpoint',
+                                  'before': prior, 'after': next_card})
+        prior = next_card
+    tip = copy.deepcopy(prior)
+    tip.update(copy.deepcopy(base.card))
+    history['events'].append({'id': 'r4', 'kind': 'claim', 'actor': base.context['actor'],
+                              'before': prior, 'after': tip})
+    history['revision'] = 4
+    with mock.patch.object(baseline.predecessor, 'TT_ENDPOINT', fence.check.endpoint), \
+         mock.patch.object(baseline.predecessor, '_no_tt_proxy'), \
+         mock.patch.object(baseline, '_read_history', return_value=history):
+        fence.begin_image_only(work.client, base.lock, work.namespace_uid, work.journal)
 
 
 class RealPreflightTest(unittest.TestCase):
@@ -91,9 +132,9 @@ class RealPreflightTest(unittest.TestCase):
              mock.patch.object(supervisor.media_backup_upload_runner,'TT','http://fixture'), \
              mock.patch.object(backup.cohort_backup_operation,'ROOT',root):
             j,c,f=facade('journal',{'cohort_route_mode':'full-cohort-v1','kube_lock':base.lock})
-            if before_supervisor is not None:
-                before_supervisor(SimpleNamespace(journal=j,client=c,fence=f,base=base,root=root,
-                                                   operation=op,namespace_uid=namespace_uid))
+            prepare = before_supervisor or fixture_begin_image_only
+            prepare(SimpleNamespace(journal=j,client=c,fence=f,base=base,root=root,
+                                    operation=op,namespace_uid=namespace_uid))
             owner=supervisor.Supervisor(j,f,c,base.lock,namespace_uid)
             pj,pc,pf=facade('package-journal',{'full_cohort_package':{'run_id':123,'run_attempt':1,
                 'nodes':[{'name':'node','uid':'uid','hostname':'node','architecture':'amd64'}]}})
@@ -129,6 +170,7 @@ class RealPreflightTest(unittest.TestCase):
     def test_pre_supervisor_hook_uses_the_real_root_facade(self):
         seen=[]
         def prepare(root):
+            fixture_begin_image_only(root)
             self.assertIs(root.client.journal,root.journal)
             self.assertIs(root.fence.ledger.client,root.client)
             self.assertEqual(root.journal.intent['cohort_route_mode'],'full-cohort-v1')

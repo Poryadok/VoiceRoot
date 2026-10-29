@@ -20,12 +20,12 @@ type Legacy24VerifyConfig struct {
 
 // This is the actual committed initializer result, read without invoking any
 // repair or producer. Every admitted original Space must appear exactly once.
-func legacy24Initialization(ctx context.Context, conn *pgx.Conn, origin *legacy24OriginObservation, final *store.NativeInstallerSourceFacts) (string, error) {
+func legacy24Initialization(ctx context.Context, conn *pgx.Conn, origin *legacy24OriginObservation, final *store.NativeInstallerSourceFacts) (_ string, err error) {
 	tx, err := beginLegacySourceRead(ctx, conn)
 	if err != nil {
 		return "", errors.New("HOLD: initializer result snapshot unavailable")
 	}
-	defer tx.Rollback(context.Background())
+	defer finishLegacy24Read(tx, &err)
 	rows, err := tx.Query(ctx, `SELECT space_id::text,epoch::text,state,to_jsonb(s)::text FROM native_membership_guard.spaces s ORDER BY space_id::text COLLATE "C"`)
 	if err != nil {
 		return "", errors.New("HOLD: initializer result unavailable")
