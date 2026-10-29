@@ -27,6 +27,15 @@ class PublicRecoveryTests(unittest.TestCase):
                 for _,name in self.rows():setattr(actions,name,Mock(side_effect=AssertionError('wrong action')))
                 expected={'status':'WAITING','operation':row['operation']};getattr(actions,method).side_effect=None
                 getattr(actions,method).return_value=expected
+                if args[0]=='authorize-expired-native':
+                    # A public request without its protected source checkpoint
+                    # must stop before the mocked handler is dispatched.
+                    with self.assertRaises(FileNotFoundError) as error:
+                        bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
+                    self.assertEqual(error.exception.filename,
+                        str(bridge_root.guard.ROOT/('rollout-'+row['operation'])))
+                    getattr(actions,method).assert_not_called()
+                    continue
                 result=bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
                 self.assertEqual(result,expected)
                 self.assertEqual(result,bridge.dispatch(Path(directory),row,actions.execute,lambda request:None))

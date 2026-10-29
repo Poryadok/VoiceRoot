@@ -12,6 +12,130 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_changed_namespace_blocks_before_job_effect(self):
+        kube=Mock();kube.get.return_value={}
+        with patch.object(native.owner,'_guard',return_value={'namespace_uid':'original'}), \
+             patch.object(native.owner,'_no_pending'),patch.object(native.space,'load_tool',return_value={}), \
+             patch.object(native,'Kube',return_value=kube),patch.object(native,'_identity',return_value={'namespace_uid':'foreign'}), \
+             patch.object(native,'_mutate') as mutate:
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_namespace_changed'):
+                native.inspect_source(SimpleNamespace())
+            mutate.assert_not_called();kube.run.assert_not_called()
+
+    def test_pod_reread_requires_same_uid_spec_and_image_but_allows_new_rv(self):
+        status={'name':'inspect','imageID':'immutable','state':{'terminated':{'exitCode':0}}}
+        original={'metadata':{'uid':'owned'},'spec':{'nodeName':'node'},'status':{'containerStatuses':[status]}}
+        fresh=copy.deepcopy(original);fresh['metadata'].update(namespace='voice-staging',resourceVersion='new')
+        native._check_fresh_pod(original,fresh,status)
+        for mutation in ('uid','spec','image','missing_rv'):
+            changed=copy.deepcopy(fresh)
+            if mutation=='uid':changed['metadata']['uid']='foreign'
+            if mutation=='spec':changed['spec']['nodeName']='foreign'
+            if mutation=='image':changed['status']['containerStatuses'][0]['imageID']='foreign'
+            if mutation=='missing_rv':del changed['metadata']['resourceVersion']
+            with self.subTest(mutation=mutation),self.assertRaisesRegex(native.Blocked,'space_inspect_pod_changed'):
+                native._check_fresh_pod(original,changed,status)
+
+    def test_historical_loader_rejects_noncanonical_operation_without_read(self):
+        with patch.object(native.owner,'_read') as read:
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_history_invalid'):
+                native.validate_historical_inspection('../foreign')
+            read.assert_not_called()
+
+    def test_historical_inspection_requires_released_rollout_and_receipt_link(self):
+        operation='a'*12;source={'source':'fixture'};tool={'authenticated_publication':{'publication':{'tool':'fixture'}},
+            'operation':operation,'selected':True};context={'commit':'b'*40}
+        plan={'operation':operation,'context':context,'helper_sha256':'c'*64,
+            'source_capture_sha256':native.owner.digest(source),'space_tool_sha256':native.owner.digest(tool)}
+        receipt={'inspection':'fixture'}
+        qualified={'operation':operation,'plan_sha256':native.owner.digest(plan),'space_inspection_sha256':native.owner.digest(receipt)}
+        rollout={'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED','operation':operation,
+            'target':{'cohort_preservation_sha256':native.owner.digest(qualified)}}
+        values={'checkpoint.json':{'status':'QUALIFIED','plan':plan},'qualified.json':qualified,'space-tool.json':tool,
+            operation+'.json':source}
+        def read(path,**kwargs):
+            return copy.deepcopy(rollout if path.parent.name=='rollout-'+operation else values[path.name])
+        with patch.object(native.owner,'_read',side_effect=read), \
+             patch.object(native.owner.resource_claim,'historical_binding',return_value={'context':context,'helper_sha256':'c'*64}), \
+             patch.object(native,'_retained_record',return_value=receipt):
+            self.assertEqual(native.validate_historical_inspection(operation),receipt)
+            rollout['fence_status']='ACTIVE'
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_history_invalid'):
+                native.validate_historical_inspection(operation)
+
+    def test_owned_job_and_cleanup_with_real_session_and_journal(self):
+        import commands, guard, resource_claim
+        from staging_cohort_preservation_test import CutEffectTests
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(native.owner,'_source'):
+                session,_=CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+                tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+                    'source_inventory':{'build_source_sha256':'d'*64},'platform_digest':'sha256:'+'c'*64,
+                    'config_digest':'sha256:'+'e'*64,'content':{'executable_sha256':'f'*64,
+                    'migrator_sha256':'1'*64,'sql_inventory_sha256':'2'*64}}
+                identity={'namespace_uid':'namespace','engine':{},'database':{'system_identifier':'42','server_start':'t',
+                    'database_oid':123,'database_owner':'admin','session_user':'admin','schema_owner':'admin'}}
+                config={'metadata':{'uid':'config','resourceVersion':'1'},'data':{'POSTGRES_USER':'admin'}}
+                secret={'metadata':{'uid':'secret','resourceVersion':'2'},'data':{'POSTGRES_PASSWORD':base64.b64encode(b'private').decode()}}
+                env=[{'name':'POSTGRES_USER','valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':'POSTGRES_USER'}}},
+                     {'name':'POSTGRES_PASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}}]
+                pgpod={'spec':{'nodeName':'node-a','containers':[{'name':'postgres','env':env}]}}
+                job=native._job(session,tool,'node-a');uid='11111111-1111-4111-8111-111111111111'
+                job['metadata'].update(uid=uid,resourceVersion='7');complete=copy.deepcopy(job);complete['status']={'succeeded':1}
+                pod={'metadata':{'name':'inspection-pod','namespace':'voice-staging','resourceVersion':'8','uid':'22222222-2222-4222-8222-222222222222',
+                    'ownerReferences':[{'kind':'Job','uid':uid,'controller':True}]},'spec':copy.deepcopy(job['spec']['template']['spec']),
+                    'status':{'containerStatuses':[{'name':'inspect','imageID':'fixture@'+tool['platform_digest'],
+                    'state':{'terminated':{'exitCode':0}}}]}}
+                result={'event':'inspected-legacy24','schema':'voice.space.native-legacy24-inspection.v1',
+                    'source_revision':session.context['commit'],'build_sha256':'d'*64,'executable_sha256':'f'*64,
+                    'migrator_sha256':'1'*64,'inventory_sha256':'2'*64,'target':{'database_name':'space_db',
+                    'database_oid':123,'database_system_id':'42','database_owner':'admin','installer_role':'admin','version':24}}
+                kube=Mock();values={('configmap','voice-app-config'):config,('secret','voice-app-secrets'):secret,
+                    ('pod','voice-postgres-0'):pgpod,('pod','inspection-pod'):pod,('job',job['metadata']['name']):complete}
+                kube.get.side_effect=lambda kind,name:copy.deepcopy(values[(kind,name)])
+                kube.run.return_value=copy.deepcopy(job);deleted=[]
+                def capture(argv,**kwargs):
+                    commands.authority_guard(argv);tail=argv[len(native.owner.PREFIX):]
+                    if tail[:1]==['create']:return json.dumps(job).encode()
+                    if tail[:1]==['delete']:
+                        deleted.append(True);return json.dumps({'apiVersion':'v1','kind':'Status','status':'Success'}).encode()
+                    if tail[:1]==['exec']:return ('admin\n'+hashlib.sha256(b'private').hexdigest()+'  -\n').encode()
+                    if tail[:2]==['get','pods']:
+                        return json.dumps({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8'},'items':[] if deleted else [pod]}).encode()
+                    if tail[:2]==['get','--raw']:
+                        return json.dumps({'apiVersion':'batch/v1','kind':'JobList','metadata':{'resourceVersion':'9'},'items':[]}).encode()
+                    if tail[:1]==['logs']:return json.dumps(result).encode()
+                    raise AssertionError(tail)
+                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=capture), \
+                     patch.object(native,'Kube',return_value=kube),patch.object(native.space,'load_tool',return_value=tool), \
+                     patch.object(native,'_identity',return_value=identity):
+                    receipt=native.inspect_source(session)
+                    self.assertEqual(native.load_inspection(session),receipt)
+                    values[('secret','voice-app-secrets')]=copy.deepcopy(secret)
+                    values[('secret','voice-app-secrets')]['metadata']['resourceVersion']='3'
+                    self.assertEqual(native.load_retained_inspection(session),receipt)
+                    with self.assertRaisesRegex(native.Blocked,'space_inspect_credentials_changed'):
+                        native.load_inspection(session)
+                self.assertEqual(len(deleted),1)
+                for name in ('space-inspect-create','space-inspect-delete'):
+                    self.assertEqual(native.owner._read(native.owner._base(session)/'effects'/(name+'.json'))['status'],'DONE')
+
+    def test_delete_response_must_confirm_success_or_same_job(self):
+        native._check_delete_response({'apiVersion':'v1','kind':'Status','status':'Success'},'owned')
+        native._check_delete_response({'apiVersion':'batch/v1','kind':'Job','metadata':{'uid':'owned'}},'owned')
+        for response in ({},{'apiVersion':'v1','kind':'Status','status':'Failure'},
+                         {'apiVersion':'batch/v1','kind':'Job','metadata':{'uid':'foreign'}}):
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_delete_invalid'):
+                native._check_delete_response(response,'owned')
+
+    def test_pod_list_requires_complete_versioned_observation(self):
+        for value in ({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8','continue':'next'},'items':[]},
+                      {'apiVersion':'v1','kind':'PodList','metadata':{},'items':[]}):
+            with patch.object(native.owner,'_observation',return_value=json.dumps(value).encode()):
+                with self.assertRaisesRegex(native.Blocked,'space_inspect_absence_invalid'):
+                    native._pod_list(SimpleNamespace(),'voice-space-inspect-aaaaaaaaaaaa')
+
     def test_cleanup_rejects_foreign_job_before_delete(self):
         kube=Mock();kube.get.return_value={'metadata':{'uid':'foreign','resourceVersion':'9'}}
         with patch.object(native,'_mutate') as mutate:
@@ -91,7 +215,7 @@ class InspectSourceTest(unittest.TestCase):
         pgpod={'spec':{'nodeName':'node-a','containers':[{'name':'postgres','env':env}]}}
         job=native._job(session,tool,'node-a');uid='11111111-1111-4111-8111-111111111111'
         job['metadata'].update(uid=uid,resourceVersion='7');complete=copy.deepcopy(job);complete['status']={'succeeded':1}
-        pod={'metadata':{'name':'inspection-pod','uid':'22222222-2222-4222-8222-222222222222',
+        pod={'metadata':{'name':'inspection-pod','namespace':'voice-staging','resourceVersion':'8','uid':'22222222-2222-4222-8222-222222222222',
              'ownerReferences':[{'kind':'Job','uid':uid,'controller':True}]},
              'spec':copy.deepcopy(job['spec']['template']['spec']),
              'status':{'containerStatuses':[{'name':'inspect','imageID':'fixture@'+tool['platform_digest'],'state':{'terminated':{'exitCode':0}}}]}}
@@ -99,12 +223,13 @@ class InspectSourceTest(unittest.TestCase):
             'source_revision':session.context['commit'],'build_sha256':'d'*64,'executable_sha256':'f'*64,
             'migrator_sha256':'1'*64,'inventory_sha256':'2'*64,'target':{'database_name':'space_db','database_oid':123,
                 'database_system_id':'42','database_owner':'admin','installer_role':'admin','version':24}}
-        values={('configmap','voice-app-config'):config,('secret','voice-app-secrets'):secret,('pod','voice-postgres-0'):pgpod,
+        values={('configmap','voice-app-config'):config,('secret','voice-app-secrets'):secret,('pod','voice-postgres-0'):pgpod,('pod','inspection-pod'):pod,
                 ('job',job['metadata']['name']):complete}
         kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(values[(kind,name)])
         kube.run.return_value=copy.deepcopy(job)
-        observe=[('admin\n'+hashlib.sha256(b'private').hexdigest()+'  -\n').encode(),json.dumps({'items':[pod]}).encode(),json.dumps(result).encode()]
-        with patch.object(native,'Kube',return_value=kube),patch.object(native.owner,'_guard',return_value={'fixture':'plan'}), \
+        observe=[('admin\n'+hashlib.sha256(b'private').hexdigest()+'  -\n').encode(),
+                 json.dumps({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8'},'items':[pod]}).encode(),json.dumps(result).encode()]
+        with patch.object(native,'Kube',return_value=kube),patch.object(native.owner,'_guard',return_value={'namespace_uid':'ns'}), \
              patch.object(native.owner,'_no_pending'),patch.object(native.space,'load_tool',return_value=tool), \
              patch.object(native,'_identity',return_value=identity),patch.object(native,'_mutate',return_value=('path',{},json.dumps(job).encode())), \
              patch.object(native,'_done'),patch.object(native.owner,'_observation',side_effect=observe), \
