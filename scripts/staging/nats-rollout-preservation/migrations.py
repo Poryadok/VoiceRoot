@@ -14,6 +14,11 @@ DATABASES=('bot','story','moderation','subscription','user','search','social','c
 LEGACY_DSN=('bot','story','moderation','subscription','search')
 CREATE_PROJECTION="jsonpath-as-json={.metadata['name','uid']}"
 
+def require_preserving_admission(mode, plan=None):
+    """Hold migrations until the protected all-store preservation producer is wired."""
+    if mode in ('full', 'app-only') or plan:
+        raise Blocked('staging_migration_preservation_authority_missing')
+
 def validate_plan(plan,mode):
     if mode not in ('full','app-only','images-only') or not isinstance(plan,list) or len(plan)>len(DATABASES)+1:
         raise Blocked('rollout_migration_plan_invalid')
@@ -118,6 +123,7 @@ def legacy_credentials(kube,plan,operation,secret_metadata):
                         'labels':{'voice-rollout-operation':operation}},'data':data}
 
 def execute(kube,stage,plan,mode,secret_metadata,journal):
+    require_preserving_admission(mode,plan)
     if preflight(kube,plan,mode)!=secret_metadata:raise Blocked('rollout_database_secret_changed')
     completed=[]
     copied=legacy_credentials(kube,plan,stage.operation,secret_metadata)

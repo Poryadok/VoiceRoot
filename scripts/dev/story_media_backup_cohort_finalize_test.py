@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
+import sys
 
 import story_media_backup_cohort as cohort
 import story_media_backup_cohort_finalize as finalize
@@ -39,6 +41,23 @@ class FinalizeCohortTest(unittest.TestCase):
                 'container_id': engine['container_id'], 'restart_count': engine['restart_count'],
                 'server_start': source['server_start'], 'database_oid': source.get('database_oid'),
                 'attempt_nonce': '%032x' % (index+1), 'exit': 0, 'scope': 'dump-terminal-only'}
+
+    def test_dev_validator_refuses_staging_binding_with_same_contents(self):
+        binding=copy.deepcopy(self.binding);binding['resource']='STAGING'
+        with self.assertRaises(finalize.CohortFinalizeError):
+            finalize.validate_binding(binding,self.databases)
+
+    def test_staging_wrappers_do_not_access_custody_or_dump_after_authority_failure(self):
+        binding=copy.deepcopy(self.binding);binding['resource']='STAGING'
+        module=Mock();module.validate_backup_binding.side_effect=RuntimeError('untrusted session')
+        with patch.dict(sys.modules,{'staging_cohort_preservation':module}):
+            with self.assertRaises(cohort.CohortError):
+                cohort.export_staging(object(),binding,self.databases,{}, {})
+            with self.assertRaises(cohort.CohortError):
+                cohort.verify_staging(object(),binding,self.databases,self.manifest,{}, {})
+            with self.assertRaises(finalize.CohortFinalizeError):
+                finalize.finalize_staging(object(),binding,self.databases,self.manifest,self.receipts,{}, {})
+        module.backup_custody.assert_not_called();module.produce_dump.assert_not_called()
 
     def test_exact_receipts_are_bound_without_mutating_inputs(self):
         original = copy.deepcopy((self.binding, self.manifest, self.receipts))

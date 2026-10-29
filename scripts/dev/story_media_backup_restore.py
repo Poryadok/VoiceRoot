@@ -1,5 +1,6 @@
 """Isolated media backup restore and exact migration qualification."""
 import hashlib
+import contextvars
 import io
 import json
 import os
@@ -13,6 +14,8 @@ import time
 import uuid
 
 import story_media_backup as backup
+
+_STAGING_SESSION=contextvars.ContextVar('voice_staging_restore_session',default=None)
 
 DATABASES = ('file_db', 'story_db', 'messaging_db')
 SQL_NAME = re.compile(r'([0-9]{6})_[a-z0-9_]+\.(up|down)\.sql')
@@ -31,7 +34,7 @@ CATALOG = """SELECT json_build_object(
  ORDER BY pg_get_userbyid(d.defaclrole),n.nspname,d.defaclobjtype),'[]'::json)
  FROM pg_default_acl d LEFT JOIN pg_namespace n ON n.oid=d.defaclnamespace),
  'history',(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)
- FROM schema_migrations));"""
+ FROM public.schema_migrations));"""
 
 
 def role_catalog_sql(excluded=''):
@@ -121,6 +124,10 @@ def _quote_identifier(value):
 
 
 def _docker(*args, input=None, timeout=120):
+    session=_STAGING_SESSION.get()
+    if session is not None:
+        import staging_cohort_preservation
+        return staging_cohort_preservation.restore_command(session,['docker',*args],body=b'' if input is None else input,timeout=timeout)
     result = subprocess.run(['docker', *args], input=input, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, timeout=timeout)
     if result.returncode:
@@ -189,7 +196,7 @@ def _cleanup(journal, resources):
 
 
 def _psql(cid, admin, database, sql, timeout=120):
-    return _docker('exec', '-i', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
+    return _docker('exec', '-i', '-e', 'PGOPTIONS=-c search_path=pg_catalog,public', cid, 'psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1',
                    '-U', admin, '-d', database, input=sql.encode('utf-8'), timeout=timeout)
 
 

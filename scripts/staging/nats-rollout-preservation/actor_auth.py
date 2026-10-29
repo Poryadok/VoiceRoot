@@ -19,7 +19,13 @@ def prove(credentials,operator,binary,unchanged):
         # resolver authority and fixed isolated CLIENT transport are retained.
         config='host: 127.0.0.1\nport: 4222\nmax_control_line: 32768\noperator: '+q(tokens['operator.jwt'])+'\nsystem_account: '+q(tokens['system-account.public'])+'\nresolver: MEMORY\nresolver_preload: { '+q(tokens['account.public'])+': '+q(tokens['account.jwt'])+', '+q(tokens['system-account.public'])+': '+q(tokens['system-account.jwt'])+' }\n'
         p=base/'server.conf';p.write_text(config);p.chmod(0o440);os.chown(p,0,65532)
-        runtime=DockerRuntime(base,'actor'+uuid.uuid4().hex[:12])
+        import commands,resource_claim
+        session=getattr(commands.authority_guard,'__self__',None)
+        cohort_runtime=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+        if cohort_runtime:
+            import staging_cohort_preservation
+            runtime=staging_cohort_preservation.auth_runtime(session,base,'actor')
+        else:runtime=DockerRuntime(base,'actor'+uuid.uuid4().hex[:12])
         try:
             broker=runtime.create('broker',NATS_IMAGE,[(p,'/server.conf',False)],['/usr/local/bin/nats-server','-c','/server.conf'])
             runtime.run(['start',broker]);runtime.inspect(broker)
@@ -37,6 +43,9 @@ def prove(credentials,operator,binary,unchanged):
                 'credential_sha256':hash_bytes(credentials),'empty_scratch':True,
                 'publication_authorization_exercised':False,'business_delivery_exercised':False}
         finally:
-            for name in reversed(list(runtime.owned)):
-                row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
-                if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('existing_service_actor_cleanup_failed')
+            try:
+                for name in reversed(list(runtime.owned)):
+                    row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
+                    if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('existing_service_actor_cleanup_failed')
+            finally:
+                if cohort_runtime:runtime.finish_auth()

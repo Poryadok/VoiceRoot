@@ -1,6 +1,8 @@
 import copy
 import hashlib
 import json
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -88,6 +90,32 @@ class AffectedTests(unittest.TestCase):
                 self.obs['database_observations']['workloads']['analytics'][0]['status']='hold'
                 with self.assertRaises(affected.AffectedError): affected.build(self.package,self.inventory,'token',Catalog())
 
+    def test_realtime_create_only_requires_typed_current_absence(self):
+        import realtime_absent_phase
+        self.obs['projection']['realtime']={'uid':'rt','generation':1,'spec_sha256':'d'*64,
+            'pods':[{'containers':[{'name':'realtime','image_id':'sha256:'+'1'*64}]}]}
+        self.obs['database_observations']['workloads']['realtime']=[{'status':'hold','reason':'database_configuration_missing'}]
+        self.candidate['platform_digests']['voice-realtime/realtime']='sha256:'+'1'*64
+        class Catalog:
+            def __init__(obj):obj.inventory=self.inventory
+            def verify_current(obj,token):return {'engine':{'namespace_uid':'ns'},'server_start':'start',
+                'databases':{'messaging_db':10,'chat_db':11,'postgres':12},
+                'all_databases':{'messaging_db':10,'chat_db':11,'postgres':12},'properties':{},'excluded':{}}
+        catalog=Catalog()
+        class Absence:
+            def __init__(obj):obj.inventory=self.inventory; obj.catalog=catalog
+            def verify_current(obj,token):return {'source_sha':'a'*40,'deployment_uid':'rt',
+                'generation':1,'spec_sha256':'d'*64}
+        with patch.object(affected.metadata,'CONTAINERS',{'messaging':'messaging','realtime':'realtime'}), \
+             patch.object(affected,'FullCatalogPhase',Catalog), \
+             patch.object(realtime_absent_phase,'RealtimeAbsentPhase',Absence):
+            with self.assertRaises(affected.AffectedError): affected.build(self.package,self.inventory,'token',catalog)
+            plan=affected.build(self.package,self.inventory,'token',catalog,Absence())
+            self.assertEqual(plan['writers']['voice-realtime']['reason'],'qualified_create_only_realtime')
+            self.assertNotIn('realtime_db',plan['databases'])
+            self.obs['database_observations']['workloads']['realtime'][0]['reason']='runtime_read_failed'
+            with self.assertRaises(affected.AffectedError): affected.build(self.package,self.inventory,'token',catalog,Absence())
+
     def test_drain_invokes_only_matching_source_derived_scope(self):
         spec={'replicas':1}; self.obs['projection']['messaging']['spec_sha256']=hashlib.sha256(
             json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -115,6 +143,43 @@ class AffectedTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_completed_space_and_realtime_are_only_allowed_catalog_successors(self):
+        import space_fresh_install_phase as space
+        before={'engine':{'id':'engine'},'server_start':'start','all_databases':{'postgres':1,'space_db':2},
+                'databases':{'postgres':1,'space_db':2},'excluded':{},'properties':{'postgres':{'p':1},'space_db':{'p':2}}}
+        post={'all_databases':{'postgres':1,'space_db':3},'databases':{'postgres':1,'space_db':3},
+              'excluded':{},'properties':{'postgres':{'p':1},'space_db':{'p':3}}}
+        current=copy.deepcopy(post);current['all_databases']['realtime_db']=4
+        current['databases']['realtime_db']=4;current['properties']['realtime_db']={'p':4}
+        binding={'phase':object(),'token':'t','receipt_sha256':'f'*64}
+        proof={'operation_id':'op','source_sha':'a'*40,'namespace_uid':'ns','receipt_sha256':'f'*64,
+               'old_oid':2,'new_oid':3,'catalog':post,'original_catalog_sha256':affected.writer_cut.digest(before)}
+        class Catalog:
+            def verify_receipt(obj,_token):return copy.deepcopy(before)
+        class Cut:
+            def __init__(obj,probe):
+                obj.probe=probe;obj.space_fresh=binding;obj.namespace_uid='ns'
+                obj.fence=SimpleNamespace(context={'operation_id':'op','commit':'a'*40})
+            def current_base_session_scope(obj):return {'engine':before['engine'],'server_start':'start',
+                'databases':['postgres','space_db'],'database_oids':{'postgres':1,'space_db':3}}
+        helper=SimpleNamespace(verify_binding=lambda *_args,**_kwargs:binding)
+        scope={'engine':before['engine'],'server_start':'start','databases':['postgres','realtime_db','space_db'],
+               'database_oids':{'postgres':1,'space_db':3,'realtime_db':4}}
+        with patch.dict(sys.modules,{'writer_cut_space':helper}),patch.object(affected,'FullCatalogPhase',Catalog), \
+             patch.object(affected.writer_cut,'WriterCut',Cut),patch.object(space,'verify_historical',return_value=proof), \
+             patch.object(affected,'_full_catalog',return_value=current):
+            probe=affected.CatalogScopedProbe(Catalog(),'t');cut=Cut(probe)
+            self.assertEqual(affected._verify_catalog(probe,cut,scope),current)
+            with patch.object(affected,'_full_catalog',return_value=post):
+                self.assertEqual(affected.verify_space_catalog(probe,cut),post)
+                post['all_databases']['foreign_db']=9
+                with self.assertRaises(affected.AffectedError):affected.verify_space_catalog(probe,cut)
+                del post['all_databases']['foreign_db']
+            current['properties']['postgres']={'p':'changed'}
+            with self.assertRaises(affected.AffectedError):affected._verify_catalog(probe,cut,scope)
+            current['properties']['postgres']={'p':1};current['all_databases']['foreign_db']=9
+            with self.assertRaises(affected.AffectedError):affected._verify_catalog(probe,cut,scope)
+
     def test_migration_catalog_uses_only_source_bound_execution(self):
         import writer_cut_migration
         before={'engine':{'id':'engine'},'server_start':'start','all_databases':{'postgres':1},
@@ -129,6 +194,7 @@ class CatalogTests(unittest.TestCase):
                 obj.probe=probe; obj.admission={'session_scope':{'engine':before['engine'],'server_start':'start',
                     'databases':['postgres'],'database_oids':{'postgres':1}}}
                 obj.migration={'kind':'realtime','phase':object(),'root':'.','plan':copy.deepcopy(state)}
+            def current_base_session_scope(obj):return copy.deepcopy(obj.admission['session_scope'])
         with patch.object(affected,'FullCatalogPhase',Catalog),patch.object(affected.writer_cut,'WriterCut',Cut), \
              patch.object(affected,'_full_catalog',return_value=current), \
              patch.object(writer_cut_migration,'normalized',return_value=(None,state)):
@@ -172,6 +238,7 @@ class CatalogTests(unittest.TestCase):
              patch.object(affected,'_full_catalog',return_value=current), \
              patch.object(affected.pg,'inspect',return_value={'scope':scope,'active_sessions':0,'active_transactions':0}) as sample:
             probe=affected.CatalogScopedProbe(Catalog(),'token'); cut=Cut(probe)
+            self.assertEqual(affected.verify_provisioned_catalog(probe,cut),current)
             self.assertEqual(affected.inspect_provisioned(probe,cut)['scope'],scope)
             sample.return_value['active_sessions']=1
             with self.assertRaises(affected.AffectedError): affected.inspect_provisioned(probe,cut)

@@ -85,6 +85,11 @@ class Session:
         self.expected_target=None
         self.admitted=False
         self.repair_guard=None
+        self._prerequisite_permit=None
+        self._prerequisite_readonly_permit=None
+        self._cohort_permit=None
+        self._cohort_auth_permit=None
+        self._cohort_lineage=None
 
     def authority(self):
         row=self.check_card();c=self.context
@@ -106,8 +111,11 @@ class Session:
             if previous is not None and previous.get('status')=='complete':
                 try:
                     c=validate(previous.get('context'))
-                    closed=(set(previous)=={'schema','context','operation','helper_sha256','status','phase','target_sha256','actual'}
+                    closed=(set(previous) in ({'schema','context','operation','helper_sha256','status','phase','target_sha256','actual'},
+                                              {'schema','context','operation','helper_sha256','status','phase','target_sha256','actual','cohort_preservation_sha256'})
                         and previous['schema']=='voice-staging-resource-fence-v1'
+                        and ('cohort_preservation_sha256' not in previous or isinstance(previous['cohort_preservation_sha256'],str)
+                             and re.fullmatch('[a-f0-9]{64}',previous['cohort_preservation_sha256']))
                         and previous['phase']=='finished' and previous['actual']==c['images']
                         and re.fullmatch('[a-f0-9]{12}',previous['operation'])
                         and re.fullmatch('[a-f0-9]{64}',previous['helper_sha256'])
@@ -117,7 +125,7 @@ class Session:
             if self.owned(previous) and previous.get('status')=='active':
                 # The request journal alone decides completed replay versus
                 # interrupted execution; never reset its durable executor intent.
-                self.admitted=True;self.expected_target=previous.get('target_sha256');self.authority();return
+                self.admitted=True;self.expected_target=previous.get('target_sha256');self._cohort_lineage=previous.get('cohort_preservation_sha256');self.authority();return
             if previous is not None and previous.get('status')!='complete' and self.repair_guard is not None:
                 old=previous.get('context',{})
                 if (request is None or request.get('action')!='prepare-repair'
@@ -142,7 +150,8 @@ class Session:
                 operation=self.operation,helper_sha256=self.helper,status='active',phase='prepare',target_sha256=None))
         elif not self.owned(previous) or previous.get('status') not in ('active','complete'):
             raise RuntimeError('staging_unfenced_or_uncertain_operation')
-        if previous is not None and self.owned(previous):self.expected_target=previous.get('target_sha256')
+        if previous is not None and self.owned(previous):
+            self.expected_target=previous.get('target_sha256');self._cohort_lineage=previous.get('cohort_preservation_sha256')
         self.admitted=True
         self.authority()
 
@@ -155,6 +164,76 @@ class Session:
             raise RuntimeError('staging_executor_target_changed')
         if getattr(self,'expected_phase',None) is not None and row.get('phase')!=self.expected_phase:
             raise RuntimeError('staging_executor_phase_changed')
+        cohort_hash=row.get('cohort_preservation_sha256')
+        if ((cohort_hash is not None and (not isinstance(cohort_hash,str) or not re.fullmatch(r'[a-f0-9]{64}',cohort_hash)))
+            or row.get('phase')=='cohort-preservation' and cohort_hash is None
+            or self._cohort_lineage is not None and cohort_hash!=self._cohort_lineage):
+            raise RuntimeError('staging_cohort_lineage_invalid')
+        if argv and self._cohort_auth_permit is not None:
+            permit=self._cohort_auth_permit
+            if (row.get('phase') not in ('cohort-preservation','prerequisites','prerequisites-captured','realtime-bootstrap','prepare')
+                or not row.get('target_sha256') or type(permit) is not dict or set(permit)!={'effect_id','argv','body_sha256'}
+                or not isinstance(permit['effect_id'],str) or not permit['effect_id']
+                or not isinstance(permit['argv'],list) or list(argv)!=permit['argv']
+                or not isinstance(permit['body_sha256'],str) or not re.fullmatch(r'[a-f0-9]{64}',permit['body_sha256'])):
+                raise RuntimeError('staging_cohort_auth_permit_invalid')
+            self._cohort_auth_permit=None
+            return row
+        if argv and row.get('phase') in ('cohort-preservation','prerequisites','prerequisites-captured'):
+            args=list(argv);permit=self._prerequisite_permit
+            cohort=self._cohort_permit
+            if (row['phase']=='cohort-preservation' and type(cohort) is dict
+                and set(cohort)=={'effect_id','argv','body_sha256'}
+                and isinstance(cohort['effect_id'],str) and cohort['effect_id']
+                and isinstance(cohort['argv'],list) and args==cohort['argv']
+                and isinstance(cohort['body_sha256'],str) and re.fullmatch(r'[a-f0-9]{64}',cohort['body_sha256'])):
+                self._cohort_permit=None
+                return row
+            if (row['phase']=='prerequisites' and permit is not None and args==permit):
+                self._prerequisite_permit=None
+                return row
+            readonly=self._prerequisite_readonly_permit
+            if row['phase']=='prerequisites-captured' and readonly is not None and args==readonly:
+                self._prerequisite_readonly_permit=None
+                return row
+            decode=['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']
+            prefixes=[['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'],
+                ['kubectl','--namespace','voice-staging']]
+            is_dryrun=any(args==prefix+[verb,'--dry-run=server','-f','/dev/stdin','-o','json']
+                for prefix in prefixes for verb in ('apply','create'))
+            def safe_get(prefix):
+                if args[:len(prefix)+1]!=prefix+['get']:return False
+                tail=args[len(prefix)+1:]
+                if len(tail)==2 and tail[0]=='--raw':
+                    return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1])
+                        or re.fullmatch(r'/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-[a-z0-9-]{1,100}:8222/proxy/jsz\?accounts=true&streams=true&consumers=true&config=true&limit=2048',tail[1]))
+                if len(tail)==5:
+                    return tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
+                if len(tail) not in (3,4) or tail[-2]!='-o':return False
+                if not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
+                if len(tail)==4 and not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',tail[1]):return False
+                output=tail[-1]
+                if output in ('json',"jsonpath-as-json={.metadata['uid','resourceVersion']}"):return True
+                from runtime_stage import IMAGE_TEMPLATE
+                from stage_runtime import FENCE_TEMPLATE
+                return output in ('go-template='+IMAGE_TEMPLATE,'go-template='+FENCE_TEMPLATE)
+            is_get=any(safe_get(prefix) for prefix in prefixes)
+            import actor_root
+            actor_read=prefixes[0]+list(actor_root.STORY_SCHEMA_ARGS)
+            import source_plan
+            clickhouse_read=prefixes[0]+list(source_plan.CLICKHOUSE_READ_ARGS)
+            postgres_reads=[prefixes[0]+source_plan.postgres_read_args(name) for name in ('postgres','gateway_db')]
+            identity_read=False
+            if args not in postgres_reads and args[:len(prefixes[0])+3]==prefixes[0]+['exec','voice-postgres-0','-c']:
+                try:
+                    import staging_cohort_preservation_pg
+                    identity_args=getattr(staging_cohort_preservation_pg,'IDENTITY_ARGS',None)
+                except ModuleNotFoundError as error:
+                    if error.name!='staging_cohort_preservation_pg':raise
+                    identity_args=None
+                identity_read=identity_args is not None and args==prefixes[0]+list(identity_args)
+            if args!=decode and args!=actor_read and args!=clickhouse_read and args not in postgres_reads and not identity_read and not is_dryrun and not is_get:
+                raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
         # stage guards own those queries. No workload fence/apply/cleanup may
         # run until its fresh actual baseline and complete target are bound.
@@ -167,7 +246,7 @@ class Session:
 
     def bind_target(self,commit,images,actual,target_sha256):
         row=self.check();card=self.authority();observed=card.get('observed',{})
-        if row.get('phase')=='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_advance_required')
+        if row.get('phase') in ('cohort-preservation','realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if (commit!=self.context['commit'] or images!=self.context['images']
             or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
             or observed.get('window')!=self.context['window'] or observed.get('operation')!=card.get('operation',0)-1
@@ -179,14 +258,68 @@ class Session:
             return
         row['target_sha256']=target_sha256;self.journal.save(row);self.expected_target=target_sha256
 
+    def bind_cohort_preservation(self,plan,actual_before):
+        import staging_cohort_preservation
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        staging_cohort_preservation.validate_plan(plan,self)
+        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+            or plan.get('actual_before')!=actual_before
+            or plan.get('candidate')!={'commit':self.context['commit'],'images':self.context['images']}
+            or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
+            or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual_before):
+            raise RuntimeError('staging_cohort_baseline_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_cohort_baseline_changed')
+        row.update(phase='cohort-preservation',target_sha256=digest(plan),cohort_preservation_sha256=digest(plan))
+        self.journal.save(row);self.expected_target=row['target_sha256'];self._cohort_lineage=row['cohort_preservation_sha256']
+        return self.binding()
+
+    def bind_prerequisites(self,plan,actual_before):
+        import staging_prerequisites
+        import staging_cohort_preservation
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        staging_prerequisites.validate_plan(plan,self)
+        if row.get('phase')!='cohort-preservation':raise RuntimeError('staging_cohort_preservation_required')
+        receipt=staging_cohort_preservation.load_qualified(self,actual=actual_before)
+        if (plan.get('schema')!='voice-staging-prerequisites-plan-v2'
+            or plan.get('preservation_sha256')!=digest(receipt)
+            or plan.get('actual_before')!=actual_before or observed.get('state')!='known'
+            or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual_before):
+            raise RuntimeError('staging_prerequisites_baseline_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_prerequisites_baseline_changed')
+        row.update(phase='prerequisites',target_sha256=digest(plan))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
+    def capture_prerequisites(self,stage):
+        import staging_prerequisites
+        row=self.check();card=self.authority()
+        if row.get('phase')!='prerequisites':raise RuntimeError('staging_prerequisites_phase_invalid')
+        captured=staging_prerequisites.capture(self,stage)
+        if not isinstance(captured,dict) or staging_prerequisites.load_capture(self)!=captured:
+            raise RuntimeError('staging_prerequisites_capture_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_prerequisites_capture_changed')
+        row.update(phase='prerequisites-captured',target_sha256=digest(captured))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
     def bind_realtime_bootstrap(self,plan,actual):
         import realtime_bootstrap
         row=self.check();card=self.authority();observed=card.get('observed',{})
         realtime_bootstrap.validate_plan(plan,self)
-        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
-            or plan.get('actual_images')!=actual or observed.get('state')!='known'
+        parent=None
+        if row.get('phase')=='prerequisites-captured':
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(self,actual=actual)
+            if plan.get('prerequisites_sha256')!=digest(parent):raise RuntimeError('staging_prerequisites_capture_changed')
+        elif (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+              or 'prerequisites_sha256' in plan or plan.get('schema')=='voice-staging-realtime-bootstrap-v2'):
+            raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
+        if (plan.get('actual_images')!=actual or observed.get('state')!='known'
             or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
-            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual):
+            or observed.get('operation')!=card.get('operation',0)-1
+            or observed.get('images')!=(parent['actual_before'] if parent is not None else actual)):
             raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
         if self.check()!=row or self.authority()!=card:
             raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
@@ -194,20 +327,59 @@ class Session:
         self.journal.save(row);self.expected_target=row['target_sha256']
         return self.binding()
 
+    def _validate_cohort_target(self,row,target):
+        if row.get('cohort_preservation_sha256') is None:
+            if 'cohort_preservation_sha256' in target:raise RuntimeError('staging_cohort_target_changed')
+            return
+        import staging_cohort_preservation
+        receipt=staging_cohort_preservation.load_qualified(self)
+        if target.get('cohort_preservation_sha256')!=digest(receipt):
+            raise RuntimeError('staging_cohort_target_changed')
+
     def advance_realtime_bootstrap(self,target,actual):
         import realtime_bootstrap
         row=self.check();card=self.authority();observed=card.get('observed',{})
         if row.get('phase')!='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_phase_invalid')
         receipt=realtime_bootstrap.load_completed(self,actual=actual)
+        plan=realtime_bootstrap.load_plan(self)
+        if not isinstance(target,dict) or not isinstance(plan,dict):raise RuntimeError('staging_realtime_bootstrap_target_changed')
+        parent=None
+        if 'prerequisites_sha256' in plan:
+            import staging_prerequisites
+            parent=staging_prerequisites.load_capture(self,actual=actual)
+            if target.get('prerequisites_sha256')!=plan['prerequisites_sha256'] or plan['prerequisites_sha256']!=digest(parent):
+                raise RuntimeError('staging_prerequisites_capture_changed')
+        elif 'prerequisites_sha256' in target:raise RuntimeError('staging_prerequisites_capture_changed')
+        self._validate_cohort_target(row,target)
         if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
             or target.get('images')!=self.context['images']
             or target.get('realtime_bootstrap_sha256')!=digest(receipt)
             or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
             or observed.get('window')!=self.context['window']
-            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual):
+            or observed.get('operation')!=card.get('operation',0)-1
+            or observed.get('images')!=(parent['actual_before'] if parent is not None else actual)):
             raise RuntimeError('staging_realtime_bootstrap_target_changed')
         if self.check()!=row or self.authority()!=card:
             raise RuntimeError('staging_realtime_bootstrap_target_changed')
+        row.update(phase='prepare',target_sha256=digest(target))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
+    def advance_prerequisites_target(self,target,actual):
+        import staging_prerequisites,realtime_bootstrap_existing
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        if row.get('phase')!='prerequisites-captured':raise RuntimeError('staging_prerequisites_phase_invalid')
+        parent=staging_prerequisites.load_capture(self,actual=actual)
+        receipt=realtime_bootstrap_existing.load_existing(self,actual=actual)
+        if isinstance(target,dict):self._validate_cohort_target(row,target)
+        if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
+            or not isinstance(receipt,dict) or receipt.get('prerequisites_sha256')!=digest(parent)
+            or target.get('images')!=self.context['images'] or target.get('prerequisites_sha256')!=digest(parent)
+            or target.get('realtime_bootstrap_sha256')!=digest(receipt) or observed.get('state')!='known'
+            or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=parent['actual_before']):
+            raise RuntimeError('staging_prerequisites_target_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_prerequisites_target_changed')
         row.update(phase='prepare',target_sha256=digest(target))
         self.journal.save(row);self.expected_target=row['target_sha256']
         return self.binding()
@@ -228,7 +400,7 @@ class Session:
         # it must neither reopen apply nor create uncertainty in a safe window.
         if self.owned(previous) and (previous.get('status')=='complete' or previous.get('phase')=='awaiting-ci'):return
         row=self.check()
-        if row.get('phase')=='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_advance_required')
+        if row.get('phase') in ('cohort-preservation','realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if not row.get('target_sha256'):raise RuntimeError('staging_resource_target_unbound')
         row['phase']='apply-ready';self.journal.save(row)
 
@@ -253,7 +425,8 @@ class Session:
         return False
 
 
-def trusted_json(path,*,missing=False):
+def trusted_json(path,*,missing=False,limit=65536):
+    if limit not in (65536, 2 << 20):raise ValueError('staging_resource_limit_invalid')
     path=Path(path)
     for parent in (*path.parents[::-1],):
         row=parent.lstat()
@@ -264,7 +437,7 @@ def trusted_json(path,*,missing=False):
         raise
     try:
         row=os.fstat(fd)
-        if not stat.S_ISREG(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022 or row.st_nlink!=1 or not 1<=row.st_size<=65536:
+        if not stat.S_ISREG(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022 or row.st_nlink!=1 or not 1<=row.st_size<=limit:
             raise RuntimeError('staging_resource_journal_untrusted')
         raw=os.read(fd,row.st_size+1)
         if len(raw)!=row.st_size:raise RuntimeError('staging_resource_journal_changed')

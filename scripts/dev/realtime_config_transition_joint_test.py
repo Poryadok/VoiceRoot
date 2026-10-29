@@ -12,6 +12,7 @@ import backend_config_transition_probe as probe
 import media_operation_journal as journal
 import realtime_config_transition_deployment as p3
 import realtime_config_transition_service as chat_service
+import realtime_config_transition_space_service as space_service
 import realtime_config_transition_authority as authority
 import realtime_config_transition_authority_test as authority_fixture
 import realtime_p3_create_only as creation
@@ -46,11 +47,13 @@ class MixedTest(unittest.TestCase):
             'spec':{'type':'ClusterIP','clusterIP':'10.0.0.1','selector':{'app':'voice-realtime'},'ports':[{'name':'http','port':8080}]}}
         chat={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-chat','namespace':'voice-dev','uid':'cs','resourceVersion':'1'},
             'spec':{'type':'ClusterIP','clusterIP':'10.0.0.2','selector':{'app':'voice-chat'},'ports':[{'name':'http','port':8080}]}}
+        space_svc={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-space','namespace':'voice-dev','uid':'ss','resourceVersion':'1'},
+            'spec':{'type':'ClusterIP','clusterIP':'10.0.0.3','selector':{'app':'voice-space'},'ports':[{'name':'http','port':8080}]}}
         self.base.journal.intent['backend_config_service']=copy.deepcopy(realtime_service)
         self.base.journal.state['intent']=copy.deepcopy(self.base.journal.intent)
         self.base.cut.admission=copy.deepcopy(self.base.admission); self.base.cut.intent=copy.deepcopy(self.base.journal.intent)
         self.base.cut.drain()
-        self.services={'voice-chat':chat,'voice-realtime':realtime_service}; self.old_call=self.base.client.call
+        self.services={'voice-chat':chat,'voice-realtime':realtime_service,'voice-space':space_svc}; self.old_call=self.base.client.call
         self.authority=authority_fixture.AuthorityTest('test_derives_renderer_input_without_private_values')
         self.addCleanup(self.cleanup,self.authority); self.authority.setUp()
         module=sys.modules['realtime_jwks_publisher']; original_class=getattr(module,'PublisherPhase',None)
@@ -102,10 +105,12 @@ class MixedTest(unittest.TestCase):
                 'services':self.names,'sources':{n:copy.deepcopy(self.base.client.workloads['Deployment','voice-'+n]) for n in self.names},
                 'observation':observation,'observation_plan':{'source_sha':self.base.context['commit'],'targets':targets}},
             'realtime_chat_service':{'source':copy.deepcopy(chat),'source_sha':self.base.context['commit'],'cut_invocation':self.base.cut.invocation},
+            'realtime_space_service':{'source':copy.deepcopy(space_svc),'source_sha':self.base.context['commit'],'cut_invocation':self.base.cut.invocation},
             'realtime_config_deployments':{'source_root':'/source','source_sha':self.base.context['commit'],'cut_invocation':self.base.cut.invocation}}
         self.config=journal.Journal(Path(self.base.temp.name)/'mixed-config',intent); self.addCleanup(self.config.close)
         self.base.cut.bind_config_plan(self.config)
         chat_service.apply_chat_service(self.base.cut,self.config)
+        space_service.apply_space_service(self.base.cut,self.config)
         session=Session(); migration_phase=Migration(); migration_phase.intent=self.authority.migration.intent
         space_phase=Space(); publisher_phase=Publisher(); publisher_phase.fence=self.base.fence; publisher_phase.lock=self.base.lock; publisher_phase.namespace_uid='ns'
         self.types=[patch.object(creation,'Session',Session),patch.object(migration,'Migration',Migration),
@@ -128,6 +133,7 @@ class MixedTest(unittest.TestCase):
         p3.apply(self.base.cut,self.config,'space')
         backend.apply_development(self.base.cut,self.config,'user')
         self.assertEqual(self.base.cut.config_snapshot['services'],self.names)
+        self.assertEqual(space_service.verify_space_service(self.base.cut,self.config)['receipt']['uid'],'ss')
         self.assertEqual(self.base.cut.verify_drained()['active_sessions'],0)
 
     def test_source_drift_before_chat_patch_holds_without_mutation(self):

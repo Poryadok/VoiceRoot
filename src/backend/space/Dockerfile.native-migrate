@@ -9,7 +9,9 @@ COPY src/backend /src
 COPY --from=native-driver /usr/local/bin/migrate /usr/local/bin/migrate
 ENV GOMAXPROCS=2 GOMEMLIMIT=2GiB
 WORKDIR /src/space
-RUN SOURCE_SHA="$(cd /src && find . -type f -name '*.go' ! -name '*_test.go' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)" \
+RUN CGO_ENABLED=0 go list -p 2 -deps -json ./cmd/native-migrate > /native-closure.json \
+ && test "$(wc -c < /native-closure.json)" -le 2097152 \
+ && SOURCE_SHA="$(cd /src && find . -type f -name '*.go' ! -name '*_test.go' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)" \
  && MIGRATE_SHA="$(sha256sum /usr/local/bin/migrate | cut -d' ' -f1)" \
  && CGO_ENABLED=0 go build -p 2 -trimpath -ldflags="-s -w -X voice/backend/space/internal/nativeinstaller.SourceRevision=${SOURCE_REVISION} -X voice/backend/space/internal/nativeinstaller.BuildSourceSHA256=${SOURCE_SHA} -X voice/backend/space/internal/nativeinstaller.MigrateSHA256=${MIGRATE_SHA}" -o /native-migrate ./cmd/native-migrate
 
@@ -18,6 +20,7 @@ ARG SOURCE_REVISION
 LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 COPY --from=native-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=native-build /native-migrate /usr/local/bin/native-migrate
+COPY --from=native-build /native-closure.json /usr/local/share/voice-native-closure.json
 COPY --from=native-driver /usr/local/bin/migrate /usr/local/bin/migrate
 COPY src/backend/migrations/space_db /migrations
 USER 65532:65532

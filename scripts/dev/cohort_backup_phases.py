@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import story_media_backup_cohort as cohort
+import cohort_unmanaged_actual as unmanaged
 
 
 class CohortPhaseError(RuntimeError):
@@ -12,9 +13,19 @@ class CohortPhaseError(RuntimeError):
 
 
 class CohortPhases:
-    def __init__(self, phases):
+    def __init__(self, phases, catalog_phase=None, catalog_token=None):
         self.phases = phases
         self.binding = copy.deepcopy(phases.intent['cohort_binding'])
+        self.catalog_phase, self.catalog_token = catalog_phase, catalog_token
+        self._catalog_phase, self._catalog_token = catalog_phase, catalog_token
+        self._catalog_cut = self._bound_catalog_cut = None
+        if 'full_catalog' in self.binding:
+            try:
+                unmanaged.verify_catalog_phase(catalog_phase,catalog_token,self.binding)
+                self._catalog_identity()
+            except Exception: raise CohortPhaseError('full catalog authority unavailable') from None
+        elif catalog_phase is not None or catalog_token is not None:
+            raise CohortPhaseError('unexpected catalog authority')
         self.members = cohort._members(self.binding, self.binding['databases'])
         source = self.binding['sources']['roles']['engine']
         capture = phases.intent['backup_capture']
@@ -33,6 +44,46 @@ class CohortPhases:
         if self.phases.intent.get('cohort_binding') != self.binding:
             raise CohortPhaseError('cohort binding changed')
         self.phases._guard()
+        if 'full_catalog' in self.binding:
+            if self.catalog_phase is not self._catalog_phase or self.catalog_token != self._catalog_token:
+                raise CohortPhaseError('full catalog authority changed')
+            if self._catalog_cut is not self._bound_catalog_cut:
+                raise CohortPhaseError('full catalog cut changed')
+            try:
+                self._catalog_identity()
+                unmanaged.verify_catalog_phase(self.catalog_phase,self.catalog_token,self.binding,self._catalog_cut)
+                self._catalog_identity()
+            except unmanaged.UnmanagedError: raise CohortPhaseError('full catalog authority changed') from None
+
+    def _catalog_identity(self):
+        catalog=self.catalog_phase; phase=self.phases
+        if (catalog.fence.context!=phase.fence.context or catalog.lock!=phase.lock or
+                catalog.namespace_uid!=phase.namespace_uid or catalog.client.journal is not catalog.journal or
+                phase.client.journal is not phase.journal or catalog.fence.ledger.client is not catalog.client or
+                phase.fence.ledger.client is not phase.client or catalog.fence.ledger.read()!=phase.fence.ledger.read()):
+            raise CohortPhaseError('full catalog phase identity differs')
+
+    def bind_catalog_cut(self,cut):
+        """Bind the original writer cut before any provision successor exists."""
+        try:
+            import full_cohort_affected_plan as affected
+            if ('full_catalog' not in self.binding or self._catalog_cut is not None or
+                    type(cut) is not affected.writer_cut.WriterCut or cut.provision_successor is not None or
+                    cut.effective_session is not None or cut.migration is not None):
+                raise ValueError()
+            self._guard();cut._guard()
+            if (cut.fence.context!=self.phases.fence.context or cut.lock!=self.phases.lock or
+                    cut.namespace_uid!=self.phases.namespace_uid or
+                    cut.fence.ledger.read()!=self.phases.fence.ledger.read()):
+                raise ValueError()
+            receipt=unmanaged.verify_catalog_phase(self.catalog_phase,self.catalog_token,self.binding,cut)
+            scope={'engine':receipt['engine'],'server_start':receipt['server_start'],
+                   'databases':sorted(receipt['all_databases']),'database_oids':receipt['all_databases']}
+            if cut.admission['session_scope']!=scope or cut.fence.ledger.read()!=self.phases.fence.ledger.read():
+                raise ValueError()
+            self._catalog_cut=self._bound_catalog_cut=cut
+        except Exception:
+            raise CohortPhaseError('full catalog cut binding unavailable') from None
 
     def uncertain(self, member):
         self.phases._uncertain('cohort-' + str(member))
