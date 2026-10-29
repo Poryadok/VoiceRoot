@@ -10,6 +10,7 @@ import cohort_readback as readback
 import cohort_upload_phase as upload
 import story_media_backup_cohort as cohort
 import story_media_backup_cohort_restore as restore
+import cohort_backup_phases as phases
 
 
 class RestoreError(RuntimeError): pass
@@ -85,6 +86,7 @@ def run(phase, key, destination, manifest, metadata, source_root, postgres_image
     """One actual isolated restore; caller owns source authority and drain."""
     pending = False; p = phase.phases
     try:
+        if 'full_catalog' in phase.binding and type(phase) is not phases.CohortPhases: raise ValueError()
         readback._guard(phase,drain); row, revision = p.fence.ledger.read()
         snapshot = readback._snapshot(phase,row); binding, planned, marker, _ = snapshot
         done = p.journal.state['steps'].get('cohort-readback')
@@ -115,8 +117,10 @@ def run(phase, key, destination, manifest, metadata, source_root, postgres_image
         current['cohort_restore'] = copy.deepcopy(intent); current['step'] = 'cohort-restore-pending'; p.fence.ledger.write(rev,current)
         readback._guard(phase,drain); reserved, _ = p.fence.ledger.read()
         journal = RestoreJournal(phase,drain,snapshot,done,intent); journal._check(reserved)
+        catalog_args = ({'catalog_phase':phase.catalog_phase,'catalog_token':phase.catalog_token}
+                        if 'full_catalog' in binding else {})
         receipt = restore.qualify(destination,key,binding,binding['databases'],manifest,metadata,source_root,
-                                  postgres_image,migrate_image,journal)
+                                  postgres_image,migrate_image,journal,**catalog_args)
         if (not isinstance(receipt,dict) or receipt.get('operation_id') != binding['operation_id']
                 or receipt.get('snapshot_id') != binding['snapshot_id'] or receipt.get('source_sha') != binding['source_sha']
                 or receipt.get('manifest_sha256') != digest or receipt.get('cleanup') != 'verified'

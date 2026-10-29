@@ -5,6 +5,7 @@ import json
 import re
 import secrets
 import story_media_backup_cohort as cohort
+import cohort_unmanaged_actual as unmanaged
 
 
 class CohortPhaseError(RuntimeError):
@@ -12,9 +13,21 @@ class CohortPhaseError(RuntimeError):
 
 
 class CohortPhases:
-    def __init__(self, phases):
+    def __init__(self, phases, catalog_phase=None, catalog_token=None):
         self.phases = phases
         self.binding = copy.deepcopy(phases.intent['cohort_binding'])
+        self.catalog_phase, self.catalog_token = catalog_phase, catalog_token
+        self._catalog_phase, self._catalog_token = catalog_phase, catalog_token
+        if 'full_catalog' in self.binding:
+            try:
+                unmanaged.verify_catalog_phase(catalog_phase,catalog_token,self.binding)
+                if (catalog_phase.fence is not phases.fence or catalog_phase.journal is not phases.journal or
+                        catalog_phase.client is not phases.client or catalog_phase.lock!=phases.lock or
+                        catalog_phase.namespace_uid!=phases.namespace_uid):
+                    raise CohortPhaseError('full catalog phase identity differs')
+            except Exception: raise CohortPhaseError('full catalog authority unavailable') from None
+        elif catalog_phase is not None or catalog_token is not None:
+            raise CohortPhaseError('unexpected catalog authority')
         self.members = cohort._members(self.binding, self.binding['databases'])
         source = self.binding['sources']['roles']['engine']
         capture = phases.intent['backup_capture']
@@ -33,6 +46,11 @@ class CohortPhases:
         if self.phases.intent.get('cohort_binding') != self.binding:
             raise CohortPhaseError('cohort binding changed')
         self.phases._guard()
+        if 'full_catalog' in self.binding:
+            if self.catalog_phase is not self._catalog_phase or self.catalog_token != self._catalog_token:
+                raise CohortPhaseError('full catalog authority changed')
+            try: unmanaged.verify_catalog_phase(self.catalog_phase,self.catalog_token,self.binding)
+            except unmanaged.UnmanagedError: raise CohortPhaseError('full catalog authority changed') from None
 
     def uncertain(self, member):
         self.phases._uncertain('cohort-' + str(member))
