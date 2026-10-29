@@ -147,7 +147,11 @@ def preflight_payloads(session):
     import staging_prerequisites as parent
     current=parent.require_child(session,'release_policy')
     authority=parent.load_authority(session)
-    if not isinstance(authority,dict) or set(authority)!={'approved','source'}:
+    operation=getattr(session,'operation',None)
+    if (not isinstance(operation,str) or not re.fullmatch(r'[a-f0-9]{12}',operation)
+        or not isinstance(current,dict) or current.get('operation')!=operation
+        or not isinstance(authority,dict) or set(authority)!={'approved','execution','source'}
+        or authority['source']!=str(guard.ROOT/'installed'/'sources'/operation)):
         raise ValueError('release_policy_source_authority_invalid')
     payloads={effect:parent.load_payload(session,'release_policy',effect)
               for effect in ('create-policy-configmap','commit-root-policy')}
