@@ -1,5 +1,7 @@
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -54,6 +56,22 @@ class TransferTest(unittest.TestCase):
                 patch.object(transfer.subprocess, 'run') as run:
             with self.assertRaises(RuntimeError): transfer.transfer()
             run.assert_not_called()
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX remote custody fixture')
+    def test_remote_script_creates_private_file_once_without_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = json.dumps(sample()).encode()
+            script = transfer._REMOTE.replace('/home/pmd', directory)
+            first = subprocess.run([sys.executable, '-c', script], input=raw, capture_output=True)
+            self.assertEqual(first.returncode, 0)
+            self.assertEqual(first.stdout, b'')
+            target = Path(directory) / 'voice-staging-core-accounts' / 'accounts.json'
+            self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(target.read_bytes(), raw)
+            second = subprocess.run([sys.executable, '-c', script], input=b'foreign', capture_output=True)
+            self.assertNotEqual(second.returncode, 0)
+            self.assertEqual(second.stdout, b'')
+            self.assertEqual(target.read_bytes(), raw)
 
     @unittest.skipUnless(os.name == 'nt', 'Windows handle custody fixture')
     def test_locked_source_refuses_path_replacement_during_acl_check(self):
