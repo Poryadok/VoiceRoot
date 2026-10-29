@@ -6,10 +6,13 @@ import full_cohort_chat_health as health
 import full_cohort_schema_metadata as common
 import realtime_config_transition_deployment as deployment
 import realtime_config_transition_joint_test
+import realtime_jwks_publisher
 
 
 class ConfigIntegrationTest(unittest.TestCase):
     def test_chat_health_reads_owned_config_and_rejects_ledger_drift(self):
+        original_publisher = realtime_jwks_publisher.PublisherPhase
+        self.addCleanup(setattr, realtime_jwks_publisher, 'PublisherPhase', original_publisher)
         base = realtime_config_transition_joint_test.MixedTest('test_ordered_real_producers_with_shared_cut')
         base.setUp(); self.addCleanup(base.doCleanups)
         deployment.apply(base.base.cut, base.config, 'chat')
