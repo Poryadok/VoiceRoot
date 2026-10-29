@@ -13,6 +13,15 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_running_guard_never_calls_full_space_identity_loader(self):
+        plan={'fixture':'protected'}
+        with patch.object(native,'_live_base',return_value=Path('/unused')), \
+             patch.object(native.owner,'_read',return_value=plan), \
+             patch.object(native,'_live_running_context',return_value=plan) as running, \
+             patch.object(native,'_live_context',side_effect=AssertionError('space connection')) as full:
+            self.assertEqual(native._live_checked_running_plan(SimpleNamespace()),plan)
+            running.assert_called_once();full.assert_not_called()
+
     def test_live_documents_keep_private_evidence_on_owned_volume(self):
         session=SimpleNamespace(operation='a'*12,context={'operation_id':'stg-run-17'})
         tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
@@ -23,8 +32,11 @@ class InspectSourceTest(unittest.TestCase):
         self.assertNotIn('volumeName',pvc['spec']);self.assertNotIn('dataSource',pvc['spec'])
         for mode in ('bind','upgrade','verify'):
             spec=docs[mode]['spec']['template']['spec'];container=spec['containers'][0]
-            self.assertEqual(spec['nodeName'],'node-a');self.assertFalse(spec['automountServiceAccountToken'])
+            self.assertNotIn('nodeName',spec)
+            self.assertEqual(spec['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms'][0]['matchFields'][0]['values'],['node-a'])
+            self.assertFalse(spec['automountServiceAccountToken'])
             self.assertEqual(spec['securityContext']['runAsUser'],65532)
+            self.assertNotIn('fsGroup',spec['securityContext'])
             self.assertEqual(spec['volumes'][0]['persistentVolumeClaim']['claimName'],pvc['metadata']['name'])
             self.assertEqual(spec['volumes'][0]['persistentVolumeClaim']['readOnly'],mode=='verify')
             self.assertEqual(container['image'],tool['immutable_image']);self.assertTrue(container['securityContext']['readOnlyRootFilesystem'])
@@ -55,6 +67,7 @@ class InspectSourceTest(unittest.TestCase):
              {'name':'POSTGRES_PASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}}]
         objects={('pod','voice-postgres-0'):{'spec':{'nodeName':'node-a','containers':[{'name':'postgres','env':env}]}},
             ('persistentvolumeclaim','pgdata-voice-postgres-0'):{'metadata':{'uid':'pgpvc'},'spec':{'storageClassName':'local-path'}},
+            ('storageclass','local-path'):{'metadata':{'name':'local-path','uid':'class','resourceVersion':'1'},'provisioner':'local-path-provisioner'},
             ('configmap','voice-app-config'):{'data':{'POSTGRES_USER':'voice'}},
             ('secret','voice-app-secrets'):{'data':{'POSTGRES_PASSWORD':'private'}}}
         kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(objects[(kind,name)])
@@ -69,15 +82,16 @@ class InspectSourceTest(unittest.TestCase):
 
     def test_live_volume_rejects_foreign_claim_and_original_database_volume(self):
         claim_uid='11111111-1111-4111-8111-111111111111';pv_uid='22222222-2222-4222-8222-222222222222'
-        plan={'documents':{'pvc':{'metadata':{'name':'evidence'},'spec':{'storageClassName':'local-path'}}},
+        plan={'documents':{'pvc':{'metadata':{'name':'evidence'},'spec':{'storageClassName':'local-path'}}},'storage_provisioner':'local-path-provisioner',
               'postgres_pvc_uid':'33333333-3333-4333-8333-333333333333','postgres_pv_uid':'44444444-4444-4444-8444-444444444444'}
         pvc={'metadata':{'name':'evidence','namespace':'voice-staging','uid':claim_uid,'resourceVersion':'1'},
              'spec':{'volumeName':'pv-evidence','storageClassName':'local-path','accessModes':['ReadWriteOnce']},'status':{'phase':'Bound'}}
-        pv={'metadata':{'name':'pv-evidence','uid':pv_uid,'resourceVersion':'2'},'status':{'phase':'Bound'},
+        pv={'metadata':{'name':'pv-evidence','uid':pv_uid,'resourceVersion':'2','creationTimestamp':'2026-01-01T00:00:01Z',
+            'annotations':{'pv.kubernetes.io/provisioned-by':'local-path-provisioner'}},'status':{'phase':'Bound'},
             'spec':{'storageClassName':'local-path','claimRef':{'name':'evidence','namespace':'voice-staging','uid':claim_uid}}}
         kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(pvc if kind=='persistentvolumeclaim' else pv)
         with patch.object(native,'Kube',return_value=kube),patch.object(native,'_live_base',return_value=Path('/unused')), \
-             patch.object(native.owner,'_read',return_value={'status':'DONE','response':{'uid':claim_uid}}):
+             patch.object(native.owner,'_read',return_value={'status':'DONE','response':{'uid':claim_uid,'creationTimestamp':'2026-01-01T00:00:00Z'}}):
             self.assertEqual(native._live_volume(SimpleNamespace(),plan)['pv_uid'],pv_uid)
             pv['spec']['claimRef']['uid']='foreign'
             with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
@@ -106,12 +120,12 @@ class InspectSourceTest(unittest.TestCase):
         tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
               'source_inventory':{'build_source_sha256':'d'*64},'platform_digest':'sha256:'+'c'*64,'config_digest':'sha256:'+'e'*64}
         docs=native._live_documents(session,tool,'node-a','local-path','snapshot-1')
-        plan={'documents':docs,'authority_sha256':'f'*64,'postgres_pvc_uid':'old-pvc','postgres_pv_uid':'old-pv',
+        plan={'documents':docs,'authority_sha256':'f'*64,'node':'node-a','storage_provisioner':'local-path-provisioner','postgres_pvc_uid':'old-pvc','postgres_pv_uid':'old-pv',
               'tool_platform_digest':tool['platform_digest'],'tool_config_digest':tool['config_digest']}
         live={};pvc_uid=str(uuid.uuid4());pv_uid=str(uuid.uuid4());pod_uid={};lost=False
         def pod_for(job):
             name=job['metadata']['name'];running=name.endswith('-bind')
-            uid=pod_uid.setdefault(name,str(uuid.uuid4()));spec=copy.deepcopy(job['spec']['template']['spec'])
+            uid=pod_uid.setdefault(name,str(uuid.uuid4()));spec=copy.deepcopy(job['spec']['template']['spec']);spec['nodeName']='node-a'
             state={'running':{}} if running else {'terminated':{'exitCode':0}}
             return {'metadata':{'name':name+'-pod','namespace':'voice-staging','uid':uid,'resourceVersion':'9',
                 'ownerReferences':[{'controller':True,'kind':'Job','uid':job['metadata']['uid']}]},'spec':spec,
@@ -120,7 +134,8 @@ class InspectSourceTest(unittest.TestCase):
         class Kube:
             def get(self,kind,name):
                 if kind=='persistentvolumeclaim':return copy.deepcopy(live['pvc'])
-                if kind=='persistentvolume':return {'metadata':{'name':'pv-evidence','uid':pv_uid,'resourceVersion':'3'},
+                if kind=='persistentvolume':return {'metadata':{'name':'pv-evidence','uid':pv_uid,'resourceVersion':'3',
+                    'creationTimestamp':'2026-01-01T00:00:01Z','annotations':{'pv.kubernetes.io/provisioned-by':'local-path-provisioner'}},
                     'status':{'phase':'Bound'},'spec':{'storageClassName':'local-path','claimRef':{
                         'name':docs['pvc']['metadata']['name'],'namespace':'voice-staging','uid':pvc_uid}}}
                 return copy.deepcopy(live[name])
@@ -134,7 +149,7 @@ class InspectSourceTest(unittest.TestCase):
             tail=argv[len(native.owner.PREFIX):]
             if tail[0]=='create':
                 value=json.loads(body);name=value['metadata']['name']
-                value['metadata'].update(uid=pvc_uid if value['kind']=='PersistentVolumeClaim' else str(uuid.uuid4()),resourceVersion='7')
+                value['metadata'].update(uid=pvc_uid if value['kind']=='PersistentVolumeClaim' else str(uuid.uuid4()),resourceVersion='7',creationTimestamp='2026-01-01T00:00:00Z')
                 if value['kind']=='PersistentVolumeClaim':
                     value['spec']['volumeName']='pv-evidence';value['status']={'phase':'Bound'};live['pvc']=copy.deepcopy(value)
                 else:
@@ -146,7 +161,7 @@ class InspectSourceTest(unittest.TestCase):
                 return json.dumps({'apiVersion':'v1','kind':'Status','status':'Success'}).encode()
             if tail[0]=='logs':
                 result='1'*64+'  /evidence/origin.json\n'+'2'*64+'  /evidence/completed.jsonl\n'
-                if '-verify-pod' in tail[1]:result+='3'*64+'  /tmp/verified.json\n'
+                if '-verify-pod' in tail[1]:result+='verification=ok\n'
                 return result.encode()
             raise AssertionError(tail)
         for lost in (False,True):
@@ -154,6 +169,7 @@ class InspectSourceTest(unittest.TestCase):
             with self.subTest(lost=lost),tempfile.TemporaryDirectory(dir='/root') as directory:
                 base=Path(directory)/'live'
                 with patch.object(native,'_live_base',return_value=base),patch.object(native,'_live_context',return_value=plan), \
+                     patch.object(native,'_live_running_context',return_value=plan) as running, \
                      patch.object(native,'Kube',return_value=Kube()),patch.object(commands,'capture',side_effect=capture):
                     if lost:
                         with self.assertRaisesRegex(RuntimeError,'upgrade-create-response-lost'):native.execute_live(session)
@@ -162,8 +178,9 @@ class InspectSourceTest(unittest.TestCase):
                     else:
                         receipt=native.execute_live(session)
                         self.assertEqual(receipt['status'],'COMPLETE');self.assertEqual(receipt['volume']['pvc_uid'],pvc_uid)
-                        self.assertEqual(receipt['evidence_hashes']['/tmp/verified.json'],'3'*64)
+                        self.assertEqual(receipt['evidence_hashes']['/evidence/completed.jsonl'],'2'*64)
                         self.assertEqual(set(live),{'pvc'})
+                        self.assertEqual(running.call_count,2)
                         result=native.owner._read(base/'verify-result.json');result['hashes']['/evidence/origin.json']='4'*64
                         native.owner.save(base/'verify-result.json',result)
                         with self.assertRaisesRegex(native.Blocked,'space_live_receipt_changed'):native.load_live_completed(session)
