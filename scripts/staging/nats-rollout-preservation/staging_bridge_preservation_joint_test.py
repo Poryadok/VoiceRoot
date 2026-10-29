@@ -499,6 +499,12 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
        patch.object(source_authority.transport,'_request',side_effect=story_request), \
        patch.object(http.client,'HTTPSConnection',Https), \
        patch.object(urllib.request.OpenerDirector,'open',registry_open) if 'VOICE_TEST_SPACE_OCI' in os.environ else contextlib.nullcontext():
+   if 'VOICE_TEST_SPACE_OCI' in os.environ:
+    import runtime_stage
+    preview=runtime_stage.RolloutStage.capture(stage_runtime.Kube(),session.operation,lambda _:None,
+     ['voice-web','voice-admin','voice-developer-portal'])
+    # Synthetic TT baseline comes from the modeled cluster's real capture.
+    card['observed']['images']=copy.deepcopy(preview.old_images)
    trace_errors=[]
    def trace(frame,event,arg):
     if event=='exception' and frame.f_code.co_filename.endswith(('space_native_tool_identity_staging.py','source_authority.py','github_custody.py')):
