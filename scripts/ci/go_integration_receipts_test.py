@@ -18,6 +18,24 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_file_matrix_requires_pdf_runtime_and_real_renderer(self):
+        import yaml
+        inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        cases = [['voice/backend/file', 'TestPDFRuntimeMainUploadsRendersAndRevokesThumbnail'],
+                 ['voice/backend/file', 'TestPDFRuntimeRequiresInstalledDependencies'],
+                 ['voice/backend/file/internal/pdfproc', 'TestRendererFirstPage']]
+        for case in cases:
+            self.assertIn(case, inventory['file'])
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        install = next(step for step in workflow['jobs']['backend-go-integration-pr']['steps']
+                       if step.get('name') == 'Install File codec tools')
+        self.assertIn("matrix.service == 'file'", install['if'])
+        self.assertIn('poppler-utils', install['run'])
+        for package, name in cases:
+            skipped = [{'Package': package, 'Test': name, 'Action': action} for action in ('run', 'skip')]
+            skipped.append({'Package': package, 'Action': 'pass'})
+            self.assertTrue(receipts.verify_required(skipped, [[package, name]], 0))
+
     def test_file_matrix_requires_real_codec_cases(self):
         import yaml
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))

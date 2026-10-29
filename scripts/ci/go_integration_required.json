@@ -242,13 +242,16 @@
   ],
   "file": [
     ["voice/backend/file", "TestAudioPreviewRequiresExactLiveReference"],
+    ["voice/backend/file", "TestPDFRuntimeMainUploadsRendersAndRevokesThumbnail"],
+    ["voice/backend/file", "TestPDFRuntimeRequiresInstalledDependencies"],
     ["voice/backend/file", "TestPreviewProducerAtomicReplayAndExactReferenceResolver"],
     ["voice/backend/file", "TestPreviewResolverConcurrentReferenceReleaseAndAcquire"],
     ["voice/backend/file/internal/gifproc", "TestRealCodecAnimationTimingAndDisposal"],
     ["voice/backend/file/internal/gifproc", "TestRealCodecOutputCapIsPermanent"],
     ["voice/backend/file/internal/gifproc", "TestRealCodecRunningProcessCancellation"],
     ["voice/backend/file/internal/gifproc", "TestRealCodecZeroDelayAndSingleFrame"],
-    ["voice/backend/file/internal/grpcsvc", "TestMessageFileURLUsesRevocableProxyAndRechecksLiveReference"]
+    ["voice/backend/file/internal/grpcsvc", "TestMessageFileURLUsesRevocableProxyAndRechecksLiveReference"],
+    ["voice/backend/file/internal/pdfproc", "TestRendererFirstPage"]
   ],
   "gameintegration": [
     ["voice/backend/gameintegration", "TestGISRuntimeDatabaseRoleCanWriteOnlyGISOwnedTables"],

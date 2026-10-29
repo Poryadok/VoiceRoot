@@ -1240,7 +1240,7 @@ jobs:
         if: matrix.service == 'file'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg poppler-utils
       - name: Go integration test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:

@@ -195,6 +195,8 @@ When Realtime is in that matrix, `realtime-lifecycle-integration` requires its
 tagged fanout and protected transport tests against owned PostgreSQL without skips.
 When File is in the matrix, its required cases include the real GIF codec tests;
 the File runner installs FFmpeg and treats an unavailable codec as a failure.
+Its PDF renderer and upload-to-thumbnail runtime tests also require Poppler and
+cannot pass by skipping a missing renderer.
 
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
