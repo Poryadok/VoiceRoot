@@ -24,6 +24,7 @@ PUBLIC = {'voice-principal-ca': ('ca.crt', 'principal-ca.pem'),
           'voice-media-ca': ('ca.crt', 'media-ca.pem'),
           'voice-space-media-server-tls': ('tls.crt', 'space-jwks.pem')}
 CERT_PATH = '/etc/voice/media/server/tls.crt'
+KEY_PATH = '/etc/voice/media/server/tls.key'
 # Exact reviewed Space Deployment document, not the surrounding multi-service file.
 SPACE_DOCUMENT_SHA = '13ba97e8c2249127f3cb06ea4d3e552b11657a17d6e32defa433380ca296cf18'
 SOURCE_LINES = (
@@ -31,16 +32,25 @@ SOURCE_LINES = (
     b'{name: SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN, value: ":8443"}',
     b'{name: media-server, mountPath: /etc/voice/media/server, readOnly: true}',
     b'secret: {secretName: voice-space-media-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}',
+    b'{name: SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE, value: "/etc/voice/media/server/tls.key"}',
+    b'{name: SPACE_PRINCIPAL_SIGNING_KEYS_DIR, value: "/etc/voice/media/signing"}',
+    b'{name: SPACE_PRINCIPAL_ACTIVE_KID, valueFrom: {"secretKeyRef": {"name": "voice-space-principal-signing", "key": "active-kid"}}}',
+    b'{name: media-signing, mountPath: /etc/voice/media/signing, readOnly: true}',
+    b'secret: {secretName: voice-space-principal-signing, defaultMode: 0440, items: [{key: current.pem, path: current.pem}, {key: next.pem, path: next.pem}]}',
 )
 
 # Only these fixed codes may leave capture; never include exception text.
 KNOWN_HOLDS = frozenset({'source_identity_invalid','source_authority_failed','space_source_contract_unknown',
     'space_identity_invalid','space_identity_changed','space_mount_invalid','space_configuration_unknown',
-    'space_service_invalid','public_input_identity','public_input_missing','public_input_changed',
+    'space_service_invalid','space_cert_env_absent','space_cert_env_duplicate','space_cert_env_mismatch',
+    'space_listen_env_absent','space_listen_env_duplicate','space_listen_env_mismatch',
+    'space_key_env_absent','space_key_env_duplicate','space_key_env_mismatch',
+    'public_input_identity','public_input_missing','public_input_changed',
     'public_certificate_invalid','public_crypto_invalid','public_ca_invalid','space_certificate_invalid',
     'source_snapshot_changed','destination_invalid','destination_changed','public_write_failed'})
 STAGE_HOLDS = frozenset({'p3_stage_source','p3_stage_workload','p3_stage_pod','p3_stage_mount',
     'p3_stage_service','p3_stage_public_identity','p3_stage_public_value','p3_stage_public_pem',
+    'p3_stage_principal_ca_identity','p3_stage_media_ca_identity','p3_stage_space_cert_identity',
     'p3_stage_config','p3_stage_recheck','p3_stage_destination','p3_stage_write','p3_stage_crypto',
     'p3_stage_postcheck'})
 
@@ -75,12 +85,15 @@ def _source_contract(root, snapshot):
         if len(matches) != 1: raise common.Hold('space_source_contract_unknown')
         return matches[0]
     env, mounts = field(b'env'), field(b'volumeMounts')
-    for segment, line in ((env, SOURCE_LINES[0]), (env, SOURCE_LINES[1]), (mounts, SOURCE_LINES[2])):
+    for segment, line in ((env, SOURCE_LINES[0]), (env, SOURCE_LINES[1]), (env, SOURCE_LINES[4]),
+                          (env, SOURCE_LINES[5]), (env, SOURCE_LINES[6]), (mounts, SOURCE_LINES[2]), (mounts, SOURCE_LINES[7])):
         if len(re.findall(rb'(?m)^            - ' + re.escape(line) + rb'\r?$', segment)) != 1:
             raise common.Hold('space_source_contract_unknown')
     volume = rb'(?m)^        - name: media-server\r?\n          ' + re.escape(SOURCE_LINES[3]) + rb'\r?$'
     if len(re.findall(volume, doc[section.end():])) != 1:
         raise common.Hold('space_source_contract_unknown')
+    signer = rb'(?m)^        - name: media-signing\r?\n          ' + re.escape(SOURCE_LINES[8]) + rb'\r?$'
+    if len(re.findall(signer, doc[section.end():])) != 1: raise common.Hold('space_source_contract_unknown')
     return digest
 
 
@@ -112,19 +125,31 @@ def _value(run, guard, kind, name, key):
     return raw
 
 
-def _mounted(pod):
+def _env_categories(pod):
     containers = [c for c in pod['spec']['containers'] if c.get('name') == 'space']
     if len(containers) != 1: raise common.Hold('space_mount_invalid')
     container = containers[0]
-    for name, value in [('SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE', CERT_PATH),
-                        ('SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN', ':8443')]:
+    result = {}
+    for name, value, prefix in [('SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE', CERT_PATH, 'space_cert_env'),
+                                ('SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE', KEY_PATH, 'space_key_env'),
+                                ('SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN', ':8443', 'space_listen_env')]:
         entries = [e for e in container.get('env', []) if e.get('name') == name]
-        if len(entries) != 1 or set(entries[0]) != {'name', 'value'} or entries[0]['value'] != value:
-            raise common.Hold('space_configuration_unknown')
-    mounts = [m for m in container.get('volumeMounts', []) if CERT_PATH == m.get('mountPath') or
-              CERT_PATH.startswith(m.get('mountPath', '').rstrip('/') + '/')]
-    if len(mounts) != 1: raise common.Hold('space_mount_invalid')
-    mount = mounts[0]
+        result[prefix] = ('absent' if not entries else 'duplicate' if len(entries)!=1 else
+                          'mismatch' if set(entries[0]) != {'name','value'} or entries[0]['value'] != value else 'exact')
+    return result
+
+
+def _mount(pod):
+    containers = [c for c in pod['spec']['containers'] if c.get('name') == 'space']
+    if len(containers) != 1: raise common.Hold('space_mount_invalid')
+    container = containers[0]
+    def covering(path):
+        return [m for m in container.get('volumeMounts', []) if path == m.get('mountPath') or
+                path.startswith(m.get('mountPath', '').rstrip('/') + '/')]
+    cert_mounts, key_mounts = covering(CERT_PATH), covering(KEY_PATH)
+    if len(cert_mounts) != 1 or len(key_mounts) != 1 or cert_mounts[0] != key_mounts[0]:
+        raise common.Hold('space_mount_invalid')
+    mount = cert_mounts[0]
     if (mount.get('mountPath') != '/etc/voice/media/server' or mount.get('readOnly') is not True
             or 'subPath' in mount or 'subPathExpr' in mount): raise common.Hold('space_mount_invalid')
     volumes = [v for v in pod['spec']['volumes'] if v.get('name') == mount.get('name')]
@@ -133,6 +158,131 @@ def _mounted(pod):
     if secret.get('secretName') != 'voice-space-media-server-tls': raise common.Hold('space_mount_invalid')
     if sum(item.get('key') == 'tls.crt' and item.get('path') == 'tls.crt' for item in secret.get('items', [])) != 1:
         raise common.Hold('space_mount_invalid')
+    if sum(item.get('key') == 'tls.key' and item.get('path') == 'tls.key' for item in secret.get('items', [])) != 1:
+        raise common.Hold('space_mount_invalid')
+
+
+def _mounted(pod):
+    for prefix,status in _env_categories(pod).items():
+        if status != 'exact': raise common.Hold(prefix + '_' + status)
+    _mount(pod)
+
+
+def _signer_categories(pod):
+    containers=[c for c in pod['spec']['containers'] if c.get('name')=='space']
+    if len(containers)!=1: raise common.Hold('space_mount_invalid')
+    container=containers[0]; env=container.get('env',[])
+    def category(name,wanted):
+        entries=[e for e in env if e.get('name')==name]
+        if not entries: return 'absent'
+        if len(entries)!=1: return 'duplicate'
+        return 'exact' if entries[0]==wanted else 'mismatch'
+    directory=category('SPACE_PRINCIPAL_SIGNING_KEYS_DIR',
+        {'name':'SPACE_PRINCIPAL_SIGNING_KEYS_DIR','value':'/etc/voice/media/signing'})
+    active=category('SPACE_PRINCIPAL_ACTIVE_KID',{'name':'SPACE_PRINCIPAL_ACTIVE_KID',
+        'valueFrom':{'secretKeyRef':{'name':'voice-space-principal-signing','key':'active-kid'}}})
+    path='/etc/voice/media/signing'
+    mounts=[m for m in container.get('volumeMounts',[]) if m.get('mountPath')==path or
+            path.startswith(m.get('mountPath','').rstrip('/')+'/') or m.get('mountPath','').startswith(path+'/')]
+    mount='mismatch'
+    if len(mounts)==1 and mounts[0].get('mountPath')==path and mounts[0].get('readOnly') is True and not ({'subPath','subPathExpr'} & set(mounts[0])):
+        volumes=[v for v in pod['spec'].get('volumes',[]) if v.get('name')==mounts[0].get('name')]
+        if len(volumes)==1:
+            secret=volumes[0].get('secret',{}); items=secret.get('items',[])
+            if secret.get('secretName')=='voice-space-principal-signing' and all(
+                    sum(x.get('key')==k and x.get('path')==k for x in items)==1 for k in ('current.pem','next.pem')):
+                mount='exact'
+    return {'signing_dir':directory,'active_kid_ref':active,'signing_mount':mount}
+
+
+def _signer_identity(run,guard):
+    template = ('{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}{{"\\n"}}'
+        '{{range $k,$v := .data}}{{if eq $k "current.pem"}}1{{end}}{{end}}{{"\\n"}}'
+        '{{range $k,$v := .data}}{{if eq $k "next.pem"}}1{{end}}{{end}}{{"\\n"}}'
+        '{{range $k,$v := .data}}{{if eq $k "active-kid"}}1{{end}}{{end}}')
+    raw=_call(run,guard,'get','secret','voice-space-principal-signing','--ignore-not-found=true','-o','go-template='+template)
+    if raw==b'': return {'state':'absent','uid':None,'resource_version':None,'keys':[]}
+    lines=raw.decode('ascii').split('\n')
+    if (len(lines)!=5 or any(not re.fullmatch(r'[A-Za-z0-9.-]{1,128}',s) for s in lines[:2])
+            or any(x not in ('','1') for x in lines[2:])): raise common.Hold('public_input_identity')
+    return {'state':'present','uid':lines[0],'resource_version':lines[1],
+            'keys':[name for name,present in zip(('current.pem','next.pem','active-kid'),lines[2:]) if present=='1']}
+
+
+def observe_signer(source_root,source_sha,source_authority,space_pod,namespace_uid,claim_guard,
+                   run_bytes=common.linux_private_bytes):
+    """Prepare-only signer metadata; never reads Secret values or issues keys."""
+    try:
+        if not isinstance(source_sha,str) or not re.fullmatch(r'[a-f0-9]{40}',source_sha) or not namespace_uid: raise ValueError()
+        def guard():
+            common._fence(claim_guard)
+            try:
+                raw=common._external(run_bytes,['kubectl','--kubeconfig','/home/pmd/.kube/config','--context','default',
+                    '--request-timeout=15s','get','namespace','voice-dev','-o','json'])
+                meta=json.loads(raw)['metadata']
+                if meta.get('name')!='voice-dev' or meta.get('uid')!=namespace_uid: raise ValueError()
+            except Exception: raise common.GuardLost('namespace_guard_failed') from None
+            common._fence(claim_guard)
+        def authorize():
+            if common._external(source_authority,source_sha) is False: raise ValueError()
+        guard(); authorize(); snapshot=source_snapshot(Path(source_root),source_sha); _source_contract(source_root,snapshot)
+        workload=common.kube_workload_snapshot('space',space_pod,run_bytes,guard); before=workload()
+        pod=_get(run_bytes,guard,'pod',space_pod)
+        if pod['metadata'].get('uid')!=before['pod_uid'] or pod['metadata'].get('resourceVersion')!=before['pod_rv']: raise ValueError()
+        signer={'configuration':_signer_categories(pod),'secret':_signer_identity(run_bytes,guard)}
+        config=_env_categories(pod)
+        try: _mount(pod); config['space_mount']='exact'
+        except common.Hold: config['space_mount']='mismatch'
+        if workload()!=before or _signer_identity(run_bytes,guard)!=signer['secret']: raise ValueError()
+        authorize()
+        if source_snapshot(Path(source_root),source_sha)!=snapshot: raise ValueError()
+        guard()
+        return {'status':'observed','source_sha':source_sha,'namespace_uid':namespace_uid,
+                'space_identity':{k:before[k] for k in ('pod_uid','pod_rv','deployment_uid','deployment_rv','container_id','restart_count')},
+                'current_space_config':config,'current_signer':signer,'scope':'signer-metadata-only',
+                'admission_qualified':False}
+    except common.GuardLost: raise
+    except Exception: raise common.Hold('signer_observation_failed') from None
+
+
+def observe_public_metadata(source_root,source_sha,source_authority,namespace_uid,claim_guard,
+                            run_bytes=common.linux_private_bytes):
+    """Distinguish observed absent public references from unknown transport."""
+    try:
+        if not isinstance(source_sha,str) or not re.fullmatch(r'[a-f0-9]{40}',source_sha) or not namespace_uid: raise ValueError()
+        def guard():
+            common._fence(claim_guard)
+            try:
+                raw=common._external(run_bytes,['kubectl','--kubeconfig','/home/pmd/.kube/config','--context','default',
+                    '--request-timeout=15s','get','namespace','voice-dev','-o','json'])
+                meta=json.loads(raw)['metadata']
+                if meta.get('name')!='voice-dev' or meta.get('uid')!=namespace_uid: raise ValueError()
+            except Exception: raise common.GuardLost('namespace_guard_failed') from None
+            common._fence(claim_guard)
+        def authorize():
+            if common._external(source_authority,source_sha) is False: raise ValueError()
+        def read():
+            result={}
+            for name,(key,_) in PUBLIC.items():
+                template=('{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}{{"\\n"}}'
+                    '{{range $k,$v := .data}}{{if eq $k "'+key+'"}}1{{end}}{{end}}')
+                raw=_call(run_bytes,guard,'get','secret',name,'--ignore-not-found=true','-o','go-template='+template)
+                if raw==b'': result[name]={'state':'absent','uid':None,'resource_version':None,'key_present':False}; continue
+                fields=raw.decode('ascii').split('\n')
+                if (len(fields)!=3 or any(not re.fullmatch(r'[A-Za-z0-9.-]{1,128}',s) for s in fields[:2])
+                        or fields[2] not in ('','1')): raise ValueError()
+                result[name]={'state':'present','uid':fields[0],'resource_version':fields[1],'key_present':fields[2]=='1'}
+            return result
+        guard(); authorize(); snapshot=source_snapshot(Path(source_root),source_sha); _source_contract(source_root,snapshot)
+        values=read()
+        if read()!=values: raise ValueError()
+        authorize()
+        if source_snapshot(Path(source_root),source_sha)!=snapshot: raise ValueError()
+        guard()
+        return {'status':'observed','source_sha':source_sha,'namespace_uid':namespace_uid,'objects':values,
+                'scope':'public-reference-metadata-only','admission_qualified':False}
+    except common.GuardLost: raise
+    except Exception: raise common.Hold('public_metadata_observation_failed') from None
 
 
 def _service(service, pod):
@@ -184,12 +334,12 @@ def _verify(paths):
 
 
 def capture(source_root, source_sha, source_authority, space_pod, namespace_uid, claim_guard, destination,
-            run_bytes=common.linux_private_bytes):
+            run_bytes=common.linux_private_bytes, *, mode='serving'):
     """One prepare-only capture. The caller owns claim and source authority."""
     paths, filefds, dirfd = {}, {}, None
     stage = 'p3_stage_source'
     try:
-        if not re.fullmatch(r'[a-f0-9]{40}', source_sha) or not namespace_uid: raise common.Hold('source_identity_invalid')
+        if not re.fullmatch(r'[a-f0-9]{40}', source_sha) or not namespace_uid or mode not in ('serving','issuer-plan'): raise common.Hold('source_identity_invalid')
         def guard():
             common._fence(claim_guard)
             raw = common._external(run_bytes, ['kubectl', '--kubeconfig', '/home/pmd/.kube/config', '--context', 'default',
@@ -212,11 +362,25 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
         stage = 'p3_stage_pod'; pod = _get(run_bytes, guard, 'pod', space_pod)
         if pod['metadata'].get('uid') != before['pod_uid'] or pod['metadata'].get('resourceVersion') != before['pod_rv']:
             raise common.Hold('space_identity_changed')
-        stage = 'p3_stage_mount'; _mounted(pod)
-        stage = 'p3_stage_service'; service = _service(_get(run_bytes, guard, 'service', 'voice-space'), pod)
+        stage = 'p3_stage_mount'
+        categories = _env_categories(pod)
+        try: _mount(pod); categories['space_mount'] = 'exact'
+        except common.Hold: categories['space_mount'] = 'mismatch'
+        if mode == 'serving': _mounted(pod)
+        signer = _signer_categories(pod) if mode == 'issuer-plan' else None
+        signer_identity = _signer_identity(run_bytes,guard) if mode == 'issuer-plan' else None
+        stage = 'p3_stage_service'
+        service = _service(_get(run_bytes, guard, 'service', 'voice-space'), pod) if mode == 'serving' else None
         identities, values = {}, {}
+        stages={'voice-principal-ca':'p3_stage_principal_ca_identity',
+                'voice-media-ca':'p3_stage_media_ca_identity','voice-space-media-server-tls':'p3_stage_space_cert_identity'}
         for name, (key, _) in PUBLIC.items():
-            stage = 'p3_stage_public_identity'; identities[name] = _meta(run_bytes, guard, 'secret', name)
+            stage = stages[name]
+            try: identities[name] = _meta(run_bytes, guard, 'secret', name)
+            except common.GuardLost: raise
+            except common.Hold as error:
+                if str(error)=='public_input_identity': raise common.Hold(stage) from None
+                raise
             stage = 'p3_stage_public_value'; values[name] = _value(run_bytes, guard, 'secret', name, key)
             stage = 'p3_stage_public_pem'; _public_pem(values[name])
         stage = 'p3_stage_config'
@@ -227,8 +391,11 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
                 if _meta(run_bytes, guard, 'secret', name) != identities[name]: raise common.Hold('public_input_changed')
             if _meta(run_bytes, guard, 'configmap', 'voice-app-config') != identities['voice-app-config']:
                 raise common.Hold('public_input_changed')
-            if workload() != before or _service(_get(run_bytes, guard, 'service', 'voice-space'), pod) != service:
+            if workload() != before or (mode == 'serving' and _service(_get(run_bytes, guard, 'service', 'voice-space'), pod) != service):
                 raise common.Hold('space_identity_changed')
+            if mode == 'issuer-plan':
+                current = _get(run_bytes, guard, 'pod', space_pod)
+                if current != pod or _signer_identity(run_bytes,guard)!=signer_identity: raise common.Hold('space_identity_changed')
             authorize()
             if source_snapshot(Path(source_root), source_sha) != snapshot: raise common.Hold('source_snapshot_changed')
             common._fence(guard)
@@ -264,13 +431,18 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
                     or os.pread(fd, 32769, 0) != values[paths[filename]]):
                 raise common.Hold('destination_changed')
         common._fence(guard)
-        return {'status': 'observed', 'source_sha': source_sha, 'namespace_uid': namespace_uid,
+        result = {'status': 'observed', 'source_sha': source_sha, 'namespace_uid': namespace_uid,
                 'source_manifest_sha256': manifest_digest,
                 'space_identity': {k: before[k] for k in ('pod_uid', 'pod_rv', 'deployment_uid', 'deployment_rv', 'container_id', 'restart_count')},
                 'space_service_spec': service, 'objects': identities, 'public_der_sha256': hashes,
                 'redis_endpoint': 'expected' if redis == b'voice-redis:6379' else 'other',
                 'admission_qualified': False,
                 'unobserved': ['projected_mount_sync', 'service_endpoint_routing', 'runtime_peer_transport', 'redis_auth', 'schema_job', 'rollout']}
+        if mode == 'issuer-plan':
+            result['scope'] = 'issuer-source-plan-only'; result['current_space_config'] = categories
+            result['current_signer'] = {'configuration':signer,'secret':signer_identity}
+            result['unobserved'].extend(['current_space_serving_configuration','current_space_https','current_space_jwks'])
+        return result
     except common.GuardLost:
         raise
     except common.Hold as error:
