@@ -22,5 +22,8 @@ health proof, and before `Session.complete`. `verify_completed(phase)` checks
 the private result while the same authority is held. The typed
 `staging_core_release` verifier and the actual caller are required dependencies;
 the local HTTP fixtures alone do not qualify a rollout or grant authority.
+If the same protected operation must be recovered, `recover_completed(session,
+release)` reopens and validates only a completed receipt without HTTP effects;
+an absent or pending receipt remains HOLD and is never replayed.
 The fixed operation journal holds credentials, private HMAC key, tokens and
 owned receipts: preserve its private custody and never print or export it.

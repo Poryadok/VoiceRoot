@@ -135,3 +135,32 @@ def verify_completed(phase):
         raise SmokeError('STAGING smoke proof changed')
     phase._guard()
     return copy.deepcopy(result)
+
+
+def recover_completed(session, release):
+    """Reopen only a completed private receipt; never replay pending effects."""
+    phase = StagingCoreSmoke(session, release)
+    try:
+        import staging_core_release
+        session.check()
+        phase.receipt = staging_core_release.verify_completed(release, session)
+        session.check()
+        base = guard.ROOT / ('rollout-' + session.operation)
+        info = os.stat(base, follow_symlinks=False)
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o022:
+            raise SmokeError('STAGING operation directory unavailable')
+        path = base / 'core-smoke'
+        if not os.path.lexists(path):
+            raise SmokeError('completed STAGING smoke unavailable')
+        intent = {'resource_context': copy.deepcopy(session.context), 'operation': session.operation,
+                  'release': copy.deepcopy(phase.receipt)}
+        phase.journal = media_operation_journal.Journal(path, intent)
+        phase._journal = phase.journal
+        phase.credentials = staging_core_credentials.CredentialInput(session, release, phase.journal)
+        phase._credentials = phase.credentials
+        phase._accounts = phase.credentials.verify()
+        return phase, verify_completed(phase)
+    except BaseException:
+        if phase.journal is not None:
+            phase.journal.close()
+        raise SmokeError('completed STAGING smoke unavailable; reconcile without replay') from None

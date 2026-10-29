@@ -90,5 +90,25 @@ class StagingSmokeTest(unittest.TestCase):
         finally:
             self.phase.journal = original
 
+    def test_recover_completed_without_source_read_or_http(self):
+        result = self.phase.run()
+        before = len(self.server.calls)
+        self.phase.journal.close()
+        with patch.object(credentials, '_open_input', side_effect=AssertionError('must use retained private receipt')):
+            recovered, actual = self.module.recover_completed(self.session, self.release)
+        self.addCleanup(recovered.journal.close)
+        self.assertEqual(actual, result)
+        self.assertEqual(len(self.server.calls), before)
+
+    def test_recover_pending_refuses_without_http_or_replay(self):
+        self.phase.run()
+        self.phase.journal.state['steps']['staging-core-smoke']['status'] = 'pending'
+        self.phase.journal.save()
+        before = len(self.server.calls)
+        self.phase.journal.close()
+        with self.assertRaises(self.module.SmokeError):
+            self.module.recover_completed(self.session, self.release)
+        self.assertEqual(len(self.server.calls), before)
+
 
 if __name__ == '__main__': unittest.main()
