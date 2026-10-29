@@ -39,6 +39,7 @@ class ProbeTest(unittest.TestCase):
                   'APNS_KEY_ID':'present','NOTIFICATION_RECORD_PUSHES':'false'}.get(field,'absent')
         if self.fault == 'secret_return' and field == 'FCM_CREDENTIALS_JSON': result = 'private-credential'
         if self.fault == 'unexpected_env' and field == 'DATABASE_URL': result = 'present'
+        if self.fault == 'empty_debug' and field == 'NOTIFICATION_DEBUG_HTTP_ENABLED': result = 'empty'
         return result.encode()
 
     def inspect(self):
@@ -73,9 +74,26 @@ class ProbeTest(unittest.TestCase):
 
     def test_duplicate_and_optional_sources_hold(self):
         self.snapshot['env'].append(copy.deepcopy(self.snapshot['env'][0]))
-        with self.assertRaises(probe.ProbeError): self.inspect()
+        with self.assertRaisesRegex(probe.ProbeError,'explicit-env-duplicate'): self.inspect()
         self.setUp(); self.snapshot['envFrom'][0]['configMapRef']['optional'] = True
         with self.assertRaises(probe.ProbeError): self.inspect()
+
+    def test_explicit_ref_failures_report_only_fixed_reason_and_field(self):
+        for fault in ('unsupported-ref','optional','missing-key'):
+            with self.subTest(fault=fault):
+                self.setUp(); entry = self.snapshot['env'][1]
+                if fault == 'unsupported-ref': entry['valueFrom'] = {'fieldRef':{'fieldPath':'metadata.name'}}
+                if fault == 'optional': entry['valueFrom']['secretKeyRef']['optional'] = True
+                if fault == 'missing-key': entry['valueFrom']['secretKeyRef']['key'] = 'private-name'
+                with self.assertRaises(probe.ProbeError) as error: self.inspect()
+                self.assertIn('explicit-env-'+fault+'-FCM_CREDENTIALS_JSON',str(error.exception))
+                self.assertNotIn('private-name',str(error.exception))
+
+    def test_empty_literal_env_is_observed_as_empty(self):
+        self.snapshot['env'].append({'name':'NOTIFICATION_DEBUG_HTTP_ENABLED'})
+        self.fault = 'empty_debug'
+        self.assertEqual(self.inspect()['fields']['NOTIFICATION_DEBUG_HTTP_ENABLED'],
+                         {'state':'empty','origin':{'source':'literal'}})
 
     def test_guard_loss_prevents_observation(self):
         with patch.object(probe.metadata,'kube_workload_snapshot',return_value=self.snap):

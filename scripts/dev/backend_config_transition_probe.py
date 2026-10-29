@@ -81,18 +81,31 @@ def inspect(workload, pod_name, run_bytes, guard):
                                      'resource_version':obj['resource_version'],'key':name[len(prefix):],'source':'envFrom'}
         reason = 'explicit-env'
         explicit = before['env']; names = [entry.get('name') for entry in explicit if isinstance(entry,dict)]
-        if len(names) != len(explicit) or len(names) != len(set(names)): raise ValueError()
+        reason = 'explicit-env-malformed'
+        if len(names) != len(explicit) or any(not isinstance(name,str) for name in names): raise ValueError()
+        reason = 'explicit-env-duplicate'
+        if len(names) != len(set(names)): raise ValueError()
         for entry in explicit:
             name = entry['name']
             if name not in origins: continue
+            reason = 'explicit-env-malformed-'+name
+            if set(entry)-{'name','value','valueFrom'}: raise ValueError()
             if 'value' in entry and 'valueFrom' not in entry:
+                if not isinstance(entry['value'],str): raise ValueError()
+                origins[name] = {'source':'literal'}
+            elif 'value' not in entry and 'valueFrom' not in entry:
                 origins[name] = {'source':'literal'}
             elif 'valueFrom' in entry and 'value' not in entry:
                 value = entry['valueFrom']
                 if not isinstance(value,dict) or len(value) != 1: raise ValueError()
                 typ, ref = next(iter(value.items()))
-                if typ not in ('secretKeyRef','configMapKeyRef') or not isinstance(ref,dict) or set(ref)-{'name','key','optional'} or ref.get('optional',False) is not False: raise ValueError()
+                reason = 'explicit-env-unsupported-ref-'+name
+                if typ not in ('secretKeyRef','configMapKeyRef') or not isinstance(ref,dict) or set(ref)-{'name','key','optional'}: raise ValueError()
+                reason = 'explicit-env-optional-'+name
+                if ref.get('optional',False) is not False: raise ValueError()
+                reason = 'explicit-env-reference-read-'+name
                 obj = reference('secret' if typ == 'secretKeyRef' else 'configmap',ref['name'])
+                reason = 'explicit-env-missing-key-'+name
                 if not isinstance(ref.get('key'),str) or ref['key'] not in obj['keys']: raise ValueError()
                 origins[name] = {'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
                                  'resource_version':obj['resource_version'],'key':ref['key'],'source':'explicit'}
