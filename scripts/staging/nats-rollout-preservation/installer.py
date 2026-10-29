@@ -138,6 +138,13 @@ def tt_resource_journal_snapshot(installed):
     except (OSError,ValueError,TypeError,KeyError,RuntimeError):
         raise Blocked('bridge_tt_upgrade_resource_reconciliation_required') from None
 
+def require_future_history_absent(installed):
+    """The exact legacy-cohort transition cannot adopt new private history."""
+    for name in ('source-authority','realtime-bootstrap'):
+        try:(Path(installed)/name).lstat()
+        except FileNotFoundError:continue
+        raise Blocked('bridge_full23_future_history_present')
+
 def binding_sha(code):
     return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
@@ -317,12 +324,13 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                 raise Blocked('bridge_upgrade_directory_untrusted')
         inbox=installed/'inbox'
         if __import__('stat').S_IMODE(inbox.lstat().st_mode)!=0o1730:raise Blocked('bridge_upgrade_directory_untrusted')
+        if version=='idle-full23-installed-cohort-v1':require_future_history_absent(installed)
         inbox.chmod(0o700)
         try:
             if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
             tt_protected={}
             tt_copies=()
-            if version in ('idle-tt-resource-fencing-v1','idle-installed-cohort-v1','idle-gis-installed-cohort-v1'):
+            if version in ('idle-tt-resource-fencing-v1','idle-installed-cohort-v1','idle-gis-installed-cohort-v1','idle-full23-installed-cohort-v1'):
                 tt_protected=tt_resource_journal_snapshot(installed)
                 tt_copies=(code,installed/'code',installed/('code-'+version+'-staged'),installed/('code-'+previous_version+'-preserved'))
                 for copy in tt_copies:
@@ -349,7 +357,9 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                 protected[str(path)]=retirement.file_sha(path)
             witnesses=story_witness.registry_snapshot()
             if kube.get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
+            if version=='idle-full23-installed-cohort-v1':require_future_history_absent(installed)
             _upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid,predecessor,version,previous_version)
+            if version=='idle-full23-installed-cohort-v1':require_future_history_absent(installed)
             for copy in tt_copies:
                 if copy.exists():tt_code_inventory(copy,root_cli.code_binding(copy))
             if story_witness.registry_snapshot()!=witnesses or kube.get('configmap','voice-nats-generation')!=marker:
