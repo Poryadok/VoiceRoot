@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import re
 import sys
@@ -137,6 +138,44 @@ def validate_plan(record,payloads,approved,source,old_policy_bytes):
         if record!=rebuilt or payloads!=expected:raise ValueError('mismatch')
     except (KeyError,IndexError,TypeError,ValueError) as exc:
         raise ValueError('release_policy_child_plan_invalid') from exc
+    return True
+
+def preflight_payloads(session):
+    """Check protected inputs and live preimages once before any child effect."""
+    import guard
+    import operator_retirement
+    import staging_prerequisites as parent
+    current=parent.require_child(session,'release_policy')
+    authority=parent.load_authority(session)
+    if not isinstance(authority,dict) or set(authority)!={'approved','source'}:
+        raise ValueError('release_policy_source_authority_invalid')
+    payloads={effect:parent.load_payload(session,'release_policy',effect)
+              for effect in ('create-policy-configmap','commit-root-policy')}
+    policy_path=guard.ROOT/'installed'/'policy.json'
+    before_info=os.lstat(policy_path)
+    before_identity=(before_info.st_dev,before_info.st_ino,before_info.st_mode,before_info.st_uid,before_info.st_nlink)
+    old=operator_retirement.private_bytes(policy_path,2<<20)
+    validate_plan(current,payloads,authority['approved'],authority['source'],old)
+    kube=Kube();namespace=kube.get('namespace','voice-staging');metadata=namespace.get('metadata',{})
+    if (metadata.get('name')!='voice-staging' or metadata.get('uid')!=current['namespace_uid']
+        or metadata.get('deletionTimestamp')):
+        raise ValueError('release_policy_namespace_changed')
+    name=current['effects'][0]['name']
+    path='/api/v1/namespaces/voice-staging/configmaps?fieldSelector=metadata.name%3D'+name+'&limit=2'
+    listing=kube.run(['get','--raw',path]);metadata=listing.get('metadata',{})
+    if (listing.get('apiVersion')!='v1' or listing.get('kind')!='ConfigMapList'
+        or listing.get('items')!=[] or metadata.get('continue')
+        or not isinstance(metadata.get('resourceVersion'),str)
+        or not re.fullmatch(r'[0-9]{1,20}',metadata['resourceVersion'])):
+        raise ValueError('release_policy_configmap_absence_changed')
+    final=operator_retirement.private_bytes(policy_path,2<<20)
+    after_info=os.lstat(policy_path)
+    after_identity=(after_info.st_dev,after_info.st_ino,after_info.st_mode,after_info.st_uid,after_info.st_nlink)
+    if (after_identity!=before_identity or final!=old
+        or parent.require_child(session,'release_policy')!=current
+        or parent.load_authority(session)!=authority):
+        raise ValueError('release_policy_preflight_changed')
+    validate_plan(current,payloads,authority['approved'],authority['source'],old)
     return True
 
 def execute(session):
