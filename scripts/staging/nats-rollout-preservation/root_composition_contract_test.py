@@ -6,6 +6,7 @@ import json
 import shutil
 import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -14,6 +15,8 @@ import bridge_root
 import compiler
 import frontend_createonly_contract_test as fixtures
 import gis_first_install as gis
+import gis_existing_update_test as gis_fixtures
+import guard_test
 import normalize
 import realtime_bootstrap
 import resource_claim
@@ -26,8 +29,59 @@ import source_plan_test
 import transaction
 
 
+def with_gis_server_defaults(kube):
+    run = kube.run
+    def server(args, body=None, timeout=30):
+        if args[:2] == ['create', '--dry-run=server'] and body and body.get('metadata', {}).get('name') == 'voice-gameintegration':
+            value = copy.deepcopy(body)
+            if value['kind'] == 'Service':
+                value['spec']['clusterIP'] = '10.43.1.99'
+                value['spec']['clusterIPs'] = ['10.43.1.99']
+            elif value['kind'] == 'Deployment':
+                value['spec']['template']['spec']['dnsPolicy'] = 'ClusterFirst'
+            return value
+        return run(args, body=body, timeout=timeout)
+    kube.run = server
+
+
 class RootCompositionContract(unittest.TestCase):
-    def test_bridge_first_install_c1_receipt_reaches_prepare_and_authorize(self):
+    def test_first_install_receipt_binds_exact_private_baseline_snapshots(self):
+        # Synthetic cluster identities: verify receipt binding, not a live PASS.
+        _kube, state, original = gis_fixtures.first_install()
+        plan = state['gis_first_install']
+        snapshots = {name: {'kind': 'Deployment', 'metadata': {
+            'name': name, 'namespace': 'voice-staging', 'uid': str(uuid.UUID(int=index + 1))},
+            'spec': {'template': {'fixture': name}}}
+            for index, name in enumerate(sorted(gis.baseline_workload_names(include_hub=True)))}
+        self.assertEqual(len(snapshots), 24)
+        plan['baseline_snapshots'] = copy.deepcopy(snapshots)
+        plan['custody']['baseline_workload_count'] = 24
+        plan['custody']['baseline_snapshots_sha256'] = gis.digest(snapshots)
+        plan['custody_binding_sha256'] = gis.digest(plan['custody'])
+        plan['prerequisite_receipt']['custody_binding_sha256'] = plan['custody_binding_sha256']
+        state['target']['gis_first_install_sha256'] = plan['source_plan_sha256']
+        state['target']['gis_first_install_normalized_sha256'] = gis.normalized_binding(plan)
+        state['context'] = {'original_snapshots': copy.deepcopy(snapshots), 'snapshots': {}}
+        receipt = gis.transition_receipt(plan, original['ready'], source_ci=plan['source_ci'],
+                                         custody=plan['custody'], target_mode='app-only')
+        self.assertTrue(gis.validate_transition_receipt(receipt, state))
+        state['context']['snapshots'] = {'later-state': 'changed'}
+        self.assertTrue(gis.validate_transition_receipt(receipt, state))
+        for fault in ('tamper', 'missing', 'extra', 'duplicate_uid'):
+            with self.subTest(fault=fault):
+                altered = copy.deepcopy(state)
+                rows = altered['gis_first_install']['baseline_snapshots']
+                first, second = sorted(rows)[:2]
+                if fault == 'tamper': rows[first]['spec']['template']['fixture'] = 'changed'
+                elif fault == 'missing': del rows[first]
+                elif fault == 'extra': rows['voice-foreign'] = copy.deepcopy(rows[first])
+                else: rows[second]['metadata']['uid'] = rows[first]['metadata']['uid']
+                expected = ('gis_first_install_transition_custody_invalid' if fault == 'tamper'
+                            else 'gis_first_install_baseline_workload_count_invalid')
+                with self.assertRaisesRegex(gis.Blocked, expected):
+                    gis.validate_transition_receipt(receipt, altered)
+
+    def _exercise_bridge(self, ordinary_fault=None):
         # C1 producer/loaders and external Kube/NATS/custody are controlled
         # boundaries; the typed receipt is synthetic, not a completed PASS.
         source = Path(source_plan_test.SOURCE)
@@ -36,8 +90,10 @@ class RootCompositionContract(unittest.TestCase):
             installed = root / 'installed'
             (installed / 'sources').mkdir(parents=True)
             kube, params = source_plan_test.SourceTests().canonical_fixture('app-only')
-            for kind in ('Service', 'Deployment'):
-                del kube.objects[(kind, 'voice-gameintegration')]
+            ordinary = ordinary_fault is not None
+            if not ordinary:
+                for kind in ('Service', 'Deployment'):
+                    del kube.objects[(kind, 'voice-gameintegration')]
             run = kube.run
             def inventory(args, body=None, timeout=30):
                 if args[:2] == ['get', 'services,deployments']:
@@ -46,11 +102,15 @@ class RootCompositionContract(unittest.TestCase):
                                       if kind in ('Service', 'Deployment')]}
                 return run(args, body=body, timeout=timeout)
             kube.run = inventory
+            with_gis_server_defaults(kube)
             enrolled = {'voice-gateway', *('voice-' + name for name in runtime_stage.LEAVES),
                         'voice-web', 'voice-admin', 'voice-developer-portal', source_plan.PRINCIPAL_PUBLISHER}
+            if ordinary: enrolled.add('voice-gameintegration')
             snapshots = {name: copy.deepcopy(obj) for (kind, name), obj in kube.objects.items()
                          if kind == 'Deployment' and name in enrolled}
-            snapshots.pop('voice-nats-hub', None)
+            snapshots[runtime_stage.HUB] = {'metadata': {'name': runtime_stage.HUB, 'uid': 'fixture-hub'},
+                'spec': {'replicas': 1, 'template': {'spec': {'containers': [
+                    {'name': 'nats', 'image': 'example.invalid/nats@sha256:' + 'c' * 64}]}}}}
             old_images = {name + '/' + container['name']:
                 'example.invalid/' + container['name'] + '@sha256:' + 'c' * 64
                 for name, row in snapshots.items()
@@ -68,6 +128,7 @@ class RootCompositionContract(unittest.TestCase):
                              'spec': {'volumeName': 'fixture-pv'}},
                 final_pv={'metadata': {'uid': 'fixture-pv'}, 'spec': {'local': {'path': '/fixture'}}},
                 final_path=root / 'fixture-store')
+            stage.operation = 'a' * 12
             stage.fence = Mock()
             stage.verify_final_storage = Mock()
             stage.prepared = Mock()
@@ -116,7 +177,36 @@ class RootCompositionContract(unittest.TestCase):
                 return copy.deepcopy(approved)
             image = approved['images']['gameintegration']
             ctx = resource_claim_test.context()
-            ctx.update(commit=approved['source_sha'], images={'voice-gameintegration/gameintegration': image})
+            if ordinary:
+                compile_params = {k: v for k, v in params.items() if k in optional}
+                compile_params.update(registry=source_authority.REGISTRY, tag=approved['source_sha'], mode='app-only',
+                    changed_services=[], images={key: value for key, value in old_images.items()
+                                                if not key.startswith(runtime_stage.HUB + '/')},
+                    contract=contract, enrolled=list(stage.snapshots), generation=marker['data']['generation'],
+                    dataPVC=marker['data']['dataPVC'])
+                parameter = root / 'expected-parameters.json'
+                output = root / ('target-' + approved['source_sha'] + '.json')
+                parameter.write_text(json.dumps(compile_params))
+                with patch.object(compiler, 'decode_yaml', side_effect=source_plan_test.decoder):
+                    compiler.main([str(source), str(parameter), str(output)], producer=kube)
+                expected_images = json.loads(output.read_text())['target']['images']
+                candidate_images = copy.deepcopy(expected_images)
+                if ordinary_fault == 'backend': del candidate_images['voice-user/user']
+                if ordinary_fault == 'frontend': del candidate_images['voice-web/web']
+                if ordinary_fault == 'backend_admission':
+                    existing_run = kube.run
+                    def admission(args, body=None, timeout=30):
+                        value = existing_run(args, body=body, timeout=timeout)
+                        if (args[:2] == ['apply', '--dry-run=server'] and body
+                            and body.get('kind') == 'Deployment'
+                            and body.get('metadata', {}).get('name') == 'voice-user'):
+                            value['spec']['template']['spec']['containers'].append({
+                                'name': 'admission-sidecar', 'image': 'example.invalid/sidecar@sha256:' + 'f' * 64})
+                        return value
+                    kube.run = admission
+            else:
+                candidate_images = {'voice-gameintegration/gameintegration': image}
+            ctx.update(commit=approved['source_sha'], images=candidate_images)
             card = resource_claim_test.card(ctx)
             card['observed']['images'] = copy.deepcopy(old_images)
             journal = resource_claim_test.MemoryJournal()
@@ -149,30 +239,39 @@ class RootCompositionContract(unittest.TestCase):
             execution = {'dispatcher_run_id': 17, 'head_sha': params['tag']}
             request = {'nonce': 'a' * 64, 'token': 'synthetic', 'mode': 'app-only',
                        'changed_services': [], 'gis_first_install': True}
+            if ordinary: del request['gis_first_install']
             cut = {'manifest': {'archive_sha256': '6' * 64}, 'census': {'fixture': 'cut'}}
             cut['census_sha256'] = resource_claim.digest(cut['census'])
             import actor_root, nats_root_plan, nats_contract_custody, gis_prerequisite
+            import gis_existing_update
             import datetime as dt
             gis_execute = Mock()
+            captures = Mock(return_value=stage)
+            class ReachedC1(Exception):
+                pass
+            c1 = Mock(side_effect=ReachedC1 if ordinary else c1_prepare)
             with contextlib.ExitStack() as stack:
                 for seam in (patch.object(bridge_root, 'INSTALLED', installed), patch.object(bridge_root.guard, 'ROOT', root),
                     patch.object(root_cli, 'ROOT', root), patch.object(bridge_root, 'Kube', return_value=kube),
                     patch.object(root_cli, 'Kube', return_value=kube), patch.object(actions, '_idle'),
+                    patch.object(gis_existing_update, 'load_authority', return_value=None),
+                    patch.object(actions, '_previous_gis_transition', return_value=None),
                     patch.object(actions, '_dispatcher', return_value=(17, execution)),
                     patch.object(source_authority, 'capture_source', side_effect=capture_source),
                     patch.object(bridge_root, 'record_source_authority'),
                     patch.object(compiler, 'decode_yaml', side_effect=source_plan_test.decoder),
                     patch.object(compiler, 'ProducerKube', return_value=kube),
-                    patch.object(runtime_stage.RolloutStage, 'capture', return_value=stage),
+                    patch.object(runtime_stage.RolloutStage, 'capture', new=captures),
                     patch.object(actor_root, 'preflight', return_value=None), patch.object(actor_root, 'revalidate'),
                     patch.object(bridge_root, 'actor_after_realtime_bootstrap', return_value=None),
                     patch.object(nats_root_plan, 'preflight', return_value={'scripts': {}, 'plan': {'actions': []}, 'binding': {}}),
-                    patch.object(realtime_bootstrap, 'run_prepare', side_effect=c1_prepare),
+                    patch.object(realtime_bootstrap, 'run_prepare', new=c1),
                     patch.object(realtime_bootstrap, 'load_completed', side_effect=c1_load),
                     patch.object(realtime_bootstrap, 'load_plan', return_value=c1_plan),
                     patch.object(source_authority, '_head'), patch.object(source_authority, '_headers', return_value={}),
                     patch.object(transaction.migrations, 'preflight', return_value={}),
                     patch.object(transaction.migrations, 'execute', return_value=[]),
+                    patch.object(transaction.migrations.bot_migration, 'required', return_value=False),
                     patch.object(transaction.space_safeguards, 'preflight', return_value=None),
                     patch.object(transaction.space_safeguards, 'combined_capacity', return_value={}),
                     patch.object(transaction.space_safeguards, 'before_migrate'),
@@ -184,7 +283,7 @@ class RootCompositionContract(unittest.TestCase):
                     patch.object(transaction, 'require_original_live_census', return_value={}),
                     patch.object(transaction, 'capture_cut', return_value=copy.deepcopy(cut)),
                     patch.object(transaction, 'DockerRuntime'), patch.object(transaction, 'verify_archive', return_value=True),
-                    patch.object(transaction, 'revalidate_inputs'), patch.object(gis, 'preflight'),
+                    patch.object(transaction, 'revalidate_inputs'), patch.object(transaction, 'reconstruct', return_value=stage),
                     patch.object(gis_prerequisite, 'preflight'), patch.object(transaction, 'apply_contract', return_value={}),
                     patch.object(nats_contract_custody, 'advance', return_value={}),
                     patch.object(transaction, 'execute_gis_first_install', new=gis_execute),
@@ -192,24 +291,75 @@ class RootCompositionContract(unittest.TestCase):
                     patch('grp.getgrnam', return_value=SimpleNamespace(gr_gid=0))):
                     stack.enter_context(seam)
                 with resource_claim.command_scope(session.check):
+                    if ordinary:
+                        if ordinary_fault == 'none':
+                            with self.assertRaises(ReachedC1): actions._prepare(request)
+                            c1.assert_called_once()
+                        else:
+                            with self.assertRaisesRegex(bridge_root.Blocked, 'realtime_bootstrap_candidate_changed'):
+                                actions._prepare(request)
+                            c1.assert_not_called()
+                        return
                     state = actions._prepare(request)
+                    self.assertEqual(captures.call_count, 2)
+                    self.assertEqual(set(stage.snapshots), gis.baseline_workload_names(include_hub=True))
+                    self.assertNotIn('voice-gameintegration', stage.snapshots)
                     self.assertEqual(state['realtime_bootstrap'], receipt)
                     self.assertEqual(state['target']['realtime_bootstrap_sha256'], resource_claim.digest(receipt))
                     self.assertEqual(state['resource_fence'], session.binding())
                     self.assertEqual(session.binding()['target_sha256'], resource_claim.digest(state['target']))
                     self.assertIn('gis_first_install', state)
                     base = root / ('rollout-' + session.operation)
+                    self.assertEqual(state['target']['gis_first_install_normalized_sha256'],
+                        gis.normalized_binding(state['gis_first_install']))
+                    for fault in ('service', 'deployment', 'allocation'):
+                        with self.subTest(normalized_tamper=fault):
+                            altered = copy.deepcopy(state)
+                            plan = altered['gis_first_install']
+                            if fault == 'allocation': plan['service_allocation'] = 'foreign'
+                            elif fault == 'service':
+                                service = next(row for row in plan['objects'] if row['kind'] == 'Service')
+                                service['spec']['ports'][0]['port'] += 1
+                            else:
+                                deployment = next(row for row in plan['objects'] if row['kind'] == 'Deployment')
+                                deployment['spec']['template']['spec']['containers'][0]['image'] = 'example.invalid/foreign@sha256:' + 'f' * 64
+                            with self.assertRaisesRegex(gis.Blocked, 'gis_first_install_normalized_binding_changed'):
+                                transaction.authorize(kube, base, altered, '6' * 64,
+                                    altered['cut']['manifest_sha256'], {})
+                            gis_execute.assert_not_called()
+                            self.assertFalse((base / 'apply-authorization.json').exists())
                     authorization = transaction.authorize(kube, base, state, '6' * 64,
                         state['cut']['manifest_sha256'], {})
                     self.assertEqual(authorization['resource_fence'], session.binding())
                     self.assertEqual(authorization['target'], state['target'])
                     self.assertEqual((state['phase'], state['status']), ('PAUSED_APPLY', 'WAITING'))
                     gis_execute.assert_called_once()
+                    guard_receipt = guard_test.receipt()
+                    guard_receipt.update(schema='nats-rollout-preservation-v1', operation=session.operation,
+                        target=copy.deepcopy(authorization['target']), backup=copy.deepcopy(authorization['backup']),
+                        expires_at=authorization['expires_at'], resource_fence=copy.deepcopy(authorization['resource_fence']))
+                    workspace = installed / 'sources' / session.operation
+                    args = (guard_receipt['target']['registry'], guard_receipt['target']['tag'], 'app-only', [], workspace)
+                    bridge_root.guard.validate(guard_receipt, *args)
+                    for field in ('gis_first_install_sha256', 'gis_first_install_normalized_sha256'):
+                        bad = copy.deepcopy(guard_receipt)
+                        del bad['target'][field]
+                        bad['resource_fence']['target_sha256'] = resource_claim.digest(bad['target'])
+                        with self.assertRaisesRegex(bridge_root.guard.Blocked, 'gis_first_install_target_binding_invalid'):
+                            bridge_root.guard.validate(bad, *args)
+
+    def test_bridge_first_install_c1_receipt_reaches_prepare_and_authorize(self):
+        self._exercise_bridge()
+
+    def test_ordinary_candidate_inventory_is_exact_before_c1(self):
+        for fault in ('none', 'backend', 'frontend', 'backend_admission'):
+            with self.subTest(fault=fault): self._exercise_bridge(fault)
 
     def test_first_install_compiler_output_normalizes_without_generic_gis_apply(self):
         for mode in ('full', 'app-only'):
             with self.subTest(mode=mode):
                 kube, pack, _ = fixtures.FrontendCreateOnlyContract().compile_absent(mode, first_install=True)
+                with_gis_server_defaults(kube)
                 self.assertEqual(pack['manifests'], [])
                 source_plan = pack['gis_first_install']
                 self.assertEqual(pack['target']['gis_first_install_sha256'], gis.digest(source_plan))
@@ -227,9 +377,18 @@ class RootCompositionContract(unittest.TestCase):
                             '123456abcdef', {}, pack['migrations'], pack['nonnats'],
                             gis_first_install=tampered, gis_source_root=Path(tmp), gis_source_capture={})
                     capture.assert_not_called()
-                stage = SimpleNamespace(expected={'source_claim': 'fixture'}, snapshots={})
-                target = normalize.normalize_target(kube, stage, pack['manifests'], pack['target'])
+                stage = SimpleNamespace(expected={'source_claim': 'fixture'}, snapshots={}, operation='123456abcdef')
+                original = gis.bind_operation(source_plan, stage.operation, pack['target'])
+                target, normalized_plan = normalize.normalize_first_install(kube, stage, pack['manifests'], pack['target'], original)
                 self.assertEqual(target['gis_first_install_sha256'], pack['target']['gis_first_install_sha256'])
+                normalized_deployment = next(row for row in normalized_plan['objects'] if row['kind'] == 'Deployment')
+                normalized_service = next(row for row in normalized_plan['objects'] if row['kind'] == 'Service')
+                self.assertEqual(target['template_hashes']['voice-gameintegration'],
+                    gis.digest(normalized_deployment['spec']['template']))
+                self.assertEqual(target['input_template_hashes']['voice-gameintegration'],
+                    pack['target']['template_hashes']['voice-gameintegration'])
+                self.assertEqual(normalized_plan['service_allocation'], 'server')
+                self.assertNotIn('clusterIP', normalized_service['spec'])
 
 
 if __name__ == '__main__':
