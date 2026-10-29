@@ -43,6 +43,18 @@ class BindRaceTest(unittest.TestCase):
             with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_config_plan(self.config)
         self.assertEqual(self.ledger.row['status'], 'uncertain')
 
+    def test_p3_services_use_only_fixed_source_verifier(self):
+        calls = []
+        def checked(cut, config, service):
+            calls.append(service)
+            raise RuntimeError('source verifier reached')
+        module = SimpleNamespace(verify_deployment_successor=checked)
+        for service in ('chat', 'realtime'):
+            with self.subTest(service=service), mock.patch.dict(sys.modules, {'realtime_config_transition': module}):
+                with self.assertRaisesRegex(RuntimeError, 'source verifier reached'):
+                    self.cut._validate_config_snapshot(self.config, {'services': [service], 'steps': {}, 'effects': {}}, {})
+        self.assertEqual(calls, ['chat', 'realtime'])
+
 
 class SuccessorTest(unittest.TestCase):
     def setUp(self):

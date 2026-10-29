@@ -63,6 +63,8 @@ on:
       - scripts/dev/full_cohort_oci_test.py
       - scripts/dev/full_cohort_package_phase.py
       - scripts/dev/full_cohort_package_phase_test.py
+      - scripts/dev/full_cohort_inventory_phase.py
+      - scripts/dev/full_cohort_inventory_phase_test.py
       - scripts/dev/realtime_secret_phase.py
       - scripts/dev/realtime_secret_phase_test.py
       - scripts/dev/realtime_secret_provision.py
@@ -156,6 +158,7 @@ jobs:
           python -B scripts/dev/full_cohort_image_apply_composition_test.py
           python -B scripts/dev/full_cohort_oci_test.py
           python -B scripts/dev/full_cohort_package_phase_test.py
+          python -B scripts/dev/full_cohort_inventory_phase_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
           python -B scripts/dev/realtime_secret_provision_test.py
           python -B scripts/dev/realtime_migration_verify_test.py
