@@ -74,6 +74,11 @@ FILTER_JSON='{"code":"true","auth":"true"}' GO_SERVICES_JSON='[]' run_matrix
 assert_contains "${build_services}" auth
 assert_not_contains "${build_services}" gateway
 
+echo "== auth consumer test impact does not deploy Auth =="
+FILTER_JSON='{"code":"true","svc_subscription":"true","auth_test_impact":"true"}' GO_SERVICES_JSON='["subscription"]' run_matrix
+[[ "${run_auth}" == "false" ]] || fail "test impact must not set Auth deployment"
+assert_not_contains "${build_services}" auth
+
 echo "== controlledgame test-only change never builds/promotes/rolls out images =="
 FILTER_JSON='{"code":"true","svc_controlledgame":"true"}' GO_SERVICES_JSON='["controlledgame"]' run_matrix
 [[ "${build_services}" == "[]" ]] || fail "controlledgame test-only change must not build images"

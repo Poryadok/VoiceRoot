@@ -113,7 +113,7 @@ check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-dr
 check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows
 check_if "$(or_true "${RUN_WEB}" "${RUN_FLUTTER}" "${GLOBAL}")" web
 check_if "${RUN_GO_INTEGRATION}" backend-go-integration-pr
-check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth
+check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}" "${RUN_AUTH_TEST_IMPACT:-false}")" backend-auth
 if [[ "${EVENT_NAME}" == pull_request ]]; then
   check_if "$(or_true "${RUN_AUTH}" "${FILTER_AUTH}" "${GLOBAL}")" backend-auth-image
 fi

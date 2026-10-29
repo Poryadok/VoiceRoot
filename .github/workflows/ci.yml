@@ -62,6 +62,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       windows_desktop: ${{ steps.filter.outputs.windows_desktop }}
       auth: ${{ steps.filter.outputs.auth }}
+      auth_test_impact: ${{ steps.filter.outputs.auth_test_impact }}
       developer-portal: ${{ steps.filter.outputs.developer-portal }}
       admin: ${{ steps.filter.outputs.admin }}
       compose: ${{ steps.filter.outputs.compose }}
@@ -72,6 +73,7 @@ jobs:
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       docker_go_services: ${{ steps.gomatrix.outputs.docker_go_services }}
       integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
+      integration_analytics: ${{ steps.gomatrix.outputs.integration_analytics == 'true' || steps.filter.outputs.analytics_integration_inputs == 'true' }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
       build_services: ${{ steps.stagingmatrix.outputs.build_services }}
@@ -1180,11 +1182,13 @@ jobs:
       - name: Go mod tidy (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         run: go mod tidy
+      - name: Require Docker for Go integration
+        run: docker info >/dev/null
       - name: Go integration test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
-        run: go test -timeout 20m ./...
+        run: go test -count=1 -timeout 20m ./...
 
   staging-images-push:
     needs: changes
@@ -1334,6 +1338,7 @@ jobs:
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_auth == 'true' ||
        needs.changes.outputs.auth == 'true' ||
+       (github.event_name == 'pull_request' && needs.changes.outputs.auth_test_impact == 'true') ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
@@ -2039,6 +2044,7 @@ jobs:
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
           RUN_PORTAL: ${{ needs.changes.outputs.run_developer_portal }}
           FILTER_AUTH: ${{ needs.changes.outputs.auth }}
+          RUN_AUTH_TEST_IMPACT: ${{ github.event_name == 'pull_request' && needs.changes.outputs.auth_test_impact == 'true' }}
           FILTER_ADMIN: ${{ needs.changes.outputs.admin }}
           FILTER_PORTAL: ${{ needs.changes.outputs.developer-portal }}
           PROTOS: ${{ needs.changes.outputs.protos }}
@@ -2053,7 +2059,7 @@ jobs:
           RUN_A1_E2E: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
           RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
           RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true') }}
+          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && needs.changes.outputs.integration_analytics == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true'))) }}
           RUN_GRAFANA_ANALYTICS_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.compose == 'true' }}
           RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
           JOB_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.flutter-key-backup-goldens.result }}
@@ -2567,6 +2573,8 @@ jobs:
     if: >-
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto') ||
+      (github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+       needs.changes.outputs.integration_analytics == 'true') ||
       (
         github.event_name == 'push' &&
         github.ref == 'refs/heads/master' &&
@@ -2606,7 +2614,14 @@ jobs:
         env:
           CLICKHOUSE_DSN: clickhouse://default:voice-clickhouse-ci@localhost:9000/voice
           CGO_ENABLED: "0"
-        run: go test -tags=integration ./internal/store/...
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -json -count=1 -tags=integration ./internal/store/... | tee "$RUNNER_TEMP/analytics-go-test.jsonl"
+          python3 ../../../scripts/ci/go_integration_receipts.py \
+            --events "$RUNNER_TEMP/analytics-go-test.jsonl" \
+            --package voice/backend/analytics/internal/store \
+            --test TestClickHouseInsertBatch --exit-code 0
 
   grafana-analytics-smoke:
     needs: changes

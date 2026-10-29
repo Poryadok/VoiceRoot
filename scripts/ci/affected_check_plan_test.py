@@ -91,6 +91,27 @@ class AffectedCheckPlanTests(unittest.TestCase):
                                                               'backend-go': result}))
         self.assertTrue(planner.verify_results(plan, {'current-diff-contract': 'success'}))
 
+    def test_plan_gate_is_bound_to_candidate_and_requires_receipts(self):
+        candidate = 'a' * 40
+        identity = {'base': 'b' * 40, 'head': 'c' * 40, 'candidate': candidate}
+        plan = {'schema': 'voice-affected-check-plan-v1',
+                'identity': identity,
+                'checks': {'current-diff-contract': ['every pull request'],
+                           'flutter-unit-tests': ['src/frontend/lib/main.dart']}}
+        needs = {'current-diff-contract': {'result': 'success'},
+                 'flutter-unit-tests': {'result': 'success'},
+                 'flutter-unit-receipts': {'result': 'success'}}
+        self.assertEqual(planner.verify_gate(plan, needs, identity), [])
+        for value in ('failure', 'cancelled', 'skipped', ''):
+            with self.subTest(result=value):
+                changed = dict(needs, **{'flutter-unit-receipts': {'result': value}})
+                self.assertIn('flutter-unit-tests', planner.verify_gate(plan, changed, identity))
+        self.assertIn('flutter-unit-tests', planner.verify_gate(plan, {}, identity))
+        with self.assertRaises(ValueError):
+            planner.verify_gate(plan, needs, dict(identity, base='d' * 40))
+        with self.assertRaises(ValueError):
+            planner.verify_gate(dict(plan, checks={}), needs, identity)
+
     def test_release_branch_always_requires_history_audit(self):
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matched = planner.match_filters(rules, ['docs/TESTING.md'])
@@ -120,9 +141,19 @@ class AffectedCheckPlanTests(unittest.TestCase):
         matrix = planner.resolve_go_matrix(ROOT, {'code': True, 'svc_chat': True})
         self.assertEqual(set(matrix['go_services']), {'chat', 'messaging', 'file', 'gateway'})
         self.assertEqual(set(matrix['docker_go_services']), {'chat', 'messaging'})
-        self.assertEqual(matrix['integration_go_services'], ['chat'])
+        self.assertTrue({'chat', 'messaging', 'file', 'gateway', 'analytics',
+                         'notification', 'realtime'} <= set(matrix['integration_go_services']))
         self.assertTrue(matrix['run_go'])
         self.assertTrue(matrix['run_pkg'])
+
+    def test_migration_only_selects_owner_and_event_consumers(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        path = 'src/backend/migrations/chat_db/000999_example.up.sql'
+        matched = planner.match_filters(rules, [path])
+        matrix = planner.resolve_go_matrix(ROOT, planner.effective_filters(matched))
+        integrations = set(matrix['integration_go_services'])
+        self.assertTrue({'chat', 'messaging', 'realtime', 'notification', 'analytics'} <= integrations)
+        self.assertNotIn('story', integrations)
 
     def test_plan_binds_source_and_is_deterministic(self):
         with tempfile.TemporaryDirectory() as d:
@@ -252,6 +283,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
             (['protos/voice/chat/v1/chat.proto'], ['chat'], [], True, True),
             (['scripts/ci/unknown.py'], ['chat'], [], True, True),
             (['src/backend/migrations/auth_db/000999_test.up.sql'], [], [], False, False),
+            (['docker/clickhouse/init/001_events.sql'], [], [], False, False),
         )
         for paths, go, integration, run_go, run_pkg in cases:
             with self.subTest(paths=paths):
@@ -263,6 +295,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 flags.update(run_go=str(run_go).lower(), run_pkg=str(run_pkg).lower(),
                              run_auth=flags['auth'], run_web=flags['frontend'],
                              run_admin=flags['admin'], run_developer_portal=flags['developer-portal'],
+                             integration_analytics=str('analytics' in integration or
+                                                       flags['analytics_integration_inputs'] == 'true').lower(),
                              integration_go_services=json.dumps(integration, separators=(',', ':')))
                 values = gate.context('pull_request', **flags)
                 self.assertEqual(gate.run_gate(values).returncode, 0)

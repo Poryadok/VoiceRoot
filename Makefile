@@ -327,6 +327,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/full_application_request_test.py"
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
 	python3 "$(ROOT)/scripts/ci/affected_check_plan_test.py"
+	python3 "$(ROOT)/scripts/ci/go_integration_receipts_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
 	python3 "$(ROOT)/scripts/ci/gate-latency_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"

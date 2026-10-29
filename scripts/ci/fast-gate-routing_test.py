@@ -103,6 +103,43 @@ class FastGateRoutingTests(unittest.TestCase):
             flags = self.filters_for(database.relative_to(ROOT).as_posix() + '/000999_test.up.sql')
             self.assertEqual(flags[selector], 'true', database.name)
 
+    def test_auth_consumer_checks_follow_subscription_and_contract_inputs(self):
+        for path in ('src/backend/subscription/internal/events/consumer.go',
+                     'src/backend/migrations/subscription_db/000999_test.up.sql',
+                     'protos/voice/subscription/v1/subscription.proto'):
+            with self.subTest(path=path):
+                flags = self.filters_for(path)
+                self.assertEqual(flags.get('auth_test_impact'), 'true')
+                values = policy.context('pull_request', **flags)
+                self.assertTrue(policy.evaluate(policy.job_condition('backend-auth'), values))
+                self.assertFalse(policy.evaluate(policy.job_condition('backend-auth-image'), values))
+                self.assertNotEqual(policy.run_gate(values, 'backend-auth', 'skipped').returncode, 0)
+
+    def test_selected_analytics_integration_is_a_required_pr_job(self):
+        values = policy.context('pull_request', code='true', integration_analytics='true')
+        self.assertTrue(policy.evaluate(policy.job_condition('analytics-clickhouse-integration'), values))
+        for result in ('skipped', 'failure', 'cancelled', ''):
+            self.assertNotEqual(policy.run_gate(values, 'analytics-clickhouse-integration', result).returncode, 0)
+        values['needs.changes.outputs.integration_analytics'] = 'false'
+        self.assertFalse(policy.evaluate(policy.job_condition('analytics-clickhouse-integration'), values))
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        steps = workflow['jobs']['analytics-clickhouse-integration']['steps']
+        run = next(s['run'] for s in steps if s.get('name') == 'Analytics ClickHouse integration tests')
+        self.assertIn('go test -json -count=1 -tags=integration', run)
+        self.assertIn('go_integration_receipts.py', run)
+        self.assertIn('TestClickHouseInsertBatch', run)
+
+    def test_clickhouse_schema_alone_requires_analytics_integration(self):
+        flags = self.filters_for('docker/clickhouse/init/001_events.sql')
+        self.assertEqual(flags.get('analytics_integration_inputs'), 'true')
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        output = workflow['jobs']['changes']['outputs']['integration_analytics']
+        self.assertTrue(policy.evaluate(output, {'steps.filter.outputs.analytics_integration_inputs': 'true',
+                                                  'steps.gomatrix.outputs.integration_analytics': 'false'}))
+        values = policy.context('pull_request', integration_analytics='true', **flags)
+        self.assertTrue(policy.evaluate(policy.job_condition('analytics-clickhouse-integration'), values))
+        self.assertNotEqual(policy.run_gate(values, 'analytics-clickhouse-integration', 'skipped').returncode, 0)
+
     def test_docker_matrix_retains_source_consumers_without_s2s_builds(self):
         for seed, expected in (
                 ('file', {'file'}), ('notification', {'notification'}),
@@ -202,6 +239,26 @@ class FastGateRoutingTests(unittest.TestCase):
             self.assertNotIn('needs.backend-go-pkg', policy.job_condition(job))
         values = policy.context('pull_request', run_go='true', run_pkg='true')
         self.assertNotEqual(policy.run_gate(values, 'backend-go-pkg', 'failure').returncode, 0)
+
+    def test_go_integrations_require_docker_and_execute_without_test_cache(self):
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        steps = workflow['jobs']['backend-go-integration-pr']['steps']
+        docker_step = next(s for s in steps if s.get('name') == 'Require Docker for Go integration')
+        test_step = next(s for s in steps if s.get('name', '').startswith('Go integration test'))
+        self.assertLess(steps.index(docker_step), steps.index(test_step))
+        self.assertIn('go test -count=1', test_step['run'])
+        with tempfile.TemporaryDirectory() as directory:
+            command = Path(directory) / 'docker'
+            command.write_text('#!/bin/sh\nexit 1\n', encoding='utf-8')
+            command.chmod(0o755)
+            env = dict(os.environ, PATH=directory + os.pathsep + os.environ['PATH'])
+            result = subprocess.run([policy.bash(), '-c', docker_step['run']], env=env,
+                                    text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            command.write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+            result = subprocess.run([policy.bash(), '-c', docker_step['run']], env=env,
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == '__main__':

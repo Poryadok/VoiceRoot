@@ -119,6 +119,26 @@ Generated modules, shared pkg, module manifests, context exclusions and global
 wiring conservatively select all images/checks. Unsupported COPY grammar or ADD
 widens selection. Post-merge staging build/promotion policy is unchanged.
 
+The PR Go integration matrix retains the existing RPC-neighbour and Docker
+source-consumer selections and adds event subscribers and dedicated invalidation
+consumers from [CONTRACT_MATRIX](../../docs/CONTRACT_MATRIX.md). Auth, shared packages, proto,
+shared build inputs and global CI/runtime wiring conservatively select all Go
+service integrations until a narrower verified dependency inventory exists.
+Migration paths select their owning service through the existing path filters;
+the same RPC and event consumer expansion then applies. This routing does not
+by itself prove that a required test executed: opt-in skips and Testcontainers
+availability must be verified separately.
+
+When Analytics is in the affected Go integration matrix, the dedicated PR
+ClickHouse job also runs. It checks the uncached JSON test stream for an actual
+successful `TestClickHouseInsertBatch` execution; a skipped or missing case
+cannot satisfy the job. The full Go matrix still needs its own case inventory
+and member receipts.
+
+PR changes to Subscription source/migrations or protobufs also select Auth tests
+because Auth consumes Subscription events and compiles contracts. The separate
+`auth_test_impact` filter does not select Auth image builds or deployments.
+
 Offline routing tests prove selector/gate agreement and required-result failure
 propagation, not application runtime correctness or latency improvement. Keep
 hosted exact-head CI and the existing measurement methodology below.

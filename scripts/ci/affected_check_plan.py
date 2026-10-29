@@ -13,7 +13,7 @@ import tempfile
 
 KNOWN_FILTERS = frozenset('''global ci_global ci_scripts go_build_shared nats_renderer
     history_audit match_squad_overlay a1_t106_live a1_e2e a1_attachment_restart
-    staging_infra protos pkg frontend dev_web_publish windows_desktop auth
+    staging_infra analytics_integration_inputs protos pkg frontend dev_web_publish windows_desktop auth auth_test_impact
     developer-portal admin compose full_application_request'''.split()) | frozenset(
         'svc_' + name for name in '''analytics bot chat controlledgame federation file
         gameintegration gateway matchmaking messaging moderation notification realtime
@@ -136,6 +136,29 @@ def verify_results(plan, results):
     return [name for name in sorted(plan['checks']) if results.get(name) != 'success']
 
 
+def verify_gate(plan, needs, identity):
+    """Check job-level results for a source-bound PR plan.
+
+    Matrix-member completeness requires separate receipts; this function does
+    not claim to establish it from GitHub's aggregate job result.
+    """
+    if (not isinstance(identity, dict) or set(identity) != {'base', 'head', 'candidate'} or
+            any(not isinstance(oid, str) or not re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', oid)
+                for oid in identity.values()) or
+            plan.get('schema') != 'voice-affected-check-plan-v1' or
+            plan.get('identity') != identity or
+            not isinstance(plan.get('checks'), dict) or
+            'current-diff-contract' not in plan['checks']):
+        raise ValueError('invalid or mismatched affected-check plan')
+    failures = []
+    for name in sorted(plan['checks']):
+        jobs = ('flutter-unit-tests', 'flutter-unit-receipts') if name == 'flutter-unit-tests' else (name,)
+        if any(not isinstance(needs.get(job), dict) or needs[job].get('result') != 'success'
+               for job in jobs):
+            failures.append(name)
+    return failures
+
+
 def resolve_go_matrix(root, filters):
     env = dict(os.environ)
     env['FILTER_JSON'] = json.dumps({key: str(value).lower() for key, value in filters.items()})
@@ -195,6 +218,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
     selected('a1-flutter-profile-handoff', ('global', 'a1_t106_live'))
     selected('a1-attachment-restart-proof', broad + ('a1_attachment_restart',))
     selected('compose-e2e', broad)
+    selected('analytics-clickhouse-integration', ('analytics_integration_inputs',), enabled='analytics' in integration)
     if flags.get('code'):
         selected('protobuf', broad + ('protos',))
         selected('compose-config', broad + ('compose',))
@@ -205,8 +229,8 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('flutter-windows', ('windows_desktop',))
         selected('web', broad + ('frontend',))
         selected('backend-go-integration-pr', enabled=bool(integration))
-        for name in ('backend-auth', 'backend-auth-image'):
-            selected(name, broad + ('auth',))
+        selected('backend-auth', broad + ('auth', 'auth_test_impact'))
+        selected('backend-auth-image', broad + ('auth',))
         selected('admin', broad + ('admin',))
         selected('developer-portal', broad + ('developer-portal',))
     return {'components': {'go': matrix['go_services'],
@@ -264,7 +288,7 @@ def build_plan(root, base, head, candidate, head_ref=''):
         keys = set(re.findall(r'^([A-Za-z0-9_-]+):\s*$',
                               filter_path.read_text(encoding='utf-8'), re.M))
         keys.update(('code', 'global', 'ci_global', 'ci_scripts', 'protos', 'pkg',
-                     'go_build_shared', 'frontend', 'auth', 'admin', 'developer-portal',
+                     'go_build_shared', 'frontend', 'auth', 'auth_test_impact', 'admin', 'developer-portal',
                      'compose', 'windows_desktop', 'history_audit', 'a1_t106_live',
                      'a1_attachment_restart', 'nats_renderer', 'match_squad_overlay'))
         matched = {key: paths or ['unresolved filter configuration'] for key in keys}
