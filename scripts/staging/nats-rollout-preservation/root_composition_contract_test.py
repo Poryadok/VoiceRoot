@@ -3,6 +3,7 @@ import copy
 import contextlib
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -21,6 +22,7 @@ import normalize
 import nonnats_plan
 import realtime_bootstrap
 import resource_claim
+import root_composition_fixture
 import resource_claim_test
 import root_cli
 import runtime_stage
@@ -140,8 +142,14 @@ class RootCompositionContract(unittest.TestCase):
         # C1 producer/loaders and external Kube/NATS/custody are controlled
         # boundaries; the typed receipt is synthetic, not a completed PASS.
         source = Path(source_plan_test.SOURCE)
+        if 'VOICE_TEST_PINNED_ARCHIVE' not in os.environ:
+            # Hosted fixture only: source/helper checks still run, but these
+            # synthetic bytes do not prove production binary identity.
+            import staging_prerequisites
+            pins=patch.object(staging_prerequisites,'BINARY_PINS',root_composition_fixture.SYNTHETIC_PINS)
+            pins.start();self.addCleanup(pins.stop)
         c2_mode = ordinary_fault == 'c2'
-        with tempfile.TemporaryDirectory(dir='/root' if c2_mode else None) as tmp:
+        with tempfile.TemporaryDirectory(dir='/root') as tmp:
             root = Path(tmp)
             if c2_mode:
                 import realtime_bootstrap_existing as c2
@@ -153,7 +161,7 @@ class RootCompositionContract(unittest.TestCase):
             installed = root / 'installed'
             (installed / 'sources').mkdir(parents=True, exist_ok=True)
             kube, params = source_plan_test.SourceTests().canonical_fixture('app-only')
-            ordinary = ordinary_fault is not None
+            ordinary = ordinary_fault not in (None,'source_tamper','helper_tamper','binary_tamper','binary_missing')
             if c2_mode:
                 for index, obj in enumerate(kube.objects.values()):
                     obj.setdefault('metadata', {})['uid'] = str(uuid.UUID(int=index + 1))
@@ -225,16 +233,8 @@ class RootCompositionContract(unittest.TestCase):
                         value.setdefault('metadata', {})['uid'] = current['metadata']['uid']
                     return value
                 kube.run = normalized_apply
-            code = root / 'code'
-            (code / 'nats-known-baseline').mkdir(parents=True)
-            (code / 'nats-known-baseline' / 'kernel').write_bytes(b'fixture')
-            binding = {}
-            if c2_mode:
-                c2_code = Path(c2.__file__).read_bytes()
-                helper_path = code / 'nats-rollout-preservation' / 'realtime_bootstrap_existing.py'
-                helper_path.parent.mkdir()
-                helper_path.write_bytes(c2_code)
-                binding['nats-rollout-preservation/realtime_bootstrap_existing.py'] = hashlib.sha256(c2_code).hexdigest()
+            code = installed / 'code'
+            binding = root_composition_fixture.helper_binding(source, code)
             contract = {'scripts': []}
             for part in ('realtime', 'notification', 'search', 'analytics-chat'):
                 raw = (source / ('deploy/templates/nats-' + part + '-bootstrap.yaml')).read_bytes().split(b'---')[0]
@@ -264,8 +264,19 @@ class RootCompositionContract(unittest.TestCase):
                 for relative in ('scripts', 'deploy', 'src/backend/migrations',
                                  'src/backend/auth/src/main/resources/db/migration', 'docker'):
                     shutil.copytree(source / relative, workspace / relative, dirs_exist_ok=True)
+                for path in workspace.rglob('*'):
+                    path.chmod(0o700 if path.is_dir() else 0o600)
                 approved['source_files'] = {str(path.relative_to(workspace)).replace('\\', '/'): hashlib.sha256(path.read_bytes()).hexdigest()
                     for path in workspace.rglob('*') if path.is_file()}
+                if ordinary_fault=='source_tamper':
+                    path=workspace/'scripts/staging/nats-rollout-preservation/staging_prerequisites.py'
+                    path.write_bytes(path.read_bytes()+b'\n# counterfeit source\n')
+                if ordinary_fault in ('helper_tamper','binary_tamper','binary_missing'):
+                    name=('nats-rollout-preservation/staging_prerequisites.py' if ordinary_fault=='helper_tamper'
+                          else 'nats-known-baseline/kernel')
+                    path=code/name
+                    if ordinary_fault=='binary_missing':path.unlink()
+                    else:path.write_bytes(path.read_bytes()+b'\ncorrupted\n')
                 return copy.deepcopy(approved)
             image = approved['images']['gameintegration']
             ctx = resource_claim_test.context()
@@ -362,7 +373,6 @@ class RootCompositionContract(unittest.TestCase):
                     patch.object(actions, '_previous_gis_transition', return_value=None),
                     patch.object(actions, '_dispatcher', return_value=(17, execution)),
                     patch.object(source_authority, 'capture_source', side_effect=capture_source),
-                    patch.object(bridge_root, 'record_source_authority'),
                     patch.object(compiler, 'decode_yaml', side_effect=source_plan_test.decoder),
                     patch.object(compiler, 'ProducerKube', return_value=kube),
                     patch.object(runtime_stage.RolloutStage, 'capture', new=captures),
@@ -399,6 +409,11 @@ class RootCompositionContract(unittest.TestCase):
                     stack.enter_context(patch.object(c2, '_observe', return_value=copy.deepcopy(live)))
                     stack.enter_context(patch.object(stage_runtime, 'Kube', return_value=kube))
                 with resource_claim.command_scope(session.check):
+                    if ordinary_fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing'):
+                        with self.assertRaises(bridge_root.Blocked):actions._prepare(request)
+                        c1.assert_not_called();gis_execute.assert_not_called();captures.assert_not_called()
+                        self.assertEqual(session.check()['phase'],'prepare')
+                        return
                     if ordinary and not c2_mode:
                         if ordinary_fault in ('none', 'missing_secret'):
                             with self.assertRaises(ReachedC1): actions._prepare(request)
@@ -472,6 +487,10 @@ class RootCompositionContract(unittest.TestCase):
 
     def test_bridge_first_install_c1_receipt_reaches_prepare_and_authorize(self):
         self._exercise_bridge()
+
+    def test_source_and_helper_drift_are_rejected_before_effects(self):
+        for fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing'):
+            with self.subTest(fault=fault):self._exercise_bridge(fault)
 
     def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
         self._exercise_bridge('c2')
