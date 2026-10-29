@@ -113,21 +113,29 @@ class Supervisor:
         self._execution_preparation_started = False
         self._guard()
 
-    def _image_admission(self):
-        if not self.context['operation_id'].startswith('media-c1-'):return
-        step=copy.deepcopy(self.journal.state['steps'].get('image-only-admission'))
-        capture=copy.deepcopy(self.journal.state['steps'].get(full_cohort_image_only_baseline.STEP)); row,revision=self.fence.ledger.read()
+    def _confirmed_admission(self):
+        c1=self.context['operation_id'].startswith('media-c1-')
+        step_name='image-only-admission' if c1 else 'predecessor-admission'
+        capture_name=full_cohort_image_only_baseline.STEP if c1 else 'full-cohort-predecessor'
+        marker='image_only_baseline' if c1 else 'predecessor'
+        step=copy.deepcopy(self.journal.state['steps'].get(step_name))
+        capture=copy.deepcopy(self.journal.state['steps'].get(capture_name)); row,revision=self.fence.ledger.read()
         if (not isinstance(step,dict) or set(step)!={'status','descriptor','old_revision','new_revision'} or
                 step.get('status')!='done' or not isinstance(step.get('old_revision'),list) or
                 not isinstance(step.get('new_revision'),list) or len(step['old_revision'])!=2 or len(step['new_revision'])!=2 or
                 any(not isinstance(v,str) or not v for v in step['old_revision']+step['new_revision']) or
                 step['old_revision'][0]!=step['new_revision'][0] or not isinstance(revision,tuple) or len(revision)!=2 or
                 revision[0]!=step['new_revision'][0] or not self.fence.owned(row) or row.get('status')!='active' or
-                row.get('image_only_baseline')!=step['descriptor'] or not isinstance(capture,dict) or
+                row.get(marker)!=step['descriptor'] or not isinstance(capture,dict) or
                 capture.get('descriptor')!=step['descriptor'] or self.journal.dirfd is None or self.journal.lockfd is None or
-                self.journal.state['steps'].get('image-only-admission')!=step or
-                self.journal.state['steps'].get(full_cohort_image_only_baseline.STEP)!=capture):
-            raise SupervisorError('image-only admission is not confirmed')
+                self.journal.state['steps'].get(step_name)!=step or
+                self.journal.state['steps'].get(capture_name)!=capture):
+            raise SupervisorError('operation admission is not confirmed')
+        if not c1:
+            import full_cohort_predecessor_phase as predecessor
+            if (capture.get('status')!='captured' or not isinstance(capture.get('snapshot'),dict) or
+                    predecessor.digest(capture['snapshot'])!=step['descriptor'].get('snapshot_sha256')):
+                raise SupervisorError('predecessor snapshot changed')
 
     def _guard(self):
         if (self.journal is not self._journal or self.fence is not self._fence or self.client is not self._client or
@@ -142,7 +150,7 @@ class Supervisor:
                 getattr(self.fence.on_uncertain, '__func__', None) is not resource_fencing.ResourceCheck.mark_uncertain):
             raise SupervisorError('supervisor authority changed')
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
-        self._image_admission()
+        self._confirmed_admission()
 
     def _open(self, name, extra):
         go_names={'go-migration-'+db+'-journal' for db in full_cohort_go_migration_plan.DATABASES}

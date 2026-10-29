@@ -16,6 +16,12 @@ import space_native_tool_identity as tool
 
 
 class SourceInventoryTests(unittest.TestCase):
+    def test_canonical_import_cannot_select_staging_migrations(self):
+        directory=Path(__file__).resolve().parent
+        code=("import pathlib,canonical_application_package,space_native_tool_identity as t; "
+              "assert pathlib.Path(t.migrations.__file__).resolve()==pathlib.Path('migrations.py').resolve()")
+        result=subprocess.run([sys.executable,'-B','-c',code],cwd=directory,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
     def test_isolated_compiled_probe_accepts_only_exact_post_gate_refusal(self):
         import publish_candidate
         cid='a'*64; calls=[]
@@ -56,6 +62,7 @@ class SourceInventoryTests(unittest.TestCase):
         for source in paths:
             dest=root/source.relative_to(original); dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(source,dest)
         script=root/'scripts/dev/space_native_tool_identity.py'; script.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(tool.__file__,script)
+        shutil.copyfile(original/'scripts/dev/migrations.py',script.parent/'migrations.py')
         files={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                for p in (root/'src/backend').rglob('*.go') if not p.name.endswith('_test.go')}
         for path in (root/'src/backend/migrations/space_db').iterdir():
