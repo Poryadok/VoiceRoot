@@ -3,6 +3,7 @@ import base64
 import hashlib
 import json
 import tempfile
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
@@ -15,7 +16,7 @@ class InspectSourceTest(unittest.TestCase):
     def test_live_documents_keep_private_evidence_on_owned_volume(self):
         session=SimpleNamespace(operation='a'*12,context={'operation_id':'stg-run-17'})
         tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
-              'source_inventory':{'build_source_sha256':'d'*64}}
+              'source_inventory':{'build_source_sha256':'d'*64},'platform_digest':'sha256:'+'c'*64,'config_digest':'sha256:'+'e'*64}
         docs=native._live_documents(session,tool,'node-a','local-path','snapshot-1')
         pvc=docs['pvc'];self.assertEqual(pvc['spec']['storageClassName'],'local-path')
         self.assertEqual(pvc['spec']['accessModes'],['ReadWriteOnce'])
@@ -33,6 +34,11 @@ class InspectSourceTest(unittest.TestCase):
         self.assertIn('> /evidence/completed.jsonl',native.LIVE_UPGRADE_SCRIPT)
         self.assertIn('sync -f /evidence/completed.jsonl',native.LIVE_UPGRADE_SCRIPT)
         self.assertNotIn('cat ',native.LIVE_VERIFY_SCRIPT)
+        desired=docs['upgrade'];spec=copy.deepcopy(desired['spec']);native._check_live_job_spec(spec,desired)
+        for key,value in (('parallelism',2),('completions',2),('manualSelector',True),('successPolicy',{})):
+            altered=copy.deepcopy(spec);altered[key]=value
+            with self.subTest(key=key),self.assertRaisesRegex(native.Blocked,'space_live_admission_changed'):
+                native._check_live_job_spec(altered,desired)
         with self.assertRaisesRegex(native.Blocked,'space_live_binding_invalid'):
             native._live_documents(session,tool,'node-a','local-path','$(foreign)')
 
@@ -40,7 +46,7 @@ class InspectSourceTest(unittest.TestCase):
         session=Mock();session.operation='a'*12;session.context={'operation_id':'stg-run-17'}
         session.check.return_value={'phase':'prepare','target_sha256':'b'*64};session.binding.return_value={'target':'b'*64}
         tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
-              'source_inventory':{'build_source_sha256':'d'*64}}
+              'source_inventory':{'build_source_sha256':'d'*64},'platform_digest':'sha256:'+'c'*64,'config_digest':'sha256:'+'e'*64}
         original={'engine':{'namespace_uid':'ns','pod_uid':'pgpod','pvc_uid':'pgpvc','pv_uid':'pgpv'},'installer_role':'voice'}
         authority={'original':original,'tool':tool};archive={'binding':{'snapshot_id':'snapshot-1'}}
         qualified={'archive_sha256':native.owner.digest(archive)}
@@ -60,6 +66,108 @@ class InspectSourceTest(unittest.TestCase):
             self.assertEqual(result['documents']['pvc']['spec']['storageClassName'],'local-path')
             objects[('persistentvolumeclaim','pgdata-voice-postgres-0')]['metadata']['uid']='foreign'
             with self.assertRaisesRegex(native.Blocked,'space_live_source_changed'):native._live_context(session)
+
+    def test_live_volume_rejects_foreign_claim_and_original_database_volume(self):
+        claim_uid='11111111-1111-4111-8111-111111111111';pv_uid='22222222-2222-4222-8222-222222222222'
+        plan={'documents':{'pvc':{'metadata':{'name':'evidence'},'spec':{'storageClassName':'local-path'}}},
+              'postgres_pvc_uid':'33333333-3333-4333-8333-333333333333','postgres_pv_uid':'44444444-4444-4444-8444-444444444444'}
+        pvc={'metadata':{'name':'evidence','namespace':'voice-staging','uid':claim_uid,'resourceVersion':'1'},
+             'spec':{'volumeName':'pv-evidence','storageClassName':'local-path','accessModes':['ReadWriteOnce']},'status':{'phase':'Bound'}}
+        pv={'metadata':{'name':'pv-evidence','uid':pv_uid,'resourceVersion':'2'},'status':{'phase':'Bound'},
+            'spec':{'storageClassName':'local-path','claimRef':{'name':'evidence','namespace':'voice-staging','uid':claim_uid}}}
+        kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(pvc if kind=='persistentvolumeclaim' else pv)
+        with patch.object(native,'Kube',return_value=kube),patch.object(native,'_live_base',return_value=Path('/unused')), \
+             patch.object(native.owner,'_read',return_value={'status':'DONE','response':{'uid':claim_uid}}):
+            self.assertEqual(native._live_volume(SimpleNamespace(),plan)['pv_uid'],pv_uid)
+            pv['spec']['claimRef']['uid']='foreign'
+            with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
+            pv['spec']['claimRef']['uid']=claim_uid;pv['metadata']['uid']=plan['postgres_pv_uid']
+            with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
+
+    def test_live_pvc_lost_create_response_remains_pending(self):
+        import commands
+        session=Mock();session.operation='a'*12;session.context={'operation_id':'stg-run-17'};session.binding.return_value={'target':'b'*64}
+        tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+              'source_inventory':{'build_source_sha256':'d'*64}}
+        docs=native._live_documents(session,tool,'node-a','local-path','snapshot-1');plan={'documents':docs}
+        kube=Mock();kube.run.return_value=copy.deepcopy(docs['pvc'])
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            base=Path(directory)
+            with patch.object(native,'_live_base',return_value=base),patch.object(native,'_live_checked_plan',return_value=plan), \
+                 patch.object(native,'Kube',return_value=kube),patch.object(commands,'capture',side_effect=RuntimeError('lost-create')) as capture:
+                with self.assertRaisesRegex(RuntimeError,'lost-create'):native._live_create(session,'pvc')
+                with self.assertRaisesRegex(native.Blocked,'space_live_reconciliation_required'):native._live_create(session,'pvc')
+                self.assertEqual(capture.call_count,1)
+                self.assertEqual(native.owner._read(base/'effects'/'pvc-create.json')['status'],'PENDING')
+
+    def test_live_jobs_retain_private_volume_and_verify_without_export(self):
+        import commands
+        session=Mock();session.operation='a'*12;session.context={'operation_id':'stg-run-17'};session.binding.return_value={'target':'b'*64}
+        tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+              'source_inventory':{'build_source_sha256':'d'*64},'platform_digest':'sha256:'+'c'*64,'config_digest':'sha256:'+'e'*64}
+        docs=native._live_documents(session,tool,'node-a','local-path','snapshot-1')
+        plan={'documents':docs,'authority_sha256':'f'*64,'postgres_pvc_uid':'old-pvc','postgres_pv_uid':'old-pv',
+              'tool_platform_digest':tool['platform_digest'],'tool_config_digest':tool['config_digest']}
+        live={};pvc_uid=str(uuid.uuid4());pv_uid=str(uuid.uuid4());pod_uid={};lost=False
+        def pod_for(job):
+            name=job['metadata']['name'];running=name.endswith('-bind')
+            uid=pod_uid.setdefault(name,str(uuid.uuid4()));spec=copy.deepcopy(job['spec']['template']['spec'])
+            state={'running':{}} if running else {'terminated':{'exitCode':0}}
+            return {'metadata':{'name':name+'-pod','namespace':'voice-staging','uid':uid,'resourceVersion':'9',
+                'ownerReferences':[{'controller':True,'kind':'Job','uid':job['metadata']['uid']}]},'spec':spec,
+                'status':{'phase':'Running' if running else 'Succeeded','containerStatuses':[{'name':'native',
+                    'imageID':'fixture@'+tool['platform_digest'],'state':state}]}}
+        class Kube:
+            def get(self,kind,name):
+                if kind=='persistentvolumeclaim':return copy.deepcopy(live['pvc'])
+                if kind=='persistentvolume':return {'metadata':{'name':'pv-evidence','uid':pv_uid,'resourceVersion':'3'},
+                    'status':{'phase':'Bound'},'spec':{'storageClassName':'local-path','claimRef':{
+                        'name':docs['pvc']['metadata']['name'],'namespace':'voice-staging','uid':pvc_uid}}}
+                return copy.deepcopy(live[name])
+            def run(self,args,body=None):
+                if args[0]=='create':return copy.deepcopy(body)
+                if args[1]=='--raw':return {'apiVersion':'batch/v1','kind':'JobList','metadata':{'resourceVersion':'4'},'items':[]}
+                name=args[3].removeprefix('job-name=') if '-l' in args else None
+                items=[pod_for(live[name])] if name in live else []
+                return {'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'5'},'items':items}
+        def capture(argv,body=b'',**kwargs):
+            tail=argv[len(native.owner.PREFIX):]
+            if tail[0]=='create':
+                value=json.loads(body);name=value['metadata']['name']
+                value['metadata'].update(uid=pvc_uid if value['kind']=='PersistentVolumeClaim' else str(uuid.uuid4()),resourceVersion='7')
+                if value['kind']=='PersistentVolumeClaim':
+                    value['spec']['volumeName']='pv-evidence';value['status']={'phase':'Bound'};live['pvc']=copy.deepcopy(value)
+                else:
+                    value['status']={'active':1} if name.endswith('-bind') else {'succeeded':1};live[name]=copy.deepcopy(value)
+                    if lost and name.endswith('-upgrade'):raise RuntimeError('upgrade-create-response-lost')
+                return json.dumps(value).encode()
+            if tail[0]=='delete':
+                name=tail[1].rsplit('/',1)[1];del live[name]
+                return json.dumps({'apiVersion':'v1','kind':'Status','status':'Success'}).encode()
+            if tail[0]=='logs':
+                result='1'*64+'  /evidence/origin.json\n'+'2'*64+'  /evidence/completed.jsonl\n'
+                if '-verify-pod' in tail[1]:result+='3'*64+'  /tmp/verified.json\n'
+                return result.encode()
+            raise AssertionError(tail)
+        for lost in (False,True):
+            live.clear();pod_uid.clear()
+            with self.subTest(lost=lost),tempfile.TemporaryDirectory(dir='/root') as directory:
+                base=Path(directory)/'live'
+                with patch.object(native,'_live_base',return_value=base),patch.object(native,'_live_context',return_value=plan), \
+                     patch.object(native,'Kube',return_value=Kube()),patch.object(commands,'capture',side_effect=capture):
+                    if lost:
+                        with self.assertRaisesRegex(RuntimeError,'upgrade-create-response-lost'):native.execute_live(session)
+                        self.assertEqual(native.owner._read(base/'effects'/'upgrade-create.json')['status'],'PENDING')
+                        self.assertFalse((base/'effects'/'verify-create.json').exists())
+                    else:
+                        receipt=native.execute_live(session)
+                        self.assertEqual(receipt['status'],'COMPLETE');self.assertEqual(receipt['volume']['pvc_uid'],pvc_uid)
+                        self.assertEqual(receipt['evidence_hashes']['/tmp/verified.json'],'3'*64)
+                        self.assertEqual(set(live),{'pvc'})
+                        result=native.owner._read(base/'verify-result.json');result['hashes']['/evidence/origin.json']='4'*64
+                        native.owner.save(base/'verify-result.json',result)
+                        with self.assertRaisesRegex(native.Blocked,'space_live_receipt_changed'):native.load_live_completed(session)
+                    with self.assertRaises(FileExistsError):native.execute_live(session)
 
     def test_changed_namespace_blocks_before_job_effect(self):
         kube=Mock();kube.get.return_value={}
