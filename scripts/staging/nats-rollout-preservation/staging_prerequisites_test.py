@@ -43,6 +43,9 @@ class PrivateCustodyTests(unittest.TestCase):
             with patch.object(guard,'ROOT',root),patch.object(prereq,'REQUIRED_HELPERS',frozenset((name,))),patch.object(prereq,'BINARY_PINS',{}):
                 with self.assertRaises(prereq.Blocked):prereq._capture_authority(actions,session,approved,execution)
                 with resource_claim.command_scope(session.check):
+                    (installed/'prerequisites').chmod(0o750)
+                    with self.assertRaises(prereq.Blocked):prereq._capture_authority(actions,session,approved,execution)
+                    (installed/'prerequisites').chmod(0o700)
                     self.assertEqual(prereq._capture_authority(actions,session,approved,execution),prereq.digest(receipt))
                     with self.assertRaises(FileExistsError):prereq._capture_authority(actions,session,approved,execution)
 

@@ -88,7 +88,16 @@ def _capture_authority(actions,session,approved,execution):
         raise Blocked('staging_prerequisites_helper_changed')
     info=code.lstat()
     if root_cli.code_binding(code)!=actions.binding:raise Blocked('staging_prerequisites_helper_changed')
-    parent=guard.ROOT/'installed'/'prerequisites';encrypted_cut.directory(parent)
+    installed_root=guard.ROOT/'installed';encrypted_cut.directory(installed_root)
+    parent=installed_root/'prerequisites'
+    try:
+        parent.mkdir(mode=0o700)
+        directory=os.open(installed_root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    except FileExistsError:pass
+    encrypted_cut.directory(parent)
+    if stat.S_IMODE(parent.lstat().st_mode)!=0o700:raise Blocked('staging_prerequisites_private_invalid')
     base=_base(session);base.mkdir(mode=0o700)
     directory=os.open(parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
     try:os.fsync(directory)
