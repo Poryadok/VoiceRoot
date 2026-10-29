@@ -26,6 +26,36 @@ sudo -n sh -eu -c '
   export TMPDIR="$2"
   python3 -B -m unittest realtime_bootstrap_pg_test realtime_bootstrap_composition_test realtime_bootstrap_existing_pg_test
 ' sh "$pg_fixture" "$pg_tmp"
+# Exercise the revision 31 -> 32 verifier on a separate, network-isolated
+# disposable database. The container ID belongs only to this invocation.
+sudo -n sh -eu -c '
+  cidfile="$2/gis-rev32.cid"
+  cleanup() {
+    status=$?
+    trap - EXIT
+    if [ -s "$cidfile" ]; then
+      id=$(cat "$cidfile")
+      docker rm -f -v "$id" >/dev/null || status=1
+    fi
+    exit "$status"
+  }
+  trap cleanup EXIT
+  docker run -d --cidfile "$cidfile" --network none \
+    -e POSTGRES_PASSWORD=fixture-password postgres:16-alpine >/dev/null
+  id=$(cat "$cidfile")
+  ready=0
+  for n in $(seq 1 60); do
+    if docker exec "$id" pg_isready -U postgres >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  [ "$ready" = 1 ] || { echo GIS_REV32_POSTGRES_NOT_READY >&2; exit 1; }
+  docker exec "$id" mkdir /fixture
+  docker cp "$1/src/backend/migrations/game_integration_db" "$id:/fixture/migrations"
+  docker cp "$1/docker/postgres/provision-gameintegration-runtime-role.sql" "$id:/fixture/provision.sql"
+  docker cp "$1/docker/postgres/verify-gameintegration-runtime-role.sql" "$id:/fixture/verify.sql"
+  docker cp "$1/scripts/dev/gis_rev32_verifier_test.sh" "$id:/fixture/test.sh"
+  docker exec -e GIS_REV32_FIXTURE=/fixture "$id" sh /fixture/test.sh
+' sh "$pg_fixture" "$pg_tmp"
 # The pinned official Go toolchain supplies mandatory server-helper parity;
 # the Python fixture image intentionally has no Go installation.
 docker run --rm --network none --entrypoint tar \
@@ -59,7 +89,9 @@ docker run --rm --network none --entrypoint tar \
       set -- "$@" "${path%.py}"
     done
     python -m unittest "$@"
-    cd ../nats-known-baseline
+    cd /tmp/repo/scripts/deploy
+    python -m unittest staging_p3_auxiliary_image_test
+    cd /tmp/repo/scripts/staging/nats-known-baseline
     python -m unittest controller_test root_main_test docker_runtime_test stage_runtime_test
     bash /tmp/repo/scripts/staging/nats-rollout-preservation_test.sh
   '
