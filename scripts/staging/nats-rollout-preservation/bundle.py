@@ -25,6 +25,7 @@ ROLLOUT+=('deployment_report.py',)
 ROLLOUT+=('provisional.py',)
 ROLLOUT+=('release_policy_wiring.py',)
 ROLLOUT+=('resource_claim.py',)
+ROLLOUT+=('gis_existing_update.py',)
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)

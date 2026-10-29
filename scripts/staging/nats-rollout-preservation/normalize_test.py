@@ -1,9 +1,10 @@
 import copy
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from apply import digest
 import normalize
+import gis_first_install as gis
 from controller import Blocked
 
 class NormalizeTest(unittest.TestCase):
@@ -36,6 +37,45 @@ class NormalizeTest(unittest.TestCase):
                 else:row['spec']['replicas']=1
                 self.kube.run.return_value=row
                 with self.assertRaises(Blocked):normalize.normalize_target(self.kube,self.stage,[self.row],self.target)
+    def test_gis_normalized_target_is_captured_only_after_identity_validation(self):
+        row = copy.deepcopy(self.row)
+        row['metadata']['name'] = 'voice-gameintegration'
+        row['spec']['template']['spec']['containers'][0]['name'] = 'gameintegration'
+        current = copy.deepcopy(row)
+        current['metadata']['uid'] = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        self.stage.snapshots = {'voice-gameintegration': current}
+        service = {'apiVersion': 'v1', 'kind': 'Service', 'metadata': {'name': 'voice-gameintegration',
+            'namespace': 'voice-staging', 'uid': 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'}, 'spec': {'selector': {'app': 'gis'}}}
+        self.kube.get.side_effect = lambda kind, _name: copy.deepcopy(service if kind == 'service' else current)
+        normalized = copy.deepcopy(current)
+        normalized['spec']['replicas'] = 0
+        normalized['metadata']['annotations'] = {'kubectl.kubernetes.io/last-applied-configuration': 'server-result'}
+        self.kube.run.return_value = copy.deepcopy(normalized)
+        target = {'template_hashes': {'voice-gameintegration': digest(row['spec']['template'])},
+                  'images': {'voice-gameintegration/gameintegration': 'repo@sha256:' + 'a' * 64}}
+        binding={'service_uid':service['metadata']['uid'],'service':gis.semantic(service)}
+        sink = Mock()
+        with patch('gis_existing_update.verify_phase') as verify:
+            result=normalize.normalize_target(self.kube,self.stage,[row],target,gis_target_sink=sink,gis_binding=binding)
+        self.assertEqual(verify.call_count,2)
+        self.assertEqual(sink.call_args.args[0], normalized)
+        self.assertEqual(result['gis_existing_normalized_sha256'], digest({'deployment_mode':'selected-paused','deployment_uid':current['metadata']['uid'], 'service_uid':service['metadata']['uid'], 'deployment':gis.semantic(normalized), 'service':gis.semantic(service)}))
+        self.kube.run.return_value['metadata']['uid'] = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+        sink.reset_mock()
+        with patch('gis_existing_update.verify_phase'), self.assertRaises(Blocked):
+            normalize.normalize_target(self.kube,self.stage,[row],target,gis_target_sink=sink,gis_binding=binding)
+        sink.assert_not_called()
+        self.kube.run.return_value = copy.deepcopy(normalized)
+        service['spec']['selector']['app'] = 'gis'
+        service['metadata']['uid'] = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+        with patch('gis_existing_update.verify_phase'), self.assertRaises(Blocked):
+            normalize.normalize_target(self.kube,self.stage,[row],target,gis_target_sink=sink,gis_binding=binding)
+        sink.assert_not_called()
+        service['metadata']['uid'] = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+        service['spec']['selector']['app'] = 'changed'
+        with patch('gis_existing_update.verify_phase'), self.assertRaises(Blocked):
+            normalize.normalize_target(self.kube,self.stage,[row],target,gis_target_sink=sink,gis_binding=binding)
+        sink.assert_not_called()
     def test_images_only_preserves_actual_env_refs_and_strategy(self):
         self.stage.snapshots['voice-gateway']['spec']['strategy']={'type':'Recreate'}
         self.stage.snapshots['voice-gateway']['spec']['template']['spec']['containers'][0]['env']=[{'name':'OLD','value':'preserve'}]

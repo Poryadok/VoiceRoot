@@ -106,6 +106,7 @@ func (s *Store) IssuePlayerBindingExecutionPermit(ctx context.Context, bindingID
 		if err := tx.Commit(ctx); err != nil {
 			return PlayerBindingExecutionPermit{}, fmt.Errorf("commit execution permit retry: %w", err)
 		}
+		saved.ExpiresAt = saved.ExpiresAt.UTC()
 		return saved, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -130,7 +131,7 @@ func (s *Store) IssuePlayerBindingExecutionPermit(ctx context.Context, bindingID
 	permit := PlayerBindingExecutionPermit{PermitID: uuid.New(), BindingID: bindingID,
 		ApplicationID: row.ApplicationID, EnvironmentID: row.EnvironmentID,
 		BindingRevision: row.BindingRevision, AssertionID: claims.AssertionID, OperationID: operationID,
-		ExpiresAt: deadline}
+		ExpiresAt: deadline.UTC()}
 	_, err = tx.Exec(ctx, `INSERT INTO player_binding_execution_permits
 		(permit_id, binding_id, operation_id, application_id, environment_id, binding_revision,
 		 assertion_jti, assertion_sha256, expires_at, status)

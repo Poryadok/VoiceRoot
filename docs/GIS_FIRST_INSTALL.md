@@ -39,6 +39,26 @@ resourceVersion preconditions. Drift or a delete conflict stops cleanup and
 preserves the journal. The operation never deletes a namespace or changes
 database resources, NATS data, PVCs, or PVs.
 
+For the later ordinary rollout, a successful source/CI gate is not a recovery
+plan. A read-only failure before the FENCE checkpoint can be retired only by
+the runbook's verified read-only closure. A failed proof after fencing reports
+BLOCKED and attempts ownership-checked refencing; only a verified checkpoint
+proves the fence remains closed. Otherwise treat fence status and the TT claim
+as uncertain. Inspect the exact operation checkpoint,
+installed helper binding, resource identities and TT journal using the
+[preservation runbook](../scripts/staging/nats-rollout-preservation/README.md)
+before choosing a separately qualified recovery. Preserve the encrypted backup
+and its recovery key and reconcile submitted effects; do not clear an
+uncertain TT claim or repeat the rollout merely because a timeout elapsed.
+If publication fails after the durable PASS checkpoint, the root executor may
+mark its TT journal uncertain. The saved PASS is retained, but a direct handler
+replay is not authority to bypass that journal; use separately qualified
+operator reconciliation before attempting publication again.
+The historical 22-workload operator closures do not qualify a 23-workload GIS
+baseline. The existing generic FULL/app-only reverse rollout is unsupported,
+and the direct root `--rollback` command is rejected by the resource-fenced
+bridge gate. This procedure does not claim an automatic whole-baseline recovery.
+
 ## Database prerequisite
 
 Before either GIS workload object is created, the protected root operation must
