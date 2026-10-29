@@ -468,12 +468,17 @@ def load_live_completed(session):
 def validate_historical_live_completed(operation):
     """Validate the original protected PASS and native effects without a paused read."""
     import resource_claim
-    from types import SimpleNamespace
     if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
         raise Blocked('space_live_history_invalid')
     qualified=owner.validate_historical_capture(operation)
     rollout=owner._read(owner.guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20)
     binding=resource_claim.historical_binding(rollout)
+    return _validate_historical_live_completed(operation,qualified,rollout,binding)
+
+
+def _validate_historical_live_completed(operation,qualified,rollout,binding):
+    """Internal record validation after the fixed historical authority checks."""
+    from types import SimpleNamespace
     root=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
     base=root/'space-live';plan=owner._read(base/'plan.json');receipt=owner._read(base/'complete.json')
     archive=owner._read(root/'archive-record.json');catalog=owner._read(root/'catalog.json');metadata=owner._read(root/'metadata.json')
