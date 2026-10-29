@@ -4,6 +4,7 @@ The caller must independently bind the public CA to the live fenced capture.
 No Kubernetes access, root key export, CA rotation or cluster authority here.
 """
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
@@ -34,7 +35,8 @@ def _open(name, private):
 
 
 def _prepare(destination, media):
-    if not isinstance(media, bytes) or b'PRIVATE KEY' in media or b'BEGIN CERTIFICATE' not in media: raise ValueError()
+    if (not isinstance(media, bytes) or not re.fullmatch(
+        rb'-----BEGIN CERTIFICATE-----\r?\n(?:[A-Za-z0-9+/=]+\r?\n)+-----END CERTIFICATE-----\r?\n?', media)): raise ValueError()
     _check_ancestors(ARCHIVE)
     info = ARCHIVE.lstat()
     if (not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077 or ARCHIVE.resolve() != ARCHIVE): raise ValueError()
@@ -101,3 +103,19 @@ def stage(destination, media):
         return receipt
     except Exception:
         raise IssueError('Space issuance refused or incomplete; preserve operation directory') from None
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--operation-id',required=True)
+    parser.add_argument('--media-public',required=True,type=Path)
+    args = parser.parse_args()
+    if not re.fullmatch(r'media-c[12]-[a-f0-9]{32}',args.operation_id): raise IssueError('invalid operation')
+    print(json.dumps(stage(PARENT/('space-p3-'+args.operation_id[-32:]),existing._public_input(args.media_public)),sort_keys=True))
+
+
+if __name__ == '__main__':
+    try: main()
+    except Exception:
+        print('Space issuance refused or incomplete; preserve operation directory',file=sys.stderr)
+        sys.exit(1)
