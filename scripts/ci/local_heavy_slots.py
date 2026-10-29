@@ -45,6 +45,16 @@ class Lease:
         finally:
             os.close(descriptor)
 
+    def bind_owner(self, run_id):
+        if (self._descriptor is None or not isinstance(run_id, str)
+                or not re.fullmatch(r'voiceci-[0-9a-f]{32}', run_id)
+                or not re.fullmatch(rb'busy:[0-9a-f]{32}\n', self._marker)
+                or _marker(self._descriptor) != self._marker):
+            raise ValueError('invalid or changed slot owner binding')
+        marker = self._marker[:-1] + b':' + run_id.encode('ascii') + b'\n'
+        _write_marker(self._descriptor, marker)
+        self._marker = marker
+
     def __enter__(self):
         return self
 
@@ -177,3 +187,31 @@ def acquire(directory, timeout, capacity=2):
         if remaining <= 0:
             raise TimeoutError('all local heavy CI slots are occupied')
         time.sleep(min(0.05, remaining))
+
+
+def recover_bound(directory, slot, run_id, capacity=2):
+    """Lock an abandoned slot only when it names the exact owned run."""
+    if type(capacity) is not int or not 1 <= capacity <= 64 or type(slot) is not int or not 0 <= slot < capacity:
+        raise ValueError('invalid recovery slot or capacity')
+    if not isinstance(run_id, str) or not re.fullmatch(r'voiceci-[0-9a-f]{32}', run_id):
+        raise ValueError('invalid recovery run identity')
+    directory = Path(directory)
+    if not directory.is_dir() or directory.is_symlink():
+        raise ValueError('slot directory must be a real directory')
+    _configure(directory, capacity, time.monotonic())
+    path = directory / ('heavy-' + str(slot) + '.lock')
+    flags = os.O_RDWR | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    descriptor = os.open(path, flags)
+    try:
+        if path.is_symlink() or not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError('slot file must be a regular file')
+        if not _try_lock(descriptor):
+            raise ValueError('slot owner is still active')
+        marker = _marker(descriptor)
+        expected = rb'busy:[0-9a-f]{32}:' + run_id.encode('ascii') + rb'\n'
+        if not re.fullmatch(expected, marker):
+            raise ValueError('slot does not name the requested owner')
+        return Lease(descriptor, slot, marker)
+    except BaseException:
+        os.close(descriptor)
+        raise

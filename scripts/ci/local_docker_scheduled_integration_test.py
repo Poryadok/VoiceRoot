@@ -1,6 +1,8 @@
 """Opt-in real-Docker proof of scheduled, explicitly owned fixtures."""
+import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import uuid
 
@@ -23,9 +25,26 @@ def verify_live(run):
             raise RuntimeError('owned fixture container stopped')
 
 
+def crash_worker(checkout, slots, image):
+    owner = ScheduledRun.start(checkout, slots, DockerCLI(), 0)
+    print('OWNER ' + json.dumps({'directory': str(owner.run.directory), 'slot': owner.slot}), flush=True)
+    try:
+        fixture(owner.run, image)
+        verify_live(owner.run)
+        print('READY', flush=True)
+        sys.stdin.readline()
+    finally:
+        owner.close()
+
+
 def main():
     if os.environ.get('VOICE_LOCAL_DOCKER_TEST') != '1':
         print('VOICE_LOCAL_DOCKER_TEST=1 is required', file=sys.stderr)
+        return 2
+    if len(sys.argv) == 5 and sys.argv[1] == '--worker':
+        crash_worker(Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4])
+        return 0
+    if len(sys.argv) != 1:
         return 2
     root = Path(__file__).resolve().parents[2]
     checkout = root / 'tmp/ci-owned-proof' / ('scheduled-' + uuid.uuid4().hex)
@@ -67,6 +86,50 @@ def main():
                 raise
         verify_live(owners[1].run)
         verify_live(sentinel)
+        with (checkout / 'worker.log').open('wb') as log:
+            child = subprocess.Popen([sys.executable, '-u', __file__, '--worker', str(checkout), str(slots), image],
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log, text=True)
+            locator = None
+            directory = None
+            recovered = False
+            try:
+                line = child.stdout.readline().strip()
+                if not line.startswith('OWNER '):
+                    raise RuntimeError('worker failed before registering ownership')
+                locator = json.loads(line.removeprefix('OWNER '))
+                candidate = Path(locator['directory']).resolve()
+                if candidate.parent != (checkout / 'tmp/ci-local').resolve() or type(locator['slot']) is not int:
+                    raise RuntimeError('worker returned an invalid recovery identity')
+                directory = candidate
+                if child.stdout.readline().strip() != 'READY':
+                    raise RuntimeError('worker did not reach a settled fixture')
+                child.kill()
+                child.wait(timeout=15)
+                orphan = OwnedRun.load(directory, engine)
+                try:
+                    verify_live(orphan)
+                    records = orphan.state['resources'][:]
+                finally:
+                    orphan.close()
+                verify_live(owners[1].run)
+                verify_live(sentinel)
+                ScheduledRun.recover(directory, slots, engine, locator['slot'])
+                recovered = True
+                if any(engine.exists(item['kind'], item['id']) for item in records):
+                    raise RuntimeError('recovered worker left resources behind')
+                verify_live(owners[1].run)
+                verify_live(sentinel)
+                replacement = ScheduledRun.start(checkout, slots, engine, 0)
+                replacement.close()
+                print('crashed journal-bound worker recovered; other fixture and sentinel remained live')
+            finally:
+                if child.poll() is None:
+                    child.kill()
+                    child.wait(timeout=15)
+                child.stdin.close()
+                child.stdout.close()
+                if directory is not None and not recovered:
+                    ScheduledRun.recover(directory, slots, engine, locator['slot'])
         limited = ScheduledRun.start(checkout, checkout / 'one-slot', engine, 0, capacity=1)
         try:
             fixture(limited.run, image)

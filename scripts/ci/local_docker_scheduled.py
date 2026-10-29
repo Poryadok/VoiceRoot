@@ -3,25 +3,52 @@
 This applies only to resources created through OwnedRun. It does not yet
 supervise existing Testcontainers or Compose processes.
 """
-from local_docker_owned import OwnedRun
-from local_heavy_slots import acquire
+from pathlib import Path
+from local_docker_owned import OwnedRun, OwnershipError
+from local_heavy_slots import acquire, recover_bound
 
 
 class ScheduledRun:
     @classmethod
     def start(cls, checkout, slot_directory, engine, timeout, capacity=2):
         lease = acquire(slot_directory, timeout, capacity=capacity)
+        run = None
         try:
             run = OwnedRun.create(checkout, engine)
+            lease.bind_owner(run.run_id)
         except BaseException:
             # A partially initialized journal must not silently free capacity.
             lease.abandon()
+            if run is not None:
+                run.close()
             raise
         return cls(run, lease)
+
+    @classmethod
+    def recover(cls, directory, slot_directory, engine, slot, capacity=2):
+        """Clean only a journal-bound abandoned owned run, then release its slot."""
+        directory = Path(directory)
+        lease = recover_bound(slot_directory, slot, directory.name, capacity=capacity)
+        run = None
+        try:
+            run = OwnedRun.load(directory, engine)
+            run.cleanup()
+            run._check_daemon()
+            if any(engine.exists(item['kind'], item['id']) for item in run.state['resources']):
+                raise OwnershipError('owned resource remains after recovery')
+            run._check_daemon()
+            lease.close()
+        except BaseException:
+            lease.abandon()
+            raise
+        finally:
+            if run is not None:
+                run.close()
 
     def __init__(self, run, lease):
         self.run = run
         self._lease = lease
+        self.slot = lease.slot
 
     def close(self):
         if self._lease is None:

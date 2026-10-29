@@ -47,6 +47,61 @@ class ScheduledRunTests(unittest.TestCase):
         later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
         later.close()
 
+    def test_abandoned_owned_run_can_be_recovered_by_exact_binding(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        directory, slot = one.run.directory, one.slot
+        name = one.run.create_resource('network')
+        one.abandon()
+        with self.assertRaises(TimeoutError):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertNotIn(('network', name), self.engine.resources)
+        later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        later.close()
+
+    def test_recovery_refuses_a_live_owner_or_different_run(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        other = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        self.addCleanup(one.abandon)
+        self.addCleanup(other.abandon)
+        resource = one.run.create_resource('network')
+        with self.assertRaises((OwnershipError, ValueError)):
+            ScheduledRun.recover(one.run.directory, self.slots, self.engine, one.slot)
+        one.abandon()
+        with self.assertRaises((OwnershipError, ValueError)):
+            ScheduledRun.recover(other.run.directory, self.slots, self.engine, one.slot)
+        self.assertIn(('network', resource), self.engine.resources)
+        ScheduledRun.recover(one.run.directory, self.slots, self.engine, one.slot)
+        other.close()
+
+    def test_uncertain_recovery_does_not_release_capacity(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        directory, slot = one.run.directory, one.slot
+        one.run.create_resource('network')
+        one.abandon()
+        self.engine.uncertain_remove = True
+        with self.assertRaises(OwnershipError):
+            ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        with self.assertRaises(TimeoutError):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+
+    def test_recovery_refuses_another_daemon_without_touching_resources(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        directory, slot = one.run.directory, one.slot
+        resource = one.run.create_resource('network')
+        one.abandon()
+        self.engine.identity = 'different-daemon'
+        with self.assertRaises(OwnershipError):
+            ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertIn(('network', resource), self.engine.resources)
+        with self.assertRaises(TimeoutError):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.engine.identity = 'daemon-a'
+        ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+
     def test_body_failure_cleans_owned_resources_before_releasing_slot(self):
         with self.assertRaisesRegex(RuntimeError, 'body failed'):
             with ScheduledRun.start(self.root, self.slots, self.engine, 0) as run:
