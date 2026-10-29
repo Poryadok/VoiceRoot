@@ -51,7 +51,7 @@ def stage_cluster_fixture(session,store_kube=None):
         images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
             'status':{'phase':'Running','containerStatuses':statuses(template['spec']['containers']),
                       'initContainerStatuses':statuses(template['spec'].get('initContainers',[]))}})
-    fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace}},
+    fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace,'resourceVersion':'1'}},
            ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
                  'data':{'phase':'active','generation':'r20260930a4','dataPVC':'fixture'}},
            ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
@@ -228,7 +228,22 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    'replay_password_b64':base64.b64encode(b'synthetic-replay-password').decode()})
   Cluster, names, claim=stage_cluster_fixture(session,store_kube); cluster=Cluster()
   original_get=cluster.get
+  pg_controller='00000000-0000-4000-8000-000000000011'
+  pg_pod='00000000-0000-4000-8000-000000000012'
+  pg_claim='00000000-0000-4000-8000-000000000013'
+  pg_volume='00000000-0000-4000-8000-000000000014'
+  pg_objects={('statefulset','voice-postgres'):{'metadata':{'uid':pg_controller,'resourceVersion':'1'},'spec':{'replicas':1}},
+   ('pod','voice-postgres-0'):{'metadata':{'uid':pg_pod,'resourceVersion':'1','ownerReferences':[{'kind':'StatefulSet',
+    'name':'voice-postgres','uid':pg_controller,'controller':True}]},'spec':{'volumes':[{'persistentVolumeClaim':
+    {'claimName':'pgdata-voice-postgres-0'}}]},'status':{'phase':'Running','containerStatuses':[{'name':'postgres',
+    'ready':True,'imageID':'docker.io/library/postgres@sha256:'+'a'*64}]}},
+   ('persistentvolumeclaim','pgdata-voice-postgres-0'):{'metadata':{'uid':pg_claim,'resourceVersion':'1'},
+    'spec':{'volumeName':'fixture-postgres-pv'},'status':{'phase':'Bound'}},
+   ('persistentvolume','fixture-postgres-pv'):{'metadata':{'uid':pg_volume,'resourceVersion':'1'},
+    'spec':{'claimRef':{'uid':pg_claim,'name':'pgdata-voice-postgres-0','namespace':'voice-staging'}}}}
   def get(kind,name):
+   session.check()
+   if (kind.lower(),name) in pg_objects:return copy.deepcopy(pg_objects[(kind.lower(),name)])
    if (kind,name)==('node','pmdebook'):
     if 'VOICE_TEST_OCI' not in os.environ:raise KeyError((kind,name))
     return {'metadata':{'name':name,'uid':'synthetic-node'},'status':{'nodeInfo':{'operatingSystem':'linux',
@@ -250,6 +265,13 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
       'pvc':'PersistentVolumeClaim','pv':'PersistentVolume'}
     return store_kube.get(spelling.get(kind,kind),name)
   def run(args,**kwargs):
+   session.check()
+   import actor_root
+   if args==list(actor_root.STORY_SCHEMA_ARGS):
+    return {'database':'story_db','username':'voice','version':4,'dirty':False}
+   if args[:2]==['exec','voice-postgres-0'] and 'sha256sum' in ' '.join(args):
+    password=base64.b64decode(get('secret','voice-app-secrets')['data']['POSTGRES_PASSWORD'])
+    return {'password_sha256':hashlib.sha256(password).hexdigest()}
    if args[:2]==['apply','--dry-run=server']:return store_kube.run(args,**kwargs)
    return cluster.run(args,**kwargs)
   def capture(argv,**kwargs):
@@ -284,6 +306,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def close(self):pass
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
        patch.object(stage_runtime.Kube,'_run',side_effect=run),patch.object(commands,'capture',side_effect=capture), \
+       patch.object(stage_runtime.Kube,'secret_meta',side_effect=lambda name:{k:get('secret',name)['metadata'][k] for k in ('uid','resourceVersion')}), \
        patch.object(compiler,'capture',side_effect=capture), \
        patch.object(http.client,'HTTPSConnection',Https):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
