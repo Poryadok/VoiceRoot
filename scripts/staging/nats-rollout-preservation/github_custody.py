@@ -126,6 +126,33 @@ def _timestamp(value):
     return parsed.astimezone(timezone.utc)
 
 
+def _bound_zip_directory(remote, size):
+    """Bound the effective directory before zipfile reads it, including ZIP64."""
+    if size < 22: _fail()
+    remote.seek(size - min(size, 65557)); tail = remote.read(65557)
+    index = tail.rfind(b'PK\x05\x06')
+    if index < 0 or len(tail) != index + 22: _fail()
+    _, disk, directory_disk, disk_count, count, directory_size, directory_offset, comment = struct.unpack('<4s4H2LH', tail[index:])
+    if disk or directory_disk or disk_count != 1 or count != 1 or comment: _fail()
+    end = size - 22
+    if end >= 20:
+        remote.seek(end - 20); locator = remote.read(20)
+    else:
+        locator = b''
+    if locator[:4] == b'PK\x06\x07':
+        _, locator_disk, record_offset, disks = struct.unpack('<4sLQL', locator)
+        if locator_disk or disks != 1 or record_offset + 56 != end - 20: _fail()
+        remote.seek(record_offset); record = remote.read(56)
+        if len(record) != 56: _fail()
+        sig, record_size, _, _, zip_disk, zip_directory_disk, zip_disk_count, zip_count, zip_size, zip_offset = struct.unpack('<4sQ2H2L4Q', record)
+        if (sig != b'PK\x06\x06' or record_size != 44 or zip_disk or zip_directory_disk
+                or zip_disk_count != 1 or zip_count != 1 or zip_size > 8192
+                or zip_offset + zip_size != record_offset): _fail()
+        if directory_size not in (zip_size, 0xffffffff) or directory_offset not in (zip_offset, 0xffffffff): _fail()
+    elif directory_size > 8192 or directory_offset + directory_size != end:
+        _fail()
+
+
 def verify_artifact(token, binding, cipher_path, artifact_id):
     """Verify remote archive metadata and all ciphertext bytes; never extract."""
     try:
@@ -168,15 +195,7 @@ def verify_artifact(token, binding, cipher_path, artifact_id):
         with tempfile.TemporaryFile() as remote:
             downloaded = _download(url + '/zip', headers, remote, archive_limit, deadline, redirects=True)
             if downloaded != metadata['size_in_bytes']: _fail()
-            # Bound central-directory parsing before ZipFile allocates entries.
-            # Exactly one member means ZIP64 entry-count expansion is unnecessary;
-            # ZIP64 individual sizes remain supported by ZipFile.
-            remote.seek(-min(downloaded, 65557), 2)
-            tail = remote.read(65557)
-            offset = tail.rfind(b'PK\x05\x06')
-            if offset < 0 or len(tail) != offset + 22: _fail()
-            _, disk, directory_disk, disk_count, total_count, directory_bytes, _, comment_bytes = struct.unpack('<4s4H2LH', tail[offset:])
-            if disk or directory_disk or disk_count != 1 or total_count != 1 or directory_bytes > 8192 or comment_bytes: _fail()
+            _bound_zip_directory(remote, downloaded)
             remote.seek(0)
             with zipfile.ZipFile(remote) as archive:
                 members = archive.infolist()
