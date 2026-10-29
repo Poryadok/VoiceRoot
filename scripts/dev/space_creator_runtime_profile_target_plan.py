@@ -16,7 +16,7 @@ import publish_candidate
 import space_creator_runtime_profile_auth as shared
 import space_creator_runtime_profile_config as observed_config
 import space_creator_runtime_profile_jdk as jdk
-import space_p3_issuer_preflight as preflight
+import dev_peer_issuer_preflight as preflight
 import writer_cut
 
 GATEWAY_JWKS=creator.GATEWAY_JWKS
@@ -199,7 +199,8 @@ class TargetPlanPhase(shared.AuthTrustPhase):
         super().__init__(journal,fence,client,lock,namespace_uid,package,inventory_phase)
         import space_creator_runtime_profile_trust_effect as trust
         if (type(config_phase) is not observed_config.CreatorConfigPhase or type(jdk_phase) is not jdk.TargetJdkPhase
-                or type(preflight_phase) is not preflight.IssuerPreflightPhase or type(trust_phase) is not trust.TrustEffectPhase
+                or type(preflight_phase) is not preflight.PeerIssuerPreflightPhase or preflight_phase.profile!='creator'
+                or type(trust_phase) is not trust.TrustEffectPhase
                 or any(x.fence.context!=fence.context or x.lock!=lock or x.namespace_uid!=namespace_uid
                        for x in (config_phase,jdk_phase,preflight_phase,trust_phase))
                 or any(x.package is not package for x in (config_phase,jdk_phase,preflight_phase,trust_phase))

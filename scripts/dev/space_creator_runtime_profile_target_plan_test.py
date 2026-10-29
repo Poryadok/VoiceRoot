@@ -133,7 +133,7 @@ class PhaseTest(unittest.TestCase):
             inv=attach(inventory.InventoryPhase.__new__(inventory.InventoryPhase),'inventory'); inv.package=pkg
             config=attach(subject.observed_config.CreatorConfigPhase.__new__(subject.observed_config.CreatorConfigPhase),'config')
             roots=attach(subject.jdk.TargetJdkPhase.__new__(subject.jdk.TargetJdkPhase),'jdk')
-            issuer=attach(subject.preflight.IssuerPreflightPhase.__new__(subject.preflight.IssuerPreflightPhase),'issuer')
+            issuer=attach(subject.preflight.PeerIssuerPreflightPhase.__new__(subject.preflight.PeerIssuerPreflightPhase),'issuer'); issuer.profile='creator'
             trust=attach(trust_effect.TrustEffectPhase.__new__(trust_effect.TrustEffectPhase),'trust')
             for item in (config,roots,issuer,trust): item.package=pkg
             config.inventory=inv; roots.inventory=inv; trust.inventory=inv; trust.jdk=roots; trust.preflight=issuer
