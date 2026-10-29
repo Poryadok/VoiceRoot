@@ -2233,6 +2233,13 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U voice -d postgres"
           --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -2255,6 +2262,24 @@ jobs:
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --events "$RUNNER_TEMP/user-association-events.jsonl" --exit-code "$result" \
             --output "$RUNNER_TEMP/user-association-receipt.json" --reject-skips
+      - name: Run User capture transport proof
+        working-directory: src/backend/user
+        env:
+          CGO_ENABLED: '0'
+          USER_ASSOCIATION_TEST_DSN: postgres://voice:voice-association-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          USER_ASSOCIATION_TEST_REDIS: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m -run '^TestSpaceCaptureNativeProtectedTransport$' ./internal/grpcsvc > "$RUNNER_TEMP/user-capture-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/user_capture_required.json --service user \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/user-capture-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/user-capture-receipt.json" --reject-skips
       - name: Upload User association evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -2263,6 +2288,8 @@ jobs:
           path: |
             ${{ runner.temp }}/user-association-events.jsonl
             ${{ runner.temp }}/user-association-receipt.json
+            ${{ runner.temp }}/user-capture-events.jsonl
+            ${{ runner.temp }}/user-capture-receipt.json
           if-no-files-found: warn
           retention-days: 14
 

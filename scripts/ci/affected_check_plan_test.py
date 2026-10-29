@@ -280,6 +280,11 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('./internal/identityassociation', test['run'])
         self.assertIn('--reject-skips', test['run'])
         self.assertIn('job.services.postgres.ports', test['env']['USER_ASSOCIATION_TEST_DSN'])
+        capture = next(step for step in job['steps'] if step.get('name') == 'Run User capture transport proof')
+        self.assertIn('TestSpaceCaptureNativeProtectedTransport', capture['run'])
+        self.assertIn('--reject-skips', capture['run'])
+        self.assertIn('job.services.redis.ports', capture['env']['USER_ASSOCIATION_TEST_REDIS'])
+        self.assertIn('job.services.postgres.ports', capture['env']['USER_ASSOCIATION_TEST_DSN'])
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['user'], 'docker_go_services': [],
                   'integration_go_services': ['user'], 'run_go': True, 'run_pkg': True}

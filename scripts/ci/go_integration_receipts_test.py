@@ -60,6 +60,21 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         self.assertEqual(len(cases), len({tuple(case) for case in cases}))
         self.assertEqual({tuple(case) for case in cases}, discovered)
 
+    def test_user_capture_inventory_requires_each_authority_and_sql_cohort(self):
+        inventory = json.loads((ROOT / 'scripts/ci/user_capture_required.json').read_text(encoding='utf-8'))
+        cases = inventory['user']
+        prefix = 'TestSpaceCaptureNativeProtectedTransport'
+        required_names = {prefix, *(prefix + '/' + name for name in
+                                    ('auth', 'role', 'gateway', 'moderation', 'canonical-SQL-full-cohort'))}
+        self.assertEqual({name for _, name in cases}, required_names)
+        events = [{'Package': package, 'Test': name, 'Action': action}
+                  for package, name in cases for action in ('run', 'pass')]
+        package = 'voice/backend/user/internal/grpcsvc'
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertEqual(receipts.verify_required(events, cases, 0), [])
+        missing = [event for event in events if event.get('Test') != prefix + '/canonical-SQL-full-cohort']
+        self.assertTrue(receipts.verify_required(missing, cases, 0))
+
     def test_required_case_must_run_and_pass_exactly_once(self):
         required = [('voice/backend/chat/internal/store', 'TestStoreIntegration')]
         events = [{'Package': required[0][0], 'Test': required[0][1], 'Action': action}

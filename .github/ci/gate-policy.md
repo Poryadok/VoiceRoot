@@ -149,9 +149,10 @@ This is the Story LFP inventory, not the complete Go matrix inventory.
 
 When User is in the PR integration matrix, `user-association-integration` runs
 the native identity-association package against its own PostgreSQL service.
-All current named package tests are inventoried and skips are rejected. This
-proof does not cover separate User protected-transport fixtures that also need
-Redis, and it does not activate the source-disabled production path.
+All current named package tests are inventoried and skips are rejected. The
+same job separately runs the protected capture transport with owned PostgreSQL
+and Redis, requiring all named authority and canonical SQL cohort subtests with
+no skips. These fixtures do not activate the source-disabled production path.
 
 When Notification is in the PR integration matrix,
 `notification-quota-integration` runs the complete `chatquota` package against

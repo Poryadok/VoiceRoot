@@ -148,8 +148,10 @@ The affected User PR proof runs `./internal/identityassociation` against an
 owned PostgreSQL service using `USER_ASSOCIATION_TEST_DSN`. It requires the
 named package inventory in `scripts/ci/user_association_required.json` and
 rejects skips. Its fixtures create and drop databases; point the DSN only at an
-owned disposable PostgreSQL server. Protected capture transport cases that also
-require Redis are separate from this proof.
+owned disposable PostgreSQL server. The job also runs the protected capture
+transport against the same owned PostgreSQL and an owned Redis service. Its
+named subtests are listed in `scripts/ci/user_capture_required.json`; skips
+are rejected in that focused run.
 
 The affected Notification PR proof runs `./internal/chatquota` with
 `BE195_REDIS_ADDR` pointing to an owned Redis service, requires the named cases
