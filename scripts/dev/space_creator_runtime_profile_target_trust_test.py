@@ -20,6 +20,35 @@ import space_creator_runtime_profile_target_trust as target
 
 
 class TargetTrustTest(unittest.TestCase):
+    def test_timed_out_input_cleans_exact_owned_container(self):
+        phase=target.TargetTrustPhase.__new__(target.TargetTrustPhase); ca_sha=hashlib.sha256(b'der').hexdigest(); cid='e'*64
+        image='ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64; image_id='sha256:'+'f'*64
+        roots={'image':image,'config_digest':image_id,'root_fingerprints':['aa'*32]}
+        source={'ca':{'uid':'ca','resourceVersion':'1','der_sha256':ca_sha}}
+        phase._dependencies=mock.Mock(return_value=(roots,source)); phase._guard=mock.Mock(); phase._state=mock.Mock()
+        phase._secret=mock.Mock(side_effect=lambda name,key:({'uid':'ca','resourceVersion':'1'},b'ca') if name=='voice-media-ca' else ({'uid':'trust','resourceVersion':'1'},b'private'))
+        commands=[]
+        def docker(args,limit=1048576):
+            commands.append(args)
+            if args[:2]==['image','inspect']:return json.dumps([{'Id':image_id,'Os':'linux','Architecture':'amd64','RepoDigests':[image],'Config':{'Volumes':None}}]).encode()
+            if args[0]=='create':return cid.encode()
+            if args[0]=='inspect':
+                name=next(a.split('=',1)[1] for c in commands if c[0]=='create' for a in c if a.startswith('voice.test.owner='))
+                return json.dumps([{'Id':cid,'Image':image_id,'Config':{'Labels':{'voice.test.owner':name},'Entrypoint':['/bin/sh'],
+                    'Cmd':['-ec',target.SCRIPT],'User':'65532:65532','OpenStdin':True},'HostConfig':{'NetworkMode':'none','ReadonlyRootfs':True,
+                    'CapDrop':['ALL'],'SecurityOpt':['no-new-privileges'],'Tmpfs':{'/scratch':target.TMPFS}},'Mounts':[]}]).encode()
+            if args[0] in ('rm','ps'):return b''
+            raise AssertionError(args)
+        phase._docker=mock.Mock(side_effect=docker)
+        with mock.patch.object(target.material,'_cert_der',return_value=b'der'), mock.patch.object(target,'_input',side_effect=TimeoutError()):
+            with self.assertRaises(TimeoutError):phase._capture('token')
+        self.assertTrue(any(args[0]=='rm' and cid in args for args in commands))
+        self.assertEqual(phase._state.call_args.args[0]['status'],'removed')
+        commands.clear()
+        with mock.patch.object(target.material,'_cert_der',return_value=b'der'), mock.patch.object(target,'_input',side_effect=target.metadata.GuardLost('lost')):
+            with self.assertRaises(target.metadata.GuardLost):phase._capture('token')
+        self.assertFalse(any(args[0]=='rm' for args in commands))
+
     def test_preflight_ledger_read_failure_is_guard_lost(self):
         phase=target.TargetTrustPhase.__new__(target.TargetTrustPhase); row={'status':'active'}; rev=('uid','rv')
         phase._guard=mock.Mock(); phase._local=mock.Mock(); phase._ledger=mock.Mock(return_value=(row,rev))
