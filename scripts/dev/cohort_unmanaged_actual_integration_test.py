@@ -141,7 +141,7 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             stale=copy.deepcopy(event);stale['databases']['extra_db']+=1
             with patch.object(affected.FullCatalogPhase,'verify_current',return_value=stale),self.assertRaises(restore.CohortRestoreError):
                 restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
-            observed=[];events=[];original=media._psql
+            observed=[];events=[];histories={'auth_db':[],'voice_db':[]};original=media._psql
             def psql(cid,admin,db,sql,timeout=120):
                 result=original(cid,admin,db,sql,timeout=timeout)
                 if sql==restore.GATEWAY_CATALOG:
@@ -152,6 +152,11 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                 if sql=='ALTER DATABASE template0 WITH ALLOW_CONNECTIONS true':events.append('template')
                 if sql in (media.CATALOG,restore.AUTH_CATALOG):
                     self.assertEqual(original(cid,admin,db,'SELECT count(*) FROM public.fixture_marker').strip(),b'1')
+                    query=("SELECT coalesce(json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version),'[]'::json) FROM public.schema_migrations"
+                           if db=='voice_db' else "SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM public.flyway_schema_history")
+                    history=json.loads(original(cid,admin,db,query))
+                    self.assertEqual(json.loads(result)['history'],history)
+                    histories[db].append(history)
                 if sql==unmanaged.CATALOG_SQL and db not in ('gateway_db','auth_db','voice_db'):
                     self.assertEqual(original(cid,admin,db,'SELECT id,value FROM tenant.events').strip(),b'7|kept')
                     self.assertEqual(original(cid,admin,db,'SELECT version,dirty FROM public.schema_migrations').strip(),b'991|t')
@@ -164,6 +169,11 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             expected['auth_db']={'mode':'restore-only','from':32,'to':32}
             expected['voice_db']={'mode':'migrate','from':14,'to':15}
             self.assertEqual(receipt['databases'],expected)
+            self.assertEqual(catalogs['voice_db']['history'],[{'version':14,'dirty':False}])
+            self.assertEqual(histories['voice_db'],[[{'version':14,'dirty':False}],[{'version':15,'dirty':False}]])
+            self.assertEqual(len(histories['auth_db']),2)
+            self.assertEqual(histories['auth_db'],[catalogs['auth_db']['history'],catalogs['auth_db']['history']])
+            self.assertEqual(catalogs['auth_db']['history'],[{'version':'32','script':'V32__linked_oauth_transport.sql','checksum':123,'success':True}])
             extras=[db for db in databases if db not in ('gateway_db','auth_db','voice_db')]
             self.assertEqual(sorted(observed),sorted(extras*2))
             self.assertIn('gateway',events);self.assertIn('template',events)
