@@ -23,6 +23,8 @@ sources. Duplicate explicit variables, unsupported or optional sources, unknown
 runtime origins, guard loss, container drift and resource identity drift hold.
 The current program checks `/proc/1/exe` and examines `/proc/1/environ` inside
 the container, emitting only the bounded category, never the variable value.
+Failures expose only a fixed stage and, for runtime/origin failures, an
+allowlisted field name; transport errors and values are never included.
 For toggles, non-ASCII bytes are unsupported and cause HOLD rather than an
 approximation of Go's Unicode whitespace or case-folding behavior.
 

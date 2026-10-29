@@ -40,8 +40,10 @@ class ProbeError(RuntimeError): pass
 
 def inspect(workload, pod_name, run_bytes, guard):
     """Return fixed enums and non-secret references; this is observation, not admission."""
+    reason = 'target'
     try:
         if workload not in FIELDS or not callable(run_bytes) or not callable(guard): raise ValueError()
+        reason = 'workload-before'
         snap = metadata.kube_workload_snapshot(workload,pod_name,run_bytes,guard,namespace='voice-dev')
         metadata._fence(guard); before = snap()
         fields = FIELDS[workload]; objects = {}
@@ -59,6 +61,7 @@ def inspect(workload, pod_name, run_bytes, guard):
                 if len(rows) < 2 or not rows[0] or not rows[1] or len(rows[2:]) != len(set(rows[2:])): raise ValueError()
                 objects[key] = {'kind':kind,'name':name,'uid':rows[0],'resource_version':rows[1],'keys':set(rows[2:])}
             return objects[key]
+        reason = 'env-from'
         origins = {name:None for name in fields}; env_sources = []
         for item in before['envFrom']:
             if not isinstance(item,dict) or set(item)-{'prefix','secretRef','configMapRef'}: raise ValueError()
@@ -76,6 +79,7 @@ def inspect(workload, pod_name, run_bytes, guard):
                 if name.startswith(prefix) and name[len(prefix):] in obj['keys']:
                     origins[name] = {'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
                                      'resource_version':obj['resource_version'],'key':name[len(prefix):],'source':'envFrom'}
+        reason = 'explicit-env'
         explicit = before['env']; names = [entry.get('name') for entry in explicit if isinstance(entry,dict)]
         if len(names) != len(explicit) or len(names) != len(set(names)): raise ValueError()
         for entry in explicit:
@@ -95,6 +99,7 @@ def inspect(workload, pod_name, run_bytes, guard):
             else: raise ValueError()
         observed = {}
         for name in fields:
+            reason = 'runtime-' + name
             metadata._fence(guard)
             args = BASE+['exec',pod_name,'-c',workload,'--','sh','-ec',SCRIPT,'--',name]
             raw = metadata._external(run_bytes,args); metadata._fence(guard)
@@ -104,15 +109,19 @@ def inspect(workload, pod_name, run_bytes, guard):
                 allowed = {'absent','empty','true','false','other'}
             if not isinstance(raw,bytes) or len(raw)>32 or raw.decode('ascii') not in allowed: raise ValueError()
             status = raw.decode('ascii')
+            reason = 'origin-' + name
             if (origins[name] is None) != (status == 'absent'): raise ValueError()
             observed[name] = {'state':status,'origin':origins[name]}
+        reason = 'reference-recheck'
         expected_objects = copy.deepcopy(objects); objects.clear()
         for kind,name in expected_objects: reference(kind,name)
+        reason = 'workload-after'
         metadata._fence(guard); after = snap(); metadata._fence(guard)
+        reason = 'identity-drift'
         if before != after or expected_objects != objects: raise ValueError()
         identity = {k:before[k] for k in ('namespace','namespace_uid','deployment','deployment_uid','deployment_rv',
                     'pod_name','pod_uid','pod_rv','container_name','container_id','restart_count')}
         return {'status':'observed','identity':identity,'fields':observed,'env_sources':env_sources,
                 'scope':'runtime-config-metadata-only-no-provider-validation'}
     except BaseException:
-        raise ProbeError('runtime configuration observation unavailable') from None
+        raise ProbeError('runtime configuration observation unavailable: '+reason) from None

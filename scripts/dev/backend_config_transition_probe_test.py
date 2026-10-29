@@ -67,6 +67,9 @@ class ProbeTest(unittest.TestCase):
                 self.setUp(); self.fault = fault
                 with self.assertRaises(probe.ProbeError) as error: self.inspect()
                 self.assertNotIn('private-credential',str(error.exception))
+                if fault == 'secret_return': self.assertIn('runtime-FCM_CREDENTIALS_JSON',str(error.exception))
+                if fault == 'unexpected_env': self.assertIn('origin-DATABASE_URL',str(error.exception))
+                if fault in ('container_drift','ref_drift'): self.assertIn('identity-drift',str(error.exception))
 
     def test_duplicate_and_optional_sources_hold(self):
         self.snapshot['env'].append(copy.deepcopy(self.snapshot['env'][0]))
