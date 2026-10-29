@@ -18,11 +18,13 @@ import gis_first_install as gis
 import gis_existing_update_test as gis_fixtures
 import guard_test
 import normalize
+import nonnats_plan
 import realtime_bootstrap
 import resource_claim
 import resource_claim_test
 import root_cli
 import runtime_stage
+import stage_runtime
 import source_authority
 import source_plan
 import source_plan_test
@@ -45,6 +47,59 @@ def with_gis_server_defaults(kube):
 
 
 class RootCompositionContract(unittest.TestCase):
+    def test_c2_protected_anchor_revalidates_actual_compiler_target_after_tt_bind(self):
+        # Author fixture models a historical PASS; live PG/Kubernetes
+        # observations and current source attestation are controlled seams.
+        import realtime_bootstrap_existing as c2
+        import realtime_bootstrap_existing_test as c2_fixtures
+        owner = c2_fixtures.ProtectedAnchorTests()
+        owner.setUp()
+        self.addCleanup(owner.tearDown)
+        _kube, pack, _ = fixtures.FrontendCreateOnlyContract().compile_absent('app-only')
+        ctx = resource_claim_test.context()
+        ctx.update(commit=pack['target']['tag'], images=copy.deepcopy(pack['target']['images']))
+        card = resource_claim_test.card(ctx)
+        old_images = {'voice-space/space': 'example.invalid/space@sha256:' + 'c' * 64}
+        card['observed']['images'] = copy.deepcopy(old_images)
+        binding = {'nats-rollout-preservation/realtime_bootstrap_existing.py':
+                   hashlib.sha256(Path(c2.__file__).read_bytes()).hexdigest()}
+        journal = resource_claim.RootJournal(owner.root)
+        session = resource_claim.Session(ctx, 'b' * 12, resource_claim.digest(binding),
+            lambda: copy.deepcopy(card), journal)
+        marker = {'metadata': {'name': 'voice-nats-generation', 'uid': 'marker'}}
+        deployment = {'metadata': {'uid': 'deploy', 'generation': 1}, 'spec': {'replicas': 1}}
+        stage = object.__new__(runtime_stage.RolloutStage)
+        stage.marker = marker
+        stage.snapshots = {'voice-space': deployment}
+        stage.old_images = old_images
+        class Kube:
+            def get(self, kind, name):
+                return copy.deepcopy(marker if kind == 'configmap' else deployment)
+        ancestry, plan, first_receipt, _ = c2._anchor()
+        live = {'postgres': plan['postgres'], 'role_oid': 13, 'database_oid': 29, 'owner_oid': 13,
+                'secret': dict(first_receipt['secret'], realtime_value_sha256='f' * 64)}
+        actions = object.__new__(bridge_root.Actions)
+        actions.tt_session = session
+        actions.binding = binding
+        request = {'action': 'prepare', 'mode': 'app-only', 'nonce': session.operation + 'c' * 52}
+        approved = {'fixture': 'controlled-source'}
+        execution = {'fixture': 'controlled-execution'}
+        source = owner.root / 'installed' / 'sources' / session.operation
+        source.mkdir(parents=True, mode=0o700)
+        with patch('grp.getgrnam', return_value=SimpleNamespace(gr_gid=0)), \
+                patch.object(stage_runtime, 'Kube', return_value=Kube()), \
+                patch.object(c2, '_source'), patch.object(c2, '_observe', return_value=copy.deepcopy(live)):
+            session.admit(start=True)
+            with resource_claim.command_scope(session.check):
+                record = c2.run_existing(actions, request, approved, execution, source, stage)
+                self.assertEqual(record['anchor'], ancestry['anchor'])
+                target = copy.deepcopy(pack['target'])
+                target['realtime_bootstrap_sha256'] = resource_claim.digest(record)
+                session.bind_target(target['tag'], target['images'], old_images, resource_claim.digest(target))
+                self.assertEqual(c2.load_existing(session, actual=old_images, rollout_target=target), record)
+                with self.assertRaises(c2.Blocked):
+                    c2.load_existing(session, actual={'voice-space/space': 'foreign'}, rollout_target=target)
+
     def test_first_install_receipt_binds_exact_private_baseline_snapshots(self):
         # Synthetic cluster identities: verify receipt binding, not a live PASS.
         _kube, state, original = gis_fixtures.first_install()
@@ -85,12 +140,23 @@ class RootCompositionContract(unittest.TestCase):
         # C1 producer/loaders and external Kube/NATS/custody are controlled
         # boundaries; the typed receipt is synthetic, not a completed PASS.
         source = Path(source_plan_test.SOURCE)
-        with tempfile.TemporaryDirectory() as tmp:
+        c2_mode = ordinary_fault == 'c2'
+        with tempfile.TemporaryDirectory(dir='/root' if c2_mode else None) as tmp:
             root = Path(tmp)
+            if c2_mode:
+                import realtime_bootstrap_existing as c2
+                import realtime_bootstrap_existing_test as c2_fixtures
+                anchor = c2_fixtures.ProtectedAnchorTests()
+                anchor.setUp()
+                shutil.copytree(anchor.root, root, dirs_exist_ok=True)
+                anchor.tearDown()
             installed = root / 'installed'
-            (installed / 'sources').mkdir(parents=True)
+            (installed / 'sources').mkdir(parents=True, exist_ok=True)
             kube, params = source_plan_test.SourceTests().canonical_fixture('app-only')
             ordinary = ordinary_fault is not None
+            if c2_mode:
+                for index, obj in enumerate(kube.objects.values()):
+                    obj.setdefault('metadata', {})['uid'] = str(uuid.UUID(int=index + 1))
             if not ordinary:
                 for kind in ('Service', 'Deployment'):
                     del kube.objects[(kind, 'voice-gameintegration')]
@@ -111,6 +177,8 @@ class RootCompositionContract(unittest.TestCase):
             snapshots[runtime_stage.HUB] = {'metadata': {'name': runtime_stage.HUB, 'uid': 'fixture-hub'},
                 'spec': {'replicas': 1, 'template': {'spec': {'containers': [
                     {'name': 'nats', 'image': 'example.invalid/nats@sha256:' + 'c' * 64}]}}}}
+            if c2_mode:
+                for row in snapshots.values(): row['metadata']['generation'] = 1
             old_images = {name + '/' + container['name']:
                 'example.invalid/' + container['name'] + '@sha256:' + 'c' * 64
                 for name, row in snapshots.items()
@@ -128,7 +196,12 @@ class RootCompositionContract(unittest.TestCase):
                              'spec': {'volumeName': 'fixture-pv'}},
                 final_pv={'metadata': {'uid': 'fixture-pv'}, 'spec': {'local': {'path': '/fixture'}}},
                 final_path=root / 'fixture-store')
-            stage.operation = 'a' * 12
+            if c2_mode:
+                real_stage = object.__new__(runtime_stage.RolloutStage)
+                vars(real_stage).update(vars(stage))
+                stage = real_stage
+            operation = ('b' if c2_mode else 'a') * 12
+            stage.operation = operation
             stage.fence = Mock()
             stage.verify_final_storage = Mock()
             stage.prepared = Mock()
@@ -136,13 +209,32 @@ class RootCompositionContract(unittest.TestCase):
             get = kube.get
             def get_with_stage(kind, name):
                 if (kind, name) == ('configmap', 'voice-nats-generation'): return copy.deepcopy(marker)
+                if c2_mode and kind == 'deployment' and name in snapshots: return copy.deepcopy(snapshots[name])
                 if kind == 'pvc' and name == marker['data']['dataPVC']:
                     return {'status': {'capacity': {'storage': '1Gi'}}}
+                if c2_mode and kind and kind[0].islower():
+                    kind = next((key[0] for key in kube.objects if key[0].lower() == kind and key[1] == name), kind)
                 return get(kind, name)
             kube.get = get_with_stage
+            if c2_mode:
+                base_run = kube.run
+                def normalized_apply(args, body=None, timeout=30):
+                    value = base_run(args, body=body, timeout=timeout)
+                    if args[:2] == ['apply', '--dry-run=server'] and body:
+                        current = get(body['kind'], body['metadata']['name'])
+                        value.setdefault('metadata', {})['uid'] = current['metadata']['uid']
+                    return value
+                kube.run = normalized_apply
             code = root / 'code'
             (code / 'nats-known-baseline').mkdir(parents=True)
             (code / 'nats-known-baseline' / 'kernel').write_bytes(b'fixture')
+            binding = {}
+            if c2_mode:
+                c2_code = Path(c2.__file__).read_bytes()
+                helper_path = code / 'nats-rollout-preservation' / 'realtime_bootstrap_existing.py'
+                helper_path.parent.mkdir()
+                helper_path.write_bytes(c2_code)
+                binding['nats-rollout-preservation/realtime_bootstrap_existing.py'] = hashlib.sha256(c2_code).hexdigest()
             contract = {'scripts': []}
             for part in ('realtime', 'notification', 'search', 'analytics-chat'):
                 raw = (source / ('deploy/templates/nats-' + part + '-bootstrap.yaml')).read_bytes().split(b'---')[0]
@@ -191,6 +283,13 @@ class RootCompositionContract(unittest.TestCase):
                     compiler.main([str(source), str(parameter), str(output)], producer=kube)
                 expected_images = json.loads(output.read_text())['target']['images']
                 candidate_images = copy.deepcopy(expected_images)
+                if ordinary_fault == 'missing_secret':
+                    for plan_mode in ('full', 'app-only'):
+                        source_plan.compile_plan(source, dict(compile_params, mode=plan_mode), source_plan_test.decoder, kube)
+                    del kube.objects[('Secret', 'voice-app-secrets')]['data']['REALTIME_DATABASE_URL']
+                    for plan_mode in ('full', 'app-only'):
+                        with self.assertRaisesRegex(nonnats_plan.PlanError, 'required_secret_key_invalid|canonical_app_secret_key_missing'):
+                            source_plan.compile_plan(source, dict(compile_params, mode=plan_mode), source_plan_test.decoder, kube)
                 if ordinary_fault == 'backend': del candidate_images['voice-user/user']
                 if ordinary_fault == 'frontend': del candidate_images['voice-web/web']
                 if ordinary_fault == 'backend_admission':
@@ -210,7 +309,7 @@ class RootCompositionContract(unittest.TestCase):
             card = resource_claim_test.card(ctx)
             card['observed']['images'] = copy.deepcopy(old_images)
             journal = resource_claim_test.MemoryJournal()
-            session = resource_claim.Session(ctx, 'a' * 12, resource_claim.digest({}),
+            session = resource_claim.Session(ctx, operation, resource_claim.digest(binding),
                 lambda: copy.deepcopy(card), journal)
             session.admit(start=True)
             c1_plan = {'secret': {'uid': 'fixture-secret', 'resourceVersion': '1', 'data_sha256': '1' * 64}}
@@ -235,10 +334,11 @@ class RootCompositionContract(unittest.TestCase):
                     self.assertEqual(rollout_target['realtime_bootstrap_sha256'], resource_claim.digest(receipt))
                 return copy.deepcopy(receipt)
             actions = object.__new__(bridge_root.Actions)
-            actions.code = code; actions.binding = {}; actions.tt_session = session
+            actions.code = code; actions.binding = binding; actions.tt_session = session
             execution = {'dispatcher_run_id': 17, 'head_sha': params['tag']}
-            request = {'nonce': 'a' * 64, 'token': 'synthetic', 'mode': 'app-only',
+            request = {'nonce': ('b' if c2_mode else 'a') * 64, 'token': 'synthetic', 'mode': 'app-only',
                        'changed_services': [], 'gis_first_install': True}
+            request['action'] = 'prepare'
             if ordinary: del request['gis_first_install']
             cut = {'manifest': {'archive_sha256': '6' * 64}, 'census': {'fixture': 'cut'}}
             cut['census_sha256'] = resource_claim.digest(cut['census'])
@@ -249,7 +349,11 @@ class RootCompositionContract(unittest.TestCase):
             captures = Mock(return_value=stage)
             class ReachedC1(Exception):
                 pass
-            c1 = Mock(side_effect=ReachedC1 if ordinary else c1_prepare)
+            c1 = Mock(side_effect=(c2.run_existing if c2_mode else ReachedC1 if ordinary else c1_prepare))
+            if c2_mode:
+                first_receipt = anchor.receipt
+                live = {'postgres': anchor.checkpoint['plan']['postgres'], 'role_oid': 13, 'database_oid': 29,
+                    'owner_oid': 13, 'secret': dict(first_receipt['secret'], realtime_value_sha256='f' * 64)}
             with contextlib.ExitStack() as stack:
                 for seam in (patch.object(bridge_root, 'INSTALLED', installed), patch.object(bridge_root.guard, 'ROOT', root),
                     patch.object(root_cli, 'ROOT', root), patch.object(bridge_root, 'Kube', return_value=kube),
@@ -290,9 +394,13 @@ class RootCompositionContract(unittest.TestCase):
                     patch.object(actions, '_encrypt', side_effect=lambda _base, state, _execution: state),
                     patch('grp.getgrnam', return_value=SimpleNamespace(gr_gid=0))):
                     stack.enter_context(seam)
+                if c2_mode:
+                    stack.enter_context(patch.object(c2, '_source'))
+                    stack.enter_context(patch.object(c2, '_observe', return_value=copy.deepcopy(live)))
+                    stack.enter_context(patch.object(stage_runtime, 'Kube', return_value=kube))
                 with resource_claim.command_scope(session.check):
-                    if ordinary:
-                        if ordinary_fault == 'none':
+                    if ordinary and not c2_mode:
+                        if ordinary_fault in ('none', 'missing_secret'):
                             with self.assertRaises(ReachedC1): actions._prepare(request)
                             c1.assert_called_once()
                         else:
@@ -302,6 +410,20 @@ class RootCompositionContract(unittest.TestCase):
                         return
                     state = actions._prepare(request)
                     self.assertEqual(captures.call_count, 2)
+                    if c2_mode:
+                        record = state['realtime_bootstrap']
+                        self.assertEqual(record['schema'], 'voice-staging-realtime-bootstrap-existing-v1')
+                        self.assertEqual(record['anchor'], {'operation': anchor.op, 'receipt_sha256': c2.digest(first_receipt)})
+                        self.assertEqual(state['target']['realtime_bootstrap_sha256'], c2.digest(record))
+                        self.assertEqual(state['resource_fence'], session.binding())
+                        base = root / ('rollout-' + operation)
+                        authorization = transaction.authorize(kube, base, state, '6' * 64,
+                            state['cut']['manifest_sha256'], {})
+                        self.assertEqual(authorization['target'], state['target'])
+                        self.assertEqual(authorization['resource_fence'], session.binding())
+                        self.assertEqual((state['phase'], state['status']), ('PAUSED_APPLY', 'WAITING'))
+                        gis_execute.assert_not_called()
+                        return
                     self.assertEqual(set(stage.snapshots), gis.baseline_workload_names(include_hub=True))
                     self.assertNotIn('voice-gameintegration', stage.snapshots)
                     self.assertEqual(state['realtime_bootstrap'], receipt)
@@ -351,8 +473,11 @@ class RootCompositionContract(unittest.TestCase):
     def test_bridge_first_install_c1_receipt_reaches_prepare_and_authorize(self):
         self._exercise_bridge()
 
+    def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
+        self._exercise_bridge('c2')
+
     def test_ordinary_candidate_inventory_is_exact_before_c1(self):
-        for fault in ('none', 'backend', 'frontend', 'backend_admission'):
+        for fault in ('none', 'backend', 'frontend', 'backend_admission', 'missing_secret'):
             with self.subTest(fault=fault): self._exercise_bridge(fault)
 
     def test_first_install_compiler_output_normalizes_without_generic_gis_apply(self):
