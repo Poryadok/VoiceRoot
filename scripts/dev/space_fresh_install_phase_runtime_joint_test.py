@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import full_cohort_go_migration as go
+import full_cohort_affected_plan as affected
 import full_cohort_schema_metadata as schema
 import space_fresh_install_phase_pg as pgmodule
 import space_fresh_install_phase as fresh
@@ -40,6 +41,7 @@ class RuntimeJointTest(unittest.TestCase):
             f.cut.intent['writer_cut']=copy.deepcopy(f.cut.admission)
             f.cut.journal.intent=copy.deepcopy(f.cut.intent)
             f.cut.journal.state['intent']=copy.deepcopy(f.cut.intent)
+            f.cut.probe=f.cut._initial_probe=affected.CatalogScopedProbe(f.catalog,'token')
         else:
             f.cut.admission={'controllers':routes.controllers}; f.cut._guard=mock.Mock()
         inv=SimpleNamespace(verify_current=mock.Mock(return_value={'database_observations':observed}),
@@ -95,6 +97,13 @@ class RuntimeJointTest(unittest.TestCase):
         self.assertEqual(receipt['new_oid'],42); self.assertEqual(receipt['runtime']['role'],'space_runtime')
         self.assertEqual(state['patches'],1); self.assertEqual(state['secret']['data']['OTHER'],'c2VudGluZWw=')
         self.assertNotIn('postgres://',str(receipt)); self.assertEqual(runtime.verify_secret_successor(phase.runtime,'token')['new_rv'],'2')
+        if with_real_cut:
+            scope=f.cut.current_base_session_scope()
+            self.assertEqual(scope['database_oids']['space_db'],42)
+            self.assertEqual(affected.verify_space_catalog(f.cut.probe,f.cut)['all_databases']['space_db'],42)
+            f.oid=43
+            with self.assertRaises(affected.AffectedError):affected.verify_space_catalog(f.cut.probe,f.cut)
+            f.oid=42
         with mock.patch.object(runtime,'verify_receipt',wraps=runtime.verify_receipt) as historical:
             self.assertEqual(fresh.verify_historical(phase,'token')['new_oid'],receipt['new_oid'])
             historical.assert_called_once_with(phase.runtime,'token')
