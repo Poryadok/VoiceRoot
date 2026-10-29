@@ -8,11 +8,13 @@ import json
 import os
 from pathlib import Path
 import re
+import select
 import secrets
 import socket
 import stat
 import struct
 import threading
+import time
 
 import canonical_application_package as canonical
 import frontend_runtime_executor as transport
@@ -160,7 +162,7 @@ class Session:
         self.suffix=match[1]; self.intent=copy.deepcopy(journal.intent); self.record=None; self.effects={}; self.pending=False
         self.listener=self.connection=self.dirfd=self.inode=self.initial=self.media=self.objects=self.proof=self.envelope=None
         self.completed=False; self.exchanged=False; self.poisoned=False
-        self.issue_thread=self.issue_done=self.issue_result=None
+        self.issue_thread=self.issue_done=self.issue_result=self.issue_control=None
         self.refs=(journal,fence,client,fence.ledger,package,issuer_preflight); self.custody=native.SpaceNativeToolPhase._custody(journal)
         self.identity=(copy.deepcopy(fence.context),copy.deepcopy(lock),namespace_uid,self.source_root,token,self.suffix)
 
@@ -318,7 +320,14 @@ class Session:
     def serve_preflight(self):
         try:
             if self.exchanged or self.listener is None or self.record.get('status')!='ready': raise ValueError()
-            self._socket(); self._check_current(); self.listener.settimeout(300); connection,_=self.listener.accept()
+            self._socket(); deadline=time.monotonic()+300
+            while True:
+                self._check_current(); self._drained()
+                if self.issue_done is None or self.issue_done.is_set(): raise ValueError()
+                remaining=deadline-time.monotonic()
+                if remaining<=0: raise ValueError()
+                if select.select([self.listener],[],[],min(remaining,1))[0]: break
+            connection,_=self.listener.accept()
             self.connection=connection; connection.settimeout(120)
             pid,uid,_=struct.unpack('3i',connection.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
             if uid!=0 or pid<=0: raise ValueError()
@@ -346,18 +355,22 @@ class Session:
         if self.issue_thread is not None or self.record is None or self.record.get('status')!='ready':
             raise CreateError('Role peer issue unavailable')
         import dev_peer_issuer_client
-        self.issue_done=threading.Event(); self.issue_result=[]
-        def trigger():
-            try: self.issue_result.append(('ok',dev_peer_issuer_client.trigger_issue(self.preflight,self.token)))
-            except BaseException: self.issue_result.append(('error',None))
-            finally: self.issue_done.set()
-        self.issue_thread=threading.Thread(target=trigger,daemon=True); self.issue_thread.start()
         try:
+            self.issue_control=dev_peer_issuer_client.new_issue_trigger(self.preflight,self.token)
+            self.issue_done=threading.Event(); self.issue_result=[]
+            def trigger():
+                try: self.issue_result.append(('ok',self.issue_control.run()))
+                except BaseException: self.issue_result.append(('error',None))
+                finally: self.issue_done.set()
+            self.issue_thread=threading.Thread(target=trigger,daemon=True); self.issue_thread.start()
             self.serve_preflight(); return self.finish()
-        except BaseException:
+        except BaseException as error:
             if self.pending and not self.completed: self._uncertain()
+            if self.issue_control is not None:self.issue_control.cancel()
+            if self.issue_thread is not None and self.issue_thread.ident is not None:self.issue_thread.join(2)
             self.close()
-            raise
+            if isinstance(error,schema.GuardLost):raise
+            raise CreateError('Role peer issue unavailable; reconcile') from None
 
     def _await_issue(self):
         if self.issue_thread is None or self.issue_done is None or not self.issue_done.wait(180): raise ValueError()

@@ -3,6 +3,7 @@ import copy
 import hashlib
 from pathlib import Path
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch,Mock
@@ -162,6 +163,25 @@ class PhaseTest(unittest.TestCase):
         with patch.object(self.base.cut,'verify_drained',side_effect=drift):
             with self.assertRaises(subject.DelegatedError): self.phase.run()
         self.assertEqual(self.base.ledger.row['status'],'uncertain'); self.assertFalse(self.phase.completed)
+
+    def test_failed_handoff_waits_for_cancelled_worker(self):
+        root=self.root/'operations'; root.mkdir(mode=0o700); (root/self.phase.suffix).mkdir(mode=0o700)
+        cancelled=threading.Event(); release=threading.Event(); finished=threading.Event()
+        class Handle:
+            def run(self):cancelled.wait(5); release.wait(20); finished.set()
+            def cancel(self):cancelled.set()
+        outcome=[]
+        def call():
+            try:self.phase._obtain()
+            except BaseException:outcome.append('hold')
+        with patch.object(subject,'ROOT',root),patch.object(subject.issuer_client,'new_issue_trigger',return_value=Handle()), \
+             patch.object(self.phase,'_socket'),patch.object(self.phase,'_drained'), \
+             patch.object(self.phase,'_current',side_effect=[None,ValueError('lost')]):
+            caller=threading.Thread(target=call); caller.start()
+            try:
+                self.assertTrue(cancelled.wait(5)); caller.join(5.5); self.assertTrue(caller.is_alive()); self.assertEqual(outcome,[])
+            finally:release.set(); caller.join(5); self.phase.close()
+        self.assertFalse(caller.is_alive()); self.assertTrue(finished.is_set()); self.assertEqual(outcome,['hold'])
 
 
 class CreatorSpaceInspectionTest(unittest.TestCase):
