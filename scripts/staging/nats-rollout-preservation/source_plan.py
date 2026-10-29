@@ -800,6 +800,13 @@ def _normalized_ddl(statement):
 CLICKHOUSE_READ_ARGS=('exec','voice-clickhouse-0','-c','clickhouse','--','sh','-ceu',
     'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$CLICKHOUSE_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; clickhouse-client --host voice-clickhouse --user default --password "$CLICKHOUSE_PASSWORD" --query "$1"; printf "}"',
     '--',CH_SQL)
+POSTGRES_READ_SCRIPT='printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$POSTGRES_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; PGPASSWORD="$POSTGRES_PASSWORD" PGOPTIONS="-c default_transaction_read_only=on -c search_path=pg_catalog,public,pg_temp" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$1" -Atqc "$2"; printf "}"'
+
+
+def postgres_read_args(database):
+    if database not in ('postgres','gateway_db'):_fail('canonical_postgres_database_invalid')
+    sql=PG_SQL if database=='postgres' else GATEWAY_SQL
+    return ['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',POSTGRES_READ_SCRIPT,'--',database,sql]
 
 
 def _verify_clickhouse(kube, secret, ddl):
@@ -824,8 +831,14 @@ def verify_db_init(kube, plan):
         for pod, password, user, database, sql in (
             ('voice-postgres-0', 'POSTGRES_PASSWORD', 'POSTGRES_USER', 'postgres', PG_SQL),
             ('voice-postgres-0', 'POSTGRES_PASSWORD', 'POSTGRES_USER', 'gateway_db', GATEWAY_SQL)):
-            script = 'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$POSTGRES_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h voice-postgres -U "$POSTGRES_USER" -d "$1" -Atqc "$2"; printf "}"'
-            result = kube.run(['exec', pod, '--', 'sh', '-ceu', script, '--', database, sql])
+            import commands,resource_claim
+            session=getattr(commands.authority_guard,'__self__',None)
+            guarded=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+            if guarded:
+                import staging_cohort_preservation
+                before=staging_cohort_preservation.guard_postgres(session)
+            result = kube.run(postgres_read_args(database))
+            if guarded and staging_cohort_preservation.guard_postgres(session)!=before:_fail('cohort_postgres_changed')
             if result['password_sha256'] != hashlib.sha256(_value(secret, password).encode()).hexdigest():
                 _fail('unsupported_postgres_authority_sync')
             catalog = result['catalog']
