@@ -183,12 +183,20 @@ class RenderTest(unittest.TestCase):
         target = {'engine': 'golang-migrate', 'from': 1, 'to': 3, 'files': {'000001_up.up.sql': 'a' * 64}}
         observed = {'metadata': {'migrations': {'auth_db': {'from': 26}, 'chat_db': target}},
                     'databases': ['auth_db', 'chat_db'], 'sources': {'chat_db': {'database_oid': 4}},
-                    'restore_inputs': {}, 'full_catalog': {}, 'migration_roles': {'chat_db': {'role': 'voice'}}}
+                    'restore_inputs': {'postgres_image': 'pg', 'migrate_image': 'migrate'},
+                    'full_catalog': {}, 'migration_roles': {'chat_db': {'role': 'voice'}}}
         binding = {k: observed[k] for k in ('databases', 'sources', 'restore_inputs', 'full_catalog')}
+        binding.update(source_sha='b' * 40, snapshot_id='capture-' + 'a' * 32)
+        marker = {'manifest_sha256': 'c' * 64}
+        clone = {'database': 'chat_db', 'role': 'voice', 'from': 1, 'to': 3, 'source_sha': binding['source_sha'],
+                 'snapshot_id': binding['snapshot_id'], 'manifest_sha256': marker['manifest_sha256'],
+                 'migration_roles_sha256': 'd' * 64, 'scope': 'isolated-clone-migration-login-only'}
         receipt = {'databases': {'chat_db': {'mode': 'migrate', 'from': 1, 'to': 3}}}
         cohort.phases = SimpleNamespace(**common, journal=SimpleNamespace(state={'steps': {'cohort-restore': {'receipt': receipt}}}))
         with mock.patch.object(migration.metadata, 'verify_completed', return_value=observed), \
-             mock.patch.object(migration.auth, 'verified_sources', return_value=(binding, {})), \
+             mock.patch.object(migration.readback, '_snapshot', return_value=(binding, {}, marker, {})), \
+             mock.patch.object(migration.cohort_restore_journal, 'verify_go_role', return_value=clone), \
+             mock.patch.object(migration.restore, '_source'), \
              mock.patch.object(migration.restore, 'migration_inventory'):
             self.assertEqual(migration.qualified_plan(metadata_phase, cohort, cut, 'token', 'chat_db')['plan'], target)
             receipt['databases']['chat_db']['to'] = 4

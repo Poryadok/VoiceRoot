@@ -12,9 +12,9 @@ import subprocess
 import time
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-import auth_live_migration_phase as auth
 import auth_user_candidate_probe
 import cohort_backup_phases
+import cohort_readback as readback
 import cohort_restore_journal
 import frontend_runtime_executor
 import full_cohort_backup_metadata as metadata
@@ -193,27 +193,33 @@ def qualified_plan(metadata_phase, cohort_phase, cut, token, database):
         cohort_phase._guard(); cut.verify_drained()
         observed = metadata.verify_completed(metadata_phase, token)
         plans = observed['metadata']['migrations']
-        auth_version = plans['auth_db']['from']
-        if auth_version not in (26, 32) or database not in plans:
-            raise ValueError()
-        binding, provenance = auth.verified_sources(cohort_phase, observed['metadata'], auth_version)
+        if database not in plans: raise ValueError()
+        row, revision = p.fence.ledger.read()
+        binding, _, marker, _ = readback._snapshot(cohort_phase, row)
+        clone = cohort_restore_journal.verify_go_role(cohort_phase, metadata_phase, token, database)
         plan = plans[database]
         if (binding['restore_inputs'] != observed['restore_inputs'] or binding['databases'] != observed['databases'] or
                 binding['sources'] != observed['sources'] or binding['full_catalog'] != observed['full_catalog'] or
                 restore.classify_plan(database, plan, True) != 'migrate'):
             raise ValueError()
+        _check_clone(clone, database, observed['migration_roles'][database]['role'], plan, binding['source_sha'])
+        if clone['manifest_sha256'] != marker['manifest_sha256'] or clone['snapshot_id'] != binding['snapshot_id']:
+            raise ValueError()
+        restore._source(binding, binding['databases'], observed['metadata'],
+                        binding['restore_inputs']['postgres_image'], binding['restore_inputs']['migrate_image'])
         receipt = p.journal.state['steps']['cohort-restore']['receipt']
         if receipt['databases'][database] != {'mode': 'migrate', 'from': plan['from'], 'to': plan['to']}:
             raise ValueError()
         restore.migration_inventory(metadata_phase.source_root, binding['databases'], plans, full_catalog=True)
         cut.verify_drained(); cohort_phase._guard()
         if (metadata.verify_completed(metadata_phase, token) != observed or
-                auth.verified_sources(cohort_phase, observed['metadata'], auth_version) != (binding, provenance)):
+                p.fence.ledger.read() != (row, revision) or
+                cohort_restore_journal.verify_go_role(cohort_phase, metadata_phase, token, database) != clone):
             raise ValueError()
         return {'database': database, 'plan': copy.deepcopy(plan), 'source': copy.deepcopy(binding['sources'][database]),
                 'credential': copy.deepcopy(observed['migration_roles'][database]),
                 'metadata_receipt_sha256': p.fence.ledger.read()[0][metadata.LEDGER]['receipt_sha256'],
-                'restore_provenance': copy.deepcopy(provenance)}
+                'restore_provenance': {'manifest_sha256': marker['manifest_sha256'], 'clone_receipt_sha256': _hash(clone)}}
     except BaseException:
         raise MigrationError('source-qualified migrated restore unavailable') from None
 
