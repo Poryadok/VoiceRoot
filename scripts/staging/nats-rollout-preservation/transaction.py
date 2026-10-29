@@ -224,7 +224,7 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         if realtime_bootstrap_receipt is not None or prerequisites_capture is not None:
             path=Path(base)/'checkpoint.json'
             if path.exists():
-                state=private_json(path)
+                state=private_json(path,limit=128<<20)
                 if state.get('phase')=='READ_ONLY_CAPTURE':
                     state.update(status='BLOCKED',fence_status='UNKNOWN',error=safe_error(error))
                     save(path,state)

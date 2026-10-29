@@ -57,5 +57,22 @@ class PreservationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
             migrations.require_preserving_admission('images-only', [{'database':'space'}])
 
+    @unittest.skipUnless(__import__('os').name=='posix' and __import__('os').geteuid()==0,
+                         'checkpoint custody requires isolated Linux root')
+    def test_large_root_checkpoint_records_blocked_without_masking_failure(self):
+        import json,root_main
+        with tempfile.TemporaryDirectory(dir='/root') as folder:
+            base=Path(folder);path=base/'checkpoint.json'
+            state={'phase':'READ_ONLY_CAPTURE','status':'RUNNING','fence_status':'UNKNOWN',
+                   'source_fixture':'x'*(3<<20)}
+            root_main.save(path,state,limit=128<<20)
+            with patch.object(transaction,'_prepare',side_effect=RuntimeError('fixture failure')):
+                with self.assertRaisesRegex(RuntimeError,'fixture failure'):
+                    transaction.prepare(None,base,base,{}, {},'a'*12,{},[],{},
+                                        realtime_bootstrap_receipt={'fixture':True})
+            result=json.loads(path.read_bytes())
+            self.assertEqual((result['status'],result['fence_status']),('BLOCKED','UNKNOWN'))
+            self.assertEqual(len(result['source_fixture']),3<<20)
+
 
 if __name__=='__main__':unittest.main()
