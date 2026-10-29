@@ -34,7 +34,7 @@ def stage_cluster_fixture(session,store_kube=None):
            'voice-web','voice-admin','voice-developer-portal']
     rows={}; images=[]; replicasets={}
     for index,name in enumerate(names,1):
-        uid='deployment-'+str(index);rsuid='rs-'+str(index);container=name.removeprefix('voice-')
+        uid='00000000-0000-4000-8000-'+str(index).zfill(12);rsuid='00000000-0000-4000-8000-'+str(index+100).zfill(12);container=name.removeprefix('voice-')
         image=(stage_runtime.NATS_IMAGE if name==stage_runtime.HUB else 'fixture.invalid/'+container+':old')
         spec={'containers':[{'name':container,'image':image}]}
         if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
@@ -53,7 +53,7 @@ def stage_cluster_fixture(session,store_kube=None):
             'imageID':('ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f'
                 if name=='voice-story' and c['name']=='story' and os.environ.get('VOICE_TEST_STORY_OCI')
                 else 'fixture.invalid/'+c['name']+'@sha256:'+'a'*64)} for c in containers]
-        images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
+        images.append({'kind':'Pod','metadata':{'uid':'00000000-0000-4000-8000-'+str(index+200).zfill(12),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
             'status':{'phase':'Running','containerStatuses':statuses(template['spec']['containers']),
                       'initContainerStatuses':statuses(template['spec'].get('initContainers',[]))}})
     fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace,'resourceVersion':'1'}},
@@ -76,6 +76,19 @@ def stage_cluster_fixture(session,store_kube=None):
         def run(self,args,**kwargs):
             session.check()
             if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
+            if args[:2]==['get','pods,replicasets'] and args[-1].startswith('go-template='):
+                result=[]
+                for item in images:
+                    if item['kind']=='Pod':
+                        rsuid=item['metadata']['ownerReferences'][0]['uid']
+                        rs=next(value for value in replicasets.values() if value['metadata']['uid']==rsuid)
+                        depuid=rs['metadata']['ownerReferences'][0]['uid']
+                        dep=next(value for value in rows.values() if value['metadata']['uid']==depuid)
+                        if dep['spec'].get('replicas',1)==0:continue
+                    result.append({'kind':item['kind'],'metadata':{'uid':item['metadata']['uid'],
+                        'ownerReferences':[{'uid':owner['uid']} for owner in item['metadata']['ownerReferences']]},
+                        'spec':{'volumes':[]}})
+                return {'items':result}
             if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
             if args==['get','pods','-o','json']:
                 return {'items':[{'metadata':{'name':'fixture-hub','uid':'fixture-hub-uid'},
@@ -342,7 +355,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     return {'items':[copy.deepcopy(pg_slice)]}
    if args==['get','pods','-l','app='+stage_runtime.HUB,'-o','json']:
     return {'items':[{'metadata':{'name':stage_runtime.HUB+'-synthetic',
-      'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'rs-1'}]},
+      'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'00000000-0000-4000-8000-000000000101'}]},
       'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}]}
    if args[:2]==['get','--raw'] and ':8222/proxy/jsz?' in args[-1]:
     from nats_contract_plan_test import live
