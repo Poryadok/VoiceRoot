@@ -27,7 +27,7 @@ func verifyLegacy24Preserved(ctx context.Context, conn *pgx.Conn, origin *legacy
 	var name, role, current, system string
 	var oid uint32
 	var clean bool
-	if err = tx.QueryRow(ctx, `SELECT d.datname,d.oid,session_user,current_user,(SELECT system_identifier::text FROM pg_catalog.pg_control_system()),(SELECT count(*)=1 AND bool_and(version IN (44,51) AND NOT dirty) FROM public.schema_migrations) FROM pg_catalog.pg_database d WHERE d.datname='space_db'`).Scan(&name, &oid, &role, &current, &system, &clean); err != nil || !clean || role != current {
+	if err = tx.QueryRow(ctx, `SELECT d.datname,d.oid,session_user,current_user,(SELECT system_identifier::text FROM pg_catalog.pg_control_system()),(SELECT count(*)=1 AND bool_and(version IN (44,51) AND NOT dirty) FROM public.schema_migrations) FROM pg_catalog.pg_database d WHERE d.datname=current_database() AND d.datname='space_db'`).Scan(&name, &oid, &role, &current, &system, &clean); err != nil || !clean || role != current {
 		return "", errors.New("HOLD: legacy24 final target unavailable")
 	}
 	target := &store.NativeInstallerSourceFacts{DatabaseName: name, DatabaseOID: oid, DatabaseSystemID: system, InstallerRole: role}

@@ -364,5 +364,23 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, preserved, 64)
 		require.Equal(t, preserved44, preserved)
+		pool.Close()
+		require.NoError(t, conn.Close(ctx))
+		_, err = admin.Exec(ctx, `CREATE DATABASE space_other TEMPLATE space_db`)
+		require.NoError(t, err)
+		var otherOID uint32
+		require.NoError(t, admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_other'`).Scan(&otherOID))
+		otherURL := *target
+		otherURL.Path = "/space_other"
+		other, err := pgx.Connect(ctx, otherURL.String())
+		require.NoError(t, err)
+		_, err = verifyLegacy24Preserved(ctx, other, readOrigin)
+		require.Error(t, err, "matching cloned contents in another database do not prove the original target")
+		require.NoError(t, other.Close(ctx))
+		var observedOther uint32
+		require.NoError(t, admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_other'`).Scan(&observedOther))
+		require.Equal(t, otherOID, observedOther)
+		_, err = admin.Exec(ctx, `DROP DATABASE space_other`)
+		require.NoError(t, err)
 	})
 }
