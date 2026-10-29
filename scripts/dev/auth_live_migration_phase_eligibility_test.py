@@ -6,14 +6,21 @@ import base64
 from unittest.mock import patch
 from types import SimpleNamespace
 import auth_live_migration_phase_eligibility as eligibility
-from auth_live_migration_phase_eligibility import check_environment, resolve_environment, read_image_config, read_references, check_container, candidate_target, EligibilityError
+from auth_live_migration_phase_eligibility import check_environment, check_database_route, resolve_environment, read_image_config, read_references, check_container, candidate_target, EligibilityError
 
 
 class EligibilityTests(unittest.TestCase):
+    def test_candidate_route_requires_exact_auth_database_and_role(self):
+        env={'SPRING_DATASOURCE_URL':'jdbc:postgresql://voice-postgres:5432/auth_db'}
+        self.assertEqual(check_database_route(env)['role'],'voice')
+        for value in ('jdbc:postgresql://elsewhere:5432/auth_db','jdbc:postgresql://voice-postgres/user_db'):
+            with self.assertRaises(EligibilityError): check_database_route({**env,'SPRING_DATASOURCE_URL':value})
+        with self.assertRaises(EligibilityError): check_database_route({**env,'SPRING_DATASOURCE_USERNAME':'other'})
     def test_candidate_snapshot_rejects_deployment_drift(self):
         image='ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64
         spec={'replicas':0,'template':{'spec':{'containers':[{'name':'auth','image':'old',
-              'env':[{'name':'AUTH_FLYWAY_ENABLED','value':'false'}]}]}}}
+              'env':[{'name':'AUTH_FLYWAY_ENABLED','value':'false'},
+                     {'name':'SPRING_DATASOURCE_URL','value':'jdbc:postgresql://voice-postgres:5432/auth_db'}]}]}}}
         meta={'name':'voice-auth','namespace':'voice-dev','uid':'uid','generation':3,'resourceVersion':'9'}
         plan={'deployment':{'uid':'uid','generation':3,'resourceVersion':'8','spec':spec},'platform_digest':'sha256:'+'b'*64}
         class Client:
@@ -120,3 +127,6 @@ class EligibilityTests(unittest.TestCase):
                 self.assertEqual(check_environment(env)['selector'], 'absent')
             else:
                 with self.assertRaises(EligibilityError): check_environment(env)
+
+
+if __name__=='__main__': unittest.main()

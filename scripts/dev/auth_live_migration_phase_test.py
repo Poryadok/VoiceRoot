@@ -14,6 +14,100 @@ import auth_live_migration_phase_probe as probe
 
 
 class AuthMigrationContract(unittest.TestCase):
+    def test_c1_data_checks_bind_original_rows_roles_and_catalog_to_clone(self):
+        clone={'original_table_columns':{'accounts':['id']},'before_markers':{'accounts':{'count':1,'sha256':'a'}},
+               'expected_after_markers':{'accounts':{'count':1,'sha256':'b'}},
+               'roles_sha256':live._digest({'roles':[]}), 'before_catalog_sha256':live._digest({'catalog':'before'}),
+               'after_catalog_sha256':live._digest({'catalog':'after'})}
+        with patch.object(live.probe.metadata,'kube_engine_snapshot',return_value=lambda:{'pod':'same'}), \
+             patch.object(live,'marker_snapshot',side_effect=[clone['before_markers'],clone['expected_after_markers']]), \
+             patch.object(live.probe,'_query',side_effect=[{'roles':[]},{'catalog':'before'}]):
+            result=live._c1_data_snapshot({'pod':'same'},clone,True,lambda:None)
+        self.assertEqual(result['catalog_sha256'],clone['before_catalog_sha256'])
+        with patch.object(live.probe.metadata,'kube_engine_snapshot',return_value=lambda:{'pod':'same'}), \
+             patch.object(live,'marker_snapshot',return_value={'accounts':{'count':1,'sha256':'wrong'}}), \
+             patch.object(live.probe,'_query',side_effect=[{'roles':[]},{'catalog':'after'}]),self.assertRaises(ValueError):
+            live._c1_data_snapshot({'pod':'same'},clone,False,lambda:None)
+    def test_cut_scope_must_cover_actual_auth_database_and_engine(self):
+        binding={'sources':{'auth_db':{'engine':{'pod_uid':'pg'},'database_oid':42,'server_start':'start'}}}
+        cut=SimpleNamespace(admission={'session_scope':{'engine':{'pod_uid':'pg'},'server_start':'start',
+            'databases':['auth_db'],'database_oids':{'auth_db':42}}})
+        live._bind_cut_scope(cut,binding)
+        cut.admission['session_scope']['database_oids']['auth_db']=43
+        with self.assertRaises(ValueError): live._bind_cut_scope(cut,binding)
+    def test_cleanup_deletes_only_owned_uid_with_durable_intent(self):
+        operation='media-c1-'+'a'*32; cm,job=live.c1_objects(operation,{'V26__a.sql':b'SELECT 1;'},'node-one')
+        cm['metadata'].update(uid='cm-uid',resourceVersion='10'); job['metadata'].update(uid='job-uid',resourceVersion='11')
+        objects={'configmap':cm,'job':job}; events=[]
+        class Client:
+            def call(self,*args,**kwargs):
+                if args[0]=='get': return {'items':[]} if args[1]=='pods' else copy.deepcopy(objects.get(args[1],{}))
+                if args[0]=='delete':
+                    kind='job' if '/jobs/' in args[1] else 'configmap'
+                    events.append(('delete',kind,kwargs['body']['preconditions']['uid']))
+                    objects.pop(kind); return {}
+                raise AssertionError(args)
+        p=SimpleNamespace(client=Client()); phase=SimpleNamespace(phases=p,_guard=lambda:None)
+        accepted=[]; cut=SimpleNamespace(verify_migration_running=lambda:None,accept_migration_cleanup=lambda:accepted.append(True))
+        record={'status':'active','terminal_sha256':'a'*64,
+                'job':{'state':'owned','uid':'job-uid'},'configmap':{'state':'owned','uid':'cm-uid'}}
+        def move(phase,root,kind,state,identity=None):
+            events.append((state,kind)); record[kind]['state']=state
+            if all(record[k]['state']=='removed' for k in ('job','configmap')): record['status']='done'
+            return copy.deepcopy(record)
+        def successor(*args): return {'job':job,'configmap':cm,'record':copy.deepcopy(record)}
+        with patch.object(live,'_cut_identity'),patch.object(live,'verify_writer_terminal'), \
+             patch.object(live,'verify_writer_successor',side_effect=successor),patch.object(live,'_c1_resource_transition',side_effect=move), \
+             patch.object(live,'verify_writer_cleanup',return_value={}):
+            live.cleanup_c1(phase,cut,'.')
+        self.assertEqual(events,[('removing','job'),('delete','job','job-uid'),('removed','job'),
+                                 ('removing','configmap'),('delete','configmap','cm-uid'),('removed','configmap')])
+        self.assertEqual(accepted,[True])
+    def test_terminal_phase_requires_succeeded_pod_clean_history_and_gate(self):
+        op='media-c1-'+'a'*32; cm,job=live.c1_objects(op,{'V26__a.sql':b'SELECT 1;'},'node-one')
+        job['metadata'].update(uid='job-uid',resourceVersion='2')
+        job['status']={'succeeded':1,'conditions':[{'type':'Complete','status':'True'}]}
+        pod={'metadata':{'uid':'pod-uid'},'status':{'phase':'Succeeded'}}
+        class Client:
+            def call(self,*args): return {'items':[pod]} if args[1]=='pods' else job
+        inputs={'metadata':{},'history':self.before,'credential':{'uid':'secret','resourceVersion':'1'},
+                'node':{'name':'node-one','uid':'node-id'},'provenance':{},'before_data':{'before':True}}
+        clone={'after_history':self.after}; inputs['clone_receipt_sha256']=live._digest(clone)
+        p=SimpleNamespace(client=Client(),intent={'auth_live_tool':{}},journal=SimpleNamespace(state={'steps':{
+            'auth-live-c1-inputs':inputs,'cohort-auth-flyway-private':clone}}))
+        phase=SimpleNamespace(phases=p,_guard=lambda:None); finished=[]
+        cut=SimpleNamespace(verify_migration_running=lambda:None,finish_migration=lambda:finished.append(True))
+        binding={'operation_id':op,'snapshot_id':'s','source_sha':'b'*40,'databases':['auth_db'],
+                 'sources':{'auth_db':{'engine':{},'database_oid':42,'server_start':'x'}}}
+        record={'job':{'uid':'job-uid','state':'owned'},'terminal_sha256':None}
+        successor={'job':job,'record':record,'execution':{'node_uid':'node-id','platform_digest':'sha256:'+'c'*64}}
+        pod_result={'uid':'pod-uid','ip':'10.0.0.3','image_id':'sha256:'+'c'*64,'phase':'Succeeded'}
+        observed={'history':self.after,'sessions':[],'prepared':0}
+        with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'verify_writer_successor',return_value=successor), \
+             patch.object(live,'verify_writer_job',return_value={'uid':'job-uid','resourceVersion':'3'}), \
+             patch.object(live,'verify_writer_pod',return_value=pod_result),patch.object(live,'verified_sources',return_value=(binding,{})), \
+             patch.object(live.probe,'inspect',return_value=observed),patch.object(live.probe,'verify_login',return_value=inputs['credential']), \
+             patch.object(live,'observe_node',return_value=inputs['node']),patch.object(live,'_inspect_c1_gate',return_value={'gate':True}), \
+             patch.object(live,'_c1_data_snapshot',return_value={'after':True}), \
+             patch.object(live.eligibility,'observe_candidate',return_value={}), \
+             patch.object(live,'_commit_c1_terminal') as commit:
+            inputs['candidate']={}
+            receipt=live.finish_c1(phase,cut,'.','actor','token')
+            self.assertEqual(receipt['after_history'],self.after); self.assertEqual(finished,[True]); commit.assert_called_once()
+    def test_terminal_receipt_is_persisted_before_ledger_cas_and_lost_reply_poisoned(self):
+        record={'status':'active','terminal_sha256':None,'job':{'state':'owned'},'configmap':{'state':'owned'}}
+        class Ledger:
+            def __init__(self): self.row={'auth_live_c1':copy.deepcopy(record)}; self.rev=0
+            def read(self): return copy.deepcopy(self.row),self.rev
+            def write(self,rev,row): self.row=copy.deepcopy(row); self.rev+=1; raise TimeoutError()
+        journal=SimpleNamespace(state={'steps':{'auth-live-c1':copy.deepcopy(record)}},save=lambda:None)
+        phase=SimpleNamespace(phases=SimpleNamespace(journal=journal,fence=SimpleNamespace(ledger=Ledger())))
+        receipt={'safe':'evidence'}
+        with patch.object(live,'verify_writer_successor',return_value={'record':copy.deepcopy(record)}), \
+             patch.object(live.readback,'_poison') as poison:
+            with self.assertRaises(live.PhaseError): live._commit_c1_terminal(phase,'.',receipt)
+            self.assertEqual(journal.state['steps']['auth-live-c1-terminal'],receipt)
+            poison.assert_called_once_with(phase)
     def test_gate_check_uses_both_immutable_candidate_blobs(self):
         calls=[]
         def blob(root,source,path):
@@ -37,7 +131,7 @@ class AuthMigrationContract(unittest.TestCase):
         cut=SimpleNamespace(verify_migration_running=lambda:None)
         with patch.object(live,'_cut_identity'),patch.object(live,'verify_writer_successor',
              return_value={'configmap':cm,'job':job,'record':record}),patch.object(live.readback,'_guard'):
-            with self.assertRaises(live.PhaseError): live.create_c1_objects(phase,cut,lambda:None,'.','actor','token')
+            with self.assertRaises(live.PhaseError): live.create_c1_objects(phase,cut,'.','actor','token')
         self.assertTrue(client.calls)
         self.assertFalse(any(call[0]=='create' for call in client.calls))
 
@@ -66,17 +160,17 @@ class AuthMigrationContract(unittest.TestCase):
                     transitions.append((kind,state)); record[kind]['state']=state
                     if identity: record[kind].update(uid=identity[0],resourceVersion=identity[1])
                     return copy.deepcopy(record)
-                with patch.object(live,'_cut_identity'),patch.object(live.readback,'_guard'),patch.object(live.readback,'_poison') as poison, \
+                with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live.readback,'_guard'),patch.object(live.readback,'_poison') as poison, \
                      patch.object(live,'verify_writer_successor',side_effect=lambda *args:{'configmap':cm,'job':job,'record':copy.deepcopy(record)}), \
                      patch.object(live,'_c1_resource_transition',side_effect=move),patch.object(live,'verified_sources',return_value=(binding,{})), \
                      patch.object(live.eligibility,'observe_candidate',return_value={}),patch.object(live.probe,'verify_login',return_value=inputs['credential']), \
                      patch.object(live,'observe_node',return_value=inputs['node']),patch.object(live.probe,'inspect',return_value={'history':self.before,'sessions':[],'prepared':0}):
                     if lose:
-                        with self.assertRaises(live.PhaseError): live.create_c1_objects(phase,cut,lambda:None,'.','actor','token')
+                        with self.assertRaises(live.PhaseError): live.create_c1_objects(phase,cut,'.','actor','token')
                         poison.assert_called_once_with(phase)
                         self.assertEqual(record['job']['state'],'pending')
                     else:
-                        result=live.create_c1_objects(phase,cut,lambda:None,'.','actor','token')
+                        result=live.create_c1_objects(phase,cut,'.','actor','token')
                         self.assertEqual(result['job']['state'],'owned')
                         self.assertEqual(transitions,[('configmap','pending'),('configmap','owned'),('job','pending'),('job','owned')])
                     self.assertEqual(sum(call[0]=='create' and '--dry-run=server' not in call for call in client.calls),2)
@@ -156,31 +250,36 @@ class AuthMigrationContract(unittest.TestCase):
         ledger=Ledger(); journal=Journal(); p=SimpleNamespace(journal=journal,intent={'auth_live_tool':tool},
             fence=SimpleNamespace(ledger=ledger),client=object()); phase=SimpleNamespace(phases=p)
         observed={'history':self.before,'sessions':[],'prepared':0}
-        with patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live.readback,'_guard'), \
+        cut=SimpleNamespace(verify_drained=lambda:None)
+        with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'),patch.object(live.readback,'_guard'), \
              patch.object(live,'verified_sources',return_value=(binding,{})),patch.object(live,'source_catalog',return_value=({'V26__x.sql':b'sql'},{})), \
              patch.object(live,'candidate_blob',return_value=b'{}'),patch.object(live,'expected_history',return_value=self.before), \
              patch.object(live.eligibility,'observe_candidate',return_value={}),patch.object(live.probe,'inspect',return_value=observed), \
              patch.object(live,'validate_clone_receipt'),patch.object(live,'flyway_platform',return_value=tool['flyway_platform_digest']), \
+             patch.object(live,'_c1_data_snapshot',return_value={'before':True}), \
              patch.object(live.probe,'verify_login',return_value={'uid':'secret-uid','resourceVersion':'5'}), \
              patch.object(live,'observe_node',return_value={'name':'node-one','uid':'node-id'}),patch.object(live,'verify_writer_successor'):
-            record=live.init_c1(phase,lambda:None,'.','actor','token',metadata)
+            record=live.init_c1(phase,cut,'.','actor','token',metadata)
             self.assertEqual(record['job']['state'],'absent')
             self.assertEqual(ledger.row['auth_live_c1'],record)
-            with self.assertRaises(live.PhaseError): live.init_c1(phase,lambda:None,'.','actor','token',metadata)
+            with self.assertRaises(live.PhaseError): live.init_c1(phase,cut,'.','actor','token',metadata)
     def test_writer_successor_reconstructs_objects_and_rejects_forged_ledger(self):
         operation='media-c1-'+'a'*32; source='b'*40
         tool={'node_name':'node-one','node_uid':'node-id','flyway_platform_digest':'sha256:'+'c'*64}
         cm,job=live.c1_objects(operation,{'V26__authority.sql':b'SELECT 1;'},tool['node_name'])
-        inputs={'candidate':{'source_sha':source,'image':'img','policy':{'flyway':'disabled','persistence':'jdbc','selector':'absent'}},
+        clone={'before_markers':{},'expected_after_markers':{},'roles_sha256':'f'*64,
+               'before_catalog_sha256':'1'*64,'after_catalog_sha256':'2'*64}
+        inputs={'candidate':{'source_sha':source,'image':'img','policy':{'flyway':'disabled','persistence':'jdbc','selector':'absent'},
+                             'route':{'host':'voice-postgres','database':'auth_db','role':'voice'}},
                 'metadata':{'migrations':{'auth_db':{'files':{}}}},'history':self.before,'provenance':{},
                 'node':{'name':'node-one','uid':'node-id'},'credential':{'uid':'secret-uid','resourceVersion':'5'},
-                'clone_receipt_sha256':live._digest({})}
+                'before_data':live._expected_c1_data(clone,True),'clone_receipt_sha256':live._digest(clone)}
         def obj(x): return {'state':'absent','name':x['metadata']['name'],'spec_sha256':live._digest(x),'uid':None,'resourceVersion':None}
         record={'status':'active','operation_id':operation,'snapshot_id':'snapshot','source_sha':source,'nonce':'e'*32,
                 'input_sha256':live._digest(inputs),'terminal_sha256':None,'configmap':obj(cm),'job':obj(job)}
         ledger=SimpleNamespace(read=lambda:( {'auth_live_c1':copy.deepcopy(record)},('ledger','1')))
         p=SimpleNamespace(intent={'auth_live_tool':tool},journal=SimpleNamespace(state={'steps':{'auth-live-c1':copy.deepcopy(record),
-            'auth-live-c1-inputs':copy.deepcopy(inputs),'cohort-auth-flyway-private':{}}}),
+            'auth-live-c1-inputs':copy.deepcopy(inputs),'cohort-auth-flyway-private':copy.deepcopy(clone)}}),
             fence=SimpleNamespace(context={'commit':source,'operation_id':operation,'images':{'voice-auth/auth':'img'}},ledger=ledger))
         p.journal.intent=p.intent
         phase=SimpleNamespace(phases=p,_guard=lambda:None)
@@ -195,12 +294,13 @@ class AuthMigrationContract(unittest.TestCase):
             self.assertEqual(result['job'],job)
             for kind in ('configmap','job'):
                 record[kind].update(state='owned',uid=kind+'-uid',resourceVersion='2')
-            clone={'after_history':self.after}; inputs['clone_receipt_sha256']=live._digest(clone)
+            clone['after_history']=self.after; inputs['clone_receipt_sha256']=live._digest(clone)
             record['input_sha256']=live._digest(inputs)
             terminal={'operation_id':operation,'snapshot_id':'snapshot','source_sha':source,'job_uid':'job-uid',
                       'pod_uid':'pod-uid','pod_ip':'10.0.0.3','node_uid':'node-id','image_id':'sha256:'+'c'*64,
                       'before_history':self.before,'after_history':self.after,'clone_receipt_sha256':live._digest(clone),
-                      'sessions':[]}
+                      'sessions':[],'gate_sha256':'f'*64,'credential':{'uid':'secret-uid','resourceVersion':'5'},
+                      'before_data':live._expected_c1_data(clone,True),'after_data':live._expected_c1_data(clone,False)}
             record['terminal_sha256']=live._digest(terminal)
             p.journal.state['steps'].update({'auth-live-c1':copy.deepcopy(record),'auth-live-c1-inputs':copy.deepcopy(inputs),
                 'cohort-auth-flyway-private':clone,'auth-live-c1-terminal':terminal})
@@ -212,7 +312,7 @@ class AuthMigrationContract(unittest.TestCase):
             with self.assertRaises(live.PhaseError): live.verify_writer_successor(phase,'.')
     def test_noop_holds_without_protected_package_authority(self):
         phase=SimpleNamespace(phases=SimpleNamespace())
-        with self.assertRaises(live.PhaseError): live.no_op_c2(phase,lambda:None,'.','actor','token',{})
+        with self.assertRaises(live.PhaseError): live.no_op_c2(phase,object(),'.','actor','token',{})
 
     def test_package_authority_requires_same_fence_and_exact_image_platform(self):
         image='ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64; platform='sha256:'+'b'*64
@@ -278,25 +378,26 @@ class AuthMigrationContract(unittest.TestCase):
         observation={'history':self.after,'sessions':[],'prepared':0}
         metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
             [{k:r[k] for k in ('version','script','checksum','success')} for r in self.after]}}}
-        with patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live,'c2_sources',return_value=(binding,{'marker':'m'})), \
+        cut=SimpleNamespace(verify_drained=lambda:None)
+        with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'),patch.object(live,'c2_sources',return_value=(binding,{'marker':'m'})), \
              patch.object(live,'source_catalog',return_value=({},{})),patch.object(live,'candidate_blob',return_value=b'{}'), \
              patch.object(live,'expected_history',return_value=self.after),patch.object(live.eligibility,'observe_candidate',return_value={'policy':'checked'}), \
              patch.object(live.probe,'inspect',return_value=observation),patch.object(live.readback,'_guard'):
-            result=live.no_op_c2(phase,lambda:None,'.','actor','token',metadata)
+            result=live.no_op_c2(phase,cut,'.','actor','token',metadata)
             self.assertEqual(result['status'],'no-op')
             self.assertEqual(ledger.row['auth_live_c2']['status'],'done')
-            with self.assertRaises(live.PhaseError): live.no_op_c2(phase,lambda:None,'.','actor','token',metadata)
+            with self.assertRaises(live.PhaseError): live.no_op_c2(phase,cut,'.','actor','token',metadata)
             clean=Ledger(); newjournal=Journal()
             fresh=SimpleNamespace(phases=SimpleNamespace(journal=newjournal,fence=SimpleNamespace(ledger=clean)))
             with patch.object(live.probe,'inspect',return_value={**observation,'sessions':[{'pid':123}]}):
-                with self.assertRaises(live.PhaseError): live.no_op_c2(fresh,lambda:None,'.','actor','token',metadata)
+                with self.assertRaises(live.PhaseError): live.no_op_c2(fresh,cut,'.','actor','token',metadata)
             self.assertEqual(clean.row,{})
             self.assertEqual(newjournal.state['steps'],{})
             def lost_write(rev,row):
                 clean.row=copy.deepcopy(row)
                 raise RuntimeError('lost response')
             with patch.object(clean,'write',side_effect=lost_write),patch.object(live.readback,'_poison') as poison:
-                with self.assertRaises(live.PhaseError): live.no_op_c2(fresh,lambda:None,'.','actor','token',metadata)
+                with self.assertRaises(live.PhaseError): live.no_op_c2(fresh,cut,'.','actor','token',metadata)
                 poison.assert_called_once_with(fresh)
     def setUp(self):
         self.before = [{'version':str(n), 'script':f'V{n}__fixture.sql', 'checksum':n,

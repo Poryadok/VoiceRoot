@@ -13,6 +13,7 @@ import hashlib
 import json
 import publish_candidate
 import cohort_readback as readback
+import full_cohort_schema_metadata as metadata
 from frontend_runtime_executor import KubectlTransport
 
 
@@ -70,6 +71,7 @@ def observe_candidate(phase, drain, source_root, actor, token):
         for key in ('PATH','JAVA_HOME'):
             if effective.get(key)!=image_config['env'].get(key): raise ValueError()
         policy=check_environment(effective)
+        route=check_database_route(effective)
         values2,refs2=read_references(p.client,auth,guard)
         if values!=values2 or refs!=refs2 or p.intent['auth_live_candidate']!=plan or p.journal.intent!=p.intent:
             raise ValueError()
@@ -77,7 +79,7 @@ def observe_candidate(phase, drain, source_root, actor, token):
         encoded=json.dumps(target,sort_keys=True,separators=(',',':')).encode()
         return {'source_sha':context['commit'],'auth_tree':tree,'image':image,'platform_digest':plan['platform_digest'],
                 'config_digest':image_config['config_digest'],'deployment':last,'initial_resourceVersion':first['resourceVersion'],
-                'target_spec_sha256':hashlib.sha256(encoded).hexdigest(),'references':refs,'policy':policy}
+                'target_spec_sha256':hashlib.sha256(encoded).hexdigest(),'references':refs,'policy':policy,'route':route}
     except BaseException:
         raise EligibilityError('candidate Auth configuration not admitted') from None
 
@@ -268,3 +270,14 @@ def check_environment(env):
                         or re.fullmatch(r'-Djavax\.net\.ssl\.(trustStore|trustStorePassword|trustStoreType)=[A-Za-z0-9_./-]+',option)):
                     raise EligibilityError('unsupported JVM option')
     return {'flyway':'disabled','persistence':'jdbc','selector':'absent'}
+
+
+def check_database_route(env):
+    try:
+        url=env.get('SPRING_DATASOURCE_URL')
+        if not isinstance(url,str) or not url.startswith('jdbc:') or env.get('SPRING_DATASOURCE_USERNAME','voice')!='voice':
+            raise ValueError()
+        host,database,embedded_role=metadata._url(url[5:],'voice-dev')
+        if database!='auth_db' or embedded_role: raise ValueError()
+        return {'host':host,'database':'auth_db','role':'voice'}
+    except BaseException: raise EligibilityError('candidate Auth database route unavailable') from None

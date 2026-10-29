@@ -2,6 +2,7 @@
 import copy
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import auth_live_migration_phase as live
@@ -41,16 +42,17 @@ class C2JournalTest(unittest.TestCase):
             metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
                 [{k:r[k] for k in ('version','script','checksum','success')} for r in history]}}}
             observation={'history':history,'sessions':[],'prepared':0}
-            with patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live.restore,'_source'),patch.object(live,'source_catalog',return_value=({},{})), \
+            cut=SimpleNamespace(verify_drained=lambda:None)
+            with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'),patch.object(live.restore,'_source'),patch.object(live,'source_catalog',return_value=({},{})), \
                  patch.object(live,'candidate_blob',return_value=b'{}'),patch.object(live,'expected_history',return_value=history), \
                  patch.object(live.eligibility,'observe_candidate',return_value={'policy':'checked'}), \
                  patch.object(live.probe,'inspect',return_value=observation):
                 bad=copy.deepcopy(work.base.ledger.row['cohort_restore'])
                 work.base.ledger.row['cohort_restore']['receipt']['source_sha']='f'*40
-                with self.assertRaises(live.PhaseError): live.no_op_c2(work.phase,lambda:None,'.','actor','token',metadata)
+                with self.assertRaises(live.PhaseError): live.no_op_c2(work.phase,cut,'.','actor','token',metadata)
                 self.assertNotIn('auth_live_c2',work.base.ledger.row)
                 work.base.ledger.row['cohort_restore']=bad
-                receipt=live.no_op_c2(work.phase,lambda:None,'.','actor','token',metadata)
+                receipt=live.no_op_c2(work.phase,cut,'.','actor','token',metadata)
                 self.assertEqual(receipt['operation_id'],binding['operation_id'])
                 self.assertEqual(work.base.ledger.row['auth_live_c2']['status'],'done')
                 self.assertEqual(work.journal.state['steps']['auth-live-c2-private'],receipt)
