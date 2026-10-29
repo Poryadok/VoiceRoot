@@ -249,13 +249,14 @@ class EffectStateTest(unittest.TestCase):
             return listing(('trustedCertEntry', 'a' * 64), ('trustedCertEntry', self.ca_sha))
         actual_tool = effect.TrustEffectPhase._tool.__get__(self.phase)
         with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=docker), \
+             mock.patch.object(effect.target.metadata, '_bounded_process', side_effect=lambda args, limit: docker(args[1:], limit)), \
              mock.patch.object(effect.target, '_input', side_effect=input_data):
             receipt = self.prepare_run()
         self.assertEqual(receipt['mode'], 'create')
         self.assertEqual(sum(args[0] == 'rm' for args in commands), 4)
         self.assertEqual(self.phase.record['tool']['status'], 'removed')
 
-    def test_timed_out_owned_container_is_removed_before_reconciliation(self):
+    def _timeout_owned_container(self, guard_lost):
         commands = []; current = {}; cid = 'e' * 64
         def docker(args, limit=1048576):
             commands.append(copy.deepcopy(args))
@@ -276,12 +277,52 @@ class EffectStateTest(unittest.TestCase):
             if args[0] == 'ps': return b''
             raise AssertionError(args)
         actual_tool = effect.TrustEffectPhase._tool.__get__(self.phase)
-        with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=docker), \
-             mock.patch.object(effect.target, '_input', side_effect=TimeoutError('fixture')):
-            with self.assertRaises(effect.TrustEffectError): self.phase.prepare('token')
+        def guarded_docker(args, limit=1048576):
+            self.phase._guard()
+            return docker(args, limit)
+        def timeout(args, payload):
+            if guard_lost: self.base.card['generation'] += 1
+            raise TimeoutError('fixture')
+        with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=guarded_docker), \
+             mock.patch.object(effect.target.metadata, '_bounded_process', side_effect=lambda args, limit: docker(args[1:], limit)), \
+             mock.patch.object(effect.target, '_input', side_effect=timeout):
+            with self.assertRaises((effect.TrustEffectError, effect.target.metadata.GuardLost)):
+                self.phase.prepare('token')
         self.assertEqual([args for args in commands if args[0] == 'rm'], [['rm', '-f', '-v', cid]])
-        self.assertEqual(self.phase.journal.state['steps'][effect.STEP]['tool']['status'], 'removed')
+        if not guard_lost:
+            self.assertEqual(self.phase.journal.state['steps'][effect.STEP]['tool']['status'], 'removed')
         self.assertEqual(self.writes, [])
+
+    def test_timed_out_owned_container_is_removed_before_reconciliation(self):
+        self._timeout_owned_container(False)
+
+    def test_timed_out_owned_container_is_removed_after_tt_guard_loss(self):
+        self._timeout_owned_container(True)
+
+    def test_unknown_create_reply_never_attempts_name_based_cleanup(self):
+        def docker(args, limit=1048576):
+            if args[:2] == ['image', 'inspect']:
+                return json.dumps([{'Id': self.roots['config_digest'], 'Os': 'linux', 'Architecture': 'amd64',
+                    'RepoDigests': [self.roots['image']], 'Config': {'Volumes': None}}]).encode()
+            if args[0] == 'create': raise TimeoutError('lost create reply')
+            raise AssertionError(args)
+        actual_tool = effect.TrustEffectPhase._tool.__get__(self.phase)
+        with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=docker), \
+             mock.patch.object(self.phase, '_cleanup_owned') as cleanup:
+            with self.assertRaises(effect.TrustEffectError): self.phase.prepare('token')
+            cleanup.assert_not_called()
+        self.assertEqual(self.writes, [])
+        with self.assertRaises(effect.target.metadata.GuardLost): self.phase.prepare('token')
+
+    def test_cleanup_rejects_foreign_owner_without_remove(self):
+        cid = 'f' * 64; name = 'voice-creator-trust-effect-' + 'a' * 32
+        def bounded(args, limit):
+            self.assertEqual(args, ['docker', 'inspect', cid])
+            return json.dumps([{'Id': cid, 'Image': 'sha256:' + 'd' * 64,
+                                'Config': {'Labels': {'voice.test.owner': 'foreign'}}}]).encode()
+        with mock.patch.object(effect.target.metadata, '_bounded_process', side_effect=bounded) as called:
+            with self.assertRaises(ValueError): effect.TrustEffectPhase._cleanup_owned(cid, name, 'sha256:' + 'd' * 64)
+        self.assertEqual(called.call_count, 1)
 
 
 if __name__ == '__main__':

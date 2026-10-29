@@ -132,6 +132,20 @@ class TrustEffectPhase(target.TargetTrustPhase):
         if source.get('ca') != identity | {'der_sha256': ca_sha}: raise ValueError()
         return identity, pem, ca_sha
 
+    @staticmethod
+    def _cleanup_owned(cid, name, image_id):
+        """Remove only an inspected owned tool, even after the operation guard is lost."""
+        if (not re.fullmatch(r'[a-f0-9]{64}', cid) or
+                not re.fullmatch(r'voice-creator-trust-effect-[a-f0-9]{32}', name) or
+                not re.fullmatch(r'sha256:[a-f0-9]{64}', image_id)): raise ValueError()
+        raw = target.metadata._bounded_process(['docker', 'inspect', cid], 1048576)
+        detail = json.loads(raw); item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
+        if (item.get('Id') != cid or item.get('Image') != image_id or
+                item.get('Config', {}).get('Labels', {}).get('voice.test.owner') != name): raise ValueError()
+        target.metadata._bounded_process(['docker', 'rm', '-f', '-v', cid], 256)
+        remaining = target.metadata._bounded_process(['docker', 'ps', '-a', '--no-trunc', '--format', '{{.ID}}'], 1048576)
+        if cid in remaining.decode('ascii').splitlines(): raise ValueError()
+
     def _tool(self, roots, script, payload):
         info = json.loads(self._docker(['image', 'inspect', roots['image']]))
         jdk._image_info(info, roots['image'], roots['config_digest'])
@@ -145,14 +159,12 @@ class TrustEffectPhase(target.TargetTrustPhase):
                 '--entrypoint', '/bin/sh', roots['config_digest'], '-ec', script]
         cid = self._docker(args, 256).decode('ascii').strip()
         if not re.fullmatch(r'[a-f0-9]{64}', cid): raise ValueError()
-        detail = json.loads(self._docker(['inspect', cid]))
-        item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
-        cfg, host = item.get('Config', {}), item.get('HostConfig', {})
-        if (item.get('Id') != cid or item.get('Image') != roots['config_digest'] or
-                cfg.get('Labels', {}).get('voice.test.owner') != name):
-            raise ValueError()
-        removed = False
         try:
+            detail = json.loads(self._docker(['inspect', cid]))
+            item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
+            cfg, host = item.get('Config', {}), item.get('HostConfig', {})
+            if (item.get('Id') != cid or item.get('Image') != roots['config_digest'] or
+                    cfg.get('Labels', {}).get('voice.test.owner') != name): raise ValueError()
             if (cfg.get('Entrypoint') != ['/bin/sh'] or cfg.get('Cmd') != ['-ec', script] or
                     cfg.get('User') != '65532:65532' or cfg.get('OpenStdin') is not True or
                     host.get('NetworkMode') != 'none' or host.get('ReadonlyRootfs') is not True or host.get('CapDrop') != ['ALL'] or
@@ -166,14 +178,14 @@ class TrustEffectPhase(target.TargetTrustPhase):
                 raise ValueError()
             return output
         finally:
-            if not removed:
-                detail = json.loads(self._docker(['inspect', cid])); item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
-                if (item.get('Id') != cid or item.get('Image') != roots['config_digest'] or
-                        item.get('Config', {}).get('Labels', {}).get('voice.test.owner') != name): raise ValueError()
+            checkpoint_error = None
+            try:
                 self._state(self.record | {'tool': {'status': 'remove-pending', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
-                self._docker(['rm', '-f', '-v', cid], 256); removed = True
-                if cid in self._docker(['ps', '-a', '--no-trunc', '--format', '{{.ID}}']).decode('ascii').splitlines(): raise ValueError()
-                self._state(self.record | {'tool': {'status': 'removed', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
+            except BaseException as error:
+                checkpoint_error = error
+            self._cleanup_owned(cid, name, roots['config_digest'])
+            if checkpoint_error is not None: raise checkpoint_error
+            self._state(self.record | {'tool': {'status': 'removed', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
 
     def prepare(self, token):
         """Qualify the fixed Secret without mutating it, before the writer cut."""
