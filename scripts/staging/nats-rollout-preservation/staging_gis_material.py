@@ -26,6 +26,8 @@ _EFFECTS = {
 _SHA = re.compile(r'[a-f0-9]{64}')
 _UUID = re.compile(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}')
 _RV = re.compile(r'[0-9]{1,20}')
+_VERIFIER_REVISIONS = {'4297373f6d91364da34f46f959d5df8ea07f71553ebaf52d048f48782f5da11c': 31,
+                       '9924cfc09d6c08c22e0d4b0b412f32cf212476ebfc4806b9fccc2c699f4dfd5e': 32}
 _OPENSSL = '/usr/bin/openssl'
 _OPENSSL_ENV = {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LC_ALL': 'C'}
 
@@ -520,6 +522,12 @@ def source_contract(approved, source):
             if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != files[relative]:
                 raise ValueError()
         inputs = gis_prerequisite.source_inputs(root, files)
+        versions = [int(row['name'].split('_', 1)[0]) for row in inputs['migrations'] if row['name'].endswith('.up.sql')]
+        verifier_hash = files['docker/postgres/verify-gameintegration-runtime-role.sql']
+        if (not versions or verifier_hash not in _VERIFIER_REVISIONS
+            or max(versions) != _VERIFIER_REVISIONS[verifier_hash]
+            or max(versions) != gis_prerequisite.validate_source_revision(inputs)):
+            raise ValueError()
         raw = (root/'deploy/staging/services.yaml').read_bytes()
         if len(raw) > 2 << 20: raise ValueError()
         class UniqueLoader(yaml.SafeLoader):
