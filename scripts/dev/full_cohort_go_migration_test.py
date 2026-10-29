@@ -346,6 +346,24 @@ class SecretSnapshotTest(unittest.TestCase):
             transport.assert_not_called()
         self.assertNotIn('go_migration_secrets', self.base.ledger.row)
 
+    def test_source_credential_drift_after_pending_prevents_post(self):
+        changed = self.credential | {'password': 'changed'}
+        with mock.patch.object(migration, '_credential', side_effect=[self.credential, self.credential, changed]), \
+             mock.patch.object(migration, '_private_kube', side_effect=self.transport):
+            with self.assertRaises(migration.MigrationError): self.phase.create()
+        self.assertIsNone(self.created)
+        self.assertEqual(self.base.ledger.row['status'], 'uncertain')
+
+    def test_guard_lost_after_pending_aborts_before_post(self):
+        def guard(*args):
+            if self.base.ledger.row.get('go_migration_secrets'):
+                raise RuntimeError('claim lost')
+        with mock.patch.object(migration.media_operation_guard, 'verify', side_effect=guard), \
+             mock.patch.object(migration, '_private_kube', side_effect=self.transport):
+            with self.assertRaises(migration.schema.GuardLost): self.phase.create()
+        self.assertIsNone(self.created)
+        self.assertEqual(self.base.ledger.row['status'], 'uncertain')
+
     def test_job_journal_rejects_changed_input_after_reservation(self):
         with mock.patch.object(self.phase, 'verify', return_value={'uid': 'fixture'}):
             job = migration.Migration(self.phase)
@@ -358,7 +376,7 @@ class SecretSnapshotTest(unittest.TestCase):
             job.input['files']['000001_init.up.sql'] = b'SELECT 2;'
             with self.assertRaises(migration.MigrationError): job._guard()
 
-    def _job_flow(self, lost_reply):
+    def _job_flow(self, lost_reply, dirty=False):
         files = {'000001_init.up.sql': b'SELECT 1;', '000002_next.up.sql': b'SELECT 2;'}
         source = self.proof['source']
         secret_receipt = {'name': 'voice-go-input-chat-' + 'a' * 32, 'uid': 'secret-uid', 'resourceVersion': '7'}
@@ -372,7 +390,7 @@ class SecretSnapshotTest(unittest.TestCase):
         self.phase.metadata_phase.inventory = SimpleNamespace(_admin_role=lambda: 'postgres')
         self.phase.metadata_phase.package = SimpleNamespace(verify_current=lambda token: {'nodes': [
             {'name': 'node', 'uid': 'node-uid', 'hostname': 'node', 'architecture': 'amd64'}]})
-        values = iter([{'history': [{'version': 1, 'dirty': False}]}, {'history': [{'version': 2, 'dirty': False}]}])
+        values = iter([{'history': [{'version': 1, 'dirty': False}]}, {'history': [{'version': 2, 'dirty': dirty}]}])
         self.phase.metadata_phase._read = lambda *args: next(values)
         before = {'history': [{'version': 1, 'dirty': False}]}
         observed = {'databases': ['chat_db'], 'metadata': {'catalog': {'chat_db': before},
@@ -426,7 +444,7 @@ class SecretSnapshotTest(unittest.TestCase):
              mock.patch.object(migration, 'verify_writer_pod', return_value={'uid': 'pod-uid', 'ip': '10.0.0.4'}), \
              mock.patch.object(migration, '_private_kube', return_value={}):
             phase = migration.Migration(self.phase)
-            if lost_reply:
+            if lost_reply or dirty:
                 with self.assertRaises(migration.MigrationError): phase.run()
                 self.assertEqual(self.base.ledger.row['status'], 'uncertain')
                 with self.assertRaises(migration.MigrationError): phase.run()
@@ -449,3 +467,6 @@ class SecretSnapshotTest(unittest.TestCase):
 
     def test_committed_job_reply_lost_is_uncertain_and_never_retried(self):
         self._job_flow(True)
+
+    def test_dirty_terminal_ledger_holds_and_never_retries(self):
+        self._job_flow(False, dirty=True)
