@@ -111,6 +111,7 @@ class BackupPhases:
             row, revision = self.fence.ledger.read()
             records = row.get('backup_members', {}) if isinstance(row, dict) else None
             if (not self.fence.owned(row) or row.get('status') != 'active' or not self._owned_invocation(row) or
+                    'cohort_members' in row or
                     not isinstance(records, dict) or
                     set(records) - MEMBERS or member in records or
                     any(not isinstance(value, dict) or value.get('status') != 'done' for value in records.values())):

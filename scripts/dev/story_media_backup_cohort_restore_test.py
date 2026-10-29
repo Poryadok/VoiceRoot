@@ -1,0 +1,40 @@
+import hashlib
+from pathlib import Path
+import tempfile
+import unittest
+
+import story_media_backup_cohort_restore as restore
+
+
+class CohortPlanTest(unittest.TestCase):
+    def test_restore_only_never_selects_a_migration_runner(self):
+        for db, engine in [('voice_db', 'golang-migrate'), ('auth_db', 'flyway')]:
+            plan = {'engine': engine, 'from': 3, 'to': 3, 'files': {'fixture': 'a' * 64}}
+            self.assertEqual(restore.classify_plan(db, plan), 'restore-only')
+
+    def test_unchanged_and_migrating_plans_are_distinct(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            voice = root / 'src/backend/migrations/voice_db'; voice.mkdir(parents=True)
+            auth = root / 'src/backend/auth/src/main/resources/db/migration'; auth.mkdir(parents=True)
+            files = {'000001_base.up.sql': b'SELECT 1;', '000001_base.down.sql': b'SELECT 1;',
+                     '000002_next.up.sql': b'SELECT 2;'}
+            for name, raw in files.items(): (voice / name).write_bytes(raw)
+            (auth / 'V1__base.sql').write_bytes(b'SELECT 1;')
+            def hashes(values): return {name: hashlib.sha256(raw).hexdigest() for name, raw in values.items()}
+            plans = {'auth_db': {'engine': 'flyway', 'from': 1, 'to': 1,
+                                  'files': hashes({'V1__base.sql': b'SELECT 1;'})},
+                     'voice_db': {'engine': 'golang-migrate', 'from': 1, 'to': 2, 'files': hashes(files)}}
+            actual = restore.migration_inventory(root, ['auth_db', 'voice_db'], plans)
+            self.assertEqual(actual['auth_db']['V1__base.sql'], b'SELECT 1;')
+            self.assertEqual(actual['voice_db']['000002_next.up.sql'], b'SELECT 2;')
+            (voice / '000003_extra.up.sql').write_bytes(b'new')
+            with self.assertRaises(restore.CohortRestoreError):
+                restore.migration_inventory(root, ['auth_db', 'voice_db'], plans)
+
+    def test_changed_flyway_is_explicitly_rejected(self):
+        with self.assertRaisesRegex(restore.CohortRestoreError, 'changed Flyway'):
+            restore.classify_plan('auth_db', {'engine': 'flyway', 'from': 1, 'to': 2, 'files': {'V1__base.sql': 'a' * 64}})
+
+
+if __name__ == '__main__': unittest.main()

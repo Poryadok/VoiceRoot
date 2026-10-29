@@ -126,7 +126,7 @@ class PreBeginTests(unittest.TestCase):
         client = frontend_runtime_executor.KubectlTransport.__new__(frontend_runtime_executor.KubectlTransport)
         ledger = resource_fencing.KubeLedger(client)
         check = resource_fencing.ResourceCheck(phase.TT_ENDPOINT, ctx)
-        fence = resource_fencing.Fence(ctx, check, ledger)
+        fence = resource_fencing.Fence(ctx, check, ledger, on_uncertain=check.mark_uncertain)
         old = dict(ctx, status='complete', generation=1, actual=ctx['images']) | completed()
         old['claim'] = '33333333-3333-4333-8333-333333333333'
         old['window'] = '44444444-4444-4444-8444-444444444444'
@@ -198,8 +198,7 @@ class PreBeginTests(unittest.TestCase):
                 with media_operation_journal.Journal(parent+'/journal', intent) as journal:
                     client.journal = journal
                     with patch.object(phase, '_read_history', return_value=history):
-                        descriptor = phase.capture(fence, client, lock, 'namespace', journal, old, ('ledger', '5'))
-                    ledger.write(('ledger', '5'), ctx | dict(status='active', step='admitted', predecessor=descriptor))
+                        fence.begin_with_predecessor(client,lock,'namespace',journal)
                     snapshot = phase.load(fence, client, lock, 'namespace', journal)
                     self.assertEqual(snapshot['previous_operation_id'], old['operation_id'])
                     journal.state['steps']['full-cohort-predecessor']['snapshot']['previous_commit'] = 'f'*40
