@@ -109,6 +109,23 @@ class PackagePhaseTest(unittest.TestCase):
             with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
             capture.assert_not_called()
 
+    def test_node_changes_at_done_cas_never_returns_receipt(self):
+        write=self.base.ledger.write; changed=False; call=self.client.call
+        def drift(revision,row):
+            nonlocal changed
+            write(revision,row)
+            if row.get('full_cohort_package',{}).get('status')=='done': changed=True
+        def node(*args):
+            value=call(*args)
+            if args[1]=='node' and changed: value['metadata']['uid']='foreign'
+            return value
+        self.client.call=node
+        with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
+             patch.object(admission.oci,'resolve_provenance',return_value=(self.platforms,self.provenance)), \
+             patch.object(admission.source,'Registry'),patch.object(self.base.ledger,'write',side_effect=drift):
+            with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
+        self.assertTrue(self.phase.poisoned); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
     def test_moved_master_is_not_silently_equated(self):
         self.receipt['source_equivalence'] = {'current_master_sha_after':'f'*40}
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \

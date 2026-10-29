@@ -163,6 +163,9 @@ class PackagePhase:
             self._record(confirmed,final_revision,done)
             if self.journal.state['steps'].get(STEP) != done | {'receipt':receipt}:
                 raise PackageError('package local terminal record changed')
+            self._nodes(); self._guard(); final,version=self.fence.ledger.read()
+            if final!=confirmed or version!=final_revision or self.journal.state['steps'].get(STEP)!=done | {'receipt':receipt}:
+                raise PackageError('package terminal authority changed')
             return receipt
         except BaseException:
             if pending:
