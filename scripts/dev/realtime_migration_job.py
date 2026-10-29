@@ -291,7 +291,20 @@ class Migration:
                     raise RecoveryRequired('migration inputs changed')
             inputs()
             dryrun = self.client.call('create','--dry-run=server','-f','-','-o','json',body=planned)
-            admitted_job(planned,dryrun)
+            dry_spec = admitted_job(planned,dryrun)
+            dry_uid = dryrun['metadata']['uid']
+            dry_template = dry_spec['template']
+            dry_pod = {'apiVersion':'v1','kind':'Pod','metadata':{
+                'name':'voice-realtime-check-'+operation[-32:],'namespace':'voice-dev',
+                'labels':copy.deepcopy(dry_template['metadata']['labels']),
+                'ownerReferences':[{'apiVersion':'batch/v1','kind':'Job','name':planned['metadata']['name'],
+                                    'uid':dry_uid,'controller':True,'blockOwnerDeletion':False}]},
+                'spec':copy.deepcopy(dry_template['spec'])}
+            inputs()
+            admitted = self.client.call('create','--dry-run=server','-f','-','-o','json',body=dry_pod)
+            auth_user_candidate_probe.admitted_pod(dry_pod,admitted)
+            if admitted.get('metadata',{}).get('ownerReferences')!=dry_pod['metadata']['ownerReferences']:
+                raise RecoveryRequired('Pod admission owner changed')
             inputs()
             record = self._reserve('job',planned)
             inputs()

@@ -127,7 +127,7 @@ class PhaseTest(unittest.TestCase):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','local-role','lost-job','pod-image','job-label','dryrun','invocation-ack'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','pod-image','job-label','dryrun','dryrun-pod','invocation-ack'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -148,6 +148,8 @@ class PhaseTest(unittest.TestCase):
                     obj['status']={'conditions':[{'type':'Complete','status':'True'}]}
                     if fault=='dryrun' and args[:2]==('create','--dry-run=server'):
                         spec['backoffLimit']=1
+                if obj['kind']=='Pod' and fault=='dryrun-pod':
+                    obj['spec']['containers'][0]['image']='untrusted'
                 if args[:2]!=('create','--dry-run=server'):
                     objects[obj['kind']] = copy.deepcopy(obj)
                     if fault=='lost-job' and obj['kind']=='Job': raise TimeoutError('lost response')
@@ -202,7 +204,7 @@ class PhaseTest(unittest.TestCase):
                 self.assertEqual(base.ledger.row['status'],'uncertain')
                 if fault=='config': self.assertNotIn('ConfigMap',objects)
                 if fault=='job': self.assertNotIn('Job',objects)
-                if fault in ('config-drift','local-role','dryrun'): self.assertNotIn('Job',objects)
+                if fault in ('config-drift','local-role','dryrun','dryrun-pod'): self.assertNotIn('Job',objects)
                 return
             receipt = worker.run()
         self.assertEqual(receipt['schema'],schema)
