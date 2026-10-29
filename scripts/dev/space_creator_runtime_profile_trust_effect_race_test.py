@@ -4,9 +4,12 @@ import base64
 import copy
 import os
 import unittest
+from unittest import mock
 
 import space_creator_runtime_profile_trust_effect as effect
 import space_creator_runtime_profile_trust_effect_test as fixture
+import space_creator_runtime_profile_jdk as jdk
+import writer_cut
 
 
 class PreflightCustodyTest(unittest.TestCase):
@@ -31,6 +34,22 @@ class PreflightCustodyTest(unittest.TestCase):
         replacement.write_bytes(key); replacement.chmod(0o600)
         os.replace(replacement, self.phase.journal.path / effect.KEY_FILE)
         with self.assertRaises(effect.TrustEffectError): effect.verify_prepared(self.phase, 'token')
+        self.assertEqual(self.fixture.writes, [])
+
+    def test_jdk_receipt_changed_between_plan_verification_and_effect_refuses(self):
+        self.fixture.base.cut.drain()
+        original = self.phase._dependencies; calls = []
+        def changed(token):
+            calls.append(True)
+            if len(calls) == 2:
+                self.fixture.roots['root_fingerprints'] = ['c' * 64]
+                peer = self.phase.jdk
+                peer.record = {'status': 'done', 'receipt_sha256': writer_cut.digest(self.fixture.roots)}
+                peer.journal.state['steps'][jdk.STEP] = copy.deepcopy(peer.record) | {'receipt': copy.deepcopy(self.fixture.roots)}
+                peer.journal.save(); self.fixture.base.ledger.row[jdk.LEDGER] = copy.deepcopy(peer.record)
+            return original(token)
+        with mock.patch.object(self.phase, '_dependencies', side_effect=changed):
+            with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
         self.assertEqual(self.fixture.writes, [])
 
 

@@ -230,6 +230,9 @@ class TrustEffectPhase(target.TargetTrustPhase):
             plan = verify_prepared(self, token)
             self.preflight.cut.verify_drained()
             roots, source = self._dependencies(token); ca_id, pem, ca_sha = self._ca(source)
+            if (plan['jdk_receipt_sha256'] != writer_cut.digest(roots) or
+                    plan['issuer_receipt_sha256'] != writer_cut.digest(source) or plan['media_ca'] != source['ca'] or
+                    plan['root_count'] != len(roots['root_fingerprints'])): raise ValueError()
             old, old_data = self._read_store(); key = self._key()
             prior, mode = plan['old'], plan['mode']
             current_prior = None if old is None else {'uid': old['metadata']['uid'],
@@ -348,7 +351,12 @@ def verify_current(phase, token):
                 marker.get('receipt_sha256') != writer_cut.digest(receipt)): raise ValueError()
         plan = phase.journal.state['steps'][PLAN_STEP]
         if (marker.get('plan_sha256') != writer_cut.digest(plan) or
-                receipt.get('mode') != plan.get('mode') or receipt.get('old') != plan.get('old')): raise ValueError()
+                receipt.get('mode') != plan.get('mode') or receipt.get('old') != plan.get('old') or
+                receipt.get('media_ca') != plan.get('media_ca') or
+                receipt.get('jdk_receipt_sha256') != plan.get('jdk_receipt_sha256') or
+                receipt.get('issuer_receipt_sha256') != plan.get('issuer_receipt_sha256') or
+                receipt.get('root_count') != plan.get('root_count') or
+                receipt.get('store_count') != plan.get('root_count', -2) + 1): raise ValueError()
         roots, source = phase._dependencies(token); phase._ca(source)
         actual, data = phase._read_store(); key = phase._key()
         if (actual is None or receipt['secret'] != {k: actual['metadata'][k] for k in ('uid', 'resourceVersion')} or
