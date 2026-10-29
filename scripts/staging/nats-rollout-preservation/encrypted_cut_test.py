@@ -32,17 +32,23 @@ class EncryptedCutTest(unittest.TestCase):
             self.assertEqual({name:(recovered/name).read_bytes() for name in values},values)
             return {'schema':'synthetic-restore-proof'}
         adapter.qualify_decrypted.side_effect=qualify
+        installed=root/'installed';installed.mkdir(mode=0o700)
+        fixed_keys=installed/'recovery';shutil.copytree(self.keys,fixed_keys)
         with patch.object(guard,'ROOT',root),patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
-            binding=encrypted_cut.encrypt_cut(base,self.keys,cohort_session=session)
+            with self.assertRaisesRegex(encrypted_cut.CryptoError,'backup_cohort_recipient_invalid'):
+                encrypted_cut.encrypt_cut(base,self.keys,cohort_session=session)
+            binding=encrypted_cut.encrypt_cut(base,fixed_keys,cohort_session=session)
             self.assertEqual(binding['cohort_members'],descriptors)
             self.assertNotIn(values['cohort-before.key'],(base/'rollout-backup.cms').read_bytes())
-            proof=encrypted_cut.decrypt_verify(base,self.keys,binding,lambda _: {'native':'fixture'},cohort_session=session)
+            with self.assertRaisesRegex(encrypted_cut.CryptoError,'backup_cohort_recipient_invalid'):
+                encrypted_cut.decrypt_verify(base,self.keys,binding,lambda _:None,cohort_session=session)
+            proof=encrypted_cut.decrypt_verify(base,fixed_keys,binding,lambda _: {'native':'fixture'},cohort_session=session)
             self.assertEqual(proof['cohort_readback'],{'schema':'synthetic-restore-proof'})
             self.assertNotIn('cohort-before.key',proof['members'])
             adapter.qualify_decrypted.assert_called_once()
             (base/'cohort-before.tar').write_bytes(b'altered')
             with self.assertRaisesRegex(encrypted_cut.CryptoError,'backup_cohort_changed'):
-                encrypted_cut.decrypt_verify(base,self.keys,binding,lambda _:None,cohort_session=session)
+                encrypted_cut.decrypt_verify(base,fixed_keys,binding,lambda _:None,cohort_session=session)
 
     def test_operation_restore_decrypts_bound_cipher_and_checks_every_payload_member(self):
         binding=encrypted_cut.encrypt_cut(self.base,self.keys)

@@ -235,6 +235,9 @@ def cohort_members(base,session):
 
 
 def encrypt_cut(base, key_directory, space=None, *, postseal=None, cohort_session=None):
+    if cohort_session is not None:
+        import guard
+        if Path(key_directory)!=guard.ROOT/'installed'/'recovery':raise CryptoError('backup_cohort_recipient_invalid')
     base, key_directory = directory(base), directory(key_directory)
     extra,space_hashes=space_members(base,space)
     current,current_hashes=postseal_members(base,postseal)
@@ -299,6 +302,9 @@ def decrypt_verify(base,key_directory,binding,readback,*,expected_members=None,c
     member must match its root-owned source; no archive path is extracted.
     The readback callback verifies/restores only the private recovered archive.
     """
+    if cohort_session is not None:
+        import guard
+        if Path(key_directory)!=guard.ROOT/'installed'/'recovery':raise CryptoError('backup_cohort_recipient_invalid')
     base,key_directory=directory(base),directory(key_directory)
     if not callable(readback):raise CryptoError('backup_restore_reader_invalid')
     required={'rollout-before.tar','rollout-before-manifest.json','copy-checkpoint.json'}
