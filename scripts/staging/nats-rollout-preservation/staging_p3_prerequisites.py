@@ -129,7 +129,8 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
         if (service_meta.get('name')!='voice-p3-principal-jwks' or service_meta.get('namespace')!=NAMESPACE
             or service_meta.get('deletionTimestamp') or not service_uid
             or service['spec'].get('selector')!={'app':'voice-p3-principal-jwks'} or len(ports)!=1
-            or ports[0].get('name')!='https' or ports[0].get('port')!=8443 or ports[0].get('protocol','TCP')!='TCP'): raise ValueError()
+            or ports[0].get('name')!='https' or ports[0].get('port')!=8443 or ports[0].get('targetPort',8443)!=8443
+            or ports[0].get('protocol','TCP')!='TCP'): raise ValueError()
         if (len(matching)!=1 or matching[0].get('metadata',{}).get('namespace')!=NAMESPACE
             or matching[0]['metadata'].get('deletionTimestamp')
             or not controller(matching[0],'Service',service_uid)

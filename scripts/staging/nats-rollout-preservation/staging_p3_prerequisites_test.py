@@ -51,6 +51,8 @@ class StagingP3Contract(unittest.TestCase):
         with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
         bad=list(copy.deepcopy(args)); bad[3][0]['metadata']['ownerReferences'][0]['uid']='foreign'
         with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+        bad=list(copy.deepcopy(args)); bad[7]['spec']['ports'][0]['targetPort']=9999
+        with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
 
     def test_service_server_allocation_has_only_exact_bounded_difference(self):
         intended={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging'},
