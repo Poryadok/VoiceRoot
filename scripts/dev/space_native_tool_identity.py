@@ -7,6 +7,7 @@ import argparse
 import base64
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,12 @@ import tempfile
 import time
 import zipfile
 
-import migrations
+_migration_path = Path(__file__).resolve().with_name('migrations.py')
+_migration_spec = importlib.util.spec_from_file_location('_voice_dev_native_migrations', _migration_path)
+if _migration_spec is None or _migration_spec.loader is None:
+    raise ImportError('fixed DEV migration source unavailable')
+migrations = importlib.util.module_from_spec(_migration_spec)
+_migration_spec.loader.exec_module(migrations)
 
 
 class ToolIdentityError(RuntimeError): pass
