@@ -23,6 +23,7 @@ type legacy24OriginObservation struct {
 	Rows           map[string]legacy25TableDigest    `json:"rows"`
 	Derived        *legacy24Derived                  `json:"derived"`
 	Spaces         []string                          `json:"spaces"`
+	Extras         []legacy24Extra                   `json:"extras"`
 }
 
 // The complete source-owned public object set was fixed by the catalog
@@ -53,6 +54,10 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	if err != nil {
 		return nil, err
 	}
+	var noNativeSchema bool
+	if err = tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname IN ('native_membership_guard','space_account_ban_guard'))`).Scan(&noNativeSchema); err != nil || !noNativeSchema {
+		return nil, errors.New("HOLD: legacy24 native schema already exists")
+	}
 	var name, role, current, system string
 	var oid uint32
 	if err = tx.QueryRow(ctx, `SELECT d.datname,d.oid,session_user,current_user,(SELECT system_identifier::text FROM pg_catalog.pg_control_system()) FROM pg_catalog.pg_database d WHERE d.datname='space_db'`).Scan(&name, &oid, &role, &current, &system); err != nil ||
@@ -68,6 +73,10 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 		return nil, err
 	}
 	derived, err := captureLegacy24DerivedTx(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	extras, err := captureLegacy24ExtrasTx(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +110,8 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 		Rows    map[string]legacy25TableDigest `json:"rows"`
 		Derived *legacy24Derived               `json:"derived"`
 		Spaces  []string                       `json:"spaces"`
-	}{rows, derived, spaces})
+		Extras  []legacy24Extra                `json:"extras"`
+	}{rows, derived, spaces, extras})
 	if err != nil || len(encoded) > 1<<20 {
 		return nil, errors.New("legacy24 preimage unavailable")
 	}
@@ -111,7 +121,7 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	}
 	return &legacy24OriginObservation{Target: &store.NativeInstallerSourceFacts{Version: 24, DatabaseSystemID: system,
 		DatabaseName: name, DatabaseOID: oid, InstallerRole: role}, CatalogSHA256: catalog,
-		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, Rows: rows, Derived: derived, Spaces: spaces}, nil
+		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, Rows: rows, Derived: derived, Spaces: spaces, Extras: extras}, nil
 }
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {

@@ -3,6 +3,7 @@
 package nativeinstaller
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"os"
@@ -79,6 +80,8 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	catalog, preimage, err := captureLegacy24Snapshot(ctx, conn)
 	require.NoError(t, err)
 	require.Equal(t, legacy24CatalogPG16SHA256, catalog)
+	_, err = conn.Exec(ctx, `CREATE SCHEMA legacy_extra; CREATE TABLE legacy_extra.note(id integer NOT NULL, body text NOT NULL); INSERT INTO legacy_extra.note VALUES(1,'preserve')`)
+	require.NoError(t, err)
 	origin, err := observeLegacy24Origin(ctx, conn)
 	require.NoError(t, err)
 	require.Equal(t, oid, origin.Target.DatabaseOID)
@@ -87,6 +90,37 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	require.Equal(t, preimage, origin.Rows)
 	require.Len(t, origin.PreimageSHA256, 64)
 	require.Len(t, origin.AccessSHA256, 64)
+	identity := &Legacy24Receipt{Source24: origin.Target, Clean24: true, Catalog24SHA256: origin.CatalogSHA256, PreimageSHA256: origin.PreimageSHA256, AccessSHA256: origin.AccessSHA256, SpaceCount: uint64(len(origin.Spaces))}
+	var sidecar bytes.Buffer
+	require.NoError(t, writeLegacy24Origin(&sidecar, origin, identity))
+	readOrigin, err := readLegacy24Origin(bytes.NewReader(sidecar.Bytes()), identity)
+	require.NoError(t, err)
+	require.Equal(t, origin.PreimageSHA256, readOrigin.PreimageSHA256)
+	badIdentity := *identity
+	badIdentity.PreimageSHA256 = strings.Repeat("0", 64)
+	_, err = readLegacy24Origin(bytes.NewReader(sidecar.Bytes()), &badIdentity)
+	require.Error(t, err, "sidecar must remain bound to the original receipt")
+	_, err = readLegacy24Origin(bytes.NewReader(append(sidecar.Bytes(), ' ')), identity)
+	require.Error(t, err, "noncanonical or trailing private bytes are not accepted")
+	withExtra, err := observeLegacy24Origin(ctx, conn)
+	require.NoError(t, err, "independent ordinary table should be supported")
+	_, err = conn.Exec(ctx, `UPDATE legacy_extra.note SET body='changed' WHERE id=1`)
+	require.NoError(t, err)
+	changedExtra, err := observeLegacy24Origin(ctx, conn)
+	require.NoError(t, err)
+	require.NotEqual(t, withExtra.PreimageSHA256, changedExtra.PreimageSHA256, "independent table contents belong to the preimage")
+	_, err = conn.Exec(ctx, `UPDATE legacy_extra.note SET body='preserve' WHERE id=1; CREATE VIEW legacy_extra.unsupported AS SELECT * FROM legacy_extra.note`)
+	require.NoError(t, err)
+	_, err = observeLegacy24Origin(ctx, conn)
+	require.Error(t, err, "unsupported external view must HOLD")
+	_, err = conn.Exec(ctx, `DROP VIEW legacy_extra.unsupported`)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `CREATE SCHEMA native_membership_guard`)
+	require.NoError(t, err)
+	_, err = observeLegacy24Origin(ctx, conn)
+	require.Error(t, err, "a later native schema must not be accepted as original24")
+	_, err = conn.Exec(ctx, `DROP SCHEMA native_membership_guard`)
+	require.NoError(t, err)
 	aclTx, err := conn.Begin(ctx)
 	require.NoError(t, err)
 	_, err = aclTx.Exec(ctx, `SET LOCAL search_path=pg_catalog; GRANT SELECT ON public.spaces TO PUBLIC`)
@@ -156,7 +190,7 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	conn, err = pgx.Connect(ctx, target.String())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close(context.Background()) })
-	intermediate, err := verifyLegacy24Intermediate(ctx, conn, origin)
+	intermediate, err := verifyLegacy24Intermediate(ctx, conn, readOrigin)
 	require.NoError(t, err)
 	require.EqualValues(t, 25, intermediate.Target.Version)
 	require.Equal(t, origin.Target.DatabaseOID, intermediate.Target.DatabaseOID)
@@ -280,6 +314,9 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		_, err = finalTx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`)
 		require.NoError(t, err)
 		require.NoError(t, verifyLegacy24DerivedTx(ctx, finalTx, preimage, origin.Derived))
+		finalExtras, err := captureLegacy24ExtrasTx(ctx, finalTx)
+		require.NoError(t, err)
+		require.Equal(t, origin.Extras, finalExtras, "independent table is preserved through initialization")
 		require.NoError(t, finalTx.Commit(ctx))
 	})
 }
