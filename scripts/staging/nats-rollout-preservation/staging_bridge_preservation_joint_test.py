@@ -340,6 +340,16 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    return cluster.run(args,**kwargs)
   def capture(argv,**kwargs):
    commands.authority_guard(argv)
+   if 'VOICE_TEST_SPACE_OCI' in os.environ:
+    fixture=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())['identity']
+    image=fixture['immutable_image']
+    if argv[0]=='/usr/bin/docker' and argv[-4:]==['pull','--platform','linux/amd64',image]:
+     return b'' # Registry pull is modeled; the exact locally built image exists.
+    if argv==['/usr/bin/docker','--host=unix:///var/run/docker.sock','image','inspect',image]:
+     rows=json.loads(subprocess.check_output(['docker','image','inspect','voice-wt30-native-tool:46b6e99']))
+     assert rows[0]['Id']==fixture['config_digest']
+     rows[0]['RepoDigests']=[image] # Synthetic registry digest binding.
+     return json.dumps(rows).encode()
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
     return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
