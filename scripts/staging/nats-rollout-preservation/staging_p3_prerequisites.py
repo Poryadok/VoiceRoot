@@ -133,9 +133,14 @@ def source_consumers(rows):
                 if typ=='secret': want['defaultMode']=288
                 if keys is not None: want['items']=[{'key':key,'path':key} for key in keys]
                 if source!=want or set(volumes[mount])!={'name',typ}: raise ValueError()
-            if service['spec'].get('selector')!={'app':name}: raise ValueError()
+            if (service['spec'].get('selector')!={'app':name}
+                or deployment['spec'].get('selector')!={'matchLabels':{'app':name}}
+                or deployment['spec']['template']['metadata'].get('labels',{}).get('app')!=name): raise ValueError()
             port={'voice-realtime':('realtime-lifecycle',9091),'voice-chat':('realtime-lifecycle',9099),'voice-space':('principal-jwks',8443)}[name]
-            if sum(p.get('name')==port[0] and p.get('port')==port[1] for p in service['spec']['ports'])!=1: raise ValueError()
+            selected=[p for p in service['spec']['ports'] if p.get('name')==port[0]]
+            if (len(selected)!=1 or set(selected[0])-{'name','port','protocol','targetPort'}
+                or selected[0].get('port')!=port[1] or selected[0].get('targetPort',port[1])!=port[1]
+                or selected[0].get('protocol','TCP')!='TCP'): raise ValueError()
         return True
     except Exception: raise PrerequisiteError('staging P3 source consumers invalid') from None
 
