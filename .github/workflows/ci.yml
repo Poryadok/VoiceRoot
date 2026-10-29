@@ -1249,6 +1249,7 @@ jobs:
         run: |
           python3 scripts/ci/go_integration_matrix.py verify-diagnostics \
             --inventory scripts/ci/go_integration_required.json --services "$SERVICES" \
+            --exceptions scripts/ci/go_integration_exceptions.json --source-root "$GITHUB_WORKSPACE" \
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --directory "$RUNNER_TEMP/go-integration-artifacts"
 

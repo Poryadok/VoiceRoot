@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from go_integration_receipts import make_receipt, read_events, summarize_events, verify_matrix, verify_no_skips
+from go_integration_source_audit import audit
 
 
 def main():
@@ -33,6 +34,8 @@ def main():
     diagnostic = sub.choices['verify-diagnostics']
     diagnostic.add_argument('--services', required=True, help='JSON array of selected service names')
     diagnostic.add_argument('--directory', required=True, help='downloaded per-member artifact directories')
+    diagnostic.add_argument('--exceptions', required=True, help='explicit source case dispositions')
+    diagnostic.add_argument('--source-root', required=True, help='candidate checkout root')
     args = parser.parse_args()
     try:
         inventory = json.loads(Path(args.inventory).read_text(encoding='utf-8'))
@@ -57,6 +60,10 @@ def main():
             verify_matrix(services, inventory, [], identity)
             if not services:
                 raise ValueError('selected integration matrix must not be empty')
+            exceptions = json.loads(Path(args.exceptions).read_text(encoding='utf-8'))
+            source_summary = audit(args.source_root, inventory, exceptions)
+            print('Integration source audit: ' + str(source_summary['source_cases']) + ' entrypoints; ' +
+                  str(source_summary['unresolved']) + ' unresolved exceptions (not execution evidence)')
             directory = Path(args.directory)
             expected = {'go-integration-' + name + '-' + args.attempt for name in services}
             if not directory.is_dir() or {p.name for p in directory.iterdir()} != expected:

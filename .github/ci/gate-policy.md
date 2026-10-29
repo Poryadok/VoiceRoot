@@ -194,6 +194,9 @@ to run and pass. This initial inventory covers observed untagged integration
 cases and an Analytics adapter sentinel; it is not a complete inventory of
 native, tagged, opt-in, subtest or cross-service proofs. Those require their own
 explicit evidence and cannot be inferred from this aggregate.
+The source audit fails on an unclassified or stale `*_integration_test.go`
+entrypoint. Its explicit unresolved exceptions report open coverage gaps; they
+do not make those tests pass and it does not cover other filename conventions.
 
 PR changes to Subscription source/migrations or protobufs also select Auth tests
 because Auth consumes Subscription events and compiles contracts. The separate

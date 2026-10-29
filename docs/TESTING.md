@@ -142,6 +142,10 @@ and the candidate/run/attempt. The initial list covers observed untagged
 integration cases plus an Analytics adapter sentinel; it does not inventory all
 native, tagged, opt-in, subtest or cross-service tests. Dedicated checks below
 remain required for their separate cases.
+The source audit requires every `*_integration_test.go` entrypoint to appear
+in that baseline or in `scripts/ci/go_integration_exceptions.json`. An
+`unresolved` entry records a coverage gap and is never evidence that it ran;
+the audit does not discover native tests under other filename conventions.
 
 The affected Story PR proof runs `go test -json -count=1 -p 1` for
 `./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an

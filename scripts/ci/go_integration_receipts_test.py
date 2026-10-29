@@ -17,6 +17,43 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_integration_source_audit_rejects_unclassified_and_stale_cases(self):
+        source = ROOT / 'scripts/ci/go_integration_source_audit.py'
+        spec = importlib.util.spec_from_file_location('source_audit', source)
+        audit = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(audit)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / 'src/backend/chat/store'
+            package.mkdir(parents=True)
+            path = package / 'store_integration_test.go'
+            path.write_text('package store\nimport "testing"\nfunc TestCovered(t *testing.T) {}\n'
+                            'func TestDeferred(t *testing.T) {}\n', encoding='utf-8')
+            inventory = {'chat': [['voice/backend/chat/store', 'TestCovered']]}
+            exceptions = [{'service': 'chat', 'package': 'voice/backend/chat/store',
+                           'test': 'TestDeferred', 'source': 'src/backend/chat/store/store_integration_test.go',
+                           'status': 'unresolved', 'reason': 'requires a fixture'}]
+            audit.audit(root, inventory, exceptions)
+            with self.assertRaises(ValueError):
+                audit.audit(root, inventory, [])
+            with self.assertRaises(ValueError):
+                audit.audit(root, inventory, exceptions + exceptions)
+            with self.assertRaises(ValueError):
+                audit.audit(root, inventory, [dict(exceptions[0], source='wrong.go')])
+            with self.assertRaises(ValueError):
+                audit.audit(root, inventory, [dict(exceptions[0], status='dedicated', reason='made-up-job')])
+            path.write_text(path.read_text(encoding='utf-8') + 'func TestNew(t *testing.T) {}\n', encoding='utf-8')
+            with self.assertRaises(ValueError):
+                audit.audit(root, inventory, exceptions)
+
+    def test_current_source_integration_entrypoints_are_classified(self):
+        from go_integration_source_audit import audit
+        inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        summary = audit(ROOT, inventory, exceptions)
+        self.assertGreater(summary['source_cases'], 0)
+        self.assertEqual(summary['unresolved'], sum(item['status'] == 'unresolved' for item in exceptions))
+
     def test_matrix_inventory_names_existing_tests_for_every_service(self):
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
         resolver = (ROOT / 'scripts/ci/resolve-go-matrix.sh').read_text(encoding='utf-8')
@@ -40,6 +77,13 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                          'user': [['voice/backend/user/store', 'TestStore']]}
             inv = root / 'inventory.json'
             inv.write_text(json.dumps(inventory), encoding='utf-8')
+            exceptions = root / 'exceptions.json'
+            exceptions.write_text('[]', encoding='utf-8')
+            for service in inventory:
+                package_dir = root / 'src/backend' / service / 'store'
+                package_dir.mkdir(parents=True)
+                (package_dir / 'store_integration_test.go').write_text(
+                    'package store\nimport "testing"\nfunc TestStore(t *testing.T) {}\n', encoding='utf-8')
             artifacts = root / 'artifacts'
             artifacts.mkdir()
             identity = {'candidate': 'a' * 40, 'run': '123', 'attempt': '1'}
@@ -58,7 +102,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 (folder / 'go-integration-summary.json').write_text(json.dumps(summary), encoding='utf-8')
             command = [sys.executable, str(ROOT / 'scripts/ci/go_integration_matrix.py'), 'verify-diagnostics',
                        '--inventory', str(inv), '--candidate', identity['candidate'], '--run', '123',
-                       '--attempt', '1', '--services', json.dumps(list(inventory)), '--directory', str(artifacts)]
+                       '--attempt', '1', '--services', json.dumps(list(inventory)), '--directory', str(artifacts),
+                       '--exceptions', str(exceptions), '--source-root', str(root)]
             def run():
                 return subprocess.run(command, capture_output=True).returncode
             self.assertEqual(run(), 0)
