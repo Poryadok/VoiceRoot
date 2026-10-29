@@ -76,7 +76,8 @@ import copy, json, sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
-import bridge_root, commands, guard, resource_claim, staging_prerequisites as parent
+import bridge_root, commands, guard, resource_claim, stage_runtime, staging_prerequisites as parent
+import staging_cohort_preservation as producer, staging_gis_material as gis
 root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
 binding=json.loads((code/'capture-manifest.json').read_bytes()); pins=json.loads(sys.argv[2])
 c=dict(project='voice',resource='STAGING',actor='operator',claim='11111111-1111-4111-8111-111111111111',generation=7,
@@ -102,7 +103,15 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    assert str(exc)=='staging_prerequisites_source_changed', str(exc)
   else: raise AssertionError('counterfeit source receipt accepted')
   assert not (root/'installed'/'prerequisites').exists()
-  parent._capture_authority(actions,session,approved,execution)
+  # The external namespace is synthetic. The actual producer must perform
+  # source custody first, then reject this deliberately incomplete source
+  # inventory before it can bind or cut writers.
+  with patch.object(stage_runtime.Kube,'get',return_value={'metadata':{'uid':'fixture-namespace'}}):
+   try: producer.prepare(actions,{'mode':'app-only'},approved,execution,workspace)
+   except gis.MaterialError as exc:
+    assert str(exc)=='staging_gis_source_contract_invalid', str(exc)
+   else: raise AssertionError('incomplete source admitted')
+  assert not (root/'installed'/'cohort-preservation').exists()
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
   try: parent._verify_helper_source(session,approved,workspace)
