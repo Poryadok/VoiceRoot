@@ -65,6 +65,10 @@ on:
       - scripts/dev/full_cohort_package_phase_test.py
       - scripts/dev/full_cohort_inventory_phase.py
       - scripts/dev/full_cohort_inventory_phase_test.py
+      - scripts/dev/full_cohort_activation_plan.py
+      - scripts/dev/full_cohort_activation_plan_test.py
+      - scripts/dev/full_cohort_predecessor_phase.py
+      - scripts/dev/full_cohort_predecessor_phase_test.py
       - scripts/dev/realtime_secret_phase.py
       - scripts/dev/realtime_secret_phase_test.py
       - scripts/dev/realtime_secret_provision.py
@@ -75,6 +79,8 @@ on:
       - scripts/dev/realtime_migration_job_test.py
       - scripts/dev/writer_cut_pg_probe.py
       - scripts/dev/writer_cut_pg_probe_test.py
+      - scripts/dev/writer_cut_resumed_probe.py
+      - scripts/dev/writer_cut_resumed_probe_test.py
       - scripts/dev/realtime_db_provision.py
       - scripts/dev/realtime_db_provision_test.py
       - scripts/dev/realtime_db_provision_journal_test.py
@@ -92,6 +98,7 @@ on:
       - .github/workflows/dev-media-backup-upload.yml
       - scripts/dev/story_media_backup_custody.py
       - scripts/dev/resource_fencing.py
+      - scripts/dev/resource_fencing_test.py
       - scripts/dev/update_images.py
       - deploy/templates/story-media-*.yaml
   workflow_dispatch:
@@ -130,6 +137,7 @@ jobs:
           python -B scripts/dev/media_live_baseline_test.py
           python -B scripts/dev/media_operation_journal_test.py
           python -B scripts/dev/media_operation_guard_test.py
+          python -B scripts/dev/resource_fencing_test.py
           python -B scripts/dev/media_backup_phase_test.py
           python -B scripts/dev/media_backup_upload_phase_test.py
           python -B scripts/dev/media_backup_upload_run_test.py
@@ -159,11 +167,14 @@ jobs:
           python -B scripts/dev/full_cohort_oci_test.py
           python -B scripts/dev/full_cohort_package_phase_test.py
           python -B scripts/dev/full_cohort_inventory_phase_test.py
+          python -B scripts/dev/full_cohort_activation_plan_test.py
+          python -B scripts/dev/full_cohort_predecessor_phase_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
           python -B scripts/dev/realtime_secret_provision_test.py
           python -B scripts/dev/realtime_migration_verify_test.py
           python -B scripts/dev/realtime_migration_job_test.py
           python -B scripts/dev/writer_cut_pg_probe_test.py
+          python -B scripts/dev/writer_cut_resumed_probe_test.py
           python -B scripts/dev/realtime_db_provision_test.py
           python -B scripts/dev/realtime_db_provision_journal_test.py
           python -B scripts/dev/realtime_p3_adoption_test.py

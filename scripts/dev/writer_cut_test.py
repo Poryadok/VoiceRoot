@@ -104,6 +104,12 @@ class WriterCutTest(unittest.TestCase):
         self.assertEqual(self.ledger.row['status'], 'uncertain')
         self.assertEqual(self.ledger.row['writer_cut_effects']['writer-cut-drained']['status'], 'pending')
 
+    def test_replaced_session_probe_after_drain_holds(self):
+        self.cut.drain()
+        self.cut.probe = lambda scope: {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_drained()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
     def test_lost_committed_patch_never_retries(self):
         self.client.lost = True
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.drain()

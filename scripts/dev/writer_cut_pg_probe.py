@@ -18,6 +18,11 @@ ALLOWED = frozenset(('auth_db','bot_db','chat_db','file_db','game_integration_db
 class ProbeError(RuntimeError): pass
 
 
+def inspect_resumed(cut, inventory_phase, token):
+    from writer_cut_resumed_probe import inspect_resumed as observe
+    return observe(cut, inventory_phase, token)
+
+
 def _validate_scope(scope, guard):
     if not isinstance(scope,dict) or set(scope)!={'engine','databases','database_oids','server_start'} or not callable(guard):
         raise ProbeError('invalid scope')

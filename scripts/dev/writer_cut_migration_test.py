@@ -1,4 +1,5 @@
 import copy
+import sys
 import types
 import unittest
 from unittest import mock
@@ -25,6 +26,8 @@ class MigrationCutTest(unittest.TestCase):
                       'execution': {'database': 'auth_db', 'database_oid': 10}, 'terminal': None}
         self.pod = None
         self.phase = types.SimpleNamespace(journal=types.SimpleNamespace(state={'steps': {}}))
+        self.scope_match_patch = mock.patch.object(self.cut, '_effective_scope_matches', return_value=True)
+        self.scope_match_patch.start(); self.addCleanup(self.scope_match_patch.stop)
         self.normal = mock.patch.object(migration, 'normalized', side_effect=lambda *args: (None, copy.deepcopy(self.state)))
         self.observer = mock.patch.object(migration, 'observe', side_effect=lambda *args, **kwargs: (copy.deepcopy(self.state), copy.deepcopy(self.pod)))
         self.session_patch = mock.patch.object(migration, 'sessions', side_effect=lambda *args: {
@@ -270,6 +273,73 @@ class MigrationCutTest(unittest.TestCase):
             self.cut._guards()
             self.ledger.row['auth_live_c2']['nonce'] = 'b' * 32
             with self.assertRaises(writer_cut.RecoveryRequired): self.cut._guards()
+
+
+class EffectiveScopeTest(unittest.TestCase):
+    def setUp(self):
+        fixture.WriterCutTest.setUp(self)
+        scope = {'engine': {'uid': 'pg'}, 'databases': ['auth_db'], 'database_oids': {'auth_db': 10}, 'server_start': 'start'}
+        self.admission['session_scope'] = copy.deepcopy(scope)
+        self.cut.admission = copy.deepcopy(self.admission)
+        self.journal.intent['writer_cut'] = copy.deepcopy(self.admission)
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        self.cut.intent = copy.deepcopy(self.journal.intent)
+        self.cut.drain()
+        source = media_operation_journal.Journal(Path(self.temp.name) / 'realtime-source', {
+            'resource_context': self.context, 'namespace_uid': 'ns'})
+        self.addCleanup(source.close)
+        phase = types.SimpleNamespace(invocation_status='done', journal=source,
+            intent={'realtime_migration': {'engine': {'uid': 'pg'}}})
+        self.state = {'job': {'state': 'done', 'uid': 'job'}, 'terminal': 'c' * 64,
+                      'execution': {'database': 'realtime_db', 'database_oid': 13, 'role': 'realtime'}}
+        self.cut.migration = {'kind': 'realtime', 'phase': phase, 'root': '.', 'finished': True,
+                              'terminal': self.state['terminal']}
+        self.ledger.row['realtime_migration'] = {'status': 'done'}
+        patches = [mock.patch.object(migration, 'normalized', side_effect=lambda *args: (None, copy.deepcopy(self.state))),
+                   mock.patch.object(migration, 'observe', side_effect=lambda *args, **kwargs: (copy.deepcopy(self.state), None)),
+                   mock.patch.object(migration, 'sessions', return_value={'attributed_sessions': []})]
+        for patcher in patches: patcher.start(); self.addCleanup(patcher.stop)
+
+    def test_realtime_scope_adds_only_source_oid_and_detects_drift(self):
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.current_effective_session_scope()
+        self.cut.bind_realtime_scope()
+        scope = self.cut.current_effective_session_scope()
+        self.assertEqual(scope['database_oids'], {'auth_db': 10, 'realtime_db': 13})
+        self.assertEqual(scope['databases'], ['auth_db', 'realtime_db'])
+        for mutation in ('database', 'oid', 'server_start'):
+            self.cut.effective_session['scope'] = copy.deepcopy(scope)
+            changed = self.cut.effective_session['scope']
+            if mutation == 'database': changed['databases'].remove('auth_db')
+            if mutation == 'oid': changed['database_oids']['auth_db'] = 99
+            if mutation == 'server_start': changed['server_start'] = 'foreign'
+            with self.subTest(mutation=mutation), self.assertRaises(writer_cut.RecoveryRequired):
+                self.cut.current_effective_session_scope()
+        self.cut.effective_session['scope'] = copy.deepcopy(scope)
+        self.ledger.row['realtime_migration']['status'] = 'foreign'
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.current_effective_session_scope()
+
+    def test_colliding_source_oid_never_binds(self):
+        self.state['execution']['database_oid'] = 10
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_realtime_scope()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+
+class CatalogBracketTest(unittest.TestCase):
+    def test_catalog_change_during_migration_sample_holds(self):
+        scope = {'database_oids': {'auth_db': 10}}
+        cut = types.SimpleNamespace(admission={'session_scope': scope}, probe=object(), _guard=lambda: None)
+        state = {'execution': {'database': 'auth_db', 'database_oid': 10, 'role': 'voice', 'application_name': 'auth'}}
+        records = [{'scope': scope, 'catalog': {'auth_db': 10}},
+                   {'scope': scope, 'catalog': {'auth_db': 10, 'new_db': 11}}]
+        affected = types.SimpleNamespace(verify_migration_catalog=mock.Mock(side_effect=records))
+        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.dict(sys.modules, {'full_cohort_affected_plan': affected}), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+            with self.assertRaisesRegex(ValueError, 'catalog changed'):
+                migration.sessions(cut, state, None)
+            affected.verify_migration_catalog.side_effect = [records[0], records[0]]
+            self.assertEqual(migration.sessions(cut, state, None), receipt)
+        self.assertEqual(affected.verify_migration_catalog.call_count, 4)
 
 
 if __name__ == '__main__': unittest.main()

@@ -225,7 +225,8 @@ class FullCohortImageApply:
                 raise RecoveryRequired('cut journal lineage changed')
         for key in cut.journal.state['steps']:
             allowed = key.startswith('writer-resume-') or key in ('writer-cut-resume-inventory',
-                'writer-cut-activation-plan', 'writer-cut-space-health', 'writer-cut-publisher-health', 'writer-cut-chat-health')
+                'writer-cut-activation-plan', 'writer-cut-space-health', 'writer-cut-publisher-health',
+                'writer-cut-chat-health', 'writer-cut-realtime-scope')
             if key not in capture.cut_steps and (not self.verifying or not allowed):
                 raise RecoveryRequired('unexpected cut journal step')
         config = capture.config_journal
@@ -369,7 +370,7 @@ class FullCohortImageApply:
                     or re.fullmatch(r'writer-cut-migration-(?:plan|finish|cleanup)-[0-9a-f]{32}', step)
                     or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory',
                                 'writer-cut-auth-successor', 'writer-cut-activation-plan', 'writer-cut-space-health',
-                                'writer-cut-publisher-health', 'writer-cut-chat-health')):
+                                'writer-cut-publisher-health', 'writer-cut-chat-health', 'writer-cut-realtime-scope')):
                 continue
             pending_resume = (self.activation_checking and step.startswith('writer-resume-') and
                               isinstance(item, dict) and item.get('status') == 'pending')
@@ -387,6 +388,17 @@ class FullCohortImageApply:
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
         cut = self.admission.cut
+        effective = getattr(cut, 'effective_session', None)
+        scope_step = steps.get('writer-cut-realtime-scope')
+        if (effective is None) != (scope_step is None):
+            raise RecoveryRequired('Realtime scope custody changed')
+        if effective is not None:
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                       'original_scope_sha256': digest(cut.admission['session_scope']),
+                       'scope_sha256': digest(effective['scope']), 'migration_terminal_sha256': effective['terminal']}
+            if (scope_step['details'] != details or scope_step['receipt'] != details or
+                    not cut._effective_scope_matches(row)):
+                raise RecoveryRequired('Realtime scope receipt changed')
         activation = getattr(cut, 'activation', None)
         activation_step = steps.get('writer-cut-activation-plan')
         if (activation is None) != (activation_step is None):
