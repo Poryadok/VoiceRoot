@@ -4,6 +4,7 @@ package nativeinstaller
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/url"
 	"os"
 	"os/exec"
@@ -32,6 +33,15 @@ func TestProductionLegacy24InspectReadOnlyWithActiveClient(t *testing.T) {
 	require.Contains(t, stdout.String(), `"event":"inspected-legacy24"`)
 	require.NotContains(t, stdout.String(), "original member")
 	require.NotContains(t, stdout.String(), "11111111-1111-4111-8111-111111111111")
+	var evidence struct {
+		Target struct {
+			DatabaseOwner string `json:"database_owner"`
+		} `json:"target"`
+	}
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &evidence))
+	var actualOwner string
+	require.NoError(t, active.QueryRow(ctx, `SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()`).Scan(&actualOwner))
+	require.Equal(t, actualOwner, evidence.Target.DatabaseOwner)
 	after, err := observeLegacy24Origin(ctx, active)
 	require.NoError(t, err)
 	require.Equal(t, before.PreimageSHA256, after.PreimageSHA256)
