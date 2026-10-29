@@ -85,6 +85,18 @@ class BridgePreservationAdmission(unittest.TestCase):
         self.assertEqual(result.expected['source_claim_uid'],claim)
         self.assertTrue(any(row['kind']=='rollout_original_capture' for row in events))
         self.assertEqual(session.check()['phase'],'prepare')
+        class NamespaceDrift(Cluster):
+            def __init__(self):self.reads=0
+            def get(self,kind,name):
+                result=super().get(kind,name)
+                if kind=='namespace':
+                    self.reads+=1
+                    if self.reads>1:result['metadata']['uid']='foreign'
+                return result
+        with self.assertRaisesRegex(stage_runtime.Blocked,'staging_identity_changed'):
+            runtime_stage.RolloutStage.capture(NamespaceDrift(),'a'*12,lambda _:None,
+                ['voice-web','voice-admin','voice-developer-portal'])
+        self.assertEqual(session.check()['phase'],'prepare')
 
     def test_producer_imports_from_captured_helper_directory(self):
         source = Path(__file__).resolve().parents[3]
