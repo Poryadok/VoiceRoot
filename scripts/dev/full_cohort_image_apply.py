@@ -102,7 +102,7 @@ class FullCohortImageApply:
         self.cut_journal = admission.cut.journal
         self.cut_intent = copy.deepcopy(admission.cut_intent)
         self.invocation = secrets.token_hex(16)
-        self.started = self.poisoned = self.verifying = False
+        self.started = self.poisoned = self.verifying = self.activation_checking = False
         if (type(client) is not KubectlTransport or client.journal is not journal
                 or getattr(fence.ledger, 'client', None) is not client):
             raise RecoveryRequired('single fixed Kubernetes client required')
@@ -224,7 +224,8 @@ class FullCohortImageApply:
             if cut.journal.state['steps'].get(key) != value:
                 raise RecoveryRequired('cut journal lineage changed')
         for key in cut.journal.state['steps']:
-            allowed = key.startswith('writer-resume-') or key == 'writer-cut-resume-inventory'
+            allowed = key.startswith('writer-resume-') or key in ('writer-cut-resume-inventory',
+                'writer-cut-activation-plan', 'writer-cut-space-health', 'writer-cut-publisher-health', 'writer-cut-chat-health')
             if key not in capture.cut_steps and (not self.verifying or not allowed):
                 raise RecoveryRequired('unexpected cut journal step')
         config = capture.config_journal
@@ -367,17 +368,68 @@ class FullCohortImageApply:
                     or step.startswith('writer-cut-config-successor-')
                     or re.fullmatch(r'writer-cut-migration-(?:plan|finish|cleanup)-[0-9a-f]{32}', step)
                     or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory',
-                                'writer-cut-auth-successor')):
+                                'writer-cut-auth-successor', 'writer-cut-activation-plan', 'writer-cut-space-health',
+                                'writer-cut-publisher-health', 'writer-cut-chat-health')):
                 continue
-            if (not isinstance(item, dict) or item.get('status') != 'done'
+            pending_resume = (self.activation_checking and step.startswith('writer-resume-') and
+                              isinstance(item, dict) and item.get('status') == 'pending')
+            if pending_resume and getattr(self.admission.cut, 'activation', None) is None:
+                raise RecoveryRequired('pending resume has no activation plan')
+            if (not isinstance(item, dict) or (item.get('status') != 'done' and not pending_resume)
                     or not isinstance(item.get('nonce'), str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
-                    or item.get('details_sha256') != digest(item.get('details')) or not isinstance(item.get('receipt'), dict)):
+                    or item.get('details_sha256') != digest(item.get('details')) or
+                    (not pending_resume and not isinstance(item.get('receipt'), dict)) or
+                    (pending_resume and 'receipt' in item)):
                 raise RecoveryRequired('writer effect incomplete or changed')
             expected[step] = {k: item[k] for k in ('status', 'nonce', 'details_sha256')}
-            expected[step]['receipt_sha256'] = digest(item['receipt'])
+            if not pending_resume:
+                expected[step]['receipt_sha256'] = digest(item['receipt'])
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
         cut = self.admission.cut
+        activation = getattr(cut, 'activation', None)
+        activation_step = steps.get('writer-cut-activation-plan')
+        if (activation is None) != (activation_step is None):
+            raise RecoveryRequired('activation plan custody changed')
+        if activation is not None:
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                       'plan_sha256': activation['plan_sha256']}
+            if (activation_step['details'] != details or activation_step['receipt'] != details or
+                    not cut._activation_matches(row)):
+                raise RecoveryRequired('activation plan receipt changed')
+            cut.verify_activation_stage()
+            pending = [step for step, item in steps.items() if step.startswith('writer-resume-') and item.get('status') == 'pending']
+            if pending:
+                ordered = activation['plan']['ordered']
+                completed = len(cut.current_resumed_proof()['controllers'])
+                if len(pending) != 1 or completed >= len(ordered):
+                    raise RecoveryRequired('activation pending resume invalid')
+                target = ordered[completed]
+                step = 'writer-resume-' + target['kind'].lower() + '-' + target['name']
+                source = steps[step]['details']['source'] if pending[0] == step else {}
+                originals = [o for o in cut.admission['controllers'] if o['kind'] == target['kind'] and
+                             o['metadata']['name'] == target['name']]
+                resumed_spec = copy.deepcopy(target['spec'])
+                if len(originals) != 1: raise RecoveryRequired('activation writer scope changed')
+                resumed_spec['replicas'] = originals[0]['spec']['replicas']
+                if (pending[0] != step or source.get('kind') != target['kind'] or
+                        source.get('metadata', {}).get('name') != target['name'] or
+                        source.get('metadata', {}).get('namespace') != 'voice-dev' or
+                        source.get('metadata', {}).get('uid') != target['uid'] or
+                        source.get('metadata', {}).get('generation') != target['generation'] or
+                        source.get('spec') != target['spec'] or steps[step]['details'].get('target_spec') != resumed_spec):
+                    raise RecoveryRequired('activation pending target changed')
+            for name in ('space_health', 'publisher_health', 'chat_health'):
+                step = 'writer-cut-' + name.replace('_', '-')
+                health = activation['health'].get(name)
+                if (health is None) != (step not in steps):
+                    raise RecoveryRequired('activation health custody changed')
+                if health is not None:
+                    details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                               'activation_plan_sha256': activation['plan_sha256'],
+                               'health_receipt_sha256': health['receipt_sha256']}
+                    if steps[step]['details'] != details or steps[step]['receipt'] != details:
+                        raise RecoveryRequired('activation health receipt changed')
         auth = getattr(cut, 'auth_successor', None)
         auth_step = steps.get('writer-cut-auth-successor')
         if auth is None or auth_step is None:
@@ -633,6 +685,7 @@ class FullCohortImageApply:
             if not self.started or self.verifying:
                 raise RecoveryRequired('image invocation not available')
             self.verifying = True
+            self.activation_checking = True
             entered = True
             self._guard()
             row, _ = self.fence.ledger.read()
@@ -660,6 +713,7 @@ class FullCohortImageApply:
         finally:
             if entered:
                 self.verifying = False
+                self.activation_checking = False
 
     def verify_after_resume(self):
         try:

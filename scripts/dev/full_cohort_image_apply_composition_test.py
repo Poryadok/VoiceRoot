@@ -1,4 +1,5 @@
 import copy
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,11 +12,88 @@ import full_cohort_image_apply_test as fixture
 import media_operation_journal as journal
 import resource_fencing
 import writer_cut
+import writer_cut_pg_probe
+import full_cohort_inventory_phase
 
 
 class Composition(unittest.TestCase):
     def setUp(self):
         fixture.FullCohortTest.setUp(self)
+
+    def _activate(self, cut, targets, image_phase):
+        """Exercise real staged cut with synthetic source phase evidence."""
+        class Inventory:
+            def __init__(inner):
+                inner.fence, inner.client, inner.lock, inner.namespace_uid = cut.fence, cut.client, cut.lock, 'ns'
+                inner.journal = journal.Journal(Path(self.temp.name) / 'fake-activation-inventory',
+                    {'resource_context': self.context, 'namespace_uid': 'ns'})
+                self.addCleanup(inner.journal.close)
+                value = {'operation_id': self.context['operation_id'], 'synthetic': True}
+                marker = {'status': 'done', 'nonce': '1' * 32, 'receipt_sha256': writer_cut.digest(value)}
+                inner.journal.state['steps'][full_cohort_inventory_phase.STEP] = marker | {'receipt': value}
+                inner.journal.save(); self.ledger.row['full_cohort_inventory'] = marker
+            def verify_receipt(inner, token):
+                return copy.deepcopy(inner.journal.state['steps'][full_cohort_inventory_phase.STEP]['receipt'])
+        zero = {'scope': cut.admission['session_scope'], 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        inventory_patch = mock.patch.object(full_cohort_inventory_phase, 'InventoryPhase', Inventory)
+        observer_patch = mock.patch.object(writer_cut_pg_probe, 'inspect_resumed', return_value=zero, create=True)
+        inventory_patch.start(); observer_patch.start()
+        self.addCleanup(inventory_patch.stop); self.addCleanup(observer_patch.stop)
+        cut.bind_resume_inventory(Inventory(), 'token')
+        priority = {'voice-space': 1, 'voice-chat': 2, 'voice-realtime': 3}
+        targets.sort(key=lambda x: (priority.get(x['metadata']['name'], 0), x['metadata']['name']))
+        ordered = [{'kind': x['kind'], 'name': x['metadata']['name'], 'uid': x['metadata']['uid'],
+                    'generation': x['metadata']['generation'], 'spec': copy.deepcopy(x['spec'])} for x in targets]
+        plan = {'operation_id': self.context['operation_id'], 'namespace_uid': 'ns', 'source_sha': self.context['commit'],
+                'cut_invocation': cut.invocation, 'package_sha256': 'a' * 64, 'ordered': ordered,
+                'barriers': ['space_health', 'publisher_health', 'chat_health']}
+        class ActivationPhase:
+            def __init__(inner):
+                inner.fence, inner.client, inner.lock, inner.namespace_uid = cut.fence, cut.client, cut.lock, 'ns'
+                inner.journal = journal.Journal(Path(self.temp.name) / 'fake-activation-plan',
+                    {'resource_context': self.context, 'namespace_uid': 'ns'})
+                self.addCleanup(inner.journal.close)
+                marker = {'status': 'done', 'nonce': '2' * 32, 'operation_id': self.context['operation_id'],
+                          'receipt_sha256': writer_cut.digest(plan)}
+                inner.journal.state['steps']['full-cohort-activation-plan'] = marker | {'receipt': copy.deepcopy(plan)}
+                inner.journal.save(); self.ledger.row['full_cohort_activation_plan'] = marker
+        def verify_plan(*args):
+            image_phase.verify_activation_lineage()
+            return copy.deepcopy(plan)
+        module = SimpleNamespace(ActivationPhase=ActivationPhase, verify_completed=verify_plan)
+        patch = mock.patch.dict(sys.modules, {'full_cohort_activation_plan': module}); patch.start(); self.addCleanup(patch.stop)
+        cut.prepare_activation(ActivationPhase(), 'token')
+        for barrier, module_name, class_name in (
+                ('space_health', 'realtime_config_transition_space_health', 'SpaceHealthPhase'),
+                ('publisher_health', 'realtime_jwks_publisher_health', 'PublisherHealthPhase'),
+                ('chat_health', 'full_cohort_chat_health', 'ChatHealthPhase')):
+            proof = {'barrier': barrier, 'operation_id': self.context['operation_id']}
+            def factory(name, value):
+                class Health:
+                    def __init__(inner):
+                        inner.fence, inner.client, inner.lock, inner.namespace_uid = cut.fence, cut.client, cut.lock, 'ns'
+                        inner.journal = journal.Journal(Path(self.temp.name) / ('fake-' + name),
+                            {'resource_context': self.context, 'namespace_uid': 'ns'})
+                        self.addCleanup(inner.journal.close)
+                        marker = {'status': 'done', 'receipt_sha256': writer_cut.digest(value)}
+                        inner.journal.state['steps'][name] = marker | {'receipt': copy.deepcopy(value)}
+                        inner.journal.save(); self.ledger.row[name] = marker
+                return Health
+            cls = factory(barrier, proof)
+            source = SimpleNamespace(STEP=barrier, LEDGER=barrier,
+                                     verify_completed=lambda phase, cut, token: copy.deepcopy(phase.journal.state['steps'][phase.key]['receipt']))
+            setattr(source, class_name, cls)
+            patch = mock.patch.dict(sys.modules, {module_name: source}); patch.start(); self.addCleanup(patch.stop)
+            setattr(self, '_phase_' + barrier, cls())
+            getattr(self, '_phase_' + barrier).key = barrier
+        while True:
+            stage = cut.verify_activation_stage()['stage']
+            if stage == 'done': break
+            if stage in ('space_health', 'publisher_health', 'chat_health'):
+                cut.accept_activation_health(stage, getattr(self, '_phase_' + stage), 'token')
+            else:
+                cut.activate_next()
+        return cut.finish_activation()
 
     def _flow(self, fault=None, config=False, frontend=False):
         self.cut_journal.close()
@@ -215,7 +293,7 @@ class Composition(unittest.TestCase):
             for obj in self.client.deployments.values():
                 obj['status']['observedGeneration'] = obj['metadata']['generation']
             targets = [copy.deepcopy(obj) for name, obj in self.client.deployments.items() if not frontend or name not in ui_names]
-            self.assertEqual(cut.resume(targets)['status'], 'replicas-restored')
+            self.assertEqual(self._activate(cut, targets, image_phase)['status'], 'replicas-restored')
             self.client.replicasets, self.client.pods = [], []
             for name, obj in self.client.deployments.items():
                 obj['status'].update(updatedReplicas=1, availableReplicas=1)

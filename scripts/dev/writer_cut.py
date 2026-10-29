@@ -84,6 +84,8 @@ class WriterCut:
         self.migration_history = []
         self.resume_inventory = None
         self.auth_successor = None
+        self.activation = None
+        self.pending_activation_health = None
         self._identity()
 
     def _identity(self):
@@ -148,7 +150,8 @@ class WriterCut:
             if not (name.startswith('writer-drain-') or name.startswith('writer-resume-') or
                     name in ('writer-cut-drained', 'writer-cut-config-plan') or
                     name.startswith('writer-cut-config-successor-') or name.startswith('writer-cut-migration-') or
-                    name in ('writer-cut-resume-inventory', 'writer-cut-auth-successor')):
+                    name in ('writer-cut-resume-inventory', 'writer-cut-auth-successor', 'writer-cut-activation-plan',
+                             'writer-cut-space-health', 'writer-cut-publisher-health', 'writer-cut-chat-health')):
                 continue
             if name == exclude: continue
             if (not isinstance(entry, dict) or entry.get('status') not in ('pending', 'done') or
@@ -221,6 +224,7 @@ class WriterCut:
         row, revision = self.fence.ledger.read()
         if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
                 not self._config_effects_match(row) or
+                (self.pending_activation_health is not None and not self._health_matches(row, self.pending_activation_health)) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed')
         if (name == 'writer-cut-config-plan' and
@@ -317,12 +321,15 @@ class WriterCut:
         self._recheck_config_successors()
         if phase == 'resume':
             self._migration_resume_guard()
+            if self.activation is not None:
+                self._activation_verify_sources()
         self._guard()
         row, _ = self.fence.ledger.read()
         if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
                 not self._config_effects_match(row) or
                 (phase == 'resume' and not self._resume_inventory_matches(row)) or
                 (phase == 'resume' and not self._auth_successor_matches(row)) or
+                (phase == 'resume' and not self._activation_matches(row)) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed before submission')
         result = self._patch(kind, meta['name'], patch)
@@ -351,13 +358,13 @@ class WriterCut:
         owners = [o for o in meta.get('ownerReferences', []) if o.get('controller') is True and o.get('kind') == kind]
         return owners[0].get('uid') if len(owners) == 1 else None
 
-    def _pods_drained(self, controllers=None):
+    def _pods_drained(self, controllers=None, include_retired=True):
         controllers = self.admission['controllers'] if controllers is None else controllers
         deployment_ids = {o['metadata']['uid'] for o in controllers if o['kind'] == 'Deployment'}
         stateful_ids = {o['metadata']['uid'] for o in controllers if o['kind'] == 'StatefulSet'}
         rs = self.client.call('get', 'replicasets', '-o', 'json')['items']
         all_rs = {r['metadata']['uid'] for r in rs}
-        rs_ids = self.retired_rs | {r['metadata']['uid'] for r in rs if self._owner(r['metadata'], 'Deployment') in deployment_ids}
+        rs_ids = (self.retired_rs if include_retired else set()) | {r['metadata']['uid'] for r in rs if self._owner(r['metadata'], 'Deployment') in deployment_ids}
         pods = self.client.call('get', 'pods', '-o', 'json')['items']
         for pod in pods:
             meta = pod['metadata']
@@ -984,10 +991,223 @@ class WriterCut:
         except BaseException:
             self._uncertain()
 
+    @staticmethod
+    def _health_matches(row, health):
+        phase = health['phase']
+        return (not phase.journal.poisoned and phase.journal.dirfd is not None and phase.journal.lockfd is not None
+                and phase.journal.state['steps'].get(health['step']) == health['local']
+                and row.get(health['ledger']) == health['marker']
+                and digest(health['local']['receipt']) == health['receipt_sha256'])
+
+    def _activation_matches(self, row):
+        if self.activation is None:
+            return not any(o['metadata']['name'] in ('voice-space', 'voice-chat', 'voice-realtime')
+                           for o in self.admission['controllers'])
+        binding = self.activation
+        phase = binding['phase']
+        return (not phase.journal.poisoned and phase.journal.dirfd is not None and phase.journal.lockfd is not None
+                and phase.journal.state['steps'].get('full-cohort-activation-plan') == binding['local']
+                and row.get('full_cohort_activation_plan') == binding['marker']
+                and digest(binding['local']['receipt']) == binding['plan_sha256']
+                and all(self._health_matches(row, health) for health in binding['health'].values()))
+
+    def _activation_stage(self):
+        binding = self.activation
+        ordered = binding['plan']['ordered']
+        names = [x['name'] for x in ordered]
+        allowed = {'writer-resume-' + item['kind'].lower() + '-' + item['name'] for item in ordered}
+        if any(k.startswith('writer-resume-') and k not in allowed for k in self.journal.state['steps']):
+            raise RecoveryRequired('activation includes an unselected writer')
+        done = [i for i, item in enumerate(ordered) if self.journal.state['steps'].get(
+            'writer-resume-' + item['kind'].lower() + '-' + item['name'], {}).get('status') == 'done']
+        if done != list(range(len(done))): raise RecoveryRequired('activation prefix changed')
+        index = len(done)
+        pending = [k for k, v in self.journal.state['steps'].items() if k.startswith('writer-resume-')
+                   and isinstance(v, dict) and v.get('status') == 'pending']
+        expected_pending = ('writer-resume-' + ordered[index]['kind'].lower() + '-' + ordered[index]['name']) if index < len(ordered) else None
+        if len(pending) > 1 or (pending and pending[0] != expected_pending):
+            raise RecoveryRequired('activation pending effect changed')
+        health = binding['health']
+        if 'voice-space' in names and names.index('voice-space') < index and 'space_health' not in health:
+            return 'space_health'
+        if 'voice-chat' in names and names.index('voice-chat') < index and 'chat_health' not in health:
+            return 'chat_health'
+        if index == len(ordered): return 'done'
+        name = names[index]
+        if name == 'voice-chat' and 'publisher_health' not in health: return 'publisher_health'
+        if name == 'voice-realtime':
+            for barrier in ('space_health', 'publisher_health', 'chat_health'):
+                if barrier not in health: return barrier
+        return {'voice-space': 'space', 'voice-chat': 'chat', 'voice-realtime': 'realtime'}.get(name, 'remaining')
+
+    def verify_activation_stage(self):
+        if self.activation is None: raise RecoveryRequired('activation plan unavailable')
+        self._guard()
+        row, _ = self.fence.ledger.read()
+        if not self._activation_matches(row): raise RecoveryRequired('activation plan changed')
+        stage = self._activation_stage()
+        if self.activation['stage'] != stage: raise RecoveryRequired('activation stage changed')
+        self._guard()
+        row, _ = self.fence.ledger.read()
+        if not self._activation_matches(row) or self._activation_stage() != stage:
+            raise RecoveryRequired('activation changed during stage check')
+        return {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                'plan_sha256': self.activation['plan_sha256'], 'stage': stage}
+
+    def prepare_activation(self, phase, token):
+        """Bind the fixed source-owned post-image plan before any writer CAS."""
+        import full_cohort_activation_plan
+        try:
+            if (self.activation is not None or not self.drained or self.resume_inventory is None or
+                    type(phase) is not full_cohort_activation_plan.ActivationPhase or
+                    any(k.startswith('writer-resume-') for k in self.journal.state['steps']) or
+                    phase.fence.context != self.fence.context or phase.lock != self.lock or
+                    phase.namespace_uid != self.namespace_uid or phase.fence.ledger.client is not phase.client):
+                raise RecoveryRequired('activation phase identity invalid')
+            self._guard(); self._guards(); self._migration_resume_guard()
+            plan = full_cohort_activation_plan.verify_completed(phase, self, token)
+            if (not isinstance(plan, dict) or set(plan) != {'operation_id', 'namespace_uid', 'source_sha',
+                    'cut_invocation', 'package_sha256', 'ordered', 'barriers'} or
+                    plan['operation_id'] != self.fence.context['operation_id'] or plan['namespace_uid'] != self.namespace_uid or
+                    plan['source_sha'] != self.fence.context['commit'] or plan['cut_invocation'] != self.invocation or
+                    plan['barriers'] != ['space_health', 'publisher_health', 'chat_health'] or
+                    not isinstance(plan['ordered'], list)):
+                raise RecoveryRequired('activation source plan invalid')
+            selected = {(x['kind'], x['metadata']['name']): x for x in self.admission['controllers']}
+            keys = [(x.get('kind'), x.get('name')) for x in plan['ordered']]
+            if len(keys) != len(set(keys)) or set(keys) != set(selected):
+                raise RecoveryRequired('activation selected set changed')
+            names = [x[1] for x in keys]
+            if ('voice-realtime' in names and any(x in names and names.index(x) > names.index('voice-realtime')
+                                                   for x in ('voice-space', 'voice-chat'))):
+                raise RecoveryRequired('activation source order violates prerequisites')
+            for item in plan['ordered']:
+                if set(item) != {'kind', 'name', 'uid', 'generation', 'spec'}: raise RecoveryRequired('target invalid')
+                actual = self._get(item['kind'], item['name']); self._workload(actual)
+                meta = actual['metadata']
+                if (meta['uid'] != item['uid'] or meta['generation'] != item['generation'] or
+                        actual['spec'] != item['spec'] or item['spec']['replicas'] != 0):
+                    raise RecoveryRequired('activation target changed')
+            if not self._pods_drained(): raise RecoveryRequired('writer Pods remain')
+            left, lrev = self.fence.ledger.read(); right, rrev = phase.fence.ledger.read()
+            local = copy.deepcopy(phase.journal.state['steps']['full-cohort-activation-plan'])
+            marker = {k: v for k, v in local.items() if k != 'receipt'}
+            if left != right or lrev != rrev or not self._owned(left) or left.get('full_cohort_activation_plan') != marker or local.get('receipt') != plan:
+                raise RecoveryRequired('activation source ledger changed')
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                       'plan_sha256': digest(plan)}
+            record = self._reserve('writer-cut-activation-plan', details)
+            self._complete('writer-cut-activation-plan', record, details)
+            self.activation = {'phase': phase, 'token': token, 'plan': copy.deepcopy(plan), 'plan_sha256': digest(plan),
+                               'local': local, 'marker': marker, 'health': {}, 'stage': None}
+            self.activation['stage'] = self._activation_stage()
+            return self.verify_activation_stage()
+        except BaseException:
+            self._uncertain()
+
+    def _activation_verify_sources(self):
+        import full_cohort_activation_plan
+        binding = self.activation
+        plan = full_cohort_activation_plan.verify_completed(binding['phase'], self, binding['token'])
+        if plan != binding['plan']: raise RecoveryRequired('activation source plan changed')
+        for name, item in binding['health'].items():
+            module = self._activation_health_module(name)
+            receipt = module.verify_completed(item['phase'], self, item['token'])
+            if digest(receipt) != item['receipt_sha256']:
+                raise RecoveryRequired('activation health proof changed')
+
+    @staticmethod
+    def _activation_health_module(name):
+        if name == 'space_health':
+            import realtime_config_transition_space_health as module
+        elif name == 'publisher_health':
+            import realtime_jwks_publisher_health as module
+        elif name == 'chat_health':
+            import full_cohort_chat_health as module
+        else:
+            raise RecoveryRequired('unknown activation health')
+        return module
+
+    def accept_activation_health(self, name, phase, token):
+        """Accept exactly the next fixed source-owned health barrier."""
+        try:
+            stage = self.verify_activation_stage()['stage']
+            if name != stage or name not in ('space_health', 'publisher_health', 'chat_health'):
+                raise RecoveryRequired('activation health is out of order')
+            module = self._activation_health_module(name)
+            classes = {'space_health': 'SpaceHealthPhase', 'publisher_health': 'PublisherHealthPhase',
+                       'chat_health': 'ChatHealthPhase'}
+            if (type(phase) is not getattr(module, classes[name]) or phase.fence.context != self.fence.context or
+                    phase.lock != self.lock or phase.namespace_uid != self.namespace_uid or
+                    phase.fence.ledger.client is not phase.client):
+                raise RecoveryRequired('activation health identity differs')
+            proof = module.verify_completed(phase, self, token)
+            row, revision = self.fence.ledger.read(); other, other_revision = phase.fence.ledger.read()
+            local = copy.deepcopy(phase.journal.state['steps'][module.STEP])
+            marker = {k: v for k, v in local.items() if k != 'receipt'}
+            if (row != other or revision != other_revision or not self._owned(row) or
+                    row.get(module.LEDGER) != marker or local.get('receipt') != proof):
+                raise RecoveryRequired('activation health ledger differs')
+            health = {'phase': phase, 'token': token, 'step': module.STEP, 'ledger': module.LEDGER,
+                      'local': local, 'marker': marker, 'receipt_sha256': digest(proof)}
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                       'activation_plan_sha256': self.activation['plan_sha256'], 'health_receipt_sha256': digest(proof)}
+            step = 'writer-cut-' + name.replace('_', '-')
+            record = self._reserve(step, details)
+            self.pending_activation_health = health
+            self._complete(step, record, details)
+            self.pending_activation_health = None
+            self.activation['health'][name] = health
+            self.activation['stage'] = self._activation_stage()
+            return self.verify_activation_stage()
+        except BaseException:
+            self._uncertain()
+
+    def activate_next(self):
+        """Restore the next source-ordered writer once its fixed barriers are done."""
+        try:
+            stage = self.verify_activation_stage()['stage']
+            if stage in ('space_health', 'publisher_health', 'chat_health', 'done'):
+                raise RecoveryRequired('activation health or completion required')
+            self._activation_verify_sources()
+            binding = self.activation
+            done = len(self.current_resumed_proof()['controllers'])
+            item = binding['plan']['ordered'][done]
+            selected = {(x['kind'], x['metadata']['name']): x for x in self.admission['controllers']}
+            key = (item['kind'], item['name']); actual = self._get(*key); self._workload(actual)
+            meta, status = actual['metadata'], actual.get('status', {})
+            if (meta['uid'] != item['uid'] or meta['generation'] != item['generation'] or actual['spec'] != item['spec'] or
+                    status.get('observedGeneration', 0) < meta['generation'] or status.get('replicas', 0) != 0 or
+                    status.get('readyReplicas', 0) != 0 or
+                    not self._pods_drained([selected[key], actual], include_retired=False)):
+                raise RecoveryRequired('activation target no longer retired')
+            self._effect('resume', actual, selected[key]['spec']['replicas'])
+            binding['stage'] = self._activation_stage()
+            return self.verify_activation_stage()
+        except BaseException:
+            self._uncertain()
+
+    def finish_activation(self):
+        try:
+            if self.verify_activation_stage()['stage'] != 'done':
+                raise RecoveryRequired('activation remains incomplete')
+            self._activation_verify_sources()
+            self._guard(); self._guards(); self._recheck_config_successors()
+            proof = self.current_resumed_proof()
+            if len(proof['controllers']) != len(self.admission['controllers']):
+                raise RecoveryRequired('activation controller set incomplete')
+            self.drained = False
+            return {'status': 'replicas-restored', 'invocation': proof['invocation'],
+                    'controllers': copy.deepcopy(proof['controllers'])}
+        except BaseException:
+            self._uncertain()
+
     def resume(self, targets):
         try:
             if not self.drained or not isinstance(targets, list) or len(targets) != len(self.admission['controllers']):
                 raise RecoveryRequired('current target admission required')
+            if any(x['metadata']['name'] in ('voice-space', 'voice-chat', 'voice-realtime') for x in self.admission['controllers']):
+                raise RecoveryRequired('source-owned staged activation required')
             if (self.migration is not None or self.migration_history) and self.resume_inventory is None:
                 raise RecoveryRequired('qualified resume inventory required')
             if self.migration is not None:
