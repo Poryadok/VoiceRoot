@@ -61,9 +61,11 @@ class HealthTest(unittest.TestCase):
             patch.object(health.full_cohort_package_phase,'PackagePhase',Package),patch.object(health.writer_cut,'WriterCut',Cut),
             patch.object(health.planned,'SpacePlanPhase',Plan),patch.object(health.full_cohort_image_apply,'FullCohortImageApply',Image),
             patch.object(health.media_operation_guard,'verify'),patch.object(health.planned,'verify',side_effect=lambda *a:copy.deepcopy(self.expected)),
+            patch.object(health.space_service,'verify_space_service',return_value={'receipt':{'uid':'svc','resourceVersion':'4'}}),
             patch.object(health.space,'capture',side_effect=lambda *a:copy.deepcopy(self.observation))]
         for item in self.patches: item.start(); self.addCleanup(item.stop)
-        self.subject=health.SpaceHealthPhase(self.journal,self.base.fence,self.client,self.base.lock,'ns',self.package,self.cut,self.plan,self.image)
+        self.config=SimpleNamespace(intent={'fixed':True},state={'intent':{'fixed':True},'steps':{health.space_service.STEP:{'status':'done'}}})
+        self.subject=health.SpaceHealthPhase(self.journal,self.base.fence,self.client,self.base.lock,'ns',self.package,self.cut,self.plan,self.image,self.config)
 
     def cleanup(self,base):
         if not base.doCleanups(): raise RuntimeError('cleanup failed')
@@ -78,6 +80,41 @@ class HealthTest(unittest.TestCase):
         self.observation['jwks_bytes']=b'{"keys":[1]}'
         with self.assertRaises(health.HealthError): self.subject.run('token')
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_foreign_service_receipt_cannot_qualify_health(self):
+        with patch.object(health.space_service,'verify_space_service',return_value={'receipt':{'uid':'foreign','resourceVersion':'4'}}):
+            with self.assertRaises(health.HealthError): self.subject.run('token')
+        self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_service_record_drift_during_final_guard_holds(self):
+        original=self.subject._guard; count=0
+        def mutate():
+            nonlocal count
+            count+=1; original()
+        with patch.object(self.subject,'_guard',side_effect=mutate): self.subject.run('token')
+        self.subject.record=None; self.journal.state['steps'].clear(); self.base.ledger.row.pop(health.LEDGER)
+        calls=0
+        def drift():
+            nonlocal calls
+            calls+=1; original()
+            if calls==count: self.config.state['steps'][health.space_service.STEP]['status']='foreign'
+        with patch.object(self.subject,'_guard',side_effect=drift):
+            with self.assertRaises(health.HealthError): self.subject.run('token')
+        self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_reopened_health_rejects_service_record_drift_at_last_guard(self):
+        self.subject.run('token'); original=self.subject._guard; count=0
+        def observe():
+            nonlocal count
+            count+=1; original()
+        with patch.object(self.subject,'_guard',side_effect=observe): health.verify_completed(self.subject,self.cut,'token')
+        calls=0
+        def drift():
+            nonlocal calls
+            calls+=1; original()
+            if calls==count: self.config.state['steps'][health.space_service.STEP]['status']='foreign'
+        with patch.object(self.subject,'_guard',side_effect=drift):
+            with self.assertRaises(health.HealthError): health.verify_completed(self.subject,self.cut,'token')
 
     def test_pod_drift_during_final_source_recheck_holds(self):
         original=self.subject._sources; calls=0
@@ -98,7 +135,7 @@ class HealthTest(unittest.TestCase):
             'scope':'space-two-secret-create-only'}
         module=SimpleNamespace(Session=Issuer,verify_completed=lambda _:copy.deepcopy(proof))
         with patch.dict(sys.modules,{'space_p3_issuer_create':module}):
-            subject=health.SpaceHealthPhase(self.journal,self.base.fence,self.client,self.base.lock,'ns',self.package,self.cut,issuer,self.image)
+            subject=health.SpaceHealthPhase(self.journal,self.base.fence,self.client,self.base.lock,'ns',self.package,self.cut,issuer,self.image,self.config)
             receipt=subject.run('token')
             self.assertEqual(health.verify_completed(subject,self.cut,'token'),receipt)
 
