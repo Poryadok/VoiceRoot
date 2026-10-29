@@ -16,10 +16,40 @@ import media_operation_guard as guard
 import media_operation_journal as journals
 import resource_fencing
 import space_creator_runtime_profile_jdk as jdk
+import space_creator_runtime_profile_create as creator
 import space_creator_runtime_profile_target_trust as target
 
 
 class TargetTrustTest(unittest.TestCase):
+    def test_timed_out_input_cleans_exact_owned_container(self):
+        phase=target.TargetTrustPhase.__new__(target.TargetTrustPhase); ca_sha=hashlib.sha256(b'der').hexdigest(); cid='e'*64
+        image='ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64; image_id='sha256:'+'f'*64
+        roots={'image':image,'config_digest':image_id,'root_fingerprints':['aa'*32]}
+        source={'ca':{'uid':'ca','resourceVersion':'1','der_sha256':ca_sha}}
+        phase._dependencies=mock.Mock(return_value=(roots,source)); phase._guard=mock.Mock(); phase._state=mock.Mock()
+        phase._secret=mock.Mock(side_effect=lambda name,key:({'uid':'ca','resourceVersion':'1'},b'ca') if name=='voice-media-ca' else ({'uid':'trust','resourceVersion':'1'},b'private'))
+        commands=[]
+        def docker(args,limit=1048576):
+            commands.append(args)
+            if args[:2]==['image','inspect']:return json.dumps([{'Id':image_id,'Os':'linux','Architecture':'amd64','RepoDigests':[image],'Config':{'Volumes':None}}]).encode()
+            if args[0]=='create':return cid.encode()
+            if args[0]=='inspect':
+                name=next(a.split('=',1)[1] for c in commands if c[0]=='create' for a in c if a.startswith('voice.test.owner='))
+                return json.dumps([{'Id':cid,'Image':image_id,'Config':{'Labels':{'voice.test.owner':name},'Entrypoint':['/bin/sh'],
+                    'Cmd':['-ec',target.SCRIPT],'User':'65532:65532','OpenStdin':True},'HostConfig':{'NetworkMode':'none','ReadonlyRootfs':True,
+                    'CapDrop':['ALL'],'SecurityOpt':['no-new-privileges'],'Tmpfs':{'/scratch':target.TMPFS}},'Mounts':[]}]).encode()
+            if args[0] in ('rm','ps'):return b''
+            raise AssertionError(args)
+        phase._docker=mock.Mock(side_effect=docker)
+        with mock.patch.object(target.material,'_cert_der',return_value=b'der'), mock.patch.object(target,'_input',side_effect=TimeoutError()):
+            with self.assertRaises(TimeoutError):phase._capture('token')
+        self.assertTrue(any(args[0]=='rm' and cid in args for args in commands))
+        self.assertEqual(phase._state.call_args.args[0]['status'],'removed')
+        commands.clear()
+        with mock.patch.object(target.material,'_cert_der',return_value=b'der'), mock.patch.object(target,'_input',side_effect=target.metadata.GuardLost('lost')):
+            with self.assertRaises(target.metadata.GuardLost):phase._capture('token')
+        self.assertFalse(any(args[0]=='rm' for args in commands))
+
     def test_preflight_ledger_read_failure_is_guard_lost(self):
         phase=target.TargetTrustPhase.__new__(target.TargetTrustPhase); row={'status':'active'}; rev=('uid','rv')
         phase._guard=mock.Mock(); phase._local=mock.Mock(); phase._ledger=mock.Mock(return_value=(row,rev))
@@ -94,6 +124,26 @@ class TargetTrustTest(unittest.TestCase):
                 with mock.patch.object(target,'_input',return_value=listing), mock.patch.object(target.material,'_cert_der',return_value=b'der'):
                     receipt=phase.run('token'); self.assertNotIn('PRIVATE-SENTINEL',json.dumps(receipt))
                     self.assertEqual(target.verify_current(phase,'token'),receipt)
+                    successor=creator.Session.__new__(creator.Session); successor.preflight=pp; successor.package=pkg
+                    successor.fence=fence; successor.lock=lock; successor.namespace_uid='ns'; successor.effects={}; successor._local=mock.Mock()
+                    issued={'operation_id':context['operation_id'],'source_sha':context['commit'],'namespace_uid':'ns',
+                            'preflight_sha256':target.writer_cut.digest(source)}
+                    successor.record={'status':'done','receipt':issued}; backing.row[creator.LEDGER]=copy.deepcopy(successor.record)
+                    backing.row[creator.EFFECTS]={}
+                    with mock.patch.object(creator,'verify_completed',return_value=issued) as verify_creator, mock.patch.object(jdk,'verify_completed',return_value=roots):
+                        self.assertEqual(target.verify_successor(phase,'token',successor),receipt)
+                        verify_creator.side_effect=creator.CreateError('private')
+                        with self.assertRaises(target.metadata.GuardLost):target.verify_successor(phase,'token',successor)
+                        verify_creator.side_effect=None
+                        backing.row[creator.LEDGER]={'status':'tampered'}
+                        with self.assertRaises(target.metadata.GuardLost):target.verify_successor(phase,'token',successor)
+                        backing.row[creator.LEDGER]=copy.deepcopy(successor.record); original_fence=successor.fence; original_record=copy.deepcopy(successor.record)
+                        def late_mutation():
+                            answer=backing.read(); successor.record={'status':'tampered'}; return answer
+                        successor.fence=SimpleNamespace(context=context,ledger=SimpleNamespace(read=late_mutation))
+                        with self.assertRaises(target.metadata.GuardLost):target.verify_successor(phase,'token',successor)
+                        successor.fence=original_fence; successor.record=original_record
+                    backing.row[creator.LEDGER]=copy.deepcopy(successor.record)
                     pp._local.side_effect=[ValueError('private'),None]
                     with self.assertRaises(target.metadata.GuardLost): target.verify_current(phase,'token')
                     self.assertEqual(target.verify_current(phase,'token'),receipt)

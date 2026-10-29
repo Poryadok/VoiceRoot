@@ -1,4 +1,5 @@
 import unittest
+import copy
 import json
 from unittest import mock
 from pathlib import Path
@@ -60,10 +61,22 @@ class ConfigTest(unittest.TestCase):
                 obj.journal=other; obj.client=transport.KubectlTransport(other); other_ledger=resource_fencing.KubeLedger(obj.client)
                 other_ledger.read=backing.read; other_ledger.write=backing.write
                 obj.fence=resource_fencing.Fence(context,lambda:{},other_ledger); obj.lock=lock; obj.namespace_uid='ns'
-            inv.package=pkg; inv.verify_current=mock.Mock(return_value={})
-            phase=config.CreatorConfigPhase(j,fence,client,lock,'ns',pkg,inv); phase._observe=mock.Mock(return_value={'scope':'synthetic'})
+            inv.package=pkg; inv.verify_current=mock.Mock(return_value={}); pkg.verify_current=mock.Mock(return_value={})
+            phase=config.CreatorConfigPhase(j,fence,client,lock,'ns',pkg,inv)
+            phase._observe=mock.Mock(return_value={'scope':'synthetic','operation_id':context['operation_id'],'source_sha':context['commit'],'namespace_uid':'ns'})
             with mock.patch.object(guard,'verify'):
                 receipt=phase.run('token'); self.assertEqual(config.verify_completed(phase,'token'),receipt)
+                phase._observe.side_effect=RuntimeError('pods already drained')
+                self.assertEqual(config.verify_receipt(phase,'token'),receipt)
+                phase._observe.side_effect=None
+                original_ledger=phase._ledger; original_record=copy.deepcopy(phase.record); seen=[]
+                def late_mutation():
+                    answer=original_ledger(); seen.append(1)
+                    if len(seen)==2:phase.record=None
+                    return answer
+                phase._ledger=late_mutation
+                with self.assertRaises(config.metadata.GuardLost):config.verify_receipt(phase,'token')
+                phase._ledger=original_ledger; phase.record=original_record
                 phase._observe.return_value={'scope':'drift'}
                 with self.assertRaises(config.ConfigError): config.verify_completed(phase,'token')
                 inv.journal.close()
