@@ -230,17 +230,38 @@ def verify_writer_cleanup(phase, source_root):
     except BaseException: raise PhaseError('Auth migration cleanup receipt unavailable') from None
 
 
+def _check_configmap(authored, actual):
+    expected=authored['metadata']; meta=actual['metadata']
+    if (authored.get('kind')!='ConfigMap' or actual.get('kind')!='ConfigMap'
+            or actual.get('apiVersion')!='v1' or actual.get('immutable') is not True
+            or actual.get('data')!=authored['data'] or actual.get('binaryData')
+            or meta.get('name')!=expected['name'] or meta.get('namespace')!='voice-dev' or meta.get('deletionTimestamp')
+            or any(meta.get('annotations',{}).get(k)!=v for k,v in expected['annotations'].items())
+            or any(meta.get('labels',{}).get(k)!=v for k,v in expected['labels'].items())): raise ValueError()
+
+
+def verify_writer_configmap(authored, actual):
+    try:
+        _check_configmap(authored,actual); meta=actual['metadata']
+        if any(not isinstance(meta.get(k),str) or not meta[k] for k in ('uid','resourceVersion')): raise ValueError()
+        return {'uid':meta['uid'],'resourceVersion':meta['resourceVersion']}
+    except BaseException: raise PhaseError('Auth SQL ConfigMap identity or contents differ') from None
+
+
+def _check_job(authored, actual):
+    if authored.get('kind')!='Job' or actual.get('kind')!='Job' or actual.get('apiVersion')!='batch/v1': raise ValueError()
+    expected=authored['metadata']; meta=actual['metadata']
+    if (meta.get('name')!=expected['name'] or meta.get('namespace')!='voice-dev' or meta.get('deletionTimestamp')
+            or any(meta.get('annotations',{}).get(k)!=v for k,v in expected['annotations'].items())
+            or any(meta.get('labels',{}).get(k)!=v for k,v in expected['labels'].items())): raise ValueError()
+    runtime.validate_defaulted_job(authored,actual)
+
+
 def verify_writer_job(authored, actual):
     """Check an API-returned Job against the canonical authored specification."""
     try:
-        if (authored.get('kind')!='Job' or actual.get('kind')!='Job'
-                or actual.get('apiVersion')!='batch/v1'): raise ValueError()
-        expected=authored['metadata']; meta=actual['metadata']
-        if (meta.get('name')!=expected['name'] or meta.get('namespace')!='voice-dev' or meta.get('deletionTimestamp')
-                or any(not isinstance(meta.get(k),str) or not meta[k] for k in ('uid','resourceVersion'))
-                or any(meta.get('annotations',{}).get(k)!=v for k,v in expected['annotations'].items())
-                or any(meta.get('labels',{}).get(k)!=v for k,v in expected['labels'].items())): raise ValueError()
-        runtime.validate_defaulted_job(authored,actual)
+        _check_job(authored,actual); meta=actual['metadata']
+        if any(not isinstance(meta.get(k),str) or not meta[k] for k in ('uid','resourceVersion')): raise ValueError()
         return {'uid':meta['uid'],'resourceVersion':meta['resourceVersion']}
     except BaseException: raise PhaseError('Auth Job identity or specification differs') from None
 

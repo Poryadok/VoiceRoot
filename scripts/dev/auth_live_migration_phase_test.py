@@ -30,6 +30,13 @@ class AuthMigrationContract(unittest.TestCase):
         with self.assertRaises(live.PhaseError): live.verify_writer_pod(authored,job,bad,execution)
         bad=copy.deepcopy(pod); bad['spec']['containers'][0]['args']=['different']
         with self.assertRaises(live.PhaseError): live.verify_writer_pod(authored,job,bad,execution)
+
+    def test_sql_configmap_verifier_requires_exact_immutable_source(self):
+        cm,_=live.c1_objects('media-c1-'+'a'*32,{'V26__a.sql':b'SELECT 1;'},'node-one')
+        actual=copy.deepcopy(cm); actual['metadata'].update(uid='cm-uid',resourceVersion='2')
+        self.assertEqual(live.verify_writer_configmap(cm,actual)['uid'],'cm-uid')
+        actual['data']['auth-V26__a.sql']='SELECT 2;'
+        with self.assertRaises(live.PhaseError): live.verify_writer_configmap(cm,actual)
     def test_c1_effect_intent_is_durable_and_lost_ack_poisoned(self):
         class Ledger:
             def __init__(self,record): self.row={'auth_live_c1':copy.deepcopy(record)}; self.rev=0; self.fail=False
