@@ -64,6 +64,41 @@ def _base(session):
     return guard.ROOT/'installed'/'prerequisites'/session.operation
 
 
+def _capture_authority(actions,session,approved,execution):
+    """Capture the already-issued source and helper authority for this operation."""
+    import bridge_root
+    import commands
+    import root_cli
+    if (type(actions) is not bridge_root.Actions or actions.tt_session is not session
+        or commands.authority_guard!=session.check or session.check().get('phase')!='prepare'):
+        raise Blocked('staging_prerequisites_session_invalid')
+    source=json.loads(_read_private(guard.ROOT/'installed'/'source-authority'/(session.operation+'.json')),
+                      object_pairs_hook=guard.object_pairs)
+    if (type(source) is not dict or set(source)!={'schema','operation','context','helper_sha256','approved_sha256','execution_sha256'}
+        or source['schema']!='voice-staging-source-capture-v1' or source['operation']!=session.operation
+        or source['context']!=session.context or source['helper_sha256']!=session.helper
+        or type(approved) is not dict or approved.get('source_sha')!=session.context['commit']
+        or type(approved.get('source_files')) is not dict or type(execution) is not dict
+        or digest(approved)!=source['approved_sha256'] or digest(execution)!=source['execution_sha256']
+        or digest(actions.binding)!=session.helper):
+        raise Blocked('staging_prerequisites_source_changed')
+    code=Path(actions.code);installed=guard.ROOT/'installed'/'code'
+    if code!=installed and (code.parent!=guard.ROOT or not re.fullmatch(r'rollout-code-[a-f0-9]{32}',code.name)
+                            or root_cli.rollout_directory_kind(code)!='capture'):
+        raise Blocked('staging_prerequisites_helper_changed')
+    info=code.lstat()
+    if root_cli.code_binding(code)!=actions.binding:raise Blocked('staging_prerequisites_helper_changed')
+    parent=guard.ROOT/'installed'/'prerequisites';encrypted_cut.directory(parent)
+    base=_base(session);base.mkdir(mode=0o700)
+    save(base/'approved.json',approved);save(base/'execution.json',execution)
+    save(base/'code-custody.json',{'root':str(code),'manifest':actions.binding,
+                                  'directory':{'dev':info.st_dev,'ino':info.st_ino}})
+    workspace=guard.ROOT/'installed'/'sources'/session.operation;encrypted_cut.directory(workspace)
+    _verify_helper_source(session,approved,workspace)
+    session.check()
+    return digest(source)
+
+
 def validate_plan(plan,session):
     """Validate the closed protected identity; child preflight remains mandatory."""
     try:

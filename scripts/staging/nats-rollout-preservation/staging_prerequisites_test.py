@@ -16,6 +16,31 @@ from root_main import save
 
 
 class PrivateCustodyTests(unittest.TestCase):
+    def test_initial_capture_requires_real_session_and_exclusive_operation(self):
+        import bridge_root
+        with tempfile.TemporaryDirectory(dir='/root') as folder:
+            root=Path(folder);installed=root/'installed'
+            for path in (installed/'source-authority',installed/'prerequisites',installed/'code'/'helper',
+                         installed/'sources'/('a'*12)/'scripts'/'staging'/'helper'):
+                path.mkdir(parents=True,mode=0o700)
+            raw=b'fixture';name='helper/fixture.py';wanted=hashlib.sha256(raw).hexdigest()
+            for path in (installed/'code'/name,installed/'sources'/('a'*12)/'scripts'/'staging'/name):
+                path.write_bytes(raw);path.chmod(0o600)
+            binding={name:wanted};save(installed/'code'/'capture-manifest.json',binding)
+            context=resource_claim_test.context();card=resource_claim_test.card(context)
+            session=resource_claim.Session(context,'a'*12,prereq.digest(binding),lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
+            approved={'source_sha':context['commit'],'source_files':{'scripts/staging/'+name:wanted}}
+            execution={'fixture':'execution'}
+            receipt={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+                     'helper_sha256':session.helper,'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
+            save(installed/'source-authority'/('a'*12+'.json'),receipt)
+            actions=bridge_root.Actions(installed/'code');actions.tt_session=session
+            with patch.object(guard,'ROOT',root),patch.object(prereq,'REQUIRED_HELPERS',frozenset((name,))),patch.object(prereq,'BINARY_PINS',{}):
+                with self.assertRaises(prereq.Blocked):prereq._capture_authority(actions,session,approved,execution)
+                with resource_claim.command_scope(session.check):
+                    self.assertEqual(prereq._capture_authority(actions,session,approved,execution),prereq.digest(receipt))
+                    with self.assertRaises(FileExistsError):prereq._capture_authority(actions,session,approved,execution)
+
     def test_effect_order_is_closed_and_allows_preserved_only_slots(self):
         plan={'children':{slot:{'effects':[]} for slot in prereq.SLOTS}}
         plan['children']['p3']['effects']=[{'id':prereq.EFFECT_IDS['p3'][0]},
