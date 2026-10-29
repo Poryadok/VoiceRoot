@@ -21,7 +21,7 @@ Only new `space_creator_runtime_profile_issuer*` files. The Creator phase owner 
 - [x] Bind the draft stage to the source-owned root guard and two fresh missing-subset preflight exchanges.
 - [x] Validate the closed packet and generated cryptographic material against a fixture media CA.
 - [x] Exercise one-shot sealed memfd export to a verified operation-specific fixture peer; lost outcome holds.
-- [ ] Pin the reviewed root bundle source, exercise immutable Linux fixtures and obtain independent security review.
+- [x] Pin the independently reviewed root bundle payload and exercise immutable Linux fixtures.
 
 ## Validation
 
@@ -29,7 +29,7 @@ Linux tests must cover each subset, unknown members, existing/partial objects, m
 
 ## Progress and decisions
 
-The five-object catalog is source-backed. The root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently reviewed root metadata observer before and after generation. A root-owned global one-shot reservation prevents a second operation from silently repeating an uncertain issuance; reconciliation is required. A joint fixture exercises the real protected phase, socket exchange, root CA/key check and actual leaf creation; Kubernetes and TT remain fixture inputs. The bundle source anchor intentionally holds until the complete payload is independently reviewed. No caller-supplied list or boolean is an authority.
+The five-object catalog is source-backed. The root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently reviewed root metadata observer before and after generation. A root-owned global one-shot reservation prevents a second operation from silently repeating an uncertain issuance; reconciliation is required. A joint fixture exercises the real protected phase, socket exchange, root CA/key check and actual leaf creation; Kubernetes and TT remain fixture inputs. The root bundle source is pinned to independently reviewed payload commit `298c486200f8ac1cdf111f088d0510772298de00`. No caller-supplied list or boolean is an authority.
 
 ## Risks and follow-ups
 
