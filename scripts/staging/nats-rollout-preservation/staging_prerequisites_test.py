@@ -16,6 +16,9 @@ from root_main import save
 
 
 class PrivateCustodyTests(unittest.TestCase):
+    def test_crypto_helper_is_required(self):
+        self.assertIn('nats-rollout-preservation/staging_p3_prerequisites_crypto.py',prereq.REQUIRED_HELPERS)
+
     def test_initial_capture_requires_real_session_and_exclusive_operation(self):
         import bridge_root
         with tempfile.TemporaryDirectory(dir='/root') as folder:
@@ -116,6 +119,9 @@ class PrivateCustodyTests(unittest.TestCase):
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None})
                 value=prereq.load_authority(session)
                 self.assertEqual(value,{'approved':approved,'execution':execution,'source':str(workspace)})
+                crypto='nats-rollout-preservation/staging_p3_prerequisites_crypto.py'
+                with patch.object(prereq,'REQUIRED_HELPERS',frozenset((name,crypto))):
+                    with self.assertRaises(prereq.Blocked):prereq.load_authority(session)
                 source_file.write_bytes(b'drift')
                 with self.assertRaises(prereq.Blocked):prereq.load_authority(session)
                 source_file.write_bytes(b'fixture')

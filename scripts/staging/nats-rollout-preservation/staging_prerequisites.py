@@ -29,7 +29,7 @@ BINARY_PINS={'nats-known-baseline/kernel':'9fced2b6eb7ca33d744ceceb1550774ee7a3a
     'nats-rollout-preservation/bootstrap-renewer':'618f1f78e650d19c4948c1d08741ed625c6f9aa706159219dbf11c785a56237c',
     'nats-rollout-preservation/story-current4-probe':'88b6c89b9e57d028c5371db3faaea9eec4624223f54204b59056525f6971f53a'}
 REQUIRED_HELPERS=frozenset('nats-rollout-preservation/'+name+'.py' for name in
-    ('staging_prerequisites','staging_release_policy_prepare','staging_p3_prerequisites',
+    ('staging_prerequisites','staging_release_policy_prepare','staging_p3_prerequisites','staging_p3_prerequisites_crypto',
      'staging_gis_material','gis_first_install'))
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256','approved_sha256',
     'execution_sha256','namespace_uid','marker_sha256','baseline_sha256','actual_before',
@@ -90,6 +90,9 @@ def _capture_authority(actions,session,approved,execution):
     if root_cli.code_binding(code)!=actions.binding:raise Blocked('staging_prerequisites_helper_changed')
     parent=guard.ROOT/'installed'/'prerequisites';encrypted_cut.directory(parent)
     base=_base(session);base.mkdir(mode=0o700)
+    directory=os.open(parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:os.fsync(directory)
+    finally:os.close(directory)
     save(base/'approved.json',approved);save(base/'execution.json',execution)
     save(base/'code-custody.json',{'root':str(code),'manifest':actions.binding,
                                   'directory':{'dev':info.st_dev,'ino':info.st_ino}})
