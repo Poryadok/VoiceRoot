@@ -156,6 +156,26 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaises(Exception) as error: self.invoke(dest, runner=runner)
         self.assertNotIn('do-not-print-private-payload', str(error.exception))
 
+    def test_unknown_prewrite_failures_report_only_fixed_stage(self):
+        faults = [('source_contract','_source_contract','p3_stage_source'),
+                  ('pod','_get','p3_stage_pod'),('mount','_mounted','p3_stage_mount'),
+                  ('identity','_meta','p3_stage_public_identity'),('value','_value','p3_stage_public_value'),
+                  ('pem','_public_pem','p3_stage_public_pem')]
+        for label, symbol, code in faults:
+            with self.subTest(stage=label):
+                dest = self.root / ('stage-'+label); dest.mkdir(mode=0o700)
+                with patch.object(capture,symbol,side_effect=ValueError('private-sentinel')):
+                    with self.assertRaises(capture.common.Hold) as error: self.invoke(dest)
+                self.assertEqual(str(error.exception),code)
+                self.assertNotIn('private-sentinel',str(error.exception))
+                self.assertEqual(list(dest.iterdir()),[])
+
+    def test_unknown_wrapped_hold_is_also_sanitized(self):
+        dest=self.root/'wrapped'; dest.mkdir(mode=0o700)
+        with patch.object(capture,'_mounted',side_effect=capture.common.Hold('private-sentinel')):
+            with self.assertRaises(capture.common.Hold) as error: self.invoke(dest)
+        self.assertEqual(str(error.exception),'p3_stage_mount')
+
     def test_restart_and_source_authority_fail_closed(self):
         dest = self.root / 'private'; dest.mkdir(mode=0o700)
         count = 0
