@@ -7,6 +7,7 @@ apply command here. Root repeats verify_db_init immediately before its fence.
 import base64
 import copy
 import hashlib
+import json
 from pathlib import Path
 import re
 from urllib.parse import quote
@@ -19,6 +20,62 @@ HOSTS = {'gateway_host': 'VOICE_GATEWAY_INGRESS_HOST', 'livekit_host': 'VOICE_LI
          'web_host': 'VOICE_WEB_INGRESS_HOST', 'admin_host': 'VOICE_ADMIN_INGRESS_HOST',
          'developer_portal_host': 'VOICE_DEVELOPER_PORTAL_INGRESS_HOST'}
 FRONTENDS = ('developer-portal', 'web', 'admin')
+FULL_APPLICATION_REQUEST = '.github/ci/full-application-build-request.json'
+FULL_APPLICATIONS = frozenset('analytics auth bot chat file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice web admin developer-portal'.split())
+FULL_APPLICATION_KEYS = {name:'voice-'+name+'/'+('portal' if name=='developer-portal' else name) for name in FULL_APPLICATIONS}
+
+
+def full_application_target(target):
+    """Recognize a compiler-bound scope, not independent source/Session authority."""
+    hashes = target.get('source_hashes', {})
+    if FULL_APPLICATION_REQUEST not in hashes:
+        return False
+    primary = set(FULL_APPLICATION_KEYS.values())
+    changed = target.get('changed_services')
+    if (target.get('mode') not in ('full','app-only') or not isinstance(changed,list)
+            or len(changed)!=len(set(changed)) or changed and set(changed)!=FULL_APPLICATIONS
+            or not isinstance(hashes[FULL_APPLICATION_REQUEST],str)
+            or not re.fullmatch(r'[a-f0-9]{64}',hashes[FULL_APPLICATION_REQUEST])
+            or not primary <= set(target.get('images',{}))):
+        _fail('canonical_full_application_scope_invalid')
+    for key in primary:
+        value=target['images'][key]
+        if not isinstance(value,str) or not re.fullmatch(r'[a-z0-9][a-zA-Z0-9._/:~-]{1,255}@sha256:[a-f0-9]{64}',value):
+            _fail('canonical_full_application_image_invalid')
+    return True
+
+
+def full_application_scope(source, parameters):
+    """Derive full scope from captured source request and complete primary pins.
+
+    Root must authenticate source bytes and candidate images before calling.
+    A build request alone does not expand a subset/images-only rollout.
+    """
+    primary=set(FULL_APPLICATION_KEYS.values())
+    if parameters.get('mode') not in ('full','app-only') or not primary <= set(parameters.get('images',{})):
+        return False
+    changed=parameters.get('changed_services',[])
+    if changed and set(changed)!=FULL_APPLICATIONS:
+        return False
+    path=Path(source)/FULL_APPLICATION_REQUEST
+    if not path.exists():return False
+    if path.is_symlink() or any(p.is_symlink() for p in (path.parent,path.parent.parent)) or not path.is_file() or not 1<=path.stat().st_size<=4096:
+        _fail('canonical_full_application_request_invalid')
+    try:
+        def unique(pairs):
+            result={}
+            for key,value in pairs:
+                if key in result:raise ValueError()
+                result[key]=value
+            return result
+        raw=path.read_bytes();request=json.loads(raw,object_pairs_hook=unique)
+        if (set(request)!={'schema','cycle','request_id'} or request['schema']!='voice-full-application-build-request-v1'
+                or type(request['cycle']) is not int or request['cycle'] not in (1,2)
+                or not isinstance(request['request_id'],str) or not re.fullmatch(r'[a-f0-9]{32}',request['request_id'])):
+            raise ValueError()
+    except Exception:_fail('canonical_full_application_request_invalid')
+    return full_application_target({**parameters,'changed_services':changed,
+        'source_hashes':{FULL_APPLICATION_REQUEST:hashlib.sha256(raw).hexdigest()}})
 PRINCIPAL_PUBLISHER = 'voice-p3-principal-jwks'
 PRINCIPAL_PUBLIC = 'voice-p3-principal-public'
 PRINCIPAL_CONFIG = 'voice-p3-principal-publisher-config'
@@ -317,14 +374,20 @@ def _ingress(builder, app_secret, row='ingress'):
 
 def frontend_objects(builder, *, deployments_only=False):
     """Plan frontend objects using the same source and live comparison."""
+    full = full_application_scope(builder.root,builder.p)
     for frontend, path, host in (('developer-portal', 'deploy/staging/developer-portal.yaml', 'developer_portal_host'),
         ('web', 'deploy/staging/flutter-web.yaml', 'web_host'), ('admin', 'deploy/staging/admin.yaml', 'admin_host')):
         if not (builder.root / path).exists(): continue
         for obj in builder.documents(path, 'frontends'):
             if deployments_only and obj['kind'] != 'Deployment': continue
+            if full:
+                # The complete application package selects new frontend images,
+                # not new runtime config, ingress or storage. Preserve every
+                # captured live field; source still fixes object identities.
+                obj=builder.get(obj['kind'],obj['metadata']['name'])
             if obj['kind'] == 'Deployment':
                 _pin_images(obj, builder.p)
-                if builder.p.get('image_pull_secret'):
+                if builder.p.get('image_pull_secret') and not full:
                     obj['spec']['template']['spec']['imagePullSecrets'] = [{'name': builder.p['image_pull_secret']}]
             builder.add('frontends', obj, action=True)
 

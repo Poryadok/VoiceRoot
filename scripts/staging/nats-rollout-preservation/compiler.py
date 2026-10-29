@@ -19,6 +19,16 @@ SOURCE_MANIFESTS=('deploy/staging/services.yaml','deploy/staging/gateway-deploym
  'deploy/templates/network-policy-file-user-principal.yaml',
  'deploy/templates/network-policy-search-user-projection.yaml')
 
+
+def full_application_scope(source,parameters):
+    import source_plan
+    return source_plan.full_application_scope(source,parameters)
+
+
+def full_application_target(target):
+    import source_plan
+    return source_plan.full_application_target(target)
+
 def compatible_bootstrap(source,contract,decoder,target_scripts=None):
     paths=[]
     scripts=contract.get('scripts',[])
@@ -90,13 +100,20 @@ def exclude_gis_first_install_from_generic_apply(pack):
     if source_plan is None:return pack
     expected={('Service','voice-gameintegration'),('Deployment','voice-gameintegration')}
     manifests=pack.get('manifests')
-    if (not isinstance(manifests,list) or len(manifests)!=2
-        or {(row.get('kind'),row.get('metadata',{}).get('name')) for row in manifests}!=expected
+    full=full_application_target(pack.get('target',{}))
+    pair=[row for row in manifests if (row.get('kind'),row.get('metadata',{}).get('name')) in expected] if isinstance(manifests,list) else []
+    if (not isinstance(manifests,list) or not full and len(manifests)!=2
+        or len(pair)!=2 or {(row.get('kind'),row.get('metadata',{}).get('name')) for row in pair}!=expected
         or pack.get('target',{}).get('manifest_sha256')!=digest(manifests)
         or pack.get('target',{}).get('gis_first_install_sha256')!=digest(source_plan)):
         raise Blocked('gis_first_install_generic_apply_binding_invalid')
-    pack['manifests']=[]
-    pack['target']['manifest_sha256']=digest([])
+    if full:
+        import nonnats_plan
+        actual={row['kind']:nonnats_plan.semantic(row) for row in pair}
+        desired={row['kind']:nonnats_plan.semantic(row) for row in source_plan['objects']}
+        if actual!=desired:raise Blocked('gis_first_install_generic_apply_binding_invalid')
+    pack['manifests']=[row for row in manifests if (row['kind'],row['metadata']['name']) not in expected]
+    pack['target']['manifest_sha256']=digest(pack['manifests'])
     return pack
 
 def rendered_source(source,parameters,decoder):
@@ -159,13 +176,20 @@ class ProducerKube:
 def prebootstrap_image_inventory(source, parameters, producer):
     """Derive the ordinary full target image keys before bootstrap effects."""
     import source_plan
-    if parameters.get('mode') not in ('full', 'app-only') or parameters.get('gis_first_install'):
+    full=full_application_scope(source,parameters)
+    if parameters.get('mode') not in ('full', 'app-only') or parameters.get('gis_first_install') and not full:
         raise Blocked('realtime_bootstrap_candidate_invalid')
     rows=rendered_source(source,parameters,decode_yaml)
     builder=source_plan._Source(source,parameters,decode_yaml,producer)
     source_plan._configuration(builder)
     source_plan._application(builder,images_only=True)
     source_plan.frontend_objects(builder,deployments_only=True)
+    if full:
+        for descriptor in builder.rows['frontends']['objects']:
+            if descriptor['kind']=='Deployment':
+                wanted=copy.deepcopy(descriptor['desired']);identity=('Deployment',descriptor['name'])
+                wanted['metadata'].update(name=descriptor['name'],namespace=guard.NS)
+                rows=[row for row in rows if (row['kind'],row['metadata']['name'])!=identity]+[wanted]
     for action in builder.actions:
         wanted=action['manifest'];identity=(wanted['kind'],wanted['metadata']['name'])
         rows=[row for row in rows if (row['kind'],row['metadata']['name'])!=identity]+[wanted]
@@ -200,6 +224,9 @@ def main(args,*,producer=None):
         raise Blocked('rollout_compile_version_invalid')
     # Fail before bootstrap decoding or any producer/cluster observation.
     release_policy_wiring.source_input(source,p)
+    full=full_application_scope(source,p)
+    full_request_path='.github/ci/full-application-build-request.json'
+    full_request_sha=hashlib.sha256((source/full_request_path).read_bytes()).hexdigest() if full else None
     scope={**p,'template_hashes':{'voice-'+name:None for name in p['changed_services']}}
     frontend_only=guard.frontend_image_only(scope)
     producer=ProducerKube() if producer is None else producer
@@ -221,8 +248,18 @@ def main(args,*,producer=None):
     import source_plan
     plan=source_plan.compile_plan(source,p,decode_yaml,producer)
     gis_first_install=plan.pop('gis_first_install',None)
-    if gis_first_install is not None:
+    if gis_first_install is not None and not full:
         rows,plan=isolate_gis_first_install(rows,plan,producer)
+    if full:
+        # Include preserved/no-op frontend deployments too: they remain part of
+        # the final complete target even when no auxiliary action is necessary.
+        for check in plan['checks']:
+            if check['id']!='frontends':continue
+            for descriptor in check['objects']:
+                if descriptor['kind']!='Deployment':continue
+                wanted=copy.deepcopy(descriptor['desired']);key=('Deployment',descriptor['name'])
+                wanted['metadata'].update(name=descriptor['name'],namespace=guard.NS)
+                rows=[row for row in rows if (row['kind'],row['metadata']['name'])!=key]+[wanted]
     if frontend_only and plan['actions']:raise Blocked('rollout_frontend_auxiliary_action_forbidden')
     for action in plan['actions']:
         wanted=action['manifest'];key=(wanted['kind'],wanted['metadata']['name'])
@@ -230,7 +267,7 @@ def main(args,*,producer=None):
     changed=set(p['changed_services'])
     if p['mode']=='images-only':rows=[r for r in rows if r.get('kind')=='Deployment' and r.get('metadata',{}).get('name','').removeprefix('voice-') in changed]
     selected_images=p['images']
-    if gis_first_install is not None:
+    if gis_first_install is not None and not full:
         selected_images={'voice-gameintegration/gameintegration':p['images'].get('voice-gameintegration/gameintegration','')}
     elif p['mode']!='images-only':
         keys={r['metadata']['name']+'/'+c['name'] for r in rows if r.get('kind')=='Deployment' for c in r['spec']['template']['spec'].get('initContainers',[])+r['spec']['template']['spec']['containers']}
@@ -245,6 +282,10 @@ def main(args,*,producer=None):
     pack=compile_target(source,rows,p['registry'],p['tag'],p['mode'],p['changed_services'],selected_images,p['contract'],set(p['enrolled']),
                         (*source_paths,*bootstrap_paths,'deploy/nats/acl-intent.yaml'))
     pack['nonnats']=plan;pack['target']['nonnats_sha256']=digest(plan)
+    if full:
+        if (not full_application_scope(source,p) or hashlib.sha256((source/full_request_path).read_bytes()).hexdigest()!=full_request_sha):
+            raise Blocked('rollout_compile_full_request_changed')
+        pack['target']['source_hashes'][full_request_path]=full_request_sha
     if gis_first_install is not None:
         if set(gis_first_install)!= {'objects'} or not isinstance(gis_first_install['objects'],list) or len(gis_first_install['objects'])!=2:
             raise Blocked('gis_first_install_source_pair_invalid')

@@ -1640,6 +1640,17 @@ release cycle. Before a protected staging operation, bind its complete target
 image map to the actual DEV PASS package, retaining the existing nonselected
 infrastructure identities, and use the normal resource and preservation gates.
 
+A protected `full` or `app-only` request with that captured source request and
+all 23 application pins keeps all 23 applications in the final staging target,
+including frontends whose image already matches. Frontend Deployments retain
+their captured runtime configuration; only the selected image pins change, and
+their existing ConfigMaps, Services and Ingresses remain preserved. A cold GIS
+first installation qualifies and creates its exact Service/Deployment pair
+separately; it does not reduce this complete target to a GIS-only release. The
+request blob hash is bound in the target source inventory. Backend subsets and
+`images-only` requests retain their existing scope and do not acquire full
+release authority merely because a build-request file exists.
+
 
 ## NATS operation checkpoints and reset boundaries
 
