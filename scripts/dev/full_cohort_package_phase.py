@@ -94,6 +94,7 @@ class PackagePhase:
                     receipt.get('images')!=self.fence.context['images'] or receipt.get('nodes')!=self.plan['nodes'] or
                     receipt.get('run_id')!=self.plan['run_id'] or receipt.get('run_attempt')!=self.plan['run_attempt']):
                 raise PackageError('package receipt invalid')
+            oci.validate_provenance(receipt['images'],receipt['platform_digests'],receipt['oci_provenance'])
             root = ROOT / self.fence.context['operation_id']
             raw = private.private_file(root,'canonical-application-package.json',1048576)
             if hashlib.sha256(raw).hexdigest()!=receipt.get('package_sha256'):
@@ -141,8 +142,9 @@ class PackagePhase:
                     'source_equivalence' in captured or
                     captured.get('runtime_qualified') is not False or captured.get('deployment_performed') is not False or
                     mapped != self.fence.context['images']): raise PackageError('canonical package differs')
-            platform = oci.resolve(captured['images'],source.Registry(actor,token))
+            platform,provenance = oci.resolve_provenance(captured['images'],source.Registry(actor,token),self.fence.context['commit'])
             if set(platform) != set(mapped): raise PackageError('platform inventory differs')
+            oci.validate_provenance(mapped,platform,provenance)
             package.source._head(package.source._headers(token),self.fence.context['commit'],time.monotonic()+30)
             self._guard(); self._nodes(); current, rev = self.fence.ledger.read()
             self._record(current,rev,marker)
@@ -151,7 +153,7 @@ class PackagePhase:
             receipt = {'operation_id':operation,'source_sha':self.fence.context['commit'],
                        'run_id':self.plan['run_id'],'run_attempt':self.plan['run_attempt'],
                        'package_sha256':hashlib.sha256(raw).hexdigest(), 'images':mapped,
-                       'platform_digests':platform, 'nodes':copy.deepcopy(self.plan['nodes'])}
+                       'platform_digests':platform, 'oci_provenance':provenance,'nodes':copy.deepcopy(self.plan['nodes'])}
             digest = hashlib.sha256(json.dumps(receipt,sort_keys=True,separators=(',',':')).encode()).hexdigest()
             done = marker | {'status':'done','receipt_sha256':digest}
             self.journal.state['steps'][STEP] = copy.deepcopy(done) | {'receipt':copy.deepcopy(receipt)}; self.journal.save()
@@ -161,6 +163,9 @@ class PackagePhase:
             self._record(confirmed,final_revision,done)
             if self.journal.state['steps'].get(STEP) != done | {'receipt':receipt}:
                 raise PackageError('package local terminal record changed')
+            self._nodes(); self._guard(); final,version=self.fence.ledger.read()
+            if final!=confirmed or version!=final_revision or self.journal.state['steps'].get(STEP)!=done | {'receipt':receipt}:
+                raise PackageError('package terminal authority changed')
             return receipt
         except BaseException:
             if pending:
