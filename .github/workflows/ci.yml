@@ -2024,7 +2024,7 @@ jobs:
       - name: Verify Creator target and trust preflight
         working-directory: scripts/dev
         run: |
-          python -B -c "import sys, unittest; names=['space_creator_runtime_profile_target_plan_test','space_creator_runtime_profile_trust_effect_test','space_creator_runtime_profile_trust_effect_preflight_test','space_creator_runtime_profile_trust_effect_race_test','space_creator_runtime_profile_trust_effect_peer_test','full_cohort_auth_preparation_test','full_cohort_c1_driver_test','full_cohort_release_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 62)"
+          python -B -c "import sys, unittest; names=['space_creator_runtime_profile_target_plan_test','space_creator_runtime_profile_trust_effect_test','space_creator_runtime_profile_trust_effect_preflight_test','space_creator_runtime_profile_trust_effect_race_test','space_creator_runtime_profile_trust_effect_peer_test','full_cohort_auth_preparation_test','full_cohort_c1_driver_test','full_cohort_release_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 65)"
       - name: Verify operation-owned core smoke fixture
         working-directory: scripts/dev
         run: |
