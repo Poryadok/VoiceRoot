@@ -155,6 +155,36 @@ class CatalogTests(unittest.TestCase):
             current['all_databases']['foreign_db']=3
             with self.assertRaises(affected.AffectedError): affected.verify_effective_catalog(probe,cut)
 
+    def test_provisioned_sample_brackets_catalog_and_requires_zero(self):
+        before={'engine':{'id':'engine'},'server_start':'start','all_databases':{'postgres':1},
+                'databases':{'postgres':1},'excluded':{},'properties':{'postgres':{'template':False}}}
+        current={'all_databases':{'postgres':1,'realtime_db':2},'databases':{'postgres':1,'realtime_db':2},
+                 'excluded':{},'properties':{'postgres':{'template':False},'realtime_db':{'template':False}}}
+        scope={'engine':before['engine'],'server_start':'start','databases':['postgres','realtime_db'],
+               'database_oids':{'postgres':1,'realtime_db':2}}
+        class Catalog:
+            def verify_receipt(obj,token): return copy.deepcopy(before)
+            def _guard(obj): pass
+        class Cut:
+            def __init__(obj,probe): obj.probe=probe
+            def current_provisioned_session_scope(obj): return copy.deepcopy(scope)
+        with patch.object(affected,'FullCatalogPhase',Catalog), patch.object(affected.writer_cut,'WriterCut',Cut), \
+             patch.object(affected,'_full_catalog',return_value=current), \
+             patch.object(affected.pg,'inspect',return_value={'scope':scope,'active_sessions':0,'active_transactions':0}) as sample:
+            probe=affected.CatalogScopedProbe(Catalog(),'token'); cut=Cut(probe)
+            self.assertEqual(affected.inspect_provisioned(probe,cut)['scope'],scope)
+            sample.return_value['active_sessions']=1
+            with self.assertRaises(affected.AffectedError): affected.inspect_provisioned(probe,cut)
+            sample.return_value['active_sessions']=0
+            current['all_databases']['foreign_db']=3
+            with self.assertRaises(affected.AffectedError): affected.inspect_provisioned(probe,cut)
+            current['all_databases'].pop('foreign_db')
+            def concurrent(*args):
+                current['all_databases']['foreign_db']=3
+                return {'scope':scope,'active_sessions':0,'active_transactions':0}
+            sample.side_effect=concurrent
+            with self.assertRaises(affected.AffectedError): affected.inspect_provisioned(probe,cut)
+
     def test_full_catalog_probe_holds_on_new_database(self):
         receipt={'engine':{'id':'engine'},'server_start':'start','all_databases':{'postgres':1},'databases':{'postgres':1}}
         changed=copy.deepcopy(receipt); changed['all_databases']['new_db']=2

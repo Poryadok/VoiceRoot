@@ -49,11 +49,11 @@ class BindRaceTest(unittest.TestCase):
             calls.append(service)
             raise RuntimeError('source verifier reached')
         module = SimpleNamespace(verify_deployment_successor=checked)
-        for service in ('chat', 'realtime'):
+        for service in ('chat', 'realtime', 'space'):
             with self.subTest(service=service), mock.patch.dict(sys.modules, {'realtime_config_transition': module}):
                 with self.assertRaisesRegex(RuntimeError, 'source verifier reached'):
                     self.cut._validate_config_snapshot(self.config, {'services': [service], 'steps': {}, 'effects': {}}, {})
-        self.assertEqual(calls, ['chat', 'realtime'])
+        self.assertEqual(calls, ['chat', 'realtime', 'space'])
 
 
 class SuccessorTest(unittest.TestCase):

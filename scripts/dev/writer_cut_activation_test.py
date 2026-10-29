@@ -143,5 +143,15 @@ class ActivationTest(unittest.TestCase):
         self.assertEqual(len(self.client.patches), before)
         self.assertEqual(self.ledger.row['status'], 'uncertain')
 
+    def test_coherent_cut_barrier_deletion_cannot_preserve_stage(self):
+        self.cut.prepare_activation(self.phase, 'token')
+        self.cut.activate_next()
+        self.accept('space_health')
+        step = 'writer-cut-space-health'
+        del self.cut.journal.state['steps'][step]
+        del self.ledger.row['writer_cut_effects'][step]
+        self.ledger.version += 1
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_activation_stage()
+
 
 if __name__ == '__main__': unittest.main()

@@ -208,6 +208,23 @@ def verify_effective_catalog(probe,cut):
     return result
 
 
+def inspect_provisioned(probe,cut):
+    """Sample global zero against the protected, freshly provisioned scope."""
+    try:
+        scope=cut.current_provisioned_session_scope()
+        before=_verify_catalog(probe,cut,scope)
+        result=pg.inspect(scope,probe.catalog._guard)
+        if (not isinstance(result,dict) or set(result)!={'scope','active_sessions','active_transactions'} or
+                result['scope']!=scope or type(result['active_sessions']) is not int or result['active_sessions']!=0 or
+                type(result['active_transactions']) is not int or result['active_transactions']!=0 or
+                cut.current_provisioned_session_scope()!=scope or _verify_catalog(probe,cut,scope)!=before or
+                cut.current_provisioned_session_scope()!=scope):
+            raise ValueError()
+        return copy.deepcopy(result)
+    except BaseException:
+        raise AffectedError('provisioned scope observation unavailable') from None
+
+
 def verify_migration_catalog(probe,cut):
     """Bind an active source-owned migration DB before effective-scope completion."""
     import writer_cut_migration

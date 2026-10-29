@@ -10,6 +10,7 @@ import media_operation_guard
 import writer_cut
 
 SERVICES = ('notification','user')
+PLAN_SERVICES = ('chat','notification','realtime','space','user')
 POLICY = ('VOICE_RELEASE_PROFILE','VOICE_RELEASE_POLICY_FILE','VOICE_RELEASE_POLICY_SHA256','VOICE_RELEASE_SNAPSHOT_FILE')
 BASE = probe.BASE
 
@@ -24,8 +25,8 @@ def _plan(cut, journal, service):
             or intent.get('namespace_uid') != cut.namespace_uid or set(plan) != {'source_sha','cut_invocation','services','sources','observation','observation_plan'}
             or plan['source_sha'] != context['commit'] or plan['cut_invocation'] != cut.invocation
             or not isinstance(plan['services'],list) or not plan['services']
-            or plan['services'] != sorted(set(plan['services'])) or any(s not in SERVICES for s in plan['services'])
-            or service not in plan['services'] or set(plan['sources']) != set(plan['services'])
+            or plan['services'] != sorted(set(plan['services'])) or any(s not in PLAN_SERVICES for s in plan['services'])
+            or service not in SERVICES or service not in plan['services'] or set(plan['sources']) != set(plan['services'])
             or not isinstance(observation,dict) or set(observation) != {'operation_id','source_sha','nonce','observations'}
             or observation['operation_id'] != context['operation_id'] or observation['source_sha'] != context['commit']
             or not isinstance(observation['nonce'],str) or not re.fullmatch(r'[0-9a-f]{32}',observation['nonce'])

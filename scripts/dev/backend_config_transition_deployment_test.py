@@ -88,6 +88,22 @@ class DeploymentVerifierTest(unittest.TestCase):
         self.assertEqual(after['image'],before['image']); self.assertEqual(result['target_spec']['replicas'],0)
         self.assertEqual(after['env'],before['env']+[{'name':'VOICE_RELEASE_PROFILE','value':'development'}])
 
+    def test_mixed_fixed_plan_preserves_user_verifier_boundary(self):
+        plan = self.intent['backend_config_deployments']
+        plan['services'] = ['chat','realtime','user']
+        plan['sources'].update({'chat':{},'realtime':{}})
+        bound = self.cut.journal.state['steps']['writer-cut-config-plan']
+        bound['details']['intent'] = copy.deepcopy(self.intent)
+        bound['details_sha256'] = writer_cut.digest(bound['details'])
+        bound['receipt']['services'] = plan['services'][:]
+        bound['receipt']['config_intent_sha256'] = writer_cut.digest(self.intent)
+        self.base.ledger.row['writer_cut_effects']['writer-cut-config-plan'].update(
+            details_sha256=bound['details_sha256'],receipt_sha256=writer_cut.digest(bound['receipt']))
+        self.assertEqual(self.verify()['source'],self.source)
+        with self.assertRaises(ValueError): deployment._plan(self.cut,self.journal,'chat')
+        plan['services'] = ['chat','realtime','user','voice']
+        with self.assertRaises(ValueError): deployment._plan(self.cut,self.journal,'user')
+
     def test_foreign_observation_or_effect_cannot_become_successor(self):
         for fault in ('receipt','source','target','ledger','claim'):
             with self.subTest(fault=fault):

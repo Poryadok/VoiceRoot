@@ -134,11 +134,18 @@ def observe(cut, binding, allow_removed=False):
 
 
 def sessions(cut, state, pod):
+    import full_cohort_affected_plan
     execution = state['execution']
     identity = {k: execution[k] for k in ('database', 'database_oid', 'role', 'application_name')}
     identity.update(pod_uid=pod['uid'] if pod and pod.get('ip') else None, pod_ip=pod['ip'] if pod else None)
-    receipt = writer_cut_pg_probe.inspect_migration(copy.deepcopy(cut.admission['session_scope']), identity, cut._guard)
-    if receipt['active_sessions'] != 0 or receipt['active_transactions'] != 0:
+    before = full_cohort_affected_plan.verify_migration_catalog(cut.probe, cut)
+    scope = copy.deepcopy(before['scope'])
+    receipt = writer_cut_pg_probe.inspect_migration(scope, identity, cut._guard)
+    after = full_cohort_affected_plan.verify_migration_catalog(cut.probe, cut)
+    if before != after or receipt.get('scope') != scope:
+        raise ValueError('migration database catalog changed during observation')
+    if (type(receipt['active_sessions']) is not int or type(receipt['active_transactions']) is not int or
+            receipt['active_sessions'] != 0 or receipt['active_transactions'] != 0):
         raise ValueError('other sessions or prepared transactions remain')
     return receipt
 
