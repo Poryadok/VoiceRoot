@@ -12,6 +12,13 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_cleanup_rejects_foreign_job_before_delete(self):
+        kube=Mock();kube.get.return_value={'metadata':{'uid':'foreign','resourceVersion':'9'}}
+        with patch.object(native,'_mutate') as mutate:
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_job_changed'):
+                native._cleanup(SimpleNamespace(),kube,'voice-space-inspect-aaaaaaaaaaaa','owned')
+            mutate.assert_not_called()
+
     def test_lost_create_reply_stays_pending_and_cannot_be_replayed(self):
         import commands, guard, resource_claim
         from staging_cohort_preservation_test import CutEffectTests
