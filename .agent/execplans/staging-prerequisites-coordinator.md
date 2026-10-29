@@ -71,6 +71,15 @@ under root's shared-resource instruction until the named main refresh finishes.
   before UID/RV, unrelated Secret data and authority changes are rejected.
   It executes the real local receipt/source/Secret validators, not SQL effects;
   the actual Realtime producer join remains outstanding.
+- Independent C1 review of c246/current production bytes closed the trust P1;
+  C2 static review found no new concrete issue and requested discriminating
+  evidence. Two focused C2 tests pass: same/new candidate policy paths, lost
+  current claim, a changed hash-qualified publisher source, and a foreign origin
+  with all local digest links re-sealed. The new candidate creates only its
+  policy ConfigMap and root policy; GIS/P3 remain preserved. Candidate selection
+  is still an external fixture boundary, not a CI/image eligibility claim.
+  An opt-in test fixture now includes actual Realtime helper/source bytes before
+  Session admission; its cold parent smoke passes for the caller owner's join.
 
 ## Risks
 
