@@ -43,6 +43,8 @@ class PackagePhaseTest(unittest.TestCase):
         self.base.ledger.client = self.client
         self.kind = patch.object(admission.frontend_runtime_executor,'KubectlTransport',fixture.Client)
         self.kind.start(); self.addCleanup(self.kind.stop)
+        self.head = patch.object(package.source,'_head',return_value={})
+        self.head.start(); self.addCleanup(self.head.stop)
         self.phase = admission.PackagePhase(self.journal,self.base.fence,self.client,self.base.lock,'ns')
         self.receipt = {'schema':'voice-canonical-application-package-v1','source_sha':self.base.context['commit'],
             'verifier_sha':self.base.context['commit'],'run_id':123,'run_attempt':1,
@@ -61,9 +63,9 @@ class PackagePhaseTest(unittest.TestCase):
             result = self.phase.run('fixture-token','fixture-actor')
             self.assertEqual(result['platform_digests'],self.platforms)
             self.assertEqual(self.base.ledger.row['full_cohort_package']['status'],'done')
-            self.assertEqual(self.phase.verify_current(),result)
+            self.assertEqual(self.phase.verify_current('fixture-token'),result)
             (self.root/'canonical-application-package.json').write_text('{}',encoding='utf-8')
-            with self.assertRaises(admission.PackageError): self.phase.verify_current()
+            with self.assertRaises(admission.PackageError): self.phase.verify_current('fixture-token')
             with self.assertRaises(admission.PackageError): self.phase.run('fixture-token','fixture-actor')
 
     def test_lost_capture_or_wrong_cycle_never_succeeds(self):
@@ -136,7 +138,15 @@ class PackagePhaseTest(unittest.TestCase):
                 if calls == 2:
                     self.journal.state['steps'][admission.STEP]['receipt']['platform_digests']['voice-auth/auth'] = 'sha256:'+'0'*64
             with patch.object(self.phase,'_nodes',side_effect=drift):
-                with self.assertRaises(admission.PackageError): self.phase.verify_current()
+                with self.assertRaises(admission.PackageError): self.phase.verify_current('fixture-token')
+
+    def test_master_moved_after_package_rejected(self):
+        with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
+             patch.object(admission.oci,'resolve',return_value=self.platforms), patch.object(admission.source,'Registry'):
+            self.phase.run('fixture-token','fixture-actor')
+            with patch.object(package.source,'_head',side_effect=ValueError('private sentinel')):
+                with self.assertRaises(admission.PackageError) as error: self.phase.verify_current('fixture-token')
+            self.assertNotIn('sentinel',str(error.exception))
 
     def test_actual_capture_and_oci_composition_with_fake_remote(self):
         registry_fixture = oci_fixture.OCITest(); registry_fixture.setUp()
