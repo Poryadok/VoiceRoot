@@ -54,7 +54,12 @@ def apply_space_service(cut,journal):
         now.setdefault('backend_config_effects',{})[STEP]=copy.deepcopy(record); now['step']=STEP
         cut.fence.ledger.write(rev,now); cut.verify_drained(); _check(cut,journal)
         if journal.state['steps'].get(STEP)!=expected: raise ValueError()
-        response=cut._patch('Service','voice-space',patch); actual=cut.client.call('get','service','voice-space','-o','json')
+        # An already exact source port is recorded by guarded readback without
+        # issuing a Kubernetes write; a missing port uses the fixed CAS.
+        response=(cut._patch('Service','voice-space',patch) if target!=source['spec']
+                  else cut.client.call('get','service','voice-space','-o','json'))
+        actual=cut.client.call('get','service','voice-space','-o','json')
+        if target==source['spec'] and any(obj.get('metadata',{}).get('resourceVersion')!=meta['resourceVersion'] for obj in (response,actual)): raise ValueError()
         for obj in (response,actual):
             m=obj['metadata']
             if (obj.get('apiVersion')!='v1' or obj.get('kind')!='Service' or obj.get('spec')!=target

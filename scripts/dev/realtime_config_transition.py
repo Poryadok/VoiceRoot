@@ -67,11 +67,13 @@ def render_space_service(source,expected_pod_labels):
     selector=spec.get('selector'); ports=spec.get('ports')
     if (not isinstance(expected_pod_labels,dict) or not isinstance(selector,dict) or not selector
             or any(expected_pod_labels.get(k)!=v for k,v in selector.items())
-            or not isinstance(ports,list) or any(not isinstance(p,dict) for p in ports)
-            or any(p.get('name')=='principal-jwks' or p.get('port')==8443 for p in ports)):
+            or not isinstance(ports,list) or any(not isinstance(p,dict) for p in ports)):
         raise ValueError('Space Service JWKS port unavailable')
     target=copy.deepcopy(spec)
-    target['ports'].append({'name':'principal-jwks','port':8443,'targetPort':8443,'protocol':'TCP'})
+    desired={'name':'principal-jwks','port':8443,'targetPort':8443,'protocol':'TCP'}
+    matches=[p for p in ports if p.get('name')=='principal-jwks' or p.get('port')==8443]
+    if matches and matches!=[desired]: raise ValueError('Space Service JWKS port conflict')
+    if not matches: target['ports'].append(desired)
     return _patch(source,target),target
 
 

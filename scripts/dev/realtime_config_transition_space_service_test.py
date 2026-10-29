@@ -61,5 +61,15 @@ class ServiceTest(unittest.TestCase):
         self.assertNotIn('private',str(error.exception)); self.assertEqual(self.base.ledger.row['status'],'uncertain')
         with self.assertRaises(service.SpaceServiceError): service.apply_space_service(self.cut,self.journal)
 
+    def test_existing_exact_port_records_observation_without_kubernetes_write(self):
+        port={'name':'principal-jwks','port':8443,'targetPort':8443,'protocol':'TCP'}
+        self.cut.client.source['spec']['ports'].append(copy.deepcopy(port))
+        self.journal.intent['realtime_space_service']['source']['spec']['ports'].append(copy.deepcopy(port))
+        self.journal.state['intent']=copy.deepcopy(self.journal.intent)
+        self.cut._patch=lambda *a: (_ for _ in ()).throw(AssertionError('unexpected write'))
+        receipt=service.apply_space_service(self.cut,self.journal)
+        self.assertEqual(receipt['resourceVersion'],'4')
+        self.assertEqual(service.verify_space_service(self.cut,self.journal)['receipt'],receipt)
+
 
 if __name__=='__main__': unittest.main()
