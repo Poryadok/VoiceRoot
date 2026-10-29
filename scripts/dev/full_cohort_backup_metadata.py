@@ -1,7 +1,7 @@
 """Collect source-bound, private metadata for the full-cohort restore.
 
-The plans here describe an isolated restore of the observed state only; they
-are not an admission to migrate or evidence of application compatibility.
+Plans select source-backed targets for isolated restore; they are not an
+admission to mutate the live database or proof of application compatibility.
 """
 import copy
 import hashlib
@@ -18,6 +18,7 @@ import canonical_application_package as canonical
 import cohort_unmanaged_actual as unmanaged
 import frontend_runtime_executor
 import full_cohort_affected_plan as affected
+import full_cohort_go_migration_plan as go_plan
 import full_cohort_inventory_phase as inventory
 import full_cohort_package_phase as package
 import full_cohort_schema_metadata as schema
@@ -351,7 +352,8 @@ class BackupMetadataPhase:
             for db in databases:
                 if db not in cohort.ALLOWED_DATABASES:
                     unmanaged.validate_source_catalog(catalogs[db], catalog['properties'][db])
-                plans[db] = restore_plan(db, catalogs[db], self._files(db, source))
+                baseline = restore_plan(db, catalogs[db], self._files(db, source))
+                plans[db] = go_plan.for_restore(db, baseline, source_snapshot)
             restore.migration_inventory(self.source_root, databases, plans, full_catalog=True)
             metadata = {'catalog': catalogs, 'roles': roles, 'migrations': plans}
             sources = {'roles': {'engine': engine, 'server_start': start}}
@@ -366,7 +368,9 @@ class BackupMetadataPhase:
                       'catalog_receipt_sha256': catalog_marker['receipt_sha256'], 'databases': databases,
                       'sources': sources, 'metadata': metadata, 'restore_inputs': restore_inputs,
                       'full_catalog': {'receipt_sha256': catalog_marker['receipt_sha256'], 'properties': catalog['properties']},
-                      'scope': 'restore-only-source-metadata'}
+                      'migration_holds': ({'space_db': 'native_installer_provenance_required'}
+                                          if 'space_db' in databases else {}),
+                      'scope': 'source-metadata-with-isolated-restore-targets'}
             if (self.catalog.verify_current(token) != catalog or self.package.verify_current(token) != candidate or
                     self._source_files(candidate, token) != source_snapshot):
                 raise MetadataError('source or catalog changed')
@@ -429,7 +433,10 @@ def verify_completed(phase, token):
         if (hashlib.sha256(raw).hexdigest() != marker['receipt_sha256'] or result['operation_id'] != marker['operation_id'] or
                 result['source_sha'] != marker['source_sha'] or result['catalog_receipt_sha256'] != _digest(catalog) or
                 result['full_catalog'] != {'receipt_sha256': _digest(catalog), 'properties': catalog['properties']} or
-                result['databases'] != sorted(catalog['databases']) or result['scope'] != 'restore-only-source-metadata'):
+                result['databases'] != sorted(catalog['databases']) or
+                result['migration_holds'] != ({'space_db': 'native_installer_provenance_required'}
+                                              if 'space_db' in result['databases'] else {}) or
+                result['scope'] != 'source-metadata-with-isolated-restore-targets'):
             raise ValueError()
         phase._guard()
         if phase._ledger()[0].get(LEDGER) != marker or phase.journal.state['steps'].get(STEP) != marker:
