@@ -1,4 +1,5 @@
 import copy
+import sys
 import types
 import unittest
 from unittest import mock
@@ -321,6 +322,24 @@ class EffectiveScopeTest(unittest.TestCase):
         self.state['execution']['database_oid'] = 10
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_realtime_scope()
         self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+
+class CatalogBracketTest(unittest.TestCase):
+    def test_catalog_change_during_migration_sample_holds(self):
+        scope = {'database_oids': {'auth_db': 10}}
+        cut = types.SimpleNamespace(admission={'session_scope': scope}, probe=object(), _guard=lambda: None)
+        state = {'execution': {'database': 'auth_db', 'database_oid': 10, 'role': 'voice', 'application_name': 'auth'}}
+        records = [{'scope': scope, 'catalog': {'auth_db': 10}},
+                   {'scope': scope, 'catalog': {'auth_db': 10, 'new_db': 11}}]
+        affected = types.SimpleNamespace(verify_migration_catalog=mock.Mock(side_effect=records))
+        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.dict(sys.modules, {'full_cohort_affected_plan': affected}), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+            with self.assertRaisesRegex(ValueError, 'catalog changed'):
+                migration.sessions(cut, state, None)
+            affected.verify_migration_catalog.side_effect = [records[0], records[0]]
+            self.assertEqual(migration.sessions(cut, state, None), receipt)
+        self.assertEqual(affected.verify_migration_catalog.call_count, 4)
 
 
 if __name__ == '__main__': unittest.main()

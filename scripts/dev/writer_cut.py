@@ -563,13 +563,13 @@ class WriterCut:
                     'stable': copy.deepcopy(state['stable'])}
             binding = {'kind': kind, 'phase': phase, 'root': source_root, 'plan': plan, 'finished': False,
                        'job_uid': None, 'pod_uid': None, 'config_uid': state['configmap'].get('uid')}
+            self.migration = binding
             state, pod = migration.observe(self, binding)
             receipt = migration.sessions(self, state, pod)
             if receipt['attributed_sessions']:
                 raise RecoveryRequired('migration sessions precede Job')
             step = 'writer-cut-migration-plan-' + state['stable']['nonce']
             record = self._reserve(step, {'kind': kind, 'plan': plan})
-            self.migration = binding
             self._complete(step, record, {'operation_id': self.fence.context['operation_id'],
                                            'plan_sha256': digest(plan)})
             return copy.deepcopy(plan)
