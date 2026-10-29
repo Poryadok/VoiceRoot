@@ -454,6 +454,8 @@ class PublisherPhase:
 
 
 def verify_publisher(phase):
+    if type(phase) is PublisherReuse:
+        return verify_publisher_reuse(phase)
     try:
         if type(phase) is not PublisherPhase or phase.record is None or phase.record.get('status') != 'done': raise ValueError()
         phase._guard(); verify_source(phase.plan['source_repo'], phase.plan['source_sha']); phase._node()
@@ -474,3 +476,149 @@ def verify_publisher(phase):
             try: phase.fence.uncertain('Realtime JWKS publisher proof changed')
             except BaseException: pass
         raise PublisherError('publisher proof unavailable') from None
+
+
+class PublisherReuse:
+    """C2 read-only requalification against a captured completed C1 operation."""
+    _node = PublisherPhase._node
+    _get = PublisherPhase._get
+    _selector = PublisherPhase._selector
+    _runtime = PublisherPhase._runtime
+    _check_objects = PublisherPhase._check_objects
+
+    def __init__(self, journal, fence, client, lock, namespace_uid,
+                 predecessor_journal, predecessor_fence, predecessor_client):
+        import media_operation_journal
+        import resource_fencing
+        self.journal, self.fence, self.client = journal, fence, client
+        self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
+        self.predecessor_journal, self.predecessor_fence, self.predecessor_client = predecessor_journal, predecessor_fence, predecessor_client
+        self.intent = copy.deepcopy(journal.intent); self.plan = self.intent.get('realtime_jwks_publisher')
+        self.snapshot = None; self.record = None; self.reuse_record = None; self.pending = False; self.poisoned = False
+        if (type(journal) is not media_operation_journal.Journal or type(predecessor_journal) is not media_operation_journal.Journal
+            or type(fence) is not resource_fencing.Fence or type(predecessor_fence) is not resource_fencing.Fence
+            or type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
+            or type(predecessor_client) is not frontend_runtime_executor.KubectlTransport or predecessor_client.journal is not predecessor_journal
+            or getattr(fence.ledger, 'client', None) is not client or getattr(predecessor_fence.ledger, 'client', None) is not predecessor_client
+            or predecessor_fence.context != fence.context or self.intent.get('resource_context') != fence.context
+            or self.intent.get('namespace_uid') != namespace_uid or type(self.plan) is not dict
+            or set(self.plan) != {'source_repo', 'source_sha', 'node'} or self.plan['source_sha'] != fence.context.get('commit')
+            or not Path(self.plan['source_repo']).is_absolute()): raise PublisherError('publisher reuse identity invalid')
+        node = self.plan['node']
+        if type(node) is not dict or set(node) != {'name', 'uid', 'resourceVersion', 'hostname'} or not all(isinstance(v, str) and v for v in node.values()):
+            raise PublisherError('publisher reuse node invalid')
+        desired(node['hostname'])
+
+    def _load(self):
+        import full_cohort_predecessor_phase
+        return full_cohort_predecessor_phase.load(self.predecessor_fence, self.predecessor_client, self.lock,
+                                                  self.namespace_uid, self.predecessor_journal)
+
+    def _guard(self):
+        if (self.poisoned or self.journal.poisoned or self.journal.intent != self.intent
+            or self.journal.state.get('intent') != self.intent): raise ValueError()
+        media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+        media_operation_guard.verify(self.predecessor_fence, self.predecessor_client, self.lock, self.namespace_uid)
+        first, revision = self.fence.ledger.read(); second, other = self.predecessor_fence.ledger.read()
+        if (first != second or revision != other or not self.fence.owned(first) or first.get('status') != 'active'
+            or first.get('realtime_jwks_publisher_reuse') != self.reuse_record
+            or self.journal.state['steps'].get('realtime-jwks-publisher-reuse') != self.reuse_record): raise ValueError()
+        verify_source(self.plan['source_repo'], self.plan['source_sha'])
+        current = self._load()
+        if self.snapshot is not None and current != self.snapshot: raise ValueError()
+        media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+
+    def _write(self, record):
+        self._guard(); row, revision = self.fence.ledger.read()
+        self.journal.state['steps']['realtime-jwks-publisher-reuse'] = copy.deepcopy(record); self.journal.save()
+        current, current_revision = self.fence.ledger.read()
+        if current != row or current_revision != revision: raise ValueError()
+        current['realtime_jwks_publisher_reuse'] = copy.deepcopy(record)
+        self.fence.ledger.write(revision, current); self.reuse_record = copy.deepcopy(record); self._guard()
+
+    def _p3(self):
+        import realtime_p3_existing
+        proof = realtime_p3_existing.verify_reuse(self.predecessor_fence, self.predecessor_client, self.lock,
+                                                  self.namespace_uid, self.predecessor_journal, self.plan['source_repo'])
+        if (proof.get('scope') != 'c2-p3-exact-predecessor-reuse'
+            or proof.get('operation_id') != self.fence.context['operation_id']
+            or proof.get('source_sha') != self.plan['source_sha'] or proof.get('namespace_uid') != self.namespace_uid
+            or proof.get('previous_operation_id') != self.snapshot['previous_operation_id']): raise ValueError()
+        return proof
+
+    def _material(self, previous, p3proof):
+        pub = self.client.call('get', 'configmap', PUBLIC_NAME, '-o', 'json'); meta = pub['metadata']
+        if (pub.get('immutable') is not True or pub.get('binaryData') or set(pub.get('data', {})) != {'realtime.json'}
+            or meta.get('name') != PUBLIC_NAME or meta.get('namespace') != NAMESPACE or meta.get('deletionTimestamp')
+            or any(meta.get(k) != previous['public'][k] for k in ('uid', 'resourceVersion'))): raise ValueError()
+        raw = pub['data']['realtime.json'].encode('utf-8')
+        if not 0 < len(raw) <= 131072 or hashlib.sha256(raw).hexdigest() != previous['public']['sha256']: raise ValueError()
+        tls_meta, cert = _public_tls()
+        if any(tls_meta.get(k) != previous['tls'][k] for k in ('uid', 'resourceVersion')): raise ValueError()
+        root = p3proof['public_sources']['voice-principal-ca']
+        lines = p3_transport.public_certificate('voice-principal-ca', 'ca.crt').split(b'\n', 2)
+        if len(lines) != 3 or lines[0].decode() != root['uid'] or lines[1].decode() != root['resourceVersion']: raise ValueError()
+        ca = base64.b64decode(lines[2], validate=True)
+        if hashlib.sha256(crypto.der(ca)).hexdigest() != root['der_sha256']: raise ValueError()
+        if _verify_cert(cert, ca) != previous['tls']['certificate_sha256']: raise ValueError()
+        return copy.deepcopy(previous['public']), copy.deepcopy(previous['tls'])
+
+    def _observe(self):
+        self._guard(); snapshot = self._load()
+        if self.snapshot is None: self.snapshot = copy.deepcopy(snapshot)
+        if snapshot != self.snapshot: raise ValueError()
+        prior = snapshot['publisher']; p3proof = self._p3()
+        if (prior['status'] != 'done' or prior['image'] != {'index': INDEX, 'platform': PLATFORM, 'config': CONFIG}
+            or any(prior['node'][k] != self.plan['node'][k] for k in ('name', 'uid', 'hostname'))): raise ValueError()
+        self.record = copy.deepcopy(prior)
+        self._node(); public, tls = self._material(prior, p3proof)
+        expected = dict(zip(('configmap', 'deployment', 'service'), desired(self.plan['node']['hostname'])))
+        current_records = copy.deepcopy(prior['objects'])
+        for key, obj in expected.items():
+            current = self._get(obj['kind'], obj['metadata']['name']); check_admission(current, obj)
+            meta = current['metadata']; value = current['data'] if key == 'configmap' else current['spec']
+            old = prior['objects'][key]
+            if (meta.get('uid') != old['uid'] or not meta.get('resourceVersion') or digest(value) != old['spec_sha256']
+                or key == 'deployment' and meta.get('generation') != old['generation']): raise ValueError()
+            current_records[key]['resourceVersion'] = meta['resourceVersion']
+        self.record['objects'] = current_records
+        self._check_objects(expected); runtime = self._runtime(expected)
+        if self._p3() != p3proof or self._load() != snapshot: raise ValueError()
+        self._guard()
+        return {'previous_operation_id': snapshot['previous_operation_id'], 'predecessor_sha256': digest(snapshot),
+                'p3_reuse_sha256': digest(p3proof), 'image': copy.deepcopy(prior['image']), 'node': copy.deepcopy(self.plan['node']),
+                'public': public, 'tls': tls, 'objects': current_records, 'runtime': runtime}
+
+    def run(self):
+        try:
+            self._guard(); self.snapshot = self._load()
+            if 'realtime-jwks-publisher-reuse' in self.journal.state['steps']: raise ValueError()
+            pending = {'status':'pending', 'nonce':secrets.token_hex(16), 'operation_id':self.fence.context['operation_id'],
+                       'source_sha':self.plan['source_sha']}
+            self.pending = True; self._write(pending)
+            observed = self._observe()
+            done = pending | observed | {'status':'done'}; self._write(done)
+            return verify_publisher_reuse(self)
+        except BaseException:
+            if self.pending:
+                self.poisoned = True
+                try: self.fence.uncertain('Realtime JWKS reuse outcome uncertain')
+                except BaseException: pass
+            raise PublisherError('publisher reuse not admitted; reconcile if pending') from None
+
+
+def verify_publisher_reuse(phase):
+    try:
+        if type(phase) is not PublisherReuse or not isinstance(phase.reuse_record, dict) or phase.reuse_record.get('status') != 'done': raise ValueError()
+        phase._guard(); observed = phase._observe()
+        if phase.reuse_record != {'status':'done', 'nonce':phase.reuse_record['nonce'],
+            'operation_id':phase.fence.context['operation_id'], 'source_sha':phase.plan['source_sha'], **observed}: raise ValueError()
+        return {'schema':'voice-realtime-jwks-publisher-v1', 'operation_id':phase.fence.context['operation_id'],
+                'candidate_source_sha':phase.plan['source_sha'], 'namespace_uid':phase.namespace_uid,
+                **copy.deepcopy(observed), 'scope':'c2-predecessor-reuse'}
+    except Exception:
+        if type(phase) is PublisherReuse and phase.pending:
+            phase.poisoned = True
+            try: phase.fence.uncertain('Realtime JWKS reuse proof changed')
+            except BaseException: pass
+        raise PublisherError('publisher reuse proof unavailable') from None

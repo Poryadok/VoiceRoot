@@ -213,5 +213,59 @@ class PhaseTest(unittest.TestCase):
         self.assertEqual(proof['public']['uid'], 'uid-'+subject.PUBLIC_NAME)
         self.assertNotIn('PRIVATE KEY', str(proof)); self.assertNotIn('PRIVATE KEY', str(self.journal.state))
 
+    def test_reuse_requires_authenticated_predecessor_before_any_effect(self):
+        with self.assertRaises(subject.PublisherError):
+            subject.PublisherReuse(self.journal, self.fence, self.client, self.base.lock, 'ns', None, None, None)
+        self.assertEqual(self.client.calls, [])
+
+    def test_c2_reuse_rechecks_predecessor_and_performs_no_kube_writes(self):
+        import base64
+        import hashlib
+        import json
+        import sys
+        self.phase.run(b'', b'', b'')
+        previous = copy.deepcopy(self.phase.record)
+        context = copy.deepcopy(self.base.context)
+        context.update(operation_id='media-c2-'+'b'*32, claim='33333333-3333-4333-8333-333333333333',
+                       revision=5, generation=4, commit='c'*40)
+        card = copy.deepcopy(self.base.card)
+        card.update(claim=context['claim'], revision=5, generation=4)
+        card['candidate']['commit'] = context['commit']
+        lock = copy.deepcopy(self.base.lock)
+        lock['data']['resource_operation'] = context['operation_id']
+        lock['data']['resource_context'] = json.dumps(context, sort_keys=True, separators=(',', ':'))
+        self.base.ledger.row = context | {'status':'active', 'step':'admitted', 'predecessor':{'snapshot_sha256':'fixture'}}
+        self.base.ledger.version += 1
+        client = Client(lock); client.objects = self.client.objects; client.pods = self.client.pods; client.replicasets = self.client.replicasets
+        client.public = copy.deepcopy(self.client.public)
+        intent = {'resource_context':context, 'namespace_uid':'ns', 'realtime_jwks_publisher': {
+            'source_repo':'/source', 'source_sha':context['commit'], 'node':copy.deepcopy(previous['node'])}}
+        journal = media_operation_journal.Journal(Path(self.base.temp.name) / 'c2-publisher', intent)
+        self.addCleanup(journal.close); client.journal = journal
+        fence = resource_fencing.Fence(context, lambda: copy.deepcopy(card), View(self.base.ledger, client))
+        pred_journal = media_operation_journal.Journal(Path(self.base.temp.name) / 'predecessor',
+            {'resource_context':context, 'namespace_uid':'ns'})
+        self.addCleanup(pred_journal.close)
+        pred_client = Client(lock); pred_client.journal = pred_journal
+        pred_fence = resource_fencing.Fence(context, lambda: copy.deepcopy(card), View(self.base.ledger, pred_client))
+        snapshot = {'publisher':previous, 'previous_operation_id':self.base.context['operation_id']}
+        root_der = b'root-der'
+        p3proof = {'scope':'c2-p3-exact-predecessor-reuse', 'operation_id':context['operation_id'],
+            'source_sha':context['commit'], 'namespace_uid':'ns', 'previous_operation_id':snapshot['previous_operation_id'],
+            'public_sources':{'voice-principal-ca':{'uid':'ca','resourceVersion':'8','der_sha256':hashlib.sha256(root_der).hexdigest()}}}
+        module = SimpleNamespace(verify_reuse=lambda *args: copy.deepcopy(p3proof))
+        phase = subject.PublisherReuse(journal, fence, client, lock, 'ns', pred_journal, pred_fence, pred_client)
+        with mock.patch('full_cohort_predecessor_phase.load', return_value=copy.deepcopy(snapshot)), \
+             mock.patch.dict(sys.modules, {'realtime_p3_existing':module}), \
+             mock.patch.object(subject.p3_transport, 'public_certificate', return_value=b'ca\n8\n'+base64.b64encode(b'ca-cert')), \
+             mock.patch.object(subject.crypto, 'der', return_value=root_der):
+            proof = phase.run()
+            self.assertEqual(proof['scope'], 'c2-predecessor-reuse')
+            self.assertEqual(client.calls, [])
+            self.assertEqual(subject.verify_publisher(phase), proof)
+            client.objects['service', subject.NAME]['metadata']['uid'] = 'different'
+            with self.assertRaises(subject.PublisherError): subject.verify_publisher(phase)
+            self.assertEqual(self.base.ledger.row['status'], 'uncertain')
+
 
 if __name__ == '__main__': unittest.main()
