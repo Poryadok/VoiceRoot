@@ -405,13 +405,47 @@ jobs:
       - name: MatchSquad DEV overlay contracts
         run: python3 -B -m unittest scripts.dev.match_squad_overlay_test scripts.dev.match_squad_runtime_overlay_test
 
-  # Flutter's built-in file sharding retains the original complete test
-  # discovery and concurrency=1 isolation within each independent checkout.
-  flutter-unit-tests:
+  # Partition Flutter's default filesystem discovery by file, preserving
+  # concurrency=1 isolation within each independent checkout.
+  flutter-unit-plan:
     needs: changes
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Prepare canonical Flutter test inventory
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          python3 ../../scripts/ci/flutter_test_shards_test.py
+          python3 ../../scripts/ci/flutter_test_shards.py plan --plan "$RUNNER_TEMP/plan.json"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: flutter-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/plan.json
+          if-no-files-found: error
+
+  flutter-unit-tests:
+    needs: [changes, flutter-unit-plan]
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.flutter-unit-plan.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.protos == 'true' ||
@@ -432,11 +466,21 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets (host)
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - uses: actions/download-artifact@v7
+        with:
+          name: flutter-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-plan
       - name: Flutter unit and widget tests
         working-directory: src/frontend
         run: |
           flutter pub get
-          flutter test --reporter expanded --concurrency=1 --no-pub --total-shards=4 --shard-index=${{ matrix.shard }}
+          python3 ../../scripts/ci/flutter_test_shards_test.py
+          /usr/bin/time -v python3 ../../scripts/ci/flutter_test_shards.py run --plan "$RUNNER_TEMP/flutter-plan/plan.json" --shard-index=${{ matrix.shard }} --receipt "$RUNNER_TEMP/receipt.json"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: flutter-receipt-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/receipt.json
+          if-no-files-found: error
       - name: Retain failing golden diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
@@ -445,6 +489,23 @@ jobs:
           path: src/frontend/test/failures
           if-no-files-found: ignore
           retention-days: 7
+
+  flutter-unit-receipts:
+    needs: [flutter-unit-plan, flutter-unit-tests]
+    if: always() && needs.flutter-unit-plan.result == 'success' && needs.flutter-unit-tests.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          name: flutter-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-plan
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: flutter-receipt-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/flutter-receipts
+      - name: Verify complete Flutter file partition
+        run: python3 scripts/ci/flutter_test_shards.py verify --plan "$RUNNER_TEMP/flutter-plan/plan.json" --receipts "$RUNNER_TEMP/flutter-receipts"
 
   flutter:
     needs: changes
@@ -2000,6 +2061,7 @@ jobs:
       - match-squad-overlay
       - flutter
       - flutter-unit-tests
+      - flutter-unit-receipts
       - flutter-device-driver
       - flutter-windows
       - web
@@ -2091,7 +2153,7 @@ jobs:
           JOB_VOICE_HISTORY_AUDIT: ${{ needs.voice-history-audit.result }}
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
-          JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-tests.result }}
+          JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-receipts.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}
