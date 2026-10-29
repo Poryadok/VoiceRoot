@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import subprocess
 
@@ -18,6 +19,22 @@ import local_source_snapshot
 
 def _invoke(command, **kwargs):
     return subprocess.run(command, **kwargs)
+
+
+def classify_suites(test_root, selected):
+    """Separate known browser-only files; refuse unknown platform annotations."""
+    profiles = {'vm': [], 'chrome': []}
+    for name in selected:
+        text = (Path(test_root) / name).read_text(encoding='utf-8')
+        count = text.count('@TestOn')
+        if count == 0:
+            profiles['vm'].append(name)
+        elif count == 1 and re.match(
+                r"\A(?:[ \t]*(?://[^\r\n]*)?\r?\n)*[ \t]*@TestOn\s*\(\s*(['\"])browser\1\s*\)\s*\r?\n[ \t]*library\s*;", text):
+            profiles['chrome'].append(name)
+        else:
+            raise ValueError('unsupported TestOn annotation: ' + name)
+    return profiles
 
 
 def directory_digest(root):
@@ -67,14 +84,22 @@ def run(root, head, output, flutter, selected=None):
                                  or not set(selected).issubset(inventory)):
         raise ValueError('selected suites must be distinct discovered test paths')
     selected = inventory if selected is None else selected
-    suites = [str(frontend / 'test' / name) for name in selected]
-    if not suites:
+    if not selected:
         raise ValueError('Flutter test inventory is empty')
+    profiles = classify_suites(frontend / 'test', selected)
     result = {'schema': 'voice-local-flutter-diagnostic-v1', 'source': source,
               'status': 'incomplete', 'commands': [], 'tests': None,
               'full_inventory': selected == inventory,
               'unbound_inputs': ['Flutter SDK and external package provenance', 'generated and ambient inputs']}
-    test_args = [] if result['full_inventory'] else ['test/' + name for name in selected]
+    tests = []
+    if profiles['vm']:
+        vm_args = [] if result['full_inventory'] else ['test/' + name for name in profiles['vm']]
+        tests.append(('test-vm', [flutter, 'test', '--no-pub', '--reporter', 'json',
+                                  '--concurrency=1', *vm_args], profiles['vm']))
+    if profiles['chrome']:
+        tests.append(('test-chrome', [flutter, 'test', '--no-pub', '--platform', 'chrome',
+                                      '--reporter', 'json', '--concurrency=1',
+                                      *('test/' + name for name in profiles['chrome'])], profiles['chrome']))
     # Captures and live-test switches are caller data, not this run's outputs.
     env = {key: value for key, value in os.environ.items()
            if not key.upper().startswith('VOICE_') and not key.upper().endswith('_CAPTURE_DIR')}
@@ -99,11 +124,10 @@ def run(root, head, output, flutter, selected=None):
         prefetch = (['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
                      str(checkout / 'scripts/ci/flutter-windows-prefetch-sqlite3.ps1'), '-RootDir', str(checkout)]
                     if os.name == 'nt' else ['bash', str(checkout / 'scripts/ci/flutter-linux-prefetch-sqlite3.sh')])
-        for label, command in [('pub-get', [flutter, 'pub', 'get', '--enforce-lockfile']),
-                               ('sqlite-prefetch', prefetch),
-                               ('analyze', [flutter, 'analyze', '--no-fatal-infos', '--no-pub']),
-                               ('test', [flutter, 'test', '--no-pub', '--reporter', 'json',
-                                         '--concurrency=1', *test_args])]:
+        commands = [('pub-get', [flutter, 'pub', 'get', '--enforce-lockfile'], []),
+                    ('sqlite-prefetch', prefetch, []),
+                    ('analyze', [flutter, 'analyze', '--no-fatal-infos', '--no-pub'], []), *tests]
+        for label, command, selected_suites in commands:
             out = output / (label + '.stdout')
             err = output / (label + '.stderr')
             with out.open('wb') as stdout, err.open('wb') as stderr:
@@ -116,17 +140,25 @@ def run(root, head, output, flutter, selected=None):
             local_source_snapshot.verify_materialized(root, source, checkout)
             if label == 'sqlite-prefetch':
                 result['pub_cache_sha256'] = directory_digest(env['PUB_CACHE'])
-            elif label in ('analyze', 'test') and directory_digest(env['PUB_CACHE']) != result['pub_cache_sha256']:
+            elif (label == 'analyze' or label.startswith('test-')) and directory_digest(env['PUB_CACHE']) != result['pub_cache_sha256']:
                 raise ValueError('dependency cache changed during execution')
-            if label == 'test':
+            if selected_suites:
                 raw = out.read_bytes()
-                result['tests'] = flutter_test_events.summarize(
-                    flutter_test_events.read_events(raw), suites, reject_skips=False)
-                result['tests']['event_sha256'] = hashlib.sha256(raw).hexdigest()
-                if result['tests']['skipped']:
-                    raise ValueError('required Flutter tests were skipped')
+                summary = flutter_test_events.summarize(
+                    flutter_test_events.read_events(raw),
+                    [str(frontend / 'test' / name) for name in selected_suites], reject_skips=False)
+                if result['tests'] is None:
+                    result['tests'] = {'tests': 0, 'passed': 0, 'hidden': 0,
+                                       'skipped': [], 'suites': [], 'event_sha256': {}}
+                for key in ('tests', 'passed', 'hidden'):
+                    result['tests'][key] += summary[key]
+                result['tests']['skipped'].extend(summary['skipped'])
+                result['tests']['suites'].extend(summary['suites'])
+                result['tests']['event_sha256'][label] = hashlib.sha256(raw).hexdigest()
         if local_source_snapshot.capture(root, head) != source:
             raise ValueError('source changed during execution')
+        if result['tests']['skipped']:
+            raise ValueError('required Flutter tests were skipped')
     except (OSError, ValueError, json.JSONDecodeError) as error:
         result['status'] = 'failed'
         result['error'] = str(error)

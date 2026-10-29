@@ -34,7 +34,7 @@ class LocalFlutterExecutionTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout=b'{"frameworkRevision":"test"}')
         if 'test' in command:
             self.test_env = kwargs.get('env', {})
-            path = str(Path(cwd) / 'test/example_test.dart')
+            path = str(Path(cwd) / (command[-1] if command[-1].startswith('test/') else 'test/example_test.dart'))
             rows = [{'type':'start'}, {'type':'suite','suite':{'id':1,'path':path}},
                     {'type':'allSuites','count':1},
                     {'type':'testStart','test':{'id':2,'suiteID':1,'name':'example','metadata':{'skip':False}}},
@@ -113,6 +113,52 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         item.write_bytes(b'one')
         (cache / 'package' / 'another.dart').write_bytes(b'new')
         self.assertNotEqual(first, execution.directory_digest(cache))
+
+    def test_discovery_separates_browser_only_and_rejects_unknown_teston(self):
+        test_dir = self.root / 'src/frontend/test'
+        (test_dir / 'browser_test.dart').write_text("@TestOn('browser')\nlibrary;\n")
+        profiles = execution.classify_suites(test_dir, ['example_test.dart', 'browser_test.dart'])
+        self.assertEqual(profiles, {'vm': ['example_test.dart'], 'chrome': ['browser_test.dart']})
+        (test_dir / 'unknown_test.dart').write_text("@TestOn('some-future-platform')\nlibrary;\n")
+        with self.assertRaisesRegex(ValueError, 'unsupported TestOn'):
+            execution.classify_suites(test_dir, ['unknown_test.dart'])
+        (test_dir / 'unknown_test.dart').write_text("// @TestOn('browser')\nvoid main() {}\n")
+        with self.assertRaisesRegex(ValueError, 'unsupported TestOn'):
+            execution.classify_suites(test_dir, ['unknown_test.dart'])
+
+    def test_browser_only_selection_runs_in_chrome(self):
+        (self.root / 'src/frontend/test/browser_test.dart').write_text("@TestOn('browser')\nlibrary;\n")
+        with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+            result = execution.run(self.root, self.head, self.output, 'flutter', ['browser_test.dart'])
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['tests']['passed'], 1)
+        command = result['commands'][-1]['argv']
+        self.assertIn('chrome', command)
+        self.assertIn('test/browser_test.dart', command)
+
+    def test_full_inventory_runs_both_platforms_before_rejecting_skips(self):
+        (self.root / 'src/frontend/test/browser_test.dart').write_text("@TestOn('browser')\nlibrary;\n")
+        self.skipped = True
+        with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertTrue(result['full_inventory'])
+        self.assertEqual(result['tests']['tests'], 2)
+        self.assertEqual(len(result['tests']['skipped']), 2)
+        self.assertEqual(set(result['tests']['event_sha256']), {'test-vm', 'test-chrome'})
+        self.assertIn('chrome', result['commands'][-1]['argv'])
+
+    def test_failed_chrome_does_not_accept_passing_vm_result(self):
+        (self.root / 'src/frontend/test/browser_test.dart').write_text("@TestOn('browser')\nlibrary;\n")
+        def fail_browser(command, **kwargs):
+            if 'chrome' in command:
+                return subprocess.CompletedProcess(command, 2)
+            return self.fake_flutter(command, **kwargs)
+        with mock.patch.object(execution, '_invoke', side_effect=fail_browser):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(result['tests']['passed'], 1)
+        self.assertEqual(result['commands'][-1]['exit_code'], 2)
 
 
 if __name__ == '__main__':

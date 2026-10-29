@@ -37,7 +37,9 @@ process exit code, or replace the full unit/widget file inventory receipt.
 For an isolated Flutter diagnostic, run
 `python scripts/ci/local_flutter_execution.py --head <full-HEAD-commit> --output <new-directory-outside-checkout> --flutter <flutter-executable>`.
 By default it discovers the full `test/` inventory; repeat `--suite` with a path
-relative to `test/` to diagnose a smaller selection. It copies Git-visible
+relative to `test/` to diagnose a smaller selection. Known `@TestOn('browser')`
+suites run separately on Chrome; unsupported platform annotations fail closed.
+It copies Git-visible
 source bytes into the new directory, uses a private pub cache and temporary
 directory, runs locked dependency resolution, the repository SQLite prefetch,
 analysis and JSON-reported tests, rechecks captured files after commands, and
