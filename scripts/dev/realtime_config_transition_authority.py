@@ -80,6 +80,7 @@ def _delegated_space(cut,binding,token):
     import full_cohort_package_phase as package
     trust_local=copy.deepcopy(refs[1].journal.state['steps'][target.STEP]); trust_record=copy.deepcopy(refs[1].record)
     package_local=copy.deepcopy(refs[1].package.journal.state['steps'][package.STEP])
+    cut_local=copy.deepcopy((cut.journal.intent,cut.journal.state))
     anchors=tuple(copy.deepcopy((p.initial,p.record,p.effects,p.proof)) for p in (refs[2],phase,refs[4]))
     if outer()!=before: raise ValueError()
     receipt=trust_local['receipt']
@@ -90,7 +91,7 @@ def _delegated_space(cut,binding,token):
         p._local()
         if (p.initial,p.record,p.effects,p.proof)!=anchor: raise ValueError()
     cut._identity()
-    if (phase.proof!=original or binding.token!=bound_token or (cut.fence.context,cut.lock,cut.namespace_uid)!=cut_fixed or
+    if ((cut.journal.intent,cut.journal.state)!=cut_local or phase.proof!=original or binding.token!=bound_token or (cut.fence.context,cut.lock,cut.namespace_uid)!=cut_fixed or
             any(a is not b for a,b in zip((cut.fence,cut.fence.ledger,cut.client,cut.journal),cut_refs)) or
             any(a is not b for a,b in zip((binding.cut,binding.trust,binding.creator,binding.space,binding.role),refs))): raise ValueError()
     return result,json.dumps(jwks,sort_keys=True,separators=(',',':'),allow_nan=False).encode()

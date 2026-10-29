@@ -98,7 +98,7 @@ class AuthorityTest(unittest.TestCase):
         import space_role_peer_create as role
         from unittest import mock
         cut=authority.writer_cut.WriterCut.__new__(authority.writer_cut.WriterCut)
-        cut.fence=self.cut.fence; cut.lock={}; cut.namespace_uid='ns'; cut.client=object(); cut.journal=object(); cut._guard=mock.Mock(); cut._identity=mock.Mock()
+        cut.fence=self.cut.fence; cut.lock={}; cut.namespace_uid='ns'; cut.client=object(); cut.journal=SimpleNamespace(intent={'fixed':True},state={'steps':{'writer-cut-drained':{'status':'done'}}}); cut._guard=mock.Mock(); cut._identity=mock.Mock()
         trust=target.TargetTrustPhase.__new__(target.TargetTrustPhase); creator=delegated.CreatorReceiver.__new__(delegated.CreatorReceiver)
         phase=delegated.SpaceReceiver.__new__(delegated.SpaceReceiver); role_phase=role.Session.__new__(role.Session)
         for item in (trust,creator,phase,role_phase):item.fence=cut.fence; item.lock={}; item.namespace_uid='ns'
@@ -130,6 +130,15 @@ class AuthorityTest(unittest.TestCase):
                 if reads==15:trust.package.journal.state['steps'].pop(package.STEP)
                 return {'status':'active'},'1'
             cut.fence.ledger.read=late_package_change
+            with self.assertRaises(ValueError):authority._space(cut,binding,'token')
+            self.assertEqual(reads,15)
+            trust.package.journal.state['steps'][package.STEP]={'status':'done'}; reads=0
+            def late_cut_change():
+                nonlocal reads
+                reads+=1
+                if reads==15:cut.journal.state['steps'].pop('writer-cut-drained')
+                return {'status':'active'},'1'
+            cut.fence.ledger.read=late_cut_change
             with self.assertRaises(ValueError):authority._space(cut,binding,'token')
             self.assertEqual(reads,15)
 

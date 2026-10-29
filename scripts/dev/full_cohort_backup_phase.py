@@ -9,6 +9,11 @@ import secrets
 import stat
 import time
 
+import auth_flyway_upgrade_qualification_cohort as auth_clone
+import auth_flyway_upgrade_qualification_journal as auth_journal
+import auth_live_migration_phase as auth_live
+import auth_user_adoption_runtime as auth_runtime
+import canonical_application_package
 import cohort_backup_operation
 import cohort_backup_phases
 import cohort_dispatch
@@ -25,15 +30,81 @@ import media_operation_journal
 import publish_candidate
 import resource_fencing
 import story_media_backup
+import story_media_backup_restore
 import writer_cut
 
 
 class BackupError(RuntimeError): pass
 
 
+class AuthToolPreparation:
+    """Retain the source-qualified Auth tool and node before writer drain."""
+    def __init__(self, supervisor, token):
+        if (type(supervisor) is not full_cohort_supervisor.Supervisor or supervisor.cut is None
+                or supervisor.cut.started or supervisor.cut.drained
+                or not supervisor.context['operation_id'].startswith('media-c1-')
+                or getattr(supervisor,'_execution_token',None)!=token
+                or not isinstance(getattr(supervisor,'_execution_actor',None),str)
+                or not supervisor._execution_actor):
+            raise BackupError('Auth tool preparation not admitted')
+        self.supervisor=supervisor;self.package=supervisor.package
+        self.context=copy.deepcopy(supervisor.context);self.actor=supervisor._execution_actor
+        self._receipt=self._capture(token)
+
+    def _capture(self, token):
+        s=self.supervisor
+        if (s.context!=self.context or s.package is not self.package or s._execution_token!=token
+                or s._execution_actor!=self.actor):raise BackupError('Auth tool identity changed')
+        s._guard();package=self.package.verify_current(token)
+        pod=s.client.call('get','pod','voice-postgres-0','-o','json');s._guard()
+        meta=pod['metadata'];node_name=pod['spec']['nodeName']
+        if meta.get('name')!='voice-postgres-0' or meta.get('namespace')!='voice-dev' or not meta.get('uid'):
+            raise BackupError('Auth database node unavailable')
+        nodes=[n for n in package['nodes'] if n['name']==node_name and n['architecture']=='amd64']
+        if len(nodes)!=1:raise BackupError('Auth database node is not package-qualified')
+        tool={'node_name':node_name,'node_uid':nodes[0]['uid'],
+              'flyway_platform_digest':auth_live.flyway_platform(auth_runtime.QUALIFIED_TOOLS['flyway'].rsplit('@',1)[1])}
+        auth_live.observe_node(s.client,{'pod_uid':meta['uid']},tool,s._guard)
+        deployment=s.client.call('get','deployment','voice-auth','-o','json');s._guard()
+        dmeta=deployment['metadata'];spec=copy.deepcopy(deployment['spec'])
+        if (dmeta.get('name')!='voice-auth' or dmeta.get('namespace')!='voice-dev'
+                or not dmeta.get('uid') or type(spec.get('replicas')) is not int):
+            raise BackupError('Auth candidate deployment unavailable')
+        spec['replicas']=0
+        image=s.context['images']['voice-auth/auth']
+        target=auth_live.eligibility.candidate_target(spec,image)
+        container=next(c for c in target['template']['spec']['containers'] if c['name']=='auth')
+        digest=package['platform_digests']['voice-auth/auth']
+        registry=publish_candidate.Registry(self.actor,token)
+        config=auth_live.eligibility.read_image_config(registry,image.rsplit('@',1)[1],digest)
+        values,refs=auth_live.eligibility.read_references(s.client,container,s._guard)
+        effective=auth_live.eligibility.resolve_environment(container,values,config['env'])
+        for name in ('PATH','JAVA_HOME'):
+            if effective.get(name)!=config['env'].get(name):raise BackupError('Auth candidate environment changed')
+        policy=auth_live.eligibility.check_environment(effective)
+        route=auth_live.eligibility.check_database_route(effective)
+        values2,refs2=auth_live.eligibility.read_references(s.client,container,s._guard)
+        again=s.client.call('get','deployment','voice-auth','-o','json');s._guard()
+        if (values!=values2 or refs!=refs2 or again['spec']!=deployment['spec']
+                or again['metadata'].get('uid')!=dmeta['uid']):
+            raise BackupError('Auth candidate source changed')
+        candidate={'deployment_uid':dmeta['uid'],'target_spec_sha256':auth_runtime.digest(target),
+                   'config_digest':config['config_digest'],'references':refs,'policy':policy,'route':route,
+                   'auth_tree':auth_live.eligibility._source_tree(canonical_application_package.ROOT,s.context['commit'])}
+        images={name:story_media_backup_restore._check_image(auth_runtime.QUALIFIED_TOOLS[name])
+                for name in ('postgres','flyway')}
+        if self.package.verify_current(token)!=package:raise BackupError('Auth package changed')
+        s._guard()
+        return {'tool':tool,'pod_uid':meta['uid'],'images':images,'package':package,'candidate':candidate}
+
+    def verify_current(self, token):
+        if self._capture(token)!=self._receipt:raise BackupError('Auth tool preparation changed')
+        return copy.deepcopy(self._receipt)
+
+
 class BackupPhase:
     """One invocation under an already-owned supervisor, writer cut and common lock."""
-    def __init__(self, supervisor, cut, physical, metadata):
+    def __init__(self, supervisor, cut, physical, metadata, auth_preparation=None):
         if (type(supervisor) is not full_cohort_supervisor.Supervisor or type(cut) is not writer_cut.WriterCut
                 or type(physical) is not full_cohort_pg_physical_identity.PhysicalPhase
                 or type(metadata) is not full_cohort_backup_metadata.BackupMetadataPhase
@@ -43,9 +114,15 @@ class BackupPhase:
                 or supervisor.census is None or supervisor.intent.get('cohort_route_mode')!='full-cohort-v1'):
             raise BackupError('full cohort phase identity unavailable')
         self.supervisor,self.cut,self.physical,self.metadata=supervisor,cut,physical,metadata
+        if auth_preparation is not None and (type(auth_preparation) is not AuthToolPreparation or auth_preparation.supervisor is not supervisor):
+            raise BackupError('Auth tool preparation identity unavailable')
+        self.auth_preparation=auth_preparation
+        self._auth_preparation=auth_preparation
         self._dependencies=(supervisor,cut,physical,metadata,supervisor.package,supervisor.inventory,supervisor.catalog,supervisor.census)
         self.journal=self.cohort=self._bound_journal=self._bound_cohort=None
         self._route=None
+        self._auth_flyway=None
+        self._auth_plan=None
         self._started=False
         self._guard()
 
@@ -53,6 +130,7 @@ class BackupPhase:
         s=self.supervisor
         if (any(a is not b for a,b in zip((s,self.cut,self.physical,self.metadata,s.package,s.inventory,s.catalog,s.census),self._dependencies))
                 or self.journal is not self._bound_journal or self.cohort is not self._bound_cohort
+                or self.auth_preparation is not self._auth_preparation
                 or s.intent.get('cohort_route_mode')!='full-cohort-v1'):
             raise BackupError('full cohort phase identity changed')
         s._guard()
@@ -75,6 +153,54 @@ class BackupPhase:
         admin=self.supervisor.inventory._admin_role()
         self._guard()
         return copy.deepcopy((census,physical,metadata,admin))
+
+    def _auth_intent(self, source, token):
+        """Capture the drained Auth deployment and its source-qualified tool node."""
+        s=self.supervisor
+        if not s.context['operation_id'].startswith('media-c1-'):
+            return None
+        if 'auth_db' not in source['databases']:
+            if self.auth_preparation is not None:raise BackupError('prepared C1 Auth database unavailable')
+            return None
+        plan=source['metadata']['migrations']['auth_db']
+        if plan['engine']!='flyway' or plan['from']!=26 or plan['to']!=26:
+            raise BackupError('Auth source is not the supported C1 baseline')
+        actor=getattr(s,'_execution_actor',None)
+        if not isinstance(actor,str) or not actor or getattr(s,'_execution_token',None)!=token:
+            raise BackupError('Auth execution identity unavailable')
+        if type(self.auth_preparation) is not AuthToolPreparation or self.auth_preparation.supervisor is not s:
+            raise BackupError('Auth tool preparation unavailable')
+        prepared=self.auth_preparation.verify_current(token);package=prepared['package']
+        self._guard()
+        first=s.client.call('get','deployment','voice-auth','-o','json')
+        pod=s.client.call('get','pod','voice-postgres-0','-o','json')
+        self._guard()
+        second=s.client.call('get','deployment','voice-auth','-o','json')
+        meta=first['metadata']; other=second['metadata']
+        if (meta.get('name')!='voice-auth' or meta.get('namespace')!='voice-dev'
+                or any(not meta.get(k) for k in ('uid','generation','resourceVersion'))
+                or any(meta.get(k)!=other.get(k) for k in ('name','namespace','uid','generation'))
+                or first['spec']!=second['spec'] or pod['metadata'].get('uid')!=source['sources']['auth_db']['engine']['pod_uid']):
+            raise BackupError('Auth deployment or database node changed')
+        candidate={'deployment':{'uid':meta['uid'],'generation':meta['generation'],
+                   'resourceVersion':other['resourceVersion'],'spec':copy.deepcopy(first['spec'])},
+                   'platform_digest':package['platform_digests']['voice-auth/auth']}
+        auth_live.eligibility.candidate_target(candidate['deployment']['spec'],s.context['images']['voice-auth/auth'])
+        target=auth_live.eligibility.candidate_target(candidate['deployment']['spec'],s.context['images']['voice-auth/auth'])
+        if (candidate['deployment']['uid']!=prepared['candidate']['deployment_uid']
+                or auth_runtime.digest(target)!=prepared['candidate']['target_spec_sha256']):
+            raise BackupError('drained Auth deployment differs from prepared candidate')
+        node_name=pod['spec']['nodeName']
+        nodes=[n for n in package['nodes'] if n['name']==node_name and n['architecture']=='amd64']
+        if len(nodes)!=1:raise BackupError('Auth database node is not package-qualified')
+        tool=prepared['tool']
+        if tool['node_name']!=node_name or tool['node_uid']!=nodes[0]['uid'] or prepared['pod_uid']!=pod['metadata']['uid']:
+            raise BackupError('Auth tool node changed')
+        auth_live.observe_node(s.client,source['sources']['auth_db']['engine'],tool,self._guard)
+        if s.package.verify_current(token)!=package or getattr(s,'_execution_actor',None)!=actor or getattr(s,'_execution_token',None)!=token:
+            raise BackupError('Auth package or execution identity changed')
+        self._guard()
+        return {'auth_live_candidate':candidate,'auth_live_tool':tool}
 
     @staticmethod
     def _write_key(root):
@@ -137,9 +263,11 @@ class BackupPhase:
                            restore_inputs=source['restore_inputs'],full_catalog=source['full_catalog'])
             expected=physical|{'operation':context['operation_id'],'snapshot_id':snapshot}
             capture={k:expected[k] for k in ('snapshot_id','pod_uid','pvc_uid','pv_uid','container_id','restart_count')}
+            auth_intent=self._auth_intent(source,token)
             intent={'resource_context':copy.deepcopy(context),'namespace_uid':s.namespace_uid,'kube_lock':copy.deepcopy(s.lock),
                     'cohort_binding':binding,'backup_capture':capture,'cohort_source':expected,
                     'cohort_admin_role':admin,'upload_workflow_sha':context['commit']}
+            if auth_intent is not None:intent.update(auth_intent)
             pending=True
             with story_media_backup.private_directory(root):
                 self.journal=media_operation_journal.Journal(root/'backup-journal',intent)
@@ -151,6 +279,9 @@ class BackupPhase:
             self.cohort=cohort_backup_phases.CohortPhases(phase,s.catalog,token)
             self._bound_cohort=self.cohort
             self.cohort.bind_catalog_cut(self.cut)
+            if auth_intent is not None:
+                auth_live.bind_package(self.cohort,s.package,token)
+                auth_live.bind_metadata(self.cohort,self.metadata,token)
             row,revision=self._guard()
             if 'full_cohort_backup_route' in row:raise BackupError('backup route already exists')
             route=cohort_upload_runner.route_marker(binding,s.namespace_uid)
@@ -181,6 +312,9 @@ class BackupPhase:
                 self._guard,metadata_phase=self.metadata if source['migration_roles'] else None,
                 metadata_token=token if source['migration_roles'] else None)
             if self._source(token)!=original:raise BackupError('backup source changed')
+            if auth_intent is not None:
+                self._qualify_auth(token,source,destination,key,restored_manifest,custody,receipt,auth_intent)
+                if self._source(token)!=original:raise BackupError('backup source changed')
             return verify_completed(self,token)
         except BaseException:
             if pending:
@@ -188,6 +322,48 @@ class BackupPhase:
                 try:s.fence.uncertain('full cohort backup outcome uncertain')
                 except BaseException:pass
             raise BackupError('full cohort backup incomplete; retain lock and reconcile' if pending else 'full cohort backup not admitted') from None
+
+    def _qualify_auth(self, token, source, destination, key, manifest, custody, receipt, auth_intent):
+        s=self.supervisor; phase=self.cohort; actor=s._execution_actor
+        self._guard()
+        if s._execution_token!=token or phase.phases.intent.get('auth_live_tool')!=auth_intent['auth_live_tool'] or phase.phases.intent.get('auth_live_candidate')!=auth_intent['auth_live_candidate']:
+            raise BackupError('Auth qualification identity changed')
+        binding,provenance=auth_live.verified_sources(phase,source['metadata'],26)
+        candidate=auth_live.eligibility.observe_candidate(phase,self._guard,self.metadata.source_root,actor,token)
+        prepared=self.auth_preparation.verify_current(token)['candidate']
+        if any(candidate[k]!=prepared[k] for k in ('target_spec_sha256','config_digest','references','policy','route','auth_tree')):
+            raise BackupError('Auth candidate differs from pre-drain preparation')
+        _,catalog=auth_live.source_catalog(self.metadata.source_root,binding['source_sha'])
+        if (catalog!=source['metadata']['migrations']['auth_db']['files']
+                or max(int(name.split('__',1)[0][1:]) for name in catalog)!=32
+                or provenance['manifest_sha256']!=auth_runtime.digest(manifest)
+                or provenance['custody_sha256']!=auth_runtime.digest(custody)
+                or provenance['restore_sha256']!=auth_runtime.digest(receipt)):
+            raise BackupError('Auth source or protected backup changed')
+        plan={'source_sha':binding['source_sha'],'target':32,'candidate':candidate,
+              'tool':copy.deepcopy(auth_intent['auth_live_tool']),
+              'inventory_sha256':auth_runtime.digest(catalog),'custody_sha256':provenance['custody_sha256'],
+              'restore_sha256':provenance['restore_sha256']}
+        self._guard()
+        if 'cohort-auth-flyway-plan' in phase.phases.journal.state['steps']:
+            raise BackupError('Auth qualification plan already exists')
+        phase.phases.journal.state['steps']['cohort-auth-flyway-plan']=copy.deepcopy(plan)
+        phase.phases.journal.save();self._guard()
+        admission={'source_sha':binding['source_sha'],'target':plan['target'],'flyway_enabled':False,
+                   'selector_mode':'absent','persistence':'jdbc','plan_sha256':auth_runtime.digest(plan),
+                   'custody_sha256':provenance['custody_sha256'],'restore_sha256':provenance['restore_sha256']}
+        adapter=auth_journal.AuthFlywayJournal(phase,self._guard,binding,provenance['manifest_sha256'],
+                  provenance['custody_sha256'],provenance['restore_sha256'],admission['plan_sha256'],source['metadata'])
+        auth_clone.qualify_cohort(self.metadata.source_root,destination,key,binding,binding['databases'],manifest,
+                                 source['metadata'],custody,receipt,admission,adapter)
+        adapter.guard();self._guard()
+        again=auth_live.eligibility.observe_candidate(phase,self._guard,self.metadata.source_root,actor,token)
+        if (not auth_live._same_candidate(candidate,again) or auth_live.verified_sources(phase,source['metadata'],26)!=(binding,provenance)
+                or s._execution_actor!=actor or s._execution_token!=token):
+            raise BackupError('Auth qualification authority changed')
+        if phase.phases.journal.state['steps']['cohort-auth-flyway-plan']!=plan:
+            raise BackupError('Auth qualification plan changed')
+        adapter.guard();self._auth_flyway=adapter;self._auth_plan=copy.deepcopy(plan)
 
 
 def verify_completed(phase, token):
@@ -263,11 +439,25 @@ def verify_completed(phase, token):
         if any(len({resource[key] for resource in resources.values()})!=len(resources) for key in ('nonce','name','container_id')):
             raise ValueError()
         for db in changed:cohort_restore_journal.verify_go_role(cohort,phase.metadata,token,db)
-        saved=copy.deepcopy((readback,done,resources));phase._guard();cohort._guard();current,rev=p.fence.ledger.read()
+        auth_local=None
+        if 'auth_live_tool' in p.intent or 'auth_live_candidate' in p.intent:
+            if (set(('auth_live_tool','auth_live_candidate'))-p.intent.keys()
+                    or type(phase._auth_flyway) is not auth_journal.AuthFlywayJournal
+                    or phase._auth_flyway.phase is not cohort):raise ValueError()
+            phase._auth_flyway.guard()
+            if (phase._auth_flyway.record.get('status')!='done' or not isinstance(phase._auth_plan,dict)
+                    or p.journal.state['steps'].get('cohort-auth-flyway-plan')!=phase._auth_plan
+                    or phase._auth_flyway.record.get('plan_sha256')!=auth_runtime.digest(phase._auth_plan)):raise ValueError()
+            auth_local=copy.deepcopy((p.journal.state['steps']['cohort-auth-flyway'],
+                                      p.journal.state['steps']['cohort-auth-flyway-private']))
+        saved=copy.deepcopy((readback,done,resources,phase._auth_plan,auth_local));phase._guard();cohort._guard();current,rev=p.fence.ledger.read()
         if (current!=row or rev!=revision or cohort_readback._snapshot(cohort,current)!=snapshot
                 or (p.journal.state['steps'].get('cohort-readback'),p.journal.state['steps'].get('cohort-restore'),
                     {name.removeprefix('cohort-restore-resource-'):value for name,value in p.journal.state['steps'].items()
-                     if name.startswith('cohort-restore-resource-')})!=saved):raise ValueError()
+                     if name.startswith('cohort-restore-resource-')},
+                    p.journal.state['steps'].get('cohort-auth-flyway-plan'),
+                    (p.journal.state['steps'].get('cohort-auth-flyway'),p.journal.state['steps'].get('cohort-auth-flyway-private'))
+                    if auth_local is not None else None)!=saved):raise ValueError()
         return {'operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],'source_sha':binding['source_sha'],
                 'manifest_sha256':marker['manifest_sha256'],'scope':'full-cohort-private-backup-and-isolated-restore'}
     except BaseException:
