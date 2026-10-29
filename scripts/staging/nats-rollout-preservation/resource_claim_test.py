@@ -55,6 +55,10 @@ class ResourceTests(unittest.TestCase):
             binding=session.bind_cohort_preservation(plan,plan['actual_before'])
             self.assertEqual(binding['target_sha256'],claim.digest(plan))
             self.assertEqual(session.check()['phase'],'cohort-preservation')
+            self.assertEqual(session.check()['cohort_preservation_sha256'],claim.digest(plan))
+            saved=copy.deepcopy(journal.row);del journal.row['cohort_preservation_sha256']
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_lineage_invalid'):session.check()
+            journal.row=saved
             argv=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','scale','deployment/voice-user','--replicas=0']
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
             session._cohort_permit={'effect_id':'scale-user','argv':argv,'body_sha256':'invalid'}
