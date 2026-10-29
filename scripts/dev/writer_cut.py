@@ -244,9 +244,10 @@ class WriterCut:
             if kind == 'jobs' and self.migration is not None:
                 import writer_cut_migration
                 state, pod = writer_cut_migration.observe(self, self.migration, allow_removed=self.migration['finished'])
-                if self.migration['finished'] and not self._has_resumed_effect():
+                if not self._has_resumed_effect():
                     receipt = writer_cut_migration.sessions(self, state, pod)
-                    if receipt['attributed_sessions']: raise RecoveryRequired('terminal migration sessions remain')
+                    if self.migration['finished'] and receipt['attributed_sessions']:
+                        raise RecoveryRequired('terminal migration sessions remain')
                 uid = state['job']['uid'] if state['job']['state'] in ('owned', 'done', 'removing') else None
                 actual = [item for item in actual if item['metadata']['uid'] != uid]
             if actual != self.admission['guards'][kind]:
@@ -268,7 +269,12 @@ class WriterCut:
             import writer_cut_migration
             for binding in self.migration_history:
                 writer_cut_migration.verify_cleaned(self, binding)
-                if not self._has_resumed_effect():
+                if self.migration is not None and not self._has_resumed_effect():
+                    _, state = writer_cut_migration.normalized(self, binding['kind'], binding['phase'], binding['root'])
+                    database = state['execution']['database']
+                    if self.admission['session_scope'].get('database_oids', {}).get(database) != state['execution']['database_oid']:
+                        raise RecoveryRequired('previous migration database is outside pinned scope')
+                elif not self._has_resumed_effect():
                     _, state = writer_cut_migration.normalized(self, binding['kind'], binding['phase'], binding['root'])
                     receipt = writer_cut_migration.sessions(self, state, None)
                     if receipt['attributed_sessions']: raise RecoveryRequired('cleaned migration sessions remain')

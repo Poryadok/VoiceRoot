@@ -19,7 +19,7 @@ class MigrationCutTest(unittest.TestCase):
                       'configmap': {'uid': 'config-uid'},
                       'stable': {'operation_id': self.fence.context['operation_id'],
                                  'source_sha': self.fence.context['commit'], 'nonce': 'a' * 32},
-                      'execution': {'database': 'auth_db'}, 'terminal': None}
+                      'execution': {'database': 'auth_db', 'database_oid': 10}, 'terminal': None}
         self.pod = None
         self.phase = types.SimpleNamespace(journal=types.SimpleNamespace(state={'steps': {}}))
         self.normal = mock.patch.object(migration, 'normalized', side_effect=lambda *args: (None, copy.deepcopy(self.state)))
@@ -228,6 +228,24 @@ class MigrationCutTest(unittest.TestCase):
             with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_resume_inventory(Inventory(), 'token')
         self.assertEqual(len(self.client.patches), before)
         self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_previous_migration_does_not_reject_current_owned_session(self):
+        scope = self.admission['session_scope'] | {'database_oids': {'auth_db': 10}}
+        self.admission['session_scope'] = copy.deepcopy(scope)
+        self.cut.admission['session_scope'] = copy.deepcopy(scope)
+        self.cut.intent['writer_cut']['session_scope'] = copy.deepcopy(scope)
+        self.journal.intent['writer_cut']['session_scope'] = copy.deepcopy(scope)
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        self.bind()
+        self.cut.migration_history.append({'kind': 'auth', 'phase': object(), 'root': '.'})
+        with mock.patch.object(migration, 'verify_cleaned'), \
+             mock.patch.object(migration, 'sessions', return_value={
+                 'scope': scope, 'active_sessions': 0, 'active_transactions': 0,
+                 'attributed_sessions': [{'fixture': 'current-job'}]}) as observer:
+            self.cut._guards()
+            self.assertEqual(observer.call_count, 1)
+            self.state['execution']['database_oid'] = 11
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut._guards()
 
 
 if __name__ == '__main__': unittest.main()
