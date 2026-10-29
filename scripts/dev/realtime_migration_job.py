@@ -354,9 +354,15 @@ class Migration:
         self._check_step('job',owned)
         return owned
 
-    def run(self):
+    def run(self, cut):
         pending = False
         try:
+            import writer_cut
+            if (type(cut) is not writer_cut.WriterCut or cut.fence.context != self.fence.context or
+                    cut.lock != self.lock or cut.namespace_uid != self.namespace or
+                    cut.fence.ledger.read() != self.fence.ledger.read()):
+                raise RecoveryRequired('writer cut identity invalid')
+            cut.verify_drained()
             self._guard()
             operation = self.fence.context['operation_id']
             spec = self.intent['realtime_migration']
@@ -465,8 +471,11 @@ class Migration:
             if admitted.get('metadata',{}).get('ownerReferences')!=dry_pod['metadata']['ownerReferences']:
                 raise RecoveryRequired('Pod admission owner changed')
             inputs()
+            cut.bind_migration('realtime',self,self.root)
+            inputs()
             record = self._reserve('job',planned)
             inputs()
+            cut.verify_migration_pending()
             self._check_step('job',record)
             created = self.client.call('create','-f','-','-o','json',body=planned)
             accepted_spec = admitted_job(planned,created)
@@ -474,9 +483,11 @@ class Migration:
             if (not jm.get('resourceVersion') or jm.get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha']):
                 raise RecoveryRequired('created Job metadata changed')
             record = self._bind_owned_job(record,uid,jm['resourceVersion'])
+            cut.verify_migration_running()
             deadline = time.monotonic()+650
             while time.monotonic()<deadline:
                 inputs()
+                cut.verify_migration_running()
                 current = self.client.call('get','job',jm['name'],'-o','json')
                 if (current.get('apiVersion')!='batch/v1' or current.get('kind')!='Job' or
                         current.get('metadata',{}).get('name')!=jm['name'] or
@@ -532,6 +543,7 @@ class Migration:
                            for o in p.get('metadata',{}).get('ownerReferences',[]))]
             if final_job != current or final_owned != [pod]: raise RecoveryRequired('terminal Job or Pod changed')
             self._finish('job',record,receipt)
+            cut.finish_migration()
             inputs()
             final_pods = self.client.call('get','pods','-o','json')['items']
             final_owned = [p for p in final_pods if any(o.get('controller') is True and o.get('kind')=='Job' and o.get('uid')==uid

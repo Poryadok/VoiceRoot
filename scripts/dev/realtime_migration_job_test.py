@@ -9,6 +9,7 @@ import realtime_secret_phase_test as secret_fixture
 import realtime_db_provision_journal_test as pg_fixture
 import realtime_secret_provision as bridge
 import media_operation_journal as journal
+import writer_cut
 
 
 class RendererTest(unittest.TestCase):
@@ -103,6 +104,17 @@ class PhaseTest(unittest.TestCase):
     def setup_operation(self):
         setup = secret_fixture.SecretPhaseTest()
         base, client, secret = setup.setup_phase(); self.addCleanup(base.doCleanups)
+        class Cut:
+            def __init__(inner):
+                inner.fence, inner.lock, inner.namespace_uid = secret.fence, secret.lock, secret.namespace_uid
+                inner.calls = []
+            def verify_drained(inner): inner.calls.append('drained')
+            def bind_migration(inner, kind, phase, root): inner.calls.append('bind')
+            def verify_migration_pending(inner): inner.calls.append('pending')
+            def verify_migration_running(inner): inner.calls.append('running')
+            def finish_migration(inner): inner.calls.append('finish')
+        patcher = patch.object(writer_cut, 'WriterCut', Cut); patcher.start(); self.addCleanup(patcher.stop)
+        self.cut = Cut()
         password = b'a'*32; receipt = secret.run(password)
         fixture = pg_fixture.JournalIntegration(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
         provision = journal.Journal(Path(base.temp.name)/'provision', {'resource_context':base.context,
@@ -133,8 +145,8 @@ class PhaseTest(unittest.TestCase):
         worker = job.Migration(secret,provision,j,renderer.root,password)
         with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':base.context['commit'],'files':files}), \
              patch.object(job.realtime_db_provision,'KubePostgres',return_value=pg):
-            with self.assertRaises(job.RecoveryRequired): worker.run()
-            with self.assertRaises(job.RecoveryRequired): worker.run()
+            with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
+            with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
         self.assertEqual(base.ledger.row['status'],'uncertain')
         self.assertEqual(j.state['steps']['config']['status'],'pending')
 
@@ -151,7 +163,7 @@ class PhaseTest(unittest.TestCase):
         worker = job.Migration(secret,provision,j,renderer.root,password)
         with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':base.context['commit'],'files':files}), \
              patch.object(job.realtime_db_provision,'KubePostgres',return_value=pg):
-            with self.assertRaises(job.RecoveryRequired): worker.run()
+            with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
         self.assertEqual(creates,[])
         self.assertNotIn('realtime_migration',base.ledger.row)
 
@@ -159,7 +171,7 @@ class PhaseTest(unittest.TestCase):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack','successor-drift','successor-unpaired'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack','successor-drift','successor-unpaired','pending-cut'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -207,6 +219,8 @@ class PhaseTest(unittest.TestCase):
             return original(*args,body=body)
         client.call = api
         worker = job.Migration(secret,provision,j,renderer.root,password)
+        if fault == 'pending-cut':
+            self.cut.verify_migration_pending = Mock(side_effect=RuntimeError('guard changed'))
         original_reserve, original_finish = worker._reserve, worker._finish
         original_bind = worker._bind_owned_job
         observed_states = []
@@ -263,13 +277,17 @@ class PhaseTest(unittest.TestCase):
              patch.object(worker,'_bind_owned_job',side_effect=bind), \
              patch.object(base.ledger,'write',side_effect=write):
             if fault:
-                with self.assertRaises(job.RecoveryRequired): worker.run()
+                with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
                 self.assertEqual(base.ledger.row['status'],'uncertain')
                 if fault=='config': self.assertNotIn('ConfigMap',objects)
                 if fault=='job': self.assertNotIn('Job',objects)
-                if fault in ('config-drift','local-role','dryrun','dryrun-pod'): self.assertNotIn('Job',objects)
+                if fault in ('config-drift','local-role','dryrun','dryrun-pod','pending-cut'): self.assertNotIn('Job',objects)
                 return
-            receipt = worker.run()
+            receipt = worker.run(self.cut)
+            self.assertEqual(self.cut.calls[0], 'drained')
+            self.assertLess(self.cut.calls.index('bind'), self.cut.calls.index('running'))
+            self.assertLess(self.cut.calls.index('pending'), self.cut.calls.index('running'))
+            self.assertEqual(self.cut.calls[-1], 'finish')
         self.assertEqual(receipt['schema'],schema)
         self.assertEqual(observed_states,['absent','pending','owned','done'])
         self.assertEqual(j.state['steps']['job']['status'],'done')
