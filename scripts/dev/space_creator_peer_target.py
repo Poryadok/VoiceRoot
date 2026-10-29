@@ -35,12 +35,16 @@ def render_space(source,config_keys):
     creator._mount(pod,container,'creator-ca','/etc/voice/creator/ca','voice-media-ca',('ca.crt','jwks-ca.crt'))
     creator._mount(pod,container,'creator-client','/etc/voice/creator/client','voice-space-media-client-tls',('tls.crt','tls.key'))
     jwks=[entry for entry in entries if entry.get('name')=='S2S_JWKS_URLS_JSON']
-    if (len(jwks)!=1 or set(jwks[0])!={'name','value'} or not isinstance(jwks[0]['value'],str) or
-            'S2S_JWKS_URLS_JSON' in config_keys):raise ValueError('Space peer JWKS unavailable')
-    endpoints=json.loads(jwks[0]['value'],object_pairs_hook=_unique)
-    if not isinstance(endpoints,dict) or endpoints.get('role')!='https://voice-role:8443/.well-known/jwks.json':
-        raise ValueError('Space Role JWKS unavailable')
+    if (len(jwks)>1 or 'S2S_JWKS_URLS_JSON' in config_keys or
+            (jwks and (set(jwks[0])!={'name','value'} or not isinstance(jwks[0]['value'],str)))):
+        raise ValueError('Space peer JWKS unavailable')
+    endpoints=json.loads(jwks[0]['value'],object_pairs_hook=_unique) if jwks else {}
+    if not isinstance(endpoints,dict):raise ValueError('Space peer JWKS unavailable')
     for name,url in endpoints.items():_https(name,url)
+    endpoints['role']='https://voice-role:8443/.well-known/jwks.json'
+    value=json.dumps(endpoints,sort_keys=True,separators=(',',':'))
+    if jwks: jwks[0]['value']=value
+    else: entries.append(env._env('S2S_JWKS_URLS_JSON',value))
     observer=any(entry.get('name','').startswith('SPACE_ROLE_OVERRIDE_PRINCIPAL_') for entry in entries)
     exposed=any(port.get('name')=='role-authority' or port.get('containerPort')==9099
                 for item in pod['containers']+pod.get('initContainers',[]) for port in item.get('ports',[]))

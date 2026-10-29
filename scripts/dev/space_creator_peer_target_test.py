@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 
 import space_creator_peer_target as peer
@@ -26,11 +27,22 @@ class PeerTargetTest(unittest.TestCase):
         self.assertEqual(source,original);source['spec']=spec
         self.assertEqual(peer.render_space(source,[])[1],spec)
 
-    def test_observer_rejects_missing_or_unsafe_jwks_and_conflicts(self):
-        for fault in ('missing','duplicate','http','bad-port','control','escape','space','redis','port','env-only','shared','creator'):
+    def test_adds_role_and_preserves_other_issuers(self):
+        for original in (None, '{"legacy":"https://existing.example/keys"}'):
+            source=target(); entries=source['spec']['template']['spec']['containers'][0]['env']
+            entry=next(e for e in entries if e['name']=='S2S_JWKS_URLS_JSON')
+            if original is None: entries.remove(entry)
+            else: entry['value']=original
+            before=copy.deepcopy(source); _,spec=peer.render_space(source,[])
+            result=json.loads(next(e['value'] for e in spec['template']['spec']['containers'][0]['env'] if e['name']=='S2S_JWKS_URLS_JSON'))
+            self.assertEqual(result['role'],'https://voice-role:8443/.well-known/jwks.json')
+            if original: self.assertEqual(result['legacy'],'https://existing.example/keys')
+            self.assertEqual(source,before)
+
+    def test_observer_rejects_unsafe_jwks_and_conflicts(self):
+        for fault in ('duplicate','http','bad-port','control','escape','space','redis','port','env-only','shared','creator'):
             source=target(); container=source['spec']['template']['spec']['containers'][0]; keys=[]
             jwks=next(e for e in container['env'] if e['name']=='S2S_JWKS_URLS_JSON')
-            if fault=='missing':container['env'].remove(jwks)
             if fault=='duplicate':jwks['value']='{"role":"https://voice-role:8443/.well-known/jwks.json","role":"https://foreign"}'
             if fault=='http':jwks['value']='{"role":"https://voice-role:8443/.well-known/jwks.json","other":"http://foreign"}'
             if fault=='bad-port':jwks['value']='{"role":"https://voice-role:8443/.well-known/jwks.json","other":"https://foreign:bogus/keys"}'
