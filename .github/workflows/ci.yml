@@ -2047,6 +2047,10 @@ jobs:
         run: |
           docker run --rm --network none --user 1000:1000 -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
             python -B -c "import sys, unittest; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromName('space_creator_runtime_profile_delegated_test')); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 8)"
+      - name: Verify delegated Realtime P3 issuer and receiver
+        run: |
+          docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
+            python -B -c "import sys, unittest; names=['dev_realtime_p3_issuer_metadata_test','dev_realtime_p3_issuer_capability_test','dev_realtime_p3_issuer_service_test','realtime_p3_delegated_receiver_test','realtime_p3_delegated_joint_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 12)"
       - name: Verify backup and Go consumer with synthetic external boundaries
         working-directory: scripts/dev
         run: |
