@@ -50,6 +50,20 @@ Go/Flutter/dependency and Docker content caches still execute validation and
 respect their toolchain/content identities. No `continue-on-error` or synthetic
 success is introduced.
 
+The PR `affected-check-plan` job produces an advisory comparison artifact using
+the exact base, head, merge candidate and branch name. The planner records both
+sides of renames and deletions, reuses the Go and Docker selectors, and compares
+its selection with the existing path-filter outputs. Unclassified code or
+unsupported filter grammar widens the proposed plan. This comparison has no gate
+authority yet: the existing required jobs remain in force, and a successful
+comparison is not a local preflight receipt or release qualification. For a
+clean checkout of the exact candidate with Git, Bash, jq and Python available:
+
+```bash
+python3 scripts/ci/affected_check_plan.py --base "$BASE_SHA" --head "$HEAD_SHA" \
+  --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF"
+```
+
 Compose E2E and the attachment restart proof explicitly build current Compose
 images before starting the stack with --no-build. An isolated Buildx builder
 uses per-service, per-platform content caches for build preparation; cached

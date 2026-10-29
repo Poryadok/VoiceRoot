@@ -157,6 +157,42 @@ jobs:
           export FILTER_JSON
           bash scripts/ci/resolve-staging-matrix.sh
 
+  # Advisory comparison only: current jobs and the required gate stay unchanged.
+  affected-check-plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: .github/ci/path-filters.yml
+          predicate-quantifier: some-with-excludes
+      - name: Compare affected checks
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          HOSTED_FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 scripts/ci/affected_check_plan.py --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF" --compare-hosted \
+            > "$RUNNER_TEMP/affected-check-plan.json"
+          cat "$RUNNER_TEMP/affected-check-plan.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: affected-check-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/affected-check-plan.json
+          if-no-files-found: error
+          retention-days: 14
+
   ci-skip-gate:
     needs: changes
     if: >-
