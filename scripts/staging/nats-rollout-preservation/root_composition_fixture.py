@@ -55,6 +55,7 @@ def exercise_candidate_drift(test):
     import copy
     from unittest.mock import patch
     import bridge_root
+    import commands
     import resource_claim
     import resource_claim_test
     import source_authority
@@ -100,9 +101,17 @@ def exercise_candidate_drift(test):
             with patch.object(prerequisites,'run_prepare',real_prepare),patch.object(prerequisites,'_candidate_images',real_candidate), \
                  patch.object(policy,'validate_source',real_policy_source),patch.object(bridge_root,'INSTALLED',installed), \
                  patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)), \
-                 patch.object(source_authority,'capture_source',side_effect=capture),resource_claim.command_scope(session.check):
+                 patch.object(source_authority,'capture_source',side_effect=capture), \
+                 patch.object(prerequisites,'submit_effect',wraps=prerequisites.submit_effect) as submit, \
+                 patch.object(session,'bind_prerequisites',wraps=session.bind_prerequisites) as bind, \
+                 resource_claim.command_scope(session.check):
                 with test.assertRaisesRegex(bridge_root.Blocked,'realtime_bootstrap_candidate_changed'):
                     actions._prepare(request)
+                submit.assert_not_called();bind.assert_not_called()
+                for call in commands.capture.call_args_list:
+                    argv=call.args[0]
+                    test.assertFalse(any(verb in argv for verb in ('patch','apply','create','delete','replace'))
+                                     and not any(arg.startswith('--dry-run=') for arg in argv))
                 test.assertEqual(session.check()['phase'],'prepare')
                 test.assertFalse((installed/'prerequisites'/session.operation/'checkpoint.json').exists())
         raise Rejected()
