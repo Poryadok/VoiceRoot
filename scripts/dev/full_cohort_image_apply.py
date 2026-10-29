@@ -745,8 +745,12 @@ class FullCohortImageApply:
                 self.activation_checking = False
 
     def verify_after_resume(self):
+        entered = False
         try:
+            if self.verifying:
+                raise RecoveryRequired('image verification already in progress')
             self.verifying = True
+            entered = True
             self._guard()
             if not self.started:
                 raise RecoveryRequired('invocation not owned')
@@ -838,6 +842,9 @@ class FullCohortImageApply:
             return observations
         except BaseException:
             self._uncertain()
+        finally:
+            if entered:
+                self.verifying = False
 
     @staticmethod
     def _controller(meta, kind):
