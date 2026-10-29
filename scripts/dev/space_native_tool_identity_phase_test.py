@@ -26,11 +26,25 @@ class ToolPhaseTest(unittest.TestCase):
         intent={'resource_context':copy.deepcopy(base.context),'namespace_uid':'ns'}
         self.journal=journal.Journal(self.pkg.root/'tool-journal',intent); self.addCleanup(self.journal.close)
         self.client=fixture.Client(base.lock); self.client.journal=self.journal
-        class Alias:
-            def __init__(inner): inner.client=self.client
-            def read(inner): return base.ledger.read()
-            def write(inner,revision,row): return base.ledger.write(revision,row)
-        self.ledger=Alias(); self.fence=resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),self.ledger)
+        def transport(fallback):
+            def call(*args,**kwargs):
+                if len(args)>2 and args[1]=='configmap' and args[2]==resource_fencing.LEDGER:
+                    if args[0]=='get':
+                        row,revision=base.ledger.read()
+                        return {'metadata':{'name':resource_fencing.LEDGER,'namespace':'voice-dev','uid':revision[0],'resourceVersion':revision[1]},
+                                'data':{'executor':json.dumps(row,sort_keys=True,separators=(',',':'))}}
+                    if args[0]=='patch':
+                        body=kwargs['body']; old=base.ledger.read()[1]
+                        if body[0]['value']!=old[0] or body[1]['value']!=old[1]: raise RuntimeError('CAS changed')
+                        data=body[2]['value']; base.ledger.write(old,json.loads(data['executor']))
+                        return {'metadata':{'uid':old[0]},'data':data}
+                return fallback(*args,**kwargs)
+            return call
+        self.client.call=transport(self.client.call)
+        self.pkg.client.call=transport(self.pkg.client.call)
+        self.pkg.phase.fence.ledger=resource_fencing.KubeLedger(self.pkg.client)
+        self.ledger=resource_fencing.KubeLedger(self.client)
+        self.fence=resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),self.ledger)
         self.phase=tool.SpaceNativeToolPhase(self.journal,self.fence,self.client,base.lock,'ns',self.pkg.phase,'actor')
         source=base.context['commit']; index='sha256:'+'d'*64; platform='sha256:'+'e'*64; config='sha256:'+'f'*64
         inventory={'source_sha':source,'build_source_sha256':'1'*64,'sql_inventory_sha256':'2'*64,
@@ -81,6 +95,41 @@ class ToolPhaseTest(unittest.TestCase):
             self.phase.run('token')
         self.assertTrue(self.phase.poisoned)
         self.assertEqual(self.pkg.base.ledger.row['status'],'uncertain')
+
+    def test_completed_reader_rejects_closed_own_journal(self):
+        with patch.object(tool,'authenticated_publication',return_value=copy.deepcopy(self.capture)):
+            self.phase.run('token'); self.journal.close()
+            with self.assertRaises(tool.ToolIdentityError): tool.verify_completed(self.phase,'token')
+
+    def test_completed_reader_rejects_package_journal_closed_during_artifact(self):
+        with patch.object(tool,'authenticated_publication',return_value=copy.deepcopy(self.capture)):
+            self.phase.run('token')
+        def close_package(*args):
+            self.pkg.journal.close(); return copy.deepcopy(self.capture)
+        with patch.object(tool,'authenticated_publication',side_effect=close_package),self.assertRaises(tool.ToolIdentityError):
+            tool.verify_completed(self.phase,'token')
+
+    def test_completed_reader_rejects_own_journal_closed_during_artifact(self):
+        with patch.object(tool,'authenticated_publication',return_value=copy.deepcopy(self.capture)):
+            self.phase.run('token')
+        def close_own(*args):
+            self.journal.close(); return copy.deepcopy(self.capture)
+        with patch.object(tool,'authenticated_publication',side_effect=close_own),self.assertRaises(tool.ToolIdentityError):
+            tool.verify_completed(self.phase,'token')
+
+    def test_completed_reader_rejects_closed_package_journal(self):
+        with patch.object(tool,'authenticated_publication',return_value=copy.deepcopy(self.capture)):
+            self.phase.run('token'); self.pkg.journal.close()
+            with self.assertRaises(tool.ToolIdentityError): tool.verify_completed(self.phase,'token')
+
+    def test_completed_reader_rejects_ledger_replacement_during_artifact(self):
+        with patch.object(tool,'authenticated_publication',return_value=copy.deepcopy(self.capture)):
+            self.phase.run('token')
+        def replace(*args):
+            self.fence.ledger=resource_fencing.KubeLedger(self.client)
+            return copy.deepcopy(self.capture)
+        with patch.object(tool,'authenticated_publication',side_effect=replace),self.assertRaises(tool.ToolIdentityError):
+            tool.verify_completed(self.phase,'token')
 
 
 if __name__=='__main__': unittest.main()

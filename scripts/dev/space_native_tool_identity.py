@@ -23,6 +23,15 @@ import migrations
 class ToolIdentityError(RuntimeError): pass
 
 
+# Reviewed semantics establish that the fixed no-network error is reached only
+# after these source-owned gates. A change requires a new semantic review.
+GATE_SOURCE_SHA256={
+    'src/backend/space/internal/nativeinstaller/runner.go':'fb216adceb399966c38284f9a4df305aac265b0a31ce25ffbc31a51cc33b3c8b',
+    'src/backend/space/internal/store/native_catalog_rowjson_types.go':'110c2a4c5f70cdc955ba4cb9f8d7cee424ec15176a7ab70c9c863c0d4f0dbc25',
+    'src/backend/space/cmd/native-migrate/main.go':'9c197b2d384f368fdec76fc7d69f0e09074e90beb1ef54c45b9e1315978476a0',
+}
+
+
 def ci_identity(env,run):
     """Check authenticated in-progress master push before the tool build."""
     try:
@@ -219,15 +228,17 @@ def _extract_image(reference,config_digest,inventory,root):
             for name,path in (('native-migrate','/usr/local/bin/native-migrate'),('migrate','/usr/local/bin/migrate'),('migrations','/migrations')):
                 common.command(['docker','cp',container+':'+path,str(dest/name)])
             def read(path,limit):
-                if path.is_symlink() or not path.is_file() or not 0<path.stat().st_size<=limit: raise ValueError()
+                if path.is_symlink() or not path.is_file() or path.stat().st_nlink!=1 or not 0<path.stat().st_size<=limit: raise ValueError()
                 return path.read_bytes()
             binary=read(dest/'native-migrate',100<<20); driver=read(dest/'migrate',100<<20)
             directory=dest/'migrations'
             if directory.is_symlink() or not directory.is_dir(): raise ValueError()
             entries=list(directory.iterdir())
             if len(entries)>512: raise ValueError()
-            if any(p.is_symlink() or not p.is_file() or p.suffix!='.sql' for p in entries): raise ValueError()
-            sql={p.name:read(p,2<<20) for p in entries}
+            if any(p.is_symlink() or not p.is_file() for p in entries): raise ValueError()
+            sql={p.name:read(p,2<<20) for p in entries if p.suffix=='.sql'}
+            other={p.name:hashlib.sha256(read(p,2<<20)).hexdigest() for p in entries if p.suffix!='.sql'}
+            if other!=inventory['other_files']: raise ValueError()
             proof=content_identity(inventory,binary,driver,sql)
     finally:
         common.command(['docker','rm',container])
@@ -355,7 +366,7 @@ def source_inventory(root,snapshot):
             or not isinstance(files,dict)): raise ValueError()
         def read(relative):
             path=root/relative
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root.resolve()): raise ValueError()
+            if path.is_symlink() or not path.is_file() or path.stat().st_nlink!=1 or not path.resolve().is_relative_to(root.resolve()): raise ValueError()
             raw=path.read_bytes()
             if hashlib.sha256(raw).hexdigest()!=files.get(relative): raise ValueError()
             return raw
@@ -364,11 +375,18 @@ def source_inventory(root,snapshot):
         expected_gos={p for p in files if p.startswith('src/backend/') and p.endswith('.go') and not p.endswith('_test.go')}
         if not gos or gos!=expected_gos: raise ValueError()
         for name in gos: read(name)
+        if any(files.get(name)!=digest for name,digest in GATE_SOURCE_SHA256.items()): raise ValueError()
         sql_dir=root/'src/backend/migrations/space_db'
-        sql_paths={p.relative_to(root).as_posix() for p in sql_dir.glob('*.sql')}
-        expected_sql={p for p in files if p.startswith('src/backend/migrations/space_db/') and p.endswith('.sql')}
+        entries=list(sql_dir.iterdir())
+        if any(p.is_symlink() or not p.is_file() for p in entries): raise ValueError()
+        all_paths={p.relative_to(root).as_posix() for p in entries}
+        expected_all={p for p in files if p.startswith('src/backend/migrations/space_db/')}
+        if all_paths!=expected_all: raise ValueError()
+        sql_paths={p for p in all_paths if p.endswith('.sql')}
+        expected_sql={p for p in expected_all if p.endswith('.sql')}
         if not sql_paths or sql_paths!=expected_sql: raise ValueError()
         sql={Path(path).name:hashlib.sha256(read(path)).hexdigest() for path in sql_paths}
+        other={Path(path).name:hashlib.sha256(read(path)).hexdigest() for path in all_paths-sql_paths}
         if len(sql)!=len(sql_paths): raise ValueError()
         manifest_path='src/backend/space/internal/nativeinstaller/source_manifest.go'
         manifest=read(manifest_path).decode('utf-8')
@@ -378,7 +396,8 @@ def source_inventory(root,snapshot):
         dockerfile='src/backend/space/Dockerfile.native-migrate'; read(dockerfile)
         return {'source_sha':source,'build_source_sha256':migrations.space_source_digest(root),
                 'sql_inventory_sha256':inventory[0],'dockerfile_sha256':files[dockerfile],
-                'source_manifest_sha256':files[manifest_path],'sql_files':dict(sorted(sql.items()))}
+                'source_manifest_sha256':files[manifest_path],'gate_source_sha256':dict(GATE_SOURCE_SHA256),
+                'sql_files':dict(sorted(sql.items())),'other_files':dict(sorted(other.items()))}
     except Exception: raise ToolIdentityError('Space native source inventory not qualified') from None
 
 
@@ -393,7 +412,11 @@ class SpaceNativeToolPhase:
         import resource_fencing
         if (type(journal) is not media_operation_journal.Journal or type(fence) is not resource_fencing.Fence
             or type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
-            or getattr(fence.ledger,'client',None) is not client or type(package) is not full_cohort_package_phase.PackagePhase
+            or type(fence.ledger) is not resource_fencing.KubeLedger or getattr(fence.ledger,'client',None) is not client
+            or type(package) is not full_cohort_package_phase.PackagePhase
+            or type(package.fence.ledger) is not resource_fencing.KubeLedger or package.fence.ledger.client is not package.client
+            or type(package.journal) is not media_operation_journal.Journal or package.client.journal is not package.journal
+            or package.journal is journal
             or not isinstance(actor,str) or not actor or not isinstance(namespace_uid,str) or not namespace_uid
             or journal.intent.get('resource_context')!=fence.context or journal.intent.get('namespace_uid')!=namespace_uid
             or not re.fullmatch(r'media-c1-[a-f0-9]{32}',fence.context.get('operation_id',''))):
@@ -401,13 +424,38 @@ class SpaceNativeToolPhase:
         self.journal,self.fence,self.client=journal,fence,client
         self.lock,self.namespace_uid=copy.deepcopy(lock),namespace_uid
         self.package,self.actor=package,actor; self._package_ref,self._actor=package,actor
+        self._journal_ref,self._package_journal_ref=journal,package.journal
+        self._fence_ref,self._client_ref,self._ledger_ref=fence,client,fence.ledger
+        self._package_fence_ref,self._package_client_ref,self._package_ledger_ref=package.fence,package.client,package.fence.ledger
+        self._journal_custody=self._custody(journal); self._package_journal_custody=self._custody(package.journal)
         self.intent=copy.deepcopy(journal.intent); self.poisoned=False
+
+    @staticmethod
+    def _custody(journal):
+        import media_operation_journal
+        if type(journal) is not media_operation_journal.Journal or type(journal.dirfd) is not int or type(journal.lockfd) is not int:
+            raise ToolIdentityError('Space native journal custody unavailable')
+        directory=os.fstat(journal.dirfd); lock=os.fstat(journal.lockfd)
+        media_operation_journal.Journal._private(directory,0o700,directory=True)
+        media_operation_journal.Journal._private(lock,0o600)
+        path_directory=os.stat(journal.path,follow_symlinks=False); path_lock=os.stat(journal.path/'lock',follow_symlinks=False)
+        if ((directory.st_dev,directory.st_ino)!=(path_directory.st_dev,path_directory.st_ino)
+            or (lock.st_dev,lock.st_ino)!=(path_lock.st_dev,path_lock.st_ino)): raise ToolIdentityError('Space native journal replaced')
+        return (journal.dirfd,journal.lockfd,directory.st_dev,directory.st_ino,lock.st_dev,lock.st_ino)
 
     def _guard(self):
         import media_operation_guard
-        if (self.poisoned or self.journal.poisoned or self.package is not self._package_ref or self.actor!=self._actor
+        if (self.poisoned or self.journal is not self._journal_ref or self.package is not self._package_ref
+            or self.package.journal is not self._package_journal_ref or self.journal.poisoned or self.actor!=self._actor
+            or self.fence is not self._fence_ref or self.client is not self._client_ref or self.fence.ledger is not self._ledger_ref
+            or self.package.fence is not self._package_fence_ref or self.package.client is not self._package_client_ref
+            or self.package.fence.ledger is not self._package_ledger_ref
+            or self._ledger_ref.client is not self.client or self._package_ledger_ref.client is not self.package.client
+            or self.client.journal is not self.journal or self.package.client.journal is not self.package.journal
             or self.journal.intent!=self.intent
             or self.journal.state.get('intent')!=self.intent): raise ToolIdentityError('Space native phase identity changed')
+        if (self._custody(self.journal)!=self._journal_custody or self._custody(self.package.journal)!=self._package_journal_custody):
+            raise ToolIdentityError('Space native journal custody changed')
         media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
 
     def _package(self,token):
