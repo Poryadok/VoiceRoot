@@ -218,12 +218,19 @@ def load_native_space_rehearsal(session):
     """Authenticate the current attempt's retained result, including after cleanup."""
     owner._guard(session);owner._no_pending(session)
     attempt=owner._read(owner._base(session)/'restore-attempt.json')
+    result=_retained_rehearsal(session,attempt,owner.load_backup_archive(session),load_tool(session))
+    owner._guard(session)
+    return result
+
+
+def _retained_rehearsal(session,attempt,archive,tool):
+    """Verify retained bytes under the caller's already authenticated phase."""
     if (attempt.get('operation')!=session.operation or attempt.get('plan_sha256')!=owner.digest(owner.load_plan(session))
         or attempt.get('status') not in ('RUNNING','COMPLETE') or attempt.get('phase') not in ('local','offnode')
         or not re.fullmatch('[a-f0-9]{32}',str(attempt.get('nonce')))):
         raise Blocked('cohort_space_attempt_changed')
     nonce=attempt['nonce'];base=owner._base(session)/'restore'/nonce
-    record=owner._read(base/'native-space.json');archive=owner.load_backup_archive(session);tool=load_tool(session)
+    record=owner._read(base/'native-space.json')
     fields={'schema','operation','attempt','plan_sha256','archive_sha256','tool_sha256','clone_id','status',
         'resources','commands','clone_identity','origin_sha256','events_sha256','verification_sha256','receipt'}
     if (set(record)!=fields or record['schema']!='voice-staging-cohort-space-rehearsal-v1'
@@ -257,5 +264,32 @@ def load_native_space_rehearsal(session):
             raise Blocked('cohort_space_command_changed')
     if owner._read(base/'native-space.json')!=record or owner._read(owner._base(session)/'restore-attempt.json')!=attempt:
         raise Blocked('cohort_space_rehearsal_changed')
-    owner._guard(session)
+    owner._phase_continuity(session,owner.load_plan(session))
     return copy.deepcopy(record)
+
+
+def load_native_authority(session):
+    """Transfer qualified off-node evidence, never clone identity, to live code."""
+    import staging_cohort_preservation_pg as pg
+    qualified=owner.load_qualified(session);plan=owner.load_plan(session);base=owner._base(session)
+    archive=owner._read(base/'archive-record.json');offnode=owner._read(base/'offnode-restore.json')
+    tool=load_tool(session)
+    if (owner.digest(archive)!=qualified['archive_sha256']
+        or owner.digest(offnode)!=qualified['offnode_restore_sha256']
+        or offnode.get('operation')!=session.operation or offnode.get('plan_sha256')!=owner.digest(plan)
+        or offnode.get('phase')!='offnode' or offnode.get('status')!='COMPLETE'
+        or owner._read(base/'restore-attempt.json')!=offnode):
+        raise Blocked('cohort_space_offnode_changed')
+    rehearsal=_retained_rehearsal(session,offnode,archive,tool)
+    if (offnode.get('proof',{}).get('native_space')!=rehearsal
+        or offnode['proof'].get('space_native_rehearsal_sha256')!=owner.digest(rehearsal)):
+        raise Blocked('cohort_space_offnode_changed')
+    original=pg.guard_space_identity(session)
+    result={'schema':'voice-staging-space-native-authority-v1','operation':session.operation,
+        'preservation_sha256':owner.digest(qualified),'tool':tool,'original':original,'rehearsal':rehearsal}
+    if (owner.load_qualified(session)!=qualified or load_tool(session)!=tool
+        or owner._read(base/'archive-record.json')!=archive or owner._read(base/'offnode-restore.json')!=offnode
+        or _retained_rehearsal(session,offnode,archive,tool)!=rehearsal
+        or pg.guard_space_identity(session)!=original):
+        raise Blocked('cohort_space_authority_changed')
+    return copy.deepcopy(result)

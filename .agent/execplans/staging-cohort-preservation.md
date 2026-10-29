@@ -147,3 +147,39 @@ schema/installer drift negatives using a real Root Session and synthetic Kube
 observations. Its exact argv still requires WT25's separate Session allowlist
 change; it is not an enabled live migration path. The native authority loader
 and final Go/image rehearsal remain the next joined checkpoint.
+
+The fixed load_native_authority entrypoint now joins the qualified receipt to
+the current completed off-node attempt, original archive and retained native
+command/sidecar/event records. It returns the separately observed original
+engine/database owner identity; clone identities remain rehearsal evidence.
+Local/PENDING/foreign-attempt and changed proof-digest cases are refused. The
+focused handoff test uses real Root Session/private records but explicitly
+stubs qualification, native retained-proof verification and PostgreSQL; it is
+not evidence of the pending real native clone success.
+
+Final reviewed Go source 3e7a8bcb6780 was normally integrated at 25bd1d70a74d.
+One bounded immutable-source Tool build completed in 52.765s, image
+sha256:39e8247b70b8fcee059edb23017adec9706c9a39de3b7a7fafd3c72ddae451d2.
+The real native fixture now passes (2/2, 38.355s): original PG16 Space24 with
+data, guarded full-catalog archive and restore, original-owner clone execution,
+actual native upgrade24-to51 and same-image original verification, root-retained
+sidecar/eight events, tamper rejection and owned cleanup. The original source
+database remains24 with its seeded row. The new fixed Space identity read also
+executes on the actual source PostgreSQL under the real Session gate.
+The first attempt failed at the synthetic Kube-to-Docker test mapping, which
+was corrected without changing production checks; no image rebuild was needed.
+Build and final logs are retained under tmp/preservation-native. The image is
+test-owned, not a CI publication. Source/Kubernetes/CI admission boundaries are
+still explicit fixtures; off-node-native/live Job composition and independent
+review of the native producer remain required before activation.
+
+The same immutable image now also passes the real off-node-native composition
+(2/2, 74.167s): CMS encryption/decryption, extracted archive, a distinct second
+native PostgreSQL clone, original verifier and cleanup, then the actual
+load_native_authority with fresh original database identity. No native retained
+proof or qualified loader is mocked in this path. Repeated qualification does
+not repeat remote/restore work; a PENDING off-node record is refused. GitHub
+retrieval, native NATS bytes, source/Kubernetes/paused admission and absence of
+an auxiliary remain explicit external fixtures. The final retained log is
+tmp/preservation-native/native-25bd-offnode.log. Whole Stage inspect-before-cut
+and live Job integration remain separate and are not asserted by this result.

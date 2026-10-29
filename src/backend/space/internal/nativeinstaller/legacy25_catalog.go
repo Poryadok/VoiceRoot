@@ -14,12 +14,13 @@ import (
 // This structural comparison alone is not legacy25 admission: owner/ACL,
 // preservation preimage, application state, source and maintenance custody
 // are separate prerequisites. The PG16 fixture was made by running the pinned
-// source migration inventory through version 25 on an isolated database.
+// source migration inventory through version 25 on an isolated database;
+// bounded normalization handles only the documented PG16 restore forms.
 //
 //go:embed legacy25_catalog.sql
 var legacy25CatalogSQL string
 
-const legacy25CatalogPG16SHA256 = "44b35397753b74dd616e3c87e60f8e61f1e37a93eb69361923767170a01193d5"
+const legacy25CatalogPG16SHA256 = "01fb07d050a452c3c4807e764dbb951680ea49994e795431eeee0bf39a4d8ff1"
 const legacy25CatalogSQLSHA256 = "9e4b711ace946e1b60679ffc7d600289c2ef2cdba09925dbb9725df52310bcba"
 
 func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error) {
@@ -79,7 +80,11 @@ func inspectLegacyCatalogTx(ctx context.Context, tx pgx.Tx, versionNumber int, e
 	if err := tx.QueryRow(ctx, legacy25CatalogSQL).Scan(&catalog); err != nil {
 		return "", errors.New("legacy25 catalog unavailable")
 	}
-	sum := sha256.Sum256([]byte(catalog))
+	normalized, err := normalizeLegacyCatalog(catalog)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(normalized)
 	digest := hex.EncodeToString(sum[:])
 	if digest != expected {
 		return "", errors.New("legacy25 catalog differs")

@@ -844,6 +844,11 @@ def load_native_space_rehearsal(session):
     return load(session)
 
 
+def load_native_authority(session):
+    from staging_cohort_preservation_space import load_native_authority as load
+    return load(session)
+
+
 def _end_restore(session,proof):
     nonce=restore_attempt(session);base=_base(session)
     resources=_read(base/'restore'/nonce/'resources.json')
