@@ -55,9 +55,19 @@ def claim(fence, client, lock, namespace_uid, environment, challenge, expected_m
         dispatch = dispatch_marker(planned)
         if row.get('cohort_dispatch') != dispatch:
             raise CohortRunError('cohort dispatch intent missing')
+        import cohort_upload_runner as runner
+        mode=runner.route_mode(fence,lock,namespace_uid)
+        route=row.get('full_cohort_backup_route')
+        if (mode=='full-cohort-v1') != (route is not None):
+            raise CohortRunError('cohort route mode differs')
+        if route is not None:
+            if expected_members!=runner.full_members(fence,lock,namespace_uid,row):
+                raise CohortRunError('full cohort member set differs')
+        elif 'full_cohort_backup_route' in row:
+            raise CohortRunError('full cohort route invalid')
         if (not isinstance(expected_members,list) or expected_members != sorted(set(expected_members)) or
                 'roles' not in expected_members or len(expected_members)<2 or
-                set(expected_members)-({'roles'} | cohort.ALLOWED_DATABASES) or
+                (route is None and set(expected_members)-({'roles'} | cohort.ALLOWED_DATABASES)) or
                 planned['members'] != expected_members or not isinstance(planned['receipt_sha256'],dict) or
                 set(planned['receipt_sha256']) != set(expected_members) or
                 any(not isinstance(v,str) or not re.fullmatch(r'[0-9a-f]{64}',v) for v in planned['receipt_sha256'].values()) or
@@ -88,10 +98,15 @@ def claim(fence, client, lock, namespace_uid, environment, challenge, expected_m
         checked, checked_revision = fence.ledger.read()
         if (not fence.owned(checked) or checked.get('status')!='active' or checked.get('backup_invocation')!=invocation or
                 checked.get('cohort_upload')!=actual or checked.get('cohort_dispatch')!=dispatch or checked.get('cohort_bundle')!=marker or
+                checked.get('full_cohort_backup_route')!=route or
                 checked.get('cohort_members') != members or 'backup_members' in checked or
                 not isinstance(checked_revision,tuple) or len(checked_revision)!=2 or
                 any(not isinstance(v,str) or not v for v in checked_revision)):
             raise CohortRunError('cohort upload claim changed')
+        if runner.route_mode(fence,lock,namespace_uid)!=mode:
+            raise CohortRunError('cohort root route changed')
+        if route is not None and runner.full_members(fence,lock,namespace_uid,checked)!=expected_members:
+            raise CohortRunError('full cohort source route changed')
         return actual
     except BaseException:
         if attempted:

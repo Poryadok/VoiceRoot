@@ -337,6 +337,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
 
 ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
+	python3 -m unittest discover -s "$(ROOT)/scripts/dev" -p 'space_fresh_install_phase*_test.py'
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p a4_rollout_evidence_test.py
