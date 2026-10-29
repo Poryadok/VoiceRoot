@@ -57,10 +57,14 @@ def _guard(request):
         raise ValueError()
     preflight._check_ca(request['ca'])
 
+def _clean_env():
+    return (not set(os.environ)-{'PATH','LANG','LC_ALL','LC_CTYPE'} and os.environ.get('PATH')=='/usr/bin:/bin' and
+            os.environ.get('LANG')=='C' and os.environ.get('LC_ALL')=='C')
+
 def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
     """One guarded issuance; all failed or uncertain attempts require reconciliation."""
     try:
-        if (os.geteuid()!=0 or not re.fullmatch(r'media-c1-[a-f0-9]{32}',operation_id) or
+        if (os.geteuid()!=0 or not _clean_env() or not re.fullmatch(r'media-c1-[a-f0-9]{32}',operation_id) or
             not re.fullmatch(r'[a-f0-9]{40}',source_sha) or type(consumer_pid) is not int or consumer_pid<=0 or
             type(consumer_start_ticks) is not int or consumer_start_ticks<=0): raise ValueError()
         exporter.existing._check_root_custody(exporter.ROOT); suffix=operation_id[-32:]
@@ -89,6 +93,7 @@ def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
                 media=os.read(cert_fd,65537)
                 if not existing._unchanged(cert_fd,cert_identity) or len(media)!=cert_identity[2]: raise ValueError()
             finally: os.close(cert_fd)
+            _guard(first)
             receipt=_prepare(destination,media,missing,operation_id,source_sha,first['namespace_uid'],first['preflight_sha256'])
             second=_exchange(channel,operation_id)
             if second!=first: raise ValueError()
@@ -107,8 +112,7 @@ def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
 def _prepare(destination,media,missing,operation_id,source_sha,namespace_uid,preflight_sha256):
     """Generate a fixed subset after an external source-owned guard has admitted it."""
     try:
-        if (set(os.environ)-{'PATH','LANG','LC_ALL','LC_CTYPE'} or os.environ.get('PATH')!='/usr/bin:/bin' or
-            os.environ.get('LANG')!='C' or os.environ.get('LC_ALL')!='C' or
+        if (not _clean_env() or
             not isinstance(missing,list) or not missing or missing!=sorted(set(missing)) or set(missing)-set(packet.FAMILIES) or
             not re.fullmatch(r'media-c1-[a-f0-9]{32}',operation_id) or not re.fullmatch(r'[a-f0-9]{40}',source_sha) or
             not isinstance(namespace_uid,str) or not namespace_uid or not re.fullmatch(r'[a-f0-9]{64}',preflight_sha256) or
@@ -151,3 +155,16 @@ def _prepare(destination,media,missing,operation_id,source_sha,namespace_uid,pre
             finally: os.close(key_fd)
         finally: os.close(cert_fd)
     except Exception: raise IssuerError('Creator profile generation refused') from None
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--operation-id',required=True); parser.add_argument('--source-sha',required=True)
+    parser.add_argument('--consumer-pid',required=True,type=int); parser.add_argument('--consumer-start-ticks',required=True,type=int)
+    args=parser.parse_args()
+    print(json.dumps(stage(args.operation_id,args.source_sha,args.consumer_pid,args.consumer_start_ticks),sort_keys=True))
+
+if __name__=='__main__':
+    try: main()
+    except Exception:
+        print('Creator profile issuance unavailable; reconcile if attempted',file=sys.stderr)
+        sys.exit(1)

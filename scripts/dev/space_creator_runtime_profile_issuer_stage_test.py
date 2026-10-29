@@ -33,6 +33,7 @@ class StageTest(unittest.TestCase):
             credentials.write_private(dest/'objects.json',b'private fixture'); credentials.write_private(dest/'media-public.crt',media)
             return {'object_names':missing}
         patches=(patch.dict('sys.modules',{'space_p3_issuer_preflight_metadata_root':metadata}),
+                 patch.dict(os.environ,{'PATH':'/usr/bin:/bin','LANG':'C','LC_ALL':'C'},clear=True),
                  patch.object(exporter,'ROOT',self.root),patch.object(exporter,'_socket_path',return_value=self.sock),
                  patch.object(exporter.existing,'_check_root_custody'),patch.object(exporter.existing,'_pmd_uid',return_value=0),
                  patch.object(issuer.ca_custody,'_open',side_effect=open_cert),patch.object(issuer,'_guard'),
@@ -71,5 +72,16 @@ class StageTest(unittest.TestCase):
         thread.join(timeout=5)
         self.assertTrue((self.root/('space-creator-'+'a'*32+'.once')).exists())
         self.assertFalse((self.root/('space-creator-'+'a'*32)/'complete').exists())
+
+class GuardTest(unittest.TestCase):
+    def test_actual_guard_rechecks_ca_and_exact_observation(self):
+        metadata=types.ModuleType('space_p3_issuer_preflight_metadata_root')
+        metadata.observe=unittest.mock.Mock(return_value={'leaf':{'state':'absent'}})
+        preflight=types.ModuleType('space_p3_issuer_preflight_root'); preflight._check_ca=unittest.mock.Mock()
+        request={'ca':{},'namespace_uid':'ns','context':{},'lock':{},'creator_secrets':{'leaf':{'state':'absent'}}}
+        with patch.dict('sys.modules',{'space_p3_issuer_preflight_metadata_root':metadata,'space_p3_issuer_preflight_root':preflight}):
+            issuer._guard(request); self.assertEqual(preflight._check_ca.call_count,2)
+            metadata.observe.return_value={'leaf':{'state':'present'}}
+            with self.assertRaises(ValueError): issuer._guard(request)
 
 if __name__=='__main__': unittest.main()

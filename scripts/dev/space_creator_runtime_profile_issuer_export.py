@@ -1,5 +1,6 @@
 """One-shot root-to-verified-consumer transfer; no cluster mutation."""
 import array
+import argparse
 import fcntl
 import json
 import os
@@ -8,6 +9,7 @@ import re
 import socket
 import stat
 import struct
+import sys
 
 import realtime_p3_root_export as existing
 import space_creator_runtime_profile_issuer_packet as packet
@@ -91,3 +93,18 @@ def export(operation_id,source_sha,namespace_uid,preflight_sha256,consumer_pid,c
         finally: os.close(fd)
         return {'status':'send_attempted','receiver_verified':False,'admission_qualified':False}
     except Exception: raise ExportError('Creator profile handoff failed or uncertain; reconcile') from None
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--operation-id',required=True); parser.add_argument('--source-sha',required=True)
+    parser.add_argument('--namespace-uid',required=True); parser.add_argument('--preflight-sha256',required=True)
+    parser.add_argument('--consumer-pid',required=True,type=int); parser.add_argument('--consumer-start-ticks',required=True,type=int)
+    args=parser.parse_args()
+    print(json.dumps(export(args.operation_id,args.source_sha,args.namespace_uid,args.preflight_sha256,
+                            args.consumer_pid,args.consumer_start_ticks),sort_keys=True))
+
+if __name__=='__main__':
+    try: main()
+    except Exception:
+        print('Creator profile handoff failed or uncertain; reconcile',file=sys.stderr)
+        sys.exit(1)

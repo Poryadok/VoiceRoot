@@ -19,8 +19,8 @@ Only new `space_creator_runtime_profile_issuer*` files. The Creator phase owner 
 
 - [x] Agree fixed Secret names and TLS SAN/EKU with Creator consumer.
 - [ ] Bind a source-owned root guard to a complete, fresh missing-subset preflight before key generation.
-- [ ] Validate the closed packet and generated cryptographic material against the retained media CA.
-- [ ] Export once via sealed memfd to the verified operation-specific peer; lost outcome holds.
+- [x] Validate the closed packet and generated cryptographic material against a fixture media CA.
+- [x] Exercise one-shot sealed memfd export to a verified operation-specific fixture peer; lost outcome holds.
 - [ ] Exercise immutable Linux fixtures and obtain independent security review.
 
 ## Validation
@@ -29,7 +29,7 @@ Linux tests must cover each subset, unknown members, existing/partial objects, m
 
 ## Progress and decisions
 
-The five-object catalog is source-backed. The source-owned root-readable guarded preflight has not yet been identified; caller-supplied lists or booleans cannot substitute for it. Continue independent packet and crypto work while its owner supplies the fixed authority seam.
+The five-object catalog is source-backed. The draft root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently owned root metadata observer before and after generation. The observer and consumer integration are not yet reviewed or proven together. No caller-supplied list or boolean is an authority. Linux fixture tests cover crypto, one-shot FD transfer, missing READY and post-generation drift; external metadata and guards are mocked in stage tests.
 
 ## Risks and follow-ups
 
