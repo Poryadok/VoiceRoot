@@ -2023,6 +2023,19 @@ jobs:
       VOICE_MINIO_MC_IMAGE: ghcr.io/poryadok/voiceroot/minio-mc:86b2017f06d0d471e8b43abc78031e86756defe3@sha256:66a55c322fed37a3fefa0b815d195b01e7903d1bbffccd80d5a8af3cedf343f2
     steps:
       - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+        id: compose_builder
+      - name: Expose ephemeral BuildKit cache credentials
+        uses: actions/github-script@v8
+        with:
+          script: |
+            for (const key of ["ACTIONS_RUNTIME_TOKEN", "ACTIONS_RESULTS_URL", "ACTIONS_CACHE_URL"]) {
+              const value = process.env[key];
+              if (value) {
+                core.setSecret(value);
+                core.exportVariable(key, value);
+              }
+            }
       - name: Prepare compose env
         run: |
           cp .env.example .env
@@ -2059,9 +2072,17 @@ jobs:
         run: |
           echo "PHASE0_FIXTURE_DIR=$RUNNER_TEMP/voice-space-media-phase0" >> "$GITHUB_ENV"
           python scripts/dev/generate-phase0-fixture.py "$RUNNER_TEMP/voice-space-media-phase0"
+      - name: Build current app images with content-addressed preparation cache
+        env:
+          BUILDX_BUILDER: ${{ steps.compose_builder.outputs.name }}
+        run: |
+          python3 scripts/ci/compose_build_cache_test.py
+          COMPOSE_PARALLEL_LIMIT=4 python3 scripts/ci/compose_build_cache.py \
+            --scope voice-compose-linux-amd64-v1 --builder "$BUILDX_BUILDER" -- \
+            docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app
       - name: Start app stack
         run: |
-          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build; then
+          if COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --no-build; then
             :
           else
             startup_status=$?
@@ -2332,9 +2353,27 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+        id: compose_builder
+      - name: Expose ephemeral BuildKit cache credentials
+        uses: actions/github-script@v8
+        with:
+          script: |
+            for (const key of ["ACTIONS_RUNTIME_TOKEN", "ACTIONS_RESULTS_URL", "ACTIONS_CACHE_URL"]) {
+              const value = process.env[key];
+              if (value) {
+                core.setSecret(value);
+                core.exportVariable(key, value);
+              }
+            }
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: |
+            src/backend/gateway/go.sum
+            src/backend/notification/go.sum
+            src/backend/pkg/go.sum
       - name: Build and validate official MinIO mc runtime
         run: |
           docker build -f docker/minio/mc.Dockerfile -t voice-minio-mc:ci .
@@ -2349,6 +2388,8 @@ jobs:
       - name: File attachment restart proof
         env:
           VOICE_FILE_ATTACHMENT_RESTART_CLEANUP: "true"
+          VOICE_COMPOSE_BUILD_CACHE_SCOPE: voice-compose-linux-amd64-v1
+          BUILDX_BUILDER: ${{ steps.compose_builder.outputs.name }}
           VOICE_MINIO_IMAGE: voice-minio:ci
           VOICE_MINIO_MC_IMAGE: voice-minio-mc:ci
         run: make compose-file-attachment-restart-proof

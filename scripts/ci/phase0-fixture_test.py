@@ -2384,7 +2384,22 @@ class HostGoCacheTests(unittest.TestCase):
         self.assertFalse(any(step.get("uses", "").startswith("docker/bake-action")
                              for step in steps))
         startup = next(step for step in steps if step.get("name") == "Start app stack")
-        self.assertIn("--profile app up -d --build", startup["run"])
+        preparation = next(step for step in steps if step.get("name") ==
+                           "Build current app images with content-addressed preparation cache")
+        self.assertLess(steps.index(preparation), steps.index(startup))
+        self.assertNotIn("if", preparation)
+        self.assertNotIn("continue-on-error", preparation)
+        self.assertIn("scripts/ci/compose_build_cache.py", preparation["run"])
+        self.assertIn('--builder "$BUILDX_BUILDER"', preparation["run"])
+        self.assertEqual(preparation["env"]["BUILDX_BUILDER"],
+                         "${{ steps.compose_builder.outputs.name }}")
+        builder = next(step for step in steps if step.get("id") == "compose_builder")
+        self.assertEqual(builder["uses"], "docker/setup-buildx-action@v3")
+        compose = ("docker compose -f docker-compose.yml "
+                   "-f docker-compose.voice-space-media.yml "
+                   "-f docker-compose.phase0.yml --profile app")
+        self.assertIn(compose, preparation["run"])
+        self.assertIn(compose + " up -d --no-build", startup["run"])
         script = (ROOT / "scripts/ci/compose-e2e-smoke.sh").read_text(encoding="utf-8")
         commands = [line for line in script.splitlines() if "go test " in line]
         self.assertGreaterEqual(len(commands), 4)
