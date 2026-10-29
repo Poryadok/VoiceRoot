@@ -81,7 +81,9 @@ For this exact legacy predecessor, new private history paths
 absent under the existing operation lock before closing ingress, immediately
 before the code swap, and immediately after it. Any existing file, directory,
 or symbolic link at either path requires reconciliation; nothing is deleted
-or adopted. Existing `installed/sources` and rollout history stay protected.
+or adopted. Established checks continue to protect reviewed source workspaces
+and rollout history. The old helper can have `installed/source-archives`; the
+transition neither requires that cache to be absent nor replaces it.
 
 If a new history path appears after the swap, the command reports a blocking
 failure but code may already have changed and ingress is restored to `01730`.
