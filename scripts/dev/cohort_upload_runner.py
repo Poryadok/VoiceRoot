@@ -61,10 +61,21 @@ def full_members(fence, lock, namespace_uid, row):
     root=json.loads(media.private_file(directory/'journal','state.json',1048576),object_pairs_hook=media.unique_object)
     selected=json.loads(media.private_file(directory/'backup-journal','state.json',1048576),object_pairs_hook=media.unique_object)
     root_intent=root['intent'];intent=selected['intent'];binding=intent['cohort_binding']
+    planned=row['cohort_upload']
+    local_planned={k:('dispatch-pending' if k=='status' else v) for k,v in planned.items()
+                   if k not in ('run_id','run_attempt')}
     if (root_intent.get('cohort_route_mode')!='full-cohort-v1' or root_intent.get('resource_context')!=fence.context
             or root_intent.get('kube_lock')!=lock or root_intent.get('namespace_uid')!=namespace_uid
             or intent.get('resource_context')!=fence.context or intent.get('kube_lock')!=lock
             or intent.get('namespace_uid')!=namespace_uid or 'full_catalog' not in binding
+            or binding.get('operation_id')!=operation or binding.get('source_sha')!=fence.context['commit']
+            or binding.get('snapshot_id')!=planned.get('snapshot_id') or binding.get('operation_id')!=planned.get('operation_id')
+            or binding.get('source_sha')!=planned.get('source_sha')
+            or any(binding.get(k)!=fence.context.get(k) for k in ('project','resource','actor','claim','window','generation','revision'))
+            or binding.get('sources',{}).get('roles',{}).get('engine',{}).get('namespace_uid')!=namespace_uid
+            or selected['steps'].get('cohort-upload')!=local_planned
+            or selected['steps'].get('cohort-dispatch')!=run.dispatch_marker(local_planned)
+            or selected['steps'].get('cohort-bundle')!={'status':'done','marker':row.get('cohort_bundle')}
             or row.get('full_cohort_backup_route')!=route_marker(binding,namespace_uid)):
         raise RunnerError('full cohort source route unavailable')
     return sorted(finalize.validate_binding(binding,binding['databases']))

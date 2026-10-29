@@ -1,5 +1,6 @@
 """Fixed full-cohort upload route; external ledger/source are synthetic."""
 import copy
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -77,8 +78,9 @@ class FixedUploadRouteTest(unittest.TestCase):
                      'full_catalog':{'receipt_sha256':'9'*64,'properties':{db:{'allowconn':True} for db in databases}}}
             intent={'resource_context':context,'namespace_uid':uid,'kube_lock':{'fixture':True},
                     'cohort_route_mode':'full-cohort-v1','cohort_binding':binding}
+            opened={}
             for name in ('journal','backup-journal'):
-                obj=journals.Journal(op/name,intent);self.addCleanup(obj.close)
+                obj=journals.Journal(op/name,intent);self.addCleanup(obj.close);opened[name]=obj
             receipt_hashes={m:'8'*64 for m in members}
             planned={'status':'dispatch-pending','operation_id':operation,'snapshot_id':binding['snapshot_id'],
                      'source_sha':source,'workflow_sha':source,'invocation_nonce':'2'*32,'challenge':challenge,
@@ -86,6 +88,9 @@ class FixedUploadRouteTest(unittest.TestCase):
                      'manifest_sha256':'4'*64}
             marker={'status':'done','operation_id':operation,'snapshot_id':binding['snapshot_id'],'invocation_nonce':'2'*32,
                     'bundle_bytes':1,'bundle_sha256':'3'*64,'manifest_sha256':'4'*64,'receipt_sha256':receipt_hashes}
+            opened['backup-journal'].state['steps'].update({'cohort-upload':planned,
+                'cohort-dispatch':upload.dispatch_marker(planned),'cohort-bundle':{'status':'done','marker':marker}})
+            opened['backup-journal'].save()
             ledger_members={m:{'status':'done','nonce':format(i+1,'032x'),'snapshot_id':binding['snapshot_id'],
                                'operation_id':operation,'receipt_sha256':'8'*64} for i,m in enumerate(members)}
             row={'status':'active','full_cohort_backup_route':runner.route_marker(binding,uid),
@@ -101,6 +106,16 @@ class FixedUploadRouteTest(unittest.TestCase):
             with patch.object(runner,'ROOT',root),patch.object(upload.media_operation_guard,'verify'):
                 with self.assertRaises(upload.CohortRunError):
                     upload.claim(fence,None,intent['kube_lock'],uid,env,challenge,members+['unexpected'])
+                selected=op/'backup-journal'/'state.json';original=selected.read_bytes()
+                for field in ('source_sha','actor','namespace_uid','snapshot_id'):
+                    state=json.loads(original);foreign=state['intent']['cohort_binding']
+                    if field=='namespace_uid':foreign['sources']['roles']['engine']['namespace_uid']='00000000-0000-0000-0000-000000000002'
+                    else:foreign[field]='f'*40 if field=='source_sha' else 'capture-'+'f'*32 if field=='snapshot_id' else 'foreign'
+                    selected.write_text(json.dumps(state),encoding='utf8')
+                    row['full_cohort_backup_route']=runner.route_marker(foreign,uid)
+                    with self.subTest(field=field),self.assertRaises(upload.CohortRunError):
+                        upload.claim(fence,None,intent['kube_lock'],uid,env,challenge,members)
+                selected.write_bytes(original);row['full_cohort_backup_route']=runner.route_marker(binding,uid)
                 old=row.pop('full_cohort_backup_route')
                 with self.assertRaises(upload.CohortRunError):upload.claim(fence,None,intent['kube_lock'],uid,env,challenge,members)
                 row['full_cohort_backup_route']=old
