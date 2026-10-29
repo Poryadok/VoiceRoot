@@ -23,28 +23,6 @@ var legacy25CatalogSQL string
 const legacy25CatalogPG16SHA256 = "01fb07d050a452c3c4807e764dbb951680ea49994e795431eeee0bf39a4d8ff1"
 const legacy25CatalogSQLSHA256 = "9e4b711ace946e1b60679ffc7d600289c2ef2cdba09925dbb9725df52310bcba"
 
-func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error) {
-	if ctx == nil || conn == nil {
-		return "", errors.New("legacy25 catalog unavailable")
-	}
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return "", errors.New("legacy25 catalog unavailable")
-	}
-	defer tx.Rollback(context.Background())
-	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog`); err != nil {
-		return "", errors.New("legacy25 catalog unavailable")
-	}
-	digest, err := inspectLegacy25CatalogTx(ctx, tx)
-	if err != nil {
-		return "", err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return "", errors.New("legacy25 catalog unavailable")
-	}
-	return digest, nil
-}
-
 func inspectLegacy25CatalogTx(ctx context.Context, tx pgx.Tx) (string, error) {
 	return inspectLegacyCatalogTx(ctx, tx, 25, legacy25CatalogPG16SHA256)
 }
@@ -52,8 +30,8 @@ func inspectLegacy25CatalogTx(ctx context.Context, tx pgx.Tx) (string, error) {
 // Only the two separately source-pinned legacy cuts are supported internally.
 // This does not expose arbitrary historical-version admission.
 func inspectLegacyCatalogTx(ctx context.Context, tx pgx.Tx, versionNumber int, expected string) (string, error) {
-	if !((versionNumber == 25 && expected == legacy25CatalogPG16SHA256) ||
-		(versionNumber == 24 && expected == legacy24CatalogPG16SHA256)) {
+	if (versionNumber != 25 || expected != legacy25CatalogPG16SHA256) &&
+		(versionNumber != 24 || expected != legacy24CatalogPG16SHA256) {
 		return "", errors.New("legacy catalog version unavailable")
 	}
 	queryHash := sha256.Sum256([]byte(legacy25CatalogSQL))
