@@ -42,6 +42,48 @@ class ResourceTests(unittest.TestCase):
         session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
         return session,current,journal
 
+    def test_realtime_bootstrap_requires_typed_transition_and_exact_receipt(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        actual=current['observed']['images'];plan={'actual_images':actual,'fixture':'validated separately'}
+        receipt={'fixture':'root validated'}
+        module=Mock();module.load_completed.return_value=receipt
+        with patch.dict(sys.modules,{'realtime_bootstrap':module}):
+            first=session.bind_realtime_bootstrap(plan,actual)
+            self.assertEqual(first['target_sha256'],claim.digest(plan))
+            self.assertEqual(journal.row['phase'],'realtime-bootstrap')
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):
+                session.bind_target(context()['commit'],context()['images'],actual,'d'*64)
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+            bad={'tag':context()['commit'],'images':context()['images'],'realtime_bootstrap_sha256':'0'*64}
+            with self.assertRaises(RuntimeError):session.advance_realtime_bootstrap(bad,actual)
+            self.assertEqual(journal.row['phase'],'realtime-bootstrap')
+            target=dict(bad,realtime_bootstrap_sha256=claim.digest(receipt))
+            result=session.advance_realtime_bootstrap(target,actual)
+            self.assertEqual(result['target_sha256'],claim.digest(target))
+            self.assertEqual(journal.row['phase'],'prepare')
+            saved=len(journal.events)
+            session.bind_target(context()['commit'],context()['images'],actual,claim.digest(target))
+            self.assertEqual(len(journal.events),saved)
+            with self.assertRaisesRegex(RuntimeError,'target_changed'):
+                session.bind_target(context()['commit'],context()['images'],actual,'f'*64)
+            module.load_completed.assert_called_with(session,actual=actual)
+            with self.assertRaises(RuntimeError):session.advance_realtime_bootstrap(target,actual)
+
+    def test_realtime_advance_rechecks_journal_after_receipt_load(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        actual=current['observed']['images'];plan={'actual_images':actual};receipt={'fixture':'root validated'}
+        module=Mock()
+        def changed(*args,**kwargs):
+            journal.row['status']='uncertain'
+            return receipt
+        module.load_completed.side_effect=changed
+        with patch.dict(sys.modules,{'realtime_bootstrap':module}):
+            session.bind_realtime_bootstrap(plan,actual)
+            target={'tag':context()['commit'],'images':context()['images'],'realtime_bootstrap_sha256':claim.digest(receipt)}
+            with self.assertRaises(RuntimeError):session.advance_realtime_bootstrap(target,actual)
+            self.assertEqual(journal.row['status'],'uncertain')
+            self.assertEqual(journal.row['phase'],'realtime-bootstrap')
+
     def test_identity_is_typed_and_exact_not_actor_label(self):
         for key in context():
             c=context();del c[key]

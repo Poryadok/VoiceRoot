@@ -10,7 +10,7 @@ from controller import Blocked
 IMAGE='migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539'
 FLYWAY_IMAGE='flyway/flyway@sha256:c8cf894f9b63e8b3a50bb7a89f65b84dbd147d3203d8bc502f7c570b7d440895'
 DATABASES=('bot','story','moderation','subscription','user','search','social','chat',
-           'messaging','file','space','role','notification','matchmaking','voice')
+           'messaging','file','space','role','notification','matchmaking','voice','realtime')
 LEGACY_DSN=('bot','story','moderation','subscription','search')
 CREATE_PROJECTION="jsonpath-as-json={.metadata['name','uid']}"
 

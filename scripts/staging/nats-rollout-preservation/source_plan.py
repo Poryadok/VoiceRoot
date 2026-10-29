@@ -104,7 +104,7 @@ APP_SOURCES = ('deploy/staging/services.yaml', 'deploy/staging/gateway-deploymen
                'deploy/templates/network-policy-file-user-principal.yaml',
                'deploy/templates/network-policy-search-user-projection.yaml')
 DATABASES = tuple(service + '_db' for service in ('auth', 'user', 'social', 'chat', 'messaging', 'file', 'space',
-    'role', 'notification', 'matchmaking', 'gateway', 'search', 'subscription', 'moderation', 'bot', 'story', 'voice'))
+    'role', 'notification', 'matchmaking', 'gateway', 'search', 'subscription', 'moderation', 'bot', 'story', 'voice', 'realtime'))
 PG_SQL = "SELECT json_build_object('databases',(SELECT json_agg(datname ORDER BY datname) FROM pg_database WHERE datname LIKE '%\\_db'), 'authenticated',true)"
 GATEWAY_SQL = "SELECT json_build_object('columns',(SELECT json_agg(json_build_array(column_name,data_type,is_nullable) ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema='public' AND table_name='client_versions'),'primary_key',(SELECT json_agg(a.attname) FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=ANY(i.indkey) WHERE i.indrelid='public.client_versions'::regclass AND i.indisprimary),'windows_seed',EXISTS(SELECT 1 FROM client_versions WHERE platform='windows'))"
 CH_SQL = "SELECT name, engine, create_table_query FROM system.tables WHERE database='voice' ORDER BY name FORMAT JSON"
@@ -201,9 +201,21 @@ class _Source:
 
     def add(self, row, obj, action=False, private=False):
         kind, name = obj['kind'], obj['metadata']['name']
-        live = self.get(kind, name)
         if obj['metadata'].get('namespace') != NS:
             _fail('canonical_namespace_invalid')
+        if (row == 'frontends' and kind == 'ConfigMap' and name in guard.FRONTEND_BOOTSTRAP
+                and action and not private and self.p['mode'] in ('full','app-only')):
+            live = guard.frontend_live(self.kube, name)
+            if live is None:
+                try: normalized = self.kube.run(['create', '--dry-run=server', '-f', '/dev/stdin', '-o', 'json'], body=obj)
+                except Exception: _fail('canonical_normalization_failed_' + row)
+                if normalized.get('kind') != kind or normalized.get('metadata', {}).get('name') != name or normalized.get('metadata', {}).get('namespace') != NS:
+                    _fail('canonical_normalized_identity_invalid')
+                self.rows[row]['objects'].append({'kind':kind,'name':name,'namespace':NS,
+                    'desired':guard.semantic(normalized),'disposition':'create'})
+                return normalized
+        else:
+            live = self.get(kind, name)
         try:
             normalized = obj if private else self.kube.run(['apply', '--dry-run=server', '-f', '/dev/stdin', '-o', 'json'], body=obj)
         except Exception:
@@ -507,7 +519,7 @@ def compile_plan(source, parameters, decoder, kube):
             # canonical source/DSN prerequisites; never execute or recreate Jobs.
             b.read('scripts/staging/apply-migrate-jobs.sh', 'migrations')
             keys = {service.upper() + '_DATABASE_URL' for service in ('bot', 'story', 'moderation', 'subscription', 'user', 'search',
-                'social', 'chat', 'messaging', 'file', 'space', 'role', 'notification', 'matchmaking', 'voice')}
+                'social', 'chat', 'messaging', 'file', 'space', 'role', 'notification', 'matchmaking', 'voice', 'realtime')}
             keys.update(('AUTH_JWT_PRIVATE_KEY', 'AUTH_TOTP_ENCRYPTION_KEY', 'POSTGRES_PASSWORD'))
             b.secret('migrations', 'voice-app-secrets', keys)
             for database in DATABASES:
@@ -573,9 +585,9 @@ def compile_plan(source, parameters, decoder, kube):
                 _fail('unsupported_enabled_observability_reconciliation')
             b.skip('observability')
         plan = {'schema': guard.SCHEMA, 'mode': p['mode'], 'checks': [b.rows[row] for row in selected], 'actions': b.actions}
+        guard.preflight(kube, plan, p['mode'])
         if p.get('gis_first_install') is True:
             plan['gis_first_install'] = {'objects': copy.deepcopy(getattr(b, 'gis_first_install_objects', []))}
-        guard.preflight(kube, plan, p['mode'])
         return plan
     except PlanError:
         raise

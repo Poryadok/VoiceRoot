@@ -25,6 +25,7 @@ class PlanError(ValueError):
 SCHEMA = 'nats-rollout-nonnats-v1'
 BINDING_SCHEMA = 'nats-rollout-nonnats-binding-v1'
 ACTION_KINDS = {'ConfigMap', 'Ingress', 'Deployment', 'StatefulSet', 'Service', 'NetworkPolicy'}
+FRONTEND_BOOTSTRAP = frozenset('voice-'+name+'-runtime-config' for name in ('web','admin','developer-portal'))
 FULL_ONLY = {'app-config', 'infra', 'db-init'}
 OPTIONAL = {'ingress', 'livekit-ingress', 'frontends', 'observability'}
 SECRET_CONTRACTS = {
@@ -150,6 +151,35 @@ def _read(kube, descriptor):
     except Exception:
         _fail('live_object_read_failed')
 
+def frontend_live(kube, name):
+    """Read the fixed namespace catalog; a failed or incomplete list is not absence."""
+    if name not in FRONTEND_BOOTSTRAP:
+        _fail('frontend_bootstrap_scope_invalid')
+    try:
+        response=kube.run(['get','--raw','/api/v1/namespaces/voice-staging/configmaps?fieldSelector=metadata.name%3D'+name+'&limit=2'])
+        items=response.get('items') if isinstance(response,dict) else None
+        metadata=response.get('metadata',{}) if isinstance(response,dict) else {}
+        if (response.get('apiVersion')!='v1' or response.get('kind')!='ConfigMapList'
+            or not isinstance(metadata.get('resourceVersion'),str) or not metadata['resourceVersion']
+            or not isinstance(items,list) or len(items)>1 or metadata.get('continue')):
+            _fail('frontend_bootstrap_catalog_invalid')
+        found=[]
+        seen=set()
+        for obj in items:
+            if not isinstance(obj,dict) or obj.get('kind')!='ConfigMap' or not isinstance(obj.get('metadata'),dict):
+                _fail('frontend_bootstrap_catalog_invalid')
+            identity=obj['metadata']
+            if (identity.get('namespace')!='voice-staging' or identity.get('name')!=name
+                or identity['name'] in seen):_fail('frontend_bootstrap_catalog_invalid')
+            seen.add(identity['name'])
+            if obj['metadata'].get('name')==name:
+                if obj['metadata'].get('namespace')!='voice-staging':_fail('frontend_bootstrap_catalog_invalid')
+                found.append(obj)
+        if len(found)>1:_fail('frontend_bootstrap_catalog_invalid')
+        return copy.deepcopy(found[0]) if found else None
+    except PlanError:raise
+    except Exception:_fail('frontend_bootstrap_catalog_unavailable')
+
 
 def _matches(obj, desired):
     if obj['kind'] == 'Secret':
@@ -218,11 +248,14 @@ def _validate(plan, mode):
                 _fail('plan_object_invalid')
             obj = copy.deepcopy(obj)
             effective = obj.pop('disposition', disposition)
-            if effective not in ('preserve', 'action'):
+            if effective not in ('preserve', 'action', 'create'):
                 _fail('plan_object_disposition_invalid')
             obj.setdefault('namespace', 'voice-staging')
             if obj['namespace'] != 'voice-staging':
                 _fail('plan_namespace_invalid')
+            if effective == 'create' and (mode not in ('full','app-only') or row['id'] != 'frontends'
+                    or obj['kind'] != 'ConfigMap' or obj['name'] not in FRONTEND_BOOTSTRAP):
+                _fail('frontend_bootstrap_scope_invalid')
             if row['id'] == 'auth-mail' and (obj['kind'] != 'Secret' or obj['name'] != 'voice-app-secrets'
                     or obj['desired'].get('predicates', {}).get('auth_mail') is not True):
                 _fail('auth_mail_predicate_invalid')
@@ -258,6 +291,12 @@ def preflight(kube, plan, mode):
         descriptors = _validate(plan, mode)  # Validate every action before any live read.
         binding = {'schema': BINDING_SCHEMA, 'mode': mode, 'plan_sha256': digest(plan), 'objects': []}
         for disposition, descriptor in descriptors:
+            if disposition == 'create':
+                if frontend_live(kube,descriptor['name']) is not None:_fail('frontend_bootstrap_already_present')
+                bound={k:descriptor[k] for k in ('kind','name','namespace')}
+                bound.update({'desired':copy.deepcopy(descriptor['desired']),'disposition':'create'})
+                binding['objects'].append(bound)
+                continue
             obj = _read(kube, descriptor)
             current = descriptor['desired'] if disposition == 'preserve' else semantic(obj)
             _matches(obj, current)
@@ -277,6 +316,15 @@ def revalidate(kube, binding):
         if binding.get('schema') != BINDING_SCHEMA or not binding.get('objects'):
             _fail('binding_invalid')
         for descriptor in binding['objects']:
+            if descriptor['disposition']=='create':
+                live=frontend_live(kube,descriptor['name'])
+                if 'uid' not in descriptor:
+                    if live is not None:_fail('frontend_bootstrap_already_present')
+                elif (live is None or live.get('metadata',{}).get('uid')!=descriptor['uid']
+                      or live['metadata'].get('resourceVersion')!=descriptor.get('resourceVersion')
+                      or semantic(live)!=descriptor['desired']):
+                    _fail('frontend_bootstrap_created_changed')
+                continue
             obj = _read(kube, descriptor)
             if any(obj['metadata'][k] != descriptor[k] for k in ('uid', 'resourceVersion')):
                 _fail('live_object_identity_changed')

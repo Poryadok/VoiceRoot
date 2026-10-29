@@ -209,7 +209,25 @@ def verify_gis_before_fence(kube,state):
         raise Blocked('gis_existing_authority_changed')
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None):
+    try:
+        return _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,
+            before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,
+            actor_services=actor_services,renderer_authority=renderer_authority,lifecycle=lifecycle,
+            gis_first_install=gis_first_install,gis_source_root=gis_source_root,gis_source_capture=gis_source_capture,
+            gis_source_authority=gis_source_authority,gis_transition=gis_transition,resource_session=resource_session,
+            gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt)
+    except Exception as error:
+        if realtime_bootstrap_receipt is not None:
+            path=Path(base)/'checkpoint.json'
+            if path.exists():
+                state=private_json(path)
+                if state.get('phase')=='READ_ONLY_CAPTURE':
+                    state.update(status='BLOCKED',fence_status='UNKNOWN',error=safe_error(error))
+                    save(path,state)
+        raise
+
+def _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -219,6 +237,20 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    if realtime_bootstrap_receipt is not None:
+        state['realtime_bootstrap']=copy.deepcopy(realtime_bootstrap_receipt)
+        save(base/'checkpoint.json',state)
+        if resource_session is None:raise Blocked('realtime_bootstrap_session_required')
+        import realtime_bootstrap
+        bootstrap_schema=realtime_bootstrap_receipt.get('schema') if isinstance(realtime_bootstrap_receipt,dict) else None
+        if bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
+            live_receipt=realtime_bootstrap.load_completed(resource_session)
+        elif bootstrap_schema=='voice-staging-realtime-bootstrap-existing-v1':
+            live_receipt=realtime_bootstrap.load_existing(resource_session)
+        else:raise Blocked('realtime_bootstrap_receipt_invalid')
+        if (live_receipt!=realtime_bootstrap_receipt
+            or target.get('realtime_bootstrap_sha256')!=canonical(realtime_bootstrap_receipt)):
+            raise Blocked('realtime_bootstrap_receipt_changed')
     if gis_first_install is not None:
         import gis_first_install as gis
         if gis_source_root is None or not isinstance(gis_source_capture,dict):
@@ -388,8 +420,12 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
-        from operator_retirement import record_readonly_failure
-        failed=record_readonly_failure(base,state,error)
+        if realtime_bootstrap_receipt is not None:
+            failed=state
+            failed.update(status='BLOCKED',fence_status='UNKNOWN',error=safe_error(error))
+        else:
+            from operator_retirement import record_readonly_failure
+            failed=record_readonly_failure(base,state,error)
         save(base/'checkpoint.json',failed)
         raise
     state['phase']='FENCE';save(base/'checkpoint.json',state)
@@ -400,9 +436,18 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             if resource_session is None:raise Blocked('gis_existing_resource_fence_required')
             verify_gis_before_fence(kube,state)
         if resource_session is not None:
-            resource_session.bind_target(state['target']['tag'],state['target']['images'],stage.old_images,canonical(state['target']))
+            if realtime_bootstrap_receipt is not None and bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
+                resource_session.advance_realtime_bootstrap(state['target'],stage.old_images)
+            else:
+                resource_session.bind_target(state['target']['tag'],state['target']['images'],stage.old_images,canonical(state['target']))
             state['resource_fence']=resource_session.binding()
             save(base/'checkpoint.json',state)
+        if realtime_bootstrap_receipt is not None:
+            loader=(realtime_bootstrap.load_completed if bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1'
+                    else realtime_bootstrap.load_existing)
+            receipt=loader(resource_session,actual=stage.old_images,rollout_target=state['target'])
+            if receipt!=realtime_bootstrap_receipt or resource_session.binding()['target_sha256']!=canonical(state['target']):
+                raise Blocked('realtime_bootstrap_receipt_changed')
         if gis_binding is not None:
             verify_gis_before_fence(kube,state)
         stage.runtime_base=base
@@ -613,6 +658,8 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
                 save(Path(base)/'checkpoint.json',state)
         if state.get('gis_first_install') is not None:
             execute_gis_first_install(kube,base,state,stage,journal)
+        if 'nonnats' in state:
+            nonnats_runtime.create_frontends(kube,state['nonnats'],state['nonnats_binding'],state,stage,journal,current_deadline)
         state['space_postcondition']=space_safeguards.after_migrate(kube,state.get('space_gate'))
         save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
