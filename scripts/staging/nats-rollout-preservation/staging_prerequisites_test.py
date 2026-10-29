@@ -18,6 +18,8 @@ from root_main import save
 class PrivateCustodyTests(unittest.TestCase):
     def test_crypto_helper_is_required(self):
         self.assertIn('nats-rollout-preservation/staging_p3_prerequisites_crypto.py',prereq.REQUIRED_HELPERS)
+        for name in ('gis_prerequisite','source_plan','compiler'):
+            self.assertIn('nats-rollout-preservation/'+name+'.py',prereq.REQUIRED_HELPERS)
 
     def test_initial_capture_requires_real_session_and_exclusive_operation(self):
         import bridge_root

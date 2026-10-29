@@ -30,7 +30,7 @@ BINARY_PINS={'nats-known-baseline/kernel':'9fced2b6eb7ca33d744ceceb1550774ee7a3a
     'nats-rollout-preservation/story-current4-probe':'88b6c89b9e57d028c5371db3faaea9eec4624223f54204b59056525f6971f53a'}
 REQUIRED_HELPERS=frozenset('nats-rollout-preservation/'+name+'.py' for name in
     ('staging_prerequisites','staging_release_policy_prepare','staging_p3_prerequisites','staging_p3_prerequisites_crypto',
-     'staging_gis_material','gis_first_install'))
+     'staging_gis_material','gis_first_install','gis_prerequisite','source_plan','compiler'))
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256','approved_sha256',
     'execution_sha256','namespace_uid','marker_sha256','baseline_sha256','actual_before',
     'policy_before_sha256','children','auxiliary_images','renderer_authority_sha256'}
