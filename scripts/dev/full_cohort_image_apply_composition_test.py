@@ -83,7 +83,7 @@ class Composition(unittest.TestCase):
                         **{k: target[k] for k in ('pod_name', 'pod_uid', 'deployment_uid', 'container_id', 'restart_count')},
                         'namespace_uid': 'ns', 'deployment_rv': original['metadata']['resourceVersion']},
                         'fields': {key: {'state': 'absent', 'origin': None} for key in probe.FIELDS[service]},
-                        'env_sources': [], 'scope': 'runtime-config-metadata-only-no-provider-validation',
+                        'env_sources': [], 'explicit_sources': [], 'scope': 'runtime-config-metadata-only-no-provider-validation',
                         'template_binding': 'pod-env-and-deployment-template-v1'}
                 observation = {'operation_id': self.context['operation_id'], 'source_sha': self.context['commit'],
                                'nonce': 'c' * 32, 'observations': observations}
