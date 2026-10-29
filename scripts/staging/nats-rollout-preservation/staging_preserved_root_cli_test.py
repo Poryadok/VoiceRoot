@@ -6,9 +6,18 @@ from unittest.mock import patch
 
 import root_cli
 import staging_cohort_preservation as cohort
+import transaction
 
 
 class PreservedRootCLITest(unittest.TestCase):
+    def test_transaction_rejects_foreign_receipt_before_checkpoint(self):
+        session=SimpleNamespace(operation='a'*12)
+        with tempfile.TemporaryDirectory(dir='/root') as folder,patch.object(cohort,'load_qualified',return_value={'receipt':'actual'}):
+            with self.assertRaisesRegex(transaction.Blocked,'cohort_preserved_prepare_invalid'):
+                transaction.prepare_preserved(None,Path(folder),Path('/code'),{'cohort_preservation_sha256':'f'*64},{},'a'*12,{},[],{},
+                    preservation_ref={'receipt':'foreign'},resource_session=session)
+            self.assertEqual(list(Path(folder).iterdir()),[])
+
     def test_missing_or_foreign_receipt_is_rejected_before_any_files(self):
         args=dict(resource_session=SimpleNamespace(operation='a'*12),nats_authority=None,actor_authority=None,
                   actor_services=[],renderer_authority=None,gis_source_authority=None,gis_source_root=None,
@@ -21,10 +30,6 @@ class PreservedRootCLITest(unittest.TestCase):
             with patch.object(cohort,'load_qualified',return_value={'receipt':'different'}):
                 with self.assertRaisesRegex(root_cli.Blocked,'cohort_preserved_prepare_invalid'):
                     root_cli.prepare_preserved_value(value,Path('/source'),{},'a'*12,preservation_ref={'receipt':'claimed'},**args)
-            receipt={'receipt':'qualified'};value['target']['cohort_preservation_sha256']=root_cli.transaction.canonical(receipt)
-            with patch.object(cohort,'load_qualified',return_value=receipt):
-                with self.assertRaisesRegex(root_cli.Blocked,'cohort_preserved_transaction_missing'):
-                    root_cli.prepare_preserved_value(value,Path('/source'),{},'a'*12,preservation_ref=receipt,**args)
             self.assertEqual(list(Path(folder).iterdir()),[])
 
 

@@ -238,7 +238,12 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         save(runner_code/'capture-manifest.json',binding)
         os.chown(runner_code/'capture-manifest.json',0,gid);(runner_code/'capture-manifest.json').chmod(0o440)
         raw=json.dumps(value['manifests'],sort_keys=True,separators=(',',':')).encode()
-        (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
+        if _preservation_ref is None:
+            (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
+        else:
+            fd=os.open(base/'apply-manifests.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,'wb') as stream:
+                stream.write(raw);stream.flush();os.fsync(stream.fileno())
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         if resource_session is not None:lifecycle_args['resource_session']=resource_session
         if gis_binding is not None:lifecycle_args['gis_binding']=gis_binding
