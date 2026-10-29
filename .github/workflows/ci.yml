@@ -405,13 +405,47 @@ jobs:
       - name: MatchSquad DEV overlay contracts
         run: python3 -B -m unittest scripts.dev.match_squad_overlay_test scripts.dev.match_squad_runtime_overlay_test
 
-  # Flutter's built-in file sharding retains the original complete test
-  # discovery and concurrency=1 isolation within each independent checkout.
-  flutter-unit-tests:
+  # Partition Flutter's default filesystem discovery by file, preserving
+  # concurrency=1 isolation within each independent checkout.
+  flutter-unit-plan:
     needs: changes
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Prepare canonical Flutter test inventory
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          python3 ../../scripts/ci/flutter_test_shards_test.py
+          python3 ../../scripts/ci/flutter_test_shards.py plan --plan "$RUNNER_TEMP/plan.json"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: flutter-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/plan.json
+          if-no-files-found: error
+
+  flutter-unit-tests:
+    needs: [changes, flutter-unit-plan]
+    if: >-
+      !cancelled() &&
+      needs.changes.result == 'success' &&
+      needs.flutter-unit-plan.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.frontend == 'true' ||
        needs.changes.outputs.protos == 'true' ||
@@ -432,11 +466,21 @@ jobs:
           cache: true
       - name: Prefetch sqlite3mc native assets (host)
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - uses: actions/download-artifact@v7
+        with:
+          name: flutter-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-plan
       - name: Flutter unit and widget tests
         working-directory: src/frontend
         run: |
           flutter pub get
-          flutter test --reporter expanded --concurrency=1 --no-pub --total-shards=4 --shard-index=${{ matrix.shard }}
+          python3 ../../scripts/ci/flutter_test_shards_test.py
+          /usr/bin/time -v python3 ../../scripts/ci/flutter_test_shards.py run --plan "$RUNNER_TEMP/flutter-plan/plan.json" --shard-index=${{ matrix.shard }} --receipt "$RUNNER_TEMP/receipt.json"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: flutter-receipt-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/receipt.json
+          if-no-files-found: error
       - name: Retain failing golden diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
@@ -445,6 +489,23 @@ jobs:
           path: src/frontend/test/failures
           if-no-files-found: ignore
           retention-days: 7
+
+  flutter-unit-receipts:
+    needs: [flutter-unit-plan, flutter-unit-tests]
+    if: always() && needs.flutter-unit-plan.result == 'success' && needs.flutter-unit-tests.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
+        with:
+          name: flutter-plan-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-plan
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: flutter-receipt-${{ github.run_attempt }}-*
+          path: ${{ runner.temp }}/flutter-receipts
+      - name: Verify complete Flutter file partition
+        run: python3 scripts/ci/flutter_test_shards.py verify --plan "$RUNNER_TEMP/flutter-plan/plan.json" --receipts "$RUNNER_TEMP/flutter-receipts"
 
   flutter:
     needs: changes
@@ -1963,7 +2024,7 @@ jobs:
       - name: Verify Creator target and trust preflight
         working-directory: scripts/dev
         run: |
-          python -B -c "import sys, unittest; names=['space_creator_runtime_profile_target_plan_test','space_creator_runtime_profile_trust_effect_test','space_creator_runtime_profile_trust_effect_preflight_test','space_creator_runtime_profile_trust_effect_race_test','space_creator_runtime_profile_trust_effect_peer_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 42)"
+          python -B -c "import sys, unittest; names=['space_creator_runtime_profile_target_plan_test','space_creator_runtime_profile_trust_effect_test','space_creator_runtime_profile_trust_effect_preflight_test','space_creator_runtime_profile_trust_effect_race_test','space_creator_runtime_profile_trust_effect_peer_test','full_cohort_auth_preparation_test','full_cohort_c1_driver_test','full_cohort_release_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 62)"
       - name: Verify operation-owned core smoke fixture
         working-directory: scripts/dev
         run: |
@@ -1980,8 +2041,16 @@ jobs:
             python -B -c "import sys, unittest; names=['space_p3_issuer_preflight_test','space_p3_issuer_preflight_root_test','space_p3_issuer_preflight_metadata_root_test','space_creator_runtime_profile_issuer_packet_test','space_creator_runtime_profile_issuer_test','space_creator_runtime_profile_issuer_export_test','space_creator_runtime_profile_issuer_stage_test','space_creator_runtime_profile_issuer_bundle_test','space_creator_runtime_profile_issuer_joint_test','space_creator_runtime_profile_issuer_launcher_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 33)"
       - name: Verify delegated issuer and fixed peer receivers
         run: |
+          docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -e VOICE_TEST_SOURCE_ROOT=/repo -w /repo/scripts/dev python:3.12-bookworm \
+            python -B -c "import sys, unittest; names=['dev_peer_issuer_authority_test','dev_peer_issuer_installer_test.InstallerTests.test_wrong_digest_never_touches_install_paths','dev_peer_issuer_installer_test.InstallerTests.test_symlink_is_rejected_before_filesystem_mutation','dev_peer_issuer_installer_test.InstallerTests.test_unreviewed_source_cannot_build_bundle','dev_peer_issuer_installer_test.InstallerTests.test_inline_bootstrap_binds_exact_digest_and_fixed_archive','dev_peer_issuer_installer_test.InstallerTests.test_install_fixed_bundle_without_starting_systemd','dev_peer_issuer_client_test','dev_peer_issuer_source_git_test','dev_peer_issuer_material_test','dev_peer_issuer_metadata_test','dev_peer_issuer_packet_test','dev_peer_issuer_service_test','dev_peer_issuer_source_test','space_creator_runtime_profile_delegated_service_test','space_creator_runtime_profile_fixed9_successor_test','space_creator_runtime_profile_fixed9_joint_test','space_role_peer_create_test','space_role_peer_material_test','space_role_peer_creator_inspection_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 52)"
+      - name: Verify unprivileged peer receiver
+        run: |
+          docker run --rm --network none --user 1000:1000 -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
+            python -B -c "import sys, unittest; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromName('space_creator_runtime_profile_delegated_test')); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 8)"
+      - name: Verify delegated Realtime P3 issuer and receiver
+        run: |
           docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
-            python -B -c "import sys, unittest; names=['dev_peer_issuer_authority_test','dev_peer_issuer_installer_test','dev_peer_issuer_material_test','dev_peer_issuer_metadata_test','dev_peer_issuer_packet_test','dev_peer_issuer_service_test','dev_peer_issuer_source_test','space_creator_runtime_profile_delegated_test','space_creator_runtime_profile_delegated_service_test','space_creator_runtime_profile_fixed9_successor_test','space_creator_runtime_profile_fixed9_joint_test','space_role_peer_create_test','space_role_peer_material_test','space_role_peer_creator_inspection_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 51)"
+            python -B -c "import sys, unittest; names=['dev_realtime_p3_issuer_metadata_test','dev_realtime_p3_issuer_capability_test','dev_realtime_p3_issuer_service_test','realtime_p3_delegated_receiver_test','realtime_p3_delegated_joint_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 12)"
       - name: Verify backup and Go consumer with synthetic external boundaries
         working-directory: scripts/dev
         run: |
@@ -2000,6 +2069,7 @@ jobs:
       - match-squad-overlay
       - flutter
       - flutter-unit-tests
+      - flutter-unit-receipts
       - flutter-device-driver
       - flutter-windows
       - web
@@ -2091,7 +2161,7 @@ jobs:
           JOB_VOICE_HISTORY_AUDIT: ${{ needs.voice-history-audit.result }}
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
-          JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-tests.result }}
+          JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-receipts.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
           JOB_WEB: ${{ needs.web.result }}

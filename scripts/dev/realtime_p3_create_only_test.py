@@ -86,6 +86,15 @@ class CreateOnlyTest(unittest.TestCase):
         with self.assertRaises(create.CreateError): self.execute()
         self.assertEqual(len(self.created),1)
 
+    def test_closed_journal_after_pending_refuses_create(self):
+        original=self.session._reserve
+        def close_after_pending(*args):
+            original(*args); self.journal.close()
+        with patch.object(self.session,'_reserve',side_effect=close_after_pending):
+            with self.assertRaises(create.CreateError):self.execute()
+        self.assertEqual(self.created,{}); self.assertFalse(any(kind=='create' for kind,_ in self.calls))
+        self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
     def test_existing_object_never_adopted(self):
         identity = sorted(packet.MEMBERS)[0]; self.created[identity] = {'foreign':True}
         with self.assertRaises(create.CreateError): self.execute()
@@ -96,6 +105,73 @@ class CreateOnlyTest(unittest.TestCase):
         with self.assertRaises(create.CreateError): self.execute()
         self.assertEqual(self.created,{})
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_delegated_failure_never_falls_back_or_dry_runs(self):
+        fake_source = SimpleNamespace(verify=lambda *args:None)
+        fake_receiver = SimpleNamespace(receive=lambda *args:(_ for _ in ()).throw(ValueError('not ready')))
+        with patch.dict(sys.modules,{'realtime_p3_create_only_source':fake_source,'realtime_p3_delegated_receiver':fake_receiver}), \
+             patch.object(create,'SOCKET_PARENT',self.parent), patch.object(create.transport,'public_certificate',side_effect=self.public), \
+             patch.object(create.transport,'get',side_effect=self.get), patch.object(create.transport,'create',side_effect=self.create), \
+             patch.object(create.channel,'receive',side_effect=AssertionError('must not fall back')):
+            self.session.prepare()
+            with self.assertRaises(create.CreateError):self.session.finish_delegated(None,None)
+        self.assertEqual(self.calls,[]); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_delegated_drain_loss_refuses_first_dry_run(self):
+        fake_source = SimpleNamespace(verify=lambda *args:None)
+        cut=SimpleNamespace(journal=self.base.journal,client=object(),fence=SimpleNamespace(ledger=self.base.ledger),
+                            verify_drained=lambda:(_ for _ in ()).throw(ValueError('drain lost')))
+        cut.fence.context=self.base.context; cut.lock=self.base.lock; cut.namespace_uid='ns'
+        def received(session,*_):
+            session._delegated_cut=cut; session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+            return self.envelope
+        fake_receiver=SimpleNamespace(receive=received)
+        with patch.dict(sys.modules,{'realtime_p3_create_only_source':fake_source,'realtime_p3_delegated_receiver':fake_receiver}), \
+             patch.object(create,'SOCKET_PARENT',self.parent), patch.object(create.transport,'public_certificate',side_effect=self.public), \
+             patch.object(create.transport,'get',side_effect=self.get), patch.object(create.transport,'create',side_effect=self.create):
+            self.session.prepare()
+            with self.assertRaises(create.CreateError):self.session.finish_delegated(object(),'token')
+        self.assertEqual(self.calls,[]); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_delegated_terminal_cut_journal_drift_refuses_receipt(self):
+        fake_source=SimpleNamespace(verify=lambda *args:None)
+        armed=[]
+        def drained():
+            if self.base.ledger.row.get('step')=='realtime-p3-handoff-done':armed.append(True)
+        cut=SimpleNamespace(journal=self.base.journal,client=object(),fence=SimpleNamespace(ledger=self.base.ledger),
+                            verify_drained=drained,lock=self.base.lock,namespace_uid='ns')
+        cut.fence.context=self.base.context
+        def received(session,*_):
+            session._delegated_cut=cut; session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+            return self.envelope
+        fake_receiver=SimpleNamespace(receive=received); original=self.base.ledger.read; mutated=[]
+        def drift():
+            result=original()
+            if armed and result[0].get('step')=='realtime-p3-handoff-done' and not mutated:
+                cut.journal.state['steps']['late-drift']={'status':'changed'}; mutated.append(True)
+            return result
+        with patch.dict(sys.modules,{'realtime_p3_create_only_source':fake_source,'realtime_p3_delegated_receiver':fake_receiver}), \
+             patch.object(create,'SOCKET_PARENT',self.parent),patch.object(create.transport,'public_certificate',side_effect=self.public), \
+             patch.object(create.transport,'get',side_effect=self.get),patch.object(create.transport,'create',side_effect=self.create), \
+             patch.object(self.base.ledger,'read',side_effect=drift):
+            self.session.prepare()
+            with self.assertRaises(create.CreateError):self.session.finish_delegated(object(),'token')
+        self.assertTrue(mutated); self.assertEqual(len(self.created),7)
+        self.assertFalse(self.session.completed); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_delegated_final_ledger_callback_cannot_change_cut_identity(self):
+        armed=[]
+        cut=SimpleNamespace(journal=self.base.journal,client=object(),fence=SimpleNamespace(ledger=self.base.ledger),
+                            verify_drained=lambda:armed.append(True),lock=self.base.lock,namespace_uid='ns')
+        cut.fence.context=self.base.context
+        self.session._delegated_cut=cut; self.session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+        original=self.base.ledger.read
+        def drift():
+            result=original()
+            if armed:cut.lock={'uid':'foreign'}
+            return result
+        with patch.object(self.base.ledger,'read',side_effect=drift):
+            with self.assertRaises(ValueError):self.session._guard()
 
     def test_live_ca_drift_retains_created_resources_and_holds(self):
         self.fault = 'root-drift'

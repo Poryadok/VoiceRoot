@@ -76,6 +76,20 @@ class HealthTest(unittest.TestCase):
         self.client.pod['status']['ready']=False
         with self.assertRaises(health.HealthError): health.verify_completed(self.subject,self.cut,'token')
 
+    def test_fixed9_health_binds_live_ca_and_server_secret(self):
+        bound=health.peer_authority.BoundFixed9SpaceAuthority(self.cut,object(),object(),object(),object(),'token')
+        self.subject.plan_phase=bound
+        expected={'schema':'voice-dev-space-delegated-v1','operation_id':self.base.context['operation_id'],
+                  'source_sha':self.base.context['commit'],'namespace_uid':'ns','public_jwks':{'keys':[]},
+                  'media_ca':{'uid':'ca','resourceVersion':'2'},'tls':{'uid':'tls','resourceVersion':'3'}}
+        self.observation['public_objects']={'voice-media-ca':{'uid':'ca','resource_version':'2'},
+            'voice-space-media-server-tls':{'uid':'tls','resource_version':'3'}}
+        with patch.object(health.peer_authority,'_space',return_value=(expected,b'{"keys":[]}')), \
+             patch.object(health.public,'_meta',side_effect=lambda run,guard,kind,name:copy.deepcopy(self.observation['public_objects'][name])):
+            receipt=self.subject.run('token'); self.assertEqual(health.verify_completed(self.subject,self.cut,'token'),receipt)
+            expected['tls']['resourceVersion']='4'
+            with self.assertRaises(health.HealthError):health.verify_completed(self.subject,self.cut,'token')
+
     def test_wrong_public_keys_hold_without_receipt(self):
         self.observation['jwks_bytes']=b'{"keys":[1]}'
         with self.assertRaises(health.HealthError): self.subject.run('token')

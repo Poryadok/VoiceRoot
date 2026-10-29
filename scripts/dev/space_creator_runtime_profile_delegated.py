@@ -237,35 +237,41 @@ class _Receiver:
         info=os.stat(self.PROFILE+'.sock',dir_fd=self.dirfd,follow_symlinks=False)
         if not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.geteuid(): raise ValueError()
         self.inode=(info.st_dev,info.st_ino); self.listener.listen(1); os.fsync(self.dirfd); self._socket(); self._current(); self._drained()
-        result=[]
+        result=[]; handle=issuer_client.new_issue_trigger(self.preflight,self.token)
         def invoke():
-            try:issuer_client.trigger_issue(self.preflight,self.token); result.append(True)
+            try:handle.run(); result.append(True)
             except BaseException:result.append(False)
-        worker=threading.Thread(target=invoke,daemon=True); worker.start(); deadline=time.monotonic()+300
-        while True:
-            self._current(); self._drained()
-            if time.monotonic()>=deadline or (result and result!=[True]): raise ValueError()
-            self.listener.settimeout(min(2,max(0.01,deadline-time.monotonic())))
-            try:connection,_=self.listener.accept(); break
-            except socket.timeout: continue
-        with connection:
-            connection.settimeout(180)
-            pid,uid,_=struct.unpack('3i',connection.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
-            if uid!=0 or pid<=0: raise ValueError()
-            start=root_export._start_ticks(pid)
-            for _ in range(2):
-                data,ancillary,flags,_=connection.recvmsg(64,socket.CMSG_SPACE(8*array.array('i').itemsize),socket.MSG_CMSG_CLOEXEC)
-                for level,kind,payload in ancillary:
-                    if level==socket.SOL_SOCKET and kind==socket.SCM_RIGHTS:
-                        numbers=array.array('i'); numbers.frombytes(payload[:len(payload)-len(payload)%numbers.itemsize])
-                        for fd in numbers:os.close(fd)
-                if data!=b'PREFLIGHT-REQUEST\n' or ancillary or flags & (socket.MSG_TRUNC|socket.MSG_CTRUNC): raise ValueError()
+        worker=threading.Thread(target=invoke); worker.start(); deadline=time.monotonic()+300
+        try:
+            while True:
                 self._current(); self._drained()
-                if preflight.exchange_root_request(self.preflight,self.token,connection)!=self.initial or root_export._start_ticks(pid)!=start: raise ValueError()
-            self.envelope,self.objects=self._packet(connection,pid,start)
-        worker.join(timeout=max(0,deadline-time.monotonic()))
-        if worker.is_alive() or result!=[True]: raise ValueError()
-        self._socket(); self._current(); self._drained()
+                if time.monotonic()>=deadline or (result and result!=[True]): raise ValueError()
+                self.listener.settimeout(min(2,max(0.01,deadline-time.monotonic())))
+                try:connection,_=self.listener.accept(); break
+                except socket.timeout: continue
+            with connection:
+                connection.settimeout(180)
+                pid,uid,_=struct.unpack('3i',connection.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
+                if uid!=0 or pid<=0: raise ValueError()
+                start=root_export._start_ticks(pid)
+                for _ in range(2):
+                    data,ancillary,flags,_=connection.recvmsg(64,socket.CMSG_SPACE(8*array.array('i').itemsize),socket.MSG_CMSG_CLOEXEC)
+                    for level,kind,payload in ancillary:
+                        if level==socket.SOL_SOCKET and kind==socket.SCM_RIGHTS:
+                            numbers=array.array('i'); numbers.frombytes(payload[:len(payload)-len(payload)%numbers.itemsize])
+                            for fd in numbers:os.close(fd)
+                    if data!=b'PREFLIGHT-REQUEST\n' or ancillary or flags & (socket.MSG_TRUNC|socket.MSG_CTRUNC): raise ValueError()
+                    self._current(); self._drained()
+                    if preflight.exchange_root_request(self.preflight,self.token,connection)!=self.initial or root_export._start_ticks(pid)!=start: raise ValueError()
+                self.envelope,self.objects=self._packet(connection,pid,start)
+            worker.join(timeout=max(0,deadline-time.monotonic()))
+            if worker.is_alive() or result!=[True]: raise ValueError()
+            self._socket(); self._current(); self._drained()
+        finally:
+            if worker.is_alive():
+                try:handle.cancel()
+                except BaseException:pass
+                while worker.is_alive():worker.join(timeout=5)
 
     def run(self):
         try:

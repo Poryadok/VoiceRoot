@@ -165,7 +165,13 @@ class Supervisor:
         if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal', 'namespace-census-journal',
                         'writer-cut-journal', 'physical-journal', 'space-native-tool-journal', 'space-fresh-install-journal',
                         'creator-config-journal', 'target-jdk-journal', 'space-issuer-preflight-journal',
-                        'creator-peer-target-journal') and name not in go_names:
+                        'creator-peer-target-journal', 'creator-delegated-preflight-journal',
+                        'creator-delegated-receiver-journal', 'creator-trust-effect-journal',
+                        'creator-target-plan-journal', 'creator-target-trust-journal',
+                        'space-delegated-preflight-journal', 'space-delegated-receiver-journal',
+                        'role-delegated-preflight-journal', 'role-delegated-receiver-journal',
+                        'realtime-p3-journal', 'release-journal', 'core-smoke-journal',
+                        'realtime-secret-journal', 'realtime-provision-journal', 'realtime-migration-journal') and name not in go_names:
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']

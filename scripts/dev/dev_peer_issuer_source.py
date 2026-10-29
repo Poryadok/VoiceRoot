@@ -5,9 +5,13 @@ import re
 import realtime_p3_create_only_source as source
 
 # Set only after the whole fixed issuer/installer payload is reviewed.
-REVIEWED_SOURCE='df9f81006c6dfb4a5737fe7eb3a93bce4cf10c58'
+REVIEWED_SOURCE='dae4cbf1080108f2909b2f2419ea59f9ef7b2b07'
 FILES=('dev_peer_issuer_metadata.py','dev_peer_issuer_preflight.py','dev_peer_issuer_service.py','dev_peer_issuer_authority.py',
        'dev_peer_issuer_client.py','dev_peer_issuer_packet.py','dev_peer_issuer_material.py','dev_peer_issuer_installer.py',
+       'dev_realtime_p3_issuer_metadata.py','dev_realtime_p3_issuer_capability.py',
+       'dev_realtime_p3_issuer_client.py','dev_realtime_p3_issuer_service.py',
+       'realtime_p3_create_only.py','realtime_p3_delegated_receiver.py','realtime_p3_create_only_transport.py','realtime_p3_create_only_socket.py',
+       'realtime_p3_create_only_packet.py','realtime_p3_create_only_crypto.py',
        'space_p3_issuer_preflight_metadata_root.py','space_p3_issuer_preflight_root.py',
        'space_creator_runtime_profile_issuer_packet.py','space_p3_issuer.py','realtime_p3_create_only_source.py',
        'resource_fencing.py','credentials.py','reset_credentials.py','realtime_p3_missing_issuer.py',

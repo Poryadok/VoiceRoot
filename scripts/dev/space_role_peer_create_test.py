@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import socket
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -107,6 +108,34 @@ class RoleCreateTest(unittest.TestCase):
              mock.patch.object(create,'_create') as write:
             with self.assertRaises(create.CreateError): phase.finish()
             write.assert_not_called(); phase._uncertain.assert_called_once()
+
+    def test_guard_loss_cancels_trigger_before_delayed_worker_can_connect(self):
+        import dev_peer_issuer_client as client
+        phase=self.phase(); phase.issue_thread=phase.issue_done=phase.issue_result=phase.issue_control=None
+        phase.preflight=create.preflight.PeerIssuerPreflightPhase.__new__(create.preflight.PeerIssuerPreflightPhase)
+        phase.token='token'; entered=threading.Event(); release=threading.Event()
+        def stalled(*_):
+            entered.set()
+            if not release.wait(10): raise RuntimeError('fixture timeout')
+        def lost():
+            if not entered.wait(5): raise RuntimeError('fixture did not start')
+            raise create.schema.GuardLost('lost')
+        phase.serve_preflight=lost
+        try:
+            with mock.patch.object(client.preflight,'verify_current',side_effect=stalled),mock.patch.object(client.socket,'socket') as connect:
+                with self.assertRaises(create.schema.GuardLost):phase.run()
+                release.set(); phase.issue_thread.join(5)
+                self.assertFalse(phase.issue_thread.is_alive()); connect.assert_not_called()
+        finally:release.set()
+
+    def test_trigger_setup_failure_is_uncertain_and_redacted(self):
+        import dev_peer_issuer_client as client
+        phase=self.phase(); phase.issue_thread=phase.issue_done=phase.issue_result=phase.issue_control=None
+        phase.preflight=object(); phase.token='token'
+        with mock.patch.object(client,'new_issue_trigger',side_effect=ValueError('PRIVATE-SENTINEL')):
+            with self.assertRaises(create.CreateError) as failure:phase.run()
+        self.assertNotIn('PRIVATE-SENTINEL',str(failure.exception))
+        phase._uncertain.assert_called_once(); phase.close.assert_called_once()
 
     def test_lost_create_response_keeps_pending_without_secret_output(self):
         phase=self.phase(); obj=desired()

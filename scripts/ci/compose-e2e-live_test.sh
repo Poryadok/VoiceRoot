@@ -40,8 +40,10 @@ for setting in \
 done
 
 # Serial CI execution makes a failing Flutter test identifiable in hosted logs.
-grep -F -- 'flutter test --reporter expanded --concurrency=1' \
-  "${ROOT}/.github/workflows/ci.yml" >/dev/null ||
+grep -F -- 'flutter_test_shards.py run' "${ROOT}/.github/workflows/ci.yml" >/dev/null ||
+  fail 'Flutter CI suite must invoke the file shard runner'
+grep -F -- '"flutter", "test", "--reporter", "expanded", "--concurrency=1"' \
+  "${ROOT}/scripts/ci/flutter_test_shards.py" >/dev/null ||
   fail 'Flutter CI suite must run serially with the expanded reporter'
 
 for go_status in 0 17; do
