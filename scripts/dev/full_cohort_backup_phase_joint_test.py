@@ -4,11 +4,17 @@ This is not a successful full backup or a live environment qualification.
 """
 import copy
 from contextlib import contextmanager
+import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest import mock
 
+import canonical_application_package as canonical
+import cohort_backup_operation
+import cohort_dispatch
+import cohort_upload_phase
 import frontend_runtime_executor
 import full_cohort_backup_metadata as metadata
 import full_cohort_backup_phase as backup
@@ -20,22 +26,34 @@ import full_cohort_affected_plan as affected
 import full_cohort_supervisor as supervisor
 import media_operation_journal
 import resource_fencing
+import story_media_backup_capture as capture
+import update_images
 import writer_cut
 import writer_cut_test
 
 
 class RealPreflightTest(unittest.TestCase):
     @contextmanager
-    def phases(self):
+    def phases(self, before_cut=None, after_cut=None, configure=None):
         base=writer_cut_test.WriterCutTest('test_drain_and_resume_use_current_template_not_old')
         base.setUp();self.addCleanup(base.doCleanups)
+        if configure is not None:configure(base)
         root=Path(base.temp.name)/'operations';root.mkdir(mode=0o700)
         op=root/base.context['operation_id'];op.mkdir(mode=0o700)
-        admission=copy.deepcopy(base.admission)
+        admission=copy.deepcopy(base.admission);namespace_uid='00000000-0000-0000-0000-000000000001'
         shared_workloads=base.client.workloads
         class Client(writer_cut_test.Client):
             def __init__(self,journal):
                 super().__init__(base.lock,journal);self.workloads=shared_workloads
+            def call(self,*args):
+                if args[1]=='node':
+                    return {'metadata':{'name':'node','uid':'uid','labels':{'kubernetes.io/os':'linux',
+                        'kubernetes.io/arch':'amd64','kubernetes.io/hostname':'node'}},'spec':{},
+                        'status':{'nodeInfo':{'architecture':'amd64','operatingSystem':'linux'},
+                                  'conditions':[{'type':'Ready','status':'True'}]}}
+                value=super().call(*args)
+                if args[1]=='namespace':value['metadata']['uid']=namespace_uid
+                return value
         class Ledger:
             def __init__(self,client):self.client=client
             def read(self):return base.ledger.read()
@@ -47,7 +65,7 @@ class RealPreflightTest(unittest.TestCase):
             def mark_uncertain(self,reason):pass
         check=Check(base.context)
         def facade(name,extra):
-            intent={'resource_context':copy.deepcopy(base.context),'namespace_uid':'ns',**extra}
+            intent={'resource_context':copy.deepcopy(base.context),'namespace_uid':namespace_uid,**extra}
             journal=media_operation_journal.Journal(op/name,intent);self.addCleanup(journal.close)
             client=Client(journal);fence=resource_fencing.Fence(copy.deepcopy(base.context),check,Ledger(client),check.mark_uncertain)
             return journal,client,fence
@@ -58,24 +76,26 @@ class RealPreflightTest(unittest.TestCase):
              mock.patch.object(backup.cohort_backup_operation,'ROOT',root), \
              mock.patch.object(supervisor.media_operation_guard,'verify'):
             j,c,f=facade('journal',{'cohort_route_mode':'full-cohort-v1','kube_lock':base.lock})
-            owner=supervisor.Supervisor(j,f,c,base.lock,'ns')
+            owner=supervisor.Supervisor(j,f,c,base.lock,namespace_uid)
             pj,pc,pf=facade('package-journal',{'full_cohort_package':{'run_id':123,'run_attempt':1,
                 'nodes':[{'name':'node','uid':'uid','hostname':'node','architecture':'amd64'}]}})
-            owner.package=package.PackagePhase(pj,pf,pc,base.lock,'ns')
+            owner.package=package.PackagePhase(pj,pf,pc,base.lock,namespace_uid)
             ij,ic,inf=facade('inventory-journal',{})
-            owner.inventory=inventory.InventoryPhase(ij,inf,ic,base.lock,'ns',owner.package)
+            owner.inventory=inventory.InventoryPhase(ij,inf,ic,base.lock,namespace_uid,owner.package)
             cj,cc,cf=facade('catalog-journal',{})
-            owner.catalog=affected.FullCatalogPhase(cj,cf,cc,base.lock,'ns',owner.inventory)
+            owner.catalog=affected.FullCatalogPhase(cj,cf,cc,base.lock,namespace_uid,owner.inventory)
             nj,nc,nf=facade('census-journal',{})
-            owner.census=census.NamespaceCensus(nj,nf,nc,base.lock,'ns',owner.package,owner.inventory)
+            owner.census=census.NamespaceCensus(nj,nf,nc,base.lock,namespace_uid,owner.package,owner.inventory)
+            probe=lambda scope:{'scope':scope,'active_sessions':0,'active_transactions':0}
+            if before_cut is not None:admission,probe=before_cut(owner,admission,namespace_uid,base)
             wj,wc,wf=facade('cut-journal',{'writer_cut':admission})
-            cut=writer_cut.WriterCut(wj,wf,wc,base.lock,'ns',admission,
-                lambda scope:{'scope':scope,'active_sessions':0,'active_transactions':0})
+            cut=writer_cut.WriterCut(wj,wf,wc,base.lock,namespace_uid,admission,probe)
             with mock.patch.object(cut,'_patch',side_effect=wc.patch):cut.drain()
             phj,phc,phf=facade('physical-journal',{})
-            storage=physical.PhysicalPhase(phj,phf,phc,base.lock,'ns',owner.catalog,cut)
+            storage=physical.PhysicalPhase(phj,phf,phc,base.lock,namespace_uid,owner.catalog,cut)
             mj,mc,mf=facade('metadata-journal',{})
-            source=metadata.BackupMetadataPhase(mj,mf,mc,base.lock,'ns',owner.package,owner.inventory,owner.catalog,cut,metadata.canonical.ROOT)
+            source=metadata.BackupMetadataPhase(mj,mf,mc,base.lock,namespace_uid,owner.package,owner.inventory,owner.catalog,cut,metadata.canonical.ROOT)
+            if after_cut is not None:after_cut(owner,cut,storage,source,namespace_uid)
             phase=backup.BackupPhase(owner,cut,storage,source)
             yield SimpleNamespace(base=base,root=root,operation=op,owner=owner,cut=cut,storage=storage,source=source,phase=phase)
 
@@ -87,6 +107,120 @@ class RealPreflightTest(unittest.TestCase):
             self.assertFalse((op/'backup.key').exists())
             self.assertNotIn('full_cohort_backup_route',base.ledger.row)
             self.assertEqual(base.ledger.row['status'],'active')
+
+    def test_synthetic_observations_reach_one_shot_dispatch_and_reconcile(self):
+        """Real journals/capture/encryption; synthetic source, Kube, PG and failed GH."""
+        images={name:canonical.REGISTRY+'/'+name+'@sha256:'+'b'*64 for name in canonical.IMAGE_NAMES}
+        mapped={'voice-'+name+'/'+container:images[name] for name,container in update_images.SERVICES.items()}
+        engine={'namespace_uid':'00000000-0000-0000-0000-000000000001',
+                'pod_uid':'00000000-0000-0000-0000-000000000002',
+                'pvc_uid':'00000000-0000-0000-0000-000000000003',
+                'pv_uid':'00000000-0000-0000-0000-000000000004',
+                'container_id':'containerd://'+'c'*64,'restart_count':0}
+        start='2026-01-01T00:00:00Z'; catalog={'databases':{'postgres':1},'all_databases':{'postgres':1},
+            'excluded':{},'properties':{'postgres':{'allowconn':True}}}
+        state={};observations=[]
+        def configure(base):
+            base.context['images']=copy.deepcopy(mapped);base.fence.context['images']=copy.deepcopy(mapped)
+            base.ledger.row['images']=copy.deepcopy(mapped);base.card['candidate']['images']=copy.deepcopy(mapped)
+            base.lock['data']['resource_context']=json.dumps(base.context,sort_keys=True,separators=(',',':'))
+            second=base.sources[1];second['kind']='Deployment'
+            base.client.workloads.pop(('StatefulSet',second['metadata']['name']))
+            base.client.workloads[('Deployment',second['metadata']['name'])]=copy.deepcopy(second)
+            base.admission['controllers']=copy.deepcopy(base.sources)
+        def package_capture(token,sha,run,attempt,output):
+            data={'schema':'voice-canonical-application-package-v1','source_sha':sha,'verifier_sha':sha,'run_id':run,
+                  'run_attempt':attempt,'request':{'cycle':1},'images':images,'runtime_qualified':False,'deployment_performed':False}
+            output.write_text(json.dumps(data),encoding='utf8');output.chmod(0o600);return data
+        def before(owner,admission,namespace_uid,base):
+            state.update(owner=owner,base=base)
+            root=owner.journal.path.parent.parent
+            self.enterContext(mock.patch.object(package,'ROOT',root))
+            self.enterContext(mock.patch.object(package.package,'capture',side_effect=package_capture))
+            self.enterContext(mock.patch.object(package.package,'validate_images'))
+            self.enterContext(mock.patch.object(package.oci,'resolve',return_value={k:'sha256:'+'f'*64 for k in mapped}))
+            self.enterContext(mock.patch.object(package.source,'Registry'))
+            self.enterContext(mock.patch.object(package.package.source,'_head'))
+            self.enterContext(mock.patch.object(package.package.source,'_headers',return_value={}))
+            candidate=owner.package.run('fixture-token','fixture-actor')
+            pods={};controllers={};projection={};objects={}
+            for item in base.sources:
+                name=item['metadata']['name'].removeprefix('voice-');count=item['spec']['replicas']
+                controllers['voice-'+name]=copy.deepcopy(item);pods[name]=['pod-'+name+str(i) for i in range(count)]
+                children=[{'name':p,'uid':p,'replicaset_uid':'rs-'+name,'containers':[]} for p in pods[name]]
+                projection[name]={'uid':item['metadata']['uid'],'generation':item['metadata']['generation'],
+                    'spec_sha256':census.digest(item['spec']),'replicas':count,'pods':children}
+                objects[name]=[{'name':p,'uid':p,'owner_uid':'rs-'+name,'containers':[]} for p in pods[name]]
+            observed={'database_observations':{'workloads':{'fixture':[{'status':'observed','result':{
+                      'metadata':{'engine':engine,'session':{'server_start':start}}}}]}}}
+            self.enterContext(mock.patch.object(inventory,'inventory',return_value=(pods,controllers,projection)))
+            self.enterContext(mock.patch.object(inventory.metadata,'catalog_from_source',return_value={}))
+            self.enterContext(mock.patch.object(inventory.metadata,'inspect_all',return_value=observed['database_observations']))
+            self.enterContext(mock.patch.object(owner.inventory,'_admin_role',return_value='postgres'))
+            self.enterContext(mock.patch.object(census,'APP_NAMES',frozenset(('a','b'))))
+            owner.inventory.run('fixture-token')
+            def snapshot(token):
+                uids={};specs={};generations={};current={}
+                for item in base.sources:
+                    name=item['metadata']['name'].removeprefix('voice-');live=base.client.workloads[(item['kind'],item['metadata']['name'])]
+                    key=item['kind']+'/'+item['metadata']['name'];uids[key]=item['metadata']['uid']
+                    specs[key]=census.digest(live['spec']);generations[key]=live['metadata']['generation']
+                    current[key]=copy.deepcopy(objects[name]) if live['spec']['replicas'] else []
+                return {'package_sha256':candidate['package_sha256'],'namespace_uid':namespace_uid,
+                        'baseline':{'workload_uids':uids,'workload_spec_sha256':specs},
+                        'generations':generations,'application_pods':current}
+            self.enterContext(mock.patch.object(owner.census,'_snapshot',side_effect=snapshot))
+            owner.census.run('fixture-token')
+            self.enterContext(mock.patch.object(affected,'_full_catalog',return_value=catalog))
+            self.enterContext(mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:
+                {'scope':scope,'active_sessions':0,'active_transactions':0}))
+            receipt=owner.catalog.run('fixture-token')
+            admission['session_scope']={'engine':receipt['engine'],'server_start':start,'databases':['postgres'],'database_oids':{'postgres':1}}
+            return admission,affected.CatalogScopedProbe(owner.catalog,'fixture-token')
+        def after(owner,cut,storage,source,namespace_uid):
+            expected=engine|{'statefulset_uid':'statefulset','pv_name':'pv','container':'postgres',
+                 'mount_path':'/var/lib/postgresql/data','data_directory':'/var/lib/postgresql/data/pgdata','pg_major':16}
+            observed={'expected':expected,'engine':engine,'server_start':start,'database_oid':1,
+                      'system_identifier':'7','node':{'name':'node','uid':'uid'}}
+            self.enterContext(mock.patch.object(physical.PhysicalPhase,'_observe',return_value=observed))
+            self.enterContext(mock.patch.object(metadata.media_backup_upload_phase,'ROOT',owner.journal.path.parent.parent))
+            self.enterContext(mock.patch.object(metadata.schema,'kube_engine_snapshot',return_value=lambda:engine))
+            self.enterContext(mock.patch.object(metadata.unmanaged,'validate_source_catalog'))
+            self.enterContext(mock.patch.object(source,'_source_files',return_value={'files':{}}))
+            self.enterContext(mock.patch.object(source,'_read',side_effect=lambda db,*args:
+                {'roles':[],'memberships':[]} if db=='roles' else {'database_owner':'postgres'}))
+            def tool():source._tool_state({'status':'removed'});return 'd'*64
+            self.enterContext(mock.patch.object(source,'_tool_sha',side_effect=tool))
+            storage.run('fixture-token');source.run('fixture-token')
+        with self.phases(before_cut=before,after_cut=after,configure=configure) as work:
+            self.enterContext(mock.patch.object(cohort_upload_phase,'ROOT',work.root))
+            self.enterContext(mock.patch.object(backup.publish_candidate,'source_snapshot',return_value={}))
+            self.enterContext(mock.patch.object(cohort_dispatch,'_transport',side_effect=OSError('synthetic lost dispatch')))
+            mount='42 1 0:42 / /var/lib/postgresql/data rw - ext4 /dev/x rw\n'
+            def transport(command,**kwargs):
+                text=' '.join(command)
+                if 'get' in command:
+                    kind=command[command.index('get')+1];objects={
+                        'namespace':{'metadata':{'uid':engine['namespace_uid']}},
+                        'pod':{'metadata':{'uid':engine['pod_uid'],'namespace':'voice-dev','ownerReferences':[{'uid':'statefulset','kind':'StatefulSet','controller':True}]},
+                               'spec':{'containers':[{'name':'postgres','volumeMounts':[{'name':'data','mountPath':'/var/lib/postgresql/data'}]}],
+                                       'volumes':[{'name':'data','persistentVolumeClaim':{'claimName':'pgdata-voice-postgres-0'}}]},
+                               'status':{'containerStatuses':[{'name':'postgres','containerID':engine['container_id'],'restartCount':0,'ready':True,'state':{'running':{}}}]}},
+                        'pvc':{'metadata':{'uid':engine['pvc_uid'],'namespace':'voice-dev'},'spec':{'volumeName':'pv'},'status':{'phase':'Bound'}},
+                        'pv':{'metadata':{'uid':engine['pv_uid']},'spec':{'claimRef':{'uid':engine['pvc_uid'],'namespace':'voice-dev','name':'pgdata-voice-postgres-0'}}}}
+                    return SimpleNamespace(returncode=0,stdout=json.dumps(objects[kind]).encode())
+                if 'pg_postmaster_start_time' in text:
+                    return SimpleNamespace(returncode=0,stdout=json.dumps({'database':'postgres','database_oid':1,'role':'postgres','server_start':start}).encode())
+                if 'pg_read_file' in text:
+                    return SimpleNamespace(returncode=0,stdout=json.dumps({'data_directory':'/var/lib/postgresql/data/pgdata','version':'160014','mountinfo':mount}).encode())
+                if 'readlink' in text:
+                    return SimpleNamespace(returncode=0,stdout=('/var/lib/postgresql/data/pgdata\n/var/lib/postgresql/data\n'+mount).encode())
+                observations.append(command[-1]);kwargs['stdout'].write(b'synthetic-pg-dump');return SimpleNamespace(returncode=0,stdout=b'')
+            with mock.patch.object(capture.subprocess,'run',side_effect=transport):
+                with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
+                self.assertEqual(sorted(observations),['postgres','roles'])
+                with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
+            self.assertEqual(work.base.ledger.row['status'],'uncertain')
 
 
 if __name__=='__main__':unittest.main()
