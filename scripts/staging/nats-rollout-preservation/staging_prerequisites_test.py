@@ -296,7 +296,13 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_operator_trust_expansion_is_rejected_before_effects(self):
         self._cold_prepare('expanded-trust')
 
-    def _cold_prepare(self,fault=None):
+    def test_completed_realtime_addition_requires_exact_private_custody(self):
+        self._cold_prepare('rt-extension')
+
+    def test_existing_inventory_new_candidate_creates_only_release_policy(self):
+        self._cold_prepare('c2-new-candidate')
+
+    def _cold_prepare(self,fault=None,*,realtime_source=False):
         import os, shutil, subprocess, base64, yaml, uuid
         from contextlib import ExitStack
         import bridge_root, commands, compiler, runtime_stage, stage_runtime
@@ -315,6 +321,7 @@ class PrepareCompositionTests(unittest.TestCase):
                 'deploy/templates/provision-gameintegration-runtime-role-job.yaml','deploy/templates/migrate-game-integration-db-job.yaml',
                 'deploy/templates/verify-game-integration-db-job.yaml']
             relative += [str(path.relative_to(source_root)) for path in (source_root/'src/backend/migrations/game_integration_db').glob('*.sql')]
+            if realtime_source:relative += ['deploy/templates/migrate-realtime-db-job.yaml','src/backend/migrations/realtime_db/000001_admission.up.sql']
             for name in relative:
                 dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)
             helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
@@ -323,15 +330,26 @@ class PrepareCompositionTests(unittest.TestCase):
             resource_helper='nats-rollout-preservation/resource_claim.py'
             for path in (code/resource_helper,workspace/'scripts/staging'/resource_helper):
                 path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
-            manifest={name:hashlib.sha256(helper_raw).hexdigest() for name in (helper,resource_helper)};save(code/'capture-manifest.json',manifest)
+            manifest={name:hashlib.sha256(helper_raw).hexdigest() for name in (helper,resource_helper)}
+            if realtime_source:
+                name='nats-rollout-preservation/realtime_bootstrap.py'
+                raw=Path(__file__).with_name('realtime_bootstrap.py').read_bytes()
+                for path in (code/name,workspace/'scripts/staging'/name):
+                    path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o600)
+                manifest[name]=hashlib.sha256(raw).hexdigest()
+            save(code/'capture-manifest.json',manifest)
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
             approved['source_files']['scripts/staging/'+helper]=manifest[helper]
             approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
+            if realtime_source:
+                approved.update(schema='voice-source-authority-v1',verified=True)
+                approved['source_files']['scripts/staging/nats-rollout-preservation/realtime_bootstrap.py']=manifest['nats-rollout-preservation/realtime_bootstrap.py']
             approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
             execution={'fixture':'source selected by real bridge capture, modeled here'}
+            if realtime_source:execution['head_sha']=context['commit']
             source={'schema':'voice-staging-source-capture-v1','operation':operation,'context':context,'helper_sha256':session.helper,
                 'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
             save(installed/'source-authority'/(operation+'.json'),source);save(installed/'policy.json',{'unrelated':'preserve'})
@@ -481,7 +499,64 @@ class PrepareCompositionTests(unittest.TestCase):
             self.assertEqual(binding['target_sha256'],prereq.digest(captured))
             with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
             self.assertEqual(len(writes),15)
-            if fault=='c2':
+            if fault=='rt-extension':
+                # SQL execution is not claimed here: construct its protected
+                # COMPLETE records, then run the actual parent/RT validators.
+                import realtime_bootstrap as rt
+                before=copy.deepcopy(live[('secret','voice-app-secrets')]);password=b'r'*43
+                after=copy.deepcopy(before);after['metadata']['resourceVersion']='901'
+                after['data']['REALTIME_DATABASE_URL']=rt.secret_patch(before,password)[-1]['value']
+                pg={'statefulset':{'uid':'sts','resourceVersion':'1'},
+                    'pod':{'uid':'pgpod','resourceVersion':'1','container_id':'ctr','restart_count':0},
+                    'pvc':{'name':'pgdata-voice-postgres-0','uid':'pgpvc','resourceVersion':'1'},
+                    'pv':{'name':'pgpv','uid':'pgpv','resourceVersion':'1'},
+                    'service':{'uid':'pgsvc','resourceVersion':'1','cluster_ip':'10.0.0.1'},
+                    'endpoints':{'uid':'pgep','resourceVersion':'1','pod_ip':'10.0.0.2'},
+                    'slice':{'uid':'pgslice','resourceVersion':'1'},'system_identifier':'12345'}
+                view=rt._stage_view(stage)
+                plan={'schema':'voice-staging-realtime-bootstrap-v2','operation':session.operation,
+                    'context':session.context,'helper_sha256':session.helper,'source_sha':context['commit'],
+                    'source_files_sha256':prereq.digest(approved['source_files']),
+                    'source_authority_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution),
+                    'stage_sha256':prereq.digest(view),'credential_sha256':hashlib.sha256(password).hexdigest(),
+                    'actual_images':stage.old_images,'namespace_uid':ns,'postgres':pg,
+                    'secret':rt._secret_identity(before),'active_marker_sha256':prereq.digest(stage.marker),
+                    'prerequisites_sha256':prereq.digest(captured)}
+                role={'oid':13,'login':True,'superuser':False,'createdb':False,'createrole':False,
+                    'inherit':False,'replication':False,'bypassrls':False,'memberships':0,
+                    'connection_limit':-1,'valid_until':None,'config':None}
+                role_row={'role':role,'database':None};final={'role':role,'database':{'oid':29,'owner_oid':13}}
+                def done(old,request,value):return {'status':'DONE','before_sha256':prereq.digest(old),
+                    'request_sha256':prereq.digest(request),'readback':value}
+                steps={'role':done({'role':None,'database':None},{'kind':'role','credential_sha256':plan['credential_sha256']},role_row),
+                    'database':done(role_row,{'kind':'database','owner_oid':13},final),
+                    'secret':done(plan['secret'],{'kind':'secret','plan_sha256':prereq.digest(plan)},rt._secret_identity(after))}
+                rt_receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','plan_sha256':prereq.digest(plan),
+                    'steps_sha256':prereq.digest(steps),'role_oid':13,'database_oid':29,'owner_oid':13,
+                    'secret':rt._secret_identity(after),'migration_pass':False}
+                checkpoint={'schema':'voice-staging-realtime-bootstrap-checkpoint-v1','plan':plan,'status':'COMPLETE',
+                    'resource_fence':{**session.binding(),'target_sha256':prereq.digest(plan)},'steps':steps,'receipt':rt_receipt}
+                rtbase=installed/'realtime-bootstrap'/session.operation;rtbase.mkdir(parents=True,mode=0o700)
+                for name,value in [('checkpoint.json',checkpoint),('before-secret.json',before),
+                    ('authority.json',{'approved':approved,'execution':execution}),('stage.json',view)]:save(rtbase/name,value)
+                (rtbase/'credential').write_bytes(password);(rtbase/'credential').chmod(0o600)
+                live[('secret','voice-app-secrets')]=copy.deepcopy(after)
+                self.assertEqual(prereq.load_capture(session),captured)
+                checkpoint['status']='RUNNING';save(rtbase/'checkpoint.json',checkpoint)
+                with self.assertRaises(Exception):prereq.load_capture(session)
+                checkpoint['status']='COMPLETE';save(rtbase/'checkpoint.json',checkpoint)
+                for field in ('uid','resourceVersion'):
+                    altered=copy.deepcopy(before);altered['metadata'][field]='foreign';save(rtbase/'before-secret.json',altered)
+                    with self.assertRaises(Exception):prereq.load_capture(session)
+                save(rtbase/'before-secret.json',before)
+                live[('secret','voice-app-secrets')]['data']['UNRELATED']='Zm9yZWlnbg=='
+                with self.assertRaises(Exception):prereq.load_capture(session)
+                live[('secret','voice-app-secrets')]=copy.deepcopy(after)
+                self.assertEqual(prereq.load_capture(session),captured)
+                save(rtbase/'authority.json',{'approved':{**approved,'forged':True},'execution':execution})
+                with self.assertRaises(Exception):prereq.load_capture(session)
+                self.assertEqual(len(writes),15);return
+            if fault in ('c2','c2-new-candidate'):
                 # A durable rollout PASS is modeled here; this is not a claim
                 # that the transaction/runtime boundary ran in this fixture.
                 target={'tag':context['commit'],'images':context['images'],'manifest_sha256':'1'*64,
@@ -527,20 +602,65 @@ class PrepareCompositionTests(unittest.TestCase):
                     save(installed/'active-release.json',{**active,'target_sha256':'2'*64})
                     with self.assertRaisesRegex(prereq.Blocked,'active_changed'):prereq.load_preserved(session,'p3','Secret/voice-realtime-principal-signing')
                     save(installed/'active-release.json',active)
+                    card2['generation']+=1
+                    with self.assertRaises(Exception):prereq.load_preserved(session,'p3','Secret/voice-realtime-principal-signing')
+                    card2['generation']-=1
+                    self.assertEqual(prereq.load_capture(session),captured2)
+                    # Exercise the actual source comparator with a separately
+                    # hash-qualified changed publisher blob, not stale bytes.
+                    source_path=workspace2/'deploy/staging/services.yaml';source_bytes=source_path.read_bytes()
+                    changed=source_bytes.replace(b'nginx:stable-alpine',b'nginx:alpine')
+                    self.assertNotEqual(changed,source_bytes);source_path.write_bytes(changed)
+                    changed_approved=copy.deepcopy(approved)
+                    changed_approved['source_files']['deploy/staging/services.yaml']=hashlib.sha256(changed).hexdigest()
+                    prior,_,prior_rollout=prereq._historical(active['operation'],set())
+                    with self.assertRaisesRegex(prereq.Blocked,'preserved_source_changed'):
+                        prereq._qualified_preserved(session,'p3','Deployment/voice-p3-principal-jwks',prior,prior_rollout,changed_approved)
+                    source_path.write_bytes(source_bytes)
                 target2={**target,'prerequisites_sha256':prereq.digest(captured2)}
                 saved2={**saved,'operation':operation,'target':target2,'prerequisites':captured2,
                     'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target2)}}
                 rollout2=root/('rollout-'+operation);rollout2.mkdir(mode=0o700);save(rollout2/'checkpoint.json',saved2)
                 active2={**active,'operation':operation};save(installed/'active-release.json',active2)
                 self.assertEqual(prereq.validate_historical_capture(operation),captured2)
+                # Re-seal all local digest links around a foreign origin. The
+                # immediate protected predecessor must still reject transfer.
+                bbase=prereq._base(session);bstate=json.loads((bbase/'checkpoint.json').read_bytes())
+                bready=json.loads((bbase/'publisher-ready.json').read_bytes())
+                forged=copy.deepcopy(bstate);forged_ready=copy.deepcopy(bready)
+                forged['plan']['children']['p3']['preserved']['Secret/voice-realtime-principal-signing']['authority']={
+                    'operation':'f'*12,'receipt_sha256':'f'*64}
+                forged['initial_resource_fence']['target_sha256']=prereq.digest(forged['plan'])
+                forged['preflight_sha256']=prereq.digest(forged['plan'])
+                forged_ready['receipt']['plan_sha256']=prereq.digest(forged['plan']['children']['p3'])
+                forged['receipt']['children_receipts']['p3']=forged_ready['receipt']
+                forged['receipt']['plan_sha256']=prereq.digest(forged['plan'])
+                forged_capture={**captured2,'plan_sha256':prereq.digest(forged['plan']),'receipt_sha256':prereq.digest(forged['receipt'])}
+                forged_rollout=copy.deepcopy(saved2);forged_rollout['prerequisites']=forged_capture
+                forged_rollout['target']['prerequisites_sha256']=prereq.digest(forged_capture)
+                forged_rollout['resource_fence']['target_sha256']=prereq.digest(forged_rollout['target'])
+                save(bbase/'checkpoint.json',forged);save(bbase/'publisher-ready.json',forged_ready)
+                save(bbase/'capture.json',forged_capture);save(rollout2/'checkpoint.json',forged_rollout)
+                with self.assertRaisesRegex(prereq.Blocked,'history_predecessor_changed'):prereq.validate_historical_capture(operation)
+                save(bbase/'checkpoint.json',bstate);save(bbase/'publisher-ready.json',bready)
+                save(bbase/'capture.json',captured2);save(rollout2/'checkpoint.json',saved2)
                 operation='d'*12;workspace3=installed/'sources'/operation;shutil.copytree(workspace,workspace3)
-                context3={**context,'operation_id':'stg-run-19'};card3=resource_claim_test.card(context3);card3['observed']['images']=copy.deepcopy(stage.old_images)
+                context3={**context,'operation_id':'stg-run-19'};approved3=copy.deepcopy(approved)
+                if fault=='c2-new-candidate':context3['commit']='e'*40;approved3['source_sha']=context3['commit']
+                card3=resource_claim_test.card(context3);card3['observed']['images']=copy.deepcopy(stage.old_images)
                 session=resource_claim.Session(context3,operation,prereq.digest(manifest),lambda:copy.deepcopy(card3),resource_claim_test.MemoryJournal())
                 session.admit(start=True);actions.tt_session=session;stage.operation=operation
-                save(installed/'source-authority'/(operation+'.json'),{**source,'operation':operation,'context':context3})
+                save(installed/'source-authority'/(operation+'.json'),{**source,'operation':operation,'context':context3,'approved_sha256':prereq.digest(approved3)})
                 with resource_claim.command_scope(session.check):
-                    receipt3=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved,execution,workspace3)
-                    self.assertEqual(writes,[]);self.assertEqual(receipt3['actual_before'],receipt3['actual_after'])
+                    receipt3=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved3,execution,workspace3)
+                    self.assertEqual(len(writes),1 if fault=='c2-new-candidate' else 0)
+                    if fault=='c2-new-candidate':
+                        plan3=prereq._checkpoint(session)['plan'];descriptor3=policy.staging_descriptor(context3['commit'])
+                        self.assertEqual([row['id'] for row in plan3['children']['release_policy']['effects']],list(prereq.EFFECT_IDS['release_policy']))
+                        self.assertEqual(plan3['children']['p3']['effects'],[]);self.assertEqual(plan3['children']['gis_material']['effects'],[])
+                        self.assertIn(('configmap',descriptor3['policy_object']['metadata']['name']),live)
+                        self.assertEqual(json.loads((installed/'policy.json').read_bytes())['release_policy'],descriptor3)
+                    self.assertEqual(receipt3['actual_before'],receipt3['actual_after'])
                     self.assertEqual(prereq.require_child(session,'p3')['preserved']['Secret/voice-realtime-principal-signing']['authority']['operation'],'a'*12)
                     self.assertEqual(prereq._checkpoint(session)['plan']['previous_active_sha256'],prereq.digest(active2))
 

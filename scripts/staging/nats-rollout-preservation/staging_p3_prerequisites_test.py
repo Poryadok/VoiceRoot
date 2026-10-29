@@ -81,6 +81,15 @@ class StagingP3Contract(unittest.TestCase):
         trust=next(v for v in realtime['spec']['template']['spec']['volumes'] if v['name']=='p3-trust')
         trust['secret']['items'][0]['key']='wrong'
         with self.assertRaises(p3.PrerequisiteError): p3.source_consumers(bad)
+        for fault in ('targetPort','protocol','pod-label','deployment-selector'):
+            bad=copy.deepcopy(rows); service=next(x for x in bad if x['kind']=='Service' and x['metadata']['name']=='voice-chat')
+            deploy=next(x for x in bad if x['kind']=='Deployment' and x['metadata']['name']=='voice-chat')
+            port=next(p for p in service['spec']['ports'] if p['name']=='realtime-lifecycle')
+            if fault=='targetPort': port['targetPort']=1
+            if fault=='protocol': port['protocol']='UDP'
+            if fault=='pod-label': deploy['spec']['template']['metadata']['labels']['app']='foreign'
+            if fault=='deployment-selector': deploy['spec']['selector']['matchLabels']['app']='foreign'
+            with self.subTest(fault=fault),self.assertRaises(p3.PrerequisiteError): p3.source_consumers(bad)
 
     def test_private_semantic_retains_payload_and_ownership_controls(self):
         obj={'apiVersion':'v1','kind':'Secret','metadata':{'name':'voice-realtime-principal-signing',
