@@ -156,8 +156,9 @@ def drain(installed):
     for directory in (installed,installed/'inbox',installed/'processing',installed/'journal',installed/'responses'):
         row=directory.lstat()
         if not stat.S_ISDIR(row.st_mode) or row.st_uid!=0 or row.st_mode&0o002 or directory.name!='inbox' and row.st_mode&0o020:raise BridgeError('bridge_directory_untrusted')
-    with operation_lock():
+    with operation_lock() as lock_proof:
         actions=Actions(installed/'code')
+        actions._operation_lock=lock_proof
         inbox=installed/'inbox';names=sorted(inbox.iterdir())
         if len(names)>128:raise BridgeError('bridge_inbox_bound')
         pending=list((installed/'processing').iterdir())

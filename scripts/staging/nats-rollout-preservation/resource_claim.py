@@ -525,6 +525,11 @@ def root_scope(actions,request):
     c=validate(request.get('resource_context'))
     operation=request['nonce'][:12] if request['action'] in START_ACTIONS else request['operation']
     check=Check(c);session=Session(c,operation,digest(actions.binding),check,RootJournal(guard.ROOT))
+    proof=vars(actions).get('_operation_lock')
+    if proof is not None:
+        from root_main import OperationLockProof
+        if type(proof) is not OperationLockProof:raise RuntimeError('staging_operation_lock_invalid')
+        proof.check();session.operation_lock=proof
     if request['action']=='prepare-repair':
         session.repair_guard=lambda req,previous:repair_proof(actions,req,previous)
     actions.tt_session=session
