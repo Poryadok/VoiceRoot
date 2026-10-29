@@ -9,6 +9,8 @@ import selectors
 import os
 import time
 import ipaddress
+import pathlib
+import tempfile
 import cohort_readback as readback
 import story_media_backup_cohort_restore as restore
 import auth_live_migration_phase_eligibility as eligibility
@@ -20,6 +22,7 @@ import media_backup_phase
 import media_operation_journal
 import resource_fencing
 import full_cohort_package_phase as package_phase
+import writer_cut
 from frontend_runtime_executor import KubectlTransport
 
 
@@ -366,6 +369,87 @@ def _c1_resource_transition(phase, source_root, kind, target_state, identity=Non
     except BaseException:
         if started: readback._poison(phase)
         raise PhaseError('Auth resource transition unavailable; reconcile uncertain effects') from None
+
+
+def _cut_identity(phase, cut):
+    _phase_identity(phase); p=phase.phases
+    if (type(cut) is not writer_cut.WriterCut or cut.fence.context!=p.fence.context
+            or cut.namespace_uid!=p.namespace_uid or cut.lock['metadata']['uid']!=p.lock['metadata']['uid']):
+        raise ValueError()
+    _,a=p.fence.ledger.read(); _,b=cut.fence.ledger.read()
+    if not isinstance(a,tuple) or not isinstance(b,tuple) or len(a)!=2 or len(b)!=2 or not a[0] or a[0]!=b[0]: raise ValueError()
+
+
+def create_c1_objects(phase, cut, drain, source_root, actor, token):
+    """Create the fixed CM and Job once after the writer cut binds this phase."""
+    started=False
+    try:
+        _cut_identity(phase,cut); p=phase.phases
+        if cut.verify_migration_running() is False: raise ValueError()
+        readback._guard(phase,drain)
+        planned=verify_writer_successor(phase,source_root); cm,job,record=planned['configmap'],planned['job'],planned['record']
+        if record['configmap']['state']!='absent' or record['job']['state']!='absent': raise ValueError()
+        for kind,obj in (('configmap',cm),('job',job)):
+            actual=p.client.call('get',kind,obj['metadata']['name'],'--ignore-not-found=true','-o','json')
+            if actual: raise ValueError()
+        dry=p.client.call('create','--dry-run=server','-f','-','-o','json',body=cm)
+        _check_configmap(cm,dry)
+        if cut.verify_migration_running() is False: raise ValueError()
+        readback._guard(phase,drain)
+        _c1_resource_transition(phase,source_root,'configmap','pending'); started=True
+        if cut.verify_migration_running() is False: raise ValueError()
+        actual=p.client.call('create','-f','-','-o','json',body=cm)
+        identity=verify_writer_configmap(cm,actual)
+        _c1_resource_transition(phase,source_root,'configmap','owned',(identity['uid'],identity['resourceVersion']))
+        if cut.verify_migration_running() is False: raise ValueError()
+        inputs=p.journal.state['steps']['auth-live-c1-inputs']; binding,_=verified_sources(phase,inputs['metadata'],26)
+        auth=binding['sources']['auth_db']; guard=lambda:readback._guard(phase,drain)
+        candidate=eligibility.observe_candidate(phase,drain,source_root,actor,token)
+        if not _same_candidate(candidate,inputs['candidate']): raise ValueError()
+        secret=probe.verify_login(p.client,{'engine':auth['engine'],'database_oid':auth['database_oid'],
+                                  'server_start':auth['server_start']},guard)
+        if secret!=inputs['credential']: raise ValueError()
+        node=observe_node(p.client,auth['engine'],p.intent['auth_live_tool'],guard)
+        if node['name']!=inputs['node']['name'] or node['uid']!=inputs['node']['uid']: raise ValueError()
+        scope={'engine':auth['engine'],'server_start':auth['server_start'],'databases':binding['databases'],
+               'database_oids':{db:binding['sources'][db]['database_oid'] for db in binding['databases']}}
+        database=probe.inspect(scope,guard)
+        if database['history']!=inputs['history'] or database['sessions'] or database['prepared']!=0: raise ValueError()
+        dry=p.client.call('create','--dry-run=server','-f','-','-o','json',body=job)
+        _check_job(job,dry)
+        if cut.verify_migration_running() is False: raise ValueError()
+        readback._guard(phase,drain)
+        _c1_resource_transition(phase,source_root,'job','pending')
+        if cut.verify_migration_running() is False: raise ValueError()
+        readback._guard(phase,drain)
+        actual=p.client.call('create','-f','-','-o','json',body=job)
+        identity=verify_writer_job(job,actual)
+        result=_c1_resource_transition(phase,source_root,'job','owned',(identity['uid'],identity['resourceVersion']))
+        if cut.verify_migration_running() is False: raise ValueError()
+        return result
+    except BaseException:
+        if started: readback._poison(phase)
+        raise PhaseError('Auth Job creation unavailable; retain fence and reconcile any pending effect') from None
+
+
+def _inspect_c1_gate(phase, drain, source_root, source, engine):
+    """Query only the candidate-owned gate SQL and validate its pinned V31 bytes."""
+    gate=candidate_blob(source_root,source,'src/backend/auth/src/main/resources/roleidentityauthority/gate-catalog.sql')
+    v31=candidate_blob(source_root,source,'src/backend/auth/src/main/resources/db/migration/V31__auth_identity_ddl_barrier.sql')
+    if not isinstance(gate,bytes) or not isinstance(v31,bytes) or len(gate)>131072 or len(v31)>131072: raise ValueError()
+    guard=lambda:readback._guard(phase,drain)
+    snapshot=probe.metadata.kube_engine_snapshot(probe.metadata.linux_private_bytes,guard)
+    guard()
+    if snapshot()!=engine: raise ValueError()
+    result=probe._query(gate.decode('utf-8'))
+    guard()
+    if snapshot()!=engine: raise ValueError()
+    with tempfile.TemporaryDirectory() as tmp:
+        root=pathlib.Path(tmp); path=root/'src/backend/auth/src/main/resources/db/migration/V31__auth_identity_ddl_barrier.sql'
+        path.parent.mkdir(parents=True); path.write_bytes(v31)
+        runtime.validate_ddl_gate(result,root)
+    guard()
+    return result
 
 
 def verified_sources(phase, metadata, version):

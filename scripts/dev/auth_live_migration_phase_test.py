@@ -14,6 +14,72 @@ import auth_live_migration_phase_probe as probe
 
 
 class AuthMigrationContract(unittest.TestCase):
+    def test_gate_check_uses_both_immutable_candidate_blobs(self):
+        calls=[]
+        def blob(root,source,path):
+            calls.append(path)
+            return b'SELECT 1' if path.endswith('gate-catalog.sql') else b'v31-source'
+        def check(gate,root):
+            path=root/'src/backend/auth/src/main/resources/db/migration/V31__auth_identity_ddl_barrier.sql'
+            self.assertEqual(path.read_bytes(),b'v31-source')
+        with patch.object(live,'candidate_blob',side_effect=blob),patch.object(live.probe,'_query',return_value={'gate':True}), \
+             patch.object(live.probe.metadata,'kube_engine_snapshot',return_value=lambda:{'uid':'same'}), \
+             patch.object(live.readback,'_guard'),patch.object(live.runtime,'validate_ddl_gate',side_effect=check):
+            result=live._inspect_c1_gate(object(),lambda:None,'.','a'*40,{'uid':'same'})
+        self.assertEqual(result,{'gate':True}); self.assertEqual(len(calls),2)
+    def test_c1_does_not_create_when_source_object_already_exists(self):
+        operation='media-c1-'+'a'*32; cm,job=live.c1_objects(operation,{'V26__a.sql':b'SELECT 1;'},'node-one')
+        record={'configmap':{'state':'absent'},'job':{'state':'absent'}}
+        class Client:
+            def __init__(self): self.calls=[]
+            def call(self,*args,**kwargs): self.calls.append(args); return {'metadata':{'uid':'foreign'}}
+        client=Client(); phase=SimpleNamespace(phases=SimpleNamespace(client=client))
+        cut=SimpleNamespace(verify_migration_running=lambda:None)
+        with patch.object(live,'_cut_identity'),patch.object(live,'verify_writer_successor',
+             return_value={'configmap':cm,'job':job,'record':record}),patch.object(live.readback,'_guard'):
+            with self.assertRaises(live.PhaseError): live.create_c1_objects(phase,cut,lambda:None,'.','actor','token')
+        self.assertTrue(client.calls)
+        self.assertFalse(any(call[0]=='create' for call in client.calls))
+
+    def test_c1_creation_records_intent_before_post_and_never_retries_lost_reply(self):
+        operation='media-c1-'+'a'*32; cm,job=live.c1_objects(operation,{'V26__a.sql':b'SELECT 1;'},'node-one')
+        class Client:
+            def __init__(self,lose): self.calls=[]; self.lose=lose
+            def call(self,*args,**kwargs):
+                self.calls.append(args)
+                if args[0]=='get': return {}
+                obj=copy.deepcopy(kwargs['body'])
+                if '--dry-run=server' not in args:
+                    if obj['kind']=='Job' and self.lose: raise TimeoutError()
+                    obj['metadata'].update(uid=obj['kind']+'-uid',resourceVersion='1')
+                return obj
+        for lose in (False,True):
+            with self.subTest(lost_reply=lose):
+                record={'configmap':{'state':'absent'},'job':{'state':'absent'}}
+                client=Client(lose); inputs={'metadata':{},'candidate':{},'credential':{'uid':'s','resourceVersion':'1'},
+                    'node':{'name':'node-one','uid':'node-id'},'history':self.before}
+                p=SimpleNamespace(client=client,intent={'auth_live_tool':{}},journal=SimpleNamespace(state={'steps':{'auth-live-c1-inputs':inputs}}))
+                phase=SimpleNamespace(phases=p); cut=SimpleNamespace(verify_migration_running=lambda:None)
+                binding={'databases':['auth_db'],'sources':{'auth_db':{'engine':{},'database_oid':42,'server_start':'x'}}}
+                transitions=[]
+                def move(phase,root,kind,state,identity=None):
+                    transitions.append((kind,state)); record[kind]['state']=state
+                    if identity: record[kind].update(uid=identity[0],resourceVersion=identity[1])
+                    return copy.deepcopy(record)
+                with patch.object(live,'_cut_identity'),patch.object(live.readback,'_guard'),patch.object(live.readback,'_poison') as poison, \
+                     patch.object(live,'verify_writer_successor',side_effect=lambda *args:{'configmap':cm,'job':job,'record':copy.deepcopy(record)}), \
+                     patch.object(live,'_c1_resource_transition',side_effect=move),patch.object(live,'verified_sources',return_value=(binding,{})), \
+                     patch.object(live.eligibility,'observe_candidate',return_value={}),patch.object(live.probe,'verify_login',return_value=inputs['credential']), \
+                     patch.object(live,'observe_node',return_value=inputs['node']),patch.object(live.probe,'inspect',return_value={'history':self.before,'sessions':[],'prepared':0}):
+                    if lose:
+                        with self.assertRaises(live.PhaseError): live.create_c1_objects(phase,cut,lambda:None,'.','actor','token')
+                        poison.assert_called_once_with(phase)
+                        self.assertEqual(record['job']['state'],'pending')
+                    else:
+                        result=live.create_c1_objects(phase,cut,lambda:None,'.','actor','token')
+                        self.assertEqual(result['job']['state'],'owned')
+                        self.assertEqual(transitions,[('configmap','pending'),('configmap','owned'),('job','pending'),('job','owned')])
+                    self.assertEqual(sum(call[0]=='create' and '--dry-run=server' not in call for call in client.calls),2)
     def test_writer_job_and_pod_are_bound_to_exact_template_and_owner(self):
         operation='media-c1-'+'a'*32
         _,authored=live.c1_objects(operation,{'V26__a.sql':b'SELECT 1;'},'node-one')
