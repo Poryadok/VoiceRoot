@@ -11,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"voice/backend/space/internal/store"
 )
 
 // A private PostgreSQL server and pinned PG16 dump/restore executables are
@@ -130,11 +133,55 @@ func TestLegacy24LogicalRestoreCanonicalEquivalence(t *testing.T) {
 	require.NoError(t, err)
 	_, err = inspectLegacy25Catalog(ctx, conn)
 	require.NoError(t, err)
+	_, err = verifyLegacy24Intermediate(ctx, conn, cloned)
+	require.NoError(t, err)
 	require.NoError(t, conn.Close(ctx))
 	roundtrip("space_original25")
 	conn, err = pgx.Connect(ctx, target.String())
 	require.NoError(t, err)
-	defer conn.Close(context.Background())
 	_, err = inspectLegacy25Catalog(ctx, conn)
 	require.NoError(t, err, "restored clean25 must qualify")
+	require.NoError(t, conn.Close(ctx))
+	// Continue the actual original24 clone, whose OID is bound to `cloned`.
+	_, err = admin.Exec(ctx, `ALTER DATABASE space_db RENAME TO space_restored25`)
+	require.NoError(t, err)
+	owned["space_restored25"] = owned["space_db"]
+	delete(owned, "space_db")
+	_, err = admin.Exec(ctx, `ALTER DATABASE space_original25 RENAME TO space_db`)
+	require.NoError(t, err)
+	owned["space_db"] = owned["space_original25"]
+	delete(owned, "space_original25")
+	migrate("44")
+	pool, err := pgxpool.New(ctx, target.String())
+	require.NoError(t, err)
+	defer pool.Close()
+	s := &store.SpaceStore{Pool: pool}
+	f44, err := s.InspectNativeInstallerSource(ctx, 44)
+	require.NoError(t, err, "restored source must qualify at native44")
+	migrate("45")
+	t45, err := s.TransitionNativeMembershipCatalog45(ctx)
+	require.NoError(t, err)
+	require.True(t, matchesTransition(f44, t45))
+	f45, err := s.InspectNativeInstallerSource(ctx, 45)
+	require.NoError(t, err)
+	migrate("50")
+	t50, err := s.TransitionNativeMembershipCatalog50(ctx)
+	require.NoError(t, err)
+	require.True(t, matchesTransition(f45, (*store.NativeMembershipCatalog45Receipt)(t50)))
+	f50, err := s.InspectNativeInstallerSource(ctx, 50)
+	require.NoError(t, err)
+	t51, err := runNativeCatalog51(ctx, s, f50, "../../../migrations/space_db", func(context.Context) error { return nil })
+	require.NoError(t, err)
+	require.True(t, matchesTransition(f50, &t51.NativeMembershipCatalog45Receipt))
+	f51, err := s.InspectNativeInstallerSource(ctx, 51)
+	require.NoError(t, err)
+	require.Equal(t, t51.NewSealSHA256, f51.SealSHA256)
+	for _, id := range cloned.Spaces {
+		require.NoError(t, s.InitializeNativeMembership(ctx, uuid.MustParse(id)))
+	}
+	conn, err = pgx.Connect(ctx, target.String())
+	require.NoError(t, err)
+	_, err = verifyLegacy24Preserved(ctx, conn, cloned)
+	require.NoError(t, err, "restored original rows and rights survive native initialization")
+	require.NoError(t, conn.Close(ctx))
 }
