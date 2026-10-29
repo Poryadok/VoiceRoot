@@ -244,3 +244,25 @@ def verify_successor(phase,token,creator_session):
         return copy.deepcopy(receipt)
     except metadata.GuardLost: raise
     except BaseException: raise TargetTrustError('target Auth trust successor unavailable') from None
+
+
+def verify_fixed9_successor(phase,token,creator,space,role_phase):
+    """Recheck P1 trust after the exact Creator, Space and Role transitions."""
+    import space_creator_runtime_profile_fixed9_successor as successor
+    try:
+        if type(phase) is not TargetTrustPhase: raise ValueError()
+        phase._guard(); row,rev=phase._ledger(); local=copy.deepcopy(phase.journal.state['steps'][STEP]); receipt=local['receipt']
+        marker={k:v for k,v in local.items() if k!='receipt'}
+        if marker!=phase.record or marker.get('status')!='done' or marker.get('receipt_sha256')!=writer_cut.digest(receipt) or row.get(LEDGER)!=marker: raise ValueError()
+        roots=jdk.verify_completed(phase.jdk,token); original=successor.verify(phase,token,creator,space,role_phase)
+        trust_id,_=phase._secret('voice-media-jvm-trust','truststore.p12'); ca_id,ca=phase._secret('voice-media-ca','ca.crt')
+        if (writer_cut.digest(roots)!=receipt['jdk_receipt_sha256'] or writer_cut.digest(original)!=receipt['preflight_receipt_sha256'] or
+                receipt['trust_secret']!=trust_id or receipt['media_ca']!=original['ca'] or
+                original['ca']!={'uid':ca_id['uid'],'resourceVersion':ca_id['resourceVersion'],'der_sha256':hashlib.sha256(material._cert_der(ca)).hexdigest()}): raise ValueError()
+        phase._guard(); after,end=phase._ledger()
+        if (after,end)!=(row,rev) or successor.verify(phase,token,creator,space,role_phase)!=original: raise ValueError()
+        phase._locals(after,receipt['jdk_receipt_sha256'],receipt['preflight_receipt_sha256'])
+        if phase.record!=marker or phase.journal.state['steps'].get(STEP)!=local: raise metadata.GuardLost('target trust record changed')
+        return copy.deepcopy(receipt)
+    except metadata.GuardLost: raise
+    except BaseException: raise TargetTrustError('fixed peer target trust successor unavailable') from None

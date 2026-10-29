@@ -93,6 +93,22 @@ class TargetTrustTest(unittest.TestCase):
             row[pre.ledger]={'status':'tampered'}
             with self.assertRaises(target.metadata.GuardLost):phase._dependencies('token')
 
+    def test_fixed9_successor_keeps_exact_original_ca_and_jdk(self):
+        import space_creator_runtime_profile_fixed9_successor as successor
+        phase=target.TargetTrustPhase.__new__(target.TargetTrustPhase); phase._guard=mock.Mock(); phase._locals=mock.Mock(); phase.jdk=object()
+        roots={'roots':'safe'}; original={'ca':{'uid':'ca','resourceVersion':'1','der_sha256':hashlib.sha256(b'der').hexdigest()}}
+        receipt={'jdk_receipt_sha256':target.writer_cut.digest(roots),'preflight_receipt_sha256':target.writer_cut.digest(original),
+                 'trust_secret':{'uid':'trust','resourceVersion':'1'},'media_ca':original['ca']}
+        marker={'status':'done','receipt_sha256':target.writer_cut.digest(receipt)}; phase.record=copy.deepcopy(marker)
+        phase.journal=SimpleNamespace(state={'steps':{target.STEP:marker|{'receipt':receipt}}})
+        row={target.LEDGER:marker}; phase._ledger=mock.Mock(return_value=(row,('uid','rv')))
+        phase._secret=mock.Mock(side_effect=lambda name,key:({'uid':'ca','resourceVersion':'1'},b'ca') if name=='voice-media-ca' else ({'uid':'trust','resourceVersion':'1'},b'store'))
+        with mock.patch.object(jdk,'verify_completed',return_value=roots), mock.patch.object(successor,'verify',return_value=original), \
+             mock.patch.object(target.material,'_cert_der',return_value=b'der'):
+            self.assertEqual(target.verify_fixed9_successor(phase,'token',object(),object(),object()),receipt)
+            phase._secret.side_effect=lambda name,key:({'uid':'ca','resourceVersion':'2'},b'ca') if name=='voice-media-ca' else ({'uid':'trust','resourceVersion':'1'},b'store')
+            with self.assertRaises(target.TargetTrustError):target.verify_fixed9_successor(phase,'token',object(),object(),object())
+
     def test_phase_rejects_identity_drift_and_redacts_keystore(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp); context={'project':'voice','resource':'DEV','actor':'scheduled_devops',
