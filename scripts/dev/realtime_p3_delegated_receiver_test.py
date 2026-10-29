@@ -46,7 +46,7 @@ class RequestTest(unittest.TestCase):
         session._delegated_cut=None; session.journal=object()
         cancelled=threading.Event(); release=threading.Event(); finished=threading.Event()
         class Handle:
-            def run(self):cancelled.wait(5); release.wait(5); finished.set()
+            def run(self):cancelled.wait(5); release.wait(20); finished.set()
             def cancel(self):cancelled.set()
         authority=SimpleNamespace(RealtimeP3Capability=Capability,verify_current=lambda *_:None)
         client=SimpleNamespace(new_issue_trigger=lambda *_:Handle())
@@ -60,7 +60,7 @@ class RequestTest(unittest.TestCase):
                 except receiver.creation.CreateError:outcome.append('hold')
             caller=threading.Thread(target=call); caller.start()
             try:
-                self.assertTrue(cancelled.wait(5)); self.assertTrue(caller.is_alive()); self.assertEqual(outcome,[])
+                self.assertTrue(cancelled.wait(5)); caller.join(5.5); self.assertTrue(caller.is_alive()); self.assertEqual(outcome,[])
             finally:release.set(); caller.join(5)
         self.assertFalse(caller.is_alive()); self.assertTrue(finished.is_set()); self.assertEqual(outcome,['hold'])
 

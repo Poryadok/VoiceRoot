@@ -103,6 +103,7 @@ class Session:
         self._local()
         if cut_snapshot is not None and (self._delegated_cut is not cut or
                 self._delegated_refs is None or any(a is not b for a,b in zip(self._delegated_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger))) or
+                cut.fence.context!=self.fence.context or cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid or
                 (cut.journal.intent,cut.journal.state)!=cut_snapshot or
                 native.SpaceNativeToolPhase._custody(cut.journal)!=cut_custody): raise ValueError()
 

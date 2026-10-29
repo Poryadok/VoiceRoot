@@ -168,7 +168,7 @@ class PhaseTest(unittest.TestCase):
         root=self.root/'operations'; root.mkdir(mode=0o700); (root/self.phase.suffix).mkdir(mode=0o700)
         cancelled=threading.Event(); release=threading.Event(); finished=threading.Event()
         class Handle:
-            def run(self):cancelled.wait(5); release.wait(5); finished.set()
+            def run(self):cancelled.wait(5); release.wait(20); finished.set()
             def cancel(self):cancelled.set()
         outcome=[]
         def call():
@@ -179,7 +179,7 @@ class PhaseTest(unittest.TestCase):
              patch.object(self.phase,'_current',side_effect=[None,ValueError('lost')]):
             caller=threading.Thread(target=call); caller.start()
             try:
-                self.assertTrue(cancelled.wait(5)); self.assertTrue(caller.is_alive()); self.assertEqual(outcome,[])
+                self.assertTrue(cancelled.wait(5)); caller.join(5.5); self.assertTrue(caller.is_alive()); self.assertEqual(outcome,[])
             finally:release.set(); caller.join(5); self.phase.close()
         self.assertFalse(caller.is_alive()); self.assertTrue(finished.is_set()); self.assertEqual(outcome,['hold'])
 
