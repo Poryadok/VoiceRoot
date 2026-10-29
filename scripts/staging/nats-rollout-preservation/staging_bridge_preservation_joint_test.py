@@ -22,10 +22,60 @@ import resource_claim
 from resource_claim_test import card, context
 import staging_prerequisites
 import root_composition_fixture
+import runtime_stage
+import stage_runtime
 
 
 @unittest.skipUnless(os.name == 'posix' and getattr(os, 'geteuid', lambda: -1)() == 0, 'root Linux fixture required')
 class BridgePreservationAdmission(unittest.TestCase):
+    def test_actual_stage_capture_with_owned_synthetic_cluster(self):
+        """Build the same read-only stage seam without replacing capture/preflight."""
+        namespace='00000000-0000-0000-0000-000000000001'
+        claim='00000000-0000-0000-0000-000000000002'
+        pv='00000000-0000-0000-0000-000000000003'
+        names=[stage_runtime.HUB,'voice-gateway',*('voice-'+name for name in stage_runtime.LEAVES),
+               'voice-web','voice-admin','voice-developer-portal']
+        rows={}; images=[]; replicasets={}
+        for index,name in enumerate(names,1):
+            uid='deployment-'+str(index);rsuid='rs-'+str(index);container=name.removeprefix('voice-')
+            image=(stage_runtime.NATS_IMAGE if name==stage_runtime.HUB else 'fixture.invalid/'+container+':old')
+            spec={'containers':[{'name':container,'image':image}]}
+            if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
+            template={'metadata':{'labels':{'app':name}},'spec':spec}
+            rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
+                        'spec':{'replicas':1,'template':template}}
+            rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
+                'ownerReferences':[{'kind':'Deployment','uid':uid}]},'spec':{'template':copy.deepcopy(template)}}
+            replicasets[rs['metadata']['name']]=rs;images.append(copy.deepcopy(rs))
+            images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
+                'status':{'phase':'Running','containerStatuses':[{'name':container,'ready':True,
+                    'imageID':'fixture.invalid/'+container+'@sha256:'+'a'*64}]}})
+        fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace}},
+               ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
+                    'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}},
+               ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
+               ('pv','pv'):{'metadata':{'uid':pv},'spec':{'claimRef':{'uid':claim},
+                    'local':{'path':'/var/lib/rancher/k3s/storage/pvc-'+claim+'_voice-staging_fixture'},
+                    'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname',
+                        'operator':'In','values':['pmdebook']}]}]}}}},
+               ('service','voice-nats'):{'metadata':{'uid':'service','resourceVersion':'1'}}}
+        class Cluster:
+            def get(self,kind,name):
+                if kind=='deployment':return copy.deepcopy(rows[name])
+                if kind=='replicaset':return copy.deepcopy(replicasets[name])
+                return copy.deepcopy(fixed[(kind,name)])
+            def run(self,args,**kwargs):
+                if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
+                if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
+                raise AssertionError('unexpected external cluster request')
+        events=[]
+        result=runtime_stage.RolloutStage.capture(Cluster(),'a'*12,events.append,
+            ['voice-web','voice-admin','voice-developer-portal'])
+        self.assertEqual(set(result.snapshots),set(names))
+        self.assertEqual(len(result.old_images),len(names)-1)
+        self.assertEqual(result.expected['source_claim_uid'],claim)
+        self.assertTrue(any(row['kind']=='rollout_original_capture' for row in events))
+
     def test_producer_imports_from_captured_helper_directory(self):
         source = Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory(dir='/root') as directory:
