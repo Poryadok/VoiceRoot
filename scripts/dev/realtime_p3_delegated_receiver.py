@@ -81,7 +81,7 @@ def receive(session,capability,token):
         def invoke():
             try:handle.run(); result.append(True)
             except BaseException:result.append(False)
-        worker=threading.Thread(target=invoke,daemon=True); worker.start(); deadline=time.monotonic()+300
+        worker=threading.Thread(target=invoke); worker.start(); deadline=time.monotonic()+300
         session.listener.settimeout(300); connection,_=session.listener.accept(); connection.settimeout(30)
         pid,uid,_=struct.unpack('3i',connection.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
         if uid!=0 or pid<=0: raise ValueError()
@@ -135,7 +135,7 @@ def receive(session,capability,token):
         if worker is not None and worker.is_alive():
             try:handle.cancel()
             except BaseException:pass
-            worker.join(timeout=5)
+            while worker.is_alive():worker.join(timeout=5)
         for fd in fds:
             try:os.close(fd)
             except OSError:pass
