@@ -72,6 +72,14 @@ on:
       - scripts/dev/full_cohort_pg_physical_identity_test.py
       - scripts/dev/full_cohort_backup_metadata.py
       - scripts/dev/full_cohort_backup_metadata_test.py
+      - scripts/dev/full_cohort_go_migration.py
+      - scripts/dev/full_cohort_go_migration_plan.py
+      - scripts/dev/full_cohort_go_migration_plan_test.py
+      - scripts/dev/full_cohort_go_migration_test.py
+      - scripts/dev/full_cohort_go_migration_joint_test.py
+      - scripts/dev/full_cohort_go_migration_cut_test.py
+      - scripts/dev/cohort_go_role_qualification_test.py
+      - scripts/dev/cohort_go_role_qualification_integration_test.py
       - scripts/dev/full_cohort_config_custody.py
       - scripts/dev/full_cohort_config_custody_test.py
       - scripts/dev/cohort_unmanaged_actual.py
@@ -196,6 +204,11 @@ jobs:
           python -B scripts/dev/full_cohort_supervisor_test.py
           python -B scripts/dev/full_cohort_pg_physical_identity_test.py
           python -B scripts/dev/full_cohort_backup_metadata_test.py
+          python -B scripts/dev/full_cohort_go_migration_plan_test.py
+          python -B scripts/dev/full_cohort_go_migration_test.py
+          python -B scripts/dev/full_cohort_go_migration_joint_test.py
+          python -B scripts/dev/full_cohort_go_migration_cut_test.py
+          python -B scripts/dev/cohort_go_role_qualification_test.py
           python -B scripts/dev/full_cohort_config_custody_test.py
           python -B scripts/dev/cohort_unmanaged_actual_test.py
           python -B scripts/dev/full_cohort_inventory_phase_test.py
