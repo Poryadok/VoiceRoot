@@ -67,6 +67,8 @@ on:
       - scripts/dev/full_cohort_inventory_phase_test.py
       - scripts/dev/full_cohort_activation_plan.py
       - scripts/dev/full_cohort_activation_plan_test.py
+      - scripts/dev/full_cohort_config_custody.py
+      - scripts/dev/full_cohort_config_custody_test.py
       - scripts/dev/full_cohort_predecessor_phase.py
       - scripts/dev/full_cohort_predecessor_phase_test.py
       - scripts/dev/realtime_secret_phase.py
@@ -168,6 +170,7 @@ jobs:
           python -B scripts/dev/full_cohort_package_phase_test.py
           python -B scripts/dev/full_cohort_inventory_phase_test.py
           python -B scripts/dev/full_cohort_activation_plan_test.py
+          python -B scripts/dev/full_cohort_config_custody_test.py
           python -B scripts/dev/full_cohort_predecessor_phase_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
           python -B scripts/dev/realtime_secret_provision_test.py
