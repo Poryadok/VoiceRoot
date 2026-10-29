@@ -1960,6 +1960,10 @@ jobs:
         working-directory: scripts/dev
         run: |
           python -B -c "import sys, unittest; names=['full_cohort_supervisor_test','space_creator_runtime_profile_config_test','space_creator_runtime_profile_jdk_test','space_creator_runtime_profile_target_trust_test','realtime_config_transition_space_service_test','space_creator_peer_target_test','space_creator_peer_role_target_test','space_creator_peer_phase_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 67)"
+      - name: Verify Creator target and trust preflight
+        working-directory: scripts/dev
+        run: |
+          python -B -c "import sys, unittest; names=['space_creator_runtime_profile_target_plan_test','space_creator_runtime_profile_trust_effect_test','space_creator_runtime_profile_trust_effect_preflight_test','space_creator_runtime_profile_trust_effect_race_test','space_creator_runtime_profile_trust_effect_peer_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 42)"
       - name: Prepare pinned test images
         run: |
           docker pull postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6
