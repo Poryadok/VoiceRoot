@@ -278,6 +278,8 @@ class Actions:
         return {**binding,'receipt':copy.deepcopy(receipt)}
 
     def _prepare(self,request,previous=None,repair=None):
+        import migrations
+        migrations.require_preserving_admission(request.get('mode'))
         if repair is None:self._idle()
         else:self._idle(admitted_parent=repair['operation'])
         operation=request['nonce'][:12]

@@ -567,6 +567,7 @@ def rollback_gis_first_install(kube,base,state,journal):
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
+    migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
     if state.get('gis_first_install') is not None:
         import gis_first_install as gis
         gis.validate_normalized_binding(state['target'],state['gis_first_install'])
