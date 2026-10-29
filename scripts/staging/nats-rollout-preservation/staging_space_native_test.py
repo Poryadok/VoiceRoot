@@ -71,7 +71,8 @@ class InspectSourceTest(unittest.TestCase):
         defaulted=copy.deepcopy(wanted)
         defaulted['containers'][0].update(resources={},terminationMessagePath='/dev/termination-log',terminationMessagePolicy='File')
         native._check_template(defaulted,wanted)
-        for field,value in [('initContainers',[{'name':'foreign'}]),('hostNetwork',True),('volumes',[{'name':'foreign'}])]:
+        for field,value in [('initContainers',[{'name':'foreign'}]),('hostNetwork',True),('volumes',[{'name':'foreign'}]),
+                            ('dnsConfig',{'nameservers':['192.0.2.1']})]:
             changed=copy.deepcopy(wanted);changed[field]=value
             with self.subTest(field=field),self.assertRaisesRegex(native.Blocked,'space_inspect_job_invalid'):
                 native._check_template(changed,wanted)

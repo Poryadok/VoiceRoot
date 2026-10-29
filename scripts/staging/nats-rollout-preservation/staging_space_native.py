@@ -94,8 +94,10 @@ def _check_template(actual,wanted):
         if container.get('resources')=={}:container.pop('resources')
     if any(actual.get(k)!=v for k,v in wanted.items()):
         raise Blocked('space_inspect_job_invalid')
-    if any(actual.get(k) for k in ('initContainers','ephemeralContainers','volumes','hostNetwork',
-                                   'hostPID','hostIPC','shareProcessNamespace')):
+    defaults={'dnsPolicy':'ClusterFirst','schedulerName':'default-scheduler','terminationGracePeriodSeconds':30,
+              'serviceAccountName':'default','serviceAccount':'default','enableServiceLinks':True,
+              'priority':0,'preemptionPolicy':'PreemptLowerPriority'}
+    if any(key not in wanted and (key not in defaults or value!=defaults[key]) for key,value in actual.items()):
         raise Blocked('space_inspect_job_invalid')
 
 
