@@ -83,6 +83,7 @@ class WriterCut:
         self.migration = None
         self.migration_history = []
         self.resume_inventory = None
+        self.auth_successor = None
         self._identity()
 
     def _identity(self):
@@ -147,7 +148,7 @@ class WriterCut:
             if not (name.startswith('writer-drain-') or name.startswith('writer-resume-') or
                     name in ('writer-cut-drained', 'writer-cut-config-plan') or
                     name.startswith('writer-cut-config-successor-') or name.startswith('writer-cut-migration-') or
-                    name == 'writer-cut-resume-inventory'):
+                    name in ('writer-cut-resume-inventory', 'writer-cut-auth-successor')):
                 continue
             if name == exclude: continue
             if (not isinstance(entry, dict) or entry.get('status') not in ('pending', 'done') or
@@ -280,6 +281,8 @@ class WriterCut:
                     if receipt['attributed_sessions']: raise RecoveryRequired('cleaned migration sessions remain')
         if self._has_resumed_effect() and (self.migration is not None or self.migration_history):
             self._resumed_sessions()
+        if self.auth_successor is not None:
+            self._recheck_auth_successor()
 
     def _patch(self, kind, name, patch):
         filename = '.writer-patch-' + secrets.token_hex(16)
@@ -319,6 +322,7 @@ class WriterCut:
         if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
                 not self._config_effects_match(row) or
                 (phase == 'resume' and not self._resume_inventory_matches(row)) or
+                (phase == 'resume' and not self._auth_successor_matches(row)) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed before submission')
         result = self._patch(kind, meta['name'], patch)
@@ -627,6 +631,51 @@ class WriterCut:
         self._guard()
         return {'operation_id': self.fence.context['operation_id'], 'namespace_uid': self.namespace_uid,
                 'invocation': self.invocation, 'controllers': result}
+
+    def bind_auth_successor(self, phase, source_root):
+        """Pin the source-owned completed Auth proof for C1 or C2."""
+        import auth_live_migration_phase
+        try:
+            if self.auth_successor is not None or not self.drained or any(
+                    k.startswith('writer-resume-') for k in self.journal.state['steps']):
+                raise RecoveryRequired('Auth successor binding unavailable')
+            self._guard()
+            proof = auth_live_migration_phase.verify_completed(phase, self, source_root)
+            row, _ = self.fence.ledger.read()
+            markers = {k: copy.deepcopy(row.get(k)) for k in ('auth_live_c1', 'auth_live_c2', 'cohort_readback',
+                'cohort_restore', 'cohort_restore_resources', 'cohort_auth_flyway', 'full_cohort_package')}
+            steps = copy.deepcopy(phase.phases.journal.state['steps'])
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                       'receipt_sha256': digest(proof)}
+            record = self._reserve('writer-cut-auth-successor', details)
+            self._complete('writer-cut-auth-successor', record, details)
+            self.auth_successor = {'phase': phase, 'root': source_root, 'receipt_sha256': digest(proof),
+                                   'proof': copy.deepcopy(proof), 'steps': steps, 'markers': markers}
+            self._recheck_auth_successor()
+            return copy.deepcopy(details)
+        except BaseException:
+            self._uncertain()
+
+    def _auth_successor_matches(self, row):
+        if self.auth_successor is None:
+            return True
+        binding = self.auth_successor
+        journal = binding['phase'].phases.journal
+        return (not journal.poisoned and journal.dirfd is not None and journal.lockfd is not None and
+                digest(binding['proof']) == binding['receipt_sha256'] and
+                journal.state['steps'] == binding['steps'] and
+                all(row.get(k) == value for k, value in binding['markers'].items()))
+
+    def _recheck_auth_successor(self):
+        import auth_live_migration_phase
+        binding = self.auth_successor
+        row, _ = self.fence.ledger.read()
+        if not self._auth_successor_matches(row): raise RecoveryRequired('Auth successor custody changed')
+        proof = auth_live_migration_phase.verify_completed(binding['phase'], self, binding['root'])
+        if digest(proof) != binding['receipt_sha256']:
+            raise RecoveryRequired('Auth successor proof changed')
+        row, _ = self.fence.ledger.read()
+        if not self._auth_successor_matches(row): raise RecoveryRequired('Auth successor changed during check')
 
     def bind_resume_inventory(self, inventory_phase, token):
         """Bind authenticated pre-cut routes without persisting the token."""
@@ -942,8 +991,8 @@ class WriterCut:
             if (self.migration is not None or self.migration_history) and self.resume_inventory is None:
                 raise RecoveryRequired('qualified resume inventory required')
             if self.migration is not None:
-                self.verify_migration_running()
                 if not self.migration['finished']: raise RecoveryRequired('migration is not terminal')
+                self._migration_resume_guard()
             self._guard()
             self._guards()
             self._recheck_config_successors()

@@ -1,6 +1,7 @@
 import copy
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import frontend_runtime_executor
@@ -151,6 +152,18 @@ class Composition(unittest.TestCase):
                 cut.bind_config_plan(config_journal)
                 for service in producer.SERVICES:
                     producer.apply_development(cut, config_journal, service)
+            import auth_live_migration_phase
+            auth_journal = journal.Journal(Path(self.temp.name) / 'fake-auth-qualification', {
+                'resource_context': self.context, 'namespace_uid': 'ns'})
+            self.addCleanup(auth_journal.close)
+            auth_target = copy.deepcopy(self.client.deployments['voice-auth']['spec'])
+            auth_target['template']['spec']['containers'][0]['image'] = self.context['images']['voice-auth/auth']
+            auth_proof = {'candidate': {'target_spec_sha256': cohort.digest(auth_target),
+                'image': self.context['images']['voice-auth/auth'],
+                'platform_digest': self.intent['full_cohort']['platform_digests']['voice-auth/auth']}}
+            qualified = mock.patch.object(auth_live_migration_phase, 'verify_completed', return_value=auth_proof)
+            qualified.start(); self.addCleanup(qualified.stop)
+            cut.bind_auth_successor(SimpleNamespace(phases=SimpleNamespace(journal=auth_journal)), '.')
             with mock.patch.object(cut, 'current_cut_proof', wraps=cut.current_cut_proof) as proof:
                 capture = cohort.prepare_cut(cut)
                 self.assertEqual(proof.call_count, 1)
