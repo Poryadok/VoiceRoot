@@ -14,9 +14,11 @@ import tempfile
 import time
 import tarfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import cohort_unmanaged_actual as unmanaged
+import full_cohort_backup_metadata as source_metadata
 import full_cohort_affected_plan as affected
 import story_media_backup_cohort as cohort
 import story_media_backup_cohort_restore as restore
@@ -125,6 +127,14 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                     'migrate_binary_sha256':tool_sha,'postgres_major':16}}
         binding['sources']['roles']={'engine':engine,'server_start':start}
         phase=object.__new__(affected.FullCatalogPhase)
+        fence=SimpleNamespace(context={'operation_id':event['operation_id']},ledger=SimpleNamespace(read=lambda:({'fixture':True},('uid','rv'))))
+        phase.fence=fence;phase.lock={'fixture':True};phase.namespace_uid='fixture'
+        metadata_phase=object.__new__(source_metadata.BackupMetadataPhase)
+        metadata_phase.fence=fence;metadata_phase.catalog=phase;metadata_phase.lock=phase.lock;metadata_phase.namespace_uid='fixture'
+        metadata_receipt={'operation_id':binding['operation_id'],'source_sha':binding['source_sha'],
+            'databases':databases,'sources':binding['sources'],'full_catalog':binding['full_catalog'],
+            'restore_inputs':binding['restore_inputs'],'metadata':metadata,
+            'migration_roles':{'voice_db':{'role':'source_admin'}}}
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);key=secrets.token_bytes(32)
             def producer(member,output):
@@ -141,7 +151,11 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             stale=copy.deepcopy(event);stale['databases']['extra_db']+=1
             with patch.object(affected.FullCatalogPhase,'verify_current',return_value=stale),self.assertRaises(restore.CohortRestoreError):
                 restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
-            observed=[];events=[];original=media._psql
+            observed=[];events=[];histories={'auth_db':[],'voice_db':[]};original=media._psql;docker=media._docker
+            def checked_docker(*args,**kwargs):
+                self.assertFalse(any('POSTGRES_PASSWORD=' in str(arg) or 'VOICE_RESTORE_URL=' in str(arg)
+                                     or ('postgres://' in str(arg) and ':' in str(arg).split('@')[0][11:]) for arg in args))
+                return docker(*args,**kwargs)
             def psql(cid,admin,db,sql,timeout=120):
                 result=original(cid,admin,db,sql,timeout=timeout)
                 if sql==restore.GATEWAY_CATALOG:
@@ -152,18 +166,31 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                 if sql=='ALTER DATABASE template0 WITH ALLOW_CONNECTIONS true':events.append('template')
                 if sql in (media.CATALOG,restore.AUTH_CATALOG):
                     self.assertEqual(original(cid,admin,db,'SELECT count(*) FROM public.fixture_marker').strip(),b'1')
+                    query=("SELECT coalesce(json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version),'[]'::json) FROM public.schema_migrations"
+                           if db=='voice_db' else "SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM public.flyway_schema_history")
+                    history=json.loads(original(cid,admin,db,query))
+                    self.assertEqual(json.loads(result)['history'],history)
+                    histories[db].append(history)
                 if sql==unmanaged.CATALOG_SQL and db not in ('gateway_db','auth_db','voice_db'):
                     self.assertEqual(original(cid,admin,db,'SELECT id,value FROM tenant.events').strip(),b'7|kept')
                     self.assertEqual(original(cid,admin,db,'SELECT version,dirty FROM public.schema_migrations').strip(),b'991|t')
                     observed.append(db)
                 return result
-            with patch.object(affected.FullCatalogPhase,'verify_current',return_value=event),patch.object(media,'_psql',side_effect=psql):
-                receipt=restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
+            with patch.object(affected.FullCatalogPhase,'verify_current',return_value=event),patch.object(media,'_psql',side_effect=psql), \
+                 patch.object(media,'_docker',side_effect=checked_docker), \
+                 patch.object(source_metadata,'verify_completed',return_value=metadata_receipt):
+                receipt=restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic',metadata_phase,'synthetic')
             self.assertEqual(receipt['cleanup'],'verified')
             expected={db:{'mode':'restore-only','from':None,'to':None} for db in databases}
             expected['auth_db']={'mode':'restore-only','from':32,'to':32}
             expected['voice_db']={'mode':'migrate','from':14,'to':15}
             self.assertEqual(receipt['databases'],expected)
+            self.assertEqual(receipt['migration_logins'],{'voice_db':{'role':'source_admin','from':14,'to':15}})
+            self.assertEqual(catalogs['voice_db']['history'],[{'version':14,'dirty':False}])
+            self.assertEqual(histories['voice_db'],[[{'version':14,'dirty':False}],[{'version':15,'dirty':False}]])
+            self.assertEqual(len(histories['auth_db']),2)
+            self.assertEqual(histories['auth_db'],[catalogs['auth_db']['history'],catalogs['auth_db']['history']])
+            self.assertEqual(catalogs['auth_db']['history'],[{'version':'32','script':'V32__linked_oauth_transport.sql','checksum':123,'success':True}])
             extras=[db for db in databases if db not in ('gateway_db','auth_db','voice_db')]
             self.assertEqual(sorted(observed),sorted(extras*2))
             self.assertIn('gateway',events);self.assertIn('template',events)
