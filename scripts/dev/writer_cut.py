@@ -582,6 +582,39 @@ class WriterCut:
         except BaseException:
             self._uncertain()
 
+    def current_resumed_proof(self):
+        """Return only completed resume effects with exact current controller state."""
+        self._guard()
+        row, _ = self.fence.ledger.read()
+        if not self._owned(row) or row.get('writer_cut_effects') != self._effect_map():
+            raise RecoveryRequired('resume effect map changed')
+        admitted = {(item['kind'], item['metadata']['name']): item for item in self.admission['controllers']}
+        result = []
+        for step, entry in sorted(self.journal.state['steps'].items()):
+            if not step.startswith('writer-resume-'):
+                continue
+            if entry.get('status') != 'done': raise RecoveryRequired('resume effect pending')
+            source = entry['details']['source']; spec = entry['details']['target_spec']; receipt = entry['receipt']
+            key = (source['kind'], source['metadata']['name'])
+            if (key not in admitted or step != 'writer-resume-' + key[0].lower() + '-' + key[1] or
+                    source['metadata']['uid'] != admitted[key]['metadata']['uid'] or
+                    source['spec'].get('replicas') != 0 or spec.get('replicas') != admitted[key]['spec']['replicas'] or
+                    receipt.get('uid') != source['metadata']['uid'] or receipt.get('spec_sha256') != digest(spec)):
+                raise RecoveryRequired('resume receipt differs from admission')
+            target = copy.deepcopy(source['spec']); target['replicas'] = admitted[key]['spec']['replicas']
+            current = self._get(*key); meta = current.get('metadata', {})
+            if (target != spec or current.get('kind') != key[0] or meta.get('name') != key[1] or
+                    meta.get('namespace') != 'voice-dev' or meta.get('uid') != receipt['uid'] or
+                    meta.get('generation') != receipt['generation'] or meta.get('deletionTimestamp') or
+                    not meta.get('resourceVersion') or current.get('spec') != spec):
+                raise RecoveryRequired('resumed controller changed')
+            result.append({'kind': key[0], 'name': key[1], 'uid': receipt['uid'],
+                           'generation': receipt['generation'], 'spec': copy.deepcopy(spec),
+                           'replicas': spec['replicas'], 'nonce': entry['nonce'], 'receipt_sha256': digest(receipt)})
+        self._guard()
+        return {'operation_id': self.fence.context['operation_id'], 'namespace_uid': self.namespace_uid,
+                'invocation': self.invocation, 'controllers': result}
+
     def _migration_resume_guard(self):
         """Check terminal migration without assuming already-resumed writers are zero."""
         import writer_cut_migration as migration

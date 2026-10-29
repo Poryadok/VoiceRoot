@@ -107,5 +107,15 @@ class MigrationCutTest(unittest.TestCase):
             current_uid[0] = 'replacement'
             with self.assertRaises(ValueError): migration.observe(self.cut, binding)
 
+    def test_resumed_proof_contains_only_done_current_targets(self):
+        source = copy.deepcopy(self.client.workloads[('Deployment', 'voice-a')])
+        self.cut._effect('resume', source, 2)
+        proof = self.cut.current_resumed_proof()
+        self.assertEqual([(x['kind'], x['name'], x['replicas']) for x in proof['controllers']],
+                         [('Deployment', 'voice-a', 2)])
+        self.assertEqual(proof['controllers'][0]['uid'], 'uid-a')
+        self.client.workloads[('Deployment', 'voice-a')]['spec']['template']['spec']['containers'][0]['image'] = 'foreign'
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.current_resumed_proof()
+
 
 if __name__ == '__main__': unittest.main()
