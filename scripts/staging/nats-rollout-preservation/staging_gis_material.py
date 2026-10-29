@@ -292,6 +292,8 @@ def verify_effect(session, effect_id, observation):
         selected = {'GAME_INTEGRATION_DB_PASSWORD', 'GAME_INTEGRATION_DATABASE_URL'}
         if type(after) is not dict or set(after) != set(before['data']) | selected or any(after[key] != value for key, value in before['data'].items()):
             raise ValueError()
+        if not re.fullmatch(rb'[A-Za-z0-9_-]{43}', base64.b64decode(after['GAME_INTEGRATION_DB_PASSWORD'], validate=True)):
+            raise ValueError()
         desired = _secret_semantic(before)
         desired['data'] = after
         desired_hash = hashlib.sha256(_canonical(desired)).hexdigest()
@@ -529,3 +531,73 @@ def build_plan(operation, namespace_uid, source_capture_sha256, source_contract_
         return plan, dict(payloads)
     except (KeyError, TypeError, ValueError, UnicodeError, MaterialError):
         raise MaterialError('staging_gis_plan_build_failed') from None
+
+
+def preflight_payloads(session):
+    """Validate protected inputs once before the first GIS effect, never after a create."""
+    import staging_prerequisites as parent
+    import stage_runtime
+    try:
+        plan = parent.require_child(session, 'gis_material')
+        validate_plan(plan)
+        kube = stage_runtime.Kube()
+        namespace = kube.get('namespace', 'voice-staging')
+        if (namespace['metadata'].get('uid') != plan['namespace_uid']
+            or namespace['metadata'].get('deletionTimestamp')): raise ValueError()
+        payloads = {effect['id']: parent.load_payload(session, 'gis_material', effect['id'])
+                    for effect in plan['effects']}
+        rebuilt, _ = build_plan(plan['operation'], plan['namespace_uid'], plan['source_capture_sha256'],
+            plan['source_contract_sha256'], plan['issuer'], {row['id']: row['before'] for row in plan['effects']},
+            plan['preserved'], payloads)
+        if rebuilt != plan: raise ValueError()
+        for effect_id, preserved in plan['preserved'].items():
+            verify_effect(session, effect_id, preserved['observed'])
+        for effect in plan['effects']:
+            effect_id = effect['id']
+            obj = json.loads(payloads[effect_id])
+            if effect_id == 'gis-app-credentials':
+                live = kube.get('secret', effect['name'])
+                old = obj['before']
+                observed = inspect_app_secret(live)
+                if (observed['credentials'] != 'absent'
+                    or {key: observed[key] for key in ('uid', 'resourceVersion', 'data_sha256')} != effect['before']
+                    or _secret_semantic(live) != _secret_semantic(old)):
+                    raise ValueError()
+                desired = copy.deepcopy(old); desired['data'] = obj['after_data']
+                if inspect_app_secret(desired)['credentials'] != 'present': raise ValueError()
+                if not re.fullmatch(rb'[A-Za-z0-9_-]{43}', base64.b64decode(obj['after_data']['GAME_INTEGRATION_DB_PASSWORD'], validate=True)):
+                    raise ValueError()
+                continue
+            path = '/api/v1/namespaces/voice-staging/secrets?fieldSelector=metadata.name%3D' + effect['name'] + '&limit=2'
+            listing = kube.run(['get', '--raw', path])
+            metadata = listing['metadata']
+            if (listing.get('apiVersion') != 'v1' or listing.get('kind') != 'SecretList' or listing.get('items') != []
+                or metadata.get('continue') or not isinstance(metadata.get('resourceVersion'), str)
+                or not _RV.fullmatch(metadata['resourceVersion'])):
+                raise ValueError()
+            data = obj['data']
+            if obj.get('immutable', False) is not False: raise ValueError()
+            if effect_id == 'gis-workload':
+                keys = {'GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64', 'GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64'}
+                if type(data) is not dict or set(data) != keys: raise ValueError()
+                values = [base64.b64decode(base64.b64decode(data[key], validate=True), validate=True) for key in sorted(keys)]
+                if any(len(value) != 32 for value in values) or values[0] == values[1]: raise ValueError()
+            elif effect_id == 'gis-signer':
+                if type(data) is not dict or set(data) != {'current.pem', 'next.pem', 'active-kid'}: raise ValueError()
+                values = {key: base64.b64decode(value, validate=True) for key, value in data.items()}
+                if values['active-kid'] != b'current': raise ValueError()
+                publics = []
+                for key in ('current.pem', 'next.pem'):
+                    if not values[key].startswith(b'-----BEGIN PRIVATE KEY-----\n') or len(values[key]) > 16384: raise ValueError()
+                    checked = subprocess.run([_OPENSSL, 'rsa', '-check', '-text', '-noout'], input=values[key],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True, timeout=15, env=_OPENSSL_ENV)
+                    if b'Private-Key: (3072 bit' not in checked.stdout: raise ValueError()
+                    publics.append(subprocess.run([_OPENSSL, 'pkey', '-pubout'], input=values[key],
+                        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True, timeout=15, env=_OPENSSL_ENV).stdout)
+                if not publics[0] or publics[0] == publics[1]: raise ValueError()
+            elif effect_id == 'gis-tls':
+                _verify_issuer_tls(parent, session, plan, obj, kube)()
+        return True
+    except (KeyError, TypeError, ValueError, UnicodeError, binascii.Error, OSError,
+            subprocess.SubprocessError, MaterialError):
+        raise MaterialError('staging_gis_preflight_invalid') from None

@@ -371,6 +371,71 @@ class ClosedPlanTest(unittest.TestCase):
 
 
 class AppEffectVerificationTest(ClosedPlanTest):
+    def test_preflight_validates_every_private_payload_before_dispatch(self):
+        module = importlib.import_module('staging_gis_material')
+        base = self.plan(); before = AppSecretObservationTest().secret()
+        with tempfile.TemporaryDirectory() as tmp:
+            ca, key = JWKSTLSMaterialTest().create_ca(Path(tmp), 'issuer')
+            base['issuer']['ca_public_sha256'] = hashlib.sha256(ca).hexdigest()
+            base['issuer']['issuer_certificate_sha256'] = hashlib.sha256(ca).hexdigest()
+            issuer_ca = {'apiVersion': 'v1', 'kind': 'Secret', 'type': 'Opaque', 'metadata': {
+                'name': 'voice-media-ca', 'namespace': 'voice-staging', 'uid': base['issuer']['ca_secret_uid'],
+                'resourceVersion': '11'}, 'data': {'jwks-ca.crt': base64.b64encode(ca).decode()}}
+            issuer = {'schema': 'voice-staging-gis-issuer-input-v1', 'receipt': {}, 'ca_certificate_pem': ca.decode(),
+                'ca_private_key_pem': key.decode(), 'jwks_ca_bundle_pem': ca.decode(), 'ca_secret': issuer_ca}
+            payloads = module.build_create_payloads(base['operation'], before, ca, key, ca)
+            before_map = {effect['id']: effect['before'] for effect in base['effects']}
+            before_map['gis-app-credentials'] = {key: module.inspect_app_secret(before)[key]
+                                                  for key in ('uid', 'resourceVersion', 'data_sha256')}
+            plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
+                                               base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
+            namespace = {'metadata': {'name': 'voice-staging', 'uid': base['namespace_uid']}}
+            kube = SimpleNamespace(get=Mock(side_effect=lambda _kind, name: before if name == 'voice-app-secrets' else namespace if name == 'voice-staging' else issuer_ca),
+                run=Mock(return_value={'apiVersion': 'v1', 'kind': 'SecretList', 'metadata': {'resourceVersion': '5'}, 'items': []}))
+            parent = SimpleNamespace(require_child=Mock(return_value=plan), load_payload=Mock(side_effect=lambda _s, _slot, name: payloads[name]),
+                load_issuer=Mock(return_value=issuer), submit_effect=Mock())
+            preflight = getattr(module, 'preflight_payloads', None)
+            self.assertTrue(callable(preflight), 'fixed GIS preflight is required')
+            with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
+                preflight(object())
+                parent.submit_effect.assert_not_called()
+                valid_listing = {'apiVersion': 'v1', 'kind': 'SecretList', 'metadata': {'resourceVersion': '5'}, 'items': []}
+                for fault in ('present', 'rv', 'continued', 'wrong_kind'):
+                    listing = copy.deepcopy(valid_listing)
+                    if fault == 'present': listing['items'] = [{'metadata': {'name': 'foreign'}}]
+                    elif fault == 'rv': listing['metadata']['resourceVersion'] = ''
+                    elif fault == 'continued': listing['metadata']['continue'] = 'next'
+                    else: listing['kind'] = 'List'
+                    kube.run.return_value = listing
+                    with self.subTest(fault=fault):
+                        with self.assertRaises(module.MaterialError): preflight(object())
+                kube.run.return_value = valid_listing
+                changed_rv = copy.deepcopy(valid_listing); changed_rv['metadata']['resourceVersion'] = '6'
+                kube.run.return_value = changed_rv
+                preflight(object())
+                kube.run.return_value = valid_listing
+                paths = {'/api/v1/namespaces/voice-staging/secrets?fieldSelector=metadata.name%3D' +
+                         effect['name'] + '&limit=2' for effect in plan['effects'][:-1]}
+                self.assertTrue(all(call.args[0][0:2] == ['get', '--raw'] and call.args[0][2] in paths
+                                    for call in kube.run.call_args_list))
+                original_workload = payloads['gis-workload']
+                broken = json.loads(original_workload); keys = list(broken['data']); broken['data'][keys[1]] = broken['data'][keys[0]]
+                payloads['gis-workload'] = json.dumps(broken, sort_keys=True, separators=(',', ':')).encode()
+                plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
+                                                   base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
+                parent.require_child.return_value = plan
+                with self.assertRaises(module.MaterialError): preflight(object())
+                payloads['gis-workload'] = original_workload
+                broken_app = json.loads(payloads['gis-app-credentials'])
+                broken_app['after_data']['GAME_INTEGRATION_DB_PASSWORD'] = base64.b64encode(b'x').decode()
+                broken_app['after_data']['GAME_INTEGRATION_DATABASE_URL'] = base64.b64encode(
+                    b'postgres://gameintegration_runtime:x@voice-postgres:5432/game_integration_db?sslmode=disable').decode()
+                payloads['gis-app-credentials'] = json.dumps(broken_app, sort_keys=True, separators=(',', ':')).encode()
+                plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
+                                                   base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
+                parent.require_child.return_value = plan
+                with self.assertRaises(module.MaterialError): preflight(object())
+                parent.submit_effect.assert_not_called()
     def test_preserved_effect_requires_protected_ancestry_and_fresh_exact_observation(self):
         module = importlib.import_module('staging_gis_material')
         plan = self.plan(); effect = plan['effects'].pop()
@@ -401,9 +466,10 @@ class AppEffectVerificationTest(ClosedPlanTest):
         module = importlib.import_module('staging_gis_material')
         before = AppSecretObservationTest().secret()
         before['metadata']['annotations'] = {'existing': 'unchanged'}
-        added = {'GAME_INTEGRATION_DB_PASSWORD': base64.b64encode(b'password').decode(),
+        password = b'p' * 43
+        added = {'GAME_INTEGRATION_DB_PASSWORD': base64.b64encode(password).decode(),
                  'GAME_INTEGRATION_DATABASE_URL': base64.b64encode(
-                     b'postgres://gameintegration_runtime:password@voice-postgres:5432/game_integration_db?sslmode=disable').decode()}
+                     b'postgres://gameintegration_runtime:' + password + b'@voice-postgres:5432/game_integration_db?sslmode=disable').decode()}
         after = {**before['data'], **added}
         live = copy.deepcopy(before)
         live['metadata']['resourceVersion'] = '8'
@@ -437,12 +503,16 @@ class AppEffectVerificationTest(ClosedPlanTest):
                     kube.get.return_value = changed
                     with self.assertRaises(module.MaterialError): verify(session, 'gis-app-credentials', observation)
             kube.get.assert_any_call('secret', 'voice-app-secrets')
-            for fault in ('extra_key', 'overwrite_original', 'bad_dsn'):
+            for fault in ('extra_key', 'overwrite_original', 'bad_dsn', 'weak_password'):
                 with self.subTest(fault=fault):
                     broken = copy.deepcopy(after)
                     if fault == 'extra_key': broken['UNRELATED'] = base64.b64encode(b'new').decode()
                     elif fault == 'overwrite_original': broken['POSTGRES_PASSWORD'] = base64.b64encode(b'new').decode()
-                    else: broken['GAME_INTEGRATION_DATABASE_URL'] = base64.b64encode(b'postgres://elsewhere').decode()
+                    elif fault == 'bad_dsn': broken['GAME_INTEGRATION_DATABASE_URL'] = base64.b64encode(b'postgres://elsewhere').decode()
+                    else:
+                        broken['GAME_INTEGRATION_DB_PASSWORD'] = base64.b64encode(b'x').decode()
+                        broken['GAME_INTEGRATION_DATABASE_URL'] = base64.b64encode(
+                            b'postgres://gameintegration_runtime:x@voice-postgres:5432/game_integration_db?sslmode=disable').decode()
                     candidate_payload = json.dumps({'before': before, 'after_data': broken}, sort_keys=True, separators=(',', ':')).encode()
                     effect['payload_sha256'] = hashlib.sha256(candidate_payload).hexdigest()
                     candidate_semantic = copy.deepcopy(semantic); candidate_semantic['data'] = broken
