@@ -64,9 +64,11 @@ class Cluster:
         if (patch[0]['value'] != old['metadata']['uid'] or patch[1]['value'] != old['metadata']['resourceVersion']
                 or patch[2]['value'] != old['spec']):
             raise RuntimeError('CAS conflict')
+        changed = old['spec'] != patch[3]['value']
         old['spec'] = copy.deepcopy(patch[3]['value'])
-        old['metadata'].update(resourceVersion='3', generation=2)
-        old['status'] = {'observedGeneration': 2, 'updatedReplicas': 1, 'availableReplicas': 1}
+        old['metadata']['resourceVersion'] = str(int(old['metadata']['resourceVersion']) + 1)
+        old['metadata']['generation'] += int(changed)
+        old['status'] = {'observedGeneration': old['metadata']['generation'], 'updatedReplicas': 1, 'availableReplicas': 1}
         template = copy.deepcopy(old['spec']['template'])
         template['metadata']['labels']['pod-template-hash'] = 'abc'
         self.rs = [{'metadata': {'uid': 'rs-new', 'ownerReferences': [{'controller': True, 'kind': 'Deployment', 'uid': old['metadata']['uid']}]},
@@ -103,6 +105,12 @@ class ExecutorTest(unittest.TestCase):
         self.lock['data']['resource_context'] = json.dumps(self.context, sort_keys=True, separators=(',', ':'))
         self.images = {key: self.context['images'][key] for key in ('voice-web/web', 'voice-admin/admin', 'voice-developer-portal/portal')}
         self.cluster = Cluster(self.lock)
+        self.journal.intent['frontend_deployment_baseline'] = {
+            app: {'uid': self.cluster.deployments[name]['metadata']['uid'],
+                  'generation': self.cluster.deployments[name]['metadata']['generation'],
+                  'spec': copy.deepcopy(self.cluster.deployments[name]['spec'])}
+            for app, (name, _) in adoption.APPS.items()}
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
         self.cluster.journal = self.journal
         self.ledger.client = self.cluster
         self.client_type_patch = mock.patch.object(executor, 'KubectlTransport', Cluster)
@@ -122,6 +130,39 @@ class ExecutorTest(unittest.TestCase):
         self.assertEqual(self.ledger.row['frontend_effects']['frontend-web-config']['status'], 'done')
         self.assertEqual(self.ledger.row['frontend_effects']['frontend-web-deployment']['status'], 'done')
         self.assertEqual((self.cluster.created, self.cluster.patched), (1, 1))
+
+    def test_first_adoption_unqualified_template_drift_holds_before_create(self):
+        self.cluster.deployments['voice-web']['spec']['template']['spec']['containers'][0]['command'] = ['foreign']
+        with self.assertRaises(executor.RecoveryRequired): self.phase.run('web')
+        self.assertEqual((self.cluster.created, self.cluster.patched), (0, 0))
+
+    def test_status_only_baseline_rv_uses_fresh_exact_cas(self):
+        self.cluster.deployments['voice-web']['metadata']['resourceVersion'] = '9'
+        self.phase.run('web')
+        self.assertEqual(self.cluster.deployments['voice-web']['metadata']['resourceVersion'], '10')
+
+    def test_previous_effect_removed_blocks_next_app(self):
+        self.phase.run('web')
+        del self.ledger.row['frontend_effects']['frontend-web-deployment']
+        self.ledger.version += 1
+        with self.assertRaises(executor.RecoveryRequired): self.phase.run('admin')
+        self.assertEqual((self.cluster.created, self.cluster.patched), (1, 1))
+
+    def test_ledger_drift_after_final_guard_prevents_patch(self):
+        guard = self.phase._guard
+        count = 0
+        def drift():
+            nonlocal count
+            guard()
+            pending = self.ledger.row.get('frontend_effects', {}).get('frontend-web-deployment')
+            if pending and pending.get('status') == 'pending':
+                count += 1
+                if count == 2:
+                    del self.ledger.row['frontend_effects']['frontend-web-config']
+                    self.ledger.version += 1
+        with mock.patch.object(self.phase, '_guard', side_effect=drift):
+            with self.assertRaises(executor.RecoveryRequired): self.phase.run('web')
+        self.assertEqual(self.cluster.patched, 0)
 
     def test_three_apps_use_one_invocation(self):
         for app in ('web', 'admin', 'portal'):
@@ -189,6 +230,10 @@ class ExecutorTest(unittest.TestCase):
                     pod_spec = self.cluster.deployments['voice-web']['spec']['template']['spec']
                     pod_spec['volumes'] = [{'name': 'existing', 'configMap': {'name': 'expected', 'defaultMode': 420}}]
                     pod_spec['containers'][0]['volumeMounts'] = [{'name': 'existing', 'mountPath': '/etc/existing'}]
+                    self.journal.intent['frontend_deployment_baseline']['web']['spec'] = copy.deepcopy(
+                        self.cluster.deployments['voice-web']['spec'])
+                    self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+                    self.phase.intent = copy.deepcopy(self.journal.intent)
                 original = self.cluster.patch
                 def patch(name, body):
                     result = original(name, body)
@@ -234,6 +279,10 @@ class ExecutorTest(unittest.TestCase):
 
     def test_disabled_automount_refuses_injected_token(self):
         self.cluster.deployments['voice-web']['spec']['template']['spec']['automountServiceAccountToken'] = False
+        self.journal.intent['frontend_deployment_baseline']['web']['spec'] = copy.deepcopy(
+            self.cluster.deployments['voice-web']['spec'])
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        self.phase.intent = copy.deepcopy(self.journal.intent)
         original = self.cluster.patch
         def patch(name, body):
             result = original(name, body)

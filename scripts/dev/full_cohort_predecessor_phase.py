@@ -268,6 +268,7 @@ def capture(fence, client, expected_lock, namespace_uid, journal, previous, revi
     A saved snapshot alone is not authority.  The caller must use the returned
     descriptor in the very same CAS replacing `previous` at `revision`.
     """
+    import full_cohort_config_custody as config_custody
     import media_operation_journal
     if (type(journal) is not media_operation_journal.Journal or client.journal is not journal or
             journal.poisoned or journal.dirfd is None or journal.lockfd is None or
@@ -280,12 +281,15 @@ def capture(fence, client, expected_lock, namespace_uid, journal, previous, revi
     p3 = validate_p3(previous, namespace_uid)
     publisher = validate_publisher(previous, namespace_uid)
     event = deployment_event(_read_history(fence.check), previous)
+    config = config_custody.read_completed(previous, namespace_uid)
     check_pre_begin(fence, client, expected_lock, namespace_uid, previous, revision)
     snapshot = {'schema':'voice-full-cohort-predecessor-snapshot-v1',
                 'operation_id':fence.context['operation_id'], 'namespace_uid':namespace_uid,
                 'ledger_uid':revision[0], 'ledger_resourceVersion':revision[1],
                 'old_row_sha256':digest(previous), 'previous_operation_id':previous['operation_id'],
                 'previous_commit':previous['commit'], 'deployment':event,
+                'config_completion':{'snapshot':config, 'marker':copy.deepcopy(previous[config_custody.MARKER]),
+                                     'ledger_effects':copy.deepcopy(previous['backend_config_effects'])},
                 'p3_receipt':p3, 'p3_handoff':copy.deepcopy(previous['realtime_p3_handoff']),
                 'p3_objects':copy.deepcopy(previous['realtime_p3_objects']), 'publisher':publisher}
     descriptor = {'schema':'voice-full-cohort-predecessor-v1',
@@ -298,6 +302,8 @@ def capture(fence, client, expected_lock, namespace_uid, journal, previous, revi
     check_pre_begin(fence, client, expected_lock, namespace_uid, previous, revision)
     if deployment_event(_read_history(fence.check), previous) != event:
         raise PredecessorError('C1 deployment history changed')
+    if config_custody.read_completed(previous, namespace_uid) != config:
+        raise PredecessorError('C1 config custody changed')
     check_pre_begin(fence, client, expected_lock, namespace_uid, previous, revision)
     return descriptor
 
@@ -306,6 +312,7 @@ def load(fence, client, expected_lock, namespace_uid, journal):
     """Return the private snapshot only while the matching C2 fence is active."""
     import media_operation_guard
     import media_operation_journal
+    import full_cohort_config_custody as config_custody
     import frontend_runtime_executor
     import resource_fencing
     try:
@@ -337,6 +344,12 @@ def load(fence, client, expected_lock, namespace_uid, journal):
                'realtime_jwks_publisher':snapshot['publisher']}
         if validate_p3(old, namespace_uid) != snapshot['p3_receipt']: raise ValueError()
         validate_publisher(old, namespace_uid)
+        config = snapshot['config_completion']
+        if not isinstance(config,dict) or set(config) != {'snapshot','marker','ledger_effects'}: raise ValueError()
+        previous_config = dict(config['snapshot']['resource_context'], backend_config_effects=config['ledger_effects'])
+        if (previous_config.get('operation_id') != snapshot['previous_operation_id'] or
+                previous_config.get('commit') != snapshot['previous_commit']): raise ValueError()
+        config_custody.validate_snapshot(config['snapshot'],config['marker'],previous_config,namespace_uid)
         media_operation_guard.verify(fence, client, expected_lock, namespace_uid)
         if fence.ledger.read() != (row, revision): raise ValueError()
         return copy.deepcopy(snapshot)
