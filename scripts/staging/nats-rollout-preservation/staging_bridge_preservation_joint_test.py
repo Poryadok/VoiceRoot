@@ -146,7 +146,9 @@ class BridgePreservationAdmission(unittest.TestCase):
                              [str(code / 'nats-rollout-preservation' / (name + '.py')) for name in modules])
 
     def test_captured_helpers_check_protected_source_receipt(self):
-        source = Path(__file__).resolve().parents[3]
+        # A separately frozen test-source archive carries the request marker;
+        # this mutable test harness is never copied into that source capture.
+        source = Path(os.environ.get('VOICE_TEST_SOURCE_ROOT', Path(__file__).resolve().parents[3]))
         with tempfile.TemporaryDirectory(dir=os.environ.get('VOICE_COHORT_NATIVE_ROOT','/root')) as directory:
             root = Path(directory)
             installed = root / 'installed'
@@ -166,7 +168,7 @@ class BridgePreservationAdmission(unittest.TestCase):
             for path in workspace.rglob('*'):
                 path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
-import base64, copy, hashlib, http.client, json, os, re, subprocess, sys
+import base64, contextlib, copy, hashlib, http.client, io, json, os, re, subprocess, sys, zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -179,7 +181,7 @@ import source_plan_test
 root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
 binding=json.loads((code/'capture-manifest.json').read_bytes()); pins=json.loads(sys.argv[2])
 c=dict(project='voice',resource='STAGING',actor='operator',claim='11111111-1111-4111-8111-111111111111',generation=7,
- window='22222222-2222-4222-8222-222222222222',revision=12,operation_id='stg-run-17',commit='c'*40,
+ window='22222222-2222-4222-8222-222222222222',revision=12,operation_id='stg-run-17',commit=os.environ.get('VOICE_TEST_SOURCE_SHA','c'*40),
  images={'voice-gameintegration/gameintegration':source_authority.REGISTRY+'/gameintegration@sha256:'+'c'*64})
 card=dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['actor'],claim=c['claim'],
  generation=c['generation'],window=c['window'],revision=c['revision'],operation=2,
@@ -372,9 +374,63 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def read(self,size):chunk=self.raw[:size];self.raw=self.raw[size:];return chunk
    def close(self):pass
   github_calls=[]
+  # Synthetic GitHub/registry transport, with real locally built image bytes
+  # and real content, closure, source and compiled-gate proofs.
+  if 'VOICE_TEST_SPACE_OCI' in os.environ:
+   sys.path.insert(0,str(workspace/'scripts/dev'))
+   import canonical_application_package as canonical, publish_candidate
+   data=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())
+   identity=data['identity']; inventory=data['inventory']; proof=data['proof']
+   request=canonical.parse_request((workspace/canonical.REQUEST).read_bytes())
+   tag='ghcr.io/poryadok/voiceroot/space-native-installer:source-'+c['commit']+'-17-1'
+   pub={'schema':'voice-space-native-tool-publication-v1','source_sha':c['commit'],'run_id':17,'run_attempt':1,
+    'tag':tag,**identity,'source_inventory':inventory,'request':request,'content':proof,
+    'runtime_qualified':False,'deployment_performed':False}
+   archive=io.BytesIO()
+   with zipfile.ZipFile(archive,'w') as z:z.writestr('space-native-tool.json',json.dumps(pub))
+   archive=archive.getvalue()
+   repo={'id':9,'full_name':'Poryadok/VoiceRoot','private':False,'default_branch':'master'}
+   run={'id':17,'run_attempt':1,'head_sha':c['commit'],'head_branch':'master','event':'push',
+    'path':'.github/workflows/ci.yml','status':'completed','conclusion':'success',
+    'repository':repo,'head_repository':repo}
+   jobs=[]
+   for number,(name,step) in enumerate(canonical.required_jobs().items(),1):
+    jobs.append({'id':number,'name':name,'run_id':17,'run_attempt':1,'head_sha':c['commit'],
+     'status':'completed','conclusion':'success','steps':[{'name':step,'conclusion':'success'}]})
+   jobs.append({'id':100,'name':'Space native tool image','run_id':17,'run_attempt':1,'head_sha':c['commit'],
+    'status':'completed','conclusion':'success','started_at':'2025-01-01T00:00:00Z',
+    'completed_at':'2025-01-01T00:01:00Z','steps':[{'name':s,'conclusion':'success'} for s in
+     ('Verify Space native tool source','Capture Space native tool identity')]})
+   for number,name in enumerate(('staging-images-promote','deploy-staging'),101):
+    jobs.append({'id':number,'name':name,'run_id':17,'run_attempt':1,'head_sha':c['commit'],
+     'status':'completed','conclusion':'skipped'})
+   artifact={'id':109,'name':'space-native-tool-17-1','expired':False,'size_in_bytes':len(archive),
+    'created_at':'2025-01-01T00:00:30Z','expires_at':'2099-01-01T00:00:00Z',
+    'workflow_run':{'id':17,'head_sha':c['commit'],'repository_id':9,'head_repository_id':9}}
+   def gh_raw(url):
+    suffix=url[len(source_authority.API):]
+    if suffix=='':value=repo
+    elif suffix=='/git/ref/heads/master':value={'ref':'refs/heads/master','object':{'type':'commit','sha':c['commit']}}
+    elif suffix=='/actions/runs/17':value=run
+    elif suffix.startswith('/actions/runs/17/attempts/1/jobs?'):value={'total_count':len(jobs),'jobs':jobs}
+    elif suffix.startswith('/actions/runs/17/artifacts?'):value={'total_count':1,'artifacts':[artifact]}
+    elif suffix=='/actions/artifacts/109':value=artifact
+    elif suffix=='/actions/artifacts/109/zip':return archive
+    else:raise AssertionError('unexpected synthetic Github endpoint '+suffix)
+    return json.dumps(value).encode()
+   def registry_read(self,request,absent=False):
+    url=request.full_url
+    if url.startswith('https://ghcr.io/token?'):return b'{"token":"synthetic-token"}'
+    tail=url.rsplit('/',1)[-1]
+    name=('index' if tail in (identity['index_digest'],tag.rsplit(':',1)[1]) else
+          'manifest' if tail==identity['platform_digest'] else 'config' if tail==identity['config_digest'] else None)
+    if name is None:raise AssertionError('unexpected synthetic registry path')
+    return (Path(os.environ['VOICE_TEST_SPACE_OCI'])/(name+'.json')).read_bytes()
   def story_request(url,headers,limit,deadline):
    if url.startswith('https://api.github.com/'):
-    github_calls.append(url);raise OSError('synthetic CI unavailable')
+    github_calls.append(url)
+    if 'VOICE_TEST_SPACE_OCI' in os.environ:return RegistryResponse(gh_raw(url),{})
+    raise OSError('synthetic CI unavailable')
    if url.startswith('https://ghcr.io/token?'):return RegistryResponse(b'{"token":"synthetic-token"}',{})
    records=json.loads((Path(os.environ['VOICE_TEST_STORY_OCI'])/'records.json').read_bytes())
    record=records[url];raw=(Path(os.environ['VOICE_TEST_STORY_OCI'])/(record['sha256']+'.json')).read_bytes()
@@ -433,7 +489,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
        patch.object(stage_runtime.Kube,'secret_meta',side_effect=lambda name:{k:get('secret',name)['metadata'][k] for k in ('uid','resourceVersion')}), \
        patch.object(compiler,'capture',side_effect=capture), \
        patch.object(source_authority.transport,'_request',side_effect=story_request), \
-       patch.object(http.client,'HTTPSConnection',Https):
+       patch.object(http.client,'HTTPSConnection',Https), \
+       patch.object(publish_candidate.Registry,'_read',registry_read) if 'VOICE_TEST_SPACE_OCI' in os.environ else contextlib.nullcontext():
    try: producer.prepare(actions,{'mode':'app-only','token':'synthetic-ci-token','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
    except KeyError as exc:
@@ -441,6 +498,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    except parent.Blocked as exc:
     raise AssertionError('producer blocked: '+str(exc)) from exc
    except Exception as exc:
+    if 'VOICE_TEST_SPACE_OCI' in os.environ:
+     raise AssertionError('positive producer stopped: '+type(exc).__name__+': '+str(exc)) from exc
     if type(exc).__name__!='StagingToolError' or str(exc)!='STAGING native publication unavailable' or not github_calls:
      raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
   checkpoint=root/'installed'/'cohort-preservation'/session.operation/'checkpoint.json'
