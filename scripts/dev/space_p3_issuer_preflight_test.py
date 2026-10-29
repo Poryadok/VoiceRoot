@@ -13,6 +13,8 @@ from unittest.mock import patch
 
 import media_backup_phase_test as fixture
 import media_operation_journal as journal
+import realtime_jwks_publisher_phase_test as shared
+import resource_fencing
 import space_p3_issuer_preflight as subject
 import space_p3_issuer_preflight_root as root_helper
 
@@ -31,9 +33,14 @@ class PreflightTest(unittest.TestCase):
         intent={'resource_context':copy.deepcopy(self.base.context),'namespace_uid':'ns',
                 'space_issuer_preflight':{'source_root':'/source','source_sha':self.base.context['commit']}}
         self.journal=journal.Journal(Path(self.base.temp.name)/'preflight-journal',intent); self.addCleanup(self.journal.close)
-        self.client.journal=self.journal; self.base.ledger.client=self.client
-        self.cut=SimpleNamespace(fence=self.base.fence,lock=self.base.lock,namespace_uid='ns',_guard=lambda:None,journal=self.base.journal)
-        self.package=Package(); self.package.fence=self.base.fence; self.package.lock=self.base.lock; self.package.namespace_uid='ns'
+        self.client.journal=self.journal
+        def fenced(client): return resource_fencing.Fence(self.base.context,lambda:copy.deepcopy(self.base.card),shared.View(self.base.ledger,client))
+        self.fence=fenced(self.client)
+        cut_client=fixture.Client(self.base.lock); cut_client.journal=self.base.journal
+        self.cut=SimpleNamespace(fence=fenced(cut_client),client=cut_client,lock=self.base.lock,namespace_uid='ns',_guard=lambda:None,journal=self.base.journal)
+        self.package=Package(); self.package.journal=journal.Journal(Path(self.base.temp.name)/'package-journal',intent); self.addCleanup(self.package.journal.close)
+        self.package.client=fixture.Client(self.base.lock); self.package.client.journal=self.package.journal
+        self.package.fence=fenced(self.package.client); self.package.lock=self.base.lock; self.package.namespace_uid='ns'
         self.ca={'uid':'ca','resourceVersion':'1','der_sha256':'a'*64}
         self.creator={name:{'state':'absent'} for name in subject.metadata.MEMBERS}
         self.directory=Path(self.base.temp.name)/'socket'; self.directory.mkdir(mode=0o700)
@@ -44,7 +51,7 @@ class PreflightTest(unittest.TestCase):
             patch.object(subject.IssuerPreflightPhase,'_ca',side_effect=lambda:copy.deepcopy(self.ca)),
             patch.object(subject.IssuerPreflightPhase,'_creator',side_effect=lambda:copy.deepcopy(self.creator))]
         for p in self.patches: p.start(); self.addCleanup(p.stop)
-        self.phase=subject.IssuerPreflightPhase(self.journal,self.base.fence,self.client,self.base.lock,'ns',self.package,self.cut,'/source','token')
+        self.phase=subject.IssuerPreflightPhase(self.journal,self.fence,self.client,self.base.lock,'ns',self.package,self.cut,'/source','token')
         self.addCleanup(self.phase.close)
 
     def cleanup(self,case):
@@ -79,6 +86,39 @@ class PreflightTest(unittest.TestCase):
         finally: thread.join(timeout=10)
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
         with self.assertRaises(subject.PreflightError): self.phase.prepare()
+
+    def _completed(self):
+        record=self.phase.prepare(); thread=threading.Thread(target=lambda:self.deliver(record)); thread.start()
+        try: return self.phase.finish()
+        finally: thread.join(timeout=10)
+
+    def test_closed_own_journal_cannot_authorize(self):
+        self._completed(); self.journal.close()
+        with self.assertRaises(subject.PreflightError): subject.verify_current(self.phase,'token')
+
+    def test_closed_package_journal_cannot_authorize(self):
+        self._completed(); self.package.journal.close()
+        with self.assertRaises(subject.PreflightError): subject.verify_current(self.phase,'token')
+
+    def test_closed_cut_journal_cannot_authorize_exchange(self):
+        self._completed(); self.cut.journal.close()
+        one,two=socket.socketpair(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+        self.addCleanup(one.close); self.addCleanup(two.close)
+        with self.assertRaises(subject.PreflightError): subject.exchange_root_request(self.phase,'token',one)
+
+    def test_closing_journal_during_final_ledger_read_cannot_authorize(self):
+        self._completed(); original=self.phase._authority; count=0
+        def measure():
+            nonlocal count
+            count+=1; original()
+        with patch.object(self.phase,'_authority',side_effect=measure): subject.verify_current(self.phase,'token')
+        calls=0
+        def close_at_last():
+            nonlocal calls
+            calls+=1; original()
+            if calls==count: self.package.journal.close()
+        with patch.object(self.phase,'_authority',side_effect=close_at_last):
+            with self.assertRaises(subject.PreflightError): subject.verify_current(self.phase,'token')
 
     def test_actual_root_keycheck_handoff_to_protected_phase(self):
         scratch=tempfile.TemporaryDirectory(dir='/root',prefix='space-preflight-joint-'); self.addCleanup(scratch.cleanup)

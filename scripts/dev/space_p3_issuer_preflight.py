@@ -13,6 +13,7 @@ import struct
 import frontend_runtime_executor
 import full_cohort_package_phase
 import media_operation_guard
+import media_operation_journal
 import realtime_p3_create_only as common
 import realtime_p3_create_only_crypto as crypto
 import realtime_p3_public_inputs as public
@@ -36,7 +37,8 @@ class IssuerPreflightPhase:
         self.source_root,self.token=source_root,token; self.intent=copy.deepcopy(journal.intent)
         self.record=self.listener=self.dirfd=self.inode=None; self.pending=False
         match=re.fullmatch(r'media-c[12]-([a-f0-9]{32})',fence.context.get('operation_id',''))
-        if (not match or type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
+        if (not match or type(journal) is not media_operation_journal.Journal
+                or type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
                 or getattr(fence.ledger,'client',None) is not client or type(package) is not full_cohort_package_phase.PackagePhase
                 or type(cut) is not writer_cut.WriterCut or journal is cut.journal or package.fence.context!=fence.context
                 or cut.fence.context!=fence.context or any(x.lock!=lock or x.namespace_uid!=namespace_uid for x in (cut,package))
@@ -44,14 +46,40 @@ class IssuerPreflightPhase:
                 or self.intent.get('space_issuer_preflight')!={'source_root':source_root,'source_sha':fence.context.get('commit')}
                 or not isinstance(token,str) or not token or not Path(source_root).is_absolute()): raise PreflightError('preflight identity unavailable')
         self.suffix=match[1]
+        self._phase_refs=(journal,fence,client,package,package.journal,package.fence,package.client,cut,cut.journal,cut.fence,cut.client)
+        journals=(journal,package.journal,cut.journal)
+        if len({id(item) for item in journals})!=3: raise PreflightError('preflight journals must be distinct')
+        self._journal_custody=tuple(self._custody(item) for item in journals)
+
+    @staticmethod
+    def _custody(journal):
+        if type(journal) is not media_operation_journal.Journal or type(journal.dirfd) is not int or type(journal.lockfd) is not int: raise ValueError()
+        directory=os.fstat(journal.dirfd); lock=os.fstat(journal.lockfd)
+        media_operation_journal.Journal._private(directory,0o700,directory=True)
+        media_operation_journal.Journal._private(lock,0o600)
+        path_dir=os.stat(journal.path,follow_symlinks=False); path_lock=os.stat(journal.path/'lock',follow_symlinks=False)
+        if ((directory.st_dev,directory.st_ino)!=(path_dir.st_dev,path_dir.st_ino)
+                or (lock.st_dev,lock.st_ino)!=(path_lock.st_dev,path_lock.st_ino)): raise ValueError()
+        return (journal.dirfd,journal.lockfd,directory.st_dev,directory.st_ino,lock.st_dev,lock.st_ino)
+
+    def _local(self):
+        refs=(self.journal,self.fence,self.client,self.package,self.package.journal,self.package.fence,self.package.client,
+              self.cut,self.cut.journal,self.cut.fence,self.cut.client)
+        if (any(actual is not expected for actual,expected in zip(refs,self._phase_refs))
+                or any(x.client.journal is not x.journal or x.fence.ledger.client is not x.client for x in (self,self.package,self.cut))
+                or tuple(self._custody(j) for j in (self.journal,self.package.journal,self.cut.journal))!=self._journal_custody
+                or self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent): raise ValueError()
+        if self.record is not None:
+            local=self.journal.state['steps'].get(STEP)
+            if not isinstance(local,dict) or {k:v for k,v in local.items() if k!='receipt'}!=self.record: raise ValueError()
+            if self.record['status']=='done' and writer_cut.digest(local.get('receipt'))!=self.record['receipt_sha256']: raise ValueError()
 
     def _guard(self):
-        if self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent: raise ValueError()
-        media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
+        self._local(); media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid); self._local()
         if self.record is not None:
-            row,_=self.fence.ledger.read(); local=self.journal.state['steps'].get(STEP)
-            if row.get(LEDGER)!=self.record or not isinstance(local,dict) or {k:v for k,v in local.items() if k!='receipt'}!=self.record: raise ValueError()
-            if self.record['status']=='done' and writer_cut.digest(local.get('receipt'))!=self.record['receipt_sha256']: raise ValueError()
+            row,_=self.fence.ledger.read()
+            if row.get(LEDGER)!=self.record: raise ValueError()
+        self._local()
 
     def _authority(self):
         self._guard(); self.cut._guard(); self.package.verify_current(self.token)
@@ -148,6 +176,7 @@ class IssuerPreflightPhase:
             self._authority(); after,end=self.fence.ledger.read()
             if self._ca()!=pending['ca'] or self._creator()!=pending['creator_secrets']: raise ValueError()
             self._authority(); final,final_rev=self.fence.ledger.read()
+            self._local()
             if final!=after or final_rev!=end or self.journal.state['steps'].get(STEP)!=local: raise ValueError()
             return copy.deepcopy(response)
         except BaseException:
@@ -180,6 +209,7 @@ def verify_current(phase,token):
         if (phase.record is None or phase.record.get('status')!='done' or phase._ca()!=phase.record['ca']
                 or phase._creator()!=phase.record['creator_secrets']): raise ValueError()
         phase._authority(); after,end=phase.fence.ledger.read()
+        phase._local()
         if after!=row or end!=rev or phase.journal.state['steps'][STEP]!=local: raise ValueError()
         return copy.deepcopy(local['receipt'])
     except Exception: raise PreflightError('Space custody preflight unavailable') from None
