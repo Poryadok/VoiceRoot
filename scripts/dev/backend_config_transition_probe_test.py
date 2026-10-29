@@ -39,6 +39,9 @@ class ProbeTest(unittest.TestCase):
                     'spec':{'template':{'spec':{'containers':[{'name':'notification',
                         'env':env,'envFrom':self.snapshot['envFrom']}]}}}}).encode()
             name = args[args.index('get')+2]; rv = '9'
+            if name == 'gone':
+                if self.fault == 'transport_error': raise OSError('private diagnostic')
+                return b''
             if self.fault == 'ref_drift' and sum('get' in call and 'deployment' not in call for call in self.calls) > 2: rv = '10'
             return ('uid-'+name+'\n'+rv+'\n'+'\n'.join(self.keys[name])+'\n').encode()
         field = args[-1]
@@ -84,18 +87,34 @@ class ProbeTest(unittest.TestCase):
         self.snapshot['env'].append(copy.deepcopy(self.snapshot['env'][0]))
         with self.assertRaisesRegex(probe.ProbeError,'explicit-env-duplicate'): self.inspect()
         self.setUp(); self.snapshot['envFrom'][0]['configMapRef']['optional'] = True
-        with self.assertRaises(probe.ProbeError): self.inspect()
+        self.assertTrue(self.inspect()['env_sources'][0]['optional'])
 
     def test_explicit_ref_failures_report_only_fixed_reason_and_field(self):
-        for fault in ('unsupported-ref','optional','missing-key'):
+        for fault in ('unsupported-ref','missing-key'):
             with self.subTest(fault=fault):
                 self.setUp(); entry = self.snapshot['env'][1]
                 if fault == 'unsupported-ref': entry['valueFrom'] = {'fieldRef':{'fieldPath':'metadata.name'}}
-                if fault == 'optional': entry['valueFrom']['secretKeyRef']['optional'] = True
                 if fault == 'missing-key': entry['valueFrom']['secretKeyRef']['key'] = 'private-name'
                 with self.assertRaises(probe.ProbeError) as error: self.inspect()
                 self.assertIn('explicit-env-'+fault+'-FCM_CREDENTIALS_JSON',str(error.exception))
                 self.assertNotIn('private-name',str(error.exception))
+
+    def test_optional_key_and_missing_object_preserve_envfrom_fallback(self):
+        for missing_object in (False, True):
+            with self.subTest(missing_object=missing_object):
+                self.setUp(); ref = self.snapshot['env'][1]['valueFrom']['secretKeyRef']
+                ref['optional'] = True
+                if missing_object: ref['name'] = 'gone'
+                else: ref['key'] = 'MISSING'
+                value = self.inspect(); selected = value['explicit_sources'][0]
+                self.assertFalse(selected['present']); self.assertEqual(selected['object_present'],not missing_object)
+                self.assertEqual(value['fields']['FCM_CREDENTIALS_JSON']['origin']['source'],'envFrom')
+
+    def test_optional_reference_unknown_transport_is_hold(self):
+        ref = self.snapshot['env'][1]['valueFrom']['secretKeyRef']; ref.update(name='gone',optional=True)
+        self.fault = 'transport_error'
+        with self.assertRaises(probe.ProbeError) as error: self.inspect()
+        self.assertNotIn('private diagnostic',str(error.exception))
 
     def test_empty_literal_env_is_observed_as_empty(self):
         self.snapshot['env'].append({'name':'NOTIFICATION_DEBUG_HTTP_ENABLED'})

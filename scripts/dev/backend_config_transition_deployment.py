@@ -49,10 +49,11 @@ def _plan(cut, journal, service):
             or bound['details_sha256'] != bound_record['details_sha256']
             or row['writer_cut_effects'].get('writer-cut-config-plan') != bound_record): raise ValueError()
     result = observation['observations'][service]; identity = result['identity']; target = next(x for x in prior['targets'] if x['workload'] == service)
-    if (not isinstance(result,dict) or set(result) != {'status','identity','fields','env_sources','scope','template_binding'}
+    if (not isinstance(result,dict) or set(result) != {'status','identity','fields','env_sources','explicit_sources','scope','template_binding'}
             or result.get('status') != 'observed' or result.get('scope') != 'runtime-config-metadata-only-no-provider-validation'
             or result.get('template_binding') != 'pod-env-and-deployment-template-v1'
             or set(result['fields']) != set(probe.FIELDS[service]) or not isinstance(result.get('env_sources'),list)
+            or not isinstance(result.get('explicit_sources'),list)
             or identity.get('namespace_uid') != cut.namespace_uid
             or any(identity.get(k) != target.get(k) for k in ('pod_name','pod_uid','deployment_uid','container_id','restart_count'))
             or any(result['fields'][name] != {'state':'absent','origin':None} for name in POLICY)): raise ValueError()
@@ -84,7 +85,22 @@ def _plan(cut, journal, service):
 def _refs(cut, result):
     refs = {}
     for value in result['env_sources']:
-        if not isinstance(value,dict) or set(value) != {'kind','name','uid','resource_version','prefix','fields'}: raise ValueError()
+        if (not isinstance(value,dict) or set(value) != {'kind','name','uid','resource_version','prefix','fields','optional','object_present'}
+                or type(value['optional']) is not bool or type(value['object_present']) is not bool
+                or not isinstance(value['fields'],list)
+                or (not value['object_present'] and (not value['optional'] or value['uid'] is not None
+                    or value['resource_version'] is not None or value['fields']))
+                or (value['object_present'] and any(not isinstance(value[k],str) or not value[k] for k in ('uid','resource_version')))): raise ValueError()
+        key = (value['kind'],value['name']); identity = (value['uid'],value['resource_version'])
+        if key in refs and refs[key] != identity: raise ValueError()
+        refs[key] = identity
+    for value in result['explicit_sources']:
+        if (not isinstance(value,dict) or set(value) != {'kind','name','uid','resource_version','key','optional','present','field','object_present'}
+                or type(value['optional']) is not bool or type(value['present']) is not bool
+                or type(value['object_present']) is not bool
+                or (not value['object_present'] and (not value['optional'] or value['present'] or value['uid'] is not None
+                    or value['resource_version'] is not None))
+                or (value['object_present'] and any(not isinstance(value[k],str) or not value[k] for k in ('uid','resource_version')))): raise ValueError()
         key = (value['kind'],value['name']); identity = (value['uid'],value['resource_version'])
         if key in refs and refs[key] != identity: raise ValueError()
         refs[key] = identity
@@ -99,9 +115,10 @@ def _refs(cut, result):
                 or not re.fullmatch(r'[a-z0-9]([-a-z0-9.]*[a-z0-9])?',name)): raise ValueError()
         media_operation_guard.verify(cut.fence,cut.client,cut.lock,cut.namespace_uid)
         template = '{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}'
-        raw = metadata.linux_private_bytes(BASE+['get',kind,name,'-o','go-template='+template])
+        raw = metadata.linux_private_bytes(BASE+['get',kind,name,'--ignore-not-found=true','-o','go-template='+template])
         media_operation_guard.verify(cut.fence,cut.client,cut.lock,cut.namespace_uid)
-        if raw != (uid+'\n'+rv).encode(): raise ValueError()
+        expected = b'' if uid is None and rv is None else (uid+'\n'+rv).encode()
+        if raw != expected: raise ValueError()
 
 
 def verify_deployment_successor(cut, config_journal, service):

@@ -30,10 +30,13 @@ class DeploymentVerifierTest(unittest.TestCase):
             name = target['workload']; observations[name] = {'status':'observed',
                 'identity':{**{k:target[k] for k in ('pod_name','pod_uid','deployment_uid','container_id','restart_count')},'namespace_uid':'ns','deployment_rv':'2'},
                 'fields':{key:{'state':'absent','origin':None} for key in probe.FIELDS[name]},'env_sources':[],
+                'explicit_sources':[],
                 'scope':'runtime-config-metadata-only-no-provider-validation',
                 'template_binding':'pod-env-and-deployment-template-v1'}
         observations['user']['fields']['DATABASE_URL'] = {'state':'present','origin':{
             'kind':'secret','name':'s','uid':'secret-uid','resource_version':'9','key':'db','source':'explicit'}}
+        observations['user']['explicit_sources'] = [{'kind':'secret','name':'s','uid':'secret-uid',
+            'resource_version':'9','key':'db','optional':False,'present':True,'field':'DATABASE_URL','object_present':True}]
         receipt = {'operation_id':self.context['operation_id'],'source_sha':self.context['commit'],
                    'nonce':'c'*32,'observations':observations}
         prior = {'source_sha':self.context['commit'],'targets':targets}
@@ -114,6 +117,19 @@ class DeploymentVerifierTest(unittest.TestCase):
              patch.object(deployment.metadata,'linux_private_bytes',return_value=b'secret-uid\n10'):
             with self.assertRaises(deployment.DeploymentError):
                 deployment.verify_deployment_successor(self.cut,self.journal,'user')
+
+    def test_optional_absent_object_must_remain_absent(self):
+        observation = {'env_sources':[{'kind':'secret','name':'gone','uid':None,'resource_version':None,
+            'prefix':'','fields':[],'optional':True,'object_present':False}], 'explicit_sources':[], 'fields':{}}
+        with patch.object(deployment.media_operation_guard,'verify'), \
+             patch.object(deployment.metadata,'linux_private_bytes',return_value=b''):
+            deployment._refs(self.cut,observation)
+        with patch.object(deployment.media_operation_guard,'verify'), \
+             patch.object(deployment.metadata,'linux_private_bytes',return_value=b'created-uid\n1'):
+            with self.assertRaises(ValueError): deployment._refs(self.cut,observation)
+        with patch.object(deployment.media_operation_guard,'verify'), \
+             patch.object(deployment.metadata,'linux_private_bytes',side_effect=OSError('private')):
+            with self.assertRaises(OSError): deployment._refs(self.cut,observation)
 
 
 if __name__ == '__main__': unittest.main()
