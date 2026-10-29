@@ -10,6 +10,22 @@ import transaction
 from controller import Blocked
 
 class ActorBootstrapBindingTest(unittest.TestCase):
+    def test_pre_effect_candidate_requires_source_pins_and_exact_gis_subset(self):
+        selected={'voice-gameintegration/gameintegration':'registry/gis@sha256:'+'a'*64,
+                  'voice-web/web':'registry/web@sha256:'+'b'*64}
+        session=Mock();session.context={'images':{'voice-gameintegration/gameintegration':selected['voice-gameintegration/gameintegration']}}
+        bridge_root.verify_bootstrap_candidate_images(session,selected,None,True)
+        for candidate in ({}, {'voice-gameintegration/gameintegration':'registry/gis@sha256:'+'f'*64},
+                          {'voice-web/web':selected['voice-web/web']},
+                          {'voice-gameintegration/gameintegration':selected['voice-gameintegration/gameintegration'],'foreign/x':'bad'}):
+            session.context={'images':candidate}
+            with self.subTest(candidate=candidate),self.assertRaises(Blocked):
+                bridge_root.verify_bootstrap_candidate_images(session,selected,None,True)
+        session.context={'images':{'voice-web/web':selected['voice-web/web']}}
+        bridge_root.verify_bootstrap_candidate_images(session,selected,None,False)
+        session.context={'images':{'voice-web/web':'wrong'}}
+        with self.assertRaises(Blocked):bridge_root.verify_bootstrap_candidate_images(session,selected,None,False)
+
     def test_source_capture_receipt_is_private_bound_and_exclusive(self):
         with tempfile.TemporaryDirectory() as temp:
             installed=Path(temp);installed.chmod(0o700)

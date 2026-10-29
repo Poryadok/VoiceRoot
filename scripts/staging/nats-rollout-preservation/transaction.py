@@ -23,7 +23,7 @@ from root_main import capture_inputs,revalidate_inputs,save as root_save,private
 from docker_runtime import DockerRuntime
 from runtime_stage import RolloutStage
 from preserve import capture_cut, verify_post_apply, canonical
-from normalize import normalize_target,image_only_documents
+from normalize import normalize_target,normalize_first_install,image_only_documents
 from errors import safe_error
 from nats_migration import apply_contract
 import rollout_census
@@ -342,7 +342,8 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             # retain every pre-existing workload in the preservation cut.
             existing={obj.get('name') for row in non_nats.get('checks',[]) for obj in row.get('objects',[])
                 if obj.get('kind')=='Deployment'}
-            if len(existing)!=22 or 'voice-gameintegration' in existing:
+            import gis_first_install as gis
+            if existing!=gis.baseline_workload_names(include_hub=False):
                 raise Blocked('gis_first_install_baseline_workload_count_invalid')
             # The new GIS Deployment does not exist yet and is managed by its
             # create-only receipt. The preservation stage snapshots the 22
@@ -372,7 +373,11 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             normalized_gis.append((deployment,service,selected))
         normalize_args=({'gis_target_sink':collect_gis,'gis_binding':gis_binding}
                         if gis_binding is not None else {})
-        state['target']=normalize_target(kube,stage,manifests,target,renderer_authority=renderer_authority,**normalize_args)
+        if gis_first_install is not None:
+            state['target'],state['gis_first_install']=normalize_first_install(
+                kube,stage,manifests,target,state['gis_first_install'],renderer_authority=renderer_authority)
+        else:
+            state['target']=normalize_target(kube,stage,manifests,target,renderer_authority=renderer_authority,**normalize_args)
         if gis_binding is not None:
             import gis_existing_update as existing
             if len(normalized_gis)!=1:raise Blocked('gis_existing_normalization_scope_invalid')
@@ -504,8 +509,8 @@ def execute_gis_first_install(kube,base,state,stage,journal):
         'baseline_snapshots_sha256':gis.digest(state['context']['snapshots']),
         'off_node_verified':True,
     }
-    if custody_binding['baseline_workload_count'] != 22:
-        raise Blocked('gis_first_install_baseline_workload_count_invalid')
+    gis.validate_baseline_snapshots(state['context']['snapshots'])
+    state['gis_first_install']['baseline_snapshots']=copy.deepcopy(state['context']['snapshots'])
     state['gis_first_install']['custody']=copy.deepcopy(custody_binding)
     state['gis_first_install']['custody_binding_sha256']=gis.digest(custody_binding)
     def save_gis_plan(value):

@@ -81,6 +81,28 @@ def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
         return after
     except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_actor_changed') from None
 
+def verify_bootstrap_candidate_images(session,images,renderer_authority,first_install):
+    """Reject candidate pins outside the independently selected source images."""
+    allowed=dict(images);renderer={}
+    if renderer_authority is not None:
+        from stage_runtime import HUB
+        try:
+            spec=renderer_authority['descriptor']['target_template']['spec']
+            containers=spec.get('initContainers',[])+spec['containers']
+            renderer={HUB+'/'+c['name']:c['image'] for c in containers}
+            if len(renderer)!=len(containers):raise ValueError()
+        except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_candidate_invalid') from None
+        allowed.update(renderer)
+    candidate=session.context.get('images')
+    if (not isinstance(candidate,dict) or not candidate
+        or any(key not in allowed or allowed[key]!=value for key,value in candidate.items())):
+        raise Blocked('realtime_bootstrap_candidate_changed')
+    if first_install:
+        expected={key:value for key,value in allowed.items() if key.startswith('voice-gameintegration/')}
+        expected.update(renderer)
+        if not any(key.startswith('voice-gameintegration/') for key in expected) or candidate!=expected:
+            raise Blocked('realtime_bootstrap_candidate_changed')
+
 class Actions:
     def resource_scope(self,request):
         import resource_claim
@@ -363,6 +385,11 @@ class Actions:
         if request.get('gis_first_install') is True:
             if request['mode'] not in ('full','app-only') or 'gameintegration' not in approved['images']:
                 raise Blocked('gis_first_install_admission_invalid')
+            if 'voice-gameintegration' in parameters['enrolled']:
+                raise Blocked('gis_first_install_identity_present')
+            # The separately validated add-only pair is the only not-yet-live
+            # deployment admitted to the source compiler.
+            parameters['enrolled'].append('voice-gameintegration')
             parameters['gis_first_install']=True
         self._report('contract-selection','COMPLETE')
         self._report('nats-preflight','STARTED')
@@ -400,6 +427,7 @@ class Actions:
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
             import realtime_bootstrap
             if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
+            verify_bootstrap_candidate_images(self.tt_session,images,renderer_authority,request.get('gis_first_install') is True)
             realtime_receipt=realtime_bootstrap.run_prepare(self,request,approved,execution,workspace,stage)
             if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
             if realtime_receipt is not None:

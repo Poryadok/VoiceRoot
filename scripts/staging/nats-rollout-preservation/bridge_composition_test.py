@@ -151,6 +151,7 @@ class CompositionTests(unittest.TestCase):
                     reached.append(value);op=args[2];operation=base/('rollout-'+op);operation.mkdir()
                     return {'operation':op,'target':value['target']}
                 actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={};actions.tt_session=Mock()
+                actions.tt_session.context={'images':{'voice-gateway/gateway':old['voice-gateway/gateway']}}
                 bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
                 import realtime_bootstrap
                 from nats_contract_plan import digest
