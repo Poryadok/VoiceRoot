@@ -17,6 +17,78 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_matrix_inventory_names_existing_tests_for_every_service(self):
+        inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        resolver = (ROOT / 'scripts/ci/resolve-go-matrix.sh').read_text(encoding='utf-8')
+        names = re.search(r'(?ms)^GO_SERVICES=\(\s*(.*?)\s*\)', resolver).group(1).split()
+        self.assertEqual(set(inventory), set(names))
+        for service, cases in inventory.items():
+            self.assertTrue(cases, service)
+            self.assertEqual(len(cases), len({tuple(case) for case in cases}), service)
+            by_package = {}
+            for package, name in cases:
+                self.assertTrue(package == 'voice/backend/' + service or package.startswith('voice/backend/' + service + '/'))
+                if package not in by_package:
+                    path = ROOT / 'src/backend' / package.removeprefix('voice/backend/')
+                    by_package[package] = '\n'.join(f.read_text(encoding='utf-8') for f in path.glob('*_test.go'))
+                self.assertRegex(by_package[package], r'(?m)^func ' + re.escape(name) + r'\(t \*testing\.T\)')
+
+    def test_downloaded_matrix_requires_exact_members_and_bound_streams(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inventory = {'chat': [['voice/backend/chat/store', 'TestStore']],
+                         'user': [['voice/backend/user/store', 'TestStore']]}
+            inv = root / 'inventory.json'
+            inv.write_text(json.dumps(inventory), encoding='utf-8')
+            artifacts = root / 'artifacts'
+            artifacts.mkdir()
+            identity = {'candidate': 'a' * 40, 'run': '123', 'attempt': '1'}
+            for service, cases in inventory.items():
+                folder = artifacts / ('go-integration-' + service + '-1')
+                folder.mkdir()
+                package, name = cases[0]
+                events = [{'Package': package, 'Test': name, 'Action': action}
+                          for action in ('run', 'pass')]
+                events.append({'Package': package, 'Action': 'pass'})
+                raw = ''.join(json.dumps(event) + '\n' for event in events).encode()
+                (folder / 'go-integration-events.jsonl').write_bytes(raw)
+                summary = receipts.summarize_events(events)
+                summary.update(schema='voice-go-integration-diagnostic-v1', service=service,
+                               identity=identity, exit_code=0, event_sha256=hashlib.sha256(raw).hexdigest())
+                (folder / 'go-integration-summary.json').write_text(json.dumps(summary), encoding='utf-8')
+            command = [sys.executable, str(ROOT / 'scripts/ci/go_integration_matrix.py'), 'verify-diagnostics',
+                       '--inventory', str(inv), '--candidate', identity['candidate'], '--run', '123',
+                       '--attempt', '1', '--services', json.dumps(list(inventory)), '--directory', str(artifacts)]
+            def run():
+                return subprocess.run(command, capture_output=True).returncode
+            self.assertEqual(run(), 0)
+            user = artifacts / 'go-integration-user-1'
+            user.rename(artifacts / 'missing')
+            self.assertNotEqual(run(), 0)
+            (artifacts / 'missing').rename(user)
+            summary_path = user / 'go-integration-summary.json'
+            original = summary_path.read_text(encoding='utf-8')
+            data = json.loads(original)
+            data['identity']['attempt'] = '2'
+            summary_path.write_text(json.dumps(data), encoding='utf-8')
+            self.assertNotEqual(run(), 0)
+            summary_path.write_text(original, encoding='utf-8')
+            event_path = user / 'go-integration-events.jsonl'
+            raw = event_path.read_bytes()
+            skipped_raw = raw.replace(b'"pass"', b'"skip"', 1)
+            event_path.write_bytes(skipped_raw)
+            self.assertNotEqual(run(), 0)
+            skipped_summary = receipts.summarize_events(receipts.read_events(skipped_raw.decode()))
+            skipped_summary.update(schema='voice-go-integration-diagnostic-v1', service='user',
+                                   identity=identity, exit_code=0,
+                                   event_sha256=hashlib.sha256(skipped_raw).hexdigest())
+            summary_path.write_text(json.dumps(skipped_summary), encoding='utf-8')
+            self.assertNotEqual(run(), 0, 'a matching summary cannot turn a skipped required case into a pass')
+            event_path.write_bytes(raw)
+            summary_path.write_text(original, encoding='utf-8')
+            (artifacts / 'go-integration-unexpected-1').mkdir()
+            self.assertNotEqual(run(), 0)
+
     def test_messaging_threadlist_inventory_requires_postgres_case(self):
         inventory = json.loads((ROOT / 'scripts/ci/messaging_threadlist_required.json').read_text(encoding='utf-8'))
         self.assertEqual(inventory['messaging'], [['voice/backend/messaging/internal/threadlist', 'TestPostgresImmutableNodesAndRollback']])

@@ -187,9 +187,13 @@ requires its PostgreSQL immutable-node and rollback test without skips.
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
 includes named pass/skip/fail counts and skipped cases and preserves a nonzero
-test exit. It is not an acceptance receipt: a reviewed required-case inventory
-and matrix completeness verifier are still needed to prevent required skips
-from passing the aggregate gate.
+test exit. `backend-go-integration-evidence` downloads one artifact per selected
+member, validates the exact member set, candidate/run/attempt, summary and raw
+stream digest, and requires each listed case in `go_integration_required.json`
+to run and pass. This initial inventory covers observed untagged integration
+cases and an Analytics adapter sentinel; it is not a complete inventory of
+native, tagged, opt-in, subtest or cross-service proofs. Those require their own
+explicit evidence and cannot be inferred from this aggregate.
 
 PR changes to Subscription source/migrations or protobufs also select Auth tests
 because Auth consumes Subscription events and compiles contracts. The separate

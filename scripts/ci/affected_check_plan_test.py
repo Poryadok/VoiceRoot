@@ -324,6 +324,33 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('notification-quota-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_go_integration_evidence_is_required_for_selected_matrix(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['backend-go-integration-evidence']
+        self.assertIn('backend-go-integration-pr', job['needs'])
+        self.assertIn('backend-go-integration-evidence', workflow['jobs']['ci-gate']['needs'])
+        verify = next(step for step in job['steps'] if step.get('name') == 'Verify selected Go integration evidence')
+        self.assertIn('verify-diagnostics', verify['run'])
+        self.assertIn('go_integration_required.json', verify['run'])
+        self.assertIn('integration_go_services', verify['env']['SERVICES'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['chat'], 'docker_go_services': [],
+                  'integration_go_services': ['chat'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)
+        self.assertIn('backend-go-integration-evidence', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            needs['backend-go-integration-evidence']['result'] = outcome
+            self.assertIn('backend-go-integration-evidence', planner.verify_gate(selected, needs, identity))
+        del needs['backend-go-integration-evidence']
+        self.assertIn('backend-go-integration-evidence', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('backend-go-integration-evidence', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_messaging_threadlist_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
@@ -526,6 +553,9 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 expected_extra = ({'backend-go-integration-pr'} if run_go and not integration and
                                   (flags.get('protos') == 'true' or flags.get('ci_global') == 'true')
                                   else set())
+                if integration or (go and any(flags.get(key) == 'true' for key in
+                                               ('global', 'ci_global', 'pkg', 'protos', 'go_build_shared'))):
+                    expected_extra.add('backend-go-integration-evidence')
                 self.assertEqual(proposed - required, expected_extra)
 
     def test_git_diff_includes_both_rename_paths_and_deletions(self):

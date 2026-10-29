@@ -250,6 +250,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('flutter-windows', ('windows_desktop',))
         selected('web', broad + ('frontend',))
         selected('backend-go-integration-pr', enabled=bool(integration))
+        selected('backend-go-integration-evidence', enabled=bool(integration))
         selected('story-lfp-integration', enabled='story' in integration)
         selected('user-association-integration', enabled='user' in integration)
         selected('notification-quota-integration', enabled='notification' in integration)

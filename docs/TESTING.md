@@ -136,6 +136,13 @@ global wiring changes conservatively select every Go service integration. A
 successful matrix job alone is not proof that a particular opt-in or
 Docker-dependent test ran; inspect its execution evidence and skips.
 
+For a selected PR Go integration matrix, the evidence job rechecks all
+downloaded member diagnostics against `scripts/ci/go_integration_required.json`
+and the candidate/run/attempt. The initial list covers observed untagged
+integration cases plus an Analytics adapter sentinel; it does not inventory all
+native, tagged, opt-in, subtest or cross-service tests. Dedicated checks below
+remain required for their separate cases.
+
 The affected Story PR proof runs `go test -json -count=1 -p 1` for
 `./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an
 owned PostgreSQL service. It requires the named store and protected transport

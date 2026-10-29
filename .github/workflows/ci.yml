@@ -1226,6 +1226,32 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  backend-go-integration-evidence:
+    needs: [changes, backend-go-integration-pr]
+    if: >-
+      !cancelled() && github.event_name == 'pull_request' &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.integration_go_services != '[]' &&
+      needs.backend-go-integration-pr.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: go-integration-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go-integration-artifacts
+      - name: Verify selected Go integration evidence
+        env:
+          SERVICES: ${{ needs.changes.outputs.integration_go_services }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          python3 scripts/ci/go_integration_matrix.py verify-diagnostics \
+            --inventory scripts/ci/go_integration_required.json --services "$SERVICES" \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --directory "$RUNNER_TEMP/go-integration-artifacts"
+
   staging-images-push:
     needs: changes
     if: >-
@@ -2048,6 +2074,7 @@ jobs:
       - nats-hub-config-renderer-image
       - backend-go
       - backend-go-integration-pr
+      - backend-go-integration-evidence
       - story-lfp-integration
       - user-association-integration
       - notification-quota-integration
