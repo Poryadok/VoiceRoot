@@ -117,3 +117,14 @@ class ReminderContractTests(unittest.TestCase):
                             ('$JS.API.STREAM.CREATE.'+plan.REMINDER_STREAM,{**stream,'subjects':['foreign']})):
             with self.assertRaises(plan.ContractError):actor.mutate(api,payload)
         self.assertEqual(len(calls),2)
+
+    def test_old_native_record_bytes_are_preserved_and_only_fixed_new_path_allowed(self):
+        import nats_migration
+        old={'files':[{'path':'jetstream/account/streams/old/msgs/1.blk','sha256':'old'}]}
+        extra={'path':'jetstream/account/streams/notification_reminder_hints/msgs/index.db','sha256':'new'}
+        after={'files':old['files']+[extra]}
+        self.assertTrue(nats_migration._records_preserved(old,after,True,'account'))
+        self.assertFalse(nats_migration._records_preserved(old,after,False,'account'))
+        self.assertFalse(nats_migration._records_preserved(old,after,True,'different'))
+        self.assertFalse(nats_migration._records_preserved(old,{'files':[dict(old['files'][0],sha256='changed'),extra]},True,'account'))
+        self.assertFalse(nats_migration._records_preserved(old,{'files':old['files']+[dict(extra,path='jetstream/account/streams/foreign/msgs/1.blk')]},True,'account'))

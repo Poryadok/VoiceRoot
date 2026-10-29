@@ -54,7 +54,7 @@ def _observations_match(observations,migration_id):
                     {'server_image','container_id','started_at','finished_at','stream_updates'},
                     {'server_image','container_id','started_at','finished_at','stream_updates','migration_id'})
                 or not all(_bounded_text(recovery.get(key)) for key in ('server_image','container_id','started_at','finished_at'))
-                or ('migration_id' in recovery and (migration_id not in (CURRENT_NATS_MIGRATION_ID,V6_MIGRATION_ID) or recovery['migration_id']!=migration_id))
+                or ('migration_id' in recovery and (migration_id not in (CURRENT_NATS_MIGRATION_ID,V6_MIGRATION_ID,V7_MIGRATION_ID) or recovery['migration_id']!=migration_id))
                 or ('stream_updates' in recovery and not _stream_updates_match(recovery['stream_updates'],migration_id))):return False
         elif set(row)==stream_keys:
             if (row.get('stream') not in _allowed_streams(migration_id)
