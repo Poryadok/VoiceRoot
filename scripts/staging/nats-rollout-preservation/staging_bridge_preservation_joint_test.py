@@ -186,7 +186,8 @@ card=dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['
  candidate=dict(state='known',commit=c['commit'],images=copy.deepcopy(c['images'])),
  observed=dict(state='known',claim=c['claim'],window=c['window'],operation=1,
  images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
-approved={'source_sha':c['commit'],'images':{name:source_authority.REGISTRY+'/'+name+'@sha256:'+'c'*64
+approved={'schema':'voice-source-authority-v1','repository':'Poryadok/VoiceRoot','verified':True,
+ 'run_id':17,'run_attempt':1,'source_sha':c['commit'],'images':{name:source_authority.REGISTRY+'/'+name+'@sha256:'+'c'*64
  for name in source_authority.IMAGE_NAMES},
  'source_files':{p.relative_to(workspace).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
  for p in workspace.rglob('*') if p.is_file()}}
@@ -370,7 +371,10 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def __init__(self,raw,headers):self.raw=raw;self.headers=headers
    def read(self,size):chunk=self.raw[:size];self.raw=self.raw[size:];return chunk
    def close(self):pass
+  github_calls=[]
   def story_request(url,headers,limit,deadline):
+   if url.startswith('https://api.github.com/'):
+    github_calls.append(url);raise OSError('synthetic CI unavailable')
    if url.startswith('https://ghcr.io/token?'):return RegistryResponse(b'{"token":"synthetic-token"}',{})
    records=json.loads((Path(os.environ['VOICE_TEST_STORY_OCI'])/'records.json').read_bytes())
    record=records[url];raw=(Path(os.environ['VOICE_TEST_STORY_OCI'])/(record['sha256']+'.json')).read_bytes()
@@ -430,15 +434,19 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
        patch.object(compiler,'capture',side_effect=capture), \
        patch.object(source_authority.transport,'_request',side_effect=story_request), \
        patch.object(http.client,'HTTPSConnection',Https):
-   try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
+   try: producer.prepare(actions,{'mode':'app-only','token':'synthetic-ci-token','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
    except KeyError as exc:
     assert 'VOICE_TEST_OCI' not in os.environ and exc.args==(('node','pmdebook'),), str(exc)
    except parent.Blocked as exc:
     raise AssertionError('producer blocked: '+str(exc)) from exc
    except Exception as exc:
-    raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
-  assert not (root/'installed'/'cohort-preservation'/session.operation/'checkpoint.json').exists()
+    if type(exc).__name__!='StagingToolError' or str(exc)!='STAGING native publication unavailable' or not github_calls:
+     raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
+  checkpoint=root/'installed'/'cohort-preservation'/session.operation/'checkpoint.json'
+  if github_calls:
+   assert json.loads(checkpoint.read_bytes())['status']=='PREPARED'
+  else:assert not checkpoint.exists()
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
   try: parent._verify_helper_source(session,approved,workspace)
