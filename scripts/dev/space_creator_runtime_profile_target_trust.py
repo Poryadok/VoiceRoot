@@ -25,6 +25,16 @@ SCRIPT=('umask 077; cat > /scratch/store; /usr/bin/openssl pkcs12 -in /scratch/s
 class TargetTrustError(RuntimeError): pass
 
 
+def _preflight_layout(phase):
+    import space_p3_issuer_preflight as old
+    import dev_peer_issuer_preflight as peer
+    if type(phase) is old.IssuerPreflightPhase:
+        return old,old.STEP,old.LEDGER
+    if type(phase) is peer.PeerIssuerPreflightPhase and phase.profile=='creator':
+        return peer,phase.step,phase.ledger
+    raise ValueError()
+
+
 def _input(args,payload):
     if not isinstance(payload,bytes) or not 0<len(payload)<=1048576: raise ValueError()
     process=subprocess.Popen(args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
@@ -58,9 +68,10 @@ def _input(args,payload):
 
 class TargetTrustPhase(jdk.TargetJdkPhase):
     def __init__(self,journal,fence,client,lock,namespace_uid,package_phase,inventory_phase,jdk_phase,preflight_phase):
-        import space_p3_issuer_preflight as preflight
         super().__init__(journal,fence,client,lock,namespace_uid,package_phase,inventory_phase)
-        if (type(jdk_phase) is not jdk.TargetJdkPhase or type(preflight_phase) is not preflight.IssuerPreflightPhase or
+        try: _preflight_layout(preflight_phase)
+        except BaseException: raise TargetTrustError('target trust identity unavailable') from None
+        if (type(jdk_phase) is not jdk.TargetJdkPhase or
                 jdk_phase.package is not package_phase or jdk_phase.inventory is not inventory_phase or
                 preflight_phase.package is not package_phase or any(x.fence.context!=fence.context or x.lock!=lock or
                 x.namespace_uid!=namespace_uid for x in (jdk_phase,preflight_phase))): raise TargetTrustError('target trust identity unavailable')
@@ -68,20 +79,20 @@ class TargetTrustPhase(jdk.TargetJdkPhase):
 
     def _locals(self,row,jdk_digest,preflight_digest):
         try:
-            import space_p3_issuer_preflight as preflight
+            _,pre_step,pre_ledger=_preflight_layout(self.preflight)
             if self._target_refs!=(self.jdk,self.preflight): raise ValueError()
             self._local(); self.jdk._local(); self.preflight._local()
             local=self.jdk.journal.state['steps'][jdk.STEP]; marker={k:v for k,v in local.items() if k!='receipt'}
-            prelocal=self.preflight.journal.state['steps'][preflight.STEP]
+            prelocal=self.preflight.journal.state['steps'][pre_step]
             if (marker!=self.jdk.record or row.get(jdk.LEDGER)!=marker or marker.get('status')!='done' or
                 marker.get('receipt_sha256')!=jdk_digest or marker.get('receipt_sha256')!=writer_cut.digest(local.get('receipt')) or
-                row.get(preflight.LEDGER)!=self.preflight.record or self.preflight.record.get('receipt_sha256')!=preflight_digest or
+                row.get(pre_ledger)!=self.preflight.record or self.preflight.record.get('receipt_sha256')!=preflight_digest or
                 writer_cut.digest(prelocal.get('receipt'))!=preflight_digest): raise ValueError()
         except BaseException: raise metadata.GuardLost('target trust custody unavailable') from None
 
     def _dependencies(self,token):
-        import space_p3_issuer_preflight as preflight
         try:
+            preflight,_,_=_preflight_layout(self.preflight)
             if self._target_refs!=(self.jdk,self.preflight): raise ValueError()
             self._guard(); row,rev=self._ledger()
             roots=jdk.verify_completed(self.jdk,token); source=preflight.verify_current(self.preflight,token)

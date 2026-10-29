@@ -63,9 +63,35 @@ class TargetTrustTest(unittest.TestCase):
         row[jdk.LEDGER]=phase.jdk.record; row['pre-ledger']=phase.preflight.record
         phase._target_refs=(phase.jdk,phase.preflight)
         preflight=SimpleNamespace(STEP='pre-step',LEDGER='pre-ledger',verify_current=mock.Mock(return_value=pre_receipt))
-        with mock.patch.dict(sys.modules,{'space_p3_issuer_preflight':preflight}), mock.patch.object(target.jdk,'verify_completed',return_value={'roots':'safe'}):
+        with mock.patch.object(target,'_preflight_layout',return_value=(preflight,'pre-step','pre-ledger')), mock.patch.object(target.jdk,'verify_completed',return_value={'roots':'safe'}):
             with self.assertRaises(target.metadata.GuardLost): phase._dependencies('token')
             self.assertEqual(phase._dependencies('token'),({'roots':'safe'},{'ca':'safe'}))
+
+    def test_fixed9_layout_accepts_only_creator_profile(self):
+        import dev_peer_issuer_preflight as peer
+        phase=peer.PeerIssuerPreflightPhase.__new__(peer.PeerIssuerPreflightPhase)
+        phase.profile='creator'; phase.step='creator-step'; phase.ledger='creator-ledger'
+        self.assertEqual(target._preflight_layout(phase),(peer,'creator-step','creator-ledger'))
+        phase.profile='role'
+        with self.assertRaises(ValueError): target._preflight_layout(phase)
+
+    def test_fixed9_creator_dependencies_bind_exact_ledger_and_receipt(self):
+        import dev_peer_issuer_preflight as peer
+        phase=target.TargetTrustPhase.__new__(target.TargetTrustPhase); row={'status':'active'}; rev=('uid','rv')
+        phase._guard=mock.Mock(); phase._local=mock.Mock(); phase._ledger=mock.Mock(return_value=(row,rev))
+        phase.jdk=SimpleNamespace(_ledger=mock.Mock(return_value=(row,rev)),_local=mock.Mock())
+        roots={'roots':'safe'}; phase.jdk.record={'status':'done','receipt_sha256':target.writer_cut.digest(roots)}
+        phase.jdk.journal=SimpleNamespace(state={'steps':{jdk.STEP:phase.jdk.record|{'receipt':roots}}})
+        pre=peer.PeerIssuerPreflightPhase.__new__(peer.PeerIssuerPreflightPhase); pre.profile='creator'
+        pre.step='fixed9-creator'; pre.ledger='fixed9-ledger'; pre._local=mock.Mock()
+        source={'profile':'creator','ca':'safe'}; pre.record={'status':'done','receipt_sha256':target.writer_cut.digest(source)}
+        pre.journal=SimpleNamespace(state={'steps':{pre.step:pre.record|{'receipt':source}}})
+        pre.fence=SimpleNamespace(ledger=SimpleNamespace(read=mock.Mock(return_value=(row,rev))))
+        phase.preflight=pre; phase._target_refs=(phase.jdk,pre); row[jdk.LEDGER]=phase.jdk.record; row[pre.ledger]=pre.record
+        with mock.patch.object(peer,'verify_current',return_value=source), mock.patch.object(jdk,'verify_completed',return_value=roots):
+            self.assertEqual(phase._dependencies('token'),(roots,source))
+            row[pre.ledger]={'status':'tampered'}
+            with self.assertRaises(target.metadata.GuardLost):phase._dependencies('token')
 
     def test_phase_rejects_identity_drift_and_redacts_keystore(self):
         with tempfile.TemporaryDirectory() as temp:
