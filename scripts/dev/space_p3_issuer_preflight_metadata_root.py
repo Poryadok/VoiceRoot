@@ -1,5 +1,7 @@
 """Fixed root-side Creator Secret metadata, no value output or mutation."""
 import hashlib
+import base64
+import json
 import os
 from pathlib import Path
 import re
@@ -7,8 +9,12 @@ import selectors
 import stat
 import subprocess
 import time
+import urllib.parse
+import urllib.request
 
 import realtime_p3_missing_issuer as custody
+import resource_fencing
+import reset_credentials as reset
 
 K3S=Path('/usr/local/bin/k3s')
 KUBECONFIG=Path('/etc/rancher/k3s/k3s.yaml')
@@ -19,6 +25,8 @@ MEMBERS={'voice-space-media-client-tls':{'tls.crt','tls.key'},
          'voice-role-media-server-tls':{'tls.crt','tls.key'},
          'voice-gateway-principal-signing':{'current.pem','next.pem','active-kid'}}
 TEMPLATE='{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}{{"\\n"}}{{.metadata.deletionTimestamp}}{{"\\n"}}{{range $k,$v := .data}}{{printf "%s\\n" $k}}{{end}}'
+TT='http://192.168.0.109:30990'
+LABELS={'voice.environment':'dev','app.kubernetes.io/managed-by':'voice-dev'}
 
 
 def _open(path,limit):
@@ -67,7 +75,25 @@ def _read(binary,config,args):
         process.wait(); process.stdout.close()
 
 
-def observe(namespace_uid):
+def _tt(context):
+    resource_fencing.validate_context(context)
+    if context['actor']!='scheduled_devops': raise ValueError()
+    query=urllib.parse.urlencode({'actor':context['actor'],'claim':context['claim'],'revision':context['revision'],'phase':'deploy'})
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,*args): return None
+    opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
+    with opener.open(TT+'/api/projects/voice/resources/DEV/check?'+query,timeout=10) as response: raw=response.read((2<<20)+1)
+    if len(raw)>2<<20: raise ValueError()
+    envelope=json.loads(raw); row=envelope['resource']
+    expected={'code':'DEV','environment':'dev','owner':context['actor'],'claim':context['claim'],
+              'generation':context['generation'],'window':context['window'],'revision':context['revision'],'state':'held','phase':'deploy'}
+    candidate=row.get('candidate',{})
+    if (envelope.get('valid') is not True or any(row.get(k)!=v for k,v in expected.items())
+            or candidate.get('state')!='known' or candidate.get('commit')!=context['commit']
+            or candidate.get('images')!=context['images']): raise ValueError()
+
+
+def observe(namespace_uid,context,lock,ca):
     """Return only five fixed presence/identity/key-name categories."""
     if os.geteuid()!=0 or not re.fullmatch(r'[A-Za-z0-9.-]{1,128}',namespace_uid): raise ValueError()
     binary,binary_id=_open(K3S,512*1024*1024)
@@ -75,9 +101,32 @@ def observe(namespace_uid):
         config,config_id=_open(KUBECONFIG,1024*1024)
         try:
             if _digest(binary,binary_id[2])!=K3S_SHA256: raise ValueError()
+            def guard():
+                _tt(context)
+                namespace=json.loads(_read(binary,config,['get','namespace','voice-dev','-o','json']))['metadata']
+                if (namespace.get('name')!='voice-dev' or namespace.get('uid')!=namespace_uid
+                        or any(namespace.get('labels',{}).get(k)!=v for k,v in LABELS.items())): raise ValueError()
+                current=json.loads(_read(binary,config,['-n','voice-dev','get','configmap','voice-dev-image-update-lock','-o','json']))
+                meta=current.get('metadata',{}); expected_meta=lock.get('metadata',{}); data=lock.get('data',{})
+                if (meta.get('name')!='voice-dev-image-update-lock' or meta.get('namespace')!='voice-dev'
+                        or any(meta.get(k)!=expected_meta.get(k) or not meta.get(k) for k in ('uid','resourceVersion'))
+                        or any(meta.get('labels',{}).get(k)!=v for k,v in LABELS.items()) or current.get('data')!=data
+                        or data.get('resource_operation')!=context['operation_id'] or not data.get('operation')
+                        or data.get('resource_context')!=json.dumps(context,sort_keys=True,separators=(',',':'))): raise ValueError()
+                template='{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}{{"\\n"}}{{index .data "ca.crt"}}'
+                raw=_read(binary,config,['-n','voice-dev','get','secret','voice-media-ca','-o','go-template='+template])
+                parts=raw.split(b'\n',2)
+                if len(parts)!=3 or parts[0].decode('ascii')!=ca['uid'] or parts[1].decode('ascii')!=ca['resourceVersion']: raise ValueError()
+                pem=base64.b64decode(parts[2],validate=True)
+                if not re.fullmatch(rb'-----BEGIN CERTIFICATE-----\r?\n(?:[A-Za-z0-9+/=]+\r?\n)+-----END CERTIFICATE-----\r?\n?',pem): raise ValueError()
+                fd=os.memfd_create('voice-public-ca',os.MFD_CLOEXEC)
+                try:
+                    os.write(fd,pem); cert=Path('/proc')/str(os.getpid())/'fd'/str(fd)
+                    if hashlib.sha256(reset._openssl('x509','-in',cert,'-outform','DER')).hexdigest()!=ca['der_sha256']: raise ValueError()
+                finally: os.close(fd)
+                _tt(context)
             def snapshot():
-                ns=_read(binary,config,['get','namespace','voice-dev','-o','jsonpath={.metadata.uid}']).decode('ascii')
-                if ns!=namespace_uid: raise ValueError()
+                guard()
                 result={}
                 for name,keys in MEMBERS.items():
                     raw=_read(binary,config,['-n','voice-dev','get','secret',name,'--ignore-not-found=true','-o','go-template='+TEMPLATE])
@@ -87,7 +136,7 @@ def observe(namespace_uid):
                     seen=lines[3:]
                     if len(seen)!=len(set(seen)) or set(seen)!=keys: raise ValueError()
                     result[name]={'state':'present','uid':lines[0],'resourceVersion':lines[1],'keys':sorted(seen)}
-                return result
+                guard(); return result
             result=snapshot()
             if (snapshot()!=result or not custody._unchanged(binary,binary_id) or not custody._unchanged(config,config_id)
                     or (K3S.lstat().st_dev,K3S.lstat().st_ino)!=binary_id[:2]
