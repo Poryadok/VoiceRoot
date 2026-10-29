@@ -116,6 +116,13 @@ class ConsumerTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception,'operator_retirement_binding_invalid'):
                 operator_retirement.verify_terminal(Path('/unused'),{'native_space_migration':{'status':'COMPLETE'}})
             read.assert_not_called()
+        with tempfile.TemporaryDirectory(dir='/root') as path,patch.object(guard,'ROOT',Path(path)):
+            native=Path(path)/'installed'/'cohort-preservation'/('a'*12)/'space-live'
+            native.mkdir(parents=True)
+            with patch.object(operator_retirement,'private_bytes') as read:
+                with self.assertRaisesRegex(Exception,'operator_retirement_binding_invalid'):
+                    operator_retirement.verify_terminal(Path('/unused'),{'operation':'a'*12})
+                read.assert_not_called()
 
     def test_historical_native_receipt_rejects_tampered_effect_and_rollout_event(self):
         operation='a'*12;ctx={'operation_id':'stg-run-17','commit':'c'*40};binding={'context':ctx,'operation':operation}

@@ -259,11 +259,21 @@ def verify_readonly_terminal(base,state):
     return dict(receipt,journals=journals)
 
 
-def verify_terminal(base,state):
+def _native_retirement_guard(state):
     # Existing retirement receipts predate native Space evidence. Until the
     # typed native-retirement lineage is verified, never reinterpret them as
     # proof that an operation containing that irreversible effect is safe.
+    operation=state.get('operation')
     if state.get('native_space_migration') is not None:fail()
+    if isinstance(operation,str) and re.fullmatch('[a-f0-9]{12}',operation):
+        native=guard.ROOT/'installed'/'cohort-preservation'/operation/'space-live'
+        try:native.lstat()
+        except FileNotFoundError:pass
+        else:fail()
+
+
+def verify_terminal(base,state):
+    _native_retirement_guard(state)
     if 'operator_media_abort' in state:return verify_media_abort_terminal(base,state)
     if 'operator_reset' in state:
         from operator_reset import verify_terminal as verify_reset
@@ -651,6 +661,7 @@ def _retained_mode(path):return stat.S_IMODE(Path(path).lstat().st_mode)
 
 def verify_postmigration_terminal(base,state):
     """Historical, effects-aware operator retirement; never release authority."""
+    _native_retirement_guard(state)
     from datetime import datetime
     base=Path(base);operation=state.get('operation','')
     if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
@@ -787,6 +798,7 @@ def applied_journal_binding(installed,operation,claim,rows):
 
 def verify_applied_terminal(base,state):
     """Historical, effects-aware operator retirement; never release authority."""
+    _native_retirement_guard(state)
     from datetime import datetime
     base=Path(base);operation=state.get('operation','')
     if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
