@@ -14,9 +14,11 @@ import tempfile
 import time
 import tarfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import cohort_unmanaged_actual as unmanaged
+import full_cohort_backup_metadata as source_metadata
 import full_cohort_affected_plan as affected
 import story_media_backup_cohort as cohort
 import story_media_backup_cohort_restore as restore
@@ -125,6 +127,14 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                     'migrate_binary_sha256':tool_sha,'postgres_major':16}}
         binding['sources']['roles']={'engine':engine,'server_start':start}
         phase=object.__new__(affected.FullCatalogPhase)
+        fence=SimpleNamespace(context={'operation_id':event['operation_id']},ledger=SimpleNamespace(read=lambda:({'fixture':True},('uid','rv'))))
+        phase.fence=fence;phase.lock={'fixture':True};phase.namespace_uid='fixture'
+        metadata_phase=object.__new__(source_metadata.BackupMetadataPhase)
+        metadata_phase.fence=fence;metadata_phase.catalog=phase;metadata_phase.lock=phase.lock;metadata_phase.namespace_uid='fixture'
+        metadata_receipt={'operation_id':binding['operation_id'],'source_sha':binding['source_sha'],
+            'databases':databases,'sources':binding['sources'],'full_catalog':binding['full_catalog'],
+            'restore_inputs':binding['restore_inputs'],'metadata':metadata,
+            'migration_roles':{'voice_db':{'role':'source_admin'}}}
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);key=secrets.token_bytes(32)
             def producer(member,output):
@@ -141,7 +151,11 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             stale=copy.deepcopy(event);stale['databases']['extra_db']+=1
             with patch.object(affected.FullCatalogPhase,'verify_current',return_value=stale),self.assertRaises(restore.CohortRestoreError):
                 restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
-            observed=[];events=[];histories={'auth_db':[],'voice_db':[]};original=media._psql
+            observed=[];events=[];histories={'auth_db':[],'voice_db':[]};original=media._psql;docker=media._docker
+            def checked_docker(*args,**kwargs):
+                self.assertFalse(any('POSTGRES_PASSWORD=' in str(arg) or 'VOICE_RESTORE_URL=' in str(arg)
+                                     or ('postgres://' in str(arg) and ':' in str(arg).split('@')[0][11:]) for arg in args))
+                return docker(*args,**kwargs)
             def psql(cid,admin,db,sql,timeout=120):
                 result=original(cid,admin,db,sql,timeout=timeout)
                 if sql==restore.GATEWAY_CATALOG:
@@ -162,13 +176,16 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                     self.assertEqual(original(cid,admin,db,'SELECT version,dirty FROM public.schema_migrations').strip(),b'991|t')
                     observed.append(db)
                 return result
-            with patch.object(affected.FullCatalogPhase,'verify_current',return_value=event),patch.object(media,'_psql',side_effect=psql):
-                receipt=restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
+            with patch.object(affected.FullCatalogPhase,'verify_current',return_value=event),patch.object(media,'_psql',side_effect=psql), \
+                 patch.object(media,'_docker',side_effect=checked_docker), \
+                 patch.object(source_metadata,'verify_completed',return_value=metadata_receipt):
+                receipt=restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic',metadata_phase,'synthetic')
             self.assertEqual(receipt['cleanup'],'verified')
             expected={db:{'mode':'restore-only','from':None,'to':None} for db in databases}
             expected['auth_db']={'mode':'restore-only','from':32,'to':32}
             expected['voice_db']={'mode':'migrate','from':14,'to':15}
             self.assertEqual(receipt['databases'],expected)
+            self.assertEqual(receipt['migration_logins'],{'voice_db':{'role':'source_admin','from':14,'to':15}})
             self.assertEqual(catalogs['voice_db']['history'],[{'version':14,'dirty':False}])
             self.assertEqual(histories['voice_db'],[[{'version':14,'dirty':False}],[{'version':15,'dirty':False}]])
             self.assertEqual(len(histories['auth_db']),2)
