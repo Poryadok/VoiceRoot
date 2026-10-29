@@ -226,7 +226,7 @@ class FullCohortImageApply:
         for key in cut.journal.state['steps']:
             allowed = key.startswith('writer-resume-') or key in ('writer-cut-resume-inventory',
                 'writer-cut-activation-plan', 'writer-cut-space-health', 'writer-cut-publisher-health',
-                'writer-cut-chat-health', 'writer-cut-realtime-scope')
+                'writer-cut-chat-health', 'writer-cut-realtime-scope', 'writer-cut-provision-scope')
             if key not in capture.cut_steps and (not self.verifying or not allowed):
                 raise RecoveryRequired('unexpected cut journal step')
         config = capture.config_journal
@@ -370,7 +370,8 @@ class FullCohortImageApply:
                     or re.fullmatch(r'writer-cut-migration-(?:plan|finish|cleanup)-[0-9a-f]{32}', step)
                     or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory',
                                 'writer-cut-auth-successor', 'writer-cut-activation-plan', 'writer-cut-space-health',
-                                'writer-cut-publisher-health', 'writer-cut-chat-health', 'writer-cut-realtime-scope')):
+                                'writer-cut-publisher-health', 'writer-cut-chat-health', 'writer-cut-realtime-scope',
+                                'writer-cut-provision-scope')):
                 continue
             pending_resume = (self.activation_checking and step.startswith('writer-resume-') and
                               isinstance(item, dict) and item.get('status') == 'pending')
@@ -388,6 +389,13 @@ class FullCohortImageApply:
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
         cut = self.admission.cut
+        provision = getattr(cut, 'provision_successor', None)
+        provision_step = steps.get('writer-cut-provision-scope')
+        if (provision is None) != (provision_step is None):
+            raise RecoveryRequired('provision scope custody changed')
+        if provision is not None and (provision_step['details'] != provision['details'] or
+                provision_step['receipt'] != provision['details'] or not cut._provision_scope_matches(row)):
+            raise RecoveryRequired('provision scope receipt changed')
         effective = getattr(cut, 'effective_session', None)
         scope_step = steps.get('writer-cut-realtime-scope')
         if (effective is None) != (scope_step is None):
@@ -558,8 +566,9 @@ class FullCohortImageApply:
         cut._guards()
         if not cut._pods_drained():
             raise RecoveryRequired('writer pods remain')
-        scope = self.cut_intent['writer_cut']['session_scope']
-        observed = cut.probe(copy.deepcopy(scope))
+        scope = (cut.current_provisioned_session_scope() if getattr(cut, 'provision_successor', None) is not None
+                 else self.cut_intent['writer_cut']['session_scope'])
+        observed = cut._session_observation()
         if (not isinstance(observed, dict)
                 or observed != {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
                 or type(observed.get('active_sessions')) is not int or type(observed.get('active_transactions')) is not int):
