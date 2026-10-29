@@ -431,7 +431,7 @@ jobs:
                   return raw
               finally:os.close(fd)
           manifest=json.loads(read(code/'capture-manifest.json',65536))
-          if not isinstance(manifest,dict) or not 1<=len(manifest)<=87:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
+          if not isinstance(manifest,dict) or not 1<=len(manifest)<=89:raise SystemExit('NATS_ROLLOUT=UNTRUSTED_CODE')
           if 'nats-rollout-preservation/resource_claim.py' not in manifest:raise SystemExit('NATS_ROLLOUT=RESOURCE_FENCE_UPGRADE_REQUIRED')
           for relative,wanted in manifest.items():
               part=pathlib.Path(relative)

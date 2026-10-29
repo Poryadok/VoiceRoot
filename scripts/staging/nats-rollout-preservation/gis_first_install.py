@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import ipaddress
 import json
 import re
 import time
@@ -23,6 +24,26 @@ SCHEMA = 'voice-gis-first-install-v1'
 RESOURCE_RECEIPT_SCHEMA = 'voice-gis-first-install-resources-v1'
 TRANSITION_RECEIPT_SCHEMA = 'voice-gis-first-install-transition-v1'
 SOURCE_SCHEMA = 'voice-gis-first-install-source-v1'
+
+def baseline_workload_names(*,include_hub):
+    from stage_runtime import HUB,LEAVES
+    names={'voice-'+name for name in LEAVES}|{'voice-gateway','voice-web','voice-admin',
+        'voice-developer-portal','voice-p3-principal-jwks'}
+    return names|({HUB} if include_hub else set())
+
+def validate_baseline_snapshots(snapshots):
+    if not isinstance(snapshots,dict) or set(snapshots)!=baseline_workload_names(include_hub=True):
+        raise Blocked('gis_first_install_baseline_workload_count_invalid')
+    uids=set()
+    for name,row in snapshots.items():
+        if not isinstance(row,dict):raise Blocked('gis_first_install_baseline_workload_count_invalid')
+        metadata=row.get('metadata',{})
+        if (row.get('kind')!='Deployment' or metadata.get('name')!=name
+            or metadata.get('namespace')!=NS or not isinstance(metadata.get('uid'),str)
+            or not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',metadata['uid'])
+            or metadata['uid'] in uids):raise Blocked('gis_first_install_baseline_workload_count_invalid')
+        uids.add(metadata['uid'])
+    return True
 PREREQUISITE_SCHEMA = 'voice-gis-prerequisite-receipt-v1'
 DEV_PREREQUISITE_SCHEMA = 'voice-dev-gis-prerequisite-receipt-v1'
 
@@ -451,10 +472,24 @@ def preflight(kube, plan):
     return True
 
 
-def _matches_owned(live, intended, operation):
+def _matches_owned(live, intended, operation, allow_service_allocation=False):
     metadata = live.get('metadata', {})
     actual = semantic(live)
     wanted = semantic(intended)
+    if allow_service_allocation and _identity(intended)==SERVICE:
+        try:
+            if (wanted['metadata']['namespace']!=NS or 'clusterIP' in wanted['spec']
+                or 'clusterIPs' in wanted['spec'] or wanted['spec'].get('type')!='ClusterIP'):
+                return False
+            primary=actual['spec'].pop('clusterIP');addresses=actual['spec'].pop('clusterIPs')
+            if (not isinstance(addresses,list) or not 1<=len(addresses)<=2 or primary!=addresses[0]
+                or len(set(addresses))!=len(addresses)):
+                return False
+            parsed=[ipaddress.ip_address(address) for address in addresses]
+            if any(address.is_unspecified or address.is_multicast for address in parsed):return False
+            families=actual['spec'].get('ipFamilies')
+            if families is not None and families!=['IPv4' if address.version==4 else 'IPv6' for address in parsed]:return False
+        except (KeyError,ValueError,TypeError):return False
     # The only permitted post-create mutation is this operation's guarded
     # 0-to-1 start. Compare all other fields against the paused spec.
     if _identity(intended) == DEPLOYMENT:
@@ -466,7 +501,7 @@ def _matches_owned(live, intended, operation):
 
 
 def _record(plan, save, kind, name, live):
-    if not _matches_owned(live, next(obj for obj in plan['objects'] if _identity(obj) == (kind, name)), plan['operation']):
+    if not _matches_owned(live, next(obj for obj in plan['objects'] if _identity(obj) == (kind, name)), plan['operation'],plan.get('service_allocation')=='server'):
         raise Blocked('gis_first_install_created_object_mismatch')
     plan['created'][f'{kind}/{name}'] = {
         'uid': live['metadata']['uid'], 'resourceVersion': str(live['metadata']['resourceVersion']),
@@ -518,7 +553,7 @@ def execute(kube, plan, save, *, start=True):
             if record is not None:
                 raise Blocked('gis_first_install_owned_object_missing')
             continue
-        if not _matches_owned(live, intended, plan['operation']):
+        if not _matches_owned(live, intended, plan['operation'],plan.get('service_allocation')=='server'):
             raise Blocked('gis_first_install_create_race')
         if record is not None and live['metadata']['uid'] != record['uid']:
             raise Blocked('gis_first_install_owned_object_drift')
@@ -531,7 +566,7 @@ def execute(kube, plan, save, *, start=True):
         if key in plan['created']:
             recorded = plan['created'][key]
             if (kind, name) == DEPLOYMENT and plan.get('phase') == 'STARTING' and live is not None:
-                if (not _matches_owned(live, intended, plan['operation'])
+                if (not _matches_owned(live, intended, plan['operation'],plan.get('service_allocation')=='server')
                     or live['metadata']['uid'] != recorded['uid']
                     or live.get('spec', {}).get('replicas') != 1):
                     raise Blocked('gis_first_install_owned_object_drift')
@@ -539,7 +574,7 @@ def execute(kube, plan, save, *, start=True):
                 recorded['spec_sha256'] = digest(semantic(live))
                 save(copy.deepcopy(plan))
                 continue
-            if (live is None or not _matches_owned(live, intended, plan['operation'])
+            if (live is None or not _matches_owned(live, intended, plan['operation'],plan.get('service_allocation')=='server')
                 or live['metadata']['uid'] != recorded['uid']
                 or str(live['metadata']['resourceVersion']) != recorded['resourceVersion']
                 or digest(semantic(live)) != recorded.get('spec_sha256')):
@@ -547,7 +582,7 @@ def execute(kube, plan, save, *, start=True):
             continue
         if live is not None:
             # Recover a response lost after create, but only in the same journal.
-            if not _matches_owned(live, intended, plan['operation']):
+            if not _matches_owned(live, intended, plan['operation'],plan.get('service_allocation')=='server'):
                 raise Blocked('gis_first_install_create_race')
             _record(plan, save, kind, name, live)
             continue
@@ -562,7 +597,7 @@ def execute(kube, plan, save, *, start=True):
                 raise Blocked('gis_first_install_create_outcome_unknown') from None
             if observed is None:
                 raise Blocked('gis_first_install_create_outcome_unknown') from None
-            if not _matches_owned(observed, intended, plan['operation']):
+            if not _matches_owned(observed, intended, plan['operation'],plan.get('service_allocation')=='server'):
                 code = 'gis_first_install_create_race' if _conflict(error) else 'gis_first_install_create_outcome_unknown'
                 raise Blocked(code) from None
             created = observed
@@ -572,7 +607,7 @@ def execute(kube, plan, save, *, start=True):
         key = f'{kind}/{name}'
         recorded = plan['created'].get(key, {})
         intended = next(obj for obj in plan['objects'] if _identity(obj) == (kind, name))
-        if (live is None or not _matches_owned(live, intended, plan['operation'])
+        if (live is None or not _matches_owned(live, intended, plan['operation'],plan.get('service_allocation')=='server')
             or live['metadata']['uid'] != recorded.get('uid')
             or str(live['metadata']['resourceVersion']) != recorded.get('resourceVersion')):
             raise Blocked('gis_first_install_pair_revalidation_failed')
@@ -597,7 +632,7 @@ def start_owned(kube, plan, save):
         record=plan.get('created',{}).get(key)
         intended=next(obj for obj in plan['objects'] if _identity(obj)==(kind,name))
         if (live is None or record is None or live.get('metadata',{}).get('uid')!=record.get('uid')
-            or not _matches_owned(live,intended,plan['operation'])):
+            or not _matches_owned(live,intended,plan['operation'],plan.get('service_allocation')=='server')):
             raise Blocked('gis_first_install_start_object_changed')
         replicas=live.get('spec',{}).get('replicas',0)
         if (kind,name)==DEPLOYMENT:
@@ -682,8 +717,8 @@ def verify_ready(kube, plan, *, timeout=300, clock=time.monotonic, sleep=time.sl
         if (service is None or deployment is None
             or service.get('metadata', {}).get('uid') != service_uid
             or deployment.get('metadata', {}).get('uid') != deployment_uid
-            or not _matches_owned(service, service_spec, plan['operation'])
-            or not _matches_owned(deployment, deployment_spec, plan['operation'])):
+            or not _matches_owned(service, service_spec, plan['operation'],plan.get('service_allocation')=='server')
+            or not _matches_owned(deployment, deployment_spec, plan['operation'],plan.get('service_allocation')=='server')):
             raise Blocked('gis_first_install_ready_resource_changed')
         status = deployment.get('status', {})
         generation = deployment.get('metadata', {}).get('generation')
@@ -751,6 +786,19 @@ def _ready_service_endpoints(kube, service, deployment_uid, *, namespace=NS):
     return sorted(result, key=lambda row: (row['slice_uid'], row['pod_uid']))
 
 
+def normalized_binding(plan):
+    return digest({'objects':plan['objects'],'service_allocation':plan.get('service_allocation')})
+
+
+def validate_normalized_binding(target, plan):
+    try:
+        if (target.get('gis_first_install_normalized_sha256') != normalized_binding(plan)
+                or target.get('gis_first_install_sha256') != plan['source_plan_sha256']):
+            raise ValueError()
+    except (KeyError,TypeError,ValueError):
+        raise Blocked('gis_first_install_normalized_binding_changed') from None
+
+
 def transition_receipt(plan, ready, *, source_ci, custody, target_mode):
     """Bind the 22-to-23 addition to the database, NATS and workload proofs."""
     validate_prerequisite_receipt(plan.get('prerequisite_receipt'), plan)
@@ -811,9 +859,16 @@ def validate_transition_receipt(receipt, state):
         or not isinstance(custody['target_sha'], str) or not re.fullmatch(r'[a-f0-9]{40}', custody['target_sha'])
         or any(not isinstance(custody.get(key), str) or not custody_sha.fullmatch(custody[key])
                for key in ('archive_sha256', 'manifest_sha256', 'census_sha256', 'baseline_snapshots_sha256'))
-        or custody['baseline_workload_count'] != 22 or type(custody['baseline_workload_count']) is not int
+        or custody['baseline_workload_count'] not in (22,24) or type(custody['baseline_workload_count']) is not int
         or custody['off_node_verified'] is not True):
         raise Blocked('gis_first_install_transition_custody_invalid')
+    if custody['baseline_workload_count']==24:
+        snapshots=gis_plan.get('baseline_snapshots')
+        validate_baseline_snapshots(snapshots)
+        if (snapshots!=state.get('context',{}).get('original_snapshots')
+                or digest(snapshots)!=custody['baseline_snapshots_sha256']):
+            raise Blocked('gis_first_install_transition_custody_invalid')
+        validate_normalized_binding(state.get('target',{}),gis_plan)
     ready = receipt['ready']
     if (not isinstance(ready, dict) or set(ready) != {'schema', 'namespace', 'service_uid',
         'service_spec_sha256', 'deployment_uid', 'deployment_spec_sha256', 'endpoints'}
@@ -886,7 +941,7 @@ def rollback(kube, plan, save):
         expected_semantic=copy.deepcopy(actual_semantic)
         if (kind, name)==DEPLOYMENT and expected_semantic is not None:
             expected_semantic['spec']['replicas']=0
-        if (not _matches_owned(live, intended, plan['operation'])
+        if (not _matches_owned(live, intended, plan['operation'],plan.get('service_allocation')=='server')
             or live['metadata']['uid'] != record['uid']
             or digest(expected_semantic) != digest(semantic(intended))
             or (plan.get('phase') not in ('CREATED','STARTING','STARTED')

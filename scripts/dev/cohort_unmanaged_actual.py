@@ -27,7 +27,10 @@ def verify_catalog_phase(phase, token, binding, cut=None):
                 raise UnmanagedError('catalog cut identity differs')
             receipt=phase.verify_receipt(token)
             if cut.provision_successor is None:
-                if phase.verify_current(token)!=receipt: raise UnmanagedError('original catalog changed')
+                if getattr(cut,'space_fresh',None) is None:
+                    if phase.verify_current(token)!=receipt: raise UnmanagedError('original catalog changed')
+                else:
+                    affected.verify_space_catalog(cut.probe,cut)
             elif cut.effective_session is not None:
                 affected.verify_effective_catalog(cut.probe,cut)
             else:

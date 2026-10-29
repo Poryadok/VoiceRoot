@@ -103,6 +103,13 @@ class UnmanagedActualTest(unittest.TestCase):
              patch.object(affected,'verify_effective_catalog',side_effect=RuntimeError('changed')):
             with self.assertRaises(unmanaged.UnmanagedError):unmanaged.verify_catalog_phase(phase,'token',binding,cut)
 
+        cut.effective_session=None;cut.provision_successor=None;cut.space_fresh={'fixture':True}
+        with patch.object(affected.FullCatalogPhase,'verify_receipt',return_value=receipt), \
+             patch.object(affected.FullCatalogPhase,'verify_current',side_effect=AssertionError('original cannot be current')), \
+             patch.object(affected,'verify_space_catalog',return_value={'fixture':'space'},create=True) as successor:
+            self.assertEqual(unmanaged.verify_catalog_phase(phase,'token',binding,cut),receipt)
+            successor.assert_called_once_with(probe,cut)
+
     def test_extra_plan_is_only_restore_only_in_full_catalog_mode(self):
         plan={'engine':'unmanaged','from':None,'to':None,'files':{}}
         with self.assertRaises(restore.CohortRestoreError):restore.classify_plan('extra_db',plan)

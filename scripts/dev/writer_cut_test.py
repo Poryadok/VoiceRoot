@@ -82,6 +82,21 @@ class WriterCutTest(unittest.TestCase):
         self.effect_patch.start()
         self.addCleanup(self.effect_patch.stop)
 
+    def test_space_guard_receives_inventory_after_owned_migration_job(self):
+        import writer_cut_migration as migration
+        import writer_cut_space as space
+        owned={'metadata':{'name':'migration','uid':'owned','namespace':'voice-dev'},'spec':{},'status':{}}
+        self.client.guard_rows['jobs']=[owned]
+        self.cut.space_fresh={'finished':True};self.cut.migration={'finished':False}
+        state={'job':{'state':'owned','uid':'owned'}}
+        with mock.patch.object(migration,'observe',return_value=(state,None)), \
+             mock.patch.object(migration,'sessions',return_value={'attributed_sessions':[]}), \
+             mock.patch.object(space,'guard_jobs',side_effect=lambda _cut,rows:rows) as guard:
+            self.cut._guards()
+            guard.assert_called_once_with(self.cut,[])
+            self.client.guard_rows['jobs'].append({'metadata':{'name':'foreign','uid':'foreign'},'spec':{},'status':{}})
+            with self.assertRaises(writer_cut.RecoveryRequired):self.cut._guards()
+
     def test_drain_and_resume_use_current_template_not_old(self):
         self.assertEqual(self.cut.drain()['active_sessions'], 0)
         self.assertTrue(all(v['spec']['replicas'] == 0 for v in self.client.workloads.values()))
