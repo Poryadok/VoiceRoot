@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import nats_contract_integration as integration
+import contract_fixture_entry as entry
 
 
 class HostedTransportTests(unittest.TestCase):
@@ -169,11 +170,16 @@ class HostedTransportTests(unittest.TestCase):
 
             manifest_path = bundle / 'capture/capture-manifest.json'
             manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-            self.assertLessEqual(len(manifest), 85)
+            source = Path(__file__).resolve().parents[3]
+            captured = integration._captured_python_sources(source)
+            self.assertEqual(set(manifest), set(captured) | {'nats-known-baseline/kernel'})
+            self.assertLessEqual(len(manifest), 101)
             self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
             for relative, wanted in manifest.items():
                 content = (bundle / 'capture' / relative).read_bytes()
                 self.assertEqual(hashlib.sha256(content).hexdigest(), wanted)
+                if relative in captured:
+                    self.assertEqual(content, captured[relative].read_bytes())
             for relative in (
                 'nats-rollout-preservation/closed_archive.py',
                 'nats-rollout-preservation/closed_durable.py',
@@ -328,6 +334,60 @@ class HostedTransportTests(unittest.TestCase):
             ['docker', 'info', '--format', '{{.OSType}}'],
             ['docker', 'pull', integration.fixture._pinned_runtime_images()[0]],
         ])
+
+
+class CaptureEntryBoundsTests(unittest.TestCase):
+    def exercise(self, count, *, changed=False):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = root / 'capture'; source.mkdir()
+            base = root / 'materialized'; base.mkdir()
+            names = ['nats-rollout-preservation/contract_fixture_entry.py',
+                     'nats-rollout-preservation/root_cli.py', 'nats-known-baseline/kernel']
+            names += ['nats-rollout-preservation/fixture-%03d.py' % index for index in range(count - len(names))]
+            manifest = {}
+            for name in names:
+                path = source / name; path.parent.mkdir(parents=True, exist_ok=True)
+                content = ('fixture:' + name).encode(); path.write_bytes(content)
+                manifest[name] = hashlib.sha256(content).hexdigest()
+            (source / 'capture-manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+            if changed:
+                (source / names[0]).write_bytes(b'changed')
+            binding = Mock()
+            def resolve(value):
+                return source if str(value) == '/bundle/capture' else Path(value)
+            real_stat = Path.stat
+            kernel = base / 'scripts/staging/nats-known-baseline/kernel'
+            def owned_stat(path, **kwargs):
+                info = real_stat(path, **kwargs)
+                if path == kernel and kwargs.get('follow_symlinks') is False:
+                    return SimpleNamespace(st_mode=info.st_mode, st_uid=0)
+                return info
+            with patch.object(entry, 'Path', side_effect=resolve), patch.object(entry.os, 'chown'), \
+                 patch.object(Path, 'stat', owned_stat), \
+                 patch.object(sys, 'path', list(sys.path)), patch.dict(sys.modules, {'root_cli': SimpleNamespace(code_binding=binding)}):
+                if count > 101:
+                    with self.assertRaisesRegex(RuntimeError, 'captured_code_manifest_invalid'):
+                        entry._materialize_capture(base)
+                    self.assertFalse((base / 'scripts/staging').exists()); binding.assert_not_called()
+                elif changed:
+                    with self.assertRaisesRegex(RuntimeError, 'captured_code_source_changed'):
+                        entry._materialize_capture(base)
+                    binding.assert_not_called()
+                else:
+                    code = entry._materialize_capture(base)
+                    self.assertEqual(json.loads((code / 'capture-manifest.json').read_text(encoding='utf-8')), manifest)
+                    for name in names: self.assertEqual((code / name).read_bytes(), (source / name).read_bytes())
+                    binding.assert_called_once_with(code)
+
+    def test_accepts_current_size_and_bound(self):
+        for count in (94, 101):
+            with self.subTest(count=count): self.exercise(count)
+
+    def test_rejects_over_bound_before_materialization(self):
+        self.exercise(102)
+
+    def test_rejects_changed_bytes(self):
+        self.exercise(94, changed=True)
 
 
 if __name__ == '__main__':
