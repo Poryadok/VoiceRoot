@@ -49,7 +49,7 @@ def stage_cluster_fixture(session):
                 'imageID':'fixture.invalid/'+container+'@sha256:'+'a'*64}]}})
     fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace}},
            ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
-                'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}},
+                 'data':{'phase':'active','generation':'r20260930a4','dataPVC':'fixture'}},
            ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
            ('pv','pv'):{'metadata':{'uid':pv},'spec':{'claimRef':{'uid':claim},
                 'local':{'path':'/var/lib/rancher/k3s/storage/pvc-'+claim+'_voice-staging_fixture'},
