@@ -350,10 +350,32 @@ class EffectiveScopeTest(unittest.TestCase):
 class ProvisionScopeTest(unittest.TestCase):
     def setUp(self):
         fixture.WriterCutTest.setUp(self)
+        import full_cohort_affected_plan as affected
         scope = {'engine': {'pod_uid': 'p'}, 'databases': ['auth_db'], 'database_oids': {'auth_db': 10}, 'server_start': 'start'}
         self.admission['session_scope'] = copy.deepcopy(scope); self.cut.admission = copy.deepcopy(self.admission)
         self.journal.intent['writer_cut'] = copy.deepcopy(self.admission); self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
-        self.cut.intent = copy.deepcopy(self.journal.intent); self.cut.drain()
+        baseline = {'engine': scope['engine'], 'server_start': scope['server_start'], 'all_databases': {'auth_db': 10},
+                    'excluded': {}, 'properties': {'auth_db': {'owner': 1}}}
+        class Catalog:
+            def verify_receipt(inner, token): return copy.deepcopy(baseline)
+            def verify_current(inner, token): return copy.deepcopy(baseline)
+            def _guard(inner): pass
+        with mock.patch.object(affected, 'FullCatalogPhase', Catalog):
+            probe = affected.CatalogScopedProbe(Catalog(), 'token')
+        self.cut = writer_cut.WriterCut(self.journal, self.fence, self.client, self.lock, 'ns', self.admission, probe)
+        effect = mock.patch.object(self.cut, '_patch', side_effect=self.client.patch); effect.start(); self.addCleanup(effect.stop)
+        inspect = mock.patch.object(affected.pg, 'inspect', side_effect=lambda value, guard: {
+            'scope': copy.deepcopy(value), 'active_sessions': 0, 'active_transactions': 0})
+        inspect.start(); self.addCleanup(inspect.stop)
+        def full_catalog(*args):
+            databases = {'auth_db': 10}
+            if hasattr(self, 'pg') and self.pg.state['database']:
+                databases['realtime_db'] = self.pg.state['database']['oid']
+            return {'all_databases': databases, 'databases': copy.deepcopy(databases), 'excluded': {},
+                    'properties': {'auth_db': {'owner': 1}}}
+        catalog_patch = mock.patch.object(affected, '_full_catalog', side_effect=full_catalog)
+        catalog_patch.start(); self.addCleanup(catalog_patch.stop)
+        self.cut.drain()
         password = b'fixtureCredential_123456789012345678901234'
         secret = {'name': 'voice-realtime-db-fixture', 'uid': 'secret', 'resourceVersion': '10',
                   'password_sha256': hashlib.sha256(password).hexdigest()}
@@ -393,26 +415,35 @@ class ProvisionScopeTest(unittest.TestCase):
         self.expanded = scope | {'databases': ['auth_db', 'realtime_db'], 'database_oids': {'auth_db': 10, 'realtime_db': 13}}
 
     def test_actual_provision_scope_binds_before_migration_and_rechecks(self):
-        import full_cohort_affected_plan
         result = {'scope': self.expanded, 'active_sessions': 0, 'active_transactions': 0}
-        with mock.patch.object(full_cohort_affected_plan, 'inspect_provisioned', return_value=result, create=True):
-            self.cut.bind_provision_scope(self.phase)
-            self.assertEqual(self.cut.verify_drained(), result)
-            self.assertEqual(self.cut.current_provisioned_session_scope(), self.expanded)
-            self.pg.state['database']['oid'] = 14
-            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_drained()
+        self.cut.bind_provision_scope(self.phase)
+        self.assertEqual(self.cut.verify_drained(), result)
+        self.assertEqual(self.cut.current_provisioned_session_scope(), self.expanded)
+        self.pg.state['database']['oid'] = 14
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_drained()
         self.assertEqual(self.ledger.row['status'], 'uncertain')
 
     def test_provision_only_cannot_resume_before_completed_migration(self):
-        import full_cohort_affected_plan
-        result = {'scope': self.expanded, 'active_sessions': 0, 'active_transactions': 0}
-        with mock.patch.object(full_cohort_affected_plan, 'inspect_provisioned', return_value=result, create=True):
-            self.cut.bind_provision_scope(self.phase)
-            self.cut.resume_inventory = {'fixture': True}
-            before = len(self.client.patches)
-            targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
-            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.cut.bind_provision_scope(self.phase)
+        self.cut.resume_inventory = {'fixture': True}
+        before = len(self.client.patches)
+        targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
         self.assertEqual(len(self.client.patches), before)
+
+    def test_actual_sampler_detects_catalog_change_during_zero_read(self):
+        import full_cohort_affected_plan as affected
+        original = affected._full_catalog.side_effect
+        calls = []
+        def drift(*args):
+            calls.append(True)
+            value = original(*args)
+            if len(calls) == 2: value['all_databases']['foreign_db'] = 14
+            return value
+        with mock.patch.object(affected, '_full_catalog', side_effect=drift):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_provision_scope(self.phase)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
 
 
 class CatalogBracketTest(unittest.TestCase):
