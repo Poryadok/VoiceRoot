@@ -166,15 +166,18 @@ def frontend_live(kube, name):
         found=[]
         seen=set()
         for obj in items:
-            if not isinstance(obj,dict) or obj.get('kind')!='ConfigMap' or not isinstance(obj.get('metadata'),dict):
+            if (not isinstance(obj,dict) or obj.get('kind','ConfigMap')!='ConfigMap'
+                or obj.get('apiVersion','v1')!='v1' or not isinstance(obj.get('metadata'),dict)):
                 _fail('frontend_bootstrap_catalog_invalid')
             identity=obj['metadata']
             if (identity.get('namespace')!='voice-staging' or identity.get('name')!=name
-                or identity['name'] in seen):_fail('frontend_bootstrap_catalog_invalid')
+                or identity['name'] in seen or identity.get('deletionTimestamp')):_fail('frontend_bootstrap_catalog_invalid')
             seen.add(identity['name'])
             if obj['metadata'].get('name')==name:
                 if obj['metadata'].get('namespace')!='voice-staging':_fail('frontend_bootstrap_catalog_invalid')
-                found.append(obj)
+                item=copy.deepcopy(obj)
+                item.setdefault('kind','ConfigMap');item.setdefault('apiVersion','v1')
+                found.append(item)
         if len(found)>1:_fail('frontend_bootstrap_catalog_invalid')
         return copy.deepcopy(found[0]) if found else None
     except PlanError:raise

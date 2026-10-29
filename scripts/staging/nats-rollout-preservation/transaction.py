@@ -80,6 +80,8 @@ def rollback_package(previous,*,story_only=False):
             or candidate!=expected):
             raise Blocked('rollout_rollback_backend_candidate_unproved')
     target=copy.deepcopy(previous['input_target']);rows=[];images={}
+    # A fresh rollback does not inherit a previous operation's bootstrap proof.
+    target.pop('realtime_bootstrap_sha256',None)
     if full_story:
         target['mode']='images-only';target['changed_services']=['story']
         target['template_hashes']={'voice-story':previous['target']['template_hashes']['voice-story']}
@@ -237,6 +239,8 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    if realtime_bootstrap_receipt is None and 'realtime_bootstrap_sha256' in target:
+        raise Blocked('realtime_bootstrap_receipt_missing')
     if realtime_bootstrap_receipt is not None:
         state['realtime_bootstrap']=copy.deepcopy(realtime_bootstrap_receipt)
         save(base/'checkpoint.json',state)
