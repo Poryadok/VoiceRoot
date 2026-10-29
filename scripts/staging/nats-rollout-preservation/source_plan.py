@@ -500,6 +500,12 @@ def preservation_projection(source, parameters, decoder, kube):
             for obj in selected:
                 b.add('infra',obj)
                 if obj['kind']=='StatefulSet':_preserve_claims(b,obj)
+            b.read('scripts/staging/apply-clickhouse-init.sh','db-init')
+            ddl=b.read('docker/clickhouse/init/001_events.sql','db-init')
+            cm={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'voice-clickhouse-init','namespace':NS},'data':{'001_events.sql':ddl}}
+            b.add('db-init',cm)
+            b.get('Pod','voice-clickhouse-0')
+            _verify_clickhouse(kube,app,_clickhouse_statements(ddl))
             for obj in minio:
                 if obj['kind']=='Job':
                     observed=b.get('Job',obj['metadata']['name'])
@@ -510,6 +516,21 @@ def preservation_projection(source, parameters, decoder, kube):
                     if not actual['metadata']['labels']:actual['metadata'].pop('labels',None)
                     if not actual['metadata']:actual.pop('metadata',None)
                     if actual!=desired:_fail('unsupported_minio_bucket_job_change')
+                    desired_spec=obj['spec'];actual_spec=observed['spec']
+                    defaults={'parallelism':1,'completions':1,'backoffLimit':6,'completionMode':'NonIndexed',
+                              'suspend':False,'manualSelector':False}
+                    allowed=set(desired_spec)|set(defaults)|{'selector'}
+                    if not set(actual_spec)<=allowed:_fail('unsupported_minio_bucket_job_change')
+                    for key in set(desired_spec)-{'template'}:
+                        if actual_spec.get(key)!=desired_spec[key]:_fail('unsupported_minio_bucket_job_change')
+                    for key,value in defaults.items():
+                        if key not in desired_spec and key in actual_spec and actual_spec[key]!=value:_fail('unsupported_minio_bucket_job_change')
+                    if 'selector' in actual_spec and 'selector' not in desired_spec:
+                        selector=actual_spec['selector'];labels=selector.get('matchLabels',{}) if type(selector) is dict else {}
+                        uid=observed['metadata'].get('uid')
+                        if (set(selector)!={'matchLabels'} or len(labels)!=1 or not uid
+                            or next(iter(labels)) not in ('controller-uid','batch.kubernetes.io/controller-uid')
+                            or next(iter(labels.values()))!=uid):_fail('unsupported_minio_bucket_job_change')
                 elif obj['kind']=='Service':b.add('infra',obj)
                 elif obj['kind']!='StatefulSet':_fail('preservation_minio_source_invalid')
         services=b.documents('deploy/staging/services.yaml','migrations');r2_envs={}
@@ -776,6 +797,24 @@ def _normalized_ddl(statement):
     return re.sub(r'\s+', '', statement).rstrip(';')
 
 
+CLICKHOUSE_READ_ARGS=('exec','voice-clickhouse-0','-c','clickhouse','--','sh','-ceu',
+    'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$CLICKHOUSE_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; clickhouse-client --host voice-clickhouse --user default --password "$CLICKHOUSE_PASSWORD" --query "$1"; printf "}"',
+    '--',CH_SQL)
+
+
+def _verify_clickhouse(kube, secret, ddl):
+    result = kube.run(list(CLICKHOUSE_READ_ARGS))
+    if result['password_sha256'] != hashlib.sha256(_value(secret, 'CLICKHOUSE_PASSWORD').encode()).hexdigest():
+        _fail('unsupported_clickhouse_authority_sync')
+    tables = {row['name']: row for row in result['catalog']['data']}
+    expected = {'events': 'MergeTree', 'events_logical': 'View', 'dau_mv': 'AggregatingMergeTree',
+        'dau_mv_mv': 'MaterializedView', 'events_by_type_mv': 'SummingMergeTree', 'events_by_type_mv_mv': 'MaterializedView'}
+    if any(name not in tables or tables[name]['engine'] != engine for name, engine in expected.items()):
+        _fail('canonical_clickhouse_schema_init_missing')
+    if set(ddl) != set(expected) or any(_normalized_ddl(tables[name]['create_table_query']) != ddl[name] for name in expected):
+        _fail('canonical_clickhouse_ddl_incompatible')
+
+
 def verify_db_init(kube, plan):
     """Repeat fixed read-only catalog/auth checks, with no source execution."""
     if plan['mode'] != 'full':
@@ -799,19 +838,8 @@ def verify_db_init(kube, plan):
                     ['shorebird_patch', 'integer', 'YES'], ['updated_at', 'timestamp with time zone', 'YES']]
                 if catalog['columns'] != expected or catalog['primary_key'] != ['platform'] or catalog['windows_seed'] is not True:
                     _fail('canonical_gateway_schema_init_missing')
-        script = 'printf "{\\"password_sha256\\":\\"%s\\",\\"catalog\\":" "$(printf %s \"$CLICKHOUSE_PASSWORD\" | sha256sum | cut -d\" \" -f1)"; clickhouse-client --host voice-clickhouse --user default --password "$CLICKHOUSE_PASSWORD" --query "$1"; printf "}"'
-        result = kube.run(['exec', 'voice-clickhouse-0', '--', 'sh', '-ceu', script, '--', CH_SQL])
-        if result['password_sha256'] != hashlib.sha256(_value(secret, 'CLICKHOUSE_PASSWORD').encode()).hexdigest():
-            _fail('unsupported_clickhouse_authority_sync')
-        tables = {row['name']: row for row in result['catalog']['data']}
-        expected = {'events': 'MergeTree', 'events_logical': 'View', 'dau_mv': 'AggregatingMergeTree',
-            'dau_mv_mv': 'MaterializedView', 'events_by_type_mv': 'SummingMergeTree', 'events_by_type_mv_mv': 'MaterializedView'}
-        if any(name not in tables or tables[name]['engine'] != engine for name, engine in expected.items()):
-            _fail('canonical_clickhouse_schema_init_missing')
         row = next(row for row in plan['checks'] if row['id'] == 'db-init')
-        ddl = row['evidence']['clickhouse_ddl']
-        if set(ddl) != set(expected) or any(_normalized_ddl(tables[name]['create_table_query']) != ddl[name] for name in expected):
-            _fail('canonical_clickhouse_ddl_incompatible')
+        _verify_clickhouse(kube,secret,row['evidence']['clickhouse_ddl'])
         return {'verified': True}
     except PlanError:
         raise

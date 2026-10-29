@@ -98,7 +98,8 @@ class SourceTests(unittest.TestCase):
                 kube,params=self.canonical_fixture(mode)
                 result=source_plan.preservation_projection(SOURCE,params,decoder,kube)
                 self.assertEqual(result['schema'],'voice-staging-store-projection-v1')
-                self.assertTrue(all(call[0]=='get' or call[1][0]=='apply' and '--dry-run=server' in call[1] for call in kube.calls))
+                self.assertTrue(all(call[0]=='get' or call[1][0]=='apply' and '--dry-run=server' in call[1]
+                                    or call[1][0]=='exec' and call[1][-1]==source_plan.CH_SQL for call in kube.calls))
                 kube.objects[('StatefulSet','voice-minio')]['spec']['template']['spec']['containers'][0]['image']='changed'
                 with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_canonical_change_minio-cors_voice-minio'):
                     source_plan.preservation_projection(SOURCE,params,decoder,kube)
@@ -113,6 +114,17 @@ class SourceTests(unittest.TestCase):
         env=kube.objects[('Deployment','voice-file')]['spec']['template']['spec']['containers'][0]['env']
         next(item for item in env if item['name']=='FILE_R2_SIGNING_ENDPOINT')['value']='https://wrong.invalid'
         with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_r2_configuration_change_file'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('full')
+        kube.objects[('Job','voice-minio-create-files-bucket')]['spec']['backoffLimit']=9
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_minio_bucket_job_change'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('full');kube.bad_clickhouse=True
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'canonical_clickhouse_ddl_incompatible'):
+            source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube,params=self.canonical_fixture('full')
+        kube.objects[('ConfigMap','voice-clickhouse-init')]['data']['001_events.sql']='changed'
+        with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_canonical_change_db-init_voice-clickhouse-init'):
             source_plan.preservation_projection(SOURCE,params,decoder,kube)
 
     def test_store_projection_binds_referenced_minio_credentials_without_replica_dependence(self):
