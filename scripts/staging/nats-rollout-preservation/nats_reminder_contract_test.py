@@ -101,3 +101,19 @@ class ReminderContractTests(unittest.TestCase):
         with self.assertRaises(plan.ContractError):plan.execute(record,actor,events.append)
         self.assertEqual(actor.calls,1)
         self.assertEqual([event['kind'] for event in events],['nats_contract_intent','nats_contract_mutation_issued'])
+
+    def test_actor_accepts_only_bound_reminder_stream_payload(self):
+        from nats_contract_actor import Actor
+        from nats_contract_actor_test import Runtime
+        normalized={(s,c['durable_name']):copy.deepcopy(c) for s,c in plan.V7_DECLARATIONS}
+        stream={'name':plan.REMINDER_STREAM,'subjects':[plan.REMINDER_SUBJECT],'storage':'file',
+                'retention':'limits','max_age':604800000000000,'duplicate_window':120000000000}
+        record=plan.compile_plan(self.source,self.streams,{},normalized,version=plan.V7_SCHEMA,normalized_reminder_stream=stream)
+        actor=Actor(Runtime(),'owned-broker','owned-id',Path('/selected-pvc'),lambda:None,plan=record)
+        calls=[];actor._request=lambda *args,**kwargs:calls.append((args,kwargs)) or None
+        self.assertIsNone(actor.info_config(plan.REMINDER_STREAM));self.assertTrue(calls[-1][1]['missing'])
+        actor.mutate('$JS.API.STREAM.CREATE.'+plan.REMINDER_STREAM,stream)
+        for api,payload in (('$JS.API.STREAM.CREATE.foreign',stream),
+                            ('$JS.API.STREAM.CREATE.'+plan.REMINDER_STREAM,{**stream,'subjects':['foreign']})):
+            with self.assertRaises(plan.ContractError):actor.mutate(api,payload)
+        self.assertEqual(len(calls),2)
