@@ -328,10 +328,12 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             _source_shape(binding, databases, source_metadata, postgres_image, migrate_image)
             cohort.verify_staging(session,binding,databases,manifest,catalog_ref,metadata_ref)
         sources = migration_inventory(source_root, databases, source_metadata['migrations'],full_catalog)
+        changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
+        if _staging is not None and 'space_db' in changed:
+            raise CohortRestoreError('staging Space native migration qualification required')
         if media_restore._docker('info', '--format', '{{.OSType}}').strip() != b'linux':
             raise CohortRestoreError('Linux Docker required')
         postgres_id = media_restore._check_image(postgres_image)
-        changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
         migration_roles = ((_qualified_staging_roles(session,binding,databases,source_metadata,changed,catalog_ref,metadata_ref)
                             if _staging is not None else _qualified_roles(metadata_phase, metadata_token, catalog_phase, binding, databases,
                                             source_metadata, changed)) if full_catalog and changed else {})

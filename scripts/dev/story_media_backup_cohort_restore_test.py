@@ -10,6 +10,22 @@ import story_media_backup_cohort_restore as restore
 
 
 class CohortPlanTest(unittest.TestCase):
+    def test_staging_changed_space_requires_native_proof_before_docker(self):
+        session=object()
+        metadata={'migrations':{'space_db':{'engine':'golang-migrate','from':24,'to':51,'files':{'x':'a'*64}}}}
+        adapter=types.SimpleNamespace(validate_backup_binding=mock.Mock(),load_metadata=mock.Mock(return_value={'source':metadata}))
+        journal=types.SimpleNamespace(**{name:mock.Mock() for name in ('begin','created','begin_remove','removed','uncertain')})
+        with mock.patch.dict(sys.modules,{'staging_cohort_preservation':adapter}), \
+             mock.patch.object(restore,'_source_shape'), mock.patch.object(restore.cohort,'verify_staging'), \
+             mock.patch.object(restore,'migration_inventory',return_value={}), \
+             mock.patch.object(restore,'classify_plan',wraps=restore.classify_plan) as classify, \
+             mock.patch.object(restore.media_restore,'_docker') as docker:
+            with self.assertRaisesRegex(restore.CohortRestoreError,'cohort restore incomplete'):
+                restore._qualify(None,None,{'full_catalog':{}},['space_db'],{},metadata,None,None,None,journal,
+                                 _staging=(session,{},{}))
+        docker.assert_not_called()
+        classify.assert_called_once_with('space_db',metadata['migrations']['space_db'],True)
+
     def test_staging_restore_uses_fixed_transport_and_clears_context_on_failure(self):
         session=object()
         context={key: object() for key in ('root','key','source_root','postgres_image','migrate_image','journal','source_metadata')}
