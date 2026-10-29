@@ -57,6 +57,16 @@ class RealKeytoolTest(unittest.TestCase):
         facts = trust.compare_roots(roots, listing, ca_sha)
         self.assertEqual(facts['store_count'], facts['root_count'] + 1)
         self.assertEqual(effect.classify_listing(listing, roots, ca_sha), 'preserve')
+        jks_script = ('umask 077; cat > /scratch/in; '
+                      '/opt/java/openjdk/bin/keytool -importkeystore -noprompt '
+                      '-srckeystore /scratch/in -srcstoretype PKCS12 -srcstorepass changeit '
+                      '-destkeystore /scratch/out -deststoretype JKS -deststorepass changeit >/dev/null 2>&1; '
+                      'cat /scratch/out')
+        cid = create(*options, jks_script)
+        jks = target._input([docker, 'start', '-ai', cid], store)
+        cid = create(*options, target.SCRIPT)
+        with self.assertRaises(ValueError):
+            target._input([docker, 'start', '-ai', cid], jks)
 
 
 if __name__ == '__main__':
