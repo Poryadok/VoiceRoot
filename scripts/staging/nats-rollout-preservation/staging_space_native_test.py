@@ -97,6 +97,11 @@ class InspectSourceTest(unittest.TestCase):
             with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
             pv['spec']['claimRef']['uid']=claim_uid;pv['metadata']['uid']=plan['postgres_pv_uid']
             with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
+            pv['metadata']['uid']=pv_uid;pv['metadata']['annotations']['pv.kubernetes.io/provisioned-by']='foreign'
+            with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
+            pv['metadata']['annotations']['pv.kubernetes.io/provisioned-by']='local-path-provisioner'
+            pv['metadata']['creationTimestamp']='2025-12-31T23:59:59Z'
+            with self.assertRaisesRegex(native.Blocked,'space_live_volume_changed'):native._live_volume(SimpleNamespace(),plan)
 
     def test_live_pvc_lost_create_response_remains_pending(self):
         import commands
