@@ -418,7 +418,9 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     if suffix=='':value=repo
     elif suffix=='/git/ref/heads/master':value={'ref':'refs/heads/master','object':{'type':'commit','sha':c['commit']}}
     elif suffix=='/actions/runs/17':value=run_record
-    elif suffix.startswith('/actions/runs/17/attempts/1/jobs?'):value={'total_count':len(jobs),'jobs':jobs}
+    elif suffix.startswith('/actions/runs/17/attempts/1/jobs?'):
+     page=int(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['page'][0])
+     value={'total_count':len(jobs),'jobs':jobs[(page-1)*20:page*20]}
     elif suffix.startswith('/actions/runs/17/artifacts?'):value={'total_count':1,'artifacts':[artifact]}
     elif suffix=='/actions/artifacts/109':value=artifact
     elif suffix=='/actions/artifacts/109/zip':return archive
