@@ -2,6 +2,7 @@
 import re
 import copy
 import base64
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -109,6 +110,18 @@ _LOGIN_SQL = ("SELECT json_build_object('database',current_database(),'database_
               "'read_only',current_setting('transaction_read_only'))")
 
 
+def _same_start(left, right):
+    try:
+        def instant(value):
+            if not isinstance(value, str): raise ValueError()
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            if parsed.tzinfo is None or parsed.utcoffset() is None: raise ValueError()
+            return parsed.astimezone(timezone.utc)
+        return instant(left) == instant(right)
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 def _login(database, credential, source, guard):
     """Authenticate exact credentials via stdin, bound to the observed engine."""
     process = selector = None
@@ -139,10 +152,11 @@ def _login(database, credential, source, guard):
         if process.wait(timeout=max(.01, deadline - time.monotonic())):
             raise ValueError()
         observed = json.loads(b''.join(chunks))
-        expected = {'database': database, 'database_oid': source['database_oid'], 'role': credential['role'],
-                    'server_start': source['server_start'], 'read_only': 'on'}
+        expected = {'database': database, 'database_oid': source['database_oid'], 'role': credential['role'], 'read_only': 'on'}
         fence()
-        if observed != expected or snapshot() != source['engine']:
+        if (not isinstance(observed, dict) or set(observed) != set(expected) | {'server_start'} or
+                any(observed[k] != value for k,value in expected.items()) or
+                not _same_start(observed['server_start'], source['server_start']) or snapshot() != source['engine']):
             raise ValueError()
         return {k:v for k,v in credential.items() if k != 'password'}
     except schema.GuardLost:

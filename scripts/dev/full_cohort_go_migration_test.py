@@ -18,6 +18,11 @@ import full_cohort_go_migration as migration
 
 
 class RenderTest(unittest.TestCase):
+    def test_server_start_compares_aware_instants_not_session_timezone(self):
+        self.assertTrue(migration._same_start('2026-10-29T12:00:00+00:00', '2026-10-29T15:00:00+03:00'))
+        self.assertFalse(migration._same_start('2026-10-29T12:00:00+00:00', '2026-10-29T12:00:01+00:00'))
+        self.assertFalse(migration._same_start('2026-10-29T12:00:00', '2026-10-29T12:00:00+00:00'))
+
     def test_private_immutable_secret_contains_only_password_and_no_tls_downgrade(self):
         credential = {'role': 'voice', 'sslmode': 'disable', 'password': 'fixture-password'}
         obj = migration._secret('media-c1-' + 'a' * 32, 'chat_db', credential, '10.0.0.1')
@@ -268,6 +273,12 @@ class LoginTest(unittest.TestCase):
                 credential['password'] = 'incorrect'
                 with self.assertRaises(migration.MigrationError):
                     migration._login('postgres', credential, source, lambda: None)
+                subprocess.run(['docker', 'exec', name, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+                                '-d', 'postgres', '-c', "CREATE ROLE chat_login LOGIN PASSWORD 'fixture-only'; "
+                                "ALTER ROLE chat_login SET timezone='Europe/Moscow'"], check=True,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                credential['role'] = 'chat_login'; credential['password'] = 'fixture-only'
+                self.assertEqual(migration._login('postgres', credential, source, lambda: None)['role'], 'chat_login')
         subprocess.run(['docker', 'exec', name, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
                         '-d', 'postgres', '-c', 'CREATE TABLE public.schema_migrations(version bigint,dirty boolean); '
                         'INSERT INTO public.schema_migrations VALUES(1,false)'], check=True,
