@@ -562,10 +562,12 @@ def verify_writer_pod(authored, job, pod, execution):
             raise ValueError()
         meta, spec, status = pod['metadata'], copy.deepcopy(pod['spec']), pod['status']
         owners = [o for o in meta.get('ownerReferences', []) if o.get('controller') is True]
+        phase = status.get('phase'); node_name = spec.pop('nodeName', None)
         if (pod.get('apiVersion') != 'v1' or pod.get('kind') != 'Pod' or meta.get('namespace') != 'voice-dev' or
                 any(not isinstance(meta.get(k), str) or not meta[k] for k in ('uid', 'resourceVersion')) or
                 meta.get('deletionTimestamp') or len(owners) != 1 or owners[0].get('kind') != 'Job' or
-                owners[0].get('uid') != job['metadata']['uid'] or spec.pop('nodeName', None) != execution['node_name'] or
+                owners[0].get('uid') != job['metadata']['uid'] or
+                (node_name not in (None, execution['node_name']) if phase == 'Pending' else node_name != execution['node_name']) or
                 spec.get('hostNetwork', False) is not False):
             raise ValueError()
         name, uid = authored['metadata']['name'], job['metadata']['uid']
@@ -582,6 +584,14 @@ def verify_writer_pod(authored, job, pod, execution):
         observed = copy.deepcopy(intended); observed['spec'] = spec
         auth_user_candidate_probe.admitted_pod(intended, observed)
         ip, containers = status.get('podIP'), status.get('containerStatuses', [])
+        if phase == 'Pending':
+            if (not isinstance(containers, list) or len(containers) > 1 or
+                    containers and (containers[0].get('name') != 'migrate' or
+                                    type(containers[0].get('restartCount')) is not int or containers[0]['restartCount'] != 0 or
+                                    containers[0].get('containerID') or containers[0].get('state', {}).get('running') or
+                                    containers[0].get('state', {}).get('terminated'))):
+                raise ValueError()
+            return {'uid': meta['uid'], 'ip': None}
         image = containers[0].get('imageID', '') if len(containers) == 1 else ''
         image_match = re.fullmatch(r'(?:docker-pullable://[^@]+@|containerd://|docker://)?(sha256:[0-9a-f]{64})', image)
         if (status.get('phase') not in ('Running', 'Succeeded') or not isinstance(ip, str) or
