@@ -96,6 +96,8 @@ def inspect(read, guard):
             if leaf is not None and trust is not None:
                 try:
                     data, ca = reset.values(leaf), reset.values(trust)
+                    if b'PRIVATE KEY' in data['tls.crt']:
+                        raise ValueError()
                     for purpose in purposes:
                         reset.verify_certificate(data['tls.crt'], data['tls.key'], ca[ca_key], hostname, purpose)
                     checks[name] = 'valid'

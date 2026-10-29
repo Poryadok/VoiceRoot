@@ -1,3 +1,4 @@
+import base64
 import json
 import unittest
 from unittest.mock import patch
@@ -69,6 +70,13 @@ class ObservationTests(unittest.TestCase):
         self.assertEqual(result['public_hashes'], {})
         self.assertNotIn('private payload', repr(result))
         self.assertFalse(result['admission_qualified'])
+
+    def test_embedded_private_material_is_never_fingerprinted(self):
+        name = 'voice-realtime-p3-tls'
+        self.objects[name]['data']['tls.crt'] = base64.b64encode(b'PRIVATE KEY').decode()
+        result = self.run_probe()
+        self.assertEqual(result['crypto_checks'][name], 'invalid')
+        self.assertNotIn('realtime-tls.crt', result['public_hashes'])
 
 
 if __name__ == '__main__': unittest.main()
