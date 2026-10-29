@@ -287,6 +287,10 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('--reject-skips', capture['run'])
         self.assertIn('job.services.redis.ports', capture['env']['USER_ASSOCIATION_TEST_REDIS'])
         self.assertIn('job.services.postgres.ports', capture['env']['USER_ASSOCIATION_TEST_DSN'])
+        birth = next(step for step in job['steps'] if step.get('name') == 'Run User profile birth proof')
+        self.assertIn('user_birth_required.json', birth['run'])
+        self.assertIn('--reject-skips', birth['run'])
+        self.assertIn('job.services.postgres.ports', birth['env']['USER_ASSOCIATION_TEST_DSN'])
         admission = next(step for step in job['steps'] if step.get('name') == 'Run User admission proof')
         self.assertIn('TestAdmissionEligibility_NativeExactPairAndRevisionWriters', admission['run'])
         self.assertIn('--reject-skips', admission['run'])
@@ -318,6 +322,25 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('notification-quota-integration', selected['checks'])
         matrix['integration_go_services'] = []
         self.assertNotIn('notification-quota-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
+    def test_bot_membership_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['bot-membership-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'bot')", job['if'])
+        self.assertIn('bot-membership-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Bot membership proofs')
+        self.assertIn('bot_membership_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['BOT_MEMBERSHIP_TEST_DATABASE_URL'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['bot'], 'docker_go_services': [],
+                  'integration_go_services': ['bot'], 'run_go': True, 'run_pkg': True}
+        self.assertIn('bot-membership-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/bot/main.go']), matrix)['checks'])
+        matrix['integration_go_services'] = []
+        self.assertNotIn('bot-membership-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
     def test_role_migration_proof_follows_affected_integration(self):

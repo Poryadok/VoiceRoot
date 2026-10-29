@@ -153,7 +153,9 @@ All current named package tests are inventoried and skips are rejected. The
 same job separately runs the protected capture transport with owned PostgreSQL
 and Redis, requiring all named authority and canonical SQL cohort subtests, plus
 the full-cohort and archive/raw-erasure cases, with no skips. A final focused
-User admission-eligibility transport proof uses the same owned services. These
+User admission-eligibility transport proof uses the same owned services. The
+job also requires the native primary and secondary profile-birth capture cases
+against owned PostgreSQL without skips. These
 fixtures do not activate the source-disabled production path.
 
 When Notification is in the PR integration matrix,
@@ -167,6 +169,10 @@ the migration 13 rollback writer-fence, retained-evidence, stale-snapshot and
 empty round-trip cases against an owned PostgreSQL service. The named cases
 and subtests in `scripts/ci/role_migration_required.json` must pass with no
 skips; this is separate from current-diff migration immutability validation.
+
+When Bot is in the PR integration matrix, `bot-membership-integration` requires
+both native membership transition and protected cleanup cases against owned
+PostgreSQL, with no skips in the focused runs.
 
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary

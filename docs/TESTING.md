@@ -154,6 +154,8 @@ named subtests are listed in `scripts/ci/user_capture_required.json`; skips
 are rejected in that focused run. The User admission-eligibility transport
 test also runs with the owned PostgreSQL and Redis services; its named case is
 listed in `scripts/ci/user_admission_required.json`.
+The same PostgreSQL service runs the native primary and secondary profile-birth
+capture tests listed in `scripts/ci/user_birth_required.json`, with skips rejected.
 
 The affected Notification PR proof runs `./internal/chatquota` with
 `BE195_REDIS_ADDR` pointing to an owned Redis service, requires the named cases
@@ -164,6 +166,9 @@ The affected Role PR proof runs `TestRole13` in `./internal/store` against an
 owned PostgreSQL server via `ROLE_MIGRATION_TEST_DSN`. The fixtures create and
 drop disposable databases. The named rollback and concurrency cases in
 `scripts/ci/role_migration_required.json` must run without skips.
+The affected Bot PR proof uses an owned PostgreSQL server through
+`BOT_MEMBERSHIP_TEST_DATABASE_URL` and requires both native membership cases in
+`scripts/ci/bot_membership_required.json` without skips.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.

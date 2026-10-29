@@ -17,6 +17,31 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_bot_membership_inventory_requires_both_native_boundaries(self):
+        inventory = json.loads((ROOT / 'scripts/ci/bot_membership_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['bot'], [
+            ['voice/backend/bot/internal/spacemembership', 'TestNativeMembershipTypedCleanupLostReplyAndMalformedReceipt'],
+            ['voice/backend/bot/internal/store', 'TestMembershipNativeTransitions'],
+        ])
+        for package, name in inventory['bot']:
+            path = ROOT / 'src/backend/bot/internal' / package.rsplit('/', 1)[1]
+            self.assertTrue(any(re.search(r'(?m)^func ' + name + r'\(t \*testing\.T\)',
+                                          f.read_text(encoding='utf-8')) for f in path.glob('*_test.go')))
+
+    def test_user_birth_inventory_covers_all_native_birth_tests(self):
+        inventory = json.loads((ROOT / 'scripts/ci/user_birth_required.json').read_text(encoding='utf-8'))
+        directory = ROOT / 'src/backend/user/internal/store'
+        source = '\n'.join((directory / name).read_text(encoding='utf-8') for name in
+                           ('profile_birth_capture_native_test.go', 'profile_primary_birth_capture_native_test.go'))
+        names = re.findall(r'(?m)^func (Test(?:Secondary|Primary)ProfileBirthCapture\w+)\(t \*testing\.T\)', source)
+        self.assertTrue(names)
+        self.assertEqual(inventory['user'], [['voice/backend/user/internal/store', name] for name in names])
+        package, name = inventory['user'][0]
+        skipped = [{'Package': package, 'Test': name, 'Action': 'run'},
+                   {'Package': package, 'Test': name, 'Action': 'skip'},
+                   {'Package': package, 'Action': 'pass'}]
+        self.assertTrue(receipts.verify_required(skipped, inventory['user'], 0))
+
     def test_story_lfp_inventory_covers_all_current_package_tests(self):
         inventory = json.loads((ROOT / 'scripts/ci/story_lfp_required.json').read_text(encoding='utf-8'))
         cases = inventory['story']
