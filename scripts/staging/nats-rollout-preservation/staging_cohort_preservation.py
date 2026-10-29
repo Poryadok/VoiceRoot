@@ -358,6 +358,8 @@ def _start_cut(actions,request,approved,execution,workspace):
         _save_state(session,state)
     owned=CohortStage.from_captured(session,stage,journal);owned.runtime_base=runtime
     try:
+        if tool['selected']:
+            space.prepare_tool(session,request['token'])
         root_main.revalidate_inputs(owned.kube,contract,provenance)
         owned.fence()
         state.update(status='PAUSED',context=transaction.context(owned))

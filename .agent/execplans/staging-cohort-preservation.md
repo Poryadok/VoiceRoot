@@ -183,3 +183,14 @@ retrieval, native NATS bytes, source/Kubernetes/paused admission and absence of
 an auxiliary remain explicit external fixtures. The final retained log is
 tmp/preservation-native/native-25bd-offnode.log. Whole Stage inspect-before-cut
 and live Job integration remain separate and are not asserted by this result.
+
+The publication reader proves remote bytes but does not populate the local
+Docker cache. A root-approved fixed prepare_tool now runs after typed binding
+and before fencing: exact authenticated immutable child pull, bounded private
+Docker config credential, actual config/platform/RepoDigest/source readback and
+finally cleanup. No caller image/path or token argv/environment is accepted.
+Durable response-bound effects and retained availability proof reject wrong
+config and lost response without replay. The capability test was RED before
+implementation; two focused tests now pass with real Root Session and synthetic
+registry/Docker observations. This delta awaits independent review; the prior
+real native/CMS evidence does not claim a real authenticated future-P1 pull.
