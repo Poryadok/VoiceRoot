@@ -50,8 +50,12 @@ Go/Flutter/dependency and Docker content caches still execute validation and
 respect their toolchain/content identities. No `continue-on-error` or synthetic
 success is introduced.
 
-Compose E2E builds current images through its original Compose up build path
-and executes the complete smoke suite.
+Compose E2E and the attachment restart proof explicitly build current Compose
+images before starting the stack with --no-build. An isolated Buildx builder
+uses per-service, per-platform content caches for build preparation; cached
+layers do not restore runtime state or replace the required smoke and restart
+checks. Build failures remain fatal. Hosted cold and warm timings are needed
+to establish the effect on job latency.
 
 Compose E2E's host Go commands restore module downloads and compiled objects
 using the explicit Gateway, Notification and shared pkg `go.sum` paths.
