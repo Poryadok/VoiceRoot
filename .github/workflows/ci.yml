@@ -1970,6 +1970,10 @@ jobs:
         run: |
           docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
             python -B -c "import sys, unittest; names=['space_p3_issuer_preflight_test','space_p3_issuer_preflight_root_test','space_p3_issuer_preflight_metadata_root_test','space_creator_runtime_profile_issuer_packet_test','space_creator_runtime_profile_issuer_test','space_creator_runtime_profile_issuer_export_test','space_creator_runtime_profile_issuer_stage_test','space_creator_runtime_profile_issuer_bundle_test','space_creator_runtime_profile_issuer_joint_test','space_creator_runtime_profile_issuer_launcher_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 33)"
+      - name: Verify delegated issuer and fixed peer receivers
+        run: |
+          docker run --rm --network none -v "$GITHUB_WORKSPACE:/repo:ro" -v "$RUNNER_TEMP/cohort-pydeps:/deps:ro" -e PYTHONPATH=/deps -w /repo/scripts/dev python:3.12-bookworm \
+            python -B -c "import sys, unittest; names=['dev_peer_issuer_authority_test','dev_peer_issuer_installer_test','dev_peer_issuer_material_test','dev_peer_issuer_metadata_test','dev_peer_issuer_packet_test','dev_peer_issuer_service_test','dev_peer_issuer_source_test','space_creator_runtime_profile_delegated_test','space_creator_runtime_profile_delegated_service_test','space_creator_runtime_profile_fixed9_successor_test','space_creator_runtime_profile_fixed9_joint_test','space_role_peer_create_test','space_role_peer_material_test','space_role_peer_creator_inspection_test']; result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names)); sys.exit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun != 51)"
       - name: Verify backup and Go consumer with synthetic external boundaries
         working-directory: scripts/dev
         run: |
