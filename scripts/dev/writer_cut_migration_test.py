@@ -71,6 +71,10 @@ class MigrationCutTest(unittest.TestCase):
         self.bind()
         self.state['job'].update(state='owned', uid='first', resourceVersion='1')
         before = len(self.client.patches)
+        for obj in self.client.workloads.values():
+            obj['spec']['template']['spec']['containers'][0]['image'] = 'new-target-image'
+            obj['metadata']['generation'] += 1
+            obj['status']['observedGeneration'] = obj['metadata']['generation']
         targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
         self.assertEqual(len(self.client.patches), before)
@@ -186,6 +190,10 @@ class MigrationCutTest(unittest.TestCase):
             counts.append(len(cut.current_resumed_proof()['controllers']))
             return {'scope': self.admission['session_scope'], 'active_sessions': int(unknown),
                     'active_transactions': 0, 'attributed_sessions': [{'fixture': 'first-writer'}]}
+        for obj in self.client.workloads.values():
+            obj['spec']['template']['spec']['containers'][0]['image'] = 'new-target-image'
+            obj['metadata']['generation'] += 1
+            obj['status']['observedGeneration'] = obj['metadata']['generation']
         targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
         guard = self.cut._migration_resume_guard
         def after_guard():

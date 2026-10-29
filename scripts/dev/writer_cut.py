@@ -942,8 +942,8 @@ class WriterCut:
             if (self.migration is not None or self.migration_history) and self.resume_inventory is None:
                 raise RecoveryRequired('qualified resume inventory required')
             if self.migration is not None:
-                self.verify_migration_running()
                 if not self.migration['finished']: raise RecoveryRequired('migration is not terminal')
+                self._migration_resume_guard()
             self._guard()
             self._guards()
             self._recheck_config_successors()
