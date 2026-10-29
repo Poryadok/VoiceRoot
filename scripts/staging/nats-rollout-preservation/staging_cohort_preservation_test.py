@@ -16,6 +16,69 @@ import staging_cohort_preservation as preservation
 
 
 class CutEffectTests(unittest.TestCase):
+    def test_large_binary_transport_refuses_tamper_and_lost_reply_replay(self):
+        import hashlib
+        import subprocess
+        import staging_cohort_preservation_runtime as runtime
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                session,_=self.fixture(root,{'spec':{'replicas':1}})
+                with resource_claim.command_scope(session.check):
+                    nonce=preservation._begin_restore(session,'local');base=preservation._base(session)
+                    body=b'x'*((2<<20)+1);cid='d'*64
+                    preservation._write(base/'restore-tools.json',{'images':{},'ids':{},'migrate_binary_sha256':hashlib.sha256(body).hexdigest()})
+                    resources=base/'restore'/nonce/'resources.json'
+                    preservation.save(resources,{'operation':session.operation,'attempt':nonce,'resources':{
+                        'owned':{'kind':'postgres','cid':cid,'status':'ACTIVE'}}})
+                    argv=runtime.DOCKER+['exec','-i',cid,'sh','-ec','cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate']
+                    with patch.object(subprocess,'Popen') as start:
+                        for args,raw in ((argv,body[:-1]+b'y'),(argv[:-1]+['cat > /tmp/foreign'],body)):
+                            with self.assertRaisesRegex(Exception,'cohort_restore_binary_copy_invalid'):
+                                runtime.capture_migrate_binary(session,args,raw,timeout=120)
+                        start.assert_not_called()
+                    with patch.object(subprocess,'Popen',side_effect=RuntimeError('terminal_reply_lost')) as start:
+                        with self.assertRaisesRegex(RuntimeError,'terminal_reply_lost'):
+                            preservation.restore_command(session,argv,body=body)
+                        with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                            preservation.restore_command(session,argv,body=body)
+                        self.assertEqual(start.call_count,1)
+
+    def test_store_projection_uses_qualified_candidate_policy_without_committing_it(self):
+        import hashlib
+        import staging_release_policy_prepare as policy
+        parent=preservation.private
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                session,_=self.fixture(root,{'spec':{'replicas':1}})
+                approved={'source_sha':session.context['commit'],'source_files':{}}
+                old=parent._bytes({'release_policy':policy.staging_descriptor('d'*40),'unrelated':'retained'})
+                parent._private_write(root/'installed'/'policy.json',old)
+                plan={k:'c'*64 for k in parent.PLAN_FIELDS}
+                plan.update(schema='voice-staging-prerequisites-plan-v1',operation=session.operation,context=session.context,
+                    helper_sha256=session.helper,approved_sha256=preservation.digest(approved),namespace_uid='ns',
+                    actual_before={'app/image':'old'},children={'release_policy':{'descriptor':policy.staging_descriptor(approved['source_sha'])},'p3':{},'gis_material':{}},
+                    policy_before_sha256=hashlib.sha256(old).hexdigest(),auxiliary_images={},renderer_authority_sha256=None,previous_active_sha256=None)
+                capture={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':session.context,
+                    'helper_sha256':session.helper,'approved_sha256':plan['approved_sha256'],'execution_sha256':plan['execution_sha256']}
+                plan['source_capture_sha256']=preservation.digest(capture)
+                parent._private_directory(root/'installed'/'source-authority')
+                preservation._write(root/'installed'/'source-authority'/(session.operation+'.json'),capture)
+                base=root/'installed'/'prerequisites'/session.operation
+                parent._private_directory(base.parent);parent._private_directory(base)
+                prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':plan,'request':{},'gis_authority_sha256':'f'*64}
+                preservation._write(base/'prepared.json',prepared)
+                method=getattr(preservation,'_store_policy',None);self.assertTrue(callable(method))
+                with resource_claim.command_scope(session.check):
+                    result=method(session,approved,preservation.digest(prepared))
+                    self.assertEqual(result['release_policy'],plan['children']['release_policy']['descriptor'])
+                    self.assertEqual(result['unrelated'],'retained')
+                    self.assertEqual((root/'installed'/'policy.json').read_bytes(),old)
+                    with self.assertRaisesRegex(Exception,'cohort_prepared_changed'):method(session,approved,'0'*64)
+                    (root/'installed'/'policy.json').write_bytes(old+b' ')
+                    with self.assertRaisesRegex(Exception,'cohort_store_policy_changed'):method(session,approved,preservation.digest(prepared))
+
     def fixture(self, root, before,namespace_uid='namespace',preflight=None):
         c=context(); current=card(c)
         journal=resource_claim.RootJournal(root)

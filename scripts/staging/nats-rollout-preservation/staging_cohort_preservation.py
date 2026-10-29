@@ -36,7 +36,7 @@ PREFIX=['/usr/local/bin/k3s','kubectl','--namespace',NS]
 SCHEMA='voice-staging-cohort-preservation-plan-v1'
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256',
     'approved_sha256','execution_sha256','namespace_uid','precut_capture_sha256',
-    'actual_before','candidate','prerequisite_inputs_sha256','source_inventory_sha256','stores_sha256','preflight_sha256'}
+    'actual_before','candidate','prerequisite_inputs_sha256','source_inventory_sha256','stores_sha256','preflight_sha256','space_tool_sha256'}
 _terminal_reads=weakref.WeakKeyDictionary()
 _active_auth=weakref.WeakKeyDictionary()
 _shared_cache={}
@@ -87,7 +87,8 @@ def _source(session,plan):
     custody=_read(parent/'code-custody.json')
     if digest(approved['source_files'])!=plan['source_inventory_sha256']:raise Blocked('cohort_source_changed')
     for filename in ('staging_cohort_preservation.py','staging_cohort_preservation_runtime.py',
-        'staging_cohort_preservation_pg.py','staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py'):
+        'staging_cohort_preservation_pg.py','staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py',
+        'staging_cohort_preservation_space.py'):
         name='scripts/staging/nats-rollout-preservation/'+filename
         wanted=approved['source_files'].get(name)
         if (custody['manifest'].get('nats-rollout-preservation/'+filename)!=wanted or wanted is None
@@ -125,8 +126,13 @@ def _send(session,effect_id,argv,body,*,limit=4<<20,timeout=60,pass_fds=()):
     if getattr(session,'_cohort_permit',None) is not None:raise Blocked('cohort_permit_busy')
     session._cohort_permit=permit
     try:
-        result=commands.capture(argv,body=body,limit=limit,timeout=timeout,
-            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'},pass_fds=pass_fds)
+        if len(body)>2<<20:
+            if pass_fds:raise Blocked('cohort_restore_binary_copy_invalid')
+            from staging_cohort_preservation_runtime import capture_migrate_binary
+            result=capture_migrate_binary(session,argv,body,timeout=timeout)
+        else:
+            result=commands.capture(argv,body=body,limit=limit,timeout=timeout,
+                env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'},pass_fds=pass_fds)
         if session._cohort_permit is not None:raise Blocked('cohort_permit_not_consumed')
         session.check()
         return result
@@ -309,8 +315,10 @@ def _start_cut(actions,request,approved,execution,workspace):
         'context':transaction.context(stage),'hub_pod':hub_pods[0]}
     _write(base/'precut.json',precut)
     parent=guard.ROOT/'installed'/'prerequisites'/session.operation
-    parent_plan=_read(parent/'prepared.json')['plan']
-    stores=_capture_stores(session,stage,request,approved,workspace)
+    parent_record=_read(parent/'prepared.json')
+    if digest(parent_record)!=prepared['inputs_sha256']:raise Blocked('cohort_prepared_changed')
+    parent_plan=parent_record['plan']
+    stores=_capture_stores(session,stage,request,approved,workspace,inputs_sha256=prepared['inputs_sha256'])
     _write(base/'stores.json',stores)
     contract=private._json(root_main.public_read(actions.code/'nats-known-baseline'/'deployed-contract.json'))
     preflight=bridge_root.capture_cohort_authorities(actions,request,approved,workspace,stage,contract)
@@ -322,7 +330,7 @@ def _start_cut(actions,request,approved,execution,workspace):
         'precut_capture_sha256':digest(precut),'actual_before':stage.old_images,
         'candidate':{'commit':session.context['commit'],'images':session.context['images']},
         'prerequisite_inputs_sha256':prepared['inputs_sha256'],'source_inventory_sha256':digest(approved['source_files']),
-        'stores_sha256':digest(stores),'preflight_sha256':digest(preflight)}
+        'stores_sha256':digest(stores),'preflight_sha256':digest(preflight),'space_tool_sha256':digest(None)}
     validate_plan(plan,session);_source(session,plan)
     try:enrollment=root_main.private_json(guard.ROOT/'bootstrap-enrollment.json')
     except FileNotFoundError:enrollment=None
@@ -336,6 +344,11 @@ def _start_cut(actions,request,approved,execution,workspace):
         'plan':plan,'status':'PREPARED','context':transaction.context(stage),'events':[],
         'contract':contract,'provenance':provenance,'initial_resource_fence':None}
     _write(base/'checkpoint.json',state)
+    # Authenticate the future published tool before the first writer-cut effect.
+    # This read-only source/API phase does not require publication during coding.
+    import staging_cohort_preservation_space as space
+    tool=space.capture_publication(session,request);_write(base/'space-tool.json',tool)
+    plan['space_tool_sha256']=digest(tool);state['plan']=plan;save(base/'checkpoint.json',state)
     binding=session.bind_cohort_preservation(plan,stage.old_images)
     state.update(initial_resource_fence=binding,status='CUTTING');_save_state(session,state)
     owned=None
@@ -424,11 +437,30 @@ def revalidate_paused(session):
     return copy.deepcopy(state['context'])
 
 
-def _capture_stores(session,stage,request,approved,workspace):
+def _store_policy(session,approved,inputs_sha256):
+    """Render the candidate's already prepared policy without committing it."""
+    import staging_release_policy_prepare as policy_child
+    session.check()
+    path=guard.ROOT/'installed'/'prerequisites'/session.operation/'prepared.json'
+    record=_read(path)
+    if (set(record)!={'schema','plan','request','gis_authority_sha256'}
+        or record['schema']!='voice-staging-prerequisites-prepared-v1' or digest(record)!=inputs_sha256):
+        raise Blocked('cohort_prepared_changed')
+    plan=private.validate_plan(record['plan'],session)
+    if plan['approved_sha256']!=digest(approved):raise Blocked('cohort_store_source_changed')
+    old=private._read_private(guard.ROOT/'installed'/'policy.json')
+    if hashlib.sha256(old).hexdigest()!=plan['policy_before_sha256']:raise Blocked('cohort_store_policy_changed')
+    result=policy_child.policy_successor(private._json(old),plan['children']['release_policy']['descriptor'],approved['source_sha'])
+    if _read(path)!=record or private._read_private(guard.ROOT/'installed'/'policy.json')!=old:
+        raise Blocked('cohort_store_policy_changed')
+    session.check();return result
+
+
+def _capture_stores(session,stage,request,approved,workspace,*,inputs_sha256):
     import compiler
     import source_plan
     import source_authority
-    policy=_read(guard.ROOT/'installed'/'policy.json')
+    policy=_store_policy(session,approved,inputs_sha256)
     parameters={**policy,'registry':source_authority.REGISTRY,'tag':approved['source_sha'],'mode':request['mode'],
         'changed_services':request['changed_services'],'images':{},'enrolled':list(stage.snapshots),
         'generation':stage.marker['data']['generation'],'dataPVC':stage.marker['data']['dataPVC']}
@@ -631,7 +663,7 @@ def load_auxiliary_successor(session):
 def shared_module(session,name):
     """Execute only the captured shared mechanics, with their local import closure."""
     roots={'story_media_backup_cohort','story_media_backup_cohort_restore','story_media_backup_cohort_finalize',
-        'story_media_backup_restore','cohort_unmanaged_actual','auth_user_adoption_runtime'}
+        'story_media_backup_restore','cohort_unmanaged_actual','auth_user_adoption_runtime','space_native_tool_identity_staging'}
     if name not in roots:raise Blocked('cohort_shared_module_forbidden')
     plan=load_plan(session);approved,_,_=_source(session,plan)
     source=guard.ROOT/'installed'/'sources'/session.operation/'scripts'/'dev';closure={}
@@ -802,9 +834,30 @@ def restore_command(session,argv,*,body=b'',timeout=120):
     return run(session,argv,body=body,timeout=timeout)
 
 
+def native_space_rehearsal(session):
+    from staging_cohort_preservation_space import native_space_rehearsal as run
+    return run(session)
+
+
+def load_native_space_rehearsal(session):
+    from staging_cohort_preservation_space import load_native_space_rehearsal as load
+    return load(session)
+
+
 def _end_restore(session,proof):
     nonce=restore_attempt(session);base=_base(session)
     resources=_read(base/'restore'/nonce/'resources.json')
+    native=base/'restore'/nonce/'native-space.json'
+    attempt=_read(base/'restore-attempt.json')
+    if attempt['phase'] in ('local','offnode'):
+        metadata=_read(base/'metadata.json')['source']['migrations']
+        space=metadata.get('space_db')
+        if isinstance(space,dict) and space.get('from')!=space.get('to') and not native.exists():
+            raise Blocked('cohort_space_rehearsal_required')
+    if native.exists():
+        result=load_native_space_rehearsal(session)
+        if proof.get('native_space')!=result:raise Blocked('cohort_space_rehearsal_changed')
+        proof={**proof,'space_native_rehearsal_sha256':digest(result)}
     if not resources['resources'] or any(row['status']!='REMOVED' for row in resources['resources'].values()):
         raise Blocked('cohort_restore_cleanup_incomplete')
     current=_read(base/'restore-attempt.json')
@@ -1346,7 +1399,8 @@ def validate_historical_capture(operation):
         or rollout['target'].get('cohort_preservation_sha256')!=digest(receipt)
         or digest(_read(root/'precut.json'))!=plan['precut_capture_sha256']
         or digest(_read(root/'stores.json'))!=plan['stores_sha256']
-        or digest(_read(root/'preflight.json'))!=plan['preflight_sha256']):raise Blocked('cohort_history_changed')
+        or digest(_read(root/'preflight.json'))!=plan['preflight_sha256']
+        or digest(_read(root/'space-tool.json'))!=plan['space_tool_sha256']):raise Blocked('cohort_history_changed')
     for phase in ('local','offnode'):
         restored=_read(root/(phase+'-restore.json'))
         nonce=restored.get('nonce')

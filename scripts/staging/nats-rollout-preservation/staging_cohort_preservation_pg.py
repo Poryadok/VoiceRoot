@@ -139,7 +139,11 @@ def metadata(session,catalog_record):
         mode=restore.classify_plan(db,plan,True);plans[db]=plan
         if mode=='migrate':
             role=result['database_owner'];matches=[row for row in roles['roles'] if row['name']==role]
-            if (len(matches)!=1 or matches[0]['login'] is not True or matches[0]['super'] is not False
+            native_space=db=='space_db' and current==24 and target==51
+            # Space's fixed native executable admits the actual restored owner,
+            # including its extension ownership. Never substitute the disposable
+            # clone administrator or grant/alter ownership to make it pass.
+            if (len(matches)!=1 or matches[0]['login'] is not True or (not native_space and matches[0]['super'] is not False)
                 or result['schema_owner']!=role):raise Blocked('cohort_migration_role_unqualified')
             migration_roles[db]={'role':role,'database_oid':catalog_record['databases'][db],
                 'source_files_sha256':owner.digest(files),'catalog_sha256':owner.digest(result)}
