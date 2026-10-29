@@ -34,6 +34,17 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaises(installer.reviewed.SourceError):
             installer.build('/not/a/checkout', 'a' * 40, '/tmp/not-created')
 
+    def test_inline_bootstrap_binds_exact_digest_and_fixed_archive(self):
+        script = installer.bootstrap('a' * 64)
+        lines = script.splitlines()
+        self.assertEqual(lines[-1], 'VOICE_PEER_BOOTSTRAP')
+        program = '\n'.join(lines[1:-1])
+        compile(program, '<bootstrap>', 'exec')
+        self.assertIn("EXPECTED = '" + 'a' * 64 + "'", program)
+        self.assertIn(installer.BOOTSTRAP_ARCHIVE, program)
+        with self.assertRaises(ValueError):
+            installer.bootstrap('bad')
+
 
 if __name__ == '__main__':
     unittest.main()
