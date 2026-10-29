@@ -351,6 +351,58 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('backend-go-integration-evidence', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_realtime_lifecycle_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['realtime-lifecycle-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'realtime')", job['if'])
+        self.assertIn('realtime-lifecycle-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Realtime lifecycle proofs')
+        self.assertIn('-tags=realtimep3integration', test['run'])
+        self.assertIn('realtime_lifecycle_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['REALTIME_P3_TEST_DATABASE_URL'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['realtime'], 'docker_go_services': [],
+                  'integration_go_services': ['realtime'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/realtime/main.go']), matrix)
+        self.assertIn('realtime-lifecycle-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            needs['realtime-lifecycle-integration']['result'] = outcome
+            self.assertIn('realtime-lifecycle-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('realtime-lifecycle-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/realtime/main.go']), matrix)['checks'])
+
+    def test_chat_lifecycle_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['chat-lifecycle-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'chat')", job['if'])
+        self.assertIn('chat-lifecycle-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Chat lifecycle proof')
+        self.assertIn('-tags=realtimep3integration', test['run'])
+        self.assertIn('chat_lifecycle_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['REALTIME_P3_TEST_DATABASE_URL'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['chat'], 'docker_go_services': [],
+                  'integration_go_services': ['chat'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)
+        self.assertIn('chat-lifecycle-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            needs['chat-lifecycle-integration']['result'] = outcome
+            self.assertIn('chat-lifecycle-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('chat-lifecycle-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_space_autovacuum_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
@@ -576,7 +628,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                     name = key[4:].lower().replace('_', '-')
                     if gate.run_gate(values, name, 'skipped').returncode:
                         required.add(name)
-                proposed = set(planner.make_plan(matched, matrix)['checks'])
+                plan = planner.make_plan(matched, matrix)
+                proposed = set(plan['checks'])
                 self.assertEqual(required - proposed, set())
                 expected_extra = ({'backend-go-integration-pr'} if run_go and not integration and
                                   (flags.get('protos') == 'true' or flags.get('ci_global') == 'true')
@@ -584,6 +637,10 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 if integration or (go and any(flags.get(key) == 'true' for key in
                                                ('global', 'ci_global', 'pkg', 'protos', 'go_build_shared'))):
                     expected_extra.add('backend-go-integration-evidence')
+                if 'chat' in plan['components']['go_integration']:
+                    expected_extra.add('chat-lifecycle-integration')
+                if 'realtime' in plan['components']['go_integration']:
+                    expected_extra.add('realtime-lifecycle-integration')
                 self.assertEqual(proposed - required, expected_extra)
 
     def test_git_diff_includes_both_rename_paths_and_deletions(self):

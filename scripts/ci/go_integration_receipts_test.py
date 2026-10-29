@@ -18,6 +18,24 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_realtime_lifecycle_inventory_requires_both_tagged_proofs(self):
+        inventory = json.loads((ROOT / 'scripts/ci/realtime_lifecycle_required.json').read_text(encoding='utf-8'))
+        cases = [('lifecycle_fanout_integration_test.go', 'TestActualHubFanoutFreezeWaitsForEveryRecipientAndRejectsCapturedLateScope'),
+                 ('lifecycle_transport_integration_test.go', 'TestProtectedRealtimeActualPGReceiptsRequireMTLSExactPrincipalAndReplay')]
+        self.assertEqual(inventory['realtime'], [['voice/backend/realtime', name] for _, name in cases])
+        for filename, name in cases:
+            source = (ROOT / 'src/backend/realtime' / filename).read_text(encoding='utf-8')
+            self.assertIn('//go:build realtimep3integration', source)
+            self.assertRegex(source, rf'(?m)^func {name}\(t \*testing\.T\)')
+
+    def test_chat_lifecycle_inventory_requires_tagged_storage_proof(self):
+        inventory = json.loads((ROOT / 'scripts/ci/chat_lifecycle_required.json').read_text(encoding='utf-8'))
+        name = 'TestRealtimeNativeLifecycleReadsOnlyActualChatAndFailsClosedWithoutSchema'
+        self.assertEqual(inventory['chat'], [['voice/backend/chat/internal/store', name]])
+        source = (ROOT / 'src/backend/chat/internal/store/realtime_lifecycle_integration_test.go').read_text(encoding='utf-8')
+        self.assertIn('//go:build realtimep3integration', source)
+        self.assertRegex(source, rf'(?m)^func {name}\(t \*testing\.T\)')
+
     def test_space_autovacuum_inventory_requires_real_worker_proof(self):
         inventory = json.loads((ROOT / 'scripts/ci/space_autovacuum_required.json').read_text(encoding='utf-8'))
         self.assertEqual(inventory['space'], [['voice/backend/space/internal/nativeinstaller', 'TestMaintenanceWindowWithRealAutovacuum']])

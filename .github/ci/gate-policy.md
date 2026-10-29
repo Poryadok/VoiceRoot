@@ -189,6 +189,11 @@ requires the tagged maintenance-window test against owned PostgreSQL, with a
 real autovacuum worker and no skipped test. This does not replace the separate
 Space native catalog or account-ban proofs.
 
+When Chat is in the PR integration matrix, `chat-lifecycle-integration` requires
+the tagged realtime lifecycle storage test against owned PostgreSQL without skips.
+When Realtime is in that matrix, `realtime-lifecycle-integration` requires its
+tagged fanout and protected transport tests against owned PostgreSQL without skips.
+
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
 includes named pass/skip/fail counts and skipped cases and preserves a nonzero

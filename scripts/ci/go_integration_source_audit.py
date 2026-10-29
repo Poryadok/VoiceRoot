@@ -9,6 +9,12 @@ import re
 
 TEST = re.compile(r'(?m)^func\s+(Test\w+)\s*\(\s*\w+\s+\*testing\.T\s*\)')
 DEDICATED = {
+    ('realtime', 'voice/backend/realtime', 'TestActualHubFanoutFreezeWaitsForEveryRecipientAndRejectsCapturedLateScope'):
+        'realtime-lifecycle-integration',
+    ('realtime', 'voice/backend/realtime', 'TestProtectedRealtimeActualPGReceiptsRequireMTLSExactPrincipalAndReplay'):
+        'realtime-lifecycle-integration',
+    ('chat', 'voice/backend/chat/internal/store', 'TestRealtimeNativeLifecycleReadsOnlyActualChatAndFailsClosedWithoutSchema'):
+        'chat-lifecycle-integration',
     ('analytics', 'voice/backend/analytics/internal/store', 'TestClickHouseInsertBatch'):
         'analytics-clickhouse-integration',
     ('role', 'voice/backend/role', 'TestBootstrapActualRole20PG'):

@@ -2121,6 +2121,8 @@ jobs:
       - voice-ledger-integration
       - messaging-threadlist-integration
       - space-autovacuum-integration
+      - chat-lifecycle-integration
+      - realtime-lifecycle-integration
       - backend-auth
       - backend-auth-image
       - developer-portal
@@ -2447,6 +2449,110 @@ jobs:
           path: |
             ${{ runner.temp }}/notification-quota-events.jsonl
             ${{ runner.temp }}/notification-quota-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  realtime-lifecycle-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'realtime')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-realtime-lifecycle-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Realtime lifecycle proofs
+        working-directory: src/backend/realtime
+        env:
+          CGO_ENABLED: '0'
+          REALTIME_P3_TEST_DATABASE_URL: postgres://voice:voice-realtime-lifecycle-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=realtimep3integration -run '^Test(ActualHubFanoutFreezeWaitsForEveryRecipientAndRejectsCapturedLateScope|ProtectedRealtimeActualPGReceiptsRequireMTLSExactPrincipalAndReplay)$' . > "$RUNNER_TEMP/realtime-lifecycle-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/realtime_lifecycle_required.json --service realtime \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/realtime-lifecycle-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/realtime-lifecycle-receipt.json" --reject-skips
+      - name: Upload Realtime lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: realtime-lifecycle-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/realtime-lifecycle-events.jsonl
+            ${{ runner.temp }}/realtime-lifecycle-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  chat-lifecycle-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'chat')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-chat-lifecycle-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Chat lifecycle proof
+        working-directory: src/backend/chat
+        env:
+          CGO_ENABLED: '0'
+          REALTIME_P3_TEST_DATABASE_URL: postgres://voice:voice-chat-lifecycle-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=realtimep3integration -run '^TestRealtimeNativeLifecycleReadsOnlyActualChatAndFailsClosedWithoutSchema$' ./internal/store > "$RUNNER_TEMP/chat-lifecycle-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/chat_lifecycle_required.json --service chat \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/chat-lifecycle-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/chat-lifecycle-receipt.json" --reject-skips
+      - name: Upload Chat lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-lifecycle-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/chat-lifecycle-events.jsonl
+            ${{ runner.temp }}/chat-lifecycle-receipt.json
           if-no-files-found: warn
           retention-days: 14
 
