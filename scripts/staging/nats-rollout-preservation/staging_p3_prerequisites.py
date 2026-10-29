@@ -47,6 +47,58 @@ def inventory_intent():
             for name in ASSET_KEYS]+list(PUBLISHER)
 
 
+def validate_plan_shape(plan):
+    """Check the private fixed-plan grammar; this does not authenticate evidence."""
+    try:
+        expected={'schema','operation','namespace_uid','source_capture_sha256','source_contract_sha256',
+                  'issuer_authority_sha256','auxiliary_image','objects','effects','preserved'}
+        if not isinstance(plan,dict) or set(plan)!=expected or plan['schema']!='voice-staging-p3-prerequisites-plan-v1': raise ValueError()
+        def nonempty(x): return isinstance(x,str) and 0<len(x)<=256
+        def sha(x): return isinstance(x,str) and re.fullmatch(r'[0-9a-f]{64}',x) is not None
+        if not nonempty(plan['operation']) or not nonempty(plan['namespace_uid']): raise ValueError()
+        if any(not sha(plan[k]) for k in ('source_capture_sha256','source_contract_sha256','issuer_authority_sha256')): raise ValueError()
+        aux=plan['auxiliary_image']
+        if not isinstance(aux,dict) or set(aux)!={'workload','container','source_ref','image_ref','platform','manifest_sha256',
+                                                  'config_sha256','index_sha256','source_authority_sha256'}: raise ValueError()
+        if (aux['workload']!='voice-p3-principal-jwks' or aux['container']!='jwks' or aux['source_ref']!='nginx:stable-alpine'
+            or any(not sha(aux[k]) for k in ('manifest_sha256','config_sha256','source_authority_sha256'))
+            or (aux['index_sha256'] is not None and not sha(aux['index_sha256']))): raise ValueError()
+        source_plan.principal_publisher_image(aux['image_ref'])
+        if aux['image_ref']!='docker.io/library/nginx@sha256:'+(aux['index_sha256'] or aux['manifest_sha256']): raise ValueError()
+        platform=aux['platform']
+        if (not isinstance(platform,dict) or set(platform)!={'os','architecture','variant'} or platform['os']!='linux'
+            or not nonempty(platform['architecture']) or (platform['variant'] is not None and not nonempty(platform['variant']))): raise ValueError()
+        ids=inventory_intent(); objects=plan['objects']; effects=plan['effects']; preserved=plan['preserved']
+        if not isinstance(objects,list) or len(objects)!=len(ids) or not isinstance(effects,list) or not isinstance(preserved,dict): raise ValueError()
+        by_id={}
+        for ident,obj in zip(ids,objects):
+            kind,name=ident.split('/')
+            if (not isinstance(obj,dict) or set(obj)!={'id','kind','name','namespace','desired_sha256','payload_sha256'}
+                or (obj['id'],obj['kind'],obj['name'],obj['namespace'])!=(ident,kind,name,NAMESPACE)
+                or not sha(obj['desired_sha256']) or not sha(obj['payload_sha256'])): raise ValueError()
+            by_id[ident]=obj
+        effect_ids=[]
+        for effect in effects:
+            if not isinstance(effect,dict) or set(effect)!=(set(objects[0])|{'before'}): raise ValueError()
+            ident=effect['id']; before=effect['before']
+            if (ident not in by_id or {k:v for k,v in effect.items() if k!='before'}!=by_id[ident]
+                or not isinstance(before,dict) or set(before)!={'absent','list_rv'} or before['absent'] is not True
+                or not nonempty(before['list_rv'])): raise ValueError()
+            effect_ids.append(ident)
+        if effect_ids!=[ident for ident in ids if ident in effect_ids] or set(effect_ids)&set(preserved) or set(effect_ids)|set(preserved)!=set(ids): raise ValueError()
+        for ident,item in preserved.items():
+            if not isinstance(item,dict) or set(item)!={'authority','observed'}: raise ValueError()
+            authority=item['authority']; observed=item['observed']; kind,name=ident.split('/')
+            if (not isinstance(authority,dict) or set(authority)!={'operation','receipt_sha256'}
+                or not nonempty(authority['operation']) or not sha(authority['receipt_sha256'])): raise ValueError()
+            fields={'kind','name','namespace','uid','resourceVersion','semantic_sha256'}|({'generation'} if kind=='Deployment' else set())
+            if (not isinstance(observed,dict) or set(observed)!=fields or (observed['kind'],observed['name'],observed['namespace'])!=(kind,name,NAMESPACE)
+                or not nonempty(observed['uid']) or not nonempty(observed['resourceVersion']) or not sha(observed['semantic_sha256'])
+                or (kind=='Deployment' and (type(observed['generation']) is not int or observed['generation']<1))): raise ValueError()
+        return copy.deepcopy(plan)
+    except Exception: raise PrerequisiteError('staging P3 private plan malformed') from None
+
+
 def material_objects(values):
     """Convert private bytes to exact staging API objects; caller must validate crypto."""
     try:

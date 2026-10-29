@@ -6,6 +6,38 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_private_plan_requires_closed_exact_inventory_and_provenance_shapes(self):
+        ids=p3.inventory_intent(); digest='a'*64
+        objects=[{'id':i,'kind':i.split('/')[0],'name':i.split('/')[1],
+                  'namespace':'voice-staging','desired_sha256':digest,'payload_sha256':digest} for i in ids]
+        plan={'schema':'voice-staging-p3-prerequisites-plan-v1','operation':'operation',
+              'namespace_uid':'namespace-uid','source_capture_sha256':digest,'source_contract_sha256':digest,
+              'issuer_authority_sha256':digest,'objects':objects,'preserved':{},
+              'effects':[{**x,'before':{'absent':True,'list_rv':'9'}} for x in objects],
+              'auxiliary_image':{'workload':'voice-p3-principal-jwks','container':'jwks',
+               'source_ref':'nginx:stable-alpine','image_ref':'docker.io/library/nginx@sha256:'+digest,
+               'platform':{'os':'linux','architecture':'amd64','variant':None},
+               'manifest_sha256':digest,'config_sha256':digest,'index_sha256':None,'source_authority_sha256':digest}}
+        self.assertEqual(p3.validate_plan_shape(plan),plan)
+        preserved=copy.deepcopy(plan); preserved['effects']=[]
+        for obj in objects:
+            observed={'kind':obj['kind'],'name':obj['name'],'namespace':obj['namespace'],
+                      'uid':'owned','resourceVersion':'10','semantic_sha256':digest}
+            if obj['kind']=='Deployment': observed['generation']=1
+            preserved['preserved'][obj['id']]={'authority':{'operation':'prior','receipt_sha256':digest},'observed':observed}
+        self.assertEqual(p3.validate_plan_shape(preserved),preserved)
+        broken=copy.deepcopy(preserved); del broken['preserved'][ids[0]]
+        with self.assertRaises(p3.PrerequisiteError): p3.validate_plan_shape(broken)
+        for mutate in ('unknown','duplicate','overlap','extra_effect','bad_image','bad_before'):
+            bad=copy.deepcopy(plan)
+            if mutate=='unknown': bad['extra']=True
+            if mutate=='duplicate': bad['objects'][1]=bad['objects'][0]
+            if mutate=='overlap': bad['preserved'][ids[0]]={}
+            if mutate=='extra_effect': bad['effects'].append(bad['effects'][0])
+            if mutate=='bad_image': bad['auxiliary_image']['image_ref']='nginx:stable-alpine'
+            if mutate=='bad_before': bad['effects'][0]['before']['absent']=False
+            with self.subTest(mutate=mutate),self.assertRaises(p3.PrerequisiteError): p3.validate_plan_shape(bad)
+
     def test_publisher_uses_exact_source_shape_and_immutable_nginx(self):
         raw=(Path(__file__).resolve().parents[3]/'deploy/staging/services.yaml').read_text()
         section=raw.split('  default.conf: |\n',1)[1].split('\n---',1)[0]
