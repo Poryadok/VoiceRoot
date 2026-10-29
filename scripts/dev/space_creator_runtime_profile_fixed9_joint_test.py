@@ -169,8 +169,14 @@ class ThreeProfileTest(unittest.TestCase):
                         def start_capability():
                             try:handle.run(); result.append(True)
                             except BaseException:result.append(False)
-                        trigger=threading.Thread(target=start_capability); trigger.start(); cap_receipt=cap.finish(); trigger.join(45)
-                        if trigger.is_alive() or result!=[True]:raise ValueError('capability trigger')
+                        trigger=threading.Thread(target=start_capability); trigger.start(); completed=False
+                        try:
+                            cap_receipt=cap.finish(); completed=True; trigger.join(45)
+                            if trigger.is_alive() or result!=[True]:raise ValueError('capability trigger')
+                        finally:
+                            if trigger.is_alive():
+                                if not completed or not result:handle.cancel()
+                                while trigger.is_alive():trigger.join(1)
                         creator=case.phase; creator.run()
                         pre=fresh('space'); intent=base_intent|{'peer_receiver':{'profile':'space','source_sha':case.base.context['commit']}}
                         j,c,f=attach('space-receiver',intent)
