@@ -80,6 +80,7 @@ services:
     command:
       - go
       - test
+      - -v
       - -count=1
       - -run
       - ^TestT30ComposeChatProvisionLostResponseRetriesRealReceipt$$

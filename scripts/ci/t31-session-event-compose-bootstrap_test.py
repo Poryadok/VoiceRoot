@@ -22,6 +22,17 @@ SPEC.loader.exec_module(bootstrap)
 
 
 class ComposeBootstrapEnvironmentTests(unittest.TestCase):
+    def test_each_go_acceptance_phase_verifies_execution(self):
+        workflow = WORKFLOW.read_text(encoding='utf-8')
+        for phase in ('claim', 'reclaim', 'drop', 'replay'):
+            self.assertIn(f'--log "$RUNNER_TEMP/t31-{phase}.log"', workflow)
+        self.assertEqual(workflow.count('--test TestT31ComposeHTTPSClaimInboxEffectAckReclaim'), 4)
+        self.assertIn('--log "$RUNNER_TEMP/t30-chat-retry.log"', workflow)
+        self.assertIn('--test TestT30ComposeChatProvisionLostResponseRetriesRealReceipt', workflow)
+        overlay = (ROOT / 'docker-compose.t31-session-events-e2e.yml').read_text(encoding='utf-8')
+        runner = overlay.split('  t30-chat-retry-runner:', 1)[1]
+        self.assertRegex(runner, r'(?m)^\s+- -v$')
+
     def test_workflow_routes_shared_contract_and_build_inputs(self):
         import fnmatch
         import yaml

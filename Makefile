@@ -328,6 +328,8 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
 	python3 "$(ROOT)/scripts/ci/affected_check_plan_test.py"
 	python3 "$(ROOT)/scripts/ci/go_integration_receipts_test.py"
+	python3 "$(ROOT)/scripts/ci/verify_go_verbose_test.py"
+	python3 "$(ROOT)/scripts/ci/t31-session-event-compose-bootstrap_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune_test.sh"
 	python3 "$(ROOT)/scripts/ci/local_heavy_slots_test.py"

@@ -323,6 +323,8 @@ t31:
   - 'docs/testing/game-integrations-exec-plan.md'
   - 'scripts/ci/t31-session-event-compose-bootstrap.py'
   - 'scripts/ci/t31-session-event-compose-bootstrap_test.py'
+  - 'scripts/ci/verify_go_verbose.py'
+  - 'scripts/ci/verify_go_verbose_test.py'
   - 'scripts/ci/t31-startup-diagnostics.py'
   - 'scripts/dev/generate-phase0-fixture.py'
   - 'scripts/dev/t31-session-event-gateway.conf'
