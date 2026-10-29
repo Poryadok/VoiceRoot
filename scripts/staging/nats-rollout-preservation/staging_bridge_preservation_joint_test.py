@@ -314,8 +314,12 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
       'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}]}
    if args[:2]==['get','--raw'] and ':8222/proxy/jsz?' in args[-1]:
     from nats_contract_plan_test import live
+    import nats_contract_plan as contract
     from rollout_census_test import CREATED
     streams=live();details=[]
+    for name,subjects in (('voice_events',contract.VOICE_SUBJECTS_12),('user_events',contract.USER_SUBJECTS_14)):
+     streams[name]=copy.deepcopy(streams['file_events'])
+     streams[name]['config']['name']=name;streams[name]['config']['subjects']=sorted(subjects)
     for name,info in streams.items():
      state={**info['state'],'consumer_count':0,'bytes':100}
      details.append({'name':name,'created':CREATED,'config':info['config'],'state':state,'consumer_detail':[]})
