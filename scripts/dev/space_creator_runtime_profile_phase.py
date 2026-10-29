@@ -33,6 +33,12 @@ PINS={
  'src/backend/gateway/principal_issuer.go':'0029af8557ea2b910c790fc5dae878fbc3881f31792d0db905602484cf51e554',
  'src/backend/auth/src/main/java/voice/backend/auth/principal/AuthPrincipalTransport.java':'e884dfed6c9d36c152992320373792ba236f182dda2392ca603d392881a3acfb',
  'src/backend/space/principal_runtime.go':'f6cf15e8a36e5eb27126813dd42e189bda68b8a7825fe890bc87d09f6c865cd3',
+ 'src/backend/space/main.go':'0305026e763ee771c7893ade9c24aa0455490dd96e07a42915a42883a6057ce8',
+ 'src/backend/space/internal/grpcsvc/public_creator.go':'232ebedfffb4c46f779851263ec80ee3b17966efc7379ec61da44382e8f7f86e',
+ 'src/backend/space/internal/grpcsvc/lifecycle_public_join.go':'106aa26670a296fc7392475ab94ddd4f9eba88344fcc8b8487d187d2e51e26fd',
+ 'src/backend/space/internal/grpcsvc/invite_permission.go':'7b3ffbaeb76f110e3596a27e6b9fe763c0b7927d2ef3dc9e5974f8b4979e68e4',
+ 'src/backend/space/internal/grpcsvc/join.go':'5e5b7d4a2401e3dfc74d8275d7678ceb594a3721ecf84f98615ec3b2ce88e8ff',
+ 'src/backend/space/internal/grpcsvc/privacy.go':'bc51a29157ab297822141f2e0a372754ac7f6337dd43173e512cfe2a58631d4f',
 }
 
 
