@@ -117,5 +117,11 @@ class MigrationCutTest(unittest.TestCase):
         self.client.workloads[('Deployment', 'voice-a')]['spec']['template']['spec']['containers'][0]['image'] = 'foreign'
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.current_resumed_proof()
 
+    def test_resumed_proof_accepts_admitted_replacement_controller(self):
+        current = self.client.workloads[('Deployment', 'voice-a')]
+        current['metadata']['uid'] = 'new-target-uid'
+        self.cut._effect('resume', copy.deepcopy(current), 2)
+        self.assertEqual(self.cut.current_resumed_proof()['controllers'][0]['uid'], 'new-target-uid')
+
 
 if __name__ == '__main__': unittest.main()

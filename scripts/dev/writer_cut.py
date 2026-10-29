@@ -597,7 +597,6 @@ class WriterCut:
             source = entry['details']['source']; spec = entry['details']['target_spec']; receipt = entry['receipt']
             key = (source['kind'], source['metadata']['name'])
             if (key not in admitted or step != 'writer-resume-' + key[0].lower() + '-' + key[1] or
-                    source['metadata']['uid'] != admitted[key]['metadata']['uid'] or
                     source['spec'].get('replicas') != 0 or spec.get('replicas') != admitted[key]['spec']['replicas'] or
                     receipt.get('uid') != source['metadata']['uid'] or receipt.get('spec_sha256') != digest(spec)):
                 raise RecoveryRequired('resume receipt differs from admission')
