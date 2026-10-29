@@ -5,6 +5,7 @@ import ssl
 import subprocess
 import sys
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -113,6 +114,8 @@ class HealthPhaseTest(unittest.TestCase):
         self.cut = object.__new__(writer_cut.WriterCut)
         self.cut.fence = self.fence; self.cut.lock = self.base.base.lock; self.cut.namespace_uid = 'ns'
         self.cut.invocation = 'a' * 32; self.cut.activation = {'stage': 'publisher_health'}; self.cut._guard = lambda: None
+        self.cut.verify_activation_stage = lambda: {'operation_id':self.fence.context['operation_id'],
+            'cut_invocation':self.cut.invocation, 'plan_sha256':'b'*64, 'stage':self.cut.activation['stage']}
         self.package = object.__new__(full_cohort_package_phase.PackagePhase)
         self.package.fence = self.fence; self.package.lock = self.base.base.lock; self.package.namespace_uid = 'ns'
         self.package.verify_current = lambda token: None
@@ -155,6 +158,27 @@ class HealthPhaseTest(unittest.TestCase):
     def test_failed_done_recheck_marks_uncertain(self):
         with patch.object(self.phase, '_observe', return_value=self.receipt): self.phase.run('token', self.cut)
         with patch.object(self.phase, '_observe', side_effect=OSError('drift')):
+            with self.assertRaises(health.PublisherHealthError): health.verify_completed(self.phase, self.cut, 'token')
+        self.assertEqual(self.base.base.ledger.row['status'], 'uncertain')
+
+    def test_later_stage_requires_exact_durable_cut_barrier(self):
+        with patch.object(self.phase, '_observe', return_value=self.receipt): self.phase.run('token', self.cut)
+        self.cut.activation['stage'] = 'chat'
+        with self.assertRaises(health.PublisherHealthError): health.verify_completed(self.phase, self.cut, 'token')
+        self.assertEqual(self.base.base.ledger.row['status'], 'uncertain')
+
+    def test_later_stage_accepts_only_exact_barrier_receipt(self):
+        with patch.object(self.phase, '_observe', return_value=self.receipt): self.phase.run('token', self.cut)
+        details = {'operation_id':self.fence.context['operation_id'], 'cut_invocation':self.cut.invocation,
+                   'activation_plan_sha256':'b'*64, 'health_receipt_sha256':self.phase.record['receipt_sha256']}
+        step = {'status':'done', 'nonce':'d'*32, 'details':details, 'details_sha256':publisher.digest(details), 'receipt':details}
+        self.cut.journal = SimpleNamespace(state={'steps':{'writer-cut-publisher-health':step}})
+        self.base.base.ledger.row['writer_cut_effects'] = {'writer-cut-publisher-health':{'status':'done',
+            'nonce':step['nonce'], 'details_sha256':step['details_sha256'], 'receipt_sha256':publisher.digest(details)}}
+        self.cut.activation['stage'] = 'chat'
+        with patch.object(self.phase, '_observe', return_value=self.receipt):
+            self.assertEqual(health.verify_completed(self.phase, self.cut, 'token'), self.receipt)
+            step['details'] = dict(details, cut_invocation='different')
             with self.assertRaises(health.PublisherHealthError): health.verify_completed(self.phase, self.cut, 'token')
         self.assertEqual(self.base.base.ledger.row['status'], 'uncertain')
 

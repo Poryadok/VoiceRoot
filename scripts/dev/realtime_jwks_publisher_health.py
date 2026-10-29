@@ -170,7 +170,7 @@ class PublisherHealthPhase:
         self.journal, self.fence, self.client = journal, fence, client
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.publisher, self.package = publisher_phase, package_phase
-        self.intent = copy.deepcopy(journal.intent); self.record = None
+        self.intent = copy.deepcopy(journal.intent); self.record = None; self.plan_sha256 = None
         if (type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
             or getattr(fence.ledger, 'client', None) is not client
             or type(publisher_phase) not in (publisher.PublisherPhase, publisher.PublisherReuse)
@@ -186,6 +186,13 @@ class PublisherHealthPhase:
             or stage is not None and getattr(cut, 'activation', {}).get('stage') != stage): raise ValueError()
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
         cut._guard(); self.publisher._guard(); self.package.verify_current(token)
+        activation = cut.verify_activation_stage()
+        if (type(activation) is not dict or set(activation) != {'operation_id', 'cut_invocation', 'plan_sha256', 'stage'}
+            or activation['operation_id'] != self.fence.context['operation_id'] or activation['cut_invocation'] != cut.invocation
+            or not isinstance(activation['plan_sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', activation['plan_sha256'])
+            or activation['stage'] != getattr(cut, 'activation', {}).get('stage')
+            or stage is not None and activation['stage'] != stage
+            or self.plan_sha256 is not None and activation['plan_sha256'] != self.plan_sha256): raise ValueError()
         row, revision = self.fence.ledger.read()
         for other in (cut, self.publisher, self.package):
             value, version = other.fence.ledger.read()
@@ -195,6 +202,18 @@ class PublisherHealthPhase:
             if row.get(LEDGER) != self.record or not isinstance(local, dict): raise ValueError()
             if {k: v for k, v in local.items() if k != 'receipt'} != self.record: raise ValueError()
             if self.record['status'] == 'done' and publisher.digest(local.get('receipt')) != self.record['receipt_sha256']: raise ValueError()
+        if activation['stage'] != 'publisher_health':
+            if self.record is None or self.record.get('status') != 'done': raise ValueError()
+            entry = cut.journal.state['steps']['writer-cut-publisher-health']
+            details = {'operation_id':self.fence.context['operation_id'], 'cut_invocation':cut.invocation,
+                       'activation_plan_sha256':activation['plan_sha256'], 'health_receipt_sha256':self.record['receipt_sha256']}
+            if (set(entry) != {'status', 'nonce', 'details', 'details_sha256', 'receipt'} or entry['status'] != 'done'
+                or entry['details'] != details or entry['receipt'] != details
+                or entry['details_sha256'] != publisher.digest(details)
+                or row.get('writer_cut_effects', {}).get('writer-cut-publisher-health') !=
+                   {'status':'done', 'nonce':entry['nonce'], 'details_sha256':entry['details_sha256'],
+                    'receipt_sha256':publisher.digest(details)}): raise ValueError()
+        return activation
 
     def _observe(self, cut, token, stage):
         guard = lambda: self._guard(cut, token, stage)
@@ -212,7 +231,8 @@ class PublisherHealthPhase:
         guard()
         return {'schema': 'voice-realtime-jwks-https-v1', 'operation_id': self.fence.context['operation_id'],
                 'source_sha': self.fence.context['commit'], 'namespace_uid': self.namespace_uid,
-                'cut_invocation': cut.invocation, 'publisher_sha256': publisher.digest(proof),
+                'cut_invocation': cut.invocation, 'activation_plan_sha256': self.plan_sha256,
+                'publisher_sha256': publisher.digest(proof),
                 'routing': first, 'ca_sha256': hashlib.sha256(crypto.der(ca)).hexdigest(),
                 'certificate_sha256': proof['tls']['certificate_sha256'], 'jwks_sha256': proof['public']['sha256'],
                 'scope': 'publisher-pod-https-through-kubernetes-tunnel'}
@@ -220,13 +240,13 @@ class PublisherHealthPhase:
     def run(self, token, cut):
         pending = False
         try:
-            self._guard(cut, token)
-            if getattr(cut, 'activation', {}).get('stage') != 'publisher_health': raise ValueError()
+            activation = self._guard(cut, token, 'publisher_health')
+            self.plan_sha256 = activation['plan_sha256']
             row, rev = self.fence.ledger.read()
             if STEP in self.journal.state['steps'] or LEDGER in row: raise ValueError()
             record = {'status': 'pending', 'nonce': secrets.token_hex(16), 'operation_id': self.fence.context['operation_id'],
                       'source_sha': self.fence.context['commit'], 'namespace_uid': self.namespace_uid,
-                      'cut_invocation': cut.invocation}
+                      'cut_invocation': cut.invocation, 'activation_plan_sha256': self.plan_sha256}
             pending = True; self.journal.state['steps'][STEP] = copy.deepcopy(record); self.journal.save()
             current, version = self.fence.ledger.read()
             if current != row or version != rev: raise ValueError()
