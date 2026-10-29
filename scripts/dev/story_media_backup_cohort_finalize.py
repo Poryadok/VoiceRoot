@@ -20,7 +20,8 @@ class CohortFinalizeError(Exception):
 def validate_binding(binding, databases):
     """Reject malformed operation and restore identity before any dump."""
     members = cohort._members(binding, databases)
-    if (set(binding) != BINDING_KEYS or (binding['project'], binding['resource'], binding['actor'])
+    expected_keys = BINDING_KEYS | ({'full_catalog'} if 'full_catalog' in binding else set())
+    if (set(binding) != expected_keys or (binding['project'], binding['resource'], binding['actor'])
             != ('voice', 'DEV', 'scheduled_devops') or type(binding['generation']) is not int
             or binding['generation'] <= 0 or type(binding['revision']) is not int or binding['revision'] <= 0):
         raise CohortFinalizeError('cohort binding invalid')
