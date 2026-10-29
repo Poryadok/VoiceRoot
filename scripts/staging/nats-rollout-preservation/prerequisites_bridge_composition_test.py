@@ -66,7 +66,11 @@ class BridgePrerequisiteComposition(unittest.TestCase):
                  patch.object(bridge_root, 'Kube', return_value=stage.kube), \
                  patch.object(runtime_stage.RolloutStage, 'capture', side_effect=capture):
                 if fault == 'missing-issuer':
-                    actions._prepare(request)
+                    try:
+                        actions._prepare(request)
+                    except FileNotFoundError as exc:
+                        self.assertEqual(exc.filename, str(installed / 'prerequisite-inputs' / 'p3-issuer.json'))
+                        raise
                     self.fail('missing issuer unexpectedly admitted')
                 else:
                     with self.assertRaises(ReachedPolicy):
