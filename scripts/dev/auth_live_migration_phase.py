@@ -15,8 +15,9 @@ import cohort_readback as readback
 import story_media_backup_cohort_restore as restore
 import auth_live_migration_phase_eligibility as eligibility
 import auth_live_migration_phase_probe as probe
-from auth_flyway_upgrade_qualification import source_catalog, candidate_blob
+from auth_flyway_upgrade_qualification import source_catalog, candidate_blob, marker_snapshot
 import auth_user_adoption_runtime as runtime
+import story_media_backup_restore as media_restore
 import cohort_backup_phases
 import media_backup_phase
 import media_operation_journal
@@ -176,6 +177,20 @@ def _same_candidate(left,right):
     return a==b
 
 
+def _expected_c1_data(clone, before):
+    return {'markers_sha256':_digest(clone['before_markers' if before else 'expected_after_markers']),
+            'roles_sha256':clone['roles_sha256'],
+            'catalog_sha256':clone['before_catalog_sha256' if before else 'after_catalog_sha256']}
+
+
+def _bind_clone_provenance(clone, provenance):
+    keys=('manifest_sha256','custody_sha256','restore_sha256','metadata_sha256')
+    if (not isinstance(clone,dict) or not isinstance(provenance,dict) or set(provenance)!=set(keys)
+            or any(not isinstance(provenance[k],str) or not re.fullmatch(r'[0-9a-f]{64}',provenance[k])
+                   or clone.get(k)!=provenance[k] for k in keys)):
+        raise ValueError('clone and current cohort provenance differ')
+
+
 def verify_writer_successor(phase, source_root):
     """Reconstruct the planned C1 objects from protected state; never create them."""
     try:
@@ -185,7 +200,7 @@ def verify_writer_successor(phase, source_root):
         inputs=copy.deepcopy(steps['auth-live-c1-inputs']); row,revision=p.fence.ledger.read()
         if (not isinstance(record,dict) or set(record)!={'status','operation_id','snapshot_id','source_sha','nonce','input_sha256','terminal_sha256','configmap','job'}
                 or record!=row.get('auth_live_c1') or record['status'] not in ('active','done')
-                or not isinstance(inputs,dict) or set(inputs)!={'candidate','metadata','history','provenance','node','credential','clone_receipt_sha256'}
+                or not isinstance(inputs,dict) or set(inputs)!={'candidate','metadata','history','provenance','node','credential','before_data','clone_receipt_sha256'}
                 or record['input_sha256']!=_digest(inputs) or not isinstance(record['nonce'],str)
                 or not re.fullmatch(r'[0-9a-f]{32}',record['nonce'])): raise ValueError()
         if record['terminal_sha256'] is not None:
@@ -200,12 +215,16 @@ def verify_writer_successor(phase, source_root):
                 or node.get('uid')!=tool['node_uid'] or candidate.get('source_sha')!=record['source_sha']
                 or candidate.get('image')!=p.fence.context['images']['voice-auth/auth']
                 or candidate.get('policy')!={'flyway':'disabled','persistence':'jdbc','selector':'absent'}
+                or candidate.get('route') not in ({'host':h,'database':'auth_db','role':'voice'} for h in
+                    ('voice-postgres','voice-postgres.voice-dev','voice-postgres.voice-dev.svc','voice-postgres.voice-dev.svc.cluster.local'))
                 or not isinstance(inputs['credential'],dict) or set(inputs['credential'])!={'uid','resourceVersion'}
                 or any(not isinstance(v,str) or not v for v in inputs['credential'].values())): raise ValueError()
         sources,catalog=source_catalog(source_root,record['source_sha'])
         if catalog!=inputs['metadata']['migrations']['auth_db']['files']: raise ValueError()
         clone=steps['cohort-auth-flyway-private']; clone_record=steps['cohort-auth-flyway']
         if _digest(clone)!=inputs['clone_receipt_sha256']: raise ValueError()
+        _bind_clone_provenance(clone,provenance)
+        if inputs['before_data']!=_expected_c1_data(clone,True): raise ValueError()
         validate_clone_receipt(clone,clone_record,row.get('cohort_auth_flyway'),record['operation_id'],
                                record['snapshot_id'],record['source_sha'],catalog,inputs['history'])
         cm,job=c1_objects(record['operation_id'],sources,tool['node_name'])
@@ -241,7 +260,8 @@ def verify_writer_terminal(phase, source_root):
         steps=phase.phases.journal.state['steps']; terminal=copy.deepcopy(steps['auth-live-c1-terminal'])
         inputs=steps['auth-live-c1-inputs']; clone=steps['cohort-auth-flyway-private']
         if (not isinstance(terminal,dict) or set(terminal)!={'operation_id','snapshot_id','source_sha','job_uid',
-                'pod_uid','pod_ip','node_uid','image_id','before_history','after_history','clone_receipt_sha256','sessions'}
+                'pod_uid','pod_ip','node_uid','image_id','before_history','after_history','clone_receipt_sha256','sessions',
+                'gate_sha256','credential','before_data','after_data'}
                 or record['terminal_sha256']!=_digest(terminal) or record['job']['state'] not in ('owned','removing','removed')
                 or terminal['operation_id']!=record['operation_id'] or terminal['snapshot_id']!=record['snapshot_id']
                 or terminal['source_sha']!=record['source_sha'] or terminal['job_uid']!=record['job']['uid']
@@ -249,7 +269,10 @@ def verify_writer_terminal(phase, source_root):
                 or terminal['node_uid']!=successor['execution']['node_uid']
                 or terminal['image_id']!=successor['execution']['platform_digest']
                 or terminal['sessions']!=[] or terminal['before_history']!=inputs['history']
-                or terminal['clone_receipt_sha256']!=_digest(clone)): raise ValueError()
+                or terminal['clone_receipt_sha256']!=_digest(clone) or terminal['credential']!=inputs['credential']
+                or terminal['before_data']!=_expected_c1_data(clone,True)
+                or terminal['after_data']!=_expected_c1_data(clone,False)
+                or not isinstance(terminal['gate_sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',terminal['gate_sha256'])): raise ValueError()
         ipaddress.ip_address(terminal['pod_ip'])
         verify_transition(terminal['before_history'],terminal['after_history'],clone['after_history'])
         return terminal
@@ -371,6 +394,30 @@ def _c1_resource_transition(phase, source_root, kind, target_state, identity=Non
         raise PhaseError('Auth resource transition unavailable; reconcile uncertain effects') from None
 
 
+def _commit_c1_terminal(phase, source_root, receipt):
+    started=False
+    try:
+        p=phase.phases; record=verify_writer_successor(phase,source_root)['record']
+        if (record['status']!='active' or record['terminal_sha256'] is not None
+                or record['job']['state']!='owned' or record['configmap']['state']!='owned'
+                or 'auth-live-c1-terminal' in p.journal.state['steps']): raise ValueError()
+        row,revision=p.fence.ledger.read()
+        if row.get('auth_live_c1')!=record: raise ValueError()
+        target=copy.deepcopy(record); target['terminal_sha256']=_digest(receipt)
+        started=True
+        p.journal.state['steps']['auth-live-c1-terminal']=copy.deepcopy(receipt)
+        p.journal.state['steps']['auth-live-c1']=copy.deepcopy(target); p.journal.save()
+        current,rev=p.fence.ledger.read()
+        if current!=row or rev!=revision: raise ValueError()
+        current['auth_live_c1']=copy.deepcopy(target); current['step']='auth-live-c1-terminal'
+        p.fence.ledger.write(revision,current)
+        if verify_writer_terminal(phase,source_root)!=receipt: raise ValueError()
+        return target
+    except BaseException:
+        if started: readback._poison(phase)
+        raise PhaseError('Auth terminal outcome uncertain; retain lock and reconcile') from None
+
+
 def _cut_identity(phase, cut):
     _phase_identity(phase); p=phase.phases
     if (type(cut) is not writer_cut.WriterCut or cut.fence.context!=p.fence.context
@@ -380,11 +427,20 @@ def _cut_identity(phase, cut):
     if not isinstance(a,tuple) or not isinstance(b,tuple) or len(a)!=2 or len(b)!=2 or not a[0] or a[0]!=b[0]: raise ValueError()
 
 
-def create_c1_objects(phase, cut, drain, source_root, actor, token):
+def _bind_cut_scope(cut, binding):
+    scope=cut.admission['session_scope']; auth=binding['sources']['auth_db']
+    if (scope.get('engine')!=auth['engine'] or scope.get('server_start')!=auth['server_start']
+            or not isinstance(scope.get('databases'),list) or not isinstance(scope.get('database_oids'),dict)):
+        raise ValueError()
+    for db in set(scope['databases']) & set(binding['sources']):
+        if db!='roles' and scope['database_oids'].get(db)!=binding['sources'][db]['database_oid']: raise ValueError()
+
+
+def create_c1_objects(phase, cut, source_root, actor, token):
     """Create the fixed CM and Job once after the writer cut binds this phase."""
     started=False
     try:
-        _cut_identity(phase,cut); p=phase.phases
+        _cut_identity(phase,cut); p=phase.phases; drain=lambda:cut.verify_migration_running()
         if cut.verify_migration_running() is False: raise ValueError()
         readback._guard(phase,drain)
         planned=verify_writer_successor(phase,source_root); cm,job,record=planned['configmap'],planned['job'],planned['record']
@@ -403,6 +459,7 @@ def create_c1_objects(phase, cut, drain, source_root, actor, token):
         _c1_resource_transition(phase,source_root,'configmap','owned',(identity['uid'],identity['resourceVersion']))
         if cut.verify_migration_running() is False: raise ValueError()
         inputs=p.journal.state['steps']['auth-live-c1-inputs']; binding,_=verified_sources(phase,inputs['metadata'],26)
+        _bind_cut_scope(cut,binding)
         auth=binding['sources']['auth_db']; guard=lambda:readback._guard(phase,drain)
         candidate=eligibility.observe_candidate(phase,drain,source_root,actor,token)
         if not _same_candidate(candidate,inputs['candidate']): raise ValueError()
@@ -452,6 +509,133 @@ def _inspect_c1_gate(phase, drain, source_root, source, engine):
     return result
 
 
+def _c1_data_snapshot(engine, clone, before, guard):
+    """Verify fixed pre-existing rows, role catalog and Auth catalog against clone."""
+    if type(before) is not bool or not isinstance(clone,dict): raise ValueError()
+    snapshot=probe.metadata.kube_engine_snapshot(probe.metadata.linux_private_bytes,guard)
+    if guard() is False or snapshot()!=engine: raise ValueError()
+    def query(sql):
+        if guard() is False: raise ValueError()
+        value=probe._query(sql)
+        if guard() is False: raise ValueError()
+        return value
+    columns=clone['original_table_columns']
+    marks=marker_snapshot(query,columns,before=before)
+    if before:
+        normalized=marker_snapshot(query,columns,before=True,normalize=True)
+        if marks!=clone['before_markers'] or normalized!=clone['expected_after_markers']: raise ValueError()
+    elif marks!=clone['expected_after_markers']: raise ValueError()
+    roles=query(media_restore.role_catalog_sql())
+    catalog=query(restore.AUTH_CATALOG)
+    roles_hash=_digest(roles); catalog_hash=_digest(catalog)
+    if (roles_hash!=clone['roles_sha256'] or catalog_hash!=clone['before_catalog_sha256' if before else 'after_catalog_sha256']
+            or snapshot()!=engine or guard() is False): raise ValueError()
+    return {'markers_sha256':_digest(marks),'roles_sha256':roles_hash,'catalog_sha256':catalog_hash}
+
+
+def _running_guard(phase, cut):
+    if phase._guard() is False or cut.verify_migration_running() is False: raise ValueError()
+
+
+def finish_c1(phase, cut, source_root, actor, token):
+    """Observe the owned Job and persist exact terminal DB evidence under cut."""
+    try:
+        _cut_identity(phase,cut); p=phase.phases
+        planned=verify_writer_successor(phase,source_root); record=planned['record']; authored=planned['job']
+        if record['job']['state']!='owned' or record['terminal_sha256'] is not None: raise ValueError()
+        deadline=time.monotonic()+180; guard=lambda:_running_guard(phase,cut)
+        while True:
+            guard()
+            actual=p.client.call('get','job',authored['metadata']['name'],'-o','json')
+            identity=verify_writer_job(authored,actual)
+            if identity['uid']!=record['job']['uid']: raise ValueError()
+            status=actual.get('status',{})
+            if (type(status.get('failed',0)) is not int or status.get('failed',0)!=0
+                    or type(status.get('active',0)) is not int or type(status.get('succeeded',0)) is not int
+                    or any(c.get('type')=='Failed' and c.get('status')=='True' for c in status.get('conditions',[]))):
+                raise ValueError()
+            pods=p.client.call('get','pods','-l','voice.dev/adoption-job='+authored['metadata']['name'],'-o','json').get('items')
+            if not isinstance(pods,list) or len(pods)>1: raise ValueError()
+            pod=verify_writer_pod(authored,actual,pods[0],planned['execution']) if pods else None
+            complete=any(c.get('type')=='Complete' and c.get('status')=='True' for c in status.get('conditions',[]))
+            if complete and status.get('succeeded')==1 and status.get('active',0)==0 and pod and pod['phase']=='Succeeded': break
+            if time.monotonic()>=deadline: raise ValueError()
+            time.sleep(1)
+        guard(); inputs=p.journal.state['steps']['auth-live-c1-inputs']
+        binding,provenance=verified_sources(phase,inputs['metadata'],26); _bind_cut_scope(cut,binding)
+        if provenance!=inputs['provenance']: raise ValueError()
+        auth=binding['sources']['auth_db']
+        scope={'engine':auth['engine'],'server_start':auth['server_start'],'databases':binding['databases'],
+               'database_oids':{db:binding['sources'][db]['database_oid'] for db in binding['databases']}}
+        observed=probe.inspect(scope,guard)
+        if observed['sessions'] or observed['prepared']!=0: raise ValueError()
+        clone=p.journal.state['steps']['cohort-auth-flyway-private']
+        verify_transition(inputs['history'],observed['history'],clone['after_history'])
+        gate=_inspect_c1_gate(phase,guard,source_root,binding['source_sha'],auth['engine'])
+        after_data=_c1_data_snapshot(auth['engine'],clone,False,guard)
+        secret=probe.verify_login(p.client,{'engine':auth['engine'],'database_oid':auth['database_oid'],
+                                           'server_start':auth['server_start']},guard)
+        if secret!=inputs['credential']: raise ValueError()
+        node=observe_node(p.client,auth['engine'],p.intent['auth_live_tool'],guard)
+        if node['name']!=inputs['node']['name'] or node['uid']!=inputs['node']['uid']: raise ValueError()
+        candidate=eligibility.observe_candidate(phase,guard,source_root,actor,token)
+        if not _same_candidate(candidate,inputs['candidate']): raise ValueError()
+        guard()
+        if probe.inspect(scope,guard)!=observed: raise ValueError()
+        receipt={'operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
+                 'source_sha':binding['source_sha'],'job_uid':identity['uid'],'pod_uid':pod['uid'],'pod_ip':pod['ip'],
+                 'node_uid':planned['execution']['node_uid'],'image_id':pod['image_id'],
+                 'before_history':copy.deepcopy(inputs['history']),'after_history':copy.deepcopy(observed['history']),
+                 'clone_receipt_sha256':_digest(clone),'sessions':[],'gate_sha256':_digest(gate),'credential':secret,
+                 'before_data':inputs['before_data'],'after_data':after_data}
+        _commit_c1_terminal(phase,source_root,receipt)
+        if cut.finish_migration() is False: raise ValueError()
+        return receipt
+    except BaseException:
+        readback._poison(phase)
+        raise PhaseError('Auth migration terminal outcome uncertain; retain lock and reconcile') from None
+
+
+def cleanup_c1(phase, cut, source_root):
+    """Delete only terminal owned Job and ConfigMap with UID/RV preconditions."""
+    try:
+        _cut_identity(phase,cut); p=phase.phases
+        verify_writer_terminal(phase,source_root)
+        for kind in ('job','configmap'):
+            _running_guard(phase,cut)
+            planned=verify_writer_successor(phase,source_root); record=planned['record']; resource=record[kind]
+            if resource['state']!='owned': raise ValueError()
+            authored=planned[kind]; name=authored['metadata']['name']
+            actual=p.client.call('get',kind,name,'-o','json')
+            identity=verify_writer_job(authored,actual) if kind=='job' else verify_writer_configmap(authored,actual)
+            if identity['uid']!=resource['uid']: raise ValueError()
+            _c1_resource_transition(phase,source_root,kind,'removing')
+            _running_guard(phase,cut)
+            prefix='/apis/batch/v1/namespaces/voice-dev/jobs/' if kind=='job' else '/api/v1/namespaces/voice-dev/configmaps/'
+            options={'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
+                     'preconditions':{'uid':identity['uid'],'resourceVersion':identity['resourceVersion']}}
+            p.client.call('delete','--raw='+prefix+name,'-f','-',body=options)
+            deadline=time.monotonic()+60
+            while True:
+                if phase._guard() is False: raise ValueError()
+                remaining=p.client.call('get',kind,name,'--ignore-not-found=true','-o','json')
+                pods=[]
+                if kind=='job':
+                    pods=p.client.call('get','pods','-l','voice.dev/adoption-job='+name,'-o','json').get('items')
+                    if not isinstance(pods,list): raise ValueError()
+                if not remaining and not pods: break
+                if remaining and remaining.get('metadata',{}).get('uid')!=identity['uid']: raise ValueError()
+                if time.monotonic()>=deadline: raise ValueError()
+                time.sleep(1)
+            _c1_resource_transition(phase,source_root,kind,'removed')
+        verify_writer_cleanup(phase,source_root)
+        if cut.accept_migration_cleanup() is False: raise ValueError()
+        return True
+    except BaseException:
+        readback._poison(phase)
+        raise PhaseError('Auth cleanup outcome uncertain; retain lock and reconcile') from None
+
+
 def verified_sources(phase, metadata, version):
     """Verify current cohort custody and restore records from the common fence."""
     p=phase.phases; row,_=p.fence.ledger.read()
@@ -499,12 +683,13 @@ def c2_sources(phase, metadata):
     return verified_sources(phase,metadata,32)
 
 
-def init_c1(phase, drain, source_root, actor, token, metadata):
+def init_c1(phase, cut, source_root, actor, token, metadata):
     """Capture and reserve an authenticated C1 plan; creates no Kubernetes objects."""
     p=phase.phases; started=False
     try:
-        _phase_identity(phase); _package_authority(phase); readback._guard(phase,drain)
-        binding,provenance=verified_sources(phase,metadata,26)
+        _cut_identity(phase,cut); drain=lambda:cut.verify_drained()
+        _package_authority(phase); readback._guard(phase,drain)
+        binding,provenance=verified_sources(phase,metadata,26); _bind_cut_scope(cut,binding)
         operation= binding['operation_id']; operation_name(operation)
         if not operation.startswith('media-c1-'): raise ValueError()
         sources,catalog=source_catalog(source_root,binding['source_sha'])
@@ -522,8 +707,10 @@ def init_c1(phase, drain, source_root, actor, token, metadata):
                 or projected!=metadata['catalog']['auth_db']['history']): raise ValueError()
         row,_=p.fence.ledger.read(); steps=p.journal.state['steps']
         clone=steps['cohort-auth-flyway-private']
+        _bind_clone_provenance(clone,provenance)
         validate_clone_receipt(clone,steps['cohort-auth-flyway'],row.get('cohort_auth_flyway'),operation,
                                binding['snapshot_id'],binding['source_sha'],catalog,observed['history'])
+        before_data=_c1_data_snapshot(auth['engine'],clone,True,lambda:readback._guard(phase,drain))
         tool=copy.deepcopy(p.intent['auth_live_tool'])
         readback._guard(phase,drain)
         if flyway_platform(runtime.QUALIFIED_TOOLS['flyway'].rsplit('@',1)[1])!=tool['flyway_platform_digest']: raise ValueError()
@@ -531,7 +718,7 @@ def init_c1(phase, drain, source_root, actor, token, metadata):
         node=observe_node(p.client,auth['engine'],tool,lambda:readback._guard(phase,drain))
         credential=probe.verify_login(p.client,{'engine':auth['engine'],'database_oid':auth['database_oid'],
             'server_start':auth['server_start']},lambda:readback._guard(phase,drain))
-        if (verified_sources(phase,metadata)!=(binding,provenance)
+        if (verified_sources(phase,metadata,26)!=(binding,provenance)
                 or probe.inspect(scope,lambda:readback._guard(phase,drain))!=observed): raise ValueError()
         candidate_again=eligibility.observe_candidate(phase,drain,source_root,actor,token)
         if not _same_candidate(candidate,candidate_again): raise ValueError()
@@ -540,7 +727,8 @@ def init_c1(phase, drain, source_root, actor, token, metadata):
         def resource(obj):
             return {'state':'absent','name':obj['metadata']['name'],'spec_sha256':_digest(obj),'uid':None,'resourceVersion':None}
         inputs={'candidate':candidate,'metadata':copy.deepcopy(metadata),'history':copy.deepcopy(observed['history']),
-                'provenance':provenance,'node':node,'credential':credential,'clone_receipt_sha256':_digest(clone)}
+                'provenance':provenance,'node':node,'credential':credential,'before_data':before_data,
+                'clone_receipt_sha256':_digest(clone)}
         record={'status':'active','operation_id':operation,'snapshot_id':binding['snapshot_id'],
                 'source_sha':binding['source_sha'],'nonce':secrets.token_hex(16),'input_sha256':_digest(inputs),
                 'terminal_sha256':None,'configmap':resource(cm),'job':resource(job)}
@@ -559,13 +747,14 @@ def init_c1(phase, drain, source_root, actor, token, metadata):
         raise PhaseError('C1 Auth plan unavailable; retain fence if outcome is uncertain') from None
 
 
-def no_op_c2(phase, drain, source_root, actor, token, metadata):
+def no_op_c2(phase, cut, source_root, actor, token, metadata):
     """Record a fresh clean32 C2 observation. No Kubernetes objects are created."""
     p=phase.phases; started=False
     try:
-        _phase_identity(phase); _package_authority(phase)
+        _cut_identity(phase,cut); drain=lambda:cut.verify_drained()
+        _package_authority(phase)
         readback._guard(phase,drain)
-        binding,provenance=c2_sources(phase,metadata)
+        binding,provenance=c2_sources(phase,metadata); _bind_cut_scope(cut,binding)
         operation_name(binding['operation_id'])
         if not binding['operation_id'].startswith('media-c2-'): raise ValueError()
         _,catalog=source_catalog(source_root,binding['source_sha'])

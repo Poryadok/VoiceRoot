@@ -2,6 +2,7 @@
 import copy
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import auth_live_migration_phase as live
@@ -13,6 +14,58 @@ import resource_fencing
 
 
 class C2JournalTest(unittest.TestCase):
+    def test_c1_init_runs_real_cohort_verifier_through_durable_reservation(self):
+        original=base_fixture.PhaseTest.setUp
+        tool={'node_name':'node-one','node_uid':'node-id','flyway_platform_digest':'sha256:'+'c'*64}
+        def setup(base):
+            original(base)
+            base.intent['auth_live_tool']=copy.deepcopy(tool)
+        work=fixture.ReadbackTest('test_real_encrypted_readback_and_no_replay')
+        try:
+            with patch.object(base_fixture.PhaseTest,'setUp',setup): work.setUp()
+            _,manifest=work.extract()
+            def qualifier(root,key,binding,databases,manifest,metadata,source_root,postgres,migrate,journal):
+                name='voice-media-restore-'+'b'*32; cid='c'*64; labels={'voice.test.owner':name}
+                nonce=journal.begin('postgres',name,labels); journal.created('postgres',nonce,cid,labels)
+                journal.begin_remove('postgres',cid); journal.removed('postgres',cid,True)
+                return {'operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
+                        'source_sha':binding['source_sha'],'manifest_sha256':work.base.ledger.row['cohort_bundle']['manifest_sha256'],
+                        'databases':{db:{'mode':'restore-only','from':26,'to':26} for db in databases},
+                        'scope':'selected-cohort-roles-catalog-and-ledger-only','cleanup':'verified'}
+            with patch.object(upload,'ROOT',work.root),patch.object(restore.restore,'qualify',side_effect=qualifier):
+                restore.run(work.phase,work.key,work.destination,manifest,{},'/source','pg','tool',lambda:None)
+            work.journal.state['steps']['cohort-auth-flyway-private']={}
+            work.journal.state['steps']['cohort-auth-flyway']={}; work.journal.save()
+            work.base.ledger.row['cohort_auth_flyway']={}
+            history=[{'version':str(n),'script':f'V{n}__fixture.sql','checksum':n,'type':'SQL','success':True} for n in (1,26)]
+            metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
+                [{k:r[k] for k in ('version','script','checksum','success')} for r in history]}}}
+            with patch.object(live.restore,'_source'):
+                _,provenance=live.verified_sources(work.phase,metadata,26)
+            work.journal.state['steps']['cohort-auth-flyway-private']=copy.deepcopy(provenance); work.journal.save()
+            observation={'history':history,'sessions':[],'prepared':0}
+            cut=SimpleNamespace(verify_drained=lambda:None)
+            with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'), \
+                 patch.object(live.restore,'_source'),patch.object(live,'source_catalog',return_value=({'V26__x.sql':b'sql'},{})), \
+                 patch.object(live,'candidate_blob',return_value=b'{}'),patch.object(live,'expected_history',return_value=history), \
+                 patch.object(live.eligibility,'observe_candidate',return_value={}),patch.object(live.probe,'inspect',return_value=observation), \
+                 patch.object(live,'validate_clone_receipt'),patch.object(live,'_c1_data_snapshot',return_value={}), \
+                 patch.object(live,'flyway_platform',return_value=tool['flyway_platform_digest']), \
+                 patch.object(live,'observe_node',return_value={'name':'node-one','uid':'node-id'}), \
+                 patch.object(live.probe,'verify_login',return_value={'uid':'secret','resourceVersion':'1'}), \
+                 patch.object(live,'verify_writer_successor'):
+                work.journal.state['steps']['cohort-auth-flyway-private']['manifest_sha256']='f'*64
+                work.journal.save()
+                with self.assertRaises(live.PhaseError): live.init_c1(work.phase,cut,'.','actor','token',metadata)
+                self.assertNotIn('auth_live_c1',work.base.ledger.row)
+                work.journal.state['steps']['cohort-auth-flyway-private']=copy.deepcopy(provenance)
+                work.journal.save()
+                result=live.init_c1(work.phase,cut,'.','actor','token',metadata)
+            self.assertEqual(result['job']['state'],'absent')
+            self.assertEqual(work.base.ledger.row['auth_live_c1'],result)
+        finally:
+            if not work.doCleanups(): raise RuntimeError('fixture cleanup failed')
+
     def test_owned_noop_and_forged_restore_refused(self):
         original=base_fixture.PhaseTest.setUp
         def setup(base):
@@ -41,16 +94,17 @@ class C2JournalTest(unittest.TestCase):
             metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
                 [{k:r[k] for k in ('version','script','checksum','success')} for r in history]}}}
             observation={'history':history,'sessions':[],'prepared':0}
-            with patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live.restore,'_source'),patch.object(live,'source_catalog',return_value=({},{})), \
+            cut=SimpleNamespace(verify_drained=lambda:None)
+            with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'),patch.object(live.restore,'_source'),patch.object(live,'source_catalog',return_value=({},{})), \
                  patch.object(live,'candidate_blob',return_value=b'{}'),patch.object(live,'expected_history',return_value=history), \
                  patch.object(live.eligibility,'observe_candidate',return_value={'policy':'checked'}), \
                  patch.object(live.probe,'inspect',return_value=observation):
                 bad=copy.deepcopy(work.base.ledger.row['cohort_restore'])
                 work.base.ledger.row['cohort_restore']['receipt']['source_sha']='f'*40
-                with self.assertRaises(live.PhaseError): live.no_op_c2(work.phase,lambda:None,'.','actor','token',metadata)
+                with self.assertRaises(live.PhaseError): live.no_op_c2(work.phase,cut,'.','actor','token',metadata)
                 self.assertNotIn('auth_live_c2',work.base.ledger.row)
                 work.base.ledger.row['cohort_restore']=bad
-                receipt=live.no_op_c2(work.phase,lambda:None,'.','actor','token',metadata)
+                receipt=live.no_op_c2(work.phase,cut,'.','actor','token',metadata)
                 self.assertEqual(receipt['operation_id'],binding['operation_id'])
                 self.assertEqual(work.base.ledger.row['auth_live_c2']['status'],'done')
                 self.assertEqual(work.journal.state['steps']['auth-live-c2-private'],receipt)
