@@ -68,6 +68,8 @@ on:
       - scripts/dev/full_cohort_package_phase.py
       - scripts/dev/full_cohort_supervisor.py
       - scripts/dev/full_cohort_supervisor_test.py
+      - scripts/dev/space_native_tool_identity.py
+      - scripts/dev/space_native_tool_identity_test.py
       - scripts/dev/full_cohort_pg_physical_identity.py
       - scripts/dev/full_cohort_pg_physical_identity_test.py
       - scripts/dev/full_cohort_backup_metadata.py
@@ -202,6 +204,7 @@ jobs:
           python -B scripts/dev/full_cohort_oci_test.py
           python -B scripts/dev/full_cohort_package_phase_test.py
           python -B scripts/dev/full_cohort_supervisor_test.py
+          python -B scripts/dev/space_native_tool_identity_test.py
           python -B scripts/dev/full_cohort_pg_physical_identity_test.py
           python -B scripts/dev/full_cohort_backup_metadata_test.py
           python -B scripts/dev/full_cohort_go_migration_plan_test.py
