@@ -9,9 +9,13 @@ import unittest
 from unittest.mock import patch
 
 import credentials
+import reset_credentials as reset
 import space_creator_runtime_profile_issuer as issuer
 import space_creator_runtime_profile_issuer_export as exporter
 import space_creator_runtime_profile_issuer_packet as packet
+
+REAL_PREPARE=issuer._prepare
+REAL_OPEN=issuer.ca_custody._open
 
 @unittest.skipUnless(os.geteuid()==0,'isolated root fixture required')
 class StageTest(unittest.TestCase):
@@ -57,6 +61,7 @@ class StageTest(unittest.TestCase):
         thread=self.serve('ok'); result=issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5)
         self.assertEqual(result['object_names'],sorted(packet.FAMILIES))
+        self.assertEqual(issuer._guard.call_count,3)
         self.assertTrue((self.root/('space-creator-'+'a'*32+'.once')).is_file())
         self.assertTrue((self.root/('space-creator-'+'a'*32)/'complete').is_file())
 
@@ -87,6 +92,24 @@ class StageTest(unittest.TestCase):
         with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5); issuer._prepare.assert_not_called()
         self.assertFalse((self.root/('space-creator-'+'a'*32+'.once')).exists())
+
+    def test_guarded_stage_with_real_ca_and_real_generated_leaf(self):
+        archive=self.root/'archive'; archive.mkdir(mode=0o700)
+        key,cert=reset.ResetMaterial(self.root).ca('fixture')
+        (archive/'media-ca.crt').write_bytes(cert.read_bytes()); (archive/'media-ca.key').write_bytes(key.read_bytes())
+        os.chmod(archive/'media-ca.key',0o600)
+        for name in packet.FAMILIES:
+            if name!='voice-space-media-client-tls':
+                keys=['active-kid','current.pem','next.pem'] if packet.FAMILIES[name] is None else ['tls.crt','tls.key']
+                self.request['creator_secrets'][name]={'state':'present','uid':'old-'+name,'resourceVersion':'5','keys':keys}
+        with patch.object(issuer.ca_custody,'ARCHIVE',archive),patch.object(issuer.ca_custody,'_check_ancestors'), \
+             patch.object(issuer.ca_custody,'_open',side_effect=REAL_OPEN),patch.object(issuer,'_prepare',side_effect=REAL_PREPARE):
+            thread=self.serve('ok'); result=issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
+            thread.join(timeout=5)
+        self.assertEqual(result['object_names'],['voice-space-media-client-tls'])
+        dest=self.root/('space-creator-'+'a'*32)
+        envelope=json.loads((dest/'objects.json').read_bytes())
+        self.assertEqual(set(packet.validate(envelope,self.op,'b'*40,'namespace','c'*64,result['object_names'],cert.read_bytes())),set(result['object_names']))
 
 class GuardTest(unittest.TestCase):
     def test_actual_guard_rechecks_ca_and_exact_observation(self):

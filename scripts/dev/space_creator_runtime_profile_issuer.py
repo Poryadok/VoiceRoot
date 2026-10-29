@@ -13,6 +13,7 @@ import re
 import socket
 import struct
 import sys
+import tempfile
 
 import credentials
 import realtime_p3_missing_issuer as existing
@@ -94,7 +95,11 @@ def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
                 if not existing._unchanged(cert_fd,cert_identity) or len(media)!=cert_identity[2]: raise ValueError()
             finally: os.close(cert_fd)
             _guard(first)
-            receipt=_prepare(destination,media,missing,operation_id,source_sha,first['namespace_uid'],first['preflight_sha256'])
+            old_umask=os.umask(0o077); old_tempdir=tempfile.tempdir; tempfile.tempdir=str(destination)
+            try:
+                receipt=_prepare(destination,media,missing,operation_id,source_sha,first['namespace_uid'],first['preflight_sha256'])
+            finally:
+                tempfile.tempdir=old_tempdir; os.umask(old_umask)
             second=_exchange(channel,operation_id)
             if second!=first: raise ValueError()
             _guard(second)
