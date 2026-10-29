@@ -364,6 +364,7 @@ class FullCohortImageApply:
         for step, item in steps.items():
             if not (step.startswith('writer-drain-') or step.startswith('writer-resume-')
                     or step.startswith('writer-cut-config-successor-')
+                    or re.fullmatch(r'writer-cut-migration-(?:plan|finish|cleanup)-[0-9a-f]{32}', step)
                     or step in ('writer-cut-drained', 'writer-cut-config-plan')):
                 continue
             if (not isinstance(item, dict) or item.get('status') != 'done'
@@ -374,6 +375,36 @@ class FullCohortImageApply:
             expected[step]['receipt_sha256'] = digest(item['receipt'])
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
+        cut = self.admission.cut
+        histories = getattr(cut, 'migration_history', [])
+        active = getattr(cut, 'migration', None)
+        bound = list(histories) + ([active] if active is not None else [])
+        expected_migrations = set()
+        for binding in bound:
+            nonce = binding['plan']['stable']['nonce']
+            if not binding['finished']:
+                raise RecoveryRequired('migration not finished')
+            plan_step = 'writer-cut-migration-plan-' + nonce
+            finish_step = 'writer-cut-migration-finish-' + nonce
+            expected_migrations.update((plan_step, finish_step))
+            plan_hash = digest(binding['plan'])
+            if (steps[plan_step]['details'] != {'kind': binding['kind'], 'plan': binding['plan']} or
+                    steps[plan_step]['receipt'] != {'operation_id': self.fence.context['operation_id'], 'plan_sha256': plan_hash}):
+                raise RecoveryRequired('migration plan receipt changed')
+            details = {'plan_sha256': plan_hash, 'job_uid': binding['job_uid'], 'terminal_sha256': binding['terminal']}
+            if (steps[finish_step]['details'] != details or steps[finish_step]['receipt'] !=
+                    {'operation_id': self.fence.context['operation_id'], **details}):
+                raise RecoveryRequired('migration terminal receipt changed')
+            if binding in histories:
+                cleanup_step = 'writer-cut-migration-cleanup-' + nonce
+                expected_migrations.add(cleanup_step)
+                details = {'plan_sha256': plan_hash, 'job_uid': binding['job_uid'],
+                           'config_uid': binding['config_uid'], 'terminal_sha256': binding['terminal']}
+                if (steps[cleanup_step]['details'] != details or steps[cleanup_step]['receipt'] !=
+                        {'operation_id': self.fence.context['operation_id'], **details}):
+                    raise RecoveryRequired('migration cleanup receipt changed')
+        if {step for step in expected if step.startswith('writer-cut-migration-')} != expected_migrations:
+            raise RecoveryRequired('migration effect lineage changed')
         return expected
 
     def _drained(self, row):
@@ -483,12 +514,15 @@ class FullCohortImageApply:
                     raise RecoveryRequired('admitted workload changed')
                 old_rv = current['metadata']['resourceVersion']
                 target_generation = snap['generation'] + (old != target)
+                changed = old != target
                 patch = [{'op': 'test', 'path': '/metadata/uid', 'value': snap['uid']},
                          {'op': 'test', 'path': '/metadata/resourceVersion', 'value': old_rv},
                          {'op': 'test', 'path': '/metadata/generation', 'value': snap['generation']},
                          {'op': 'test', 'path': '/spec', 'value': old},
-                         {'op': 'replace', 'path': '/spec', 'value': target}]
-                step, record = self._reserve(name, {'uid': snap['uid'], 'old': old, 'target': target, 'patch': patch})
+                         {'op': 'replace', 'path': '/spec', 'value': target}] if changed else None
+                mode = 'patch' if changed else 'already-target'
+                step, record = self._reserve(name, {'uid': snap['uid'], 'old': old, 'target': target, 'patch': patch,
+                                                    'mode': mode})
                 self._accounts()
                 self._guard()
                 row, _ = self.fence.ledger.read()
@@ -499,14 +533,14 @@ class FullCohortImageApply:
                 self._records(row)
                 self._drained(row)
                 self._partial(receipts)
-                response = self.client.patch(name, patch)
+                response = self.client.patch(name, patch) if changed else self._get('deployment', name)
                 if not self._match(name, response, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch response differs')
                 observed = self._get('deployment', name)
                 if not self._match(name, observed, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch readback differs')
                 receipt = {'uid': snap['uid'], 'resourceVersion': observed['metadata']['resourceVersion'],
-                           'generation': target_generation, 'spec': target}
+                           'generation': target_generation, 'spec': target, 'mode': mode}
                 self._complete(step, record, receipt)
                 receipts[name] = receipt
                 self._partial(receipts)

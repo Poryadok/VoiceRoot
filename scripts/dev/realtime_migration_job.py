@@ -1,6 +1,7 @@
 """Fixed Realtime migration inputs. Rendering is not authority or execution."""
 import hashlib
 import copy
+import ipaddress
 import json
 from pathlib import Path
 import re
@@ -84,6 +85,146 @@ def admitted_job(intended, actual):
         raise RecoveryRequired('Job generated metadata labels invalid')
     meta.pop('labels')
     return auth_user_candidate_probe.admitted_job(intended,value)
+
+
+def verify_writer_job(authored, actual):
+    """Validate one actual Job against the source-reconstructed authored Job."""
+    try:
+        meta = actual.get('metadata',{})
+        if (meta.get('name')!=authored['metadata']['name'] or meta.get('namespace')!='voice-dev' or
+                not isinstance(meta.get('uid'),str) or not meta['uid'] or
+                not isinstance(meta.get('resourceVersion'),str) or not meta['resourceVersion'] or
+                meta.get('deletionTimestamp') or
+                meta.get('annotations',{}).get('voice.io/source-sha')!=authored['metadata']['annotations']['voice.io/source-sha']):
+            raise RecoveryRequired('Job metadata differs')
+        return admitted_job(authored,actual)
+    except BaseException:
+        raise RecoveryRequired('writer Job identity unavailable') from None
+
+
+def verify_writer_pod(authored, job, pod, execution):
+    """Validate a Job-owned Pod before using its IP for session correlation."""
+    try:
+        accepted = verify_writer_job(authored,job)
+        if (not isinstance(execution,dict) or set(execution)!={'database','database_oid','role','application_name',
+                'container_name','node_name','node_uid','platform_digest'} or execution['database']!='realtime_db' or
+                type(execution['database_oid']) is not int or execution['database_oid']<=0 or
+                execution['role']!='realtime' or execution['container_name']!='migrate' or
+                execution['application_name']!=authored['metadata']['name'] or
+                not isinstance(execution['node_uid'],str) or not execution['node_uid'] or
+                execution['platform_digest'] not in PLATFORMS.values()): raise RecoveryRequired('execution differs')
+        meta = pod.get('metadata',{}); spec = copy.deepcopy(pod.get('spec',{})); status = pod.get('status',{})
+        owner = [o for o in meta.get('ownerReferences',[]) if o.get('controller') is True]
+        if (pod.get('apiVersion')!='v1' or pod.get('kind')!='Pod' or meta.get('namespace')!='voice-dev' or
+                not isinstance(meta.get('uid'),str) or not meta['uid'] or not isinstance(meta.get('resourceVersion'),str) or
+                not meta['resourceVersion'] or meta.get('deletionTimestamp') or len(owner)!=1 or
+                owner[0].get('kind')!='Job' or owner[0].get('uid')!=job['metadata']['uid'] or
+                spec.pop('nodeName',None)!=execution['node_name'] or spec.get('hostNetwork',False) is not False):
+            raise RecoveryRequired('Pod identity differs')
+        name = authored['metadata']['name']; uid = job['metadata']['uid']
+        generated = {'batch.kubernetes.io/controller-uid':uid,'controller-uid':uid,
+                     'batch.kubernetes.io/job-name':name,'job-name':name}
+        labels = copy.deepcopy(meta.get('labels',{}))
+        if labels != accepted['template']['metadata']['labels']:
+            raise RecoveryRequired('Pod labels differ from admitted Job template')
+        for key,value in generated.items():
+            if key in labels and labels.pop(key)!=value: raise RecoveryRequired('Pod generated labels differ')
+        template = authored['spec']['template']
+        if labels != template['metadata']['labels']: raise RecoveryRequired('Pod labels differ')
+        intended = {'apiVersion':'v1','kind':'Pod','metadata':{'name':'template','namespace':'voice-dev',
+                    'labels':template['metadata']['labels']},'spec':template['spec']}
+        observed = copy.deepcopy(intended); observed['spec'] = spec
+        auth_user_candidate_probe.admitted_pod(intended,observed)
+        addresses = status.get('podIP'); containers = status.get('containerStatuses',[])
+        image_id = containers[0].get('imageID','') if len(containers)==1 else ''
+        image_match = re.fullmatch(r'(?:docker-pullable://[^@]+@|containerd://|docker://)?(sha256:[0-9a-f]{64})',image_id)
+        if (status.get('phase') not in ('Running','Succeeded') or not isinstance(addresses,str) or
+                str(ipaddress.ip_address(addresses)) != addresses or len(containers)!=1 or
+                containers[0].get('name')!='migrate' or not containers[0].get('containerID') or
+                type(containers[0].get('restartCount')) is not int or containers[0]['restartCount']!=0 or
+                not image_match or image_match.group(1)!=execution['platform_digest']):
+            raise RecoveryRequired('Pod runtime differs')
+        return {'pod_uid':meta['uid'],'pod_ip':addresses}
+    except BaseException:
+        raise RecoveryRequired('writer Pod identity unavailable') from None
+
+
+def verify_writer_successor(phase, source_root):
+    """Reconstruct a Realtime Job transition from its actual phase journal."""
+    try:
+        if type(phase) is not Migration or Path(source_root) != phase.root:
+            raise RecoveryRequired('migration phase differs')
+        phase._guard()
+        spec = phase.intent['realtime_migration']; operation = phase.fence.context['operation_id']
+        if (spec['source_sha'] != phase.fence.context['commit'] or phase.migration_steps is None or
+                phase.bound_secret is None or phase.bound_provision is None):
+            raise RecoveryRequired('migration authority unavailable')
+        snapshot_steps = copy.deepcopy(phase.migration_steps)
+        snapshot_local = copy.deepcopy(phase.journal.state['steps'])
+        snapshot_status, snapshot_invocation = phase.invocation_status, phase.invocation
+        config, planned = render(phase.root,spec['source_sha'],operation,spec['credential'],spec['image'],spec['node'])
+        config_record = snapshot_steps.get('config')
+        local_config = snapshot_local.get('config')
+        if (not isinstance(config_record,dict) or set(config_record)!={'status','nonce','details_sha256','receipt_sha256'} or
+                config_record.get('status')!='done' or not isinstance(config_record.get('nonce'),str) or
+                not re.fullmatch(r'[0-9a-f]{32}',config_record['nonce']) or
+                config_record.get('details_sha256')!=_hash(config) or not isinstance(local_config,dict) or
+                {k:v for k,v in local_config.items() if k!='receipt'}!=config_record or
+                config_record.get('receipt_sha256')!=_hash(local_config.get('receipt'))):
+            raise RecoveryRequired('migration ConfigMap receipt unavailable')
+        receipt = local_config['receipt']
+        if not isinstance(receipt,dict) or set(receipt)!={'name','uid','resourceVersion','data_sha256'}:
+            raise RecoveryRequired('migration ConfigMap receipt invalid')
+        actual = phase.client.call('get','configmap',config['metadata']['name'],'-o','json')
+        cm = actual.get('metadata',{})
+        if (actual.get('apiVersion')!='v1' or actual.get('kind')!='ConfigMap' or
+                cm.get('namespace')!='voice-dev' or cm.get('name')!=config['metadata']['name'] or
+                cm.get('uid')!=receipt.get('uid') or cm.get('resourceVersion')!=receipt.get('resourceVersion') or
+                cm.get('deletionTimestamp') or cm.get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha'] or
+                receipt.get('name')!=cm.get('name') or receipt.get('data_sha256')!=_hash(config['data']) or
+                actual.get('immutable') is not True or actual.get('data')!=config['data']):
+            raise RecoveryRequired('migration ConfigMap changed')
+        job_record = snapshot_steps.get('job')
+        state = 'absent' if job_record is None else job_record.get('status')
+        if state not in ('absent','pending','owned','done'): raise RecoveryRequired('migration Job state invalid')
+        if state == 'absent' and 'job' in snapshot_local:
+            raise RecoveryRequired('unpaired local Job record')
+        uid = rv = terminal = job_nonce = None
+        if job_record is not None:
+            local = snapshot_local.get('job')
+            expected_keys = {'status','nonce','details_sha256'}
+            if state in ('owned','done'): expected_keys |= {'uid','resourceVersion'}
+            if state == 'done': expected_keys.add('receipt_sha256')
+            if (set(job_record)!=expected_keys or not isinstance(local,dict) or
+                    {k:v for k,v in local.items() if k!='receipt'}!=job_record or
+                    (state!='done' and local!=job_record) or
+                    job_record.get('details_sha256')!=_hash(planned) or
+                    not isinstance(job_record.get('nonce'),str) or not re.fullmatch(r'[0-9a-f]{32}',job_record['nonce'])):
+                raise RecoveryRequired('migration Job record changed')
+            job_nonce = job_record['nonce']
+            if state in ('owned','done'):
+                uid,rv = job_record.get('uid'),job_record.get('resourceVersion')
+                if not isinstance(uid,str) or not uid or not isinstance(rv,str) or not rv:
+                    raise RecoveryRequired('migration Job UID unavailable')
+            if state == 'done':
+                terminal = job_record.get('receipt_sha256')
+                if (terminal != _hash(local.get('receipt')) or local['receipt'].get('job_uid')!=uid):
+                    raise RecoveryRequired('migration terminal receipt changed')
+        node = spec['node']
+        execution = {'database':'realtime_db','database_oid':spec['database_oid'],'role':'realtime',
+            'application_name':planned['metadata']['name'],'container_name':'migrate',
+            'node_name':node['name'],'node_uid':node['uid'],'platform_digest':spec['platform_digest']}
+        phase._guard()
+        if (phase.migration_steps != snapshot_steps or phase.journal.state['steps'] != snapshot_local or
+                phase.invocation_status != snapshot_status or phase.invocation != snapshot_invocation):
+            raise RecoveryRequired('migration state changed during observation')
+        return {'configmap':copy.deepcopy(receipt),
+                'job':{'authored':planned,'state':state,'uid':uid,'resourceVersion':rv},
+                'record':{'operation_id':operation,'source_sha':spec['source_sha'],
+                          'nonce':phase.invocation,'job_nonce':job_nonce,'terminal_sha256':terminal},
+                'execution':execution}
+    except BaseException:
+        raise RecoveryRequired('writer migration successor unavailable') from None
 
 
 class Migration:
@@ -195,6 +336,23 @@ class Migration:
         if (not self._owned(current) or current['realtime_migration']['steps'].get(name)!=done or
                 not realtime_secret_phase.valid_revision(revision)):
             raise RecoveryRequired('terminal effect changed')
+
+    def _bind_owned_job(self, record, uid, resource_version):
+        """Durably bind the accepted create response before observing its Pod."""
+        self._check_step('job',record)
+        if (record.get('status')!='pending' or not isinstance(uid,str) or not uid or
+                not isinstance(resource_version,str) or not resource_version):
+            raise RecoveryRequired('created Job identity invalid')
+        row, revision = self.fence.ledger.read()
+        if not self._owned(row) or row['realtime_migration']['steps'].get('job') != record:
+            raise RecoveryRequired('Job pending record changed')
+        owned = record | {'status':'owned','uid':uid,'resourceVersion':resource_version}
+        self.journal.state['steps']['job'] = copy.deepcopy(owned); self.journal.save()
+        row['realtime_migration']['steps']['job'] = copy.deepcopy(owned)
+        self.fence.ledger.write(revision,row)
+        self.migration_steps['job'] = copy.deepcopy(owned)
+        self._check_step('job',owned)
+        return owned
 
     def run(self):
         pending = False
@@ -315,6 +473,7 @@ class Migration:
             jm = created['metadata']; uid = jm['uid']
             if (not jm.get('resourceVersion') or jm.get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha']):
                 raise RecoveryRequired('created Job metadata changed')
+            record = self._bind_owned_job(record,uid,jm['resourceVersion'])
             deadline = time.monotonic()+650
             while time.monotonic()<deadline:
                 inputs()

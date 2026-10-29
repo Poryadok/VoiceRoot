@@ -228,13 +228,43 @@ class FullCohortTest(unittest.TestCase):
         self.assertEqual(phase.admission.cut.proof_calls, 1)
         self.assertEqual(len(result), 23)
         self.assertEqual(self.client.patches, 23)
+
+    def test_already_target_images_are_observed_without_a_patch(self):
+        names = ('voice-web', 'voice-admin', 'voice-developer-portal')
+        for name in names:
+            image = self.context['images'][name + '/' + cohort.CATALOG[name]]
+            snap = self.journal.intent['full_cohort']['workloads'][name]
+            snap['spec']['template']['spec']['containers'][0]['image'] = image
+            self.client.deployments[name]['spec'] = copy.deepcopy(snap['spec'])
+            original = next(o for o in self.cut_journal.intent['writer_cut']['controllers'] if o['metadata']['name'] == name)
+            original['spec']['template']['spec']['containers'][0]['image'] = image
+            step = 'writer-drain-deployment-' + name
+            item = self.cut_journal.state['steps'][step]
+            item['details']['source']['spec'] = copy.deepcopy(original['spec'])
+            item['details']['target_spec'] = copy.deepcopy(snap['spec'])
+            item['details_sha256'] = cohort.digest(item['details'])
+            item['receipt']['spec_sha256'] = cohort.digest(snap['spec'])
+            self.ledger.row['writer_cut_effects'][step].update(details_sha256=item['details_sha256'],
+                                                               receipt_sha256=cohort.digest(item['receipt']))
+        self.cut_journal.state['intent'] = copy.deepcopy(self.cut_journal.intent)
+        self.cut_journal.save()
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        phase = self.new()
+        result = phase.apply()
+        self.assertEqual(len(result), 23)
+        self.assertEqual(self.client.patches, 20)
+        for name in names:
+            step = phase.journal.state['steps']['full-cohort-image-' + name]
+            self.assertEqual(step['details']['mode'], 'already-target')
+            self.assertIsNone(step['details']['patch'])
+            self.assertEqual(step['receipt']['generation'], phase.intent['full_cohort']['workloads'][name]['generation'])
         for name, snap in self.intent['full_cohort']['workloads'].items():
             expected = copy.deepcopy(snap['spec'])
             container = expected['template']['spec']['containers'][0]
             container['image'] = self.context['images'][name + '/' + container['name']]
             self.assertEqual(self.client.deployments[name]['spec'], expected)
             self.assertEqual(result[name]['spec'], expected)
-            self.assertEqual(result[name]['resourceVersion'], '2')
+            self.assertEqual(result[name]['resourceVersion'], '1' if name in names else '2')
 
     def test_source_owned_cut_capture_cannot_be_a_caller_dictionary(self):
         with self.assertRaises(cohort.RecoveryRequired):
