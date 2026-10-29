@@ -183,3 +183,28 @@ retrieval, native NATS bytes, source/Kubernetes/paused admission and absence of
 an auxiliary remain explicit external fixtures. The final retained log is
 tmp/preservation-native/native-25bd-offnode.log. Whole Stage inspect-before-cut
 and live Job integration remain separate and are not asserted by this result.
+
+The publication reader proves remote bytes but does not populate the local
+Docker cache. A root-approved fixed prepare_tool now runs after typed binding
+and before fencing: exact authenticated immutable child pull, bounded private
+Docker config credential, actual config/platform/RepoDigest/source readback and
+finally cleanup. No caller image/path or token argv/environment is accepted.
+Durable response-bound effects and retained availability proof reject wrong
+config and lost response without replay. The capability test was RED before
+implementation; two focused tests now pass with real Root Session and synthetic
+registry/Docker observations. This delta awaits independent review; the prior
+real native/CMS evidence does not claim a real authenticated future-P1 pull.
+
+The independently reviewed inspector a643ae20 is now called after typed binding
+and Tool preparation, before the writer fence. Fresh inspection is checked at
+that point; immutable availability and inspection hashes are carried in current
+and historical preservation receipts. Historical inspection validation runs
+only after the producer's full released-PASS/source/parent ancestry checks.
+Missing and changed selected-Space proofs were RED before the helper and now
+pass their refusal tests. The 17 focused checks pass. A repeated actual native
+PG/CMS/off-node composition passes 3/3 (91.869s) with the new receipt binding;
+its future registry/reference and Kube source-inspection observations are
+explicit fixtures, while the executable, PostgreSQL, archive, CMS, clone,
+native verification and off-node authority loader remain real. The final log
+is tmp/preservation-native/native-inspector-bound.log. Whole source-backed
+_start_cut integration remains with WT30; this checkpoint does not replace it.

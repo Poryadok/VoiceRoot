@@ -4,6 +4,7 @@ The image is an owned build, never a publication or release pin. Set the three
 VOICE_COHORT_NATIVE_* variables only in the owner's isolated Linux runner.
 """
 import copy
+import base64
 import hashlib
 import importlib
 import io
@@ -28,12 +29,55 @@ import resource_claim
 import staging_cohort_preservation as owner
 import staging_cohort_preservation_pg as pg
 import staging_cohort_preservation_space as native
+import staging_space_native as inspector
 import staging_cohort_preservation_test as cut_tests
 from staging_cohort_preservation_runtime import DOCKER
 from auth_user_adoption_runtime import QUALIFIED_TOOLS
 
 
 class NativeAuthorityTests(unittest.TestCase):
+    def test_precut_tool_pull_is_fixed_private_and_never_replays_uncertain_response(self):
+        for fault in ('none','config','lost'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory(dir='/root') as directory:
+                root=Path(directory);(root/'installed').mkdir(mode=0o700)
+                with patch.object(guard,'ROOT',root),patch.object(owner,'_source'):
+                    session,_=cut_tests.CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+                    tool={'source_sha':session.context['commit'],'config_digest':'sha256:'+'1'*64,
+                        'platform_digest':'sha256:'+'2'*64,
+                        'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'2'*64}
+                    token=b'unique-private-registry-fixture-password';calls=[]
+                    auth=owner._base(session)/'tool-pull-auth'
+                    def capture(argv,**kw):
+                        calls.append(argv);commands.authority_guard(argv)
+                        self.assertNotIn(token.decode(),' '.join(argv));self.assertFalse(any(token.decode() in str(v) for v in kw.get('env',{}).values()))
+                        prefix=DOCKER+['--config',str(auth)]
+                        if argv==prefix+['pull','--platform','linux/amd64',tool['immutable_image']]:
+                            self.assertEqual(kw['body'],b'')
+                            config=json.loads((auth/'config.json').read_bytes())
+                            self.assertEqual(config,{'auths':{'ghcr.io':{'auth':base64.b64encode(b'Poryadok:'+token).decode()}}})
+                            if fault=='lost':raise RuntimeError('pull_response_lost')
+                            return b'pulled\n'
+                        self.assertEqual(argv,DOCKER+['image','inspect',tool['immutable_image']])
+                        return json.dumps([{'Id':'sha256:'+'3'*64 if fault=='config' else tool['config_digest'],
+                            'Os':'linux','Architecture':'amd64','RepoDigests':[tool['immutable_image']],
+                            'Config':{'User':'65532:65532','Entrypoint':['/usr/local/bin/native-migrate'],
+                                'Labels':{'org.opencontainers.image.revision':tool['source_sha']}}}]).encode()
+                    method=getattr(native,'prepare_tool',None);self.assertTrue(callable(method))
+                    with resource_claim.command_scope(session.check),patch.object(native,'load_tool',return_value=tool),\
+                        patch.object(commands,'capture',side_effect=capture):
+                        state=owner._state(session);state['initial_resource_fence']=session.binding()
+                        owner.save(owner._base(session)/'checkpoint.json',state)
+                        if fault=='none':
+                            result=method(session,token.decode());self.assertEqual(result['status'],'COMPLETE')
+                        else:
+                            with self.assertRaisesRegex(Exception,'pull_response_lost|cohort_space_image_changed'):
+                                method(session,token.decode())
+                        self.assertFalse(auth.exists())
+                        count=len(calls)
+                        with self.assertRaises(Exception):method(session,token.decode())
+                        self.assertEqual(len(calls),count)
+                        for path in owner._base(session).rglob('*.json'):self.assertNotIn(token,path.read_bytes())
+
     def test_handoff_requires_bound_offnode_result_and_original_identity(self):
         with tempfile.TemporaryDirectory(dir='/root') as directory:
             root=Path(directory);(root/'installed').mkdir(mode=0o700)
@@ -124,6 +168,14 @@ class NativeSpaceTests(unittest.TestCase):
                     for p in (source/prefix).rglob('*.sql')}}
                 actual_capture=commands.capture
                 def capture(argv,**kwargs):
+                    # The future CI/registry binding is synthetic; the built
+                    # config and executable used by both native clones are real.
+                    if argv==DOCKER+['--config',str(owner._base(session)/'tool-pull-auth'),'pull','--platform','linux/amd64',publication['immutable_image']]:
+                        commands.authority_guard(argv);return b'fixture registry transport\n'
+                    if argv==DOCKER+['image','inspect',publication['immutable_image']]:
+                        commands.authority_guard(argv)
+                        value=json.loads(docker('image','inspect',image));value[0]['RepoDigests']=[publication['immutable_image']]
+                        return json.dumps(value).encode()
                     for fixed in (pg.IDENTITY_ARGS,pg.SPACE_IDENTITY_ARGS):
                         if argv==owner.PREFIX+fixed:
                             commands.authority_guard(argv)
@@ -145,6 +197,7 @@ class NativeSpaceTests(unittest.TestCase):
                 with patch.object(guard,'ROOT',root),patch.object(owner,'_source',return_value=(approved,{},{})),\
                     patch.object(owner,'revalidate_paused'),patch.object(owner,'shared_module',side_effect=lambda s,m:importlib.import_module(m)),\
                     patch('realtime_bootstrap.engine_snapshot',return_value=(namespace,engine)),\
+                    patch.object(inspector,'load_retained_inspection',side_effect=lambda s:owner._read(owner._base(s)/'space-inspection.json')),\
                     patch.object(commands,'capture',side_effect=capture),patch.object(subprocess,'Popen',side_effect=popen):
                     c=cut_tests.context();c['commit']=revision;card=cut_tests.card(c)
                     session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
@@ -166,6 +219,9 @@ class NativeSpaceTests(unittest.TestCase):
                     import shutil
                     shutil.copytree(source/'src/backend/migrations',workspace/'src/backend/migrations')
                     with resource_claim.command_scope(session.check):
+                        state=owner._state(session);state['initial_resource_fence']=session.binding();owner.save(base/'checkpoint.json',state)
+                        owner._write(base/'space-inspection.json',{'external_kube_source_inspection_fixture':True})
+                        native.prepare_tool(session,'fixture-only')
                         archive=owner._capture_archive(session)
                         self.assertEqual(set(archive['databases']),{'postgres','template1','space_db'})
                         original_identity=pg.guard_space_identity(session)
