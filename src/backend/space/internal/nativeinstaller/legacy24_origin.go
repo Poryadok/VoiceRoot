@@ -32,6 +32,8 @@ const legacy24AccessSQL = `SELECT jsonb_build_object(
  'schema',(SELECT jsonb_build_array(n.nspname,pg_get_userbyid(n.nspowner),n.nspacl) FROM pg_namespace n WHERE n.nspname='public'),
  'relations',(SELECT jsonb_agg(jsonb_build_array(c.relname,pg_get_userbyid(c.relowner),c.relacl) ORDER BY c.relname) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'),
  'functions',(SELECT jsonb_agg(jsonb_build_array(p.proname,pg_get_function_identity_arguments(p.oid),pg_get_userbyid(p.proowner),p.proacl) ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'),
+ 'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,pg_get_userbyid(e.extowner)) ORDER BY e.extname) FROM pg_extension e),
+ 'roles',(SELECT jsonb_agg(jsonb_build_array(r.rolname,r.rolsuper,r.rolinherit,r.rolcreaterole,r.rolcreatedb,r.rolcanlogin,r.rolreplication,r.rolbypassrls,r.rolconnlimit,r.rolvaliduntil,r.rolconfig) ORDER BY r.rolname) FROM pg_roles r),
  'defaults',(SELECT jsonb_agg(jsonb_build_array(pg_get_userbyid(a.defaclrole),COALESCE(n.nspname,''),a.defaclobjtype,a.defaclacl) ORDER BY pg_get_userbyid(a.defaclrole),COALESCE(n.nspname,''),a.defaclobjtype) FROM pg_default_acl a LEFT JOIN pg_namespace n ON n.oid=a.defaclnamespace),
  'memberships',(SELECT jsonb_agg(jsonb_build_array(pg_get_userbyid(m.roleid),pg_get_userbyid(m.member),pg_get_userbyid(m.grantor),m.admin_option,m.inherit_option,m.set_option) ORDER BY pg_get_userbyid(m.roleid),pg_get_userbyid(m.member),pg_get_userbyid(m.grantor)) FROM pg_auth_members m)
 )::text`
@@ -74,10 +76,11 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 }
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {
-	var access string
-	if err := tx.QueryRow(ctx, legacy24AccessSQL).Scan(&access); err != nil || len(access) == 0 || len(access) > 1<<20 {
+	var digest string
+	var size int
+	query := `SELECT encode(sha256(convert_to(x.value,'UTF8')),'hex'),octet_length(x.value) FROM (` + legacy24AccessSQL + `) AS x(value)`
+	if err := tx.QueryRow(ctx, query).Scan(&digest, &size); err != nil || size <= 0 || size > 1<<20 || len(digest) != 64 {
 		return "", errors.New("legacy24 access observation unavailable")
 	}
-	hash := sha256.Sum256([]byte(access))
-	return hex.EncodeToString(hash[:]), nil
+	return digest, nil
 }

@@ -128,4 +128,31 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	var observed uint32
 	require.NoError(t, admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&observed))
 	require.Equal(t, oid, observed)
+	t.Run("canonical44-member-derived-effects", func(t *testing.T) {
+		var beforeEpoch int64
+		require.NoError(t, conn.QueryRow(ctx, `SELECT access_epoch FROM public.space_voice_access_epochs WHERE space_id=$1`, space).Scan(&beforeEpoch))
+		var priorID, priorRow string
+		require.NoError(t, conn.QueryRow(ctx, `SELECT event_id::text,to_jsonb(o)::text FROM public.space_voice_access_outbox o WHERE space_id=$1`, space).Scan(&priorID, &priorRow))
+		require.NoError(t, conn.Close(ctx))
+		migrate("44")
+		conn, err = pgx.Connect(ctx, target.String())
+		require.NoError(t, err)
+		after, err := captureLegacy25Projection(ctx, conn, preimage)
+		require.NoError(t, err)
+		for table, old := range preimage {
+			if table == "space_voice_access_epochs" || table == "space_voice_access_outbox" {
+				continue
+			}
+			require.Equal(t, old, after[table], "unchanged original table %s", table)
+		}
+		var epoch int64
+		require.NoError(t, conn.QueryRow(ctx, `SELECT access_epoch FROM public.space_voice_access_epochs WHERE space_id=$1`, space).Scan(&epoch))
+		require.Equal(t, beforeEpoch+1, epoch, "one legacy member backfill increments its source floor once")
+		var priorAfter string
+		require.NoError(t, conn.QueryRow(ctx, `SELECT to_jsonb(o)::text FROM public.space_voice_access_outbox o WHERE event_id=$1`, priorID).Scan(&priorAfter))
+		require.Equal(t, priorRow, priorAfter, "original outbox event is retained exactly")
+		var newCount int
+		require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.space_voice_access_outbox WHERE space_id=$1 AND access_epoch=$2 AND event_kind='voice_room_access_invalidated' AND voice_room_id IS NULL AND profile_id IS NULL AND payload=jsonb_build_object('space_id',$1::text,'access_epoch',$2::bigint)`, space, epoch).Scan(&newCount))
+		require.Equal(t, 1, newCount)
+	})
 }
