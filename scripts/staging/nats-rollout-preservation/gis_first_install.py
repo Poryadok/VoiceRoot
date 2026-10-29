@@ -216,11 +216,11 @@ def validate_prerequisite_receipt(receipt, plan):
             if not row['image_ids'][container].endswith(plan['inputs']['images'][image_role].split('@', 1)[1]):
                 raise Blocked('gis_prerequisite_job_binding_invalid')
     verifier = receipt['verifier']
-    if receipt['schema']==PREREQUISITE_SCHEMA_V2:
-        import gis_prerequisite
-        if gis_prerequisite.validate_source_revision(receipt['inputs'])!=32:
-            raise Blocked('gis_prerequisite_source_revision_unsupported')
-    required_verifier = verifier_output(32 if receipt['schema']==PREREQUISITE_SCHEMA_V2 else 31)
+    import gis_prerequisite
+    revision=32 if receipt['schema']==PREREQUISITE_SCHEMA_V2 else 31
+    if gis_prerequisite.validate_source_revision(receipt['inputs'])!=revision:
+        raise Blocked('gis_prerequisite_source_revision_unsupported')
+    required_verifier = verifier_output(revision)
     if verifier != required_verifier:
         raise Blocked('gis_prerequisite_verifier_failed')
     expected_configmaps = plan.get('inputs', {}).get('configmaps', {})
@@ -347,11 +347,11 @@ def validate_dev_prerequisite_receipt(receipt, plan):
             for key, logical in wanted.items()):
             raise Blocked('gis_dev_prerequisite_job_image_invalid')
     verifier = receipt['verifier']
-    if receipt['schema']==DEV_PREREQUISITE_SCHEMA_V2:
-        import gis_prerequisite
-        if gis_prerequisite.validate_source_revision(receipt['inputs'])!=32:
-            raise Blocked('gis_prerequisite_source_revision_unsupported')
-    required_verifier = verifier_output(32 if receipt['schema']==DEV_PREREQUISITE_SCHEMA_V2 else 31)
+    import gis_prerequisite
+    revision=32 if receipt['schema']==DEV_PREREQUISITE_SCHEMA_V2 else 31
+    if gis_prerequisite.validate_source_revision(receipt['inputs'])!=revision:
+        raise Blocked('gis_prerequisite_source_revision_unsupported')
+    required_verifier = verifier_output(revision)
     if verifier != required_verifier:
         raise Blocked('gis_dev_prerequisite_verifier_invalid')
     revalidation = receipt['revalidation']

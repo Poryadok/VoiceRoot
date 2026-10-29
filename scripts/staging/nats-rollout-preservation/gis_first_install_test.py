@@ -44,9 +44,9 @@ def prerequisite(operation):
     inputs = {'schema': 'voice-gis-prerequisite-v1', 'database': 'game_integration_db',
         'configmaps': {'provision': 'voice-gameintegration-runtime-role-sql',
             'migrations': 'voice-gameintegration-db-migrations', 'verify': 'voice-gameintegration-db-verifier-sql'},
-        'migrations': [{'name': '0000000001_init.up.sql', 'sha256': 'a'*64}],
+        'migrations': [{'name': '000031_historical.up.sql', 'sha256': 'a'*64}],
         'migration_inputs_sha256': 'b'*64, 'provision_sql_sha256': 'c'*64,
-        'verifier_sql_sha256': 'd'*64,
+        'verifier_sql_sha256': '4297373f6d91364da34f46f959d5df8ea07f71553ebaf52d048f48782f5da11c',
         'templates': {'provision': 'e'*64, 'migrate': 'f'*64, 'verify': '1'*64},
         'images': {'postgres': 'postgres@sha256:'+'2'*64, 'migrate': 'migrate@sha256:'+'3'*64},
         'job_images': {'provision': {'provision': 'postgres'},
@@ -229,6 +229,15 @@ class NamespaceTests(unittest.TestCase):
 
 
 class Tests(unittest.TestCase):
+    def test_historical_v1_receipt_rejects_resealed_revision32_source(self):
+        value=plan();receipt=copy.deepcopy(value['prerequisite_receipt'])
+        gis.validate_prerequisite_receipt(receipt,value)
+        changed=copy.deepcopy(receipt['inputs'])
+        changed['migrations'].append({'name':'000032_next.up.sql','sha256':'f'*64})
+        receipt['inputs']=changed;receipt['inputs_sha256']=gis.digest(changed)
+        value['inputs']=copy.deepcopy(changed);value['inputs_sha256']=receipt['inputs_sha256']
+        with self.assertRaisesRegex(gis.Blocked,'source_revision_unsupported'):
+            gis.validate_prerequisite_receipt(receipt,value)
     def test_v2_receipt_cannot_reuse_unqualified_v1_source(self):
         value=plan();receipt=copy.deepcopy(value['prerequisite_receipt'])
         receipt['schema']=gis.PREREQUISITE_SCHEMA_V2;receipt['verifier']=gis.verifier_output(32)
