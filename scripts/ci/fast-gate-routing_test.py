@@ -181,11 +181,18 @@ class FastGateRoutingTests(unittest.TestCase):
     def test_flutter_shards_preserve_serial_isolation_and_required_coverage(self):
         block = policy.block('flutter-unit-tests')
         self.assertIn('shard: [0, 1, 2, 3]', block)
-        self.assertIn('--total-shards=4 --shard-index=${{ matrix.shard }}', block)
-        self.assertIn('--concurrency=1', block)
+        self.assertIn('flutter_test_shards.py run --plan', block)
+        self.assertIn('--concurrency=1', (ROOT / 'scripts/ci/flutter_test_shards.py').read_text())
         self.assertNotIn('flutter test --reporter expanded --concurrency=1', policy.block('flutter'))
         values = policy.context('pull_request', code='true', frontend='true')
+        values['needs.flutter-unit-plan.result'] = 'success'
         self.assertTrue(policy.evaluate(policy.job_condition('flutter-unit-tests'), values))
+        values['needs.flutter-unit-plan.result'] = 'failure'
+        self.assertFalse(policy.evaluate(policy.job_condition('flutter-unit-tests'), values))
+        self.assertIn('needs: [flutter-unit-plan, flutter-unit-tests]', policy.block('flutter-unit-receipts'))
+        gate = policy.block('ci-gate')
+        self.assertIn('JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-receipts.result }}', gate)
+        self.assertIn('      - flutter-unit-receipts', gate)
         for result in ('skipped', 'failure', 'cancelled'):
             self.assertNotEqual(policy.run_gate(values, 'flutter-unit-tests', result).returncode, 0)
 
