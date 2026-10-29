@@ -24,6 +24,9 @@ class TwoJournalTest(unittest.TestCase):
     def test_job_create_lost_reply_is_uncertain_and_not_replayed(self):
         self.exercise('lost-job-reply')
 
+    def test_pending_guard_failure_prevents_job_post(self):
+        self.exercise('pending-guard-failure')
+
     def exercise(self, mode):
         original=base_fixture.PhaseTest.setUp
         tool={'node_name':'node-one','node_uid':'node-id','flyway_platform_digest':'sha256:'+'c'*64}
@@ -63,7 +66,7 @@ class TwoJournalTest(unittest.TestCase):
             work.journal.state['steps']['cohort-auth-flyway-private']=clone
             work.journal.state['steps']['cohort-auth-flyway']={}; work.journal.save()
             work.base.ledger.row['cohort_auth_flyway']={}
-            state={'jobs':[],'configmaps':[],'pods':[],'migrated':False}
+            state={'jobs':[],'configmaps':[],'pods':[],'migrated':False,'events':[]}
             class Client(writer_cut_test.Client):
                 def call(self,*args,**kwargs):
                     if args[0]=='get' and args[1]=='namespace':
@@ -80,6 +83,7 @@ class TwoJournalTest(unittest.TestCase):
                         if '--dry-run=server' in args: return obj
                         kind=obj['kind']; obj['metadata'].update(uid=kind+'-uid',resourceVersion='1')
                         if kind=='Job':
+                            state['events'].append('job-post')
                             obj['status']={'succeeded':1,'conditions':[{'type':'Complete','status':'True'}]}
                             template=obj['spec']['template']; state['migrated']=True
                             state['pods']=[{'metadata':{'name':'pod','namespace':'voice-dev','uid':'pod-uid',
@@ -138,6 +142,23 @@ class TwoJournalTest(unittest.TestCase):
                 with patch.object(cut,'_patch',side_effect=cut_client.patch):
                     cut.drain(); live.init_c1(work.phase,cut,'.','actor','token',metadata)
                     cut.bind_migration('auth',work.phase,'.')
+                    pending_check=cut.verify_migration_pending
+                    def check_pending():
+                        state['events'].append('pending-check')
+                        if mode=='pending-guard-failure':
+                            with patch.object(writer_cut_migration,'sessions',return_value={
+                                'scope':scope,'active_sessions':1,'active_transactions':0,'attributed_sessions':[]}):
+                                return pending_check()
+                        return pending_check()
+                    self.enterContext(patch.object(cut,'verify_migration_pending',side_effect=check_pending))
+                    if mode=='pending-guard-failure':
+                        with self.assertRaises(live.PhaseError): live.create_c1_objects(work.phase,cut,'.','actor','token')
+                        self.assertEqual(state['events'],['pending-check'])
+                        self.assertFalse(state['jobs'])
+                        self.assertEqual(work.base.ledger.row['status'],'uncertain')
+                        with self.assertRaises(live.PhaseError): live.create_c1_objects(work.phase,cut,'.','actor','token')
+                        self.assertFalse(state['jobs'])
+                        return
                     if mode=='lost-job-reply':
                         with self.assertRaises(live.PhaseError): live.create_c1_objects(work.phase,cut,'.','actor','token')
                         self.assertEqual(work.base.ledger.row['status'],'uncertain')
@@ -147,6 +168,7 @@ class TwoJournalTest(unittest.TestCase):
                         self.assertEqual(len(state['jobs']),1)
                         return
                     live.create_c1_objects(work.phase,cut,'.','actor','token')
+                    self.assertEqual(state['events'],['pending-check','job-post'])
                     live.finish_c1(work.phase,cut,'.','actor','token')
                     live.cleanup_c1(work.phase,cut,'.')
                 self.assertEqual(work.base.ledger.row['auth_live_c1']['status'],'done')

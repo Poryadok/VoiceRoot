@@ -172,6 +172,7 @@ class CatalogTests(unittest.TestCase):
              patch.object(affected,'_full_catalog',return_value=current), \
              patch.object(affected.pg,'inspect',return_value={'scope':scope,'active_sessions':0,'active_transactions':0}) as sample:
             probe=affected.CatalogScopedProbe(Catalog(),'token'); cut=Cut(probe)
+            self.assertEqual(affected.verify_provisioned_catalog(probe,cut),current)
             self.assertEqual(affected.inspect_provisioned(probe,cut)['scope'],scope)
             sample.return_value['active_sessions']=1
             with self.assertRaises(affected.AffectedError): affected.inspect_provisioned(probe,cut)
