@@ -32,9 +32,7 @@ def captured_source(root):
         'docker/postgres/provision-gameintegration-runtime-role.sql', 'docker/postgres/verify-gameintegration-runtime-role.sql',
         'deploy/templates/provision-gameintegration-runtime-role-job.yaml', 'deploy/templates/migrate-game-integration-db-job.yaml',
         'deploy/templates/verify-game-integration-db-job.yaml']
-    # Synthetic compatible 31 fixture; real captured source is tested separately below.
-    paths += [p.relative_to(checkout).as_posix() for p in sorted((checkout/'src/backend/migrations/game_integration_db').glob('*.sql'))
-              if int(p.name.split('_', 1)[0]) <= 31]
+    paths += [p.relative_to(checkout).as_posix() for p in sorted((checkout/'src/backend/migrations/game_integration_db').glob('*.sql'))]
     capture = {}
     for relative in paths:
         dest = root / relative; dest.parent.mkdir(parents=True, exist_ok=True)
@@ -54,7 +52,7 @@ class GeneratedMaterialTest(unittest.TestCase):
             'deploy/templates/migrate-game-integration-db-job.yaml',
             'deploy/templates/verify-game-integration-db-job.yaml']
         paths += [p.relative_to(checkout).as_posix() for p in sorted(
-            (checkout/'src/backend/migrations/game_integration_db').glob('*.sql')) if int(p.name.split('_', 1)[0]) <= 31]
+            (checkout/'src/backend/migrations/game_integration_db').glob('*.sql'))]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); capture = {}
             for relative in paths:
@@ -70,8 +68,8 @@ class GeneratedMaterialTest(unittest.TestCase):
                 separators=(',', ':'), ensure_ascii=True).encode()).hexdigest())
             verify_sql = root/'docker/postgres/verify-gameintegration-runtime-role.sql'
             original_verifier = verify_sql.read_bytes()
-            changed_verifier = original_verifier.replace(b'migration_version <> 31',
-                b'migration_version != 30 -- migration_version <> 31')
+            changed_verifier = original_verifier.replace(b'migration_version <> 32',
+                b'migration_version != 30 -- migration_version <> 32')
             self.assertNotEqual(changed_verifier, original_verifier)
             verify_sql.write_bytes(changed_verifier)
             approved['source_files']['docker/postgres/verify-gameintegration-runtime-role.sql'] = hashlib.sha256(changed_verifier).hexdigest()
@@ -114,13 +112,13 @@ class GeneratedMaterialTest(unittest.TestCase):
 
     def test_source_contract_blocks_migrations_newer_than_the_fixed_verifier(self):
         module = importlib.import_module('staging_gis_material')
-        checkout = Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); approved = captured_source(root)
-            for path in sorted((checkout/'src/backend/migrations/game_integration_db').glob('000032_*.sql')):
-                dest=root/path.relative_to(checkout);shutil.copyfile(path,dest)
-                approved['source_files'][path.relative_to(checkout).as_posix()]=hashlib.sha256(dest.read_bytes()).hexdigest()
             self.assertTrue(any('000032_' in name for name in approved['source_files']))
+            for suffix in ('up','down'):
+                relative='src/backend/migrations/game_integration_db/000033_fixture.'+suffix+'.sql'
+                path=root/relative; path.write_text('SELECT 1;\n')
+                approved['source_files'][relative]=hashlib.sha256(path.read_bytes()).hexdigest()
             with self.assertRaises(module.MaterialError): module.source_contract(approved,root)
     def test_private_keys_and_partner_credentials_are_fresh_and_compatible(self):
         values = generate()
