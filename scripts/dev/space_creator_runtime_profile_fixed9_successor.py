@@ -1,11 +1,45 @@
 """Fixed Creator -> Space -> Role custody successor; no runtime-readiness claim."""
+import base64
 import copy
+import hashlib
 
 import dev_peer_issuer_metadata as metadata
+import full_cohort_package_phase as package
 import full_cohort_schema_metadata as schema
 import space_creator_runtime_profile_delegated as delegated
 import space_role_peer_create as role
 import writer_cut
+
+
+def _current_crypto(phase, expected, ca):
+    """Read current profile under the already reconstructed fixed-nine state."""
+    phase._guard()
+    if phase.preflight._ca()!=ca or phase.preflight._creator()!=expected: raise ValueError()
+    names=sorted(metadata.PROFILES[phase.PROFILE]); objects=[]; jwks={}; public_keys=[]
+    for name in names:
+        current=delegated._get(name,phase.PROFILE); identity=expected[name]
+        if (current is None or identity.get('state')!='present' or
+                any(current['metadata'].get(k)!=identity[k] for k in ('uid','resourceVersion'))): raise ValueError()
+        obj=delegated._normalized(current,name); objects.append(obj)
+        values={k:base64.b64decode(v,validate=True) for k,v in obj['data'].items()}
+        key_names=('current.pem','next.pem') if name.endswith('-principal-signing') else ('tls.key',)
+        if name.endswith('-principal-signing'):
+            if values['active-kid'] not in (b'current',b'next'): raise ValueError()
+            jwks[name]=delegated.packet.crypto._jwks(values)
+            obj['data']['active-kid']=base64.b64encode(b'current').decode('ascii')
+        for key in key_names:
+            public_keys.append(hashlib.sha256(delegated.packet.crypto._openssl(['pkey','-in','{0}','-pubout'],[values[key]])).digest())
+    if len(public_keys)!=len(set(public_keys)): raise ValueError()
+    receipt={'schema':'voice-dev-peer-issuer-receipt-v1','status':'staged','profile':phase.PROFILE,'object_names':names,
+             'media_ca_der_sha256':ca['der_sha256'],'public_jwks':jwks,'runtime_qualified':False,'cluster_applied':False}
+    envelope={'schema':'voice-dev-peer-issuer-packet-v1','profile':phase.PROFILE,'operation_id':phase.fence.context['operation_id'],
+              'source_sha':phase.fence.context['commit'],'namespace_uid':phase.namespace_uid,'preflight_sha256':writer_cut.digest(phase.initial),
+              'issuer_receipt':receipt,'objects':{'apiVersion':'v1','kind':'List','items':objects}}
+    delegated.packet.validate(envelope,phase.PROFILE,phase.fence.context['operation_id'],phase.fence.context['commit'],
+                              phase.namespace_uid,writer_cut.digest(phase.initial),names,phase.media)
+    if phase.preflight._ca()!=ca or phase.preflight._creator()!=expected: raise ValueError()
+    phase._guard()
+    return jwks
 
 
 def verify(trust, token, creator, space, role_phase):
@@ -48,8 +82,10 @@ def verify(trust, token, creator, space, role_phase):
             anchors.append((initial,record,effects,proof))
         if writer_cut.digest(anchors[0][0])!=trust.journal.state['steps'][target.STEP]['receipt']['preflight_receipt_sha256']: raise ValueError()
         if role.verify_completed(role_phase,token)!=anchors[2][3]: raise ValueError()
+        package_local=copy.deepcopy(trust.package.journal.state['steps'].get(package.STEP))
+        if not isinstance(package_local,dict) or package_local.get('status')!='done' or not isinstance(package_local.get('receipt'),dict): raise ValueError()
         for phase,anchor in zip((creator,space),anchors):
-            if phase._crypto(sorted(metadata.PROFILES[phase.PROFILE]))!=anchor[3]['public_jwks']: raise ValueError()
+            if _current_crypto(phase,expected,anchors[0][0]['ca'])!=anchor[3]['public_jwks']: raise ValueError()
         if creator.preflight._ca()!=anchors[0][0]['ca'] or creator.preflight._creator()!=expected: raise ValueError()
         trust._guard(); final,end=trust._ledger()
         if (final,end)!=(row,rev): raise ValueError()
@@ -65,6 +101,7 @@ def verify(trust, token, creator, space, role_phase):
             phase._local()
             step=phase.step if profile!='role' else role.STEP
             if (phase.initial,phase.record,phase.effects,phase.proof)!=anchor or phase.journal.state['steps'].get(step)!=anchor[1]: raise ValueError()
+        if trust.package.journal.state['steps'].get(package.STEP)!=package_local: raise ValueError()
         return copy.deepcopy(anchors[0][0])
     except schema.GuardLost: raise
     except BaseException: raise schema.GuardLost('fixed peer successor unavailable') from None
