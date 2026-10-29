@@ -37,7 +37,11 @@ def stage_cluster_fixture(session,store_kube=None):
         uid='00000000-0000-4000-8000-'+str(index).zfill(12);rsuid='00000000-0000-4000-8000-'+str(index+100).zfill(12);container=name.removeprefix('voice-')
         image=(stage_runtime.NATS_IMAGE if name==stage_runtime.HUB else 'fixture.invalid/'+container+':old')
         spec={'containers':[{'name':container,'image':image}]}
-        if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
+        if name==stage_runtime.HUB:
+            spec['securityContext']={'fsGroup':10000,'fsGroupChangePolicy':'OnRootMismatch'}
+            spec['containers']=[{'name':'nats','image':image,'securityContext':{'runAsUser':10000,
+                'runAsGroup':10000,'runAsNonRoot':True},'volumeMounts':[{'name':'jsdata','mountPath':'/data'}]}]
+            spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
         template={'metadata':{'labels':{'app':name}},'spec':spec}
         if store_kube is not None and ('Deployment',name) in store_kube.objects:
             template=copy.deepcopy(store_kube.get('Deployment',name)['spec']['template'])
