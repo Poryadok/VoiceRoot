@@ -75,3 +75,5 @@ tests pass, including missing off-node proof, lost auxiliary CAS reply, altered
 image and exact replica-only response. Off-node receipt/cleanup records are
 independently root-rechecked before auxiliary resume and qualification loading.
 The fixed NativeRuntime now accepts the shared exact healthz readiness command as one bounded owned-copy operation; lost terminal replies remain PENDING without replay. Eight actual RootSession unit checks pass. The native NATS transport fixture is being joined separately from the completed actual PG/CMS proof.
+
+An owned shared-volume Linux runner now executes actual pinned NATS 2.12.12 with a populated file stream. Closed capture, first isolated restore, and actual native readback through a second isolated copy pass (1/1, 4.622s), with real RootSession and command permits. Source/Kubernetes/paused admission remains synthetic; this fixture has no consumers and does not claim native consumer decoder coverage. The runner and its named volume are test-owned; no live PVC is mounted.
