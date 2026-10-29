@@ -16,6 +16,27 @@ import space_native_tool_identity as tool
 
 
 class SourceInventoryTests(unittest.TestCase):
+    def test_isolated_compiled_probe_accepts_only_exact_post_gate_refusal(self):
+        import publish_candidate
+        cid='a'*64; calls=[]
+        def command(args,**kwargs):
+            calls.append(args); return (cid+'\n').encode() if args[1]=='create' else b''
+        def start(args,**kwargs):
+            kwargs['stderr'].write(b'administrative database unavailable\n')
+            return SimpleNamespace(returncode=1)
+        with mock.patch.object(publish_candidate,'command',side_effect=command),mock.patch.object(tool.subprocess,'run',side_effect=start):
+            self.assertEqual(tool._run_compiled_probe('image@sha256:'+'b'*64,'c'*64),'native51-source-gates-reached-v1')
+        self.assertIn('--network',calls[0]); self.assertIn('none',calls[0]); self.assertEqual(calls[-1],['docker','rm','--force',cid])
+        def wrong(args,**kwargs):
+            kwargs['stderr'].write(b'HOLD: current native51 source/session qualification is not admitted\n')
+            return SimpleNamespace(returncode=1)
+        with mock.patch.object(publish_candidate,'command',side_effect=command),mock.patch.object(tool.subprocess,'run',side_effect=wrong):
+            with self.assertRaises(tool.ToolIdentityError): tool._run_compiled_probe('image@sha256:'+'b'*64,'c'*64)
+        self.assertEqual(calls[-1],['docker','rm','--force',cid])
+        with mock.patch.object(publish_candidate,'command',side_effect=command),mock.patch.object(tool.subprocess,'run',side_effect=subprocess.TimeoutExpired('docker',30)):
+            with self.assertRaises(subprocess.TimeoutExpired): tool._run_compiled_probe('image@sha256:'+'b'*64,'c'*64)
+        self.assertEqual(calls[-1],['docker','rm','--force',cid])
+
     def test_help_timeout_removes_exact_owned_container(self):
         import publish_candidate
         cid='a'*64; calls=[]
@@ -81,7 +102,8 @@ class SourceInventoryTests(unittest.TestCase):
                  'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'e'*64,
                  'source_inventory':source,'request':{'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'1'*32},
                  'content':{'executable_sha256':'2'*64,'migrator_sha256':'3'*64,'sql_inventory_sha256':'c'*64,
-                            'embedded_values_observed':True,'runtime_receipt_verified':False,'help_exit_code':0},
+                            'embedded_values_observed':True,'runtime_receipt_verified':False,'help_exit_code':0,
+                            'compiled_gate_probe':'native51-source-gates-reached-v1'},
                  'runtime_qualified':False,'deployment_performed':False}
         self.assertEqual(tool.validate_publication(receipt,identity,source),receipt)
         for name,value in [('run_id',8),('source_sha','b'*40),('immutable_image','ghcr.io/poryadok/voiceroot/space@sha256:'+'e'*64),('runtime_qualified',True)]:
@@ -103,8 +125,12 @@ class SourceInventoryTests(unittest.TestCase):
         identity={'source_sha':sha,'run_id':1,'run_attempt':1,'tag':'ghcr.io/poryadok/voiceroot/space-native-installer:'+tag}
         snapshot={'source_sha':sha,'files':{}}; inventory={'source_sha':sha,'build_source_sha256':'b'*64,'sql_inventory_sha256':'c'*64}
         context=(Path('/source'),identity,snapshot,inventory,{'cycle':1},Registry())
+        proof={'executable_sha256':'d'*64,'migrator_sha256':'e'*64,'sql_inventory_sha256':'c'*64,'embedded_values_observed':True,
+               'runtime_receipt_verified':False,'help_exit_code':0,'compiled_gate_probe':'native51-source-gates-reached-v1'}
+        request={'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'1'*32}
+        context=(Path('/source'),identity,snapshot,inventory,request,Registry())
         with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ,{'RUNNER_TEMP':folder}), \
-             mock.patch.object(tool,'_ci_context',return_value=context),mock.patch.object(tool,'_extract_image',return_value={'executable_sha256':'d'*64}):
+             mock.patch.object(tool,'_ci_context',return_value=context),mock.patch.object(tool,'_extract_image',return_value=proof):
             out=Path(folder)/'receipt.json'; receipt=tool.capture_ci(ind,out)
             self.assertEqual(json.loads(out.read_bytes()),receipt)
             with self.assertRaises(tool.ToolIdentityError): tool.capture_ci(ind,out)
