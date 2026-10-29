@@ -44,9 +44,9 @@ class RequestTest(unittest.TestCase):
         session=Session(); session.fence=cut.fence; session.lock=cut.lock; session.namespace_uid='ns'
         session.listener=Mock(); session.listener.accept.side_effect=OSError('fixture'); session.handoff={'status':'ready'}
         session._delegated_cut=None; session.journal=object()
-        cancelled=threading.Event(); finished=threading.Event()
+        cancelled=threading.Event(); release=threading.Event(); finished=threading.Event()
         class Handle:
-            def run(self):cancelled.wait(5); finished.set()
+            def run(self):cancelled.wait(5); release.wait(5); finished.set()
             def cancel(self):cancelled.set()
         authority=SimpleNamespace(RealtimeP3Capability=Capability,verify_current=lambda *_:None)
         client=SimpleNamespace(new_issue_trigger=lambda *_:Handle())
@@ -54,8 +54,15 @@ class RequestTest(unittest.TestCase):
              patch.object(receiver.creation,'Session',Session),patch.object(receiver.peer,'PeerIssuerPreflightPhase',Peer), \
              patch.object(receiver.writer_cut,'WriterCut',Cut),patch.object(receiver.native.SpaceNativeToolPhase,'_custody',return_value='custody'), \
              patch.object(receiver,'_current'):
-            with self.assertRaises(receiver.creation.CreateError):receiver.receive(session,cap,'token')
-        self.assertTrue(cancelled.is_set()); self.assertTrue(finished.is_set())
+            outcome=[]
+            def call():
+                try:receiver.receive(session,cap,'token')
+                except receiver.creation.CreateError:outcome.append('hold')
+            caller=threading.Thread(target=call); caller.start()
+            try:
+                self.assertTrue(cancelled.wait(5)); self.assertTrue(caller.is_alive()); self.assertEqual(outcome,[])
+            finally:release.set(); caller.join(5)
+        self.assertFalse(caller.is_alive()); self.assertTrue(finished.is_set()); self.assertEqual(outcome,['hold'])
 
 
 if __name__=='__main__':unittest.main()
