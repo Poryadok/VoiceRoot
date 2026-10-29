@@ -24,6 +24,10 @@ class Composition(unittest.TestCase):
 
     def _activate(self, cut, targets, image_phase):
         """Exercise real staged cut with synthetic source phase evidence."""
+        scope_match = mock.patch.object(cut, '_effective_scope_matches', return_value=True)
+        scope_value = mock.patch.object(cut, 'current_effective_session_scope', return_value=cut.admission['session_scope'])
+        scope_match.start(); scope_value.start()
+        self.addCleanup(scope_match.stop); self.addCleanup(scope_value.stop)
         class Inventory:
             def __init__(inner):
                 inner.fence, inner.client, inner.lock, inner.namespace_uid = cut.fence, cut.client, cut.lock, 'ns'

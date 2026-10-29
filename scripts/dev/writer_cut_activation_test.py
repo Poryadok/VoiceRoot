@@ -29,6 +29,8 @@ class ActivationTest(unittest.TestCase):
         self.cut.resume_inventory = {'fixture': True}
         self.inventory_patch = mock.patch.object(self.cut, '_resume_inventory_matches', return_value=True)
         self.inventory_patch.start(); self.addCleanup(self.inventory_patch.stop)
+        self.scope_patch = mock.patch.object(self.cut, '_effective_scope_matches', return_value=True)
+        self.scope_patch.start(); self.addCleanup(self.scope_patch.stop)
         ordered = []
         for source in sources:
             obj = self.client.workloads[(source['kind'], source['metadata']['name'])]
