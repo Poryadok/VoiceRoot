@@ -1,0 +1,51 @@
+{
+  "activation_authority": false,
+  "collection_base": "2c8bdf9e2f420b724575096beb4fcf5cb4ea00be",
+  "current_inputs": {
+    "path": "docs/testing/f13-production-source-v11-inputs.json",
+    "sha256": "6bc1d8846c97a09639911d0dd43d15af4c23279139a53c76e2cf12ca3ba6f92e"
+  },
+  "current_or_future_path_authority": false,
+  "evidence": [
+    {
+      "path": "docs/testing/f13-production-source-v11-carrier.diff",
+      "sha256": "e79916890de0cd97d6690f84ce8458a85dfdb1b06b8878349a64862e7e991ad4"
+    },
+    {
+      "path": "docs/testing/f13-production-source-v11-policy.md",
+      "sha256": "a146b061235aa05e55bd2fc9fb67b3ba94de76bbc9431d0946f637a029ee71d8"
+    },
+    {
+      "path": "docs/testing/f13-production-source-v11-review.md",
+      "sha256": "05dd3b012afdbeacd8c41f59ac5d387c124ef0d791a26ff1b64b5d79a2ebe4be"
+    }
+  ],
+  "foundation_base": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
+  "native_record": {
+    "path": "docs/testing/native-p3-source-v5.json",
+    "sha256": "61e3725265c7df86ccbc6afcdabfed046863cf1ca7ab8560dc0f90b9acb97568",
+    "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
+    "version": "NATIVE-P3-SOURCE-v5"
+  },
+  "predecessor": {
+    "path": "docs/testing/f13-production-source-v10.json",
+    "record": "d783ab03c35ad8a638ff052b90d330da3ffdda6c",
+    "sha256": "e2e4cc84465a8bc7ab1dc4a7f37fca24fe1803dbe497b5547180fa4460f61756",
+    "version": "F13-PRODUCTION-SOURCE-v10"
+  },
+  "reuse_policy": "UNCHANGED-NATIVE-UNIT-AFTER-FOUNDATION-v1",
+  "review": [
+    "docs/testing/f13-production-source-v11-review.md"
+  ],
+  "role_record": {
+    "path": "docs/testing/role-checkpermission-historical-source-v3.json",
+    "sha256": "1f5cb6d3c925a93881ecc26a52f84b3be5172de7e21515cee8a143e24fc2f376",
+    "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
+    "version": "MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v3"
+  },
+  "runtime_pass": false,
+  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
+  "source_tree": "343796ef28dab0b535948cf975157e53b15c1935",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "version": "F13-PRODUCTION-SOURCE-v11"
+}

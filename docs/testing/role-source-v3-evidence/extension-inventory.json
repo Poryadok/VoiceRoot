@@ -1,0 +1,9 @@
+{
+  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
+  "evidence_source": "70a3ca533e23d7454782428304c180e76fad74e1",
+  "status": "ACCEPTED",
+  "delta_sha256": "de69527339b73d2e2a4a42fd69a26e4cc93609c72829e197dcde2b31e4f027de",
+  "review": [
+    "docs/testing/role-source-v3-evidence/extension-review.md"
+  ]
+}

@@ -1,0 +1,2609 @@
+{
+  "activation_authority": false,
+  "closure": {
+    "path": "docs/testing/role-checkpermission-source-v3-closure.json",
+    "sha256": "6d6a90df60dac9081805fde37600e3cc853038aa493b77311ec8c4ece7f9f91c"
+  },
+  "compiled_evidence": {
+    "path": "docs/testing/role-source-v3-evidence/source-inventory.json",
+    "sha256": "21a8cca1edc0f8a35894f118771ab1021ca33aab92f630731a1576a7002005e0"
+  },
+  "context": [
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7e2764fca269a35c28b652146421dfd083385aa5",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/go.mod",
+      "sha256": "7a57a4a6e1951cf6b2a74a1f7885c95e1b23ecc32e6df981341b2a1cb6ccd5a9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "177ba1a42bcdbbea42d85a197a3629895835a4b7",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/catalog_assets.pb.go",
+      "sha256": "f09f1d5c91f9f64f72e2142b4e18369b6cfb042f7f51b671273deac162dcf678"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0c92f11dddc1269a776add9d8d25b16589c0f55b",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/catalog_assets_grpc.pb.go",
+      "sha256": "371391c9d118c207ef26b6ad39c6d0cd5f0dd7347867397e450f68979bedf6aa"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "fc13d1d046f8768aa1dced793a917a6934fa4aca",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/chat.pb.go",
+      "sha256": "2b81cf5227cf8887c689a23e30bd01c7746d21acf030e40c2e9851f56b412d63"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1f022a51c4e1a361228682d04176610cdc96c933",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_grpc.pb.go",
+      "sha256": "cc9e7d2725db84d5544db21b016370d4c205a4859ac5492e381d7ce1e017123a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2e3d47150856f044205cd9c9b48c448e0e253909",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_lifecycle.pb.go",
+      "sha256": "39a70e39f4677e0b1bd381e778f03c4469dc822ba9d9762680f0be2031ef1bf3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2b8f08b99d3411fc8eb0ccc97a616ff279554c18",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_lifecycle_grpc.pb.go",
+      "sha256": "3f34435e4b48ea96e9667eb338d3537919dae22fa7df604047ce8f8eb93e3d2f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2cd8f6f40e534f1ff218cbc48d0b3d63aa1a2ca4",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_scope_authority.pb.go",
+      "sha256": "84d1f122d9a4184c587f18076940d2749c555b0f8e6a3b9c4f3551a9699fab3b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "54aa1046c6dd62a3193744605219b99a3f73b3f0",
+        "type": "blob"
+      },
+      "path": "src/backend/chat/pb/voice/chat/v1/chat_scope_authority_grpc.pb.go",
+      "sha256": "a7c56af1ae6593cdb2013e04a1971b66051522843f3f9dc21b13cc712ce4db2d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d2eccf8c88c66aa43ef3f2d5ddca51f9511ff9fc",
+        "type": "blob"
+      },
+      "path": "src/backend/file/pb/voice/file/go.mod",
+      "sha256": "702f1e79018c900276311a6fbabb6f45410512194caa48e027b3e24228284df4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f3d69bb739a9ba441ecd73421d37d0f61c161820",
+        "type": "blob"
+      },
+      "path": "src/backend/file/pb/voice/file/v1/catalog_assets.pb.go",
+      "sha256": "3d6937094fb57df88e89ef7e643e1ff99ecdd89417c717679cf7d9cd4ee59b12"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1e27e62e9ba46624a0a408649eea5d269c548509",
+        "type": "blob"
+      },
+      "path": "src/backend/file/pb/voice/file/v1/catalog_assets_grpc.pb.go",
+      "sha256": "4d7683ca0bc9710b364281a3e6df41d37f9901b0139f13f80fe01b60e2f7fe4b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "449350a315015c1a7217c0ae806a8483cf2411b0",
+        "type": "blob"
+      },
+      "path": "src/backend/file/pb/voice/file/v1/file.pb.go",
+      "sha256": "b76f131d776dddcbc5536900af091b46f0a26fd13f5db7eb3cc30f6fae449def"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6d88bec7977afd2364341c7a6d3073b2f5f35abe",
+        "type": "blob"
+      },
+      "path": "src/backend/file/pb/voice/file/v1/file_grpc.pb.go",
+      "sha256": "48f5e412f4e5925ae4515803ec37d112006460d2b7f9ec03f89f9f1195aab309"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "55147001a4c21a94cb2cceded6c4a9c195f32cd7",
+        "type": "blob"
+      },
+      "path": "src/backend/messaging/pb/voice/events/go.mod",
+      "sha256": "4af7837282abb9d5904d36ae95377f0b5ab16da45bd4ca31499d5301250b3e13"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f96ceb897e0c371615817b060c241bcdc45ae020",
+        "type": "blob"
+      },
+      "path": "src/backend/messaging/pb/voice/events/v1/jetstream_events.pb.go",
+      "sha256": "c6a7c5f2efbd8a958d28d96c268bbd7a40063790fc34681ec36764555aea9f78"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "175e2747f69a744cdb4dedb764b13b2875de8c6d",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/auth_state.go",
+      "sha256": "0f11cfac5c1dfbe226e5b7c8c2b4dd06a5470da55c565ba982680a5dc73ab842"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e13daf83c46cc4313c3343a2857cd4f9b10dea25",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/auth_state_test.go",
+      "sha256": "f6ad0c42c89f1574c24b45b2748abc6a7203c91ee30877aa1424ebcef0ede386"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a6a632d712abcca5af13ff518bdb93f79d7bae79",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/gis_state.go",
+      "sha256": "f0e59788c586223a54a1897762632ae70d2c27539774d2471ec454dd6c7e04bb"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "40f5f314950459c8988e8ffa8805be08a7039375",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/gis_state_test.go",
+      "sha256": "c39cf3aee2aea611fdbbe304d9a96a4e77019f22965b3c1865d52d439004ed82"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6a55b91475379c29a3cbd4fc62218d9233f2db66",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/postgres.go",
+      "sha256": "b6fe91abb87f6ab189b90cc58c8b1ae20cb077739fa575d3d9c211d29e3c20b2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "fc1a557a3911962f20f6e72e61bbf875dcdef57c",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/postgres_integration_test.go",
+      "sha256": "c6e04dd9f6dafec87bfed29601d62829e2c6267920d78494b6257d6838b16e78"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "35c6f00e96c117e32e6d5a2cdd10635eb84b5639",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/qualified_scope_test.go",
+      "sha256": "fd9844a89acc2b6257b5c4aa8256debd0d0325f5dd0f4dff7ee9b0950e49e274"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1bd18ca59fabb9c614ab1266af3f67c8d3a6ffbb",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/role_state.go",
+      "sha256": "1e4aaa2558ac5a46df9507ac0316a1cbe34ce4e72ac0641ddf1748cd861e3fab"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7adc29fadda2fb5bbce81eb7f3d4a3d00255872b",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/role_state_test.go",
+      "sha256": "47594b2e737d5c20ff2bdf67c9bcf56b0bdc4d15e3c0aed14cd66a5a731f3def"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "576e91c672c44524d3b28e202d529f1831b404be",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/role_state_v2.go",
+      "sha256": "39ae6cb73bf17fd86dc959bdca82bf26ec11066d99ecb7828fbe4a55940d7298"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6f858298e44e41f142231dc29510f4186a8731f9",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/role_state_v2_test.go",
+      "sha256": "41a64b97cbd6bcbc62b09968cb8210a6a98d97809afb29b79126a975254a4a5d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b24fa7650c44f46f5cf3da47fffdeedf18d2d198",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/runtime.go",
+      "sha256": "0c9834b64ce737b1204df0dd082d14c38b71bfe185cf804c2ea5e7027196091f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a5875903ac59fb5a55757d23126fa436d50e5d53",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/runtime_config.go",
+      "sha256": "19035d9eb915f29de1ed221148e72cd6723fe4c2023c7f76a8941dc5cce29b67"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d401cbff20405e5025cd20d2f7c59832d58ddc2b",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/runtime_test.go",
+      "sha256": "aa70b3bab0372003bcae769b5f97c3c2006783cd3f040ab418dd8cd7f1504782"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "935a35be35fff369c54b2b407375746dfac0887c",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/server.go",
+      "sha256": "d6549a83a11437a83d07dec6580de5313ff92eb2636e6449026ebefb7c5ac327"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ce7e363d969fdc968d643d759ef122d073a8880f",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/server_test.go",
+      "sha256": "9772b661d031462a3744c5b3786aa2832981138d384f03cfcb23f3c82f17bd2c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5717e154c7e2217ebc575d4d1e28e28bf81b7335",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/space_state.go",
+      "sha256": "0f56b69eebe407d00a78c69b2b4cbabeb196b6f6c0619a468f0b304fe6e70e68"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "17b605fe8f8fb37473edeae82a307f0b0c1f209d",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/space_state_test.go",
+      "sha256": "d2e764641c0105fc838b8d07e13fabf286b1ad079eaf796bb17f7f25e27545b5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c3f1ab10386dd3ca0790170b8f1533f4f461a20b",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/user_state.go",
+      "sha256": "783cd29639ac1ee9785b68f5b83a23ef729ff3984f286691b2ee93288bef9747"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e7682f065e7a8565e6f1445ac4091fe3375a10ff",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/authoritysource/user_state_test.go",
+      "sha256": "1d4a4aac34b6195d6b64ca52638ff1560ee626664b54852f10c8a6df468f5923"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f760650a670d8e6d606d25366f66f0bf2c9cb3f4",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/correlation/correlation.go",
+      "sha256": "c8621053321875c51cefbc326fc345d6dd93780c4a90a13737fb7023164ed8dd"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c77a9cc5fa5bcc6c4c98f771b53da433201870b5",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/correlation/correlation_test.go",
+      "sha256": "221454c49c31e72957d72103722f4635044e5cd9fb3c13971986983b3f7071fc"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b2ea91b4ffbdef69db66d9417e268bad5dafc377",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/gisowner/rejection.go",
+      "sha256": "039d8e3476b959418996f38c6964c29e1409df874288db85481215642e2b7a13"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e139c221718c65dfb04bf1d7a71f62b3bdf77e3b",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/gisowner/rejection_test.go",
+      "sha256": "06ec17cb21ba59bb491990f3c7711c6581d23de6ac5f593255fe3774b63d8653"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "17f6b7c5dae7f9e92d8f0888ce4b343e261ee2f1",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/go.mod",
+      "sha256": "815de8ba56144a53e9bd9535f6a42ebf2ce86900f31667aefa7358eb450394c9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "bc33569c007bd66e44702f859e43be94a9f6c8ff",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/go.sum",
+      "sha256": "62c441273a5290d35ae7b3487ebab90ab3f6b12f223a2cad9b122eecc8a6592d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "69da62cf16975e4c4a111f443e28241652f2f8af",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/authority_migrator.go",
+      "sha256": "79cb6e788fa809feeec5e798db594becac96d1d57cce41568be51dd7c1faa0ac"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "bd574472e1e0d8f93f4acbb4e8374067fbad4980",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/authority_source.go",
+      "sha256": "197088ec65c429415645acb6a164279cec1ad8a434b247949b0406d46650f73f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "00dcc5c9aefd44a0352c87ab8a442dc1f54e2bb9",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/docker.go",
+      "sha256": "70ff2254dfe5828b9b40266294c6ccfdd16fb6746f082780807b0ae5e1e95ec5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "130d09b3286c0f4655b8613b73d000bd0225f7a0",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/docker_test.go",
+      "sha256": "5bda11c74a5e221a9b086ff5bf438e00747ea2c023ed530754a23a37b27d105e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2fe4d5b6a597beddfcadd8df874570802b35410c",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/migrations.go",
+      "sha256": "9cfeb92154f5e5ca997847ebfd7868a420e3d562fa15357777e82e39adf88ec6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "45d2136fb9d66560a24ca8ec3f137a9acc22fcde",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/migrations_test.go",
+      "sha256": "d50ddd6e4c8a08528119a967bac1208056c23394dbe4270a09c2187aa79d3653"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a17e120c6746a9d356fc9ab3c2a4cbdad9936977",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/postgres.go",
+      "sha256": "62e0ccc2caca9afe73c76bb8a57c729890c135f58db538270a2d113868336127"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6e580910aa9cfe1db4a3d748663c7115a5ba1ce0",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/postgres_test.go",
+      "sha256": "2bf3d282b430b033ae999fb53c0f2b02094f8d6bf661b06ff6f605279f17829e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "56dfb6d7fa47183813b7b1afc7ca489eb7624b93",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/preview_rollback_test.go",
+      "sha256": "bdf9f739e8f321346ed380307f52adf9db3562439a94e6947f9306e5e82b6225"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "898c39b6482a427be01549535ce19ee7ce29216f",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/user_migrations.go",
+      "sha256": "f512b97f791ce58966f310234da7180d6ca24d6e9eab2b03d49e80526ddcd81f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1e00baeb31c09185fe7abbb530b4d70bbeab45b5",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/integrationtest/user_migrations_test.go",
+      "sha256": "476529729e407033af5bcaaff82d0cfd783525ac8fccd59b7a19fe9d52b407f6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ed45c2f995acbb43e75f6535e0aa916112d395c2",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/memberadmission/membership.go",
+      "sha256": "75a0636b66a77cd654babfe65058d614d14602591fabc255a6c5749f860c7aa6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2596054b60ea46ca1704d459a6a2f30e966edc21",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/memberadmission/membership_test.go",
+      "sha256": "b4711d27949ed157b5574368da33e9aa4e3e003e40538b2ba46d461b4ca7543b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a4289341510655cfa3bbf0fd4bd4d9ce37f05974",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/memberadmission/receipt.go",
+      "sha256": "bc955c909a3c9e53c4fd2bd167f1e5f6ef09e67dd41dc76a609d8cb1be51061f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d0ae37a2f9b00ebaa3f8a0abf33233a9ab650b1a",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/memberadmission/receipt_test.go",
+      "sha256": "da0a1c579acf3442ebb65d23527b66fd88f026f97e89c3693d6033910b97f4d4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4fceb9fa31df5b1c66d3ce81087f2a2e53ebd827",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/natslog/natslog.go",
+      "sha256": "66d3791fa7acddb0324ae980006d1e83a0138522183dfa87057d0195299704c2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "181fbb5feaf35031fb73044a568e9122c57a0158",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/natslog/natslog_test.go",
+      "sha256": "2415a253684532cafa59ab43bb7e612e4f272069ef582ab02e7becad2fb548d6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5a01e5f3bc60cec4ef3af321876d374dcfb019c0",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/pb/voice/authority/v1/authority.pb.go",
+      "sha256": "87ef7cd19e8a9dc42509cb1866e0b9dba6fda664e8fc2046f82c549f421d4182"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a4794ce87530ed0fb3a8b1e80382ec1f64109b4e",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/pb/voice/authority/v1/authority_grpc.pb.go",
+      "sha256": "2124c430f64e0fb45d3849ad51be501ab4b5b0a8ccebddd2f485fb204c536d42"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "246fba4d767eeca3e8536bf81b481bf8aaae6d2c",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/bot_actor.go",
+      "sha256": "f23605f57d51ea47b783f778ef0f5482e87ac0a43d8284931cebf9dbd2a0adf9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a9e5ded63b52ed3b2240f91cd685eeda0eac1eda",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/bot_actor_test.go",
+      "sha256": "9a71a19e69de04a85a55a2aac0ba84ee13b725f575c239a0147261af4445a009"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1476a29218c73deda1d94c9113a2b844f0dba1c3",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/issuer.go",
+      "sha256": "f7d2a8f0531533a9af0305e34b5c1b9e894210f5ab228aac800824c6f5a0e208"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e8ecbd78a1d124c5e2a22f3f7d86b81f19ed7c6c",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/jwks.go",
+      "sha256": "540110d1ac27c1ded08030bd0d25094f7a4de04e60f0c9e5493053417f6358e7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5cfa3d0efac7a2465dc0a9e55bb4b8465d842d80",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/jwks_http.go",
+      "sha256": "a479f5fd591b56e34d89d42d915cb364261837e4616c8de13f3b857f61112509"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "671745395f8c77768d2fc433364ac9c3a777eaf8",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/jwks_http_test.go",
+      "sha256": "dac55779562dfbe777a45ad98437b87c20c024e790009c2cc1c1ce197ba2b9c8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c2a25835624fcfec8afe5c386913da956ea771c8",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/jwks_readiness_test.go",
+      "sha256": "3cc038509c25779b741c21830dc602f9ec93829d1eae4a245003ebb1a4974b8e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4d0af18c2e4a9fcdc2c4504a039fac4815485562",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/jwks_test.go",
+      "sha256": "cde08804bdf6970ecb868566d07d1667b266c403c6a634b211d122cf9bc726d5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a722a5067e7435c2acaca179bf174fb562799c0f",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/metadata.go",
+      "sha256": "48601ed219b8fad835fdc38af5433ddbc7588a6454584a0b9c780641f6ed7edf"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "377a01ec9129e9711a4483bf957672ec74a3df31",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/metadata_test.go",
+      "sha256": "f835a1904af320a9a2934d38d05e55de488e353eb1971856fc674a2024492ff2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f22060cc0593f0f50e3e0d5273a2c768f61bc10f",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/principal_test.go",
+      "sha256": "778aa783bd31427c31e65a07334842e75aeb266ee5222a17e3015dcb2c70ee61"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5d58886e2eeec315cd1120988cb53ebb30e965f0",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/request_hash.go",
+      "sha256": "bbcdd52cec8dc359853bc6891ed1caa217ba07e5a8cd8f2d6831aa7a4ccf2b8c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "80171a2caa6afaaf9d0f867466715d024784192f",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/request_hash_test.go",
+      "sha256": "8b0784e458c5123bda4e375ba56b554d069c04d52cc5aa5ead0d9195c98ab888"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "fb2f54beb15bfc0a6bf428b6b5f8ae047450ae35",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/social_privacy_rollout_red_test.go",
+      "sha256": "346c04df6b2aa2307c6c3f686a3f43981b4104f0163ff78306a1d4c66d760281"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "68daa3a03533f7410e8dcc527d2efa427f36ed2a",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/user_identity.go",
+      "sha256": "dfd049980ebaf24a83fbf153559a92ab4837ac98a0e2a40f9e5b465f46544b7b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "73610ccb065c86e16347e8f58f75cc1b65d329d5",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/user_identity_test.go",
+      "sha256": "963cc5598f2d01946bbcf9a8543e230d2d0bb2ef9ac74b912c1b1eb2ba7d3321"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2246134b1cf172c4fd4c5b8bec9dd7a827fce581",
+        "type": "blob"
+      },
+      "path": "src/backend/pkg/principal/verifier.go",
+      "sha256": "832e73a39861f4fd8c01f1036ba6329f42da961482277e8c14f02431cb3b612e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e22c78a340eec969ea9bcadfe54a2be833adb4b5",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/authctx/authctx.go",
+      "sha256": "0f6f8eaf9a9ce9fac6a114aba83fc633061f93766794f011632bbec2c07eeca3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "fdd4bb5dd8828981b385239d7386065b1aec198f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/admin_authority_integration_test.go",
+      "sha256": "f9abeaec943064e5ffe7e91bf6dc9a1ec1db91666eb2c9cb9365c3957c7b3c99"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2fa53b3630d5625a53d51780df31e94bc20eded5",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/bootstrap_events_concurrency_integration_test.go",
+      "sha256": "f2dd3ec78e3c60f2cf76568d697ae0cbe6992b9f57875f518e67feebb979bec6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4dd5502c6eca6bec9126e13818f331b0207f181d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/bootstrap_events_integration_test.go",
+      "sha256": "1dff4a6c78f5eada90794b4a688ff50364f371995181cd041849ee8c7cbca9db"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f9c67d2cbf3d5b9a65a04cf0c67521c26a301c40",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/bootstrap_store_config_test.go",
+      "sha256": "a889df7c2ffb9cab5fcc439fd06e2ce1609e6983d431c9e4a0c90c9f11fdce01"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f218a1815da14924b27f77cdf048f4e2d93a4131",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/bot_installation_removal.go",
+      "sha256": "5fd592a03d1177e3f8f12e163e2a14abc76c355b0dcc2d3736bebfc84670f89a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f5167da6dc24c6d3d675d69ba0739674cfe0bb24",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/bot_installation_removal_test.go",
+      "sha256": "ae264e35205aa036a199e5c167a5cc54e586a24046c638443b0bfcfa13cbfba9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "628b6aa32986605630b58ed96f65213077d930c6",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/canonical_voice_decision_integration_test.go",
+      "sha256": "80a2024513c4b890f626aaddd72e441b7ab71ae544ae90e417999e617e134dc7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c9b33786611e3fdad14959917b0e6d96b4ad9cb7",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/chat_current_acl_test.go",
+      "sha256": "533b4be2bb368f5ca01790858567af056d71b75ab0d9083d9691126afba09553"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "21a084140c0b7d15a206a707da62b6cd1b560e5d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/create_role_creator_test.go",
+      "sha256": "d9c0ea5da7c268084db63e56a430430379674ad50ee9b5e817153e71d4c0ac10"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1414193efa4b27fc33caa3c675ad8cfac81fe279",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/delete_roles_by_creator_test.go",
+      "sha256": "2468ae5aa53273888127df108742df9c76852ec104e00b9caab9f3b65e9137df"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d2767f1485e03c006195b0b87f1d02dca29aac40",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/game_session_grants.go",
+      "sha256": "867f2d80b96dd71a6a0f47123740cb90ff15d3d918d36d7ea17329b55b0ddc87"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0c8e807cf8a229dfc737cb7538d78e8e5f73bc31",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/game_session_grants_auth_test.go",
+      "sha256": "1d51c39a13a2bf658c8528842ed4a836ad3efaf243cd6149c32c2c1470aac1e8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "07c017ff511fb5c37f425fa661635299b7dac954",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/game_session_rejection_test.go",
+      "sha256": "25d8b7d4fb5765e6afb9a05dc4468998d7478262afe0eeb269aff601e6ce02f0"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b2a2c97cfa63f8138ee1c642c80451e4db4b0b6f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/invite_permission.go",
+      "sha256": "fa9f85278720998150b6ab9aea16391271c0a1c9cb7399513d970af8e252aad2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "61c78fac82f29b140bb3f4be3f95943d92d50de0",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/join_approval.go",
+      "sha256": "a42c6f2cdfe39a7ab1503a268155423f1f7102d84845a333deb44a6d18a497b0"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3721f4a5faf96102fbf5a6d9908bf15381df7193",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/member_admission.go",
+      "sha256": "82f99e1b670052175efee65d7b11ff9d30703538e31f75fcfd1491b1f8be3f24"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5a8f31a11a085c3f3d5c097e4c013747416f0dc6",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/member_admission_test.go",
+      "sha256": "913a719d3a57f4c61abd45bf983aa5a70e274d357b4903634018b25d0f4106db"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3189465b992d22f6683745bff6677440deee57c9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/member_native_coordinator.go",
+      "sha256": "ff16c50bcddc614c853f574e56f219142c1b968175fea2dfc31d26b8aced48de"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b51254284d0beaa1c8935ff395d2b2e26b77b481",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/member_nickname_auth_test.go",
+      "sha256": "6299d95798642ffe1f59ef66428690c09fbcc80a33b86651f62365e41aade3c7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "917ecf26251283b1e699d7ddc4d315856ff047d8",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ordinary_scope_test.go",
+      "sha256": "a7550d45edcabc8375fa71b3a85e1fcb84cdb9c3a2ea0e352696a7438ffe6a65"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9627cc887e4b2b32410e3e2154193a9c474c81f9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/override_target.go",
+      "sha256": "002c5d937e5121df1d5a531e1767d48b77264b72da74fb8ef67e4862cd54e3f3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4d0118b0ad12127534f94e468dad621c355ab447",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/override_target_integration_test.go",
+      "sha256": "5694b345fac163fdc0e3cf0cfb035ffb7ae0f5ea998e563387dfb44529c47054"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "25aa508dffc0a8404f210cffac47e960379a05d1",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/override_target_test.go",
+      "sha256": "77ecb6df7e1fb2e6b45fef85595ac961ced14fc7269244a70bb36924b382a7a0"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "eea0d391cac792fc18f9c8d90940ff506175aa7c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_binding_cutover_test.go",
+      "sha256": "df64a5bc30ca89e0286de55a490922098e246a2894853f12bd6d0c32f48e0712"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6957c27446b410e1e5c2ff0b533cd7939659d55a",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_transfer.go",
+      "sha256": "2e6888a3e3bada844c55729e9cc7f9930d19fdb26ddb995fae2de83eaaad7df7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "de2386d5dc2c605bd7ef9643876648d5ab31ac47",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_transfer_test.go",
+      "sha256": "95f83c7d952da8aa3dd10ce691d9956c3d9baf7aab58de443229e7f92eb0bdd5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "31791a1e713c207508075a305fe9e043e8ff5e74",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_v2.go",
+      "sha256": "3971c72e039fdc5d98d107093f592b5cd177162de79bcdee85d6022f31ab1190"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "fd7f7a10982b970637f6ab124e37ba92e59e328c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_v2_cycle2_test.go",
+      "sha256": "24190bd22819fca987713527970acefc35ad29e222b57a6011a89228e63d67ae"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "711f672e50f520d0aa92c05017a038ce9753b3a4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_v2_failure_test.go",
+      "sha256": "bcce37e0a18ac38cfe6cba91cc7d49d9ceca100c5182818f90664a869931d4b4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "020c22e46bb2234c7198b8c33a153468acd3f756",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_v2_listener_integration_test.go",
+      "sha256": "7a40c791b8f1a90b598a7dad6b9f5b53307eb6aadda3647f88651c321e29b7b4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5a3aba61c804ce95b81db46dbebaada09c3cc9b1",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ownership_v2_test.go",
+      "sha256": "037301faef2055668eaf2d19aea93fb7104283a021275f326218cf116f95089a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7787eb3b9dbb4088e2631212600b45bf5563665b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles.go",
+      "sha256": "bbe0a7e40909bb5d610c9211dbd17dcc7ebe47a2b939cb247a2a78604d8cc86c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5d2dbab8bbfedf706b992e2dc8e0de2320ba060b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_cleanup.go",
+      "sha256": "b0d9b7aaf309e0cba825e0b2d9216657d2609cbd560cf0e7e35ed2146661920a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "db509fa2e636a48afc16514d3c1f55f255d31a90",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_created_at_test.go",
+      "sha256": "192d79eb5c2e6b071e0a91fa9c4daf7b33d4c90fea26fc0675c57056fd147226"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "416349507572672faa515ae37135356724b5b7b9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_custom_integration_test.go",
+      "sha256": "8a6cc3fed7cbf35a86a32451543eae1e1b5ea96dfe38ee4d04b2709626353f2f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "367255b57a90f6bbc944f2c57666ba67a99e555c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_integration_test.go",
+      "sha256": "eebe1d29b5792e97af44ff4d290e33dfee57f055ea5b212e66d1a5e1bac2435b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e308c3b2d0a6341d531afdaa831f4b7583d99a74",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_manage.go",
+      "sha256": "12cbd9cbed24f91c593ce19c5dc5d6a1e50dad16ff0dede07b449e51e0e8a461"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7602edf1c003a2eeff3447da2f6f03eb200708c1",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_manage_integration_test.go",
+      "sha256": "3e8ddebdeebf084bfd7da17a7d8445af15e00b0bbc6633dff6bee2ea96116bde"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a9d6d9fe41ab12be541b3c89b5cbeae2306ecd6e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_metadata_test.go",
+      "sha256": "6da4346e4e01006c88bf297ab52352d7b5017af3c340b3c0ef1dafb36c73c25c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "10a106a057e6c9950a03e1c4d6875263dff50024",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/roles_test_helpers.go",
+      "sha256": "f88e4519d225a0400cbcbe23c64b24b5c58b50a94b385e30e695fb3096a41cbd"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "08901f16ed22e9b5e6e9c96b1c2c209f7292f333",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/server.go",
+      "sha256": "2d1f9cd68d6a95b9bfd03ccfcf918c922eed7c201acd3089cff628431953b283"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a53f7ced554de3a5d25768faba9b8354dcfc8a71",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/signed_space_decision_test.go",
+      "sha256": "1c07fe592352bf34f546c66bb64173f0d14c24895d657a941cf63bb6f0736e2f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b8740ee2c12c1378a3bfd4c2b8cfde7c455e95d0",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/space_lifecycle.go",
+      "sha256": "65ad21d0a5aad64b2d2815959758e116090dbb66b84d8ee908414e530d31fa0e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2869754594c2bf204907a64ac5af7cc3085da097",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/space_lifecycle_test.go",
+      "sha256": "c000b96c3a29b48757fddb1ed2b6afb136c104a1ce47eb48136610c2a1b1a7b2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "beba5946c893196ec67b4b61187dbae5827c4c0e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/space_retirement.go",
+      "sha256": "d885cb6c73c630875f0909b3f60dedac845916e69d7b05c1f5251be6870f52be"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "09ab2b7f526542e833ce648f24ca417d2c103211",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/space_retirement_test.go",
+      "sha256": "f260ab2c0c46a0eddf3d1e47f4107ab80c93c6a970a0f7755d3e0eedf0fd086b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2f2e026f0efa67f9d6548146495e413e9c78528e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/space_retirement_validation_test.go",
+      "sha256": "2fa650ca51526e2b0ddabf90c93c7e73a5839ceb99073286ead5d239180bfbe5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a77e97d5bf163e6d8f9692d0929678600bb0200d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/voice_room_grants.go",
+      "sha256": "774a9012f6b2e7ef8a84e7879f225c2ec51dd6cc837640018ab7e8dddf1233e8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4a9f707184175141fd9cf048430bbf21a00cf92b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/voice_room_grants_test.go",
+      "sha256": "6b171e230592e370b95f55fce3f989543c80523ac37f83ffdf12233bb791c157"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ad922b9f58fde7494f0e2745cc364fdd50e0bf8c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/memberauthority/client.go",
+      "sha256": "ee39e844646c8a4a073bb0da1af493834eddef8fa7b215f2ec88c1cfaf3600b3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9955122387ed6f8fcee15157abccbc5b1f0da526",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/memberauthority/client_test.go",
+      "sha256": "c52e1a3fce31d59bc7914ae44303543b9cc1d9024c3028ceba9ba27731e27ccd"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "171df15ce1ff61ff5d8f01c32615e0a650b21509",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/memberauthority/observation.go",
+      "sha256": "308babf351a2c07a20ae634dade938acfc4ea344acb3ad36b5d26bab687bf1f8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "be099ec3ab8c67db7eb3d2b8f4f63ca5137c1dc0",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/memberauthority/observation_test.go",
+      "sha256": "0b8fb668d755194c74b66698086b448d940579a29f3c0cef0ede0b0c363ecece"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "38a8c81c5b3854e4c39bb667527b736c1819163d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/memberbinding/binding.go",
+      "sha256": "2b87a177f57987aa1f2071c273de2c96690164b2530d0754a6f0e0f7ab8bbe18"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9c71e21ffe3dd9e206d6e549413075cbe94e7bcc",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/memberbinding/binding_test.go",
+      "sha256": "b755a151596013c6b7cde3723818addb4e3a3dea57e71598e4114ac813266c8b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9cb55adf86bd9f898f30e78bfca9894a7e0097b7",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/admission_method_test.go",
+      "sha256": "378a2938fdede65047a06b062352ffd80faff6533a8e7f2cc495d1723184bbfd"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c700a171150a3bd4b7fca8a88681dbfae7e005a4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/bootstrap.go",
+      "sha256": "bcc5e4fce6742930fb2a95f26374fd5bd042f22aa96a4a9ae4e85fc4303055f9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "016237c94f27ef2e42904a522a730ee847802410",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/bootstrap_test.go",
+      "sha256": "a33324d6f4fe1ae585365104fa50e9e133647beb867a5dec19387c817b7cac34"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2d483501de171cb13f6167ef79ed03d83a8d420d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/bot_removal.go",
+      "sha256": "210760a1a5e2029f9122e04d37e98272b5906368bb36e3fd0c6ae07f432313c5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "75de70ed5da03d10fb5cc857938eda3343606fb2",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/chat_current_acl.go",
+      "sha256": "92ca11915d1b5db728dd0b21799f64873c3c96f48b42414858787502e066e748"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2b27c75940e85bcaa08a0af562bba8bae0061a7e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/chat_current_acl_test.go",
+      "sha256": "b9298c6e07db2a1eaec6f7265254de6f30c50719be5114547ea92a70584dd43e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0beeeeeffe3d5c9a1defa55f0ea640adc2383cb8",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/creation_decision_test.go",
+      "sha256": "2947b200f0d01c413fcd48b25ab1e8de2afe5540e8e18b6b80d5064684f74487"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b1c93517882cb59106261e53e12eeb8b13cd7dce",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/interceptor_test.go",
+      "sha256": "dccb790df213dcfd10460bebe7a29d7e518979abf0376deb8ec2fb213ceef61e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "25582c6c36e45e4bf893fe9bf28e8beae1dfe92b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/invite_permission_test.go",
+      "sha256": "bc06b85d858a1946ccf5a9ceee4d770055d6b9958214164b7b33df63855822e5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5015b6a3970ed3e52be12562d120b187cb037e29",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/join_approval.go",
+      "sha256": "47fbc6623135bf1290cac35e0c01d654d865b087ab349060ff83609d2bd9604e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7cb9c510d791f470f6515376371412955d89b139",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/join_approval_test.go",
+      "sha256": "74d8831126495b677bf1811ae7f54178311a4f67b3229a1bae175ec4187e564d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "666a2f639d1a4902c33d10828ab2452034772168",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/matchmaking_permission_test.go",
+      "sha256": "d948fc05be17e9fcc2115451cf1262397f4595d9108223901c214d921195529c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "80efb604ed71dfc7b53eb2a1cf8b85993a2f8841",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/member_admission.go",
+      "sha256": "af91e621e8c4502c004de77b9d1ac3d780db1dcd9b6cde6508a6d2669e1bca9c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e949c76c784a6f945e9851b14243d996c5d7bff9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/member_admission_test.go",
+      "sha256": "b751670e38ad5043ea8e7c1ce2da8341b3668853ae7a2f0d2e8c883dad69d7e6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d7611ee340711f2f622292a0a8d540ad96963037",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/nickname_test.go",
+      "sha256": "8102663ec0883fa19736981a3fab3948fe79a6419535616f317b828d9f304c05"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d60dbff6e50b392a6f2ee079411daf6edffe0fd3",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/ownership_cutover_test.go",
+      "sha256": "6f56f1a69449b68d2dd3e000e390a82592b14802443c17fe318c98a5bd846a16"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "93ed2281e6462ac9372741c9f8a63aa83476a1e4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/public_role.go",
+      "sha256": "0a87ce5a12101fab24ad9ddfbc35b8062bae0e8919195193cfb7b884779c4c61"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5ab2b10b90216ebc38b7e3a6cbf1e3cb77970a0b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/public_role_unknown_test.go",
+      "sha256": "0fdc3c6f77deedfc9512c5602e5deebd8e741c08b488080411eda2fdc6cea129"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "709bf9b69759e88bc3defabccd7fff0e9e374578",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/workload_decision.go",
+      "sha256": "066d285a27dadb5d3d8af05b7d53e5068d42cb82ffa6ca7a2318cb80ee6b4804"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "20438e0e3ea5f0dde9bd8e989d69c07fe19230ed",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/workload_decision_test.go",
+      "sha256": "e67534918f049108eb8e8742aee53d3289a3ba56e0accb164dc3e13155e39b40"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9fe531a80c596654099d7fe86159c65d3c30a688",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/authority_source.go",
+      "sha256": "65460ef73e33800ce7757fd43452aeaeae61afcf8dad4fe752b5f8e0da55623c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5159708dc919d221087263f4861d3cc8cf0321a9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/bootstrap_listener_test.go",
+      "sha256": "88d93324d5b4bb0ca10b626c99032d19e7a628eef404b7a2ad6d7b7e61e1316e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "8398933c500b7267e5d5ebca5e64a1c5c783de87",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/bot_decision_test.go",
+      "sha256": "d9865445d4c8507a0d18f5dd01b021f62724697541546c5ad8bf4230e9f84be4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "60db99e0c594b945b6a4a09c26b3ac0e189a4539",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/bot_removal_listener_test.go",
+      "sha256": "2c28056cad0f6402ee14a4bd5ecdff9f14e14428d65e073d89820105743a6297"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "fa0e05a98a7224295f177fb9a0e7ea53f7323f14",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/chat_current_acl_test.go",
+      "sha256": "7365e30b89333f4e903ad97120e7b6932f29fc5cc249182d4ae3df11caaa963b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "04c6877d004ad84da47b5fcaa5904780ca778b5b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/config.go",
+      "sha256": "793ccbe1c2218d7bf32bdc8323a2ca73706114b81ba48aa6e20c2d92c52255b2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3618d9a23039f4627ac2753bd233f3a9fc394c21",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/config_test.go",
+      "sha256": "97ff681ecf70b1e5c4d8b9ee28c9fda39de6027e30a4babf80b05bab26c6a9c3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "059088d31f8211782bc338ada5bd90ce2266b6d4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/jwks_mtls_test.go",
+      "sha256": "f41ec60df0b71c10f23c34fac377630d0abe4ad60efaa4790cee0bbe6c7673b2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5bb47f639983a0cdd647294805cfd5bfe9bfe6f0",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/lifecycle_test.go",
+      "sha256": "3233193d0ada7a8d44e272c6b459509e8e3d37a6beaa35bbb5f9c1f2856e292a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a9eccdd9471b181a29bbb23f9d68388a60309a76",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/listener_test.go",
+      "sha256": "b89d9beed3d7520b9fb66ef02482cb8fca9251feea4f154e89499d69832f7b39"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "016a03f64a039b9ce2f5ef9f0c1bf4fd54a3f2b9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/listener_v2_matrix_test.go",
+      "sha256": "33018e265cff546247291f3f34cf9234975a33a0027dd0acc51e5fe8d8bc68e9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "50785a6677c2ce96a627ec8cc2e34aa4be92499f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/public_role.go",
+      "sha256": "29088dffcca51f5c57b649b717be02b0f8d9bc7cae13a590751e78a4b7a552cc"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c87d726b43f2d72466db3f0f8d4556f5ddecfe23",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/public_role_test.go",
+      "sha256": "0c573ded95a0ce54d26fab908b9abff0f18ee555d4fab341a94153a276318699"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a0bbed551f1a45cd99824e3618bd3f38cabb46b2",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/runtime_test.go",
+      "sha256": "c968c38b864032075ccc0e00cd521a46b39b88497fdd6122d69de422fd663437"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "22a9f3c99fb28c4110d5e7aae852bf3765fc196a",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/space_deletion_listener_test.go",
+      "sha256": "90ac2a3d08294f2274d1f0d76816062d6f2e9a07464084f4af6464faf72aa077"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "602cd4b2ced03eae01ee1ec0ed5b969ab4898425",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/space_retirement_listener_test.go",
+      "sha256": "a2575099cd8812394bb40d88750d682e1887e2bd22e617870f11519c243eeb89"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "24b6ff9d8969b175b3ee4c7b8512e140e5a632a7",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/roleevents/jetstream.go",
+      "sha256": "f841c64482eb5513b1d7c7ac1bb5bce7960c29867623f768e890992f80175a4b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f054237b2382fe2b71fd3658d0525360cc5c9f1b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/roleevents/jetstream_test.go",
+      "sha256": "45dacb4fd24543a3cc1b28895716d4861081211c2850d7d4ba4a3f5c163a3ed6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7aa217bf43feba11724729c482ebbf6e1917a2bc",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/roleevents/publisher.go",
+      "sha256": "fe6eb91f00248a6d89d8dc9c0f972537b85c0dd13b6635174368bd171d789fe3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e1879bbcfabc7a3423b6f708da43904117b2e966",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/admin_authority_migration_test.go",
+      "sha256": "e09dac617adc6553c6b1afb02590e3fc70277006ccb22ef2c1bde057f8a29972"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "89126f522f8076f60610760ea6b0fed1b2ccce79",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/audit_outbox.go",
+      "sha256": "c045e5bcff9df3b122c03dbdfac895f7ce3f533e38df586a6d9f88713cddc0f9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "243040440333851076da2ddeb78d3f3755437993",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/audit_outbox_test.go",
+      "sha256": "0042c72acf016926dd780369421400ae9a07bd8e96759b9a517c6b717468480a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ef046977c9854b71b3dc1efe340bf60402e6a2eb",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/authority_revision_driver_test.go",
+      "sha256": "7a7565e9f3e504b6aae6f6ebd521adf2eb7f206882b606e7ecc2c4be1de21bbb"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a01dae3e7011bca878c71926ed7cb1fd8138469d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/authority_revision_test.go",
+      "sha256": "3606e6cecf04e3c5a366331a6cca329e6b4d7d81bf32c9a43d7454da121e64a6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c104044a308bcfac5ac623864df07db45fc9730f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/authority_source.go",
+      "sha256": "9c6d550acb71efc16b6ef2a7df48a481ff2a6fa0be8e079ad64d83fd2c868d4e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "284e0f1da383d51ef5c314f22f509dbcee10df18",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/authority_source20_test.go",
+      "sha256": "7a36bb8b1358a4e85e111c783d75c6d21bd25151d662b3129b4bd4f2a24c1fa9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "60e5c8d2a70c67420d0b8aeca18a40a450a5951e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/authority_source_catalog.go",
+      "sha256": "db4100b61de6d7580737142b81ff6be01aee29b6debd2e69beea6ba050467e73"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "cb6c2de87440c01802c861645af9020182afd4fb",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/authority_source_test.go",
+      "sha256": "b3f8ff4dd9ff80abafd7fc986119e2af473255f54159c01e79904eeddc8c8230"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4bf4623749d9b9184a5a35d5f22c60743ac31ea5",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/bootstrap_atomicity_integration_test.go",
+      "sha256": "4359408d728ed0bc8d7a20f831f757ca1e4b611fa032dbbe9887dbd3f841cd46"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "8872580db2e3edee222e4143d2eb7827c0cb4b14",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/bot_installation_removal.go",
+      "sha256": "57756e094826bb68543259e16e9f09ea3d3e88c9bb3e6c306d9f019a004988a8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0feacb94d39cdc66511f7163a4b99636c34626d1",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/bot_installation_removal_test.go",
+      "sha256": "c528f3d62e52ffbd47f17016fd69342f76b7b354faccd615ffe5321356ebc89e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1d3cbc046e0f424c0dfe312c67451eebc7b49d92",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/bot_removal_catalog.go",
+      "sha256": "aa6e3cf36219ea18d34c5afb8ad3f74bdc8ad33e4f3bb29a0aeb41fcbe4057f9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "eb9d31856dc2c81afbb703fa438bafe913cebed9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/bot_removal_catalog_test.go",
+      "sha256": "ae7a7365757c73c6ed116c33eb0e1aca19f9646cb70e68b961db8a1fee61b8ad"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "afdde1bd2688124782b4e102868d883737995b58",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/chat_permissions_migration_test.go",
+      "sha256": "2ea36a54c382d00fea90e660300fd2500ca0488f3b92f38d68c21699c78e37ea"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3bd64400762db4aa73040652aceb88c86b881824",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/game_session_grants.go",
+      "sha256": "ef01288ebc4e7bb8bbdecbc03ee1df100dafb8e539f86dc9eac1f14aced1e2c1"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6f78827b06b48d523ad035a4a8909fbe442b7e7b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/game_session_grants_integration_test.go",
+      "sha256": "f4c6862a967287b9fd1325dcb4463a1589bb88552d73aac1a71e0cd998d380af"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a8fc1098803803334f0e3168e20675d25413ea2b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_admission.go",
+      "sha256": "ba2a8aff3b4c2d7c88ba7f33ded78d4e8ebcd88e87372a0962406224a052e0a5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f07fce0b4e308e470a06ad5b9f76c043e58b4fa4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_admission_authority.go",
+      "sha256": "f546f046ea968571e47e25daa8858c6b067cd8256e775906fc3dcd3922fe4e33"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e7a14f7e3e02aac2847d7d6c0433eb3f3fc4c38c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_admission_authority_test.go",
+      "sha256": "ac632815ca1e6f8c9ba222d2e35b6424a475febaed0e023ee2ea817ef3abd7ef"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d4f91efd622488c2c612c5a88f49deda1a58a96b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_admission_retention.go",
+      "sha256": "1ee80c3cc21751a694bd1053650950d7b91b9081edbe1a50a2071a0e49a2dce9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "23a885fec100c6c007dd1529cff74f5b69534d31",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_admission_test.go",
+      "sha256": "0309fc893da544713d947b4910d7b007bdc5a87796ef625e4de0eaf27d76b6c3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3922621508421e969e728a94459fbda948e67c96",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_catalog_selection.go",
+      "sha256": "1793dabe4f80b896d1d4ca44f3e286c006a3fad45ef98278a6b295a6bc473d7b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "13ae84c4dbb0bf83a015ee38a20570a2246641ca",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_decision_expiry_test.go",
+      "sha256": "582c80d28f26334f4bb5d34ac46a17dfc804467defcbe89f3508bb5adb3fdcdf"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b14997f27c2857c64474b254c35d62c9de8f5ddb",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_native_cutover.go",
+      "sha256": "86a20fb914ab02201558d310f6d636f5a24ebe74990fbb4435ad7ae07128fae6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e8d8db9a8fc63a91d10bcacfc20cf5a5c54a5db6",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_native_cutover_test.go",
+      "sha256": "25f63d40e6aff16d72b03402a94e0514708c62a9597dbe00aec51eb45ad46499"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c0460430117aeb3a48d3cbc83fc74c4dd57b132c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_owner_authority.go",
+      "sha256": "59671d7b1458042067a2cbe3097748f996afc108569af109260a6f986074cef8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "99ec815a5adb2766246936f0683d27112a302a38",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_qualified.go",
+      "sha256": "e205362089d30803d3286cfa3a75f33344579a83dd1b573bfc7ab7d0593e0c3a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6294a0000030ba8c42e448d53d67b3d107a11f5f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_qualified_test.go",
+      "sha256": "5b1756e2831ead2a40c55bb26832a543c4ab3b8b438f0c33b5a2d9740e032e48"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3b1b868f962cd3c4a3bfe740ee7af55b639f641b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_role25_test.go",
+      "sha256": "3c3dea11fe75fc5c4830c373ae0e1e6d8302ad5ba9d1bdb0bd3d0a1b174c0243"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ed414c952ea9b5cc67ddb27e0e6b9d7e56970693",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_role_catalog.go",
+      "sha256": "b00fe0a797ed94c784c2793eb446539b1cc590263994a0fd14a422f56b44b2f7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0a51e19cb7d1308f3239f995a4ddab209871a94c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_role_source.go",
+      "sha256": "52c13c48bc22d5fcc84b3e41bce24e298cc10ad4d0c874837b4e99792b43153a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a947adb042a8874741b2622dee012b0152c20cf5",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_role_source_test.go",
+      "sha256": "38d3c5156932a863b9ee5343733755228bea25b2fbdb6c68aa269db67630bed2"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "909ac52daaee3740e86e05830014cb4c5ab0304c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/member_role_state.go",
+      "sha256": "ba708f3312843d974d8a40de5047bdb667736b46a7a6d50caa4afcf27772e519"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5c885b5d264595fd42f7a5182a1a3d3ae3c806a8",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/migration13_down_native_test.go",
+      "sha256": "db0dc9645561f6681fc06023773370d0ed935a2c5926ed8c6240d4870ab6c193"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "705cf9a615df0ba2193de9289ef281f9d4ee07ad",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/migration14_adoption_test.go",
+      "sha256": "dfaa1bba033b66fa1ad89ba4bed3862359d4eb3b42fdc121b8895d106d6b1518"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "bdf7d87628f7d008ff47caa5dff0ef67743241ec",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/migration14_driver_test.go",
+      "sha256": "7e135fd7ad9999e4101a55b27586129391042c36240d37460c83d8e456a502f1"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1a0f09d9faaf9ea41c987b8772e36d85ace5867f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/migration_source_integrity_test.go",
+      "sha256": "238587aa44a2f90dcc8a5a35ce643b824a7c87a107cb7df69935e020309ad522"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7aad1665e260f8306a7a7fa01ddb26845a5274da",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ordinary_operations.go",
+      "sha256": "af9d7581f0a5370a4bdf1fe108c24461e24ca2685802bc7301baf5b7dca32f46"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d927c93074aff2ab2cf244e9b97824bbe005bca9",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ordinary_scope_test.go",
+      "sha256": "c4d422ec599637466a4e781b27b15f7fbff92f244ab455257c59f9e9c143d85c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9668b0a72a60939d94d2a87b71f915ab99c7ee1c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ownership_transfer.go",
+      "sha256": "320b06c66d76a009461ff0a0ed0905eed219faba2a690ce24cb3d28a18b66a0c"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d7191505d470001e17f3978bd1f3cf3b2d538970",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ownership_v2.go",
+      "sha256": "d02ef6415d287a2f4da40d1f03b1529915a1c72d24f7cb1b086bc2718c5626bc"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9bcc78681bb06fb2d9af8963fa9ade4a82d02a1e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ownership_v2_cycle2_test.go",
+      "sha256": "de2d20e9081807f07cc4f6c675ff5809011f11113e0322f3244532e99c8294ec"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4b8602377d81f0893faf0d85fe179e10f81c5c95",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ownership_v2_final_test.go",
+      "sha256": "6f3ae93c35ae4610cd9e19a7ec4bc2eeefa24a8d3a105efbe97edc034323d99b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "256c1239281ebdf52f6030b170dfe63f31d5d68f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ownership_v2_migration_test.go",
+      "sha256": "d9e43bdc331f8599d63fb5003c6e1b350be41ef5a86ff1e2128682441cd7a7f3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c3adac8f85af0e95c64d52f409eb8f5a44d2b68b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/ownership_v2_test.go",
+      "sha256": "3e526a19c7b4c4a65227e6a1111f4405dfd55857c29a041a270388ddb00f3cbd"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7fa5e8352e6404a88017938d55e0b97260f8547e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/roles.go",
+      "sha256": "0fa25e8d236e7359128ba7d817206c04703a3f776af5721dd8a06c58fe9f75d1"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "88fd80f1ecbea9aa377894da842a33561bbcb966",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/roles_custom_integration_test.go",
+      "sha256": "f438c6c2132b331303be44df2b5982d6a119cf3abeb6bbef80c811b13d020713"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "8eb59a0a23df4c718316b4028ea8bff445767c1f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/roles_integration_test.go",
+      "sha256": "e607f98adb609ec107887d12023143884f078ba06286882f970455609ddd946e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6dfce140af8a2bc5330c27f1cf6da3e52fe43653",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/roles_test_helpers.go",
+      "sha256": "8f17b944605175113cc7f136307527f30b8674f7b5a3dd5d894b9f50fc1f532a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5d7121df46baf73cf3990be5a3601d1a3710ca3a",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/space_chat_permissions.go",
+      "sha256": "f0ef69620ef81a6a419ec0d55a7b482d573244620a4d702fea06c2f5d110b86b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "243975e868e12f7005196005f21af6193034946e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/space_chat_permissions_test.go",
+      "sha256": "f6a463ac0f0f62bb58c7acbb31d00bff8e985e94bbdcec08202b656ae13081f3"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "adb44df95ff3b8da479f8f097ac76758522df70b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/space_deletion_fence.go",
+      "sha256": "b091d66fac6da5eae9f59a97fcb1c55591a14f1fd41ec7a7c46fe8524d93c05f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "24edb47331b0790a3d535db9b2458dbe09dc71e8",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/space_retirement.go",
+      "sha256": "43990758d5c3f18bff6ce54281eacfd64d7dc78e3233c78dcb297eb52fe72058"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4b0a8954a0ccc737f89a1f4afef3f0e9c36dc98e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/space_retirement_migration_test.go",
+      "sha256": "8e3971d24bed52645d457389fad2c7309e76e8c08e87039a4dde5efde363e0ab"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "951de3c768184f8a95079c455ca5b3ab93941b9c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/space_scope_test.go",
+      "sha256": "2368419f158a071b186cded2044ffc07529db9b67b8172ab824acab7a0e3eaec"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "11159e8d3ef1da52b0856586d98cd0440372e2ab",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/store.go",
+      "sha256": "a2bb4b062ed86e15a73594548a21812d7241c39a89a4b60787cf0a6424b16de6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "6bfd745112f501e912a577e350bf227eabbcb385",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/transaction_scope.go",
+      "sha256": "492a6b90f97d3c1d0790719d18e32177e48bc2adff3d929f71124dfbf86855a8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "860756c5d91a698e77d090b8cffb0784c51272bf",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/transaction_scope_test.go",
+      "sha256": "40e10c700af557c87b9b793bebce1b95e703f436eb2acd1d703162e83865c673"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3bfde92796faad247d5831fb328ec6157d071ddb",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/voice_policy_epoch_test.go",
+      "sha256": "b2e18296af5a71ad0a4cc5070b476b3f0459a6eb0bcf7687ad7165ebd3189535"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5d86a12811219a881d030a9b00b5d8121fd92161",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/voice_policy_invalidation_outbox.go",
+      "sha256": "97cb67daa779b8a478d590b4837227d7df2c6caf5e093fee9c6d1c26c66d27a4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "094e6ff26ff424ebd87c8d844975806df796e22e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/store/voice_room_grants.go",
+      "sha256": "7942b0e037ec80787336f53c324e2e4a490576ace85e2942476649d6a9d7bd3b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "20fa7175f4b222f40957f0fcb92daf42d7f84b02",
+        "type": "blob"
+      },
+      "path": "src/backend/role/pb/voice/role/go.mod",
+      "sha256": "34aad4ce96cfc5438a4dbfcdcee34f1a78fa172d6e727c2bd172599e40ae3345"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "45e694b07216fe4d89d0c8eecd5d42edf46b26a4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/pb/voice/role/v1/member_admission.pb.go",
+      "sha256": "640d63e8635eb0150341e9762c00346c69576fd442b7728efc83ae59f5635eb8"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "100f81de5fbbb4acaba75b4c6257fe270df1cf79",
+        "type": "blob"
+      },
+      "path": "src/backend/role/pb/voice/role/v1/role.pb.go",
+      "sha256": "713c2e8a9d2e6879ab12d6be4f7a5132b1742286cc88eab24b4bd68530edacfb"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "80a6658eced7fee9fc7c87f71a8af85a3a1c43db",
+        "type": "blob"
+      },
+      "path": "src/backend/role/pb/voice/role/v1/role_grpc.pb.go",
+      "sha256": "3375c9dfc68cf248871993ff75274641b53ec9e456117b4881a6271966d16f5b"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1cf87a794d855a3481e4c7e502b61f34ff7b122e",
+        "type": "blob"
+      },
+      "path": "src/backend/role/pb/voice/role/v1/space_chat_permissions.pb.go",
+      "sha256": "f264361cb1009dac786d78e92458008fb0d383c3c62c3d015e0a516af358e006"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "9eb3a0c16a6e2fc81d958e8285395e059c32140d",
+        "type": "blob"
+      },
+      "path": "src/backend/role/pb/voice/role/v1/space_chat_permissions_grpc.pb.go",
+      "sha256": "23c14a63e5875dc0f9ff7e676b9272ae7685f4b554b1171872cd4a48becd20a5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "edc0cf1738b069987dff0369c1eb8029f7875c5b",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions.go",
+      "sha256": "663ff441589aa8e5d778524a558aa5c5f55e1866ecfc025939f84ff0d25d8cd5"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3d8c9421d9b51adc9b2d441ab3fda6eeee53f8c4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions_admission_migration_test.go",
+      "sha256": "1090035e3d5e5fe5a1be68ad9f8412cdaacac85afa36a6e5229a4fc47ef8ee33"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "10c8091adfac130475d59ac01c2f9decfb9d94f6",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions_admission_test.go",
+      "sha256": "eda21f2aeaacb63c2ded8a98677ac72efc91684780bcdb8297d2c374c1e6b5d7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5f67ad79da234c72cd8b32fc272a6b97d034bd00",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions_extended_test.go",
+      "sha256": "bb05068bcef20968ebef3f0e6cefe44c85745dba6d4a41a933e3dbd75b781ba9"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0cb53218bd450c44e49efa3ac4977928a3b9fd98",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions_moderation_test.go",
+      "sha256": "d144cc1beb7723786468ec401e0c86e50d768bfc8573e6530a8198eac0edfc4d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1530351dcfb827f004d4d0aa5f87ef7cfee507fe",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions_pins_test.go",
+      "sha256": "dcc33ae5e353a5ddcece6f0e1f84aee4f755faf527d189746cfdec1642843d61"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f4f97caca966ea4c43301a3e17a2b1cd06785098",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/permissions_test.go",
+      "sha256": "f57bfb27e5d04d95c71f4a13fd0c49ff7e0e01f934c56919006cceaf818e8964"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "89223378561c6d6b19cd1651a046442dc2d38bed",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/space_chat_capabilities_test.go",
+      "sha256": "1eee42408108bed60e2bff5f42d4cc66fbdfa07f3860fa8a6cf8402c67ac6b51"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "83c451ee2d587111e000666b7f177e69c1a63fc5",
+        "type": "blob"
+      },
+      "path": "src/backend/role/permissions/thread_permissions_test.go",
+      "sha256": "a58104dfa637383fdd0d1f0c77f04fa2b0af060eb65c5702c84fac09957ae4f4"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "581e4ebd2981c4471b8ef869d0a3fa0b973bf9aa",
+        "type": "blob"
+      },
+      "path": "src/backend/user/pb/voice/common/go.mod",
+      "sha256": "2ade3901b61b72e0ecc5c4dbc4bd29bbb3eb179452c3bb576773b0fe8402a075"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "980e15bcbe469250837130b5abfa31fd14e231c4",
+        "type": "blob"
+      },
+      "path": "src/backend/user/pb/voice/common/go.sum",
+      "sha256": "17ae5aecbb8a791bea6abc4a01d8abf9b189dbe2b4c5501944913c7a8dcd8df0"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "bf725278387c62ec4c8c0ead92fad2a0e2a9b561",
+        "type": "blob"
+      },
+      "path": "src/backend/user/pb/voice/common/v1/bot_message.pb.go",
+      "sha256": "cdd966d9a5c443af53978eac03cb1e15966f9bcd3cc1c6c6d254b2cad670313a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "17224a2f39fd5f2df4f7122ce64d1ae58dbffeaf",
+        "type": "blob"
+      },
+      "path": "src/backend/user/pb/voice/common/v1/common.pb.go",
+      "sha256": "3f4f98ddf4395da8a7dde8415caca0f8201d399c995bc603c25b0071745d086a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3d8918d448ab7c7c50e798f689fdb4862944ebaa",
+        "type": "blob"
+      },
+      "path": "src/backend/user/pb/voice/common/v1/reference_inventory.pb.go",
+      "sha256": "447c30be1193045b9a583787292e52f02dbe40bf3333e66d5aeb6075fa6920b6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "4d476867354b8da634a4524f75b901f7e4f598c2",
+        "type": "blob"
+      },
+      "path": "src/backend/user/pb/voice/common/v1/space_lifecycle.pb.go",
+      "sha256": "e7a68d70e3bfb78240eaa9e05cadcb026b40ff6fe175ef6800ff2894168ec1ab"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ccd57e3b778c7e1a8ba5bb795158639be0cbfc3c",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/space/go.mod",
+      "sha256": "34cb408e75395a439c4646944a2c84769a0223b7d3f2a2411866974c5f0d2f5d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d6896092dab04eb8ff812a736fa0e1695ce843d7",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/space/go.sum",
+      "sha256": "129b0a6d4164d2e20105e70f22b68a9ebeafde86ff3dfc01acf4e950b252607e"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "bf99987e057ed311e2e4d70231538792a311d77e",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/space/v1/member_admission.pb.go",
+      "sha256": "238b7470bd18047ceb1696a6a5980d91267f8d749e10b2b4e39418a4d5397d80"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "1c64df7b7db5a6b5bdc6c0ae0b346c26ce5c71a3",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/space/v1/space.pb.go",
+      "sha256": "6082b277b2f801d609d759cf2dc1f7376ced515f012e047236bf7e61b299c142"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c88e5c7f0469fc4cc8149ad87f894c5b38caf12c",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/space/v1/space_grpc.pb.go",
+      "sha256": "000bde600c4e52613092aafccbbd15fc6eb72c9b52fa98b68c269ae7fac14ee0"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "09b47d1625b7988999a268a5bb1c5d6ec125f900",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/go.mod",
+      "sha256": "c6cb41108fe2dae52535279b3e64b1410e860d16e5d4a38b5fec572373b27a06"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "35b789b664525c92098fa376345f4a9def8873fc",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actions.pb.go",
+      "sha256": "0cb58bc7b507912c183f786fc6bd96677b9f05ddd2f202dfe99ae355aa9a4c89"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "8a54b6cebb22b7528797d3d2a02528b63008f053",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actions_grpc.pb.go",
+      "sha256": "8891559ccfecc5f116c34009122419283a191e33d6ff9701e467c7b6f6d72218"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "f151810616924e5d87a5a5af2275e8829500239c",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actor.pb.go",
+      "sha256": "781a56408a7ccfd2166769d26dba059684ec7ae5bc05dc1e92f911654a633823"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "5d926ba134192f92dc9174f1b8a3935cd57c0950",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_actor_grpc.pb.go",
+      "sha256": "fde7881ee484c1f245bcf8841ce5e841efe7822afc661b6ca8c7782a3ebbed3d"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "c792fe03aacbf7c078d73b8fdd500d82eee38ce9",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_consent.pb.go",
+      "sha256": "18397eb520a4cbf8be7cbee4750fd5cdaa95efdd4e37d843563254195f0e16ef"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e862db2eea48e61a18030419ff755af8d59801cb",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/lfp_consent_grpc.pb.go",
+      "sha256": "46243ef320391f40c58ebbac96b751fa54e5a1eca2418a3fb2cdb010194f3f5a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b505d59b968af59177acd22ad5161a748d48efcc",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go",
+      "sha256": "a60286a981f9fbfb3de4178c1b37f331407a2a47d30153dc3a63ddd2c2f79e2a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "06656fe9cd9478cbacde07b63eacb6b32bef5035",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go",
+      "sha256": "2e36d9bc0d5bddca10e3caed80cfcf3a7c72f5182726f4b45c6b496522252af7"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b68730d1edad25b22e10c946a2554d5f7f884939",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/story.pb.go",
+      "sha256": "d58e07bbeeec9f44f69868ea5fbf3c5744d1bc1b301bb9126c11ca229c598657"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a3a46861b7b300d5a1415bb9387ada00d85b2bf2",
+        "type": "blob"
+      },
+      "path": "src/backend/voice/pb/voice/story/v1/story_grpc.pb.go",
+      "sha256": "5c1da5b49ecbfdb8cf3f1d0d82b73697955b7725c121a4d51f9a766dfb3ba07f"
+    }
+  ],
+  "current_or_future_path_authority": false,
+  "evidence": [
+    {
+      "path": "docs/testing/role-source-v3-evidence/extension-inventory.json",
+      "sha256": "f818a081bc17c8a982d8737aee8d9b477dfd3f4980728027068d3ac606bf1a7a"
+    },
+    {
+      "path": "docs/testing/role-source-v3-evidence/extension-review.md",
+      "sha256": "894d3aa17c935fa1baed511e723d65b709601a321e47eb1bcd204fcf9ab700e5"
+    },
+    {
+      "path": "docs/testing/role-source-v3-evidence/runtime-evidence.zip",
+      "sha256": "be4bf66d35612091d6e874825d472191facb48eac06f5192e09c1095c0e35d26"
+    },
+    {
+      "path": "docs/testing/role-source-v3-evidence/source-inventory.json",
+      "sha256": "21a8cca1edc0f8a35894f118771ab1021ca33aab92f630731a1576a7002005e0"
+    },
+    {
+      "path": "docs/testing/role-source-v3-evidence/source-review.md",
+      "sha256": "889a7a331664acc04e1afab4ce9eb603f9624b8aab4783beced41eef829e21e8"
+    }
+  ],
+  "evidence_source": "70a3ca533e23d7454782428304c180e76fad74e1",
+  "extension_evidence": {
+    "path": "docs/testing/role-source-v3-evidence/extension-inventory.json",
+    "sha256": "f818a081bc17c8a982d8737aee8d9b477dfd3f4980728027068d3ac606bf1a7a"
+  },
+  "generic_identical_blob_authority": false,
+  "historical_runtime_gap": "Old9dc composition unconditionally rechecked nickname after accepted creation;144c69 HOLD. Original author/runtime evidence and taint stay historical. No executed historical cross-merge success is invented.",
+  "original_correction": "2ce88a9892989686cd4fd5734e8b414a3c914564",
+  "predecessor": {
+    "path": "docs/testing/role-checkpermission-historical-source-v2.json",
+    "record": "d739c1f514eba722d3fd13c08983c954b286b018",
+    "sha256": "967753244e8a72983df5a1b58bc9bdde3bee90d39633a658cf81e6711eeb721a",
+    "source": "84a354f191b19cb5a95d17a8831fc4885a2713de",
+    "version": "MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v2"
+  },
+  "required_current_source": [
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "e2321af0ff0e5442fc8004e649cc19cf98d9411e",
+        "type": "blob"
+      },
+      "path": "docs/microservices/role-service.md",
+      "sha256": "527d2275e0ee2e4f3915ab2f01d8a54293e2c083b9320c5269dbae6b3b2db36a"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "ca9cac8323f15bdf0b1a187744e40fbabe5174fc",
+        "type": "blob"
+      },
+      "path": "src/backend/role/go.mod",
+      "sha256": "3ece8002eb2c2aae39640c6eb14cf370580a8d34cbe3efc3f6e80611c9e805ec"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "081b3dcbdfd4fcdf0b75cee76b29311fe1089cc5",
+        "type": "blob"
+      },
+      "path": "src/backend/role/go.sum",
+      "sha256": "b167c9a3864b104dbefba58dc58262db27e09b0f069b65a2c2e39867ab97340f"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "d47197501a955b3cef3ec28433b37bb2f7df3ad4",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/grpcsvc/ordinary_scope.go",
+      "sha256": "cd11a2cddc98e732014a13598e3ad98c886f0ab8afdc5b5b2d66a7bcc26dce57"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "7de92b3770cc40711ed3f4d2fc88dbbfb0b4336c",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/creation_decision.go",
+      "sha256": "08893cded8630f95a718db0b50552fc9171b73bb4d0c750c414b5b7f76c0f3ae"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "a0cf49c60f004068338d9b10cfd2298d3b6d0b7f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/interceptor.go",
+      "sha256": "cfbec9f12162674b05880f175505b9cc1a2d6f414387a03ec381e2d72f6170f6"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "b34d569abe94ecdf0cb45f84400514e317df1d3f",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalgrpc/nickname.go",
+      "sha256": "36e01213bc080a5a22236e96791cd7fe0b199754b5d8e92487529f027c2ffadd"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "3b71aa563570477675708784637025b63a3bcccd",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/creation_listener_test.go",
+      "sha256": "5638f3644e5fd5315c5413f2333ffe46d235479b51f6b41a95de2b81b926b7fb"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2d24db11768ffb1b8ad5ae3577ffe6c8c146c917",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/listener.go",
+      "sha256": "954122425c0379d2d3128ef1b3c94b38cb35f625e45a1b9f3b8e3f2923d6d6df"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "0efa2cfc9510007874c73340e2fc1488284d77e7",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/nickname_listener_test.go",
+      "sha256": "5ee2dc3cbf0f32ba33bd0096224dd97735abce33acef0c1d74a0187e23368c33"
+    },
+    {
+      "entry": {
+        "mode": "100644",
+        "oid": "2bc7208ecaba6b1aa2b8df269afbce29cec19139",
+        "type": "blob"
+      },
+      "path": "src/backend/role/internal/principalruntime/runtime.go",
+      "sha256": "b9a36e56e8166ba62d5ea5f3153f8a9df2cf627ec652f42fab2a4340e6f79e70"
+    }
+  ],
+  "review": [
+    "docs/testing/role-source-v3-evidence/source-review.md",
+    "docs/testing/role-source-v3-evidence/extension-review.md"
+  ],
+  "runtime_pass": false,
+  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
+  "source_tree": "343796ef28dab0b535948cf975157e53b15c1935",
+  "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
+  "version": "MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v3"
+}
