@@ -46,15 +46,17 @@ class SupervisorTest(unittest.TestCase):
              mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'run',side_effect=lambda *a:calls.append('inventory')), \
              mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'verify_receipt',return_value={
                  'database_observations':{'workloads':{'realtime':[{'status':'observed'}]}}}), \
+             mock.patch.object(supervisor.full_cohort_namespace_census.NamespaceCensus,'run',side_effect=lambda *a:calls.append('census')), \
              mock.patch.object(supervisor.full_cohort_affected_plan.FullCatalogPhase,'run',side_effect=lambda *a:calls.append('catalog')), \
              mock.patch.object(supervisor.full_cohort_affected_plan,'build',return_value={'plan':'fixture'}):
             subject=supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
             self.assertEqual(subject.prepare('token','actor',1,1,nodes),{'plan':'fixture'})
-            self.assertEqual(calls,['package','inventory','catalog'])
-            self.assertEqual(len(subject.journals),3)
+            self.assertEqual(calls,['package','inventory','census','catalog'])
+            self.assertEqual(len(subject.journals),4)
             for journal in subject.journals: self.addCleanup(journal.close)
             self.assertIs(subject.package.journal,subject.journals[0])
             self.assertIs(subject.inventory.package,subject.package)
+            self.assertIs(subject.census.inventory,subject.inventory)
             self.assertIs(subject.catalog.inventory,subject.inventory)
             with self.assertRaises(supervisor.SupervisorError): subject.prepare('token','actor',1,1,nodes)
 

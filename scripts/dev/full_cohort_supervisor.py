@@ -11,6 +11,7 @@ import re
 import frontend_runtime_executor
 import full_cohort_affected_plan
 import full_cohort_inventory_phase
+import full_cohort_namespace_census
 import full_cohort_package_phase
 import media_backup_upload_runner
 import media_operation_guard
@@ -47,7 +48,7 @@ class Supervisor:
         self._journal, self._fence, self._client = journal, fence, client
         self._check = fence.check
         self.journals = []
-        self.package = self.inventory = self.catalog = self.realtime_absent = None
+        self.package = self.inventory = self.catalog = self.realtime_absent = self.census = None
         self._guard()
 
     def _guard(self):
@@ -65,7 +66,7 @@ class Supervisor:
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
 
     def _open(self, name, extra):
-        if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal'):
+        if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal', 'namespace-census-journal'):
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']
@@ -94,6 +95,10 @@ class Supervisor:
         self.inventory = full_cohort_inventory_phase.InventoryPhase(journal, fence, client, self.lock,
                                                                      self.namespace_uid, self.package)
         self.inventory.run(token)
+        journal, fence, client = self._open('namespace-census-journal', {})
+        self.census = full_cohort_namespace_census.NamespaceCensus(journal,fence,client,self.lock,
+                                                                    self.namespace_uid,self.package,self.inventory)
+        self.census.run(token)
         journal, fence, client = self._open('catalog-journal', {})
         self.catalog = full_cohort_affected_plan.FullCatalogPhase(journal, fence, client, self.lock,
                                                                   self.namespace_uid, self.inventory)
