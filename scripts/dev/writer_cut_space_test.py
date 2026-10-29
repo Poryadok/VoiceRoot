@@ -1,7 +1,7 @@
 """Actual phase/helper/CUT journal effects; controller and PG observers synthetic.
 
-Temporary wrapper wiring represents the concurrently owned WriterCut integration;
-this fixture does not qualify actual writer drain or SQL session attribution.
+This fixture exercises the actual WriterCut dispatch and effect map, but does
+not qualify actual writer drain or SQL session attribution.
 """
 import copy
 import unittest
@@ -38,21 +38,6 @@ class SpaceCutTest(unittest.TestCase):
             if getattr(cut,'space_fresh',None) is not None:space.guard_jobs(cut,actual)
             elif actual:raise ValueError()
         cut._guards=guards
-        original_map=cut._effect_map
-        def effect_map(exclude=None):
-            result=original_map(exclude)
-            for name in (space.BIND,space.FINISH):
-                if name==exclude or name not in cut.journal.state['steps']:continue
-                entry=cut.journal.state['steps'][name]
-                if entry['details_sha256']!=writer_cut.digest(entry['details']):raise ValueError()
-                result[name]={k:entry[k] for k in ('status','nonce','details_sha256')}
-                if entry['status']=='done':result[name]['receipt_sha256']=writer_cut.digest(entry['receipt'])
-            return result
-        cut._effect_map=effect_map
-        cut.bind_space_fresh=lambda phase,token:space.bind(cut,phase,token)
-        cut.verify_space_pending=lambda:space.pending(cut)
-        cut.verify_space_running=lambda:space.running(cut)
-        cut.finish_space_fresh=lambda:space.finish(cut)
         self.probes=[]
         def inspect(scope,identity,guard):
             guard();self.probes.append(copy.deepcopy(identity))
