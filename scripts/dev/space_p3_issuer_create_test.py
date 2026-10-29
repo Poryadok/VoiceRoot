@@ -1,6 +1,7 @@
 """Real Journal/Fence; synthetic Kube and root handoff boundaries."""
 import base64
 import copy
+import os
 from pathlib import Path
 import stat
 from types import SimpleNamespace
@@ -97,6 +98,17 @@ class PhaseTest(unittest.TestCase):
         with patch.object(self.phase,'_write',side_effect=changed):
             with self.assertRaises(subject.CreateError): self.run_finish()
         self.assertFalse(self.phase.completed); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    @unittest.skipUnless(os.name=='posix' and os.geteuid()==1000,'fixed pmd UID fixture')
+    def test_prepare_owns_real_private_socket_and_is_one_shot(self):
+        parent=Path(self.base.temp.name)/'operations'; parent.mkdir(mode=0o700)
+        path=parent/self.phase.suffix; path.mkdir(mode=0o700)
+        with patch.object(subject,'SOCKET_PARENT',parent):
+            result=self.phase.prepare()
+            self.assertEqual(result['status'],'ready'); self.assertTrue((path/'packet.sock').is_socket())
+            self.assertEqual(self.base.ledger.row[subject.LEDGER],result)
+            with self.assertRaises(subject.CreateError): self.phase.prepare()
+        self.assertFalse((path/'packet.sock').exists())
 
 
 if __name__ == '__main__': unittest.main()
