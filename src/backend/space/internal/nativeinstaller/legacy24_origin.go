@@ -34,6 +34,7 @@ const legacy24AccessSQL = `SELECT jsonb_build_object(
  'settings',(SELECT jsonb_agg(jsonb_build_array(CASE WHEN s.setrole=0 THEN '' ELSE pg_get_userbyid(s.setrole) END,s.setconfig) ORDER BY s.setrole) FROM pg_db_role_setting s JOIN pg_database d ON d.oid=s.setdatabase WHERE d.datname='space_db'),
  'schema',(SELECT jsonb_build_array(n.nspname,pg_get_userbyid(n.nspowner),n.nspacl) FROM pg_namespace n WHERE n.nspname='public'),
  'relations',(SELECT jsonb_agg(jsonb_build_array(c.relname,pg_get_userbyid(c.relowner),c.relacl) ORDER BY c.relname) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'),
+ 'sequences',(SELECT jsonb_agg(jsonb_build_array(s.schemaname,s.sequencename,s.sequenceowner,s.data_type::text,s.start_value,s.min_value,s.max_value,s.increment_by,s.cycle,s.cache_size,s.last_value) ORDER BY s.schemaname,s.sequencename) FROM pg_sequences s WHERE s.schemaname='public'),
  'functions',(SELECT jsonb_agg(jsonb_build_array(p.proname,pg_get_function_identity_arguments(p.oid),pg_get_userbyid(p.proowner),p.proacl) ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'),
  'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,pg_get_userbyid(e.extowner)) ORDER BY e.extname) FROM pg_extension e),
  'roles',(SELECT jsonb_agg(jsonb_build_array(r.rolname,r.rolsuper,r.rolinherit,r.rolcreaterole,r.rolcreatedb,r.rolcanlogin,r.rolreplication,r.rolbypassrls,r.rolconnlimit,r.rolvaliduntil,r.rolconfig) ORDER BY r.rolname) FROM pg_roles r),
@@ -113,6 +114,10 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 }
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {
+	var sequenceAccess bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S' AND NOT has_sequence_privilege(session_user,c.oid,'SELECT,USAGE'))`).Scan(&sequenceAccess); err != nil || !sequenceAccess {
+		return "", errors.New("legacy24 sequence observation unavailable")
+	}
 	var digest string
 	var size int
 	query := `SELECT encode(sha256(convert_to(x.value,'UTF8')),'hex'),octet_length(x.value) FROM (` + legacy24AccessSQL + `) AS x(value)`
