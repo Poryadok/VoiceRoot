@@ -18,14 +18,14 @@ cleanup_pg_fixture() { sudo -n rm -rf -- "$pg_fixture"; }
 trap cleanup_pg_fixture EXIT
 git -C "$ROOT" archive HEAD | sudo -n tar -xf - -C "$pg_fixture"
 sudo -n chmod -R a-w "$pg_fixture"
-sudo -n mkdir -m 700 "$pg_fixture/tmp"
+pg_tmp="$(sudo -n mktemp -d "$pg_fixture/.ci-pg.XXXXXXXX")"
 sudo -n sh -eu -c '
   cd "$1/scripts/staging/nats-rollout-preservation"
   command -v docker >/dev/null || { echo STAGING_PG_TESTS_REQUIRE_DOCKER >&2; exit 1; }
   export PYTHONPATH="$1/scripts/dev:$1/scripts/staging/nats-known-baseline:$1/scripts/staging/nats-rollout-preservation"
   export TMPDIR="$2"
   python3 -B -m unittest realtime_bootstrap_pg_test realtime_bootstrap_composition_test realtime_bootstrap_existing_pg_test
-' sh "$pg_fixture" "$pg_fixture/tmp"
+' sh "$pg_fixture" "$pg_tmp"
 # The pinned official Go toolchain supplies mandatory server-helper parity;
 # the Python fixture image intentionally has no Go installation.
 docker run --rm --network none --entrypoint tar \
