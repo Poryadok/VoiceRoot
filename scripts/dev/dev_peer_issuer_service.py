@@ -136,7 +136,7 @@ def check(operation, source_sha, profile, pid, start):
 
 
 def issue(operation, source_sha, profile, pid, start):
-    existing._check_root_custody(ROOT)
+    root_export._check_root_custody(ROOT)
     with _connect(operation, profile, 'operations', pid, start) as channel:
         first = _exchange(channel, operation, source_sha, profile)
         _guard(first)
