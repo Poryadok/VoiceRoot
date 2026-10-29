@@ -12,6 +12,12 @@ class CohortRunError(RuntimeError):
     pass
 
 
+def dispatch_marker(planned):
+    return {'status':'pending', 'operation_id':planned['operation_id'],
+            'challenge':planned['challenge'], 'invocation_nonce':planned['invocation_nonce'],
+            'source_sha':planned['source_sha']}
+
+
 def validate_environment(fence, environment, challenge):
     required = {'GITHUB_REPOSITORY','GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_WORKFLOW_REF',
                 'GITHUB_SHA','GITHUB_WORKFLOW_SHA','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT'}
@@ -46,6 +52,9 @@ def claim(fence, client, lock, namespace_uid, environment, challenge, expected_m
                 not isinstance(planned['bundle_sha256'],str) or not re.fullmatch(r'[0-9a-f]{64}',planned['bundle_sha256']) or
                 type(planned['bundle_bytes']) is not int or not 0 < planned['bundle_bytes'] <= 64*1024**3):
             raise CohortRunError('cohort reservation invalid')
+        dispatch = dispatch_marker(planned)
+        if row.get('cohort_dispatch') != dispatch:
+            raise CohortRunError('cohort dispatch intent missing')
         if (not isinstance(expected_members,list) or expected_members != sorted(set(expected_members)) or
                 'roles' not in expected_members or len(expected_members)<2 or
                 set(expected_members)-({'roles'} | cohort.ALLOWED_DATABASES) or
@@ -78,7 +87,7 @@ def claim(fence, client, lock, namespace_uid, environment, challenge, expected_m
         media_operation_guard.verify(fence,client,lock,namespace_uid)
         checked, checked_revision = fence.ledger.read()
         if (not fence.owned(checked) or checked.get('status')!='active' or checked.get('backup_invocation')!=invocation or
-                checked.get('cohort_upload')!=actual or checked.get('cohort_bundle')!=marker or
+                checked.get('cohort_upload')!=actual or checked.get('cohort_dispatch')!=dispatch or checked.get('cohort_bundle')!=marker or
                 checked.get('cohort_members') != members or 'backup_members' in checked or
                 not isinstance(checked_revision,tuple) or len(checked_revision)!=2 or
                 any(not isinstance(v,str) or not v for v in checked_revision)):

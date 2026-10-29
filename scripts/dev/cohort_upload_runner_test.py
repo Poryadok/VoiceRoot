@@ -35,6 +35,10 @@ class RunnerTest(unittest.TestCase):
         fixture = operation_fixture.OperationTest('test_real_guarded_producer_encrypts_distinct_members')
         data = fixture.run_real(False); self.addCleanup(fixture.doCleanups)
         base = data['base']; operation = data['binding']['operation_id']; opdir = data['root'].parent
+        marker = run.dispatch_marker(data['planned'])
+        base.ledger.row['cohort_dispatch'] = marker.copy()
+        data['phase'].phases.journal.state['steps']['cohort-dispatch'] = marker.copy()
+        data['phase'].phases.journal.save()
         key_path = opdir/'backup.key'; key_path.write_bytes(data['key']); key_path.chmod(0o600)
         output = opdir/'github-output'; output.touch(mode=0o600)
         env = {'GITHUB_REPOSITORY':run.REPOSITORY,'GITHUB_EVENT_NAME':'workflow_dispatch',

@@ -54,6 +54,7 @@ def load(environment, operation, challenge, repo_root):
             planned.get('status')!='dispatch-pending' or
             planned.get('operation_id')!=operation or planned.get('challenge')!=challenge or
             planned.get('workflow_sha')!=source or planned.get('members')!=members or
+            state['steps'].get('cohort-dispatch')!=run.dispatch_marker(planned) or
             local_marker!={'status':'done','marker':marker} or
             marker!={'status':'done','operation_id':operation,'snapshot_id':binding['snapshot_id'],
                      'invocation_nonce':planned.get('invocation_nonce'),
@@ -99,7 +100,7 @@ def stage(environment, operation, challenge, repo_root):
         media_operation_guard.verify(fence,client,lock,namespace_uid)
         checked, revision = fence.ledger.read()
         if (not fence.owned(checked) or checked.get('status')!='active' or
-                checked.get('cohort_upload')!=admitted or checked.get('cohort_bundle')!=row.get('cohort_bundle') or
+                checked.get('cohort_upload')!=admitted or checked.get('cohort_dispatch')!=run.dispatch_marker(planned) or checked.get('cohort_bundle')!=row.get('cohort_bundle') or
                 checked.get('cohort_members')!=row.get('cohort_members') or
                 checked.get('backup_invocation')!={'nonce':admitted['invocation_nonce'],'operation_id':operation} or
                 not isinstance(revision,tuple) or len(revision)!=2 or
@@ -140,7 +141,7 @@ def stage(environment, operation, challenge, repo_root):
             raise RunnerError('cohort staged custody changed')
         media_operation_guard.verify(fence,client,lock,namespace_uid)
         final, revision = fence.ledger.read()
-        if (not fence.owned(final) or final.get('status')!='active' or final.get('cohort_upload')!=admitted or
+        if (not fence.owned(final) or final.get('status')!='active' or final.get('cohort_upload')!=admitted or final.get('cohort_dispatch')!=run.dispatch_marker(planned) or
                 final.get('cohort_bundle')!=row.get('cohort_bundle') or final.get('cohort_members')!=row.get('cohort_members') or
                 final.get('backup_invocation')!={'nonce':admitted['invocation_nonce'],'operation_id':operation} or
                 not isinstance(revision,tuple) or len(revision)!=2 or any(not isinstance(v,str) or not v for v in revision)):
@@ -167,7 +168,7 @@ def mark_failed(environment, operation, challenge, repo_root):
     media_operation_guard.verify(fence,client,intent['kube_lock'],intent['namespace_uid'])
     row, revision = fence.ledger.read()
     actual = planned | {'status':'upload-running','run_id':environment['GITHUB_RUN_ID'],'run_attempt':1}
-    if (not fence.owned(row) or row.get('status')!='active' or row.get('cohort_upload')!=actual or
+    if (not fence.owned(row) or row.get('status')!='active' or row.get('cohort_upload')!=actual or row.get('cohort_dispatch')!=run.dispatch_marker(planned) or
             row.get('backup_invocation')!={'nonce':planned['invocation_nonce'],'operation_id':operation} or
             not isinstance(revision,tuple) or len(revision)!=2 or any(not isinstance(v,str) or not v for v in revision)):
         raise RunnerError('failed cohort upload identity changed')
