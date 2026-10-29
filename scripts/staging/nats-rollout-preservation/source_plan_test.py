@@ -115,6 +115,17 @@ class SourceTests(unittest.TestCase):
         with self.assertRaisesRegex(nonnats_plan.PlanError,'unsupported_r2_configuration_change_file'):
             source_plan.preservation_projection(SOURCE,params,decoder,kube)
 
+    def test_store_projection_binds_referenced_minio_credentials_without_replica_dependence(self):
+        kube,params=self.canonical_fixture('app-only')
+        def row(result,kind,name):return next(item for item in result['identities'] if item['kind']==kind and item['name']==name)
+        before=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        kube.objects[('Deployment','voice-user')]['spec']['replicas']=0
+        paused=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        self.assertEqual(row(before,'Deployment','voice-user')['semantic_sha256'],row(paused,'Deployment','voice-user')['semantic_sha256'])
+        kube.objects[('Secret','voice-minio-credentials')]['data']['MINIO_ROOT_PASSWORD']=base64.b64encode(b'changed-credential').decode()
+        changed=source_plan.preservation_projection(SOURCE,params,decoder,kube)
+        self.assertNotEqual(row(paused,'Secret','voice-minio-credentials')['semantic_sha256'],row(changed,'Secret','voice-minio-credentials')['semantic_sha256'])
+
     def test_absent_frontend_configmaps_are_create_only_not_generic_actions(self):
         kube,params=self.canonical_fixture('full')
         names={'voice-web-runtime-config','voice-admin-runtime-config','voice-developer-portal-runtime-config'}

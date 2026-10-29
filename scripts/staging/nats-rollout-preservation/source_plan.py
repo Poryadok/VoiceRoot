@@ -512,7 +512,7 @@ def preservation_projection(source, parameters, decoder, kube):
                     if actual!=desired:_fail('unsupported_minio_bucket_job_change')
                 elif obj['kind']=='Service':b.add('infra',obj)
                 elif obj['kind']!='StatefulSet':_fail('preservation_minio_source_invalid')
-        services=b.documents('deploy/staging/services.yaml','migrations')
+        services=b.documents('deploy/staging/services.yaml','migrations');r2_envs={}
         for name in ('user','file'):
             docs=[obj for obj in services if obj.get('kind')=='Deployment' and obj['metadata']['name']=='voice-'+name]
             if len(docs)!=1:_fail('preservation_r2_source_invalid')
@@ -527,6 +527,7 @@ def preservation_projection(source, parameters, decoder, kube):
             desired_env=env(docs[0])
             if {entry['name'] for entry in desired_env}!=expected:_fail('preservation_r2_source_invalid')
             if desired_env!=env(b.get('Deployment','voice-'+name)):_fail('unsupported_r2_configuration_change_'+name)
+            r2_envs['voice-'+name]=desired_env
         config=b.documents('deploy/staging/configmap-app.yaml','domains')[0]
         current=b.get('ConfigMap',config['metadata']['name'])
         redis_addr=config.get('data',{}).get('REDIS_ADDR')
@@ -539,6 +540,8 @@ def preservation_projection(source, parameters, decoder, kube):
             if kind=='Secret':
                 keys=selected_keys if name=='voice-app-secrets' else ('MINIO_ROOT_USER','MINIO_ROOT_PASSWORD')
                 semantic={'data':{key:obj['data'][key] for key in keys}}
+            elif kind=='Deployment' and name in r2_envs:semantic={'r2_env':r2_envs[name]}
+            elif kind=='ConfigMap' and name==config['metadata']['name']:semantic={'REDIS_ADDR':redis_addr}
             identities.append({'kind':kind,'name':name,'uid':meta['uid'],'resourceVersion':meta['resourceVersion'],'semantic_sha256':guard.digest(semantic)})
         sources=sorted({(entry['path'],entry['sha256']) for row in b.rows.values() for entry in row['sources']})
         return {'schema':'voice-staging-store-projection-v1','mode':p['mode'],'sources':[{'path':path,'sha256':sha} for path,sha in sources],

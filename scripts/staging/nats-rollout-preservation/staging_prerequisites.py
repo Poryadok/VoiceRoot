@@ -904,6 +904,22 @@ def prepare_inputs(actions,request,approved,execution,workspace):
     return {'stage':stage,'inputs_sha256':digest(prepared)}
 
 
+def _bind_auxiliary_successor(session,plan):
+    import staging_cohort_preservation
+    auxiliary=staging_cohort_preservation.load_auxiliary_successor(session)
+    publisher=plan['children']['p3'].get('preserved',{}).get('Deployment/voice-p3-principal-jwks')
+    if auxiliary is not None:
+        if publisher is None:raise Blocked('staging_prerequisites_auxiliary_changed')
+        observed=publisher['observed'];response=auxiliary['response'];meta=response['metadata']
+        if (meta.get('uid')!=observed.get('uid') or type(meta.get('generation')) is not int
+            or not isinstance(meta.get('resourceVersion'),str) or not meta['resourceVersion']
+            or digest(_semantic(response))!=observed.get('semantic_sha256')):
+            raise Blocked('staging_prerequisites_auxiliary_changed')
+        observed['generation']=meta['generation'];observed['resourceVersion']=meta['resourceVersion']
+    elif publisher is not None:
+        raise Blocked('staging_prerequisites_auxiliary_missing')
+
+
 def run_prepare(actions,request,approved,execution,workspace,*,preservation_ref):
     """Continue only from the root-loaded, restore-qualified preservation receipt."""
     import commands
@@ -927,6 +943,7 @@ def run_prepare(actions,request,approved,execution,workspace,*,preservation_ref)
                                   'gis_first_install':request.get('gis_first_install') is True}):
         raise Blocked('staging_prerequisites_prepared_changed')
     plan['schema']='voice-staging-prerequisites-plan-v2';plan['preservation_sha256']=digest(receipt)
+    _bind_auxiliary_successor(session,plan)
     stage=staging_cohort_preservation.capture_stage(session,receipt)
     _recheck_baseline(session,{'plan':plan});session.check()
     fence=session.bind_prerequisites(plan,stage.old_images)
@@ -1063,15 +1080,23 @@ def capture(session,stage):
     if type(stage) is not RolloutStage or stage.operation!=session.operation:
         raise Blocked('staging_prerequisites_capture_invalid')
     state=_completed(session);receipt=state['receipt'];plan=state['plan']
-    baseline=_json(_read_private(_base(session)/'baseline.json',limit=32<<20))
-    expected=copy.deepcopy(baseline['expected'])
-    publisher=receipt['publisher_identity'];expected['deployment_uids']['voice-p3-principal-jwks']=publisher['uid']
-    if stage.expected!=expected or stage.old_images!=receipt['actual_after']:
-        raise Blocked('staging_prerequisites_capture_changed')
     view=realtime_bootstrap._stage_view(stage)
-    if any(view['snapshots'].get(name)!=row for name,row in baseline['workloads']['snapshots'].items()):
-        raise Blocked('staging_prerequisites_capture_changed')
-    if view['marker']!=baseline['workloads']['marker']:raise Blocked('staging_prerequisites_marker_changed')
+    if plan['schema']=='voice-staging-prerequisites-plan-v2':
+        import staging_cohort_preservation
+        protected=staging_cohort_preservation.capture_final_stage(session)
+        if (stage.expected!=protected.expected or stage.old_images!=protected.old_images
+            or stage.original_snapshots!=protected.original_snapshots or view!=realtime_bootstrap._stage_view(protected)):
+            raise Blocked('staging_prerequisites_capture_changed')
+    else:
+        baseline=_json(_read_private(_base(session)/'baseline.json',limit=32<<20))
+        expected=copy.deepcopy(baseline['expected'])
+        publisher=receipt['publisher_identity'];expected['deployment_uids']['voice-p3-principal-jwks']=publisher['uid']
+        if stage.expected!=expected or stage.old_images!=receipt['actual_after']:
+            raise Blocked('staging_prerequisites_capture_changed')
+        if any(view['snapshots'].get(name)!=row for name,row in baseline['workloads']['snapshots'].items()):
+            raise Blocked('staging_prerequisites_capture_changed')
+        if view['marker']!=baseline['workloads']['marker']:raise Blocked('staging_prerequisites_marker_changed')
+    if stage.old_images!=receipt['actual_after']:raise Blocked('staging_prerequisites_capture_changed')
     record={'schema':'voice-staging-prerequisites-capture-v1','operation':session.operation,'context':session.context,
         'helper_sha256':session.helper,'source_capture_sha256':plan['source_capture_sha256'],'plan_sha256':digest(plan),
         'receipt_sha256':digest(receipt),'namespace_uid':plan['namespace_uid'],'actual_before':receipt['actual_before'],
@@ -1099,6 +1124,13 @@ def load_capture(session,*,actual=None,rollout_target=None):
             or rollout_target is not None and rollout_target.get('prerequisites_sha256')!=digest(record)
             or digest(_json(_read_private(_base(session)/'capture-snapshots.json',limit=32<<20)))!=record['stage']['original_snapshots_sha256']):
             raise Blocked('staging_prerequisites_capture_changed')
+        if plan['schema']=='voice-staging-prerequisites-plan-v2':
+            import staging_cohort_preservation
+            protected=staging_cohort_preservation.capture_final_stage(session)
+            if (record['stage']['expected']!=protected.expected or record['actual_after']!=protected.old_images
+                or record['stage']['workloads']!=realtime_bootstrap._stage_view(protected)
+                or record['stage']['original_snapshots_sha256']!=digest(protected.original_snapshots)):
+                raise Blocked('staging_prerequisites_capture_changed')
         realtime_bootstrap._check_stage(Kube(),record['stage']['workloads'])
         session.check()
         return record
@@ -1128,9 +1160,14 @@ def _historical(operation,seen):
     record=_json(_read_private(base/'capture.json',limit=32<<20))
     source=_json(_read_private(guard.ROOT/'installed'/'source-authority'/(operation+'.json')))
     approved=_json(_read_private(base/'approved.json',limit=32<<20));execution=_json(_read_private(base/'execution.json',limit=8<<20))
-    if (set(plan)!=PLAN_FIELDS or state.get('status')!='COMPLETE' or state.get('preflight_sha256')!=digest(plan)
+    v2=plan.get('schema')=='voice-staging-prerequisites-plan-v2'
+    if v2:
+        import staging_cohort_preservation
+        preserved=staging_cohort_preservation.validate_historical_capture(operation)
+        if plan.get('preservation_sha256')!=digest(preserved):raise Blocked('staging_prerequisites_history_preservation_changed')
+    if (set(plan)!=(PLAN_FIELDS|{'preservation_sha256'} if v2 else PLAN_FIELDS) or state.get('status')!='COMPLETE' or state.get('preflight_sha256')!=digest(plan)
         or set(state)!={'schema','plan','initial_resource_fence','status','steps','receipt','preflight_sha256'}
-        or state['schema']!='voice-staging-prerequisites-checkpoint-v1' or plan['schema']!='voice-staging-prerequisites-plan-v1'
+        or state['schema']!='voice-staging-prerequisites-checkpoint-v1' or plan['schema'] not in ('voice-staging-prerequisites-plan-v1','voice-staging-prerequisites-plan-v2')
         or state['initial_resource_fence']!={**binding,'target_sha256':digest(plan)}
         or plan['operation']!=operation or plan['context']!=binding['context'] or plan['helper_sha256']!=binding['helper_sha256']
         or approved.get('source_sha')!=binding['context']['commit']
