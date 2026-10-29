@@ -1,4 +1,5 @@
 import os
+import base64
 from pathlib import Path
 import socket
 import ssl
@@ -16,6 +17,22 @@ import full_cohort_chat_health as health
 
 
 class ResponseTests(unittest.TestCase):
+    def test_private_key_selection_rejects_uid_drift_and_lost_guard(self):
+        import full_cohort_schema_metadata as common
+        import realtime_p3_create_only_transport as transport
+        values = (b'client-certificate', b'private-secret', b'public-ca')
+        raw = b'client-uid\n17\n' + base64.b64encode(values[0]) + b'\n' + base64.b64encode(values[1])
+        ca = b'ca-uid\n23\n' + base64.b64encode(values[2])
+        with patch.object(transport, '_run', return_value=raw), patch.object(transport, 'public_certificate', return_value=ca):
+            self.assertEqual(health._private_material({'uid':'client-uid','resourceVersion':'17'},
+                {'uid':'ca-uid','resourceVersion':'23'}, lambda:None), values)
+            with self.assertRaises(health.HealthError) as error:
+                health._private_material({'uid':'other','resourceVersion':'17'}, {'uid':'ca-uid','resourceVersion':'23'}, lambda:None)
+            self.assertNotIn('private-secret', str(error.exception))
+            with self.assertRaises(common.GuardLost):
+                health._private_material({'uid':'client-uid','resourceVersion':'17'},
+                    {'uid':'ca-uid','resourceVersion':'23'}, lambda:False)
+
     def test_dependency_error_is_never_downgraded_to_health_failure(self):
         import full_cohort_schema_metadata as common
         def unavailable(): raise RuntimeError('producer masked a lost guard')
