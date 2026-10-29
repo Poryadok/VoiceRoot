@@ -281,6 +281,40 @@ class LoginTest(unittest.TestCase):
         bad = list(args); bad[6] = 'PGPASSWORD=incorrect'
         refused = subprocess.run(bad, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertNotEqual(refused.returncode, 0)
+        subprocess.run(['docker', 'exec', name, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+                        '-d', 'postgres', '-c', 'CREATE DATABASE chat_db'], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(['docker', 'exec', name, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+                        '-d', 'chat_db', '-c', 'CREATE TABLE public.schema_migrations(version bigint,dirty boolean); '
+                        'INSERT INTO public.schema_migrations VALUES(1,false)'], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        node = {'name': 'node', 'uid': 'uid', 'hostname': 'node', 'architecture': 'amd64'}
+        route = {'host': 'voice-postgres', 'service_ip': '127.0.0.1', 'role': 'postgres', 'sslmode': 'disable'}
+        files = {'000001_initial.up.sql': b'SELECT 1;',
+                 '000002_next.up.sql': b'CREATE TABLE public.go_migration_fixture(id integer);'}
+        _, job = migration.render('media-c1-' + 'a' * 32, 'b' * 40, 'chat_db', files, node, route)
+        container = job['spec']['template']['spec']['containers'][0]
+        command = container['command'][-1]
+        environment = {'PGPASSWORD': 'fixture-only', 'DATABASE_URL': 'postgres://postgres@127.0.0.1:5432/chat_db?sslmode=disable',
+                       'VOICE_DB_SERVICE_IP': '127.0.0.1', 'VOICE_DB_ROLE': 'postgres', 'VOICE_DATABASE': 'chat_db',
+                       'PGAPPNAME': 'voice-go-fixture'}
+        create = ['docker', 'create', '--network', 'container:' + name, '--entrypoint', '/bin/sh']
+        for key, value in environment.items(): create.extend(['-e', key + '=' + value])
+        create.extend([migration.realtime_migration_job.MIGRATE_IMAGE, '-ec', command])
+        cid = subprocess.run(create, check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout.decode().strip()
+        self.addCleanup(subprocess.run, ['docker', 'rm', '-f', '-v', cid], check=True,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / 'migrations'; folder.mkdir()
+            for filename, value in files.items(): (folder / filename).write_bytes(value)
+            subprocess.run(['docker', 'cp', str(folder), cid + ':/'], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        run = subprocess.run(['docker', 'start', '-a', cid], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.assertNotIn(b'fixture-only', run.stdout + run.stderr)
+        result = subprocess.run(['docker', 'exec', name, 'psql', '-X', '-qAt', '-U', 'postgres', '-d', 'chat_db', '-c',
+                                 "SELECT version || ':' || dirty || ':' || (to_regclass('public.go_migration_fixture') IS NOT NULL) "
+                                 'FROM public.schema_migrations'], check=True, stdout=subprocess.PIPE).stdout.strip()
+        self.assertEqual(result, b'2:false:true')
 
 
 class SecretSnapshotTest(unittest.TestCase):
