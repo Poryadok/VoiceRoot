@@ -56,6 +56,25 @@ def render_chat_service(source,expected_pod_labels):
     return _patch(source,target),target
 
 
+def render_space_service(source,expected_pod_labels):
+    """Plan only the documented Space public JWKS Service port."""
+    meta=source.get('metadata',{}); spec=source.get('spec',{})
+    if ((source.get('apiVersion'),source.get('kind'),meta.get('name'),meta.get('namespace'))
+            != ('v1','Service','voice-space','voice-dev')
+            or any(not isinstance(meta.get(k),str) or not meta[k] for k in ('uid','resourceVersion'))
+            or spec.get('type','ClusterIP')!='ClusterIP' or not isinstance(spec.get('clusterIP'),str)
+            or spec['clusterIP'] in ('','None')): raise ValueError('Space Service identity unavailable')
+    selector=spec.get('selector'); ports=spec.get('ports')
+    if (not isinstance(expected_pod_labels,dict) or not isinstance(selector,dict) or not selector
+            or any(expected_pod_labels.get(k)!=v for k,v in selector.items())
+            or not isinstance(ports,list) or any(not isinstance(p,dict) for p in ports)
+            or any(p.get('name')=='principal-jwks' or p.get('port')==8443 for p in ports)):
+        raise ValueError('Space Service JWKS port unavailable')
+    target=copy.deepcopy(spec)
+    target['ports'].append({'name':'principal-jwks','port':8443,'targetPort':8443,'protocol':'TCP'})
+    return _patch(source,target),target
+
+
 def render_realtime(source,receipts,operation_id):
     """Render only; all receipt identity and authority checks belong to the phase."""
     _base(source,'realtime')
