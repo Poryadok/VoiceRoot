@@ -1,6 +1,7 @@
 """Real delegated service/capability/Session; external TT, Kube and GitHub are fixtures."""
 import base64
 import copy
+from contextlib import ExitStack
 import hashlib
 import os
 from pathlib import Path
@@ -18,6 +19,9 @@ import dev_realtime_p3_issuer_capability as capability
 import dev_realtime_p3_issuer_client as client
 import dev_realtime_p3_issuer_service as p3_service
 import media_operation_journal as journals
+import full_cohort_c1_activation as activation
+import full_cohort_c1_driver as driver_module
+import full_cohort_supervisor as supervisor
 import realtime_p3_create_only as creation
 import realtime_p3_create_only_packet as packet
 import realtime_p3_create_only_packet_test as packet_fixture
@@ -40,7 +44,7 @@ class DelegatedP3JointTest(unittest.TestCase):
         cls.addClassCleanup(cleanup)
         packet_fixture.PacketTest.setUpClass()
 
-    def exercise(self,lost):
+    def exercise(self,lost,consumer=False):
         with tempfile.TemporaryDirectory(dir='/root',prefix='p3-delegated-root-') as root_tmp, tempfile.TemporaryDirectory(dir='/tmp',prefix='p3-delegated-user-') as user_tmp:
             root=Path(root_tmp); user=Path(user_tmp); os.chown(user,1000,1000); os.chmod(user,0o700)
             archive=root/'archive'; archive.mkdir(mode=0o700); issue=root/'issue'; issue.mkdir(mode=0o700)
@@ -94,7 +98,43 @@ class DelegatedP3JointTest(unittest.TestCase):
                             name=obj['metadata']['name']; result['metadata'].update(uid='uid-'+name,resourceVersion='10')
                             current[obj['kind'],name]=copy.deepcopy(result)
                         return result
-                    with patch.object(capability,'SOCKET_ROOT',pre_root),patch.object(creation,'SOCKET_PARENT',p3_ops), \
+                    stack=ExitStack(); case.addCleanup(stack.close)
+                    if consumer:
+                        class Check:
+                            endpoint='http://fixture'
+                            def __init__(self,context):self.context=copy.deepcopy(context)
+                            def __call__(self):return copy.deepcopy(case.base.card)
+                            def mark_uncertain(self,reason):pass
+                        original_init=client_type.__init__
+                        def client_init(instance,*args):
+                            if len(args)==1:
+                                original_init(instance,case.base.lock,args[0]); instance.workloads=case.base.client.workloads
+                            else:original_init(instance,*args)
+                        stack.enter_context(patch.object(client_type,'__init__',client_init))
+                        stack.enter_context(patch.object(resource_fencing,'KubeLedger',Ledger))
+                        stack.enter_context(patch.object(resource_fencing,'ResourceCheck',Check))
+                        sup_root=case.root/'supervisor'; sup_root.mkdir(mode=0o700)
+                        op=sup_root/case.base.context['operation_id']; op.mkdir(mode=0o700)
+                        stack.enter_context(patch.object(supervisor.media_backup_upload_runner,'ROOT',sup_root))
+                        stack.enter_context(patch.object(supervisor.media_backup_upload_runner,'TT','http://fixture'))
+                        root_intent={'resource_context':copy.deepcopy(case.base.context),'namespace_uid':'ns',
+                                     'cohort_route_mode':'full-cohort-v1','kube_lock':copy.deepcopy(case.base.lock)}
+                        root_j=journals.Journal(op/'journal',root_intent); case.addCleanup(root_j.close)
+                        # Admission is a fixture predecessor; the consumer guard itself remains real.
+                        descriptor={'scope':'synthetic-admission'}
+                        admission={'status':'done','descriptor':descriptor,'old_revision':['ledger','1'],'new_revision':['ledger','2']}
+                        root_j.state['steps']['image-only-admission']=copy.deepcopy(admission)
+                        root_j.state['steps']['full-cohort-image-only-baseline']={'descriptor':copy.deepcopy(descriptor)}
+                        root_j.save(); backing.row['image_only_baseline']=copy.deepcopy(descriptor)
+                        root_c=client_type(root_j); check=Check(case.base.context)
+                        root_f=resource_fencing.Fence(case.base.context,check,Ledger(root_c),check.mark_uncertain)
+                        owner=supervisor.Supervisor(root_j,root_f,root_c,case.base.lock,'ns')
+                        case.addCleanup(lambda:[journal.close() for journal in reversed(owner.journals)])
+                        owner.package=case.package; owner.cut=case.base.cut; owner._execution_token='token'
+                        driver=driver_module.C1Driver(owner); driver.started=True; driver.preflight=case.preflight; driver.p3_capability=cap
+                        info=p3_dir.stat(); driver._p3_directory=(info.st_dev,info.st_ino)
+                        driver._directory_identity=('a'*32,None,None,driver._p3_directory)
+                    with stack,patch.object(capability,'SOCKET_ROOT',pre_root),patch.object(creation,'SOCKET_PARENT',p3_ops), \
                          patch.object(peer_client,'SOCKET',str(service_path)),patch.object(source,'verify'), \
                          patch.object(creation.transport,'public_certificate',side_effect=public), \
                          patch.object(creation.transport,'get',side_effect=get),patch.object(creation.transport,'create',side_effect=create):
@@ -105,15 +145,22 @@ class DelegatedP3JointTest(unittest.TestCase):
                                 import traceback; traceback.print_exc(); outcome.append(False)
                         thread=threading.Thread(target=trigger,daemon=True); thread.start(); cap.finish(); thread.join(45)
                         if thread.is_alive() or outcome!=[True]:raise ValueError('capability trigger')
-                        session.prepare()
+                        if not consumer:session.prepare()
                         if lost:
-                            try:session.finish_delegated(cap,'token')
-                            except creation.CreateError:
+                            try:
+                                if consumer:activation._realtime_p3(driver,'token')
+                                else:session.finish_delegated(cap,'token')
+                            except (creation.CreateError,activation.ActivationError):
                                 ok=not calls and backing.row['status']=='uncertain'
-                                try:session.prepare(); ok=False
-                                except creation.CreateError:pass
+                                try:
+                                    if consumer:activation._realtime_p3(driver,'token')
+                                    else:session.prepare()
+                                    ok=False
+                                except (creation.CreateError,activation.ActivationError):pass
                         else:
-                            receipt=session.finish_delegated(cap,'token')
+                            if consumer:
+                                session=activation._realtime_p3(driver,'token'); receipt=session.handoff['receipt']
+                            else:receipt=session.finish_delegated(cap,'token')
                             ok=(len(receipt['objects'])==7 and len(current)==7 and
                                 [dry for _,dry in calls]==[True]*7+[False]*7 and session.completed)
                 except BaseException:
@@ -149,3 +196,5 @@ class DelegatedP3JointTest(unittest.TestCase):
 
     def test_actual_capability_service_and_seven_create(self):self.exercise(False)
     def test_lost_terminal_after_ack_never_dry_runs(self):self.exercise(True)
+    def test_actual_activation_consumer_and_service(self):self.exercise(False,True)
+    def test_activation_lost_terminal_never_dry_runs(self):self.exercise(True,True)
