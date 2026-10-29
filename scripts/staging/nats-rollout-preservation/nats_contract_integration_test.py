@@ -4,11 +4,13 @@ import unittest
 import json
 import hashlib
 import tempfile
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import nats_contract_integration as integration
+import contract_fixture_entry as capture_entry
 
 
 # The previous reviewed capture contained 83 Python sources. The read-only
@@ -308,6 +310,105 @@ class HostedTransportTests(unittest.TestCase):
             entry = (bundle / 'contract_fixture_entry.py').read_text(encoding='utf-8')
             self.assertLess(entry.index('root_cli.code_binding(code)'),
                             entry.index('from nats_contract_integration import inner'))
+
+    @unittest.skipUnless(sys.platform == 'linux' and hasattr(os, 'chown'),
+                         'captured-code custody requires Linux ownership semantics')
+    def test_contract_entry_materializes_exact_capture_before_fixture_import(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / 'bundle'
+            bundle.mkdir()
+
+            def fake_build(args, **kwargs):
+                output = Path(args[args.index('-o') + 1])
+                output.write_bytes(('synthetic:' + output.name).encode())
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+            with patch.object(integration.fixture, 'call', side_effect=fake_build):
+                integration.build_fixture_records(bundle)
+
+            canonical = bundle / 'capture'
+            expected_manifest = json.loads((canonical / 'capture-manifest.json').read_text(encoding='utf-8'))
+            self.assertEqual(set(expected_manifest), EXPECTED_CAPTURED_PYTHON_SOURCES | {
+                'nats-known-baseline/kernel',
+            })
+            expected_names_sha = hashlib.sha256(json.dumps(
+                sorted(expected_manifest), separators=(',', ':')).encode()).hexdigest()
+            self.assertEqual(expected_names_sha, capture_entry._EXPECTED_CAPTURED_NAMES_SHA256)
+
+            def invoke(capture, base):
+                calls = []
+                fake_fixture = SimpleNamespace(inner=lambda path: calls.append(path) or 'fixture-entered')
+                previous_root_cli = sys.modules.pop('root_cli', None)
+                try:
+                    with patch.object(capture_entry, '_CAPTURE_SOURCE', capture), \
+                            patch.dict(sys.modules, {'nats_contract_integration': fake_fixture}):
+                        result = capture_entry.inner(base)
+                finally:
+                    sys.modules.pop('root_cli', None)
+                    if previous_root_cli is not None:
+                        sys.modules['root_cli'] = previous_root_cli
+                return result, calls
+
+            result, calls = invoke(canonical, root / 'positive')
+            self.assertEqual(result, 'fixture-entered')
+            self.assertEqual(calls, [str(root / 'positive')])
+            copied = root / 'positive/scripts/staging'
+            self.assertEqual((copied / 'capture-manifest.json').read_bytes(),
+                             (canonical / 'capture-manifest.json').read_bytes())
+            self.assertEqual((copied / 'nats-rollout-preservation/contract_fixture_entry.py').stat().st_mode & 0o222, 0)
+
+            def rejected_variant(name, mutate, expected_error, destination_created=False):
+                variant = root / name
+                shutil.copytree(canonical, variant)
+                manifest_path = variant / 'capture-manifest.json'
+                manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+                mutate(variant, manifest)
+                manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n', encoding='utf-8')
+                base = root / (name + '-base')
+                with self.assertRaisesRegex(RuntimeError, expected_error):
+                    invoke(variant, base)
+                self.assertEqual((base / 'scripts/staging').exists(), destination_created)
+
+            rejected_variant('omitted', lambda _variant, manifest: manifest.pop(next(iter(manifest))),
+                             'captured_code_manifest_invalid')
+
+            def add_extra(variant, manifest):
+                relative = 'nats-rollout-preservation/extra.py'
+                content = b'# unauthorized capture member\n'
+                (variant / relative).write_bytes(content)
+                manifest[relative] = hashlib.sha256(content).hexdigest()
+            rejected_variant('extra', add_extra, 'captured_code_manifest_invalid')
+
+            def change_hash(_variant, manifest):
+                relative = next(iter(manifest))
+                manifest[relative] = '0' * 64
+            rejected_variant('changed-hash', change_hash, 'captured_code_source_changed', destination_created=True)
+
+            def traversal(_variant, manifest):
+                relative = next(iter(manifest))
+                manifest['../escape.py'] = manifest.pop(relative)
+            rejected_variant('traversal', traversal, 'captured_code_manifest_invalid')
+
+            symlink = root / 'symlink'
+            shutil.copytree(canonical, symlink)
+            relative = next(iter(expected_manifest))
+            source_file = symlink / relative
+            source_file.unlink()
+            source_file.symlink_to(canonical / relative)
+            symlink_manifest = symlink / 'capture-manifest.json'
+            manifest = json.loads(symlink_manifest.read_text(encoding='utf-8'))
+            base = root / 'symlink-base'
+            with patch.object(capture_entry, '_CAPTURE_SOURCE', symlink):
+                with self.assertRaisesRegex(RuntimeError, 'captured_code_source_invalid'):
+                    capture_entry._materialize_capture(base)
+            self.assertTrue((base / 'scripts/staging').exists())
+
+            occupied = root / 'occupied'
+            (occupied / 'scripts/staging').mkdir(parents=True)
+            with patch.object(capture_entry, '_CAPTURE_SOURCE', canonical):
+                with self.assertRaisesRegex(RuntimeError, 'captured_code_destination_exists'):
+                    capture_entry._materialize_capture(occupied)
 
     def test_hosted_runner_rejection_precedes_docker(self):
         with patch.object(integration.sys, 'platform', 'linux'):
