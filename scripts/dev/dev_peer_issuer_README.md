@@ -1,7 +1,8 @@
 # DEV delegated peer issuer
 
-This source is a work in progress. Its reviewed source pin is deliberately
-unset, so it does not authorize production operation.
+The issuer payload has an independently reviewed source pin. Integration,
+actual source publication, installation and live authority remain separate
+prerequisites; the pin alone does not authorize production operation.
 
 The intended ordinary operator is `pmd`. A fixed socket-activated service
 retains root custody of the existing media CA and accepts only the three fixed

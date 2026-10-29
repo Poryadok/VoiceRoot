@@ -1,4 +1,5 @@
 import array
+import base64
 import copy
 import fcntl
 import json
@@ -43,10 +44,16 @@ class CreateTest(unittest.TestCase):
             pre.package=pkg; pre._local=mock.Mock(); pre._authority=mock.Mock()
             phase=create.Session(journal,fence,client,lock,'ns',pkg,pre,canonical.ROOT,'token')
             with mock.patch.object(guard,'verify'),mock.patch.object(create.source,'verify'):
-                marker={'status':'pending'}; phase._write(record=marker)
+                phase.missing=['voice-auth-media-server-tls']
+                marker={'status':'pending','missing':phase.missing,'issuer_source_sha':create.source.REVIEWED_SOURCE}; phase._write(record=marker)
                 phase._write(effects={'voice-auth-media-server-tls':{'status':'pending'}})
                 self.assertEqual(backing.row[create.LEDGER],marker)
                 self.assertEqual(backing.row[create.EFFECTS]['voice-auth-media-server-tls']['status'],'pending')
+                phase.token='other'
+                with self.assertRaises(create.schema.GuardLost):phase._guard()
+                phase.token='token'; phase.missing=[]
+                with self.assertRaises(create.schema.GuardLost):phase._guard()
+                phase.missing=['voice-auth-media-server-tls']
                 backing.row[create.EFFECTS]={}
                 with self.assertRaises(create.schema.GuardLost):phase._guard()
 
@@ -56,6 +63,10 @@ class CreateTest(unittest.TestCase):
         phase._distinct_keys()
         phase.objects=copy.deepcopy(phase.objects)
         phase.objects['voice-space-media-client-tls']['data']['tls.key']=phase.objects['voice-gateway-media-client-tls']['data']['tls.key']
+        with self.assertRaises(ValueError):phase._distinct_keys()
+        phase.objects={obj['metadata']['name']:copy.deepcopy(obj) for obj in fixture_class.objects}
+        data=phase.objects['voice-space-media-client-tls']['data']
+        data['tls.crt']=base64.b64encode(base64.b64decode(data['tls.crt'])+b'PRIVATE-SENTINEL').decode()
         with self.assertRaises(ValueError):phase._distinct_keys()
 
     def test_server_metadata_injection_rejected(self):
@@ -84,7 +95,7 @@ class CreateTest(unittest.TestCase):
         phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'; phase.effects={}
         phase._socket=mock.Mock(); phase._check_current=mock.Mock(); phase._drained=mock.Mock(); phase._distinct_keys=mock.Mock(); phase._uncertain=mock.Mock(); phase.close=mock.Mock()
         obj=desired(); bad=copy.deepcopy(obj); bad['metadata']['ownerReferences']=[{'uid':'unexpected'}]
-        with mock.patch.object(create,'_receive',return_value={}), mock.patch.object(create.packet,'validate',return_value={phase.missing[0]:obj}), \
+        with mock.patch.object(create,'_receive',side_effect=lambda _,p:(setattr(p,'objects',{p.missing[0]:obj}) or {})), \
              mock.patch.object(create,'_get',return_value=None), mock.patch.object(create,'_create',return_value=bad) as call:
             with self.assertRaises(create.CreateError):phase.finish()
             self.assertEqual(call.call_count,1); self.assertTrue(call.call_args.args[1]); phase._uncertain.assert_called_once()
@@ -101,7 +112,7 @@ class CreateTest(unittest.TestCase):
         phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'; phase.effects={}
         phase._socket=mock.Mock(); phase._check_current=mock.Mock(); phase._distinct_keys=mock.Mock(); phase._uncertain=mock.Mock(); phase.close=mock.Mock()
         phase._drained=mock.Mock(side_effect=create.schema.GuardLost('drain lost')); obj=desired()
-        with mock.patch.object(create,'_receive',return_value={}), mock.patch.object(create.packet,'validate',return_value={phase.missing[0]:obj}), \
+        with mock.patch.object(create,'_receive',side_effect=lambda _,p:(setattr(p,'objects',{p.missing[0]:obj}) or {})), \
              mock.patch.object(create,'_create') as write:
             with self.assertRaises(create.schema.GuardLost):phase.finish()
             write.assert_not_called(); phase._uncertain.assert_called_once()
@@ -111,12 +122,13 @@ class CreateTest(unittest.TestCase):
         phase.pending=True; phase.completed=False; phase.initial={}; phase.media=b'ca'; phase.missing=['voice-auth-media-server-tls']
         phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'; phase.effects={}
         phase._socket=mock.Mock(); phase._check_current=mock.Mock(); phase._drained=mock.Mock(); phase._distinct_keys=mock.Mock(); phase._uncertain=mock.Mock(); phase.close=mock.Mock()
+        phase._local=mock.Mock(); phase.journal=SimpleNamespace(state={'steps':{}})
         obj=desired(); actual=copy.deepcopy(obj); actual['metadata'].update(uid='uid',resourceVersion='1')
         def save(record=None,effects=None):
-            if record is not None: phase.record=copy.deepcopy(record)
+            if record is not None: phase.record=copy.deepcopy(record); phase.journal.state['steps'][create.STEP]=copy.deepcopy(record)
             if effects is not None: phase.effects=copy.deepcopy(effects)
         phase._write=save
-        with mock.patch.object(create,'_receive',return_value={}), mock.patch.object(create.packet,'validate',return_value={phase.missing[0]:obj}), \
+        with mock.patch.object(create,'_receive',side_effect=lambda _,p:(setattr(p,'objects',{p.missing[0]:obj}) or {})), \
              mock.patch.object(create,'_get',side_effect=[None,None,actual]), \
              mock.patch.object(create,'_create',side_effect=[obj,actual]):
             receipt=phase.finish()
@@ -132,11 +144,29 @@ class CreateTest(unittest.TestCase):
             if record is not None:phase.record=copy.deepcopy(record)
             if effects is not None:phase.effects=copy.deepcopy(effects)
         phase._write=save; obj=desired()
-        with mock.patch.object(create,'_receive',return_value={}), mock.patch.object(create.packet,'validate',return_value={phase.missing[0]:obj}), \
+        with mock.patch.object(create,'_receive',side_effect=lambda _,p:(setattr(p,'objects',{p.missing[0]:obj}) or {})), \
              mock.patch.object(create,'_get',return_value=None), mock.patch.object(create,'_create',side_effect=[obj,RuntimeError('PRIVATE-SENTINEL')]):
             with self.assertRaises(create.CreateError) as failure:phase.finish()
         self.assertNotIn('PRIVATE-SENTINEL',str(failure.exception))
         self.assertEqual(phase.effects[phase.missing[0]]['status'],'pending'); phase._uncertain.assert_called_once()
+
+    def test_finish_rejects_proof_changed_during_last_guard(self):
+        phase=create.Session.__new__(create.Session); phase.exchanged=True; phase.listener=object(); phase.record={'status':'ready'}
+        phase.pending=True; phase.completed=False; phase.initial={}; phase.media=b'ca'; phase.missing=['voice-auth-media-server-tls']
+        phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'; phase.effects={}
+        phase.journal=SimpleNamespace(state={'steps':{}}); phase._socket=mock.Mock(); phase._drained=mock.Mock(); phase._local=mock.Mock()
+        phase._distinct_keys=mock.Mock(); phase._uncertain=mock.Mock(); phase.close=mock.Mock()
+        def check():
+            if phase.record.get('status')=='done':phase.proof={'scope':'tampered'}
+        phase._check_current=check
+        def save(record=None,effects=None):
+            if record is not None:phase.record=copy.deepcopy(record); phase.journal.state['steps'][create.STEP]=copy.deepcopy(record)
+            if effects is not None:phase.effects=copy.deepcopy(effects)
+        phase._write=save; obj=desired(); actual=copy.deepcopy(obj); actual['metadata'].update(uid='uid',resourceVersion='1')
+        with mock.patch.object(create,'_receive',side_effect=lambda _,p:(setattr(p,'objects',{p.missing[0]:obj}) or {})), \
+             mock.patch.object(create,'_get',side_effect=[None,None,actual]), mock.patch.object(create,'_create',side_effect=[obj,actual]):
+            with self.assertRaises(create.schema.GuardLost):phase.finish()
+        self.assertFalse(phase.completed); phase._uncertain.assert_called_once()
 
     def test_transient_preflight_observer_failure_is_guard_lost(self):
         phase=create.Session.__new__(create.Session); phase._guard=mock.Mock()
@@ -162,6 +192,8 @@ class CreateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/'packet.sock'); listener=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
             listener.bind(path); listener.listen(1); self.addCleanup(listener.close)
+            phase=SimpleNamespace(fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}),namespace_uid='ns',initial={},missing=[],media=b'ca',
+                                  _check_current=mock.Mock(),_distinct_keys=mock.Mock()); replies=[]
             def send(count):
                 fds=[]
                 try:
@@ -170,9 +202,42 @@ class CreateTest(unittest.TestCase):
                         os.write(fd,json.dumps({'safe':True}).encode()); fcntl.fcntl(fd,fcntl.F_ADD_SEALS,create.channel.REQUIRED_SEALS)
                     with socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET) as peer:
                         peer.connect(path); peer.sendmsg([create.FRAME],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',fds))])
+                        if count==1:replies.append(peer.recv(64))
                 finally:
                     for fd in fds:os.close(fd)
-            thread=threading.Thread(target=send,args=(1,)); thread.start(); self.assertEqual(create._receive(listener),{'safe':True}); thread.join()
+            thread=threading.Thread(target=send,args=(1,)); thread.start()
+            with mock.patch.object(create.packet,'validate',return_value={}):self.assertEqual(create._receive(listener,phase),{'safe':True})
+            thread.join(); self.assertEqual(replies,[create.ACK])
             before=len(os.listdir('/proc/self/fd')); thread=threading.Thread(target=send,args=(2,)); thread.start()
-            with self.assertRaises(ValueError):create._receive(listener)
+            with self.assertRaises(ValueError):create._receive(listener,phase)
             thread.join(); self.assertEqual(len(os.listdir('/proc/self/fd')),before)
+            replies.clear(); thread=threading.Thread(target=send,args=(1,)); thread.start()
+            with mock.patch.object(create.packet,'validate',side_effect=ValueError('invalid packet')):
+                with self.assertRaises(ValueError):create._receive(listener,phase)
+            thread.join(); self.assertEqual(replies,[b''])
+
+    @unittest.skipUnless(os.name=='posix' and os.geteuid()==0 and hasattr(os,'memfd_create'),'requires disposable Linux root fixture')
+    def test_distinct_short_lived_root_sender_waits_for_ack(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=str(Path(directory)/'packet.sock'); listener=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
+            listener.bind(path); listener.listen(1); self.addCleanup(listener.close)
+            phase=SimpleNamespace(fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}),namespace_uid='ns',initial={},missing=[],media=b'ca',
+                                  _check_current=mock.Mock(),_distinct_keys=mock.Mock())
+            for valid in (True,False):
+                pid=os.fork()
+                if pid==0:
+                    try:
+                        fd=os.memfd_create('fixture',os.MFD_ALLOW_SEALING); os.fchmod(fd,0o600); os.write(fd,b'{"safe":true}')
+                        fcntl.fcntl(fd,fcntl.F_ADD_SEALS,create.channel.REQUIRED_SEALS)
+                        with socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET) as peer:
+                            peer.settimeout(10); peer.connect(path); peer.sendmsg([create.FRAME],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])
+                            answer=peer.recv(64)
+                        os.close(fd); os._exit(0 if answer==(create.ACK if valid else b'') else 1)
+                    except BaseException:os._exit(2)
+                try:
+                    with mock.patch.object(create.packet,'validate',side_effect=(lambda *a:{} if valid else (_ for _ in ()).throw(ValueError()))):
+                        if valid:self.assertEqual(create._receive(listener,phase),{'safe':True})
+                        else:
+                            with self.assertRaises(ValueError):create._receive(listener,phase)
+                finally:
+                    _,status=os.waitpid(pid,0); self.assertEqual(os.waitstatus_to_exitcode(status),0)
