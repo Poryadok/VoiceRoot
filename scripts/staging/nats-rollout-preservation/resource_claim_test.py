@@ -64,6 +64,11 @@ class ResourceTests(unittest.TestCase):
                 session.check(argv[:-1]+['--replicas=1'])
             session.check(argv);self.assertIsNone(session._cohort_permit)
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            auth=['docker','inspect','owned-fixture']
+            session._cohort_auth_permit={'effect_id':'actor-inspect','argv':auth,'body_sha256':'d'*64}
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_auth_permit_invalid'):session.check(auth+['other'])
+            session.check(auth);self.assertIsNone(session._cohort_auth_permit)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(auth)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):
                 session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()

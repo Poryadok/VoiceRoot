@@ -88,6 +88,7 @@ class Session:
         self._prerequisite_permit=None
         self._prerequisite_readonly_permit=None
         self._cohort_permit=None
+        self._cohort_auth_permit=None
 
     def authority(self):
         row=self.check_card();c=self.context
@@ -158,6 +159,16 @@ class Session:
             raise RuntimeError('staging_executor_target_changed')
         if getattr(self,'expected_phase',None) is not None and row.get('phase')!=self.expected_phase:
             raise RuntimeError('staging_executor_phase_changed')
+        if argv and self._cohort_auth_permit is not None:
+            permit=self._cohort_auth_permit
+            if (row.get('phase') not in ('cohort-preservation','prerequisites','prerequisites-captured','realtime-bootstrap','prepare')
+                or not row.get('target_sha256') or type(permit) is not dict or set(permit)!={'effect_id','argv','body_sha256'}
+                or not isinstance(permit['effect_id'],str) or not permit['effect_id']
+                or not isinstance(permit['argv'],list) or list(argv)!=permit['argv']
+                or not isinstance(permit['body_sha256'],str) or not re.fullmatch(r'[a-f0-9]{64}',permit['body_sha256'])):
+                raise RuntimeError('staging_cohort_auth_permit_invalid')
+            self._cohort_auth_permit=None
+            return row
         if argv and row.get('phase') in ('cohort-preservation','prerequisites','prerequisites-captured'):
             args=list(argv);permit=self._prerequisite_permit
             cohort=self._cohort_permit
