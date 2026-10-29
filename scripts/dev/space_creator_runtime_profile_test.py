@@ -48,6 +48,41 @@ class RendererTest(unittest.TestCase):
         source['spec']['template']['spec']['containers'][0]['env'].append({'name':'GATEWAY_PRINCIPAL_SIGNING_KEYS_DIR','value':'/somewhere'})
         with self.assertRaises(ValueError): profile.render_gateway(source,[])
 
+    def test_already_exact_targets_are_idempotent(self):
+        for name,render in (('space',profile.render_space),('gateway',profile.render_gateway)):
+            source=deployment(name); _,target=render(source,[]); source['spec']=target
+            _,again=render(source,[])
+            self.assertEqual(again,target)
+
+    def test_partial_existing_profile_is_rejected(self):
+        for name,render in (('space',profile.render_space),('gateway',profile.render_gateway)):
+            for fault in ('mount','environment','port'):
+                if name=='gateway' and fault=='port': continue
+                source=deployment(name); _,source['spec']=render(source,[])
+                pod=source['spec']['template']['spec']; container=pod['containers'][0]
+                if fault=='mount': container['volumeMounts']=[m for m in container['volumeMounts'] if m['name']!='creator-client']
+                if fault=='environment': container['env']=[e for e in container['env'] if not e['name'].startswith('SPACE_CREATOR_AUTH_' if name=='space' else 'GATEWAY_SPACE_LIFECYCLE_')]
+                if fault=='port': container['ports']=[]
+                with self.subTest(name=name,fault=fault), self.assertRaises(ValueError): render(source,[])
+
+    def test_existing_signer_mount_rejects_subpath(self):
+        source=deployment('gateway'); _,source['spec']=profile.render_gateway(source,[])
+        mounts=source['spec']['template']['spec']['containers'][0]['volumeMounts']
+        next(m for m in mounts if m['name']=='gateway-signing')['subPath']='current.pem'
+        with self.assertRaises(ValueError): profile.render_gateway(source,[])
+
+    def test_complete_profile_requires_all_dependencies(self):
+        for name,render,fault in (('space',profile.render_space,'role'),('space',profile.render_space,'fsgroup'),
+                                  ('gateway',profile.render_gateway,'signer'),('gateway',profile.render_gateway,'strict'),
+                                  ('gateway',profile.render_gateway,'fsgroup')):
+            source=deployment(name); _,source['spec']=render(source,[])
+            pod=source['spec']['template']['spec']; c=pod['containers'][0]
+            if fault=='role': c['env']=[e for e in c['env'] if not e['name'].startswith(('ROLE_PRINCIPAL_','SPACE_ROLE_CLIENT_'))]
+            if fault=='signer': c['env']=[e for e in c['env'] if not e['name'].startswith('GATEWAY_PRINCIPAL_')]
+            if fault=='strict': c['env']=[e for e in c['env'] if e['name']!='GATEWAY_SESSION_EPOCH_STRICT']
+            if fault=='fsgroup': del pod['securityContext']['fsGroup']
+            with self.subTest(name=name,fault=fault), self.assertRaises(ValueError): render(source,[])
+
     def test_existing_material_mount_cannot_be_shadowed(self):
         for path in ('/','/etc/voice/media/server/tls.key','//etc/voice/media/server/tls.key'):
             source=deployment('space')
