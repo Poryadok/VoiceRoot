@@ -51,7 +51,7 @@ class DropScriptTest(unittest.TestCase):
         with mock.patch.object(subject.metadata, 'kube_engine_snapshot', return_value=lambda: {'fixture': True}), \
              mock.patch.object(subject.subprocess, 'Popen', side_effect=launch):
             pg = subject.KubeSpacePostgres(guard)
-            with self.assertRaises(subject.SpacePostgresError): pg.drop_exact(42)
+            with self.assertRaises(subject.metadata.GuardLost): pg.drop_exact(42)
         self.assertEqual(len(guards), 2)
 
     def test_oversized_child_output_is_rejected(self):

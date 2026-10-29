@@ -70,6 +70,8 @@ class KubeSpacePostgres:
                 raise SpacePostgresError('postgres command failed')
             metadata._fence(self._guard)
             return b''.join(chunks)
+        except metadata.GuardLost:
+            raise
         except BaseException:
             raise SpacePostgresError('postgres operation unavailable or uncertain') from None
         finally:
