@@ -27,6 +27,7 @@ import time
 
 import frontend_runtime_executor
 import media_operation_guard
+import media_operation_journal
 
 
 class RecoveryRequired(RuntimeError):
@@ -57,6 +58,9 @@ class WriterCut:
         self.invocation = secrets.token_hex(16)
         self.started = self.drained = self.poisoned = False
         self.retired_rs = set()
+        self.successors = {}
+        self.config_journal = None
+        self.config_snapshot = None
         self._identity()
 
     def _identity(self):
@@ -118,7 +122,9 @@ class WriterCut:
     def _effect_map(self, exclude=None):
         effects = {}
         for name, entry in self.journal.state['steps'].items():
-            if not (name.startswith('writer-drain-') or name.startswith('writer-resume-') or name == 'writer-cut-drained'):
+            if not (name.startswith('writer-drain-') or name.startswith('writer-resume-') or
+                    name in ('writer-cut-drained', 'writer-cut-config-plan') or
+                    name.startswith('writer-cut-config-successor-')):
                 continue
             if name == exclude: continue
             if (not isinstance(entry, dict) or entry.get('status') not in ('pending', 'done') or
@@ -190,6 +196,7 @@ class WriterCut:
         self._guard()
         row, revision = self.fence.ledger.read()
         if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
+                not self._config_effects_match(row) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed')
         self.journal.state['steps'][name].update(status='done', receipt=copy.deepcopy(receipt))
@@ -253,9 +260,11 @@ class WriterCut:
         name = 'writer-' + phase + '-' + kind.lower() + '-' + meta['name']
         record = self._reserve(name, {'source': source, 'target_spec': target})
         self._guards()
+        self._recheck_config_successors()
         self._guard()
         row, _ = self.fence.ledger.read()
         if (not self._owned(row) or row.get('writer_cut_effects', {}) != self._effect_map() or
+                not self._config_effects_match(row) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed before submission')
         result = self._patch(kind, meta['name'], patch)
@@ -276,6 +285,7 @@ class WriterCut:
                    'responseResourceVersion': result['metadata']['resourceVersion'],
                    'resourceVersion': actual['metadata']['resourceVersion'], 'generation': actual['metadata']['generation']}
         self._complete(name, record, receipt)
+        self._recheck_config_successors()
         return receipt
 
     @staticmethod
@@ -316,9 +326,15 @@ class WriterCut:
             meta, status = actual.get('metadata', {}), actual.get('status', {})
             name = 'writer-drain-' + original['kind'].lower() + '-' + original['metadata']['name']
             saved = self.journal.state['steps'].get(name, {})
+            successor = self.successors.get(original['metadata']['name']) if original['kind'] == 'Deployment' else None
+            if successor:
+                expected = copy.deepcopy(successor['target_spec'])
+                expected_generation = successor['receipt']['generation']
+            else:
+                expected_generation = saved.get('receipt', {}).get('generation')
             if (meta.get('uid') != original['metadata']['uid'] or meta.get('namespace') != 'voice-dev'
                     or actual.get('spec') != expected or meta.get('deletionTimestamp') or
-                    saved.get('status') != 'done' or meta.get('generation') != saved.get('receipt', {}).get('generation')):
+                    saved.get('status') != 'done' or meta.get('generation') != expected_generation):
                 raise RecoveryRequired('retired writer changed')
             generation, observed = meta.get('generation'), status.get('observedGeneration')
             if (type(generation) is not int or type(observed) is not int or observed < generation
@@ -326,11 +342,142 @@ class WriterCut:
                 return False
         return self._pods_drained()
 
+    def _validate_config_snapshot(self, config_journal, snapshot, selected):
+        import backend_config_transition
+
+        successors = {}
+        for service in snapshot['services']:
+            name = 'voice-' + service
+            step = 'backend-config-deployment-' + name
+            entry = snapshot['steps'].get(step)
+            ledger = snapshot['effects'].get(step)
+            proof = backend_config_transition.verify_deployment_successor(self, config_journal, service)
+            if (not isinstance(entry, dict) or set(entry) != {'status', 'nonce', 'details', 'details_sha256', 'receipt'} or
+                    entry['status'] != 'done' or not isinstance(entry['nonce'], str) or
+                    not re.fullmatch(r'[0-9a-f]{32}', entry['nonce']) or
+                    entry['details_sha256'] != digest(entry['details']) or
+                    not isinstance(entry['details'], dict) or set(entry['details']) !=
+                    {'operation_id', 'invocation_nonce', 'source', 'target_spec', 'patch'} or
+                    not isinstance(entry['receipt'], dict) or set(entry['receipt']) !=
+                    {'uid', 'spec_sha256', 'responseResourceVersion', 'resourceVersion', 'generation'}):
+                raise RecoveryRequired('config effect journal record invalid')
+            details, receipt = entry['details'], entry['receipt']
+            expected_ledger = {'status': 'done', 'nonce': entry['nonce'], 'details_sha256': entry['details_sha256'],
+                               'receipt_sha256': digest(receipt)}
+            if (ledger != expected_ledger or not isinstance(proof, dict) or
+                    set(proof) != {'source', 'target_spec', 'receipt', 'ledger_record'} or
+                    proof != {'source': details['source'], 'target_spec': details['target_spec'],
+                              'receipt': receipt, 'ledger_record': ledger} or
+                    details['operation_id'] != self.fence.context['operation_id'] or
+                    details['invocation_nonce'] != self.invocation):
+                raise RecoveryRequired('config effect ownership or receipt changed')
+            source, target = details['source'], details['target_spec']
+            self._workload(source)
+            original = selected[name]
+            cut_step = self.journal.state['steps'].get('writer-drain-deployment-' + name, {})
+            cut_receipt, cut_details = cut_step.get('receipt', {}), cut_step.get('details', {})
+            meta = source['metadata']
+            patch = [{'op': 'test', 'path': '/metadata/uid', 'value': meta['uid']},
+                     {'op': 'test', 'path': '/metadata/resourceVersion', 'value': meta['resourceVersion']},
+                     {'op': 'test', 'path': '/spec', 'value': source['spec']},
+                     {'op': 'replace', 'path': '/spec', 'value': target}]
+            if (source['kind'] != 'Deployment' or meta['name'] != name or meta['uid'] != original['metadata']['uid'] or
+                    cut_step.get('status') != 'done' or cut_receipt.get('uid') != meta['uid'] or
+                    cut_receipt.get('generation') != meta['generation'] or cut_details.get('target_spec') != source['spec'] or
+                    cut_receipt.get('spec_sha256') != digest(source['spec']) or details['patch'] != patch or
+                    not isinstance(target, dict) or target == source['spec'] or target.get('replicas') != 0 or
+                    receipt['uid'] != meta['uid'] or receipt['spec_sha256'] != digest(target) or
+                    type(receipt['generation']) is not int or receipt['generation'] != meta['generation'] + 1 or
+                    not isinstance(receipt['responseResourceVersion'], str) or not receipt['responseResourceVersion'] or
+                    not isinstance(receipt['resourceVersion'], str) or not receipt['resourceVersion']):
+                raise RecoveryRequired('config successor does not follow original cut')
+            successors[name] = copy.deepcopy(proof)
+        return successors
+
+    def _recheck_config_successors(self):
+        if self.config_journal is None:
+            if self.successors or self.config_snapshot is not None:
+                raise RecoveryRequired('config successor custody missing')
+            return
+        config = self.config_journal
+        snapshot = self.config_snapshot
+        if (config.poisoned or config.dirfd is None or config.lockfd is None or
+                config.intent != snapshot['intent'] or config.state.get('intent') != snapshot['intent'] or
+                any(config.state.get('steps', {}).get(k) != v for k, v in snapshot['steps'].items())):
+            raise RecoveryRequired('config journal changed')
+        row, _ = self.fence.ledger.read()
+        effects = row.get('backend_config_effects', {})
+        if not self._owned(row) or not self._config_effects_match(row):
+            raise RecoveryRequired('config ledger changed')
+        selected = {o['metadata']['name']: o for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
+        if self._validate_config_snapshot(config, snapshot, selected) != self.successors:
+            raise RecoveryRequired('config successor proof changed')
+
+    def _config_effects_match(self, row):
+        if self.config_snapshot is None:
+            return True
+        config, snapshot = self.config_journal, self.config_snapshot
+        effects = row.get('backend_config_effects', {})
+        matches = (config is not None and not config.poisoned and config.dirfd is not None and config.lockfd is not None
+                and config.intent == snapshot['intent'] and config.state.get('intent') == snapshot['intent']
+                and isinstance(effects, dict) and
+                all(config.state.get('steps', {}).get(k) == v for k, v in snapshot['steps'].items()) and
+                all(effects.get(k) == v for k, v in snapshot['effects'].items()))
+        if not matches:
+            return False
+        if snapshot['services'] == snapshot['intent']['backend_config_deployments']['services']:
+            expected = set(snapshot['steps'])
+            prefix = 'backend-config-deployment-'
+            return ({k for k in config.state['steps'] if k.startswith(prefix)} == expected and
+                    {k for k in effects if k.startswith(prefix)} == expected)
+        return True
+
+    def bind_config_plan(self, config_journal):
+        """Durably require a fixed producer plan before its first config effect."""
+        try:
+            if not self.drained or self.config_journal is not None:
+                raise RecoveryRequired('drained writers and unused config plan required')
+            self._guard()
+            self._guards()
+            if not self._retired(): raise RecoveryRequired('original cut no longer retired')
+            if (type(config_journal) is not media_operation_journal.Journal or config_journal is self.journal or
+                    config_journal.poisoned or config_journal.dirfd is None or config_journal.lockfd is None or
+                    config_journal.intent != config_journal.state.get('intent')):
+                raise RecoveryRequired('open separate config journal required')
+            intent = config_journal.intent
+            plan = intent.get('backend_config_deployments')
+            if (intent.get('resource_context') != self.fence.context or intent.get('namespace_uid') != self.namespace_uid or
+                    not isinstance(plan, dict) or plan.get('source_sha') != self.fence.context['commit'] or
+                    plan.get('cut_invocation') != self.invocation or not isinstance(plan.get('services'), list) or
+                    not plan['services'] or len(plan['services']) != len(set(plan['services'])) or
+                    set(plan['services']) - {'user', 'notification', 'realtime'}):
+                raise RecoveryRequired('config source or cut identity changed')
+            selected = {o['metadata']['name'] for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
+            if any('voice-' + s not in selected for s in plan['services']):
+                raise RecoveryRequired('config plan includes nonwriter')
+            row, _ = self.fence.ledger.read()
+            effects = row.get('backend_config_effects', {})
+            if (not self._owned(row) or not isinstance(effects, dict) or
+                    any(k.startswith('backend-config-deployment-') for k in effects) or
+                    any(k.startswith('backend-config-deployment-') for k in config_journal.state['steps'])):
+                raise RecoveryRequired('config deployment already attempted')
+            self.verify_drained()
+            snapshot = {'intent': copy.deepcopy(intent), 'steps': {}, 'effects': {}, 'services': []}
+            record = self._reserve('writer-cut-config-plan', snapshot)
+            self.config_journal, self.config_snapshot = config_journal, snapshot
+            receipt = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                       'services': copy.deepcopy(plan['services']), 'config_intent_sha256': digest(intent)}
+            self._complete('writer-cut-config-plan', record, receipt)
+            return copy.deepcopy(receipt)
+        except BaseException:
+            self._uncertain()
+
     def verify_drained(self):
         if not self.drained: raise RecoveryRequired('writer drain not completed')
         try:
             self._guard()
             self._guards()
+            self._recheck_config_successors()
             if not self._retired(): raise RecoveryRequired('writer controllers or pods not retired')
             scope = copy.deepcopy(self.admission['session_scope'])
             receipt = self.probe(scope)
@@ -341,8 +488,106 @@ class WriterCut:
                 raise RecoveryRequired('writer sessions remain or observation invalid')
             self._guard()
             self._guards()
+            self._recheck_config_successors()
             if not self._retired(): raise RecoveryRequired('writer changed during observation')
             return copy.deepcopy(receipt)
+        except BaseException:
+            self._uncertain()
+
+    def current_cut_proof(self):
+        """Return private current specs plus journal-bound proof for image admission."""
+        try:
+            if (self.config_snapshot is not None and
+                    self.config_snapshot['services'] != self.config_snapshot['intent']['backend_config_deployments']['services']):
+                raise RecoveryRequired('config successor plan is incomplete')
+            session = self.verify_drained()
+            writers = []
+            for original in self.admission['controllers']:
+                name, kind = original['metadata']['name'], original['kind']
+                drain_step = 'writer-drain-' + kind.lower() + '-' + name
+                drain = self.journal.state['steps'][drain_step]
+                successor = self.successors.get(name) if kind == 'Deployment' else None
+                if successor:
+                    service = name.removeprefix('voice-')
+                    step = 'writer-cut-config-successor-' + service
+                    accepted = self.journal.state['steps'][step]
+                    if accepted.get('status') != 'done':
+                        raise RecoveryRequired('config successor not complete')
+                    spec = successor['target_spec']
+                    receipt = successor['receipt']
+                    successor_ref = {'step': step, 'nonce': accepted['nonce'],
+                                     'receipt_sha256': digest(accepted['receipt'])}
+                else:
+                    spec = drain['details']['target_spec']
+                    receipt = drain['receipt']
+                    successor_ref = None
+                writers.append({'kind': kind, 'name': name, 'uid': receipt['uid'],
+                                'generation': receipt['generation'], 'spec': copy.deepcopy(spec),
+                                'drain_step': drain_step, 'drain_nonce': drain['nonce'],
+                                'drain_receipt_sha256': digest(drain['receipt']), 'successor': successor_ref})
+            self._guard()
+            self._recheck_config_successors()
+            return {'operation_id': self.fence.context['operation_id'], 'namespace_uid': self.namespace_uid,
+                    'invocation_nonce': self.invocation, 'writers': writers, 'session': session}
+        except BaseException:
+            self._uncertain()
+
+    def accept_config_successor(self, config_journal, service):
+        """Bind the next completed fixed producer effect to the original cut."""
+        try:
+            if not self.drained or self.config_journal is not config_journal or self.config_snapshot is None:
+                raise RecoveryRequired('bound config plan required')
+            self._guard()
+            self._guards()
+            self._recheck_config_successors()
+            if (type(config_journal) is not media_operation_journal.Journal or config_journal is self.journal or
+                    config_journal.poisoned or config_journal.dirfd is None or config_journal.lockfd is None or
+                    config_journal.intent != config_journal.state.get('intent')):
+                raise RecoveryRequired('open separate config journal required')
+            intent = config_journal.intent
+            plan = intent.get('backend_config_deployments')
+            if (intent.get('resource_context') != self.fence.context or intent.get('namespace_uid') != self.namespace_uid or
+                    not isinstance(plan, dict) or plan.get('source_sha') != self.fence.context['commit'] or
+                    plan.get('cut_invocation') != self.invocation or not isinstance(plan.get('services'), list) or
+                    not plan['services'] or len(plan['services']) != len(set(plan['services'])) or
+                    set(plan['services']) - {'user', 'notification', 'realtime'}):
+                raise RecoveryRequired('config source or cut identity changed')
+            selected = {o['metadata']['name']: o for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
+            if any('voice-' + s not in selected for s in plan['services']):
+                raise RecoveryRequired('config plan includes nonwriter')
+            previous = [] if self.config_snapshot is None else self.config_snapshot['services']
+            if len(previous) >= len(plan['services']) or service != plan['services'][len(previous)]:
+                raise RecoveryRequired('config successor is skipped or replayed')
+            services = previous + [service]
+            row, _ = self.fence.ledger.read()
+            if not self._owned(row) or not isinstance(row.get('backend_config_effects'), dict):
+                raise RecoveryRequired('config ledger unavailable')
+            config_effects = copy.deepcopy(row['backend_config_effects'])
+            expected_steps = {'backend-config-deployment-voice-' + s for s in services}
+            if ({name for name in config_effects if name.startswith('backend-config-deployment-')} != expected_steps or
+                    {name for name in config_journal.state['steps'] if name.startswith('backend-config-deployment-')} != expected_steps or
+                    any(config_effects[name].get('status') != 'done' or
+                        config_journal.state['steps'][name].get('status') != 'done' for name in expected_steps)):
+                raise RecoveryRequired('config deployment set incomplete')
+            snapshot = {'intent': copy.deepcopy(intent),
+                        'steps': {k: copy.deepcopy(config_journal.state['steps'][k]) for k in expected_steps},
+                        'effects': {k: copy.deepcopy(config_effects[k]) for k in expected_steps}, 'services': services}
+            successors = self._validate_config_snapshot(config_journal, snapshot, selected)
+            self._guard()
+            step_name = 'writer-cut-config-successor-' + service
+            record = self._reserve(step_name, snapshot)
+            self.config_journal, self.config_snapshot, self.successors = config_journal, snapshot, successors
+            probe = self.verify_drained()
+            output = {'invocation': {'nonce': self.invocation, 'operation_id': self.fence.context['operation_id']},
+                      'successor': {'service': service, 'uid': successors['voice-' + service]['receipt']['uid'],
+                          'generation': successors['voice-' + service]['receipt']['generation'],
+                          'spec_sha256': successors['voice-' + service]['receipt']['spec_sha256'],
+                          'config_step': 'backend-config-deployment-voice-' + service,
+                          'nonce': successors['voice-' + service]['ledger_record']['nonce'],
+                          'receipt_sha256': successors['voice-' + service]['ledger_record']['receipt_sha256']},
+                      'probe': probe}
+            self._complete(step_name, record, output)
+            return copy.deepcopy(output)
         except BaseException:
             self._uncertain()
 
@@ -385,6 +630,10 @@ class WriterCut:
                 raise RecoveryRequired('current target admission required')
             self._guard()
             self._guards()
+            self._recheck_config_successors()
+            if (self.config_snapshot is not None and
+                    self.config_snapshot['services'] != self.config_snapshot['intent']['backend_config_deployments']['services']):
+                raise RecoveryRequired('config successor plan is incomplete')
             original = {(x['kind'], x['metadata']['name']): x for x in self.admission['controllers']}
             seen, fresh = set(), []
             for target in targets:
@@ -420,6 +669,7 @@ class WriterCut:
                 effects[step] = {'kind': key[0], 'name': key[1], 'replicas': original[key]['spec']['replicas'],
                                  'nonce': saved['nonce'], 'receipt_sha256': digest(receipt), **receipt}
             self._guard()
+            self._recheck_config_successors()
             self.drained = False
             return {'status': 'replicas-restored', 'count': len(seen), 'effects': effects,
                     'invocation': {'nonce': self.invocation, 'operation_id': self.fence.context['operation_id']}}
