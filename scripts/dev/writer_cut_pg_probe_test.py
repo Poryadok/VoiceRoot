@@ -50,5 +50,40 @@ class ProbeTest(unittest.TestCase):
             receipt = probe.inspect(self.scope,lambda:None)
         self.assertEqual((receipt['active_sessions'],receipt['active_transactions']),(0,1))
 
+    def test_realtime_migration_session_is_separate_from_other_sessions(self):
+        identity = {'database':'realtime_db','database_oid':99,'role':'realtime',
+                    'application_name':'voice-realtime-migrate-'+'a'*32,'pod_ip':'10.1.2.3','pod_uid':'pod-uid'}
+        result = self.result | {'matched_databases':3, 'sessions':1, 'transactions':1,
+            'attributed':[{'pid':42,'backend_start':'2026-10-29T00:01:00+00:00',
+                'database':'realtime_db','role':'realtime','application_name':identity['application_name'],
+                'client_addr':'10.1.2.3'}]}
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:self.scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(result)):
+            receipt = probe.inspect_migration(self.scope,identity,lambda:None)
+        self.assertEqual((receipt['active_sessions'],receipt['active_transactions']),(1,1))
+        self.assertEqual(receipt['attributed_sessions'],result['attributed'])
+
+    def test_migration_rejects_attribution_drift_or_invalid_identity(self):
+        identity = {'database':'realtime_db','database_oid':99,'role':'realtime',
+                    'application_name':'voice-realtime-migrate-'+'a'*32,'pod_ip':'10.1.2.3','pod_uid':'pod-uid'}
+        result = self.result | {'matched_databases':3, 'attributed':[{'pid':42,
+            'backend_start':'2026-10-29T00:01:00+00:00','database':'realtime_db','role':'realtime',
+            'application_name':identity['application_name'],'client_addr':'10.1.2.4'}]}
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:self.scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(result)):
+            with self.assertRaises(probe.ProbeError): probe.inspect_migration(self.scope,identity,lambda:None)
+            with self.assertRaises(probe.ProbeError): probe.inspect_migration(self.scope,identity | {'role':'postgres'},lambda:None)
+
+    def test_auth_and_prestart_count_every_session_and_prepared(self):
+        identity = {'database':'auth_db','database_oid':99,'role':'voice',
+                    'application_name':'voice-au-au-'+'a'*28+'-migrate-auth','pod_ip':None,'pod_uid':None}
+        result = self.result | {'matched_databases':3,'sessions':1,'transactions':1,'prepared':1,'attributed':[]}
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:self.scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(result)) as run:
+            receipt = probe.inspect_migration(self.scope,identity,lambda:None)
+        self.assertEqual((receipt['active_sessions'],receipt['active_transactions']),(1,2))
+        self.assertEqual(receipt['attributed_sessions'],[])
+        self.assertIn("datname = ANY",run.call_args.args[0][-1])
+
 
 if __name__=='__main__': unittest.main()
