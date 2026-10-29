@@ -10,6 +10,7 @@ import cohort_upload_run as run
 
 class RunTest(unittest.TestCase):
     def setUp(self):
+        route=patch('cohort_upload_runner.route_mode',return_value=None);route.start();self.addCleanup(route.stop)
         self.base = fixture.UploadPhaseTest('test_reservation_is_one_shot_and_receipt_bound')
         self.base.setUp(); self.addCleanup(self.base.doCleanups); self.base.install_marker()
         with patch.object(phase, 'ROOT', Path('/fixed')), \

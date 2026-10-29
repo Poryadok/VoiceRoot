@@ -1,6 +1,8 @@
 import copy
 import hashlib
 import json
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -141,6 +143,43 @@ class AffectedTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_completed_space_and_realtime_are_only_allowed_catalog_successors(self):
+        import space_fresh_install_phase as space
+        before={'engine':{'id':'engine'},'server_start':'start','all_databases':{'postgres':1,'space_db':2},
+                'databases':{'postgres':1,'space_db':2},'excluded':{},'properties':{'postgres':{'p':1},'space_db':{'p':2}}}
+        post={'all_databases':{'postgres':1,'space_db':3},'databases':{'postgres':1,'space_db':3},
+              'excluded':{},'properties':{'postgres':{'p':1},'space_db':{'p':3}}}
+        current=copy.deepcopy(post);current['all_databases']['realtime_db']=4
+        current['databases']['realtime_db']=4;current['properties']['realtime_db']={'p':4}
+        binding={'phase':object(),'token':'t','receipt_sha256':'f'*64}
+        proof={'operation_id':'op','source_sha':'a'*40,'namespace_uid':'ns','receipt_sha256':'f'*64,
+               'old_oid':2,'new_oid':3,'catalog':post,'original_catalog_sha256':affected.writer_cut.digest(before)}
+        class Catalog:
+            def verify_receipt(obj,_token):return copy.deepcopy(before)
+        class Cut:
+            def __init__(obj,probe):
+                obj.probe=probe;obj.space_fresh=binding;obj.namespace_uid='ns'
+                obj.fence=SimpleNamespace(context={'operation_id':'op','commit':'a'*40})
+            def current_base_session_scope(obj):return {'engine':before['engine'],'server_start':'start',
+                'databases':['postgres','space_db'],'database_oids':{'postgres':1,'space_db':3}}
+        helper=SimpleNamespace(verify_binding=lambda *_args,**_kwargs:binding)
+        scope={'engine':before['engine'],'server_start':'start','databases':['postgres','realtime_db','space_db'],
+               'database_oids':{'postgres':1,'space_db':3,'realtime_db':4}}
+        with patch.dict(sys.modules,{'writer_cut_space':helper}),patch.object(affected,'FullCatalogPhase',Catalog), \
+             patch.object(affected.writer_cut,'WriterCut',Cut),patch.object(space,'verify_historical',return_value=proof), \
+             patch.object(affected,'_full_catalog',return_value=current):
+            probe=affected.CatalogScopedProbe(Catalog(),'t');cut=Cut(probe)
+            self.assertEqual(affected._verify_catalog(probe,cut,scope),current)
+            with patch.object(affected,'_full_catalog',return_value=post):
+                self.assertEqual(affected.verify_space_catalog(probe,cut),post)
+                post['all_databases']['foreign_db']=9
+                with self.assertRaises(affected.AffectedError):affected.verify_space_catalog(probe,cut)
+                del post['all_databases']['foreign_db']
+            current['properties']['postgres']={'p':'changed'}
+            with self.assertRaises(affected.AffectedError):affected._verify_catalog(probe,cut,scope)
+            current['properties']['postgres']={'p':1};current['all_databases']['foreign_db']=9
+            with self.assertRaises(affected.AffectedError):affected._verify_catalog(probe,cut,scope)
+
     def test_migration_catalog_uses_only_source_bound_execution(self):
         import writer_cut_migration
         before={'engine':{'id':'engine'},'server_start':'start','all_databases':{'postgres':1},
@@ -155,6 +194,7 @@ class CatalogTests(unittest.TestCase):
                 obj.probe=probe; obj.admission={'session_scope':{'engine':before['engine'],'server_start':'start',
                     'databases':['postgres'],'database_oids':{'postgres':1}}}
                 obj.migration={'kind':'realtime','phase':object(),'root':'.','plan':copy.deepcopy(state)}
+            def current_base_session_scope(obj):return copy.deepcopy(obj.admission['session_scope'])
         with patch.object(affected,'FullCatalogPhase',Catalog),patch.object(affected.writer_cut,'WriterCut',Cut), \
              patch.object(affected,'_full_catalog',return_value=current), \
              patch.object(writer_cut_migration,'normalized',return_value=(None,state)):
