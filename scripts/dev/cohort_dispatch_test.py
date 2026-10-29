@@ -1,4 +1,5 @@
 import unittest
+import json
 from pathlib import Path
 from unittest.mock import patch
 import cohort_upload_phase_test as fixture
@@ -78,6 +79,26 @@ class DispatchTest(unittest.TestCase):
         with self.assertRaises(dispatch.DispatchError):
             dispatch.submit(self.phase, self.plan, lambda: None, lambda sha: False, self.transport)
         self.assertEqual(self.calls, [])
+
+    def test_false_drain_refused_without_submission(self):
+        with self.assertRaises(dispatch.DispatchError):
+            dispatch.submit(self.phase, self.plan, lambda: False, lambda sha: True, self.transport)
+        self.assertEqual(self.calls, [])
+
+    def test_documented_details_response(self):
+        def transport(command, payload):
+            self.assertIs(json.loads(payload)['return_run_details'], True)
+            return json.dumps({'workflow_run_id':123,
+                'run_url':'https://api.github.com/repos/Poryadok/VoiceRoot/actions/runs/123',
+                'html_url':'https://github.com/Poryadok/VoiceRoot/actions/runs/123'}).encode()
+        result = dispatch.submit(self.phase, self.plan, lambda: None, lambda sha: True, transport)
+        self.assertEqual(result['run_id_hint'], '123')
+
+    def test_bad_response_is_uncertain(self):
+        with self.assertRaises(dispatch.DispatchError):
+            dispatch.submit(self.phase, self.plan, lambda: None, lambda sha: True,
+                            lambda command, payload: b'{"workflow_run_id":true}')
+        self.assertEqual(self.base.base.base.ledger.row['status'], 'uncertain')
 
 
 if __name__ == '__main__': unittest.main()

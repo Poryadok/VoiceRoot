@@ -48,6 +48,14 @@ on:
       - scripts/dev/cohort_upload_runner_test.py
       - scripts/dev/cohort_dispatch.py
       - scripts/dev/cohort_dispatch_test.py
+      - scripts/dev/cohort_readback.py
+      - scripts/dev/cohort_readback_test.py
+      - scripts/dev/cohort_restore_journal.py
+      - scripts/dev/cohort_restore_journal_test.py
+      - scripts/dev/writer_cut.py
+      - scripts/dev/writer_cut_test.py
+      - scripts/dev/writer_cut_successor_test.py
+      - scripts/dev/backend_config_transition*.py
       - scripts/dev/full_cohort_image_apply.py
       - scripts/dev/full_cohort_image_apply_test.py
       - scripts/dev/full_cohort_image_apply_composition_test.py
@@ -125,6 +133,15 @@ jobs:
           python -B scripts/dev/cohort_upload_run_test.py
           python -B scripts/dev/cohort_upload_runner_test.py
           python -B scripts/dev/cohort_dispatch_test.py
+          python -B scripts/dev/cohort_readback_test.py
+          python -B scripts/dev/cohort_restore_journal_test.py
+          python -B scripts/dev/writer_cut_test.py
+          python -B scripts/dev/writer_cut_successor_test.py
+          python -B scripts/dev/backend_config_transition_test.py
+          python -B scripts/dev/backend_config_transition_probe_test.py
+          python -B scripts/dev/backend_config_transition_observation_test.py
+          python -B scripts/dev/backend_config_transition_deployment_test.py
+          python -B scripts/dev/backend_config_transition_composition_test.py
           python -B scripts/dev/full_cohort_image_apply_test.py
           python -B scripts/dev/full_cohort_image_apply_composition_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
