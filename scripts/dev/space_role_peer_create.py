@@ -429,7 +429,8 @@ def inspect_existing(phase,token):
             for key in (('current.pem','next.pem') if name=='voice-role-principal-signing' else ('tls.key',)):
                 keys.append(hashlib.sha256(role_material.crypto._openssl(['pkey','-in','{0}','-pubout'],[values[key]])).digest())
         if len(keys)!=len(set(keys)) or preflight.verify_current(phase.preflight,token)!=initial: raise ValueError()
-        phase._guard()
+        phase._guard(); phase._local()
+        if phase.record is not None or phase.pending: raise ValueError()
         return {'schema':'voice-dev-peer-existing-v1','profile':'role','operation_id':phase.fence.context['operation_id'],
                 'source_sha':phase.fence.context['commit'],'namespace_uid':phase.namespace_uid,
                 'preflight_sha256':writer_cut.digest(initial),'ca':copy.deepcopy(initial['ca']),

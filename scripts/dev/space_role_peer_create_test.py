@@ -155,7 +155,7 @@ class RoleCreateTest(unittest.TestCase):
     def test_inspection_is_read_only_and_rejects_snapshot_drift(self):
         phase=create.Session.__new__(create.Session); phase.token='token'; phase.record=None; phase.pending=False
         phase.preflight=SimpleNamespace(); phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'
-        phase._guard=mock.Mock(); tls='voice-role-media-client-tls'; signer='voice-role-principal-signing'
+        phase._guard=mock.Mock(); phase._local=mock.Mock(); tls='voice-role-media-client-tls'; signer='voice-role-principal-signing'
         initial={'profile':'role','ca':{'der_sha256':hashlib.sha256(b'der').hexdigest()},
                  'creator_secrets':{tls:{'state':'present','uid':'uid','resourceVersion':'1','keys':['tls.crt','tls.key']},signer:{'state':'absent'}}}
         obj=desired(); obj['metadata'].update(uid='uid',resourceVersion='1')
@@ -168,6 +168,14 @@ class RoleCreateTest(unittest.TestCase):
             self.assertEqual(result['schema'],'voice-dev-peer-existing-v1'); self.assertEqual(result['missing'],[signer]); self.assertEqual(set(result['present']),{tls}); write.assert_not_called()
         changed=copy.deepcopy(initial); changed['creator_secrets'][signer]={'state':'present','uid':'other','resourceVersion':'2'}
         with mock.patch.object(create.preflight,'verify_current',side_effect=[initial,changed]), \
+             mock.patch.object(create.preflight.public,'_value',return_value=b'ca'), mock.patch.object(create.preflight.crypto,'der',return_value=b'der'), \
+             mock.patch.object(create,'_get',return_value=obj), mock.patch.object(create,'_values',return_value={'tls.key':b'key'}), \
+             mock.patch.object(create.role_material,'qualify',return_value=None), mock.patch.object(create.role_material.crypto,'_openssl',return_value=b'pub'):
+            with self.assertRaises(create.CreateError):create.inspect_existing(phase,'token')
+        def mutate_on_final_guard():
+            if phase._guard.call_count>=2:phase.record={'status':'unexpected'}
+        phase._guard=mock.Mock(side_effect=mutate_on_final_guard)
+        with mock.patch.object(create.preflight,'verify_current',side_effect=[initial,initial]), \
              mock.patch.object(create.preflight.public,'_value',return_value=b'ca'), mock.patch.object(create.preflight.crypto,'der',return_value=b'der'), \
              mock.patch.object(create,'_get',return_value=obj), mock.patch.object(create,'_values',return_value={'tls.key':b'key'}), \
              mock.patch.object(create.role_material,'qualify',return_value=None), mock.patch.object(create.role_material.crypto,'_openssl',return_value=b'pub'):
