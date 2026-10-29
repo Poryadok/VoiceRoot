@@ -76,6 +76,8 @@ on:
       - scripts/dev/realtime_db_provision_journal_test.py
       - scripts/dev/realtime_p3_adoption.py
       - scripts/dev/realtime_p3_adoption_test.py
+      - scripts/dev/realtime_p3_public_inputs.py
+      - scripts/dev/realtime_p3_public_inputs_test.py
       - scripts/dev/realtime_p3_create_only*.py
       - scripts/dev/realtime_p3_missing_issuer*.py
       - scripts/dev/realtime_p3_root_*.py
@@ -159,6 +161,7 @@ jobs:
           python -B scripts/dev/realtime_db_provision_test.py
           python -B scripts/dev/realtime_db_provision_journal_test.py
           python -B scripts/dev/realtime_p3_adoption_test.py
+          python -B scripts/dev/realtime_p3_public_inputs_test.py
           python -B scripts/dev/story_media_backup_cohort_finalize_test.py
       - name: Verify P3 operator and root handoff fixtures
         run: |
