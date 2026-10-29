@@ -197,7 +197,7 @@ class ResponseTests(unittest.TestCase):
                 return {'deployment':deployment,'replicasets':{'items':[rs]},'pods':{'items':[pod]},
                         'service':service,'endpointslices':{'items':[slice_]}}[args[1]]
         ledger_row = {'status':'active','full_cohort_invocation':{'nonce':'nonce','operation_id':'op'}}
-        image = SimpleNamespace(_guard=lambda:None, _valid_pod=lambda *a:True, _accounts=lambda:None,
+        image = SimpleNamespace(verify_activation_lineage=lambda:None, _valid_pod=lambda *a:True, _accounts=lambda:None,
             _records=lambda row:None, _target=lambda name:target['spec'], started=True, invocation='nonce',
             journal=SimpleNamespace(state={'steps':{'full-cohort-image-voice-chat':
                 {'status':'done','receipt':{'uid':'deployment','spec':target['spec'],'resourceVersion':'7'}}}}),

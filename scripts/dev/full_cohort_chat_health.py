@@ -201,7 +201,7 @@ def _protected_listener(pod_name, material):
 def _workloads(client, image_phase, cut, package):
     """Resolve every ready Chat Pod through the actual resumed Deployment."""
     import full_cohort_schema_metadata as common
-    common._fence(cut._guard); common._fence(image_phase._guard)
+    common._fence(cut._guard); _authority_call(image_phase.verify_activation_lineage)
     row, _ = image_phase.fence.ledger.read()
     if (not image_phase.started or not image_phase.fence.owned(row) or row.get('status') != 'active' or
             row.get('full_cohort_invocation') != {'nonce':image_phase.invocation,
@@ -290,7 +290,7 @@ def _workloads(client, image_phase, cut, package):
     if set(targets) != {p['uid'] for p in result} or any(
             targets[p['uid']] != {'name':p['name'], 'addresses':[p['ip']]} for p in result):
         raise HealthError('Chat endpoint target changed')
-    common._fence(cut._guard); common._fence(image_phase._guard); _authority_call(image_phase._accounts)
+    common._fence(cut._guard); _authority_call(image_phase.verify_activation_lineage); _authority_call(image_phase._accounts)
     return {'controller_uid':target['uid'], 'generation':target['generation'],
             'spec_sha256':_digest(target['spec']), 'pods':sorted(result, key=lambda item:item['name']),
             'service':{'uid':sm['uid'], 'resourceVersion':sm['resourceVersion'], 'cluster_ip':spec['clusterIP']},
@@ -359,7 +359,7 @@ class ChatHealthPhase:
                     item.namespace_uid != self.namespace_uid or item.fence.ledger.client is not item.client):
                 raise HealthError('Chat health fence differs')
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
-        cut._guard(); self.image_phase._guard(); self.package_phase._guard()
+        cut._guard(); _authority_call(self.image_phase.verify_activation_lineage); self.package_phase._guard()
         row, rev = self.fence.ledger.read()
         for item in (cut, self.image_phase, self.package_phase):
             if item.fence.ledger.read() != (row, rev): raise HealthError('Chat health ledger differs')
