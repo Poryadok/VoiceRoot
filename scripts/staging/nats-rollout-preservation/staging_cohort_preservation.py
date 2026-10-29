@@ -1470,4 +1470,24 @@ def validate_historical_capture(operation):
         if (digest(space._available_record(operation,plan,tool))!=fixed['space_tool_available_sha256']
             or digest(inspector.validate_historical_inspection(operation))!=fixed['space_inspection_sha256']):
             raise Blocked('cohort_space_proof_changed')
+    # The operation's authenticated migration target decides whether native
+    # completion is mandatory. Missing receipt/selected flags cannot turn a
+    # completed Space migration into an ordinary historical predecessor.
+    import migrations
+    migration_plan=migrations.validate_plan(rollout.get('migrations'),rollout['target']['mode'])
+    if digest(migration_plan)!=rollout['target'].get('migration_sha256'):
+        raise Blocked('cohort_history_migrations_changed')
+    selected=any(row['database']=='space' for row in migration_plan)
+    tool_record=_read(root/'space-tool.json')
+    if selected:
+        if tool_record.get('selected') is not True or fixed['space_inspection_sha256'] is None:
+            raise Blocked('cohort_history_native_completion_required')
+        import staging_space_native as native
+        # Internal validator consumes the already checked PASS/source/TT chain;
+        # its public wrapper calls this loader and would recurse here.
+        native._validate_historical_live_completed(operation,receipt,rollout,binding)
+    elif (tool_record.get('selected') is not False or (root/'space-live').exists()
+          or 'native_space_migration' in rollout
+          or any(event.get('kind')=='native_space_migration_complete' for event in rollout.get('events',[]))):
+        raise Blocked('cohort_history_unexpected_native_completion')
     return copy.deepcopy(receipt)

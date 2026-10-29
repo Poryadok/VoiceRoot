@@ -16,6 +16,85 @@ import staging_cohort_preservation as preservation
 
 
 class CutEffectTests(unittest.TestCase):
+    def test_historical_space_migration_cannot_omit_native_completion(self):
+        """Actual historical loader; synthetic protected predecessor records."""
+        import hashlib
+        import migrations
+        with tempfile.TemporaryDirectory(dir='/root') as directory, patch.object(guard,'ROOT',Path(directory)):
+            root=Path(directory);operation='a'*12;c=context()
+            base=root/'installed'/'cohort-preservation'/operation
+            parent=root/'installed'/'prerequisites'/operation
+            source_dir=root/'installed'/'source-authority'
+            rollout_dir=root/('rollout-'+operation)
+            for path in (base,parent,source_dir,rollout_dir):path.mkdir(parents=True,mode=0o700)
+            helper={'nats-rollout-preservation/resource_claim.py':'b'*64}
+            binding={'schema':'voice-staging-resource-fence-v1','context':c,'operation':operation,
+                     'helper_sha256':preservation.digest(helper),'target_sha256':'c'*64}
+            approved={'source_files':{}};execution={};prepared={'fixture':'prepared'}
+            source={'schema':'voice-staging-source-capture-v1','operation':operation,'context':c,
+                    'helper_sha256':binding['helper_sha256'],'approved_sha256':preservation.digest(approved),
+                    'execution_sha256':preservation.digest(execution)}
+            plan={key:'c'*64 for key in preservation.PLAN_FIELDS}
+            plan.update(schema=preservation.SCHEMA,operation=operation,context=c,helper_sha256=binding['helper_sha256'],
+                actual_before={},namespace_uid='fixture-namespace',prerequisite_inputs_sha256=preservation.digest(prepared),
+                approved_sha256=preservation.digest(approved),execution_sha256=preservation.digest(execution),
+                source_capture_sha256=preservation.digest(source),source_inventory_sha256=preservation.digest(approved['source_files']))
+            for key,name in (('precut_capture_sha256','precut.json'),('stores_sha256','stores.json'),('preflight_sha256','preflight.json')):
+                preservation._write(base/name,{});plan[key]=preservation.digest({})
+            tool={'schema':'voice-staging-cohort-space-tool-v1','operation':operation,
+                  'source_capture_sha256':plan['source_capture_sha256'],'approved_sha256':plan['approved_sha256'],
+                  'selected':False,'authenticated_publication':None}
+            preservation._write(base/'space-tool.json',tool);plan['space_tool_sha256']=preservation.digest(tool)
+            initial={**binding,'target_sha256':preservation.digest(plan)}
+            receipt={'schema':'voice-staging-cohort-preservation-receipt-v1','operation':operation,
+                'context':c,'helper_sha256':binding['helper_sha256'],'plan_sha256':preservation.digest(plan),
+                'prerequisite_inputs_sha256':preservation.digest(prepared),'actual_before':{},
+                'namespace_uid':plan['namespace_uid'],'resource_fence':initial}
+            records={'paused_sha256':'paused.json','archive_sha256':'archive-record.json','native_cut_sha256':'native-cut.json',
+                'local_restore_sha256':'local-restore.json','offnode_restore_sha256':'offnode-restore.json',
+                'custody_sha256':'offnode-custody.json','decrypted_restore_sha256':'decrypted-restore.json',
+                'cipher_binding_sha256':'cipher-binding.json'}
+            for field,name in records.items():
+                value={}
+                if name in ('local-restore.json','offnode-restore.json'):
+                    phase=name.split('-')[0];nonce=('1' if phase=='local' else '2')*32
+                    folder=base/'restore'/nonce;folder.mkdir(parents=True,mode=0o700)
+                    preservation._write(folder/'resources.json',{})
+                    value={'nonce':nonce,'status':'COMPLETE','phase':phase,'plan_sha256':preservation.digest(plan),
+                           'proof':{'cleanup':'verified'},'resources_sha256':preservation.digest({})}
+                    preservation._write(folder/'receipt.json',value)
+                preservation._write(base/name,value);receipt[field]=preservation.digest(value)
+            receipt.update(auxiliary_successor_sha256=None,space_tool_available_sha256=None,space_inspection_sha256=None)
+            preservation._write(base/'checkpoint.json',{'status':'QUALIFIED','plan':plan,'initial_resource_fence':initial})
+            preservation._write(base/'qualified.json',receipt);(base/'effects').mkdir(mode=0o700)
+            successor={'plan':{'schema':'voice-staging-prerequisites-plan-v2','preservation_sha256':preservation.digest(receipt)}}
+            captured={'plan_sha256':preservation.digest(successor['plan'])}
+            for name,value in (('prepared.json',prepared),('checkpoint.json',successor),('capture.json',captured),
+                               ('approved.json',approved),('execution.json',execution)):
+                preservation._write(parent/name,value)
+            preservation._write(source_dir/(operation+'.json'),source)
+            target={'tag':c['commit'],'images':c['images'],'mode':'images-only','migration_sha256':preservation.digest([]),
+                    'cohort_preservation_sha256':preservation.digest(receipt),'prerequisites_sha256':preservation.digest(captured)}
+            rollout={'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED','operation':operation,
+                     'target':target,'prerequisites':captured,'code_capture':helper,'migrations':[]}
+            rollout['resource_fence']={**binding,'target_sha256':preservation.digest(target)}
+            preservation._write(rollout_dir/'checkpoint.json',rollout)
+            self.assertEqual(preservation.validate_historical_capture(operation),receipt)
+            raw='SELECT 1;'
+            rollout['migrations']=[{'database':'space','image':migrations.IMAGE,'secret_key':'SPACE_DATABASE_URL',
+                'files':{'000001_fixture.up.sql':raw},'hashes':{'000001_fixture.up.sql':hashlib.sha256(raw.encode()).hexdigest()}}]
+            target.update(mode='full',migration_sha256=preservation.digest(rollout['migrations']))
+            rollout['resource_fence']['target_sha256']=preservation.digest(target)
+            preservation.save(rollout_dir/'checkpoint.json',rollout)
+            with self.assertRaisesRegex(preservation.Blocked,'cohort_history_native_completion_required'):
+                preservation.validate_historical_capture(operation)
+            rollout['migrations']=[];target.update(mode='images-only',migration_sha256=preservation.digest([]))
+            rollout['resource_fence']['target_sha256']=preservation.digest(target)
+            rollout['native_space_migration']={'status':'COMPLETE'}
+            preservation.save(rollout_dir/'checkpoint.json',rollout)
+            with self.assertRaisesRegex(preservation.Blocked,'cohort_history_unexpected_native_completion'):
+                preservation.validate_historical_capture(operation)
+
     def test_large_binary_transport_refuses_tamper_and_lost_reply_replay(self):
         import hashlib
         import subprocess
