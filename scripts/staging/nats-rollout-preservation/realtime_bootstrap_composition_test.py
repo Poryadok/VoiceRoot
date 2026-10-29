@@ -13,6 +13,7 @@ import uuid
 from unittest import mock
 
 import commands
+import bridge_root
 import guard
 import realtime_bootstrap as bootstrap
 import resource_claim
@@ -22,7 +23,7 @@ import stage_runtime
 
 class CompositionTest(unittest.TestCase):
     def test_real_session_journal_pg_and_lost_secret_reply(self):
-        for lost in (False, True):
+        for lost in (None, 'role', 'secret', 'source'):
             with self.subTest(lost=lost): self._exercise(lost)
 
     def _exercise(self, lost):
@@ -86,10 +87,18 @@ class CompositionTest(unittest.TestCase):
                     self.assertEqual(operations[2]['value'], secret['data'])
                     secret['data']['REALTIME_DATABASE_URL'] = operations[3]['value']
                     secret['metadata']['resourceVersion'] = '2'
-                    if lost: raise OSError('synthetic reply loss after commit')
+                    if lost == 'secret': raise OSError('synthetic reply loss after commit')
                     return b'secret/voice-app-secrets\n'
                 script = args[-1].replace('-h voice-postgres ', '-h 127.0.0.1 ')
-                return pg(script, body).stdout
+                result = pg(script, body).stdout
+                if lost == 'role' and b'CREATE ROLE realtime' in body:
+                    calls.append('role'); raise OSError('synthetic SQL reply loss after commit')
+                if lost == 'source' and b'CREATE ROLE realtime' in body:
+                    calls.append('role')
+                    path = installed / 'source-authority' / (operation + '.json')
+                    stale = json.loads(path.read_text()); stale['approved_sha256'] = '0' * 64
+                    bootstrap.save(path, stale)
+                return result
             approved = {'schema': 'voice-source-authority-v1', 'verified': True, 'source_sha': context['commit'],
                         'source_files': {'scripts/staging/nats-rollout-preservation/realtime_bootstrap.py': helper}}
             execution = {'head_sha': context['commit']}
@@ -98,14 +107,21 @@ class CompositionTest(unittest.TestCase):
             with mock.patch.object(guard, 'ROOT', root), mock.patch('grp.getgrnam', return_value=SimpleNamespace(gr_gid=0)), \
                  mock.patch.object(stage_runtime, 'Kube', return_value=Kube()), \
                  mock.patch.object(bootstrap, 'engine_snapshot', return_value=('ns', pg_identity)), \
-                 mock.patch.object(bootstrap, '_source_contract'), mock.patch.object(commands, 'capture', side_effect=capture):
+                 mock.patch.object(bootstrap, '_source_contract'), mock.patch.object(commands, 'capture', side_effect=capture), \
+                 mock.patch.object(bridge_root, 'INSTALLED', installed):
                 session.admit(start=True)
                 with resource_claim.command_scope(session.check):
+                    bridge_root.record_source_authority(session, approved, execution)
                     if lost:
                         with self.assertRaises(bootstrap.Blocked): bootstrap.run_prepare(actions, request, approved, execution, source, stage)
                         checkpoint = json.loads((installed / 'realtime-bootstrap' / operation / 'checkpoint.json').read_text())
-                        self.assertEqual(checkpoint['steps']['secret']['status'], 'PENDING')
-                        self.assertEqual(calls, ['patch'])
+                        step = 'role' if lost in ('role', 'source') else 'secret'
+                        self.assertEqual(checkpoint['steps'][step]['status'], 'PENDING')
+                        self.assertEqual(calls, ['role'] if lost in ('role', 'source') else ['patch'])
+                        if lost in ('role', 'source'):
+                            catalog = json.loads(pg(bootstrap._PSQL, bootstrap._CATALOG).stdout)
+                            self.assertTrue(bootstrap.valid_role(catalog['role']))
+                            self.assertIsNone(catalog['database'])
                         session.uncertain('synthetic lost reply')
                         self.assertEqual(journal.read()['status'], 'uncertain')
                     else:
@@ -122,6 +138,14 @@ class CompositionTest(unittest.TestCase):
                         self.assertEqual(bootstrap.validate_historical_checkpoint(checkpoint, passed)[1], receipt)
                         changed = copy.deepcopy(checkpoint); changed['receipt']['role_oid'] += 1
                         with self.assertRaises(bootstrap.Blocked): bootstrap.validate_historical_checkpoint(changed, passed)
+                        changed = copy.deepcopy(checkpoint)
+                        changed['steps']['secret']['readback'] = {'uid': 'bogus'}
+                        changed['receipt']['secret'] = {'uid': 'bogus'}
+                        changed['receipt']['steps_sha256'] = bootstrap.digest(changed['steps'])
+                        altered = copy.deepcopy(passed)
+                        altered['target']['realtime_bootstrap_sha256'] = bootstrap.digest(changed['receipt'])
+                        altered['resource_fence']['target_sha256'] = bootstrap.digest(altered['target'])
+                        with self.assertRaises(bootstrap.Blocked): bootstrap.validate_historical_checkpoint(changed, altered)
                         secret['data']['keep'] = 'Y2hhbmdlZA=='
                         with self.assertRaises(bootstrap.Blocked): bootstrap.load_completed(session, rollout_target=target)
 

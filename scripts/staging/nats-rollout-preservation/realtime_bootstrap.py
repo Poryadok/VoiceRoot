@@ -391,17 +391,44 @@ def _source_contract(source_root, approved):
         return [e for c in containers for e in c.get('env', []) if e.get('name') == 'DATABASE_URL']
     expected = {'name': 'DATABASE_URL', 'valueFrom': {'secretKeyRef': {'name': 'voice-app-secrets', 'key': 'REALTIME_DATABASE_URL'}}}
     if (deployment.get('kind') != 'Deployment' or deployment.get('metadata', {}).get('name') != 'voice-realtime'
-        or job.get('kind') != 'Job' or refs(deployment) != [expected] or refs(job) != [expected]):
+        or job.get('kind') != 'Job' or job.get('metadata', {}).get('name') != 'voice-migrate-realtime-db'
+        or refs(deployment) != [expected] or refs(job) != [expected]):
         raise Blocked('realtime_bootstrap_source_invalid')
 
 
 def _check_live(session, kube, plan, stage_view):
+    import guard
+    import resource_claim
     session.check()
+    path = guard.ROOT / 'installed' / 'realtime-bootstrap' / session.operation / 'authority.json'
+    resource_claim.trusted_json(path)
+    authority = json.loads(_read_private(path))
+    if (type(authority) is not dict or set(authority) != {'approved', 'execution'}
+        or digest(authority['approved']) != plan['source_authority_sha256']
+        or digest(authority['approved']['source_files']) != plan['source_files_sha256']
+        or digest(authority['execution']) != plan['execution_sha256']):
+        raise Blocked('realtime_bootstrap_source_authority_changed')
+    _verify_source_capture(session, authority['approved'], authority['execution'])
+    _source_contract(guard.ROOT / 'installed' / 'sources' / session.operation, authority['approved'])
     namespace, pg = engine_snapshot(kube)
     pg['system_identifier'] = _system_identifier()
     if namespace != plan['namespace_uid'] or pg != plan['postgres']:
         raise Blocked('realtime_bootstrap_engine_changed')
     _check_stage(kube, stage_view)
+    session.check()
+
+
+def _verify_source_capture(session, approved, execution):
+    import guard
+    import resource_claim
+    session.check()
+    path = guard.ROOT / 'installed' / 'source-authority' / (session.operation + '.json')
+    captured = resource_claim.trusted_json(path)
+    expected = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+                'context': session.context, 'helper_sha256': session.helper,
+                'approved_sha256': digest(approved), 'execution_sha256': digest(execution)}
+    if captured != expected:
+        raise Blocked('realtime_bootstrap_source_authority_changed')
     session.check()
 
 
@@ -490,6 +517,7 @@ def run_prepare(actions, request, approved, execution, source_root, stage):
             or execution.get('head_sha') != approved['source_sha']):
             raise Blocked('realtime_bootstrap_authority_invalid')
         session.check()
+        _verify_source_capture(session, approved, execution)
         helper_key = 'nats-rollout-preservation/realtime_bootstrap.py'
         helper_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         if (digest(actions.binding) != session.helper or actions.binding.get(helper_key) != helper_sha
@@ -585,6 +613,7 @@ def _records(state, session):
         or any(type(steps[k]) is not dict or set(steps[k]) != fields or steps[k]['status'] != 'DONE' for k in steps)):
         raise Blocked('realtime_bootstrap_completion_invalid')
     role = steps['role']['readback']; final = steps['database']['readback']
+    secret = steps['secret']['readback']
     if (not valid_role(role.get('role')) or role.get('database') is not None
         or final.get('role') != role['role'] or type(final.get('database')) is not dict
         or set(final['database']) != {'oid', 'owner_oid'} or type(final['database']['oid']) is not int
@@ -593,7 +622,11 @@ def _records(state, session):
         or steps['database']['before_sha256'] != digest(role) or steps['secret']['before_sha256'] != digest(plan['secret'])
         or steps['role']['request_sha256'] != digest({'kind': 'role', 'credential_sha256': plan['credential_sha256']})
         or steps['database']['request_sha256'] != digest({'kind': 'database', 'owner_oid': role['role']['oid']})
-        or steps['secret']['request_sha256'] != digest({'kind': 'secret', 'plan_sha256': digest(plan)})):
+        or steps['secret']['request_sha256'] != digest({'kind': 'secret', 'plan_sha256': digest(plan)})
+        or type(secret) is not dict or set(secret) != {'uid', 'resourceVersion', 'data_sha256'}
+        or secret.get('uid') != plan['secret']['uid'] or not isinstance(secret.get('resourceVersion'), str)
+        or not secret['resourceVersion'] or secret['resourceVersion'] == plan['secret']['resourceVersion']
+        or not isinstance(secret.get('data_sha256'), str) or not re.fullmatch(r'[a-f0-9]{64}', secret['data_sha256'])):
         raise Blocked('realtime_bootstrap_completion_invalid')
     expected = {'schema': 'voice-staging-realtime-bootstrap-receipt-v1', 'plan_sha256': digest(plan),
                 'steps_sha256': digest(steps), 'role_oid': role['role']['oid'], 'database_oid': final['database']['oid'],
@@ -652,6 +685,7 @@ def _load_completed(session, actual, rollout_target):
         or hashlib.sha256(password).hexdigest() != plan['credential_sha256']
         or _secret_identity(before) != plan['secret']):
         raise Blocked('realtime_bootstrap_custody_changed')
+    _verify_source_capture(session, authority['approved'], authority['execution'])
     kube = Kube(); _check_live(session, kube, plan, view)
     secret = kube.get('secret', 'voice-app-secrets')
     if _verify_secret_after(before, secret, password) != receipt['secret'] or _catalog() != final:

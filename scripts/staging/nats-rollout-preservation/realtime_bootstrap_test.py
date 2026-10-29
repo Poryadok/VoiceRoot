@@ -207,13 +207,26 @@ class CatalogTests(unittest.TestCase):
         approved = {'schema': 'voice-source-authority-v1', 'verified': True, 'source_sha': session.context['commit'],
                     'source_files': {'scripts/staging/nats-rollout-preservation/realtime_bootstrap.py': helper}}
         source = guard.ROOT / 'installed' / 'sources' / session.operation
-        with patch('commands.authority_guard', session.check), patch.object(bootstrap, 'engine_snapshot') as observe:
+        with patch('commands.authority_guard', session.check), patch.object(bootstrap, '_verify_source_capture'), \
+             patch.object(bootstrap, 'engine_snapshot') as observe:
             with self.assertRaises(bootstrap.Blocked):
                 bootstrap.run_prepare(actions, request, approved, {'head_sha': session.context['commit']}, source, None)
             observe.assert_not_called()
         with patch('commands.authority_guard', lambda *args: None), patch.object(bootstrap, '_catalog') as query:
             with self.assertRaises(bootstrap.Blocked): bootstrap.load_completed(session)
             query.assert_not_called()
+
+    def test_source_capture_requires_exact_protected_root_receipt(self):
+        import resource_claim_test as fixtures
+        session, _, _ = fixtures.ResourceTests().fixture(); session.admit(start=True)
+        approved = {'source': 'captured'}; execution = {'run': 7}
+        receipt = {'schema': 'voice-staging-source-capture-v1', 'operation': session.operation,
+                   'context': session.context, 'helper_sha256': session.helper,
+                   'approved_sha256': bootstrap.digest(approved), 'execution_sha256': bootstrap.digest(execution)}
+        with patch('resource_claim.trusted_json', return_value=receipt):
+            bootstrap._verify_source_capture(session, approved, execution)
+            with self.assertRaises(bootstrap.Blocked):
+                bootstrap._verify_source_capture(session, approved, {'run': 8})
 
     def test_runtime_authentication_uses_service_and_private_stdin(self):
         password = b'fixtureCredential_123456789012345678901234'
@@ -245,10 +258,16 @@ class CatalogTests(unittest.TestCase):
         def decode(raw):
             text = raw.decode()
             kind = 'Deployment' if 'kind: Deployment' in text else 'Job'
-            return {'kind': kind, 'metadata': {'name': 'voice-realtime'},
+            return {'kind': kind, 'metadata': {'name': 'voice-realtime' if kind == 'Deployment' else 'voice-migrate-realtime-db'},
                     'spec': {'template': {'spec': {'containers': [{'env': [env]}]}}}}
         with patch('compiler.decode_yaml', side_effect=decode), patch('root_main.public_read', side_effect=lambda path, limit: path.read_bytes()):
             bootstrap._source_contract(root, {'source_files': files})
+            def wrong_job(raw):
+                doc = decode(raw)
+                if doc['kind'] == 'Job': doc['metadata']['name'] = 'unrelated-job'
+                return doc
+            with patch('compiler.decode_yaml', side_effect=wrong_job), self.assertRaises(bootstrap.Blocked):
+                bootstrap._source_contract(root, {'source_files': files})
 
     def test_workload_generation_aba_or_termination_rejected(self):
         deployment = {'metadata': {'uid': 'deployment', 'generation': 4}, 'spec': {'replicas': 1}}
