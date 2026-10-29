@@ -81,7 +81,7 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
   source unit; a manual dispatch cannot supply a PR event, and selecting the PR
   job alone does not qualify a later base or changed unit. Complete the separately
   typed current-source route in [PR #1051](https://github.com/Poryadok/VoiceRoot/pull/1051)
-  using its [source plan](../../.agent/execplans/pr875-current-native-source.md):
+  using its [source plan](https://github.com/Poryadok/VoiceRoot/blob/4ad0408ba4f9c472777855df534e20c933456e92/.agent/execplans/current-release-history-source.md):
   independently review the final source extension and complete participating
   unit, publish the immutable source record and later carrier, then run the real
   full producer/fold and hosted gate on that candidate. Preserve all old records,
