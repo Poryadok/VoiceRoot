@@ -52,13 +52,13 @@ class SourceInventoryTests(unittest.TestCase):
         original=Path(__file__).resolve().parents[2]; folder=tempfile.TemporaryDirectory(); self.addCleanup(folder.cleanup)
         root=Path(folder.name); sha='a'*40
         paths=[p for p in (original/'src/backend').rglob('*.go') if not p.name.endswith('_test.go')]
-        paths += list((original/'src/backend/migrations/space_db').glob('*.sql'))+[original/'src/backend/space/Dockerfile.native-migrate']
+        paths += list((original/'src/backend/migrations/space_db').iterdir())+[original/'src/backend/space/Dockerfile.native-migrate']
         for source in paths:
             dest=root/source.relative_to(original); dest.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(source,dest)
         script=root/'scripts/dev/space_native_tool_identity.py'; script.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(tool.__file__,script)
         files={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                for p in (root/'src/backend').rglob('*.go') if not p.name.endswith('_test.go')}
-        for path in (root/'src/backend/migrations/space_db').glob('*.sql'):
+        for path in (root/'src/backend/migrations/space_db').iterdir():
             files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
         path=root/'src/backend/space/Dockerfile.native-migrate'; files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
         request=root/'.github/ci/full-application-build-request.json'; request.parent.mkdir(parents=True,exist_ok=True)
@@ -78,6 +78,9 @@ class SourceInventoryTests(unittest.TestCase):
                 'publish_candidate':fake_common,'source_authority':fake_auth}),mock.patch.object(sys,'argv',[str(script),'ci-preflight']):
             with self.assertRaises(SystemExit) as result: runpy.run_path(str(script),run_name='__main__')
         self.assertEqual(result.exception.code,0)
+        gate=root/'src/backend/space/internal/nativeinstaller/runner.go'; gate.write_bytes(gate.read_bytes()+b'\n// unreviewed\n')
+        files[gate.relative_to(root).as_posix()]=hashlib.sha256(gate.read_bytes()).hexdigest()
+        with self.assertRaises(tool.ToolIdentityError): tool.source_inventory(root,{'source_sha':sha,'files':files})
 
     def test_tool_job_requires_exact_run_and_both_steps(self):
         source='a'*40
@@ -187,7 +190,7 @@ class SourceInventoryTests(unittest.TestCase):
         root=Path(__file__).resolve().parents[2]
         files={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
                for p in (root/'src/backend').rglob('*.go') if not p.name.endswith('_test.go')}
-        for path in (root/'src/backend/migrations/space_db').glob('*.sql'):
+        for path in (root/'src/backend/migrations/space_db').iterdir():
             files[path.relative_to(root).as_posix()]=hashlib.sha256(path.read_bytes()).hexdigest()
         dockerfile=root/'src/backend/space/Dockerfile.native-migrate'
         files[dockerfile.relative_to(root).as_posix()]=hashlib.sha256(dockerfile.read_bytes()).hexdigest()
@@ -196,12 +199,13 @@ class SourceInventoryTests(unittest.TestCase):
         self.assertEqual(proof['source_sha'],'a'*40)
         self.assertEqual(len(proof['build_source_sha256']),64)
         self.assertEqual(len(proof['sql_inventory_sha256']),64)
-        for fault in ('source','sql','dockerfile','extra_sql'):
+        for fault in ('source','sql','dockerfile','extra_sql','extra_non_sql'):
             wrong=copy.deepcopy(snapshot)
             if fault=='source': wrong['files']['src/backend/space/main.go']='0'*64
             if fault=='sql': wrong['files']['src/backend/migrations/space_db/000001_init.up.sql']='0'*64
             if fault=='dockerfile': wrong['files']['src/backend/space/Dockerfile.native-migrate']='0'*64
             if fault=='extra_sql': wrong['files']['src/backend/migrations/space_db/999999_wrong.up.sql']='0'*64
+            if fault=='extra_non_sql': wrong['files']['src/backend/migrations/space_db/foreign.txt']='0'*64
             with self.subTest(fault=fault),self.assertRaises(tool.ToolIdentityError): tool.source_inventory(root,wrong)
 
 
