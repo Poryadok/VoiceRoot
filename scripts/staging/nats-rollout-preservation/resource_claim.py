@@ -208,7 +208,8 @@ class Session:
                     return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1])
                         or re.fullmatch(r'/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-[a-z0-9-]{1,100}:8222/proxy/jsz\?accounts=true&streams=true&consumers=true&config=true&limit=2048',tail[1]))
                 if len(tail)==5:
-                    return tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
+                    return (tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
+                        or tail==['endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json'])
                 if len(tail) not in (3,4) or tail[-2]!='-o':return False
                 if not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
                 if len(tail)==4 and not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',tail[1]):return False

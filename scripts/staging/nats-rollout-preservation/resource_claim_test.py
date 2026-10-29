@@ -99,6 +99,11 @@ class ResourceTests(unittest.TestCase):
             fixed=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+identity.IDENTITY_ARGS
             session.check(fixed)
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(fixed+['altered'])
+            endpoints=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','endpointslices','-l',
+                       'kubernetes.io/service-name=voice-postgres','-o','json']
+            session.check(endpoints)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(endpoints[:7]+['kubernetes.io/service-name=other']+endpoints[8:])
             with self.assertRaisesRegex(RuntimeError,'advance_required'):
                 session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
