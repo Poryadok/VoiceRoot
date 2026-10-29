@@ -11,9 +11,20 @@ import nats_contract_plan
 import nats_root_plan
 import resource_claim
 import resource_claim_test
+import staging_cohort_preservation
 
 
 class CohortBridgePreflightTest(unittest.TestCase):
+    def test_continuation_refuses_foreign_request_before_prerequisites(self):
+        actions=object.__new__(bridge_root.Actions);actions.tt_session=object()
+        loaded={'request':{'mode':'full','changed_services':['user'],'gis_first_install':False}}
+        with patch.object(staging_cohort_preservation,'load_prepared',return_value=loaded), \
+             patch.object(staging_cohort_preservation,'load_qualified',return_value={'receipt':'actual'}), \
+             patch.object(bridge_root,'record_source_authority') as record:
+            with self.assertRaisesRegex(bridge_root.Blocked,'cohort_preserved_prepare_invalid'):
+                actions._prepare({'mode':'full','changed_services':['other']},cohort_ref={'receipt':'actual'})
+            record.assert_not_called()
+
     def test_actual_session_live_preflight_and_wrong_commit_refusal(self):
         context=resource_claim_test.context();card=resource_claim_test.card(context)
         session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
