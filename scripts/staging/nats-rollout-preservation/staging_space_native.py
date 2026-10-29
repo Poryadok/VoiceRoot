@@ -123,6 +123,14 @@ def _pod_list(session,name):
     return result['items']
 
 
+def _check_delete_response(response,uid):
+    status=(type(response) is dict and response.get('apiVersion')=='v1'
+            and response.get('kind')=='Status' and response.get('status')=='Success')
+    job=(type(response) is dict and response.get('apiVersion')=='batch/v1'
+         and response.get('kind')=='Job' and response.get('metadata',{}).get('uid')==uid)
+    if not (status or job):raise Blocked('space_inspect_delete_invalid')
+
+
 def _cleanup(session,kube,name,uid):
     job=kube.get('job',name);meta=job['metadata']
     if meta.get('uid')!=uid or meta.get('deletionTimestamp'):raise Blocked('space_inspect_job_changed')
@@ -130,7 +138,7 @@ def _cleanup(session,kube,name,uid):
              'preconditions':{'uid':uid,'resourceVersion':meta['resourceVersion']}}
     path,intent,raw=_mutate(session,'space-inspect-delete',owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin'],owner.private._bytes(options))
     response=owner.private._json(raw)
-    if not isinstance(response,dict):raise Blocked('space_inspect_delete_invalid')
+    _check_delete_response(response,uid)
     _done(path,intent,{'uid':uid,'resourceVersion':meta['resourceVersion']})
     deadline=time.monotonic()+60
     while True:

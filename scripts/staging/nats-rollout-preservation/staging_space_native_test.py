@@ -12,6 +12,14 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_delete_response_must_confirm_success_or_same_job(self):
+        native._check_delete_response({'apiVersion':'v1','kind':'Status','status':'Success'},'owned')
+        native._check_delete_response({'apiVersion':'batch/v1','kind':'Job','metadata':{'uid':'owned'}},'owned')
+        for response in ({},{'apiVersion':'v1','kind':'Status','status':'Failure'},
+                         {'apiVersion':'batch/v1','kind':'Job','metadata':{'uid':'foreign'}}):
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_delete_invalid'):
+                native._check_delete_response(response,'owned')
+
     def test_pod_list_requires_complete_versioned_observation(self):
         for value in ({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8','continue':'next'},'items':[]},
                       {'apiVersion':'v1','kind':'PodList','metadata':{},'items':[]}):
