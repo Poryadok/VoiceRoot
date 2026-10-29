@@ -78,7 +78,7 @@ class SupervisorTest(unittest.TestCase):
         with self.assertRaises(supervisor.SupervisorError):
             supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
 
-    def _pre_drain_constructors(self,close_late=False,drift=False):
+    def _pre_drain_constructors(self,close_late=False,drift=False,creator=False):
         import writer_cut_test as cut_fixture
         self.guard_patch.stop()
         source=cut_fixture.workload('Deployment','voice-space','space-uid',1,'source-image')
@@ -128,9 +128,58 @@ class SupervisorTest(unittest.TestCase):
             self.assertFalse(subject.cut.started);self.assertFalse(subject.cut.drained)
             tool_run.assert_called_once_with('token');space_prepare.assert_called_once_with()
             with self.assertRaises(supervisor.SupervisorError):subject.prepare_execution('token','actor')
+            if creator:
+                def late_jdk(*args):
+                    if creator=='late':subject.target_jdk.journal.close()
+                    if creator=='census':subject.census.journal.close()
+                    if creator=='local':subject.creator_config.journal.state['steps']['drift']={}
+                    if creator=='lock':subject.lock['metadata']['uid']='changed'
+                    if creator=='authority':subject._execution_fixed=tuple(list(subject._execution_fixed))
+                    if creator=='refs':subject._execution_refs=tuple(list(subject._execution_refs))
+                with mock.patch.object(supervisor.space_creator_runtime_profile_config.CreatorConfigPhase,'run') as config_run, \
+                     mock.patch.object(supervisor.space_creator_runtime_profile_jdk.TargetJdkPhase,'run') as jdk_run, \
+                     mock.patch.object(supervisor.space_creator_runtime_profile_config,'verify_completed'), \
+                     mock.patch.object(supervisor.space_creator_runtime_profile_jdk,'verify_completed',
+                        side_effect=late_jdk), \
+                     mock.patch.object(supervisor.space_p3_issuer_preflight.IssuerPreflightPhase,'prepare',return_value={'status':'ready'}) as issuer_prepare, \
+                     mock.patch.object(supervisor.space_p3_issuer_preflight.IssuerPreflightPhase,'finish',return_value={'custody':'fixture'}), \
+                     mock.patch.object(supervisor.space_p3_issuer_preflight,'verify_current',return_value={'custody':'fixture'}):
+                    if creator in ('late','census','local','lock','authority','refs'):
+                        with self.assertRaises(supervisor.SupervisorError):subject.prepare_creator_inputs('token')
+                        with self.assertRaises(supervisor.SupervisorError):subject.prepare_creator_inputs('token')
+                        self.assertFalse(subject.cut.started)
+                        return
+                    self.assertEqual(subject.prepare_creator_inputs('token'),{'status':'ready'})
+                    self.assertEqual(len({id(p.journal) for p in (subject.creator_config,subject.target_jdk,subject.issuer_preflight)}),3)
+                    config_run.assert_called_once_with('token');jdk_run.assert_called_once_with('token','actor')
+                    issuer_prepare.assert_called_once_with()
+                    self.assertEqual(subject.finish_creator_inputs('token')['scope'],'creator-inputs-only')
+                    self.assertFalse(subject.cut.started);self.assertFalse(subject.cut.drained)
+                    with self.assertRaises(supervisor.SupervisorError):subject.prepare_creator_inputs('token')
 
     def test_pre_drain_constructors_use_separate_journals_and_never_replay(self):
         self._pre_drain_constructors()
+
+    def test_creator_inputs_are_typed_and_pre_drain(self):
+        self._pre_drain_constructors(creator=True)
+
+    def test_creator_input_late_closed_jdk_fails_and_cannot_replay(self):
+        self._pre_drain_constructors(creator='late')
+
+    def test_creator_input_late_closed_census_fails(self):
+        self._pre_drain_constructors(creator='census')
+
+    def test_creator_input_late_local_record_drift_fails(self):
+        self._pre_drain_constructors(creator='local')
+
+    def test_creator_input_late_lock_drift_fails(self):
+        self._pre_drain_constructors(creator='lock')
+
+    def test_creator_input_late_authority_replacement_fails(self):
+        self._pre_drain_constructors(creator='authority')
+
+    def test_creator_input_late_execution_refs_replacement_fails(self):
+        self._pre_drain_constructors(creator='refs')
 
     def test_pre_drain_late_closed_cut_journal_refuses_success(self):
         self._pre_drain_constructors(close_late='cut')
