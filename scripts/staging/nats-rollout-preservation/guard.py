@@ -114,6 +114,13 @@ def recovery_at_use(receipt):
         raise Blocked('rollout_recovery_authority_shape_invalid') from None
 
 
+def source_path_allowed(name):
+    p=Path(name)
+    return (not p.is_absolute() and '..' not in p.parts and
+        (str(p)=='.github/ci/full-application-build-request.json' or str(p).startswith(
+            ('scripts/','deploy/','docker/clickhouse/init/','src/backend/migrations/','src/backend/auth/src/main/resources/db/migration/'))))
+
+
 def validate(receipt, registry, tag, mode, changed, source_root):
     fields={'schema','operation','namespace_uid','marker','pvc','pv','target','backup','expires_at'}
     if 'resource_fence' in receipt:
@@ -168,7 +175,7 @@ def validate(receipt, registry, tag, mode, changed, source_root):
         raise Blocked('rollout_target_invalid')
     for name,digest in target['source_hashes'].items():
         p=Path(name)
-        if p.is_absolute() or '..' in p.parts or not SHA.fullmatch(digest) or not str(p).startswith(('scripts/','deploy/','docker/clickhouse/init/','src/backend/migrations/','src/backend/auth/src/main/resources/db/migration/')):
+        if not source_path_allowed(name) or not SHA.fullmatch(digest):
             raise Blocked('rollout_source_path_invalid')
         actual=Path(source_root)/p
         if actual.is_symlink() or not actual.is_file() or actual.stat().st_size>2<<20 or hashlib.sha256(actual.read_bytes()).hexdigest()!=digest:

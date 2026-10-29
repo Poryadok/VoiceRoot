@@ -21,6 +21,12 @@ def receipt():
         'pv':{'uid':PV_UID,'kind':'local','path':'/var/lib/rancher/k3s/storage/pvc-'+PVC_UID+'_voice-staging_'+NAME,'node':'pmdebook'}}
 
 class FrontendScopeTest(unittest.TestCase):
+    def test_full_application_request_is_only_admitted_github_source(self):
+        self.assertTrue(guard.source_path_allowed('.github/ci/full-application-build-request.json'))
+        for name in ('.github/ci/other.json','.github/workflows/ci.yml',
+                     '.github/ci/../ci/full-application-build-request.json','/github/ci/full-application-build-request.json'):
+            with self.subTest(name=name):self.assertFalse(guard.source_path_allowed(name))
+
     def target(self):return {"mode":"images-only","changed_services":["web"],"template_hashes":{"voice-web":"a"*64},"images":{"voice-web/web":"registry/web@sha256:"+"b"*64}}
     def test_frontend_image_only_is_derived_from_all_target_workloads(self):
         self.assertTrue(guard.frontend_image_only(self.target()))
