@@ -88,6 +88,8 @@ class Session:
         self._prerequisite_permit=None
         self._prerequisite_readonly_permit=None
         self._cohort_permit=None
+        self._cohort_auth_permit=None
+        self._cohort_lineage=None
 
     def authority(self):
         row=self.check_card();c=self.context
@@ -109,8 +111,11 @@ class Session:
             if previous is not None and previous.get('status')=='complete':
                 try:
                     c=validate(previous.get('context'))
-                    closed=(set(previous)=={'schema','context','operation','helper_sha256','status','phase','target_sha256','actual'}
+                    closed=(set(previous) in ({'schema','context','operation','helper_sha256','status','phase','target_sha256','actual'},
+                                              {'schema','context','operation','helper_sha256','status','phase','target_sha256','actual','cohort_preservation_sha256'})
                         and previous['schema']=='voice-staging-resource-fence-v1'
+                        and ('cohort_preservation_sha256' not in previous or isinstance(previous['cohort_preservation_sha256'],str)
+                             and re.fullmatch('[a-f0-9]{64}',previous['cohort_preservation_sha256']))
                         and previous['phase']=='finished' and previous['actual']==c['images']
                         and re.fullmatch('[a-f0-9]{12}',previous['operation'])
                         and re.fullmatch('[a-f0-9]{64}',previous['helper_sha256'])
@@ -120,7 +125,7 @@ class Session:
             if self.owned(previous) and previous.get('status')=='active':
                 # The request journal alone decides completed replay versus
                 # interrupted execution; never reset its durable executor intent.
-                self.admitted=True;self.expected_target=previous.get('target_sha256');self.authority();return
+                self.admitted=True;self.expected_target=previous.get('target_sha256');self._cohort_lineage=previous.get('cohort_preservation_sha256');self.authority();return
             if previous is not None and previous.get('status')!='complete' and self.repair_guard is not None:
                 old=previous.get('context',{})
                 if (request is None or request.get('action')!='prepare-repair'
@@ -145,7 +150,8 @@ class Session:
                 operation=self.operation,helper_sha256=self.helper,status='active',phase='prepare',target_sha256=None))
         elif not self.owned(previous) or previous.get('status') not in ('active','complete'):
             raise RuntimeError('staging_unfenced_or_uncertain_operation')
-        if previous is not None and self.owned(previous):self.expected_target=previous.get('target_sha256')
+        if previous is not None and self.owned(previous):
+            self.expected_target=previous.get('target_sha256');self._cohort_lineage=previous.get('cohort_preservation_sha256')
         self.admitted=True
         self.authority()
 
@@ -158,6 +164,21 @@ class Session:
             raise RuntimeError('staging_executor_target_changed')
         if getattr(self,'expected_phase',None) is not None and row.get('phase')!=self.expected_phase:
             raise RuntimeError('staging_executor_phase_changed')
+        cohort_hash=row.get('cohort_preservation_sha256')
+        if ((cohort_hash is not None and (not isinstance(cohort_hash,str) or not re.fullmatch(r'[a-f0-9]{64}',cohort_hash)))
+            or row.get('phase')=='cohort-preservation' and cohort_hash is None
+            or self._cohort_lineage is not None and cohort_hash!=self._cohort_lineage):
+            raise RuntimeError('staging_cohort_lineage_invalid')
+        if argv and self._cohort_auth_permit is not None:
+            permit=self._cohort_auth_permit
+            if (row.get('phase') not in ('cohort-preservation','prerequisites','prerequisites-captured','realtime-bootstrap','prepare')
+                or not row.get('target_sha256') or type(permit) is not dict or set(permit)!={'effect_id','argv','body_sha256'}
+                or not isinstance(permit['effect_id'],str) or not permit['effect_id']
+                or not isinstance(permit['argv'],list) or list(argv)!=permit['argv']
+                or not isinstance(permit['body_sha256'],str) or not re.fullmatch(r'[a-f0-9]{64}',permit['body_sha256'])):
+                raise RuntimeError('staging_cohort_auth_permit_invalid')
+            self._cohort_auth_permit=None
+            return row
         if argv and row.get('phase') in ('cohort-preservation','prerequisites','prerequisites-captured'):
             args=list(argv);permit=self._prerequisite_permit
             cohort=self._cohort_permit
@@ -237,8 +258,8 @@ class Session:
             or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual_before):
             raise RuntimeError('staging_cohort_baseline_changed')
         if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_cohort_baseline_changed')
-        row.update(phase='cohort-preservation',target_sha256=digest(plan))
-        self.journal.save(row);self.expected_target=row['target_sha256']
+        row.update(phase='cohort-preservation',target_sha256=digest(plan),cohort_preservation_sha256=digest(plan))
+        self.journal.save(row);self.expected_target=row['target_sha256'];self._cohort_lineage=row['cohort_preservation_sha256']
         return self.binding()
 
     def bind_prerequisites(self,plan,actual_before):

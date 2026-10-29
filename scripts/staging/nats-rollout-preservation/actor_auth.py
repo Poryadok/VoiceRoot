@@ -19,7 +19,12 @@ def prove(credentials,operator,binary,unchanged):
         # resolver authority and fixed isolated CLIENT transport are retained.
         config='host: 127.0.0.1\nport: 4222\nmax_control_line: 32768\noperator: '+q(tokens['operator.jwt'])+'\nsystem_account: '+q(tokens['system-account.public'])+'\nresolver: MEMORY\nresolver_preload: { '+q(tokens['account.public'])+': '+q(tokens['account.jwt'])+', '+q(tokens['system-account.public'])+': '+q(tokens['system-account.jwt'])+' }\n'
         p=base/'server.conf';p.write_text(config);p.chmod(0o440);os.chown(p,0,65532)
-        runtime=DockerRuntime(base,'actor'+uuid.uuid4().hex[:12])
+        import commands,resource_claim
+        session=getattr(commands.authority_guard,'__self__',None)
+        if isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None:
+            import staging_cohort_preservation
+            runtime=staging_cohort_preservation.auth_runtime(session,base,'actor')
+        else:runtime=DockerRuntime(base,'actor'+uuid.uuid4().hex[:12])
         try:
             broker=runtime.create('broker',NATS_IMAGE,[(p,'/server.conf',False)],['/usr/local/bin/nats-server','-c','/server.conf'])
             runtime.run(['start',broker]);runtime.inspect(broker)
