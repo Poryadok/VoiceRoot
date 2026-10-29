@@ -5,6 +5,8 @@ These tests establish a hold boundary, not a successful preservation or rollout.
 """
 import copy
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,10 +20,36 @@ import migrations
 import resource_claim
 from resource_claim_test import card, context
 import staging_prerequisites
+import root_composition_fixture
 
 
 @unittest.skipUnless(os.name == 'posix' and getattr(os, 'geteuid', lambda: -1)() == 0, 'root Linux fixture required')
 class BridgePreservationAdmission(unittest.TestCase):
+    def test_producer_imports_from_captured_helper_directory(self):
+        source = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            code = Path(directory) / 'code'
+            # The optional pinned archive exercises production binary identities;
+            # otherwise this test uses synthetic binary bytes only.
+            pins = (staging_prerequisites.BINARY_PINS if os.environ.get('VOICE_TEST_PINNED_ARCHIVE')
+                    else root_composition_fixture.SYNTHETIC_PINS)
+            with patch.object(staging_prerequisites, 'BINARY_PINS', pins):
+                binding = root_composition_fixture.helper_binding(source, code)
+            modules = ('staging_cohort_preservation', 'staging_cohort_preservation_runtime',
+                       'staging_cohort_preservation_pg', 'staging_cohort_preservation_auxiliary',
+                       'staging_cohort_preservation_auth')
+            for name in modules:
+                self.assertIn('nats-rollout-preservation/' + name + '.py', binding)
+            script = ('import importlib,json; names=' + repr(modules) + '; '
+                      'print(json.dumps([importlib.import_module(n).__file__ for n in names]))')
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(code / 'nats-rollout-preservation'),
+                                                               str(code / 'nats-known-baseline'))))
+            result = subprocess.run([sys.executable, '-c', script], cwd=directory, env=env,
+                                    check=True, capture_output=True, text=True)
+            import json
+            self.assertEqual(json.loads(result.stdout),
+                             [str(code / 'nats-rollout-preservation' / (name + '.py')) for name in modules])
+
     def test_missing_preservation_holds_before_parent_or_cluster(self):
         for mode in ('full', 'app-only'):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(dir='/root') as directory:
