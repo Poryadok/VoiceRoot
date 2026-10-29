@@ -147,7 +147,7 @@ class BridgePreservationAdmission(unittest.TestCase):
             for path in workspace.rglob('*'):
                 path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
-import base64, copy, hashlib, json, subprocess, sys
+import base64, copy, hashlib, http.client, json, os, subprocess, sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -204,6 +204,10 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   Cluster, names, claim=stage_cluster_fixture(session); cluster=Cluster()
   original_get=cluster.get
   def get(kind,name):
+   if (kind,name)==('node','pmdebook'):
+    if 'VOICE_TEST_OCI' not in os.environ:raise KeyError((kind,name))
+    return {'metadata':{'name':name,'uid':'synthetic-node'},'status':{'nodeInfo':{'operatingSystem':'linux',
+      'architecture':'amd64'},'conditions':[{'type':'Ready','status':'True'}]}}
    if (kind,name)==('secret','voice-app-secrets'):
     return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
       'uid':'00000000-0000-4000-8000-000000000004','resourceVersion':'1'},'type':'Opaque',
@@ -224,13 +228,33 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    if tail[:2]==['get','deployments']:
     return json.dumps({'apiVersion':'apps/v1','kind':'DeploymentList','metadata':{'resourceVersion':'1'},'items':[]}).encode()
    raise AssertionError('unexpected external command '+repr(tail))
+  class Response:
+   status=200
+   def __init__(self,body):self.body=body
+   def getheader(self,name):return None
+   def read(self,size):chunk=self.body[:size];self.body=self.body[size:];return chunk
+  class Https:
+   sock=None
+   def __init__(self,host,**kwargs):self.host=host
+   def request(self,method,path,headers):self.path=path
+   def getresponse(self):
+    if self.host=='auth.docker.io':return Response(b'{"token":"synthetic-token"}')
+    if self.host!='registry-1.docker.io':raise AssertionError('unexpected registry host')
+    name=('index' if self.path.endswith('0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949') else
+          'manifest' if self.path.endswith('84ed8c0dd296c188bfc24ed506f46589e9285fb0b11cf3a04d91d524d3067e11') else
+          'config' if self.path.endswith('88f52f3d58a505b7e1ad96ca6969478517bcccb58418e75a54223271a64da7df') else None)
+    if name is None:raise AssertionError('unexpected registry digest')
+    return Response((Path(os.environ['VOICE_TEST_OCI'])/(name+'.json')).read_bytes())
+   def close(self):pass
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
-       patch.object(stage_runtime.Kube,'_run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture):
+       patch.object(stage_runtime.Kube,'_run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture), \
+       patch.object(http.client,'HTTPSConnection',Https):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
    except KeyError as exc:
-    assert exc.args==(('node','pmdebook'),), str(exc)
-   else: raise AssertionError('missing synthetic node admitted')
+    assert 'VOICE_TEST_OCI' not in os.environ and exc.args==(('node','pmdebook'),), str(exc)
+   except Exception as exc:
+    raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
   assert not (root/'installed'/'cohort-preservation').exists()
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
