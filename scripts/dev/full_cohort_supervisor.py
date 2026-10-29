@@ -42,13 +42,18 @@ class Supervisor:
         self.journal, self.fence, self.client = journal, fence, client
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.context = copy.deepcopy(fence.context)
+        self.intent = copy.deepcopy(journal.intent)
+        self._journal, self._fence, self._client = journal, fence, client
         self._check = fence.check
         self.journals = []
         self.package = self.inventory = self.catalog = None
         self._guard()
 
     def _guard(self):
-        if (self.journal.poisoned or self.journal.intent.get('resource_context') != self.context or
+        if (self.journal is not self._journal or self.fence is not self._fence or self.client is not self._client or
+                self.journal.poisoned or self.journal.intent != self.intent or
+                self.journal.state.get('intent') != self.intent or
+                self.journal.intent.get('resource_context') != self.context or
                 self.journal.intent.get('namespace_uid') != self.namespace_uid or
                 self.fence.context != self.context or self.client.journal is not self.journal or
                 self.fence.ledger.client is not self.client or self.fence.check is not self._check or

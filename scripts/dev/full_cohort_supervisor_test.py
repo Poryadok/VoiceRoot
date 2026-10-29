@@ -72,5 +72,10 @@ class SupervisorTest(unittest.TestCase):
         self.fence.check=type(self.fence.check)(self.base.context)
         with self.assertRaises(supervisor.SupervisorError): subject._guard()
 
+    def test_mutated_root_journal_state_is_refused(self):
+        subject=supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
+        self.root_journal.state['intent']['namespace_uid']='foreign'
+        with self.assertRaises(supervisor.SupervisorError): subject._guard()
+
 
 if __name__=='__main__': unittest.main()
