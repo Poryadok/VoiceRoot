@@ -259,6 +259,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('user-association-integration', enabled='user' in integration)
         selected('notification-quota-integration', enabled='notification' in integration)
         selected('role-migration-integration', enabled='role' in integration)
+        selected('role-space-receipt-integration', enabled='role' in integration)
         selected('bot-membership-integration', enabled='bot' in integration)
         selected('voice-ledger-integration', enabled='voice' in integration)
         selected('messaging-threadlist-integration', enabled='messaging' in integration)

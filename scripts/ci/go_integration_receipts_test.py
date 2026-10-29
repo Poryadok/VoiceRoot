@@ -18,6 +18,19 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_role_space_receipt_inventory_excludes_unfinished_interactive_oracle(self):
+        inventory = json.loads((ROOT / 'scripts/ci/role_space_receipt_required.json').read_text(encoding='utf-8'))
+        cases = ['TestMemberAdmissionPositiveProtectedReceipt', 'TestMemberAdmissionRole25ProtectedReceipt']
+        self.assertEqual(inventory['role'], [['voice/backend/role', name] for name in cases])
+        source = (ROOT / 'src/backend/role/native_space_integration_test.go').read_text(encoding='utf-8')
+        self.assertIn('//go:build role_space_native', source)
+        for name in cases:
+            self.assertRegex(source, rf'(?m)^func {name}\(t \*testing\.T\)')
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        interactive = next(x for x in exceptions if x['test'] == 'TestNativeAssignmentNeedsQualifiedOperationPublication')
+        self.assertEqual(interactive['status'], 'unresolved')
+        self.assertNotIn(['voice/backend/role', interactive['test']], inventory['role'])
+
     def test_file_matrix_requires_pdf_runtime_and_real_renderer(self):
         import yaml
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))

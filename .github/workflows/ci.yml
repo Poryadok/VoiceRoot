@@ -2136,6 +2136,7 @@ jobs:
       - user-association-integration
       - notification-quota-integration
       - role-migration-integration
+      - role-space-receipt-integration
       - bot-membership-integration
       - voice-ledger-integration
       - messaging-threadlist-integration
@@ -2468,6 +2469,48 @@ jobs:
           path: |
             ${{ runner.temp }}/notification-quota-events.jsonl
             ${{ runner.temp }}/notification-quota-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  role-space-receipt-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Require Docker for Role Space fixtures
+        run: docker info >/dev/null
+      - name: Run Role Space receipt proofs
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: '0'
+          ROLE_NATIVE_SPACE_SOURCE_ROOT: ${{ github.workspace }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 20m -tags=role_space_native -run '^TestMemberAdmission(PositiveProtectedReceipt|Role25ProtectedReceipt)$' . > "$RUNNER_TEMP/role-space-receipt-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/role_space_receipt_required.json --service role \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/role-space-receipt-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/role-space-receipt-receipt.json" --reject-skips
+      - name: Upload Role Space receipt evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: role-space-receipt-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/role-space-receipt-events.jsonl
+            ${{ runner.temp }}/role-space-receipt-receipt.json
           if-no-files-found: warn
           retention-days: 14
 

@@ -9,6 +9,10 @@ import re
 
 TEST = re.compile(r'(?m)^func\s+(Test\w+)\s*\(\s*\w+\s+\*testing\.T\s*\)')
 DEDICATED = {
+    ('role', 'voice/backend/role', 'TestMemberAdmissionPositiveProtectedReceipt'):
+        'role-space-receipt-integration',
+    ('role', 'voice/backend/role', 'TestMemberAdmissionRole25ProtectedReceipt'):
+        'role-space-receipt-integration',
     ('realtime', 'voice/backend/realtime', 'TestActualHubFanoutFreezeWaitsForEveryRecipientAndRejectsCapturedLateScope'):
         'realtime-lifecycle-integration',
     ('realtime', 'voice/backend/realtime', 'TestProtectedRealtimeActualPGReceiptsRequireMTLSExactPrincipalAndReplay'):

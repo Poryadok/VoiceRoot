@@ -351,6 +351,32 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('backend-go-integration-evidence', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_role_space_receipt_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['role-space-receipt-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')", job['if'])
+        self.assertIn('role-space-receipt-integration', workflow['jobs']['ci-gate']['needs'])
+        step = next(step for step in job['steps'] if step.get('name') == 'Run Role Space receipt proofs')
+        self.assertIn('-tags=role_space_native', step['run'])
+        self.assertIn('role_space_receipt_required.json', step['run'])
+        self.assertIn('--reject-skips', step['run'])
+        self.assertIn('github.workspace', step['env']['ROLE_NATIVE_SPACE_SOURCE_ROOT'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['role'], 'docker_go_services': [],
+                  'integration_go_services': ['role'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/role/main.go']), matrix)
+        self.assertIn('role-space-receipt-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            needs['role-space-receipt-integration']['result'] = outcome
+            self.assertIn('role-space-receipt-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('role-space-receipt-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_t31_shared_and_contract_inputs_are_required_by_gate(self):
         import yaml
         workflow = yaml.load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
@@ -682,6 +708,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                     expected_extra.add('chat-lifecycle-integration')
                 if 'realtime' in plan['components']['go_integration']:
                     expected_extra.add('realtime-lifecycle-integration')
+                if 'role' in plan['components']['go_integration']:
+                    expected_extra.add('role-space-receipt-integration')
                 if 't31-critical' in proposed:
                     expected_extra.add('t31-critical')
                 self.assertEqual(proposed - required, expected_extra)

@@ -193,6 +193,9 @@ When Chat is in the PR integration matrix, `chat-lifecycle-integration` requires
 the tagged realtime lifecycle storage test against owned PostgreSQL without skips.
 When Realtime is in that matrix, `realtime-lifecycle-integration` requires its
 tagged fanout and protected transport tests against owned PostgreSQL without skips.
+When Role is in that matrix, `role-space-receipt-integration` requires the two
+tagged protected receipt producer tests with real Role and Space fixtures. The
+separate interactive cutover oracle remains unresolved and is not claimed by them.
 The affected `t31-critical` job calls the existing T31 Compose workflow, including
 the GIS-to-Chat lost-response retry proof, and its result is required by the PR
 gate. The standalone workflow remains enabled for comparison.
