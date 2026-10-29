@@ -352,7 +352,8 @@ class Session:
         return False
 
 
-def trusted_json(path,*,missing=False):
+def trusted_json(path,*,missing=False,limit=65536):
+    if limit not in (65536, 2 << 20):raise ValueError('staging_resource_limit_invalid')
     path=Path(path)
     for parent in (*path.parents[::-1],):
         row=parent.lstat()
@@ -363,7 +364,7 @@ def trusted_json(path,*,missing=False):
         raise
     try:
         row=os.fstat(fd)
-        if not stat.S_ISREG(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022 or row.st_nlink!=1 or not 1<=row.st_size<=65536:
+        if not stat.S_ISREG(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022 or row.st_nlink!=1 or not 1<=row.st_size<=limit:
             raise RuntimeError('staging_resource_journal_untrusted')
         raw=os.read(fd,row.st_size+1)
         if len(raw)!=row.st_size:raise RuntimeError('staging_resource_journal_changed')

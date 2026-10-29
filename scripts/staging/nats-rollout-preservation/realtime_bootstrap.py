@@ -428,7 +428,7 @@ def _check_live(session, kube, plan, stage_view):
     import resource_claim
     session.check()
     path = guard.ROOT / 'installed' / 'realtime-bootstrap' / session.operation / 'authority.json'
-    resource_claim.trusted_json(path)
+    resource_claim.trusted_json(path,limit=2<<20)
     authority = json.loads(_read_private(path))
     if (type(authority) is not dict or set(authority) != {'approved', 'execution'}
         or digest(authority['approved']) != plan['source_authority_sha256']
@@ -703,7 +703,7 @@ def _load_completed(session, actual, rollout_target):
     session.check()
     base = guard.ROOT / 'installed' / 'realtime-bootstrap' / session.operation
     for path in (base / 'checkpoint.json', base / 'before-secret.json', base / 'authority.json', base / 'stage.json'):
-        resource_claim.trusted_json(path)
+        resource_claim.trusted_json(path,limit=2<<20)
     state = json.loads(_read_private(base / 'checkpoint.json'))
     before = json.loads(_read_private(base / 'before-secret.json'))
     authority = json.loads(_read_private(base / 'authority.json'))

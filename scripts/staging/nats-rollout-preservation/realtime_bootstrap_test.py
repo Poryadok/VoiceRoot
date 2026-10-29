@@ -10,6 +10,35 @@ import realtime_bootstrap as bootstrap
 
 
 class CatalogTests(unittest.TestCase):
+    @unittest.skipUnless(__import__('os').name == 'posix' and __import__('os').geteuid() == 0,
+                         'private custody requires isolated Linux root')
+    def test_source_authority_uses_bounded_large_custody_without_expanding_journal_limit(self):
+        import json, os, guard, resource_claim
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(dir='/root') as folder:
+            root=Path(folder);base=root/'installed'/'realtime-bootstrap'/('a'*12)
+            base.mkdir(parents=True,mode=0o700)
+            approved={'source_files':{'path/%05d'%i:'a'*64 for i in range(9000)}}
+            execution={'head_sha':'b'*40};authority={'approved':approved,'execution':execution}
+            path=base/'authority.json';path.write_text(json.dumps(authority));path.chmod(0o600)
+            self.assertGreater(path.stat().st_size,65536)
+            with self.assertRaises(RuntimeError):resource_claim.trusted_json(path)
+            self.assertEqual(resource_claim.trusted_json(path,limit=2<<20),authority)
+            session=Mock(operation='a'*12);view={'fixture':True}
+            plan={'source_authority_sha256':bootstrap.digest(approved),
+                  'source_files_sha256':bootstrap.digest(approved['source_files']),
+                  'execution_sha256':bootstrap.digest(execution),'namespace_uid':'ns',
+                  'postgres':{'system_identifier':'123'}}
+            with patch.object(guard,'ROOT',root),patch.object(bootstrap,'_verify_source_capture'), \
+                 patch.object(bootstrap,'_source_contract'),patch.object(bootstrap,'engine_snapshot',return_value=('ns',{})), \
+                 patch.object(bootstrap,'_system_identifier',return_value='123'),patch.object(bootstrap,'_check_stage'):
+                bootstrap._check_live(session,object(),plan,view)
+                path.chmod(0o622)
+                with self.assertRaises(RuntimeError):bootstrap._check_live(session,object(),plan,view)
+            path.chmod(0o600);path.write_bytes(b' '*(2<<20)+b' ')
+            with self.assertRaises(RuntimeError):resource_claim.trusted_json(path,limit=2<<20)
+            with self.assertRaises(ValueError):resource_claim.trusted_json(path,limit=3<<20)
+
     def test_parent_drift_blocks_each_effect_after_pending_before_submit(self):
         import sys
         from unittest.mock import Mock
