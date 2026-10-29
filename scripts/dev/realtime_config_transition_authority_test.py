@@ -91,5 +91,29 @@ class AuthorityTest(unittest.TestCase):
             phase.namespace_uid='foreign'
             with self.assertRaises(ValueError): authority._space(self.cut,phase,'token')
 
+    def test_fixed9_space_requires_current_tls_and_verified_binding(self):
+        import realtime_p3_create_only_crypto as crypto
+        import space_creator_runtime_profile_target_trust as target
+        phase=SimpleNamespace(proof={'objects':{'voice-space-media-server-tls':{'uid':'space-cert','resourceVersion':'7'}},
+            'public_jwks':{'voice-space-principal-signing':{'keys':[]}},'ca':{'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}})
+        binding=authority.BoundFixed9SpaceAuthority(self.cut,object(),object(),phase,object(),'token')
+        self.patches[2].stop()
+        with patch.object(target,'verify_fixed9_successor') as verify, patch.object(crypto,'der',return_value=b'der'):
+            proof,jwks=authority._space(self.cut,binding,'token')
+            self.assertEqual(proof['schema'],'voice-dev-space-delegated-v1'); self.assertEqual(jwks,b'{"keys":[]}')
+            self.assertEqual(verify.call_count,2)
+            with self.assertRaises(ValueError):authority._space(self.cut,binding,'wrong')
+            with patch.object(authority.transport,'public_certificate',return_value=b'foreign\n7\ncHVibGlj'):
+                with self.assertRaises(ValueError):authority._space(self.cut,binding,'token')
+
+    def test_delegated_proof_must_match_p3_certificate_and_ca(self):
+        ca={'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}; self.p3['public_sources']['voice-media-ca']=ca
+        self.p3['public_sources']['voice-space-media-server-tls']['der_sha256']='b'*64
+        proof={'schema':'voice-dev-space-delegated-v1','tls':{'uid':'space-cert','resourceVersion':'7','certificate_sha256':'b'*64},'media_ca':ca}
+        with patch.object(authority,'_space',return_value=(proof,b'public-space')):
+            authority.collect(self.cut,object(),self.session,self.migration,self.phase,self.publisher,'/source','token')
+            proof['tls']['certificate_sha256']='c'*64
+            with self.assertRaises(authority.AuthorityError):authority.collect(self.cut,object(),self.session,self.migration,self.phase,self.publisher,'/source','token')
+
 
 if __name__=='__main__': unittest.main()

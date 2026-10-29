@@ -15,9 +15,9 @@ def render_role(source,config_keys):
     if (len(jwks)!=1 or set(jwks[0])!={'name','value'} or not isinstance(jwks[0]['value'],str) or
             'S2S_JWKS_URLS_JSON' in config_keys):raise ValueError('Role peer JWKS unavailable')
     endpoints=json.loads(jwks[0]['value'],object_pairs_hook=peer._unique)
-    if (not isinstance(endpoints,dict) or
-            endpoints.get('space')!='https://voice-space:8443/.well-known/jwks.json' or
-            not {'space','gameintegration','voice'}<=set(endpoints)):raise ValueError('Role issuer set unavailable')
+    if not isinstance(endpoints,dict) or not {'gameintegration','voice'}<=set(endpoints):
+        raise ValueError('Role issuer set unavailable')
+    endpoints['space']='https://voice-space:8443/.well-known/jwks.json'
     allowed={'space','gameintegration','voice'} | ({'chat'} if 'chat' in endpoints else set()) | ({'messaging'} if 'messaging' in endpoints else set())
     for flag,issuer in (('ROLE_BOT_LIFECYCLE_ENABLED','bot'),('ROLE_DELEGATED_USER_ENABLED','gateway'),
                         ('ROLE_AUTHORITY_SOURCE_ENABLED','federation')):
@@ -29,6 +29,7 @@ def render_role(source,config_keys):
             if matches[0]['value']=='true':allowed.add(issuer)
     if set(endpoints)!=allowed:raise ValueError('Role issuer set invalid')
     for name,url in endpoints.items():peer._https(name,url)
+    jwks[0]['value']=json.dumps(endpoints,sort_keys=True,separators=(',',':'))
     groups=[
         [env._env('ROLE_PRINCIPAL_GRPC_LISTEN',':9091'),
          env._env('ROLE_PRINCIPAL_TLS_CERT_FILE','/etc/voice/media/server/tls.crt'),

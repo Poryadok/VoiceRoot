@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 
 import space_creator_peer_role_target as peer
@@ -15,6 +16,19 @@ def role():
 
 
 class PeerRoleTargetTest(unittest.TestCase):
+    def test_target_replaces_or_adds_space_issuer_preserving_existing(self):
+        for old in (None,'https://old.example/keys'):
+            source=role(); entry=source['spec']['template']['spec']['containers'][0]['env'][0]
+            original=json.loads(entry['value'])
+            if old is None: original.pop('space')
+            else: original['space']=old
+            entry['value']=json.dumps(original); before=copy.deepcopy(source)
+            _,target=peer.render_role(source,[])
+            result=json.loads(next(e['value'] for e in target['template']['spec']['containers'][0]['env'] if e['name']=='S2S_JWKS_URLS_JSON'))
+            self.assertEqual(result['space'],'https://voice-space:8443/.well-known/jwks.json')
+            self.assertEqual(result['gameintegration'],original['gameintegration'])
+            self.assertEqual(result['voice'],original['voice']); self.assertEqual(source,before)
+
     def test_role_target_binds_protected_member_route_without_source_mutation(self):
         source=role();before=copy.deepcopy(source);patch,target=peer.render_role(source,[])
         self.assertEqual(patch[3]['value'],target);self.assertEqual(source,before)

@@ -10,6 +10,7 @@ import full_cohort_image_apply
 import full_cohort_package_phase
 import media_operation_guard
 import realtime_config_transition_space as space
+import realtime_config_transition_authority as peer_authority
 import realtime_config_transition_space_plan_phase as planned
 import realtime_config_transition_space_service as space_service
 import realtime_p3_public_inputs as public
@@ -20,6 +21,11 @@ LEDGER='realtime_space_health'
 
 
 class HealthError(RuntimeError): pass
+
+
+def _bound_public(expected,observation):
+    for name,identity in (('voice-media-ca',expected['media_ca']),('voice-space-media-server-tls',expected['tls'])):
+        if observation['public_objects'][name]!={'uid':identity['uid'],'resource_version':identity['resourceVersion']}: raise ValueError()
 
 
 class SpaceHealthPhase:
@@ -37,6 +43,8 @@ class SpaceHealthPhase:
                 or not isinstance(self.plan,dict) or set(self.plan)!={'source_root','space_pod','destination'}): raise HealthError('Space health identity unavailable')
         if type(plan_phase) is planned.SpacePlanPhase:
             if plan_phase.cut is not cut: raise HealthError('Space plan identity unavailable')
+        elif type(plan_phase) is peer_authority.BoundFixed9SpaceAuthority:
+            if plan_phase.cut is not cut: raise HealthError('Space peer identity unavailable')
         else:
             import space_p3_issuer_create as issuer
             if (type(plan_phase) is not issuer.Session or plan_phase.fence.context!=fence.context
@@ -54,6 +62,12 @@ class SpaceHealthPhase:
         self._guard(); self.image_phase._guard()
         if type(self.plan_phase) is planned.SpacePlanPhase:
             expected=planned.verify(self.plan_phase,self.cut,token)
+        elif type(self.plan_phase) is peer_authority.BoundFixed9SpaceAuthority:
+            expected,_=peer_authority._space(self.cut,self.plan_phase,token)
+            if (expected.get('schema')!='voice-dev-space-delegated-v1' or
+                    expected.get('operation_id')!=self.fence.context['operation_id'] or
+                    expected.get('source_sha')!=self.fence.context['commit'] or
+                    expected.get('namespace_uid')!=self.namespace_uid): raise ValueError()
         else:
             import space_p3_issuer_create as issuer
             expected=issuer.verify_completed(self.plan_phase)
@@ -120,6 +134,8 @@ class SpaceHealthPhase:
             result=space.capture(self.plan['source_root'],self.fence.context['commit'],authority,self.plan['space_pod'],
                                  self.namespace_uid,self._guard,self.plan['destination'])
             if result['identity']['workload']['pod_uid']!=pod['uid']: raise ValueError()
+            if type(self.plan_phase) is peer_authority.BoundFixed9SpaceAuthority:
+                _bound_public(expected,result)
             self._service(result)
             planned_document=(json.loads(base64.b64decode(expected['observation']['jwks_bytes'],validate=True))
                               if type(self.plan_phase) is planned.SpacePlanPhase else expected['public_jwks'])
@@ -165,6 +181,7 @@ def verify_completed(phase,cut,token):
                 or receipt['plan_sha256']!=writer_cut.digest(expected) or receipt['pod']!=phase._pod(resumed)
                 or receipt.get('scope')!='space-resumed-pod-https-not-service-dataplane'): raise ValueError()
         observation=receipt['https']; raw=base64.b64decode(observation['jwks_bytes'],validate=True)
+        if type(phase.plan_phase) is peer_authority.BoundFixed9SpaceAuthority: _bound_public(expected,observation)
         if hashlib.sha256(raw).hexdigest()!=observation['jwks_sha256']: raise ValueError()
         phase._refs(observation)
         phase._guard(); after,end=phase.fence.ledger.read()

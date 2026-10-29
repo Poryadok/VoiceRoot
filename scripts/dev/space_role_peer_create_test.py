@@ -155,7 +155,8 @@ class RoleCreateTest(unittest.TestCase):
     def test_inspection_is_read_only_and_rejects_snapshot_drift(self):
         phase=create.Session.__new__(create.Session); phase.token='token'; phase.record=None; phase.pending=False
         phase.preflight=SimpleNamespace(); phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'
-        phase._guard=mock.Mock(); phase._local=mock.Mock(); tls='voice-role-media-client-tls'; signer='voice-role-principal-signing'
+        phase.package=SimpleNamespace(journal=SimpleNamespace(state={'steps':{package.STEP:{'status':'done','receipt':{'safe':True}}}}))
+        phase._guard=mock.Mock(return_value=({'status':'active'},('uid','rv'))); phase._local=mock.Mock(); tls='voice-role-media-client-tls'; signer='voice-role-principal-signing'
         initial={'profile':'role','ca':{'der_sha256':hashlib.sha256(b'der').hexdigest()},
                  'creator_secrets':{tls:{'state':'present','uid':'uid','resourceVersion':'1','keys':['tls.crt','tls.key']},signer:{'state':'absent'}}}
         obj=desired(); obj['metadata'].update(uid='uid',resourceVersion='1')
@@ -174,6 +175,7 @@ class RoleCreateTest(unittest.TestCase):
             with self.assertRaises(create.CreateError):create.inspect_existing(phase,'token')
         def mutate_on_final_guard():
             if phase._guard.call_count>=2:phase.record={'status':'unexpected'}
+            return {'status':'active'},('uid','rv')
         phase._guard=mock.Mock(side_effect=mutate_on_final_guard)
         with mock.patch.object(create.preflight,'verify_current',side_effect=[initial,initial]), \
              mock.patch.object(create.preflight.public,'_value',return_value=b'ca'), mock.patch.object(create.preflight.crypto,'der',return_value=b'der'), \
