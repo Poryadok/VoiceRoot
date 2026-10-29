@@ -298,7 +298,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    'subsets':[{'addresses':[{'ip':'10.0.0.2','targetRef':{'kind':'Pod','uid':pg_pod}}],'ports':[{'port':5432}]}]}
   pg_slice={'metadata':pgmeta('pg-slice','pg-slice-uid'),'ports':[{'port':5432}],
    'endpoints':[{'addresses':['10.0.0.2'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':pg_pod}}]}
-  nats_secrets={};bootstrap_configmaps={};inspector_job={};inspector_pod={};inspector_log=b''
+  nats_secrets={};bootstrap_configmaps={};inspector_job={};inspector_pod={};inspector_log=b'';nats_runtime=None
   if 'VOICE_TEST_NATS_INPUTS' in os.environ:
    import actor_root, bootstrap_auth, bootstrap_selection
    nats=Path(os.environ['VOICE_TEST_NATS_INPUTS']);config=(nats/'server.conf').read_text()
@@ -368,6 +368,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
       'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'00000000-0000-4000-8000-000000000101'}]},
       'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}]}
    if args[:2]==['get','--raw'] and ':8222/proxy/jsz?' in args[-1]:
+    if nats_runtime is not None:return nats_runtime.monitor_jsz(nats_broker)
     from nats_contract_plan_test import live
     import nats_contract_plan as contract
     from rollout_census_test import CREATED
@@ -430,6 +431,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     if kind=='deployment':
      obj['metadata']['generation']+=1
      if name==stage_runtime.HUB and obj['spec']['replicas']==0:
+      if nats_runtime is not None:nats_runtime.stop(nats_broker)
       hub=cluster.objects[('pod','voice-fixture-hub')]
       hub['metadata']['deletionTimestamp']='2025-01-01T00:00:01Z'
       state=hub['status']['containerStatuses'][0]
@@ -619,6 +621,40 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def private_save(path,value):save(root/Path(path).name,value)
    bootstrap_root.enroll_current(enrollment_kube,code,actions.binding,unchanged,
     private_read,private_save,bootstrap_auth.prove)
+  if 'VOICE_TEST_NATS_STORE' in os.environ:
+   from docker_runtime import DockerRuntime
+   from nats_contract_actor import Actor
+   from scenario import ready
+   import nats_contract_plan as contract
+   volume=os.environ['VOICE_TEST_NATS_VOLUME'];store=Path(os.environ['VOICE_TEST_NATS_STORE'])
+   volume_info=json.loads(subprocess.check_output(['docker','volume','inspect',volume]))[0]
+   assert volume_info['Labels']=={'voice.test.owner':'wt30-joint'}
+   assert str(store)==volume_info['Mountpoint']+'/original'=='/var/lib/docker/volumes/'+volume+'/_data/original'
+   assert not list(store.iterdir())
+   nats_base=store.parent
+   nats_inputs=nats_base/'inputs';nats_inputs.mkdir(mode=0o750);os.chown(nats_inputs,0,65532)
+   for filename in ('bootstrap.creds','social.creds'):
+    target=nats_inputs/filename;target.write_bytes((nats/'inputs'/filename).read_bytes());target.chmod(0o440);os.chown(target,0,65532)
+   (nats_inputs/'account.public').write_text(account);(nats_inputs/'account.public').chmod(0o440)
+   (nats_base/'server.conf').write_text(config);(nats_base/'server.conf').chmod(0o440);os.chown(nats_base/'server.conf',0,65532)
+   nats_runtime=DockerRuntime(nats_base,'seed'+session.operation)
+   def clean_nats():
+    for row in reversed(list(nats_runtime.owned.values())):
+     subprocess.run(['docker','rm','-f','-v',row['id']],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+   atexit.register(clean_nats)
+   nats_broker=nats_runtime.start_broker('original',store);ready(nats_runtime,nats_broker)
+   actor=Actor(nats_runtime,nats_broker,nats_runtime.owned[nats_broker]['id'],store,session.check,
+    plan={'schema':contract.SCHEMA,'migration_id':contract.MIGRATION_ID})
+   subjects={'chat_events':sorted(contract.CHAT_SUBJECTS_17),'role_events':sorted(contract.ROLE_SUBJECTS_10),
+    'voice_events':sorted(contract.VOICE_SUBJECTS_12),'user_events':sorted(contract.USER_SUBJECTS_14),
+    'file_events':['file.processed'],'social_events':['social.friend_request','social.friend_accepted',
+     'social.friend_removed','social.user_blocked','social.contacts_synced']}
+   for name,values in subjects.items():
+    actor._request('$JS.API.STREAM.CREATE.'+name,{'name':name,'subjects':values,'storage':'file',
+     'retention':'limits','max_age':604800000000000,'duplicate_window':86400000000000 if name=='social_events' else 120000000000})
+   for stream,declaration in contract.DECLARATIONS:
+    actor.mutate('$JS.API.CONSUMER.CREATE.'+stream+'.'+declaration['durable_name'],
+     {'stream_name':stream,'action':'create','config':copy.deepcopy(declaration)})
   if 'VOICE_TEST_SPACE_OCI' in os.environ:
    pg_user=store_kube.get('ConfigMap','voice-app-config')['data']['POSTGRES_USER']
    pg_password=base64.b64decode(store_kube.get('Secret','voice-app-secrets')['data']['POSTGRES_PASSWORD'],validate=True)
