@@ -73,6 +73,28 @@ class PlanTest(unittest.TestCase):
                 if mutation == 'external_service': receipts['service']['type'] = 'ExternalName'
                 with self.assertRaises(ValueError): adoption.plan(original, image, receipts)
 
+    def test_operation_owned_credential_is_fixed_and_immutable(self):
+        name = 'voice-realtime-db-' + 'a'*32
+        receipts = copy.deepcopy(self.receipts)
+        receipts['assets'].pop('voice-app-secrets')
+        receipts['assets'][name] = {'uid':'uid', 'resourceVersion':'7', 'namespace':'voice-dev',
+                                     'kind':'Secret', 'keys':['DATABASE_URL'], 'immutable':True}
+        _, target, _ = adoption.plan(self.original, 'registry/realtime@sha256:'+'d'*64, receipts,
+                                     operation_id='media-c1-'+'a'*32)
+        env = target['template']['spec']['containers'][0]['env']
+        self.assertEqual(next(e for e in env if e['name']=='DATABASE_URL')['valueFrom']['secretKeyRef'],
+                         {'name':name,'key':'DATABASE_URL'})
+        _, second, _ = adoption.plan(self.original, 'registry/realtime@sha256:'+'d'*64, receipts,
+                                      operation_id='media-c2-'+'a'*32)
+        second_env = second['template']['spec']['containers'][0]['env']
+        self.assertEqual(next(e for e in second_env if e['name']=='DATABASE_URL')['valueFrom']['secretKeyRef'],
+                         {'name':name,'key':'DATABASE_URL'})
+        receipts['assets'][name]['immutable'] = False
+        with self.assertRaises(ValueError):
+            adoption.plan(self.original, 'registry/realtime@sha256:'+'d'*64, receipts, operation_id='media-c1-'+'a'*32)
+        with self.assertRaises(ValueError):
+            adoption.plan(self.original, 'registry/realtime@sha256:'+'d'*64, receipts, operation_id='media-c3-'+'a'*32)
+
     def test_patch_rejects_intervening_identity_and_spec_changes(self):
         patch, target, _ = adoption.plan(self.original, 'registry/realtime@sha256:' + 'd' * 64, self.receipts)
         # Model JSON Patch's atomic test-before-replace semantics on owned fixtures.

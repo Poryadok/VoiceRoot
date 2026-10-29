@@ -215,10 +215,12 @@ class KubePostgres:
                    '--namespace', 'voice-dev', '--request-timeout=15s', 'exec', '-i', 'voice-postgres-0',
                    '-c', 'postgres', '--', 'sh', '-ec', script]
         try:
+            self.operation_guard()
             result = subprocess.run(command, input=sql.encode('ascii'), stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL, timeout=25)
             if result.returncode or len(result.stdout) > 65536:
                 raise RecoveryRequired('postgres transport failed')
+            self.operation_guard()
             return result.stdout
         except BaseException:
             raise RecoveryRequired('postgres transport failed or uncertain') from None

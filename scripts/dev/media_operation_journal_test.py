@@ -1,6 +1,8 @@
 """Linux custody and crash boundaries for the media operation journal."""
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -10,6 +12,21 @@ import media_operation_journal as journal
 
 
 class JournalTest(unittest.TestCase):
+    def test_fifo_state_is_rejected_without_blocking(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'operation'
+            with journal.Journal(root, {'operation': 'example'}):
+                pass
+            (root / 'state.json').unlink()
+            os.mkfifo(root / 'state.json', 0o600)
+            code = ("import sys; sys.path.insert(0, sys.argv[2]); import media_operation_journal as j\n"
+                    "try: j.Journal(sys.argv[1], {'operation':'example'})\n"
+                    "except j.RecoveryRequired: sys.exit(0)\n"
+                    "sys.exit(1)\n")
+            result = subprocess.run([sys.executable, '-c', code, str(root), str(Path(__file__).parent)], timeout=3,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.assertEqual(result.returncode, 0)
+
     def test_exclusive_lock_and_exact_intent(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / 'operation'
