@@ -100,6 +100,8 @@ class EffectStateTest(unittest.TestCase):
         self.secret = None; self.writes = []; self.lost = False
         self.enterContext(mock.patch.object(effect.private, '_run', side_effect=self.kube))
         self.enterContext(mock.patch.object(self.phase, '_tool', side_effect=self.tool))
+        if self._testMethodName != 'test_undrained_cut_rejects_before_tool_or_secret':
+            base.cut.drain()
 
     def tool(self, roots, script, payload):
         if script == effect.GENERATE: return b'generated-public-store'
@@ -172,6 +174,23 @@ class EffectStateTest(unittest.TestCase):
         with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
         self.assertEqual(self.writes, [])
 
+    def test_undrained_cut_rejects_before_tool_or_secret(self):
+        with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
+        self.assertEqual(self.writes, []); self.phase._tool.assert_not_called()
+        self.assertNotIn(effect.STEP, self.phase.journal.state['steps'])
+
+    def test_resumed_cut_before_cas_is_rejected(self):
+        self.existing(b'incompatible')
+        def resumed(roots, script, payload):
+            result = self.tool(roots, script, payload)
+            if script == effect.GENERATE:
+                targets = [copy.deepcopy(item) for item in self.base.client.workloads.values()]
+                self.base.cut.resume(targets)
+            return result
+        self.phase._tool.side_effect = resumed
+        with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
+        self.assertEqual(self.writes, [])
+
     def test_replaced_private_key_inode_is_rejected(self):
         self.phase._key(create=True)
         replacement = self.phase.journal.path / 'other.key'
@@ -226,6 +245,34 @@ class EffectStateTest(unittest.TestCase):
         self.assertEqual(receipt['mode'], 'create')
         self.assertEqual(sum(args[0] == 'rm' for args in commands), 2)
         self.assertEqual(self.phase.record['tool']['status'], 'removed')
+
+    def test_timed_out_owned_container_is_removed_before_reconciliation(self):
+        commands = []; current = {}; cid = 'e' * 64
+        def docker(args, limit=1048576):
+            commands.append(copy.deepcopy(args))
+            if args[:2] == ['image', 'inspect']:
+                return json.dumps([{'Id': self.roots['config_digest'], 'Os': 'linux', 'Architecture': 'amd64',
+                    'RepoDigests': [self.roots['image']], 'Config': {'Volumes': None}}]).encode()
+            if args[0] == 'create':
+                current['name'] = args[args.index('--name') + 1]; current['script'] = args[-1]
+                return cid.encode()
+            if args[0] == 'inspect':
+                return json.dumps([{'Id': cid, 'Image': self.roots['config_digest'], 'Config': {
+                    'Labels': {'voice.test.owner': current['name']}, 'Entrypoint': ['/bin/sh'],
+                    'Cmd': ['-ec', current['script']], 'User': '65532:65532', 'OpenStdin': True},
+                    'HostConfig': {'NetworkMode': 'none', 'ReadonlyRootfs': True, 'CapDrop': ['ALL'],
+                    'SecurityOpt': ['no-new-privileges'], 'Tmpfs': {'/scratch': effect.target.TMPFS},
+                    'LogConfig': {'Type': 'none'}}, 'Mounts': [], 'State': {'Status': 'running'}}]).encode()
+            if args[0] == 'rm': self.assertEqual(args[-1], cid); return b''
+            if args[0] == 'ps': return b''
+            raise AssertionError(args)
+        actual_tool = effect.TrustEffectPhase._tool.__get__(self.phase)
+        with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=docker), \
+             mock.patch.object(effect.target, '_input', side_effect=TimeoutError('fixture')):
+            with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
+        self.assertEqual([args for args in commands if args[0] == 'rm'], [['rm', '-f', '-v', cid]])
+        self.assertEqual(self.phase.journal.state['steps'][effect.STEP]['tool']['status'], 'removed')
+        self.assertEqual(self.writes, [])
 
 
 if __name__ == '__main__':

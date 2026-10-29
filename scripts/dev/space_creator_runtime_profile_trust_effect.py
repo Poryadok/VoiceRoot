@@ -154,21 +154,29 @@ class TrustEffectPhase(target.TargetTrustPhase):
                 host.get('SecurityOpt') != ['no-new-privileges'] or host.get('Tmpfs') != {'/scratch': target.TMPFS} or
                 host.get('LogConfig', {}).get('Type') != 'none' or host.get('PortBindings') or item.get('Mounts')):
             raise ValueError()
-        self._state(self.record | {'tool': {'status': 'start-pending', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
-        self._guard(); output = target._input(['docker', 'start', '-ai', cid], payload); self._guard()
-        detail = json.loads(self._docker(['inspect', cid])); item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
-        if item.get('Id') != cid or item.get('State', {}).get('Status') != 'exited' or item.get('State', {}).get('ExitCode') != 0:
-            raise ValueError()
-        self._state(self.record | {'tool': {'status': 'remove-pending', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
-        self._docker(['rm', '-f', '-v', cid], 256)
-        if cid in self._docker(['ps', '-a', '--no-trunc', '--format', '{{.ID}}']).decode('ascii').splitlines(): raise ValueError()
-        self._state(self.record | {'tool': {'status': 'removed', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
-        return output
+        removed = False
+        try:
+            self._state(self.record | {'tool': {'status': 'start-pending', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
+            self._guard(); output = target._input(['docker', 'start', '-ai', cid], payload); self._guard()
+            detail = json.loads(self._docker(['inspect', cid])); item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
+            if item.get('Id') != cid or item.get('State', {}).get('Status') != 'exited' or item.get('State', {}).get('ExitCode') != 0:
+                raise ValueError()
+            return output
+        finally:
+            if not removed:
+                detail = json.loads(self._docker(['inspect', cid])); item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
+                if (item.get('Id') != cid or item.get('Image') != roots['config_digest'] or
+                        item.get('Config', {}).get('Labels', {}).get('voice.test.owner') != name): raise ValueError()
+                self._state(self.record | {'tool': {'status': 'remove-pending', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
+                self._docker(['rm', '-f', '-v', cid], 256); removed = True
+                if cid in self._docker(['ps', '-a', '--no-trunc', '--format', '{{.ID}}']).decode('ascii').splitlines(): raise ValueError()
+                self._state(self.record | {'tool': {'status': 'removed', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
 
     def run(self, token):
         pending = False
         try:
             self._guard(); roots, source = self._dependencies(token)
+            self.preflight.cut.verify_drained()
             ca_id, pem, ca_sha = self._ca(source)
             old, old_data = self._read_store()
             if old_data is not None and KEY in old_data and not old_data[KEY]: raise ValueError()
@@ -213,8 +221,10 @@ class TrustEffectPhase(target.TargetTrustPhase):
                 self._guard()
                 if self._read_store() != (old, old_data) or self._dependencies(token) != (roots, source) or self._ca(source) != (ca_id, pem, ca_sha):
                     raise ValueError()
+                self.preflight.cut.verify_drained()
                 response = json.loads(private._run(args, json.dumps(body, separators=(',', ':')).encode('utf8')))
                 self._guard(); actual, current_data = self._read_store()
+                self.preflight.cut.verify_drained()
                 if (actual is None or response != actual or current_data != data or
                         (old is not None and (actual['metadata']['uid'] != old['metadata']['uid'] or
                          actual['metadata']['resourceVersion'] == old['metadata']['resourceVersion']))): raise ValueError()
@@ -224,6 +234,7 @@ class TrustEffectPhase(target.TargetTrustPhase):
                 facts = trust.compare_roots(set(roots['root_fingerprints']), listing, ca_sha)
             self._guard()
             if self._dependencies(token) != (roots, source) or self._ca(source) != (ca_id, pem, ca_sha): raise ValueError()
+            self.preflight.cut.verify_drained()
             identity = {'uid': actual['metadata']['uid'], 'resourceVersion': actual['metadata']['resourceVersion']}
             if mode != 'preserve':
                 self._state(self.record | {'effect': {'status': 'done', 'mode': mode, 'old': prior, 'secret': identity}})
