@@ -93,6 +93,13 @@ class CryptoFixture(unittest.TestCase):
                  mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=lambda args,body=None,timeout=30:kube_run(None,args,body,timeout),
                      get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'ns'}})):
                 self.assertTrue(p3.preflight_payloads(session))
+                def no_allocation(args,body=None,timeout=30):
+                    result=kube_run(None,args,body,timeout)
+                    if args[0]=='create' and result['kind']=='Service':
+                        result['spec'].pop('clusterIP'); result['spec'].pop('clusterIPs')
+                    return result
+                with mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=no_allocation,get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'ns'}})):
+                    self.assertTrue(p3.preflight_payloads(session))
                 bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
                 with mock.patch.object(parent,'load_issuer',return_value=bad),self.assertRaises(p3.PrerequisiteError): p3.preflight_payloads(session)
                 with mock.patch.object(parent,'load_issuer',side_effect=[issuer,bad]),self.assertRaises(p3.PrerequisiteError): p3.preflight_payloads(session)

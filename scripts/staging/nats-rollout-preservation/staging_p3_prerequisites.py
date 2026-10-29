@@ -502,7 +502,7 @@ def preflight_payloads(session):
             with resource_claim.command_scope(session.check):
                 normalized=kube.run(['create','--dry-run=server','-f','/dev/stdin','-o','json'],body=row)
             observed=private_semantic(normalized); expected=private_semantic(payloads[ident])
-            if row['kind']=='Service':
+            if row['kind']=='Service' and ('clusterIP' in observed.get('spec',{}) or 'clusterIPs' in observed.get('spec',{})):
                 service_allocation(payloads[ident],normalized,dry_run=True)
                 observed['spec'].pop('clusterIP'); observed['spec'].pop('clusterIPs')
             if observed!=expected: raise ValueError()
