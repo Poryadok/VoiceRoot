@@ -45,6 +45,35 @@ class PrivateDirectoryTest(unittest.TestCase):
             with patch.object(driver.os,'stat',side_effect=changed):
                 with self.assertRaises(driver.DriverError):driver._ensure_private(parent,'preflight')
 
+    def test_realtime_child_requires_retained_parent_and_is_one_shot(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent=Path(tmp); suffix='a'*32; (parent/suffix).mkdir(mode=0o700)
+            info=(parent/suffix).stat(); identity=(info.st_dev,info.st_ino)
+            with patch.object(driver.issuer,'SOCKET_ROOT',parent):
+                driver._realtime_directory(suffix,identity)
+                self.assertEqual(((parent/suffix/'realtime').stat().st_mode & 0o777),0o700)
+                with self.assertRaises((FileExistsError,driver.story_media_backup.BackupError)):
+                    driver._realtime_directory(suffix,identity)
+                with self.assertRaises(driver.DriverError):driver._realtime_directory(suffix,(identity[0],identity[1]+1))
+
+    def test_p3_directory_rejects_replacement_during_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent=Path(tmp); suffix='a'*32; path=parent/suffix; path.mkdir(mode=0o700)
+            info=path.stat(); expected=(info.st_dev,info.st_ino)
+            s=SimpleNamespace(_execution_token='token',context={'operation_id':'media-c1-'+suffix})
+            instance=driver.C1Driver.__new__(driver.C1Driver); instance.started=True; instance.supervisor=s
+            instance._p3_directory=expected; instance._directory_identity=(suffix,None,None,expected)
+            calls=[]
+            def guard():
+                calls.append(True)
+                if len(calls)==2:
+                    path.rename(parent/'old'); path.mkdir(mode=0o700)
+            s._guard=guard
+            with patch.object(driver.realtime_p3,'SOCKET_PARENT',parent), \
+                 patch.object(driver,'Path',side_effect=lambda value:parent if value=='/home/pmd/voice-realtime-p3/operations' else Path(value)):
+                with self.assertRaises(driver.DriverError):driver.verify_p3_directory(instance,'token')
+            self.assertEqual(len(calls),2)
+
 
 class HandshakeTest(unittest.TestCase):
     """Socket coordination only; issuer authority is exercised by its own fixture."""
@@ -130,6 +159,22 @@ class HandshakeTest(unittest.TestCase):
         self.assertFalse(caller.is_alive()); self.assertTrue(returned.is_set())
         self.assertTrue(cancelled.is_set()); self.assertTrue(exited.is_set()); self.assertEqual(phase.marks,1)
 
+    def test_realtime_uses_fixed_capability_trigger_and_verifier(self):
+        phase=driver.realtime_capability.RealtimeP3Capability.__new__(driver.realtime_capability.RealtimeP3Capability)
+        phase.listener=None
+        def prepare():
+            phase.listener=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+            phase.listener.bind(('127.0.0.1',0)); phase.listener.listen(1)
+        def finish():
+            connection,_=phase.listener.accept(); connection.close(); phase.listener.close(); return {'status':'done'}
+        phase.prepare=prepare; phase.finish=finish
+        def run():
+            with socket.create_connection(phase.listener.getsockname(),timeout=5): pass
+        with patch.object(driver.realtime_client,'new_capability_trigger',return_value=self.handle(run)) as trigger, \
+             patch.object(driver.realtime_capability,'verify_current',return_value={'status':'done'}):
+            self.assertEqual(driver._handshake(phase,'token',realtime=True),{'status':'done'})
+        trigger.assert_called_once_with(phase,'token')
+
 
 class SharedLedgerTest(unittest.TestCase):
     def test_phase_marker_and_receiver_absence_are_required(self):
@@ -150,7 +195,7 @@ class SharedLedgerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
             context={'operation_id':'media-c1-'+'a'*32,'commit':'b'*40}; lock={'fixed':'lock'}
             row={'status':'active','config':{'status':'done'},'jdk':{'status':'done'},
-                 'peer':{'status':'done'},'issuer':{'status':'done'},'trust':{'status':'prepared'},'target':{'status':'done'}}
+                 'peer':{'status':'done'},'issuer':{'status':'done'},'p3':{'status':'done'},'trust':{'status':'prepared'},'target':{'status':'done'}}
             def ledger(client): return SimpleNamespace(client=client,read=lambda:(copy.deepcopy(row),('uid','1')))
             def phase(name,record):
                 j=Journal(Path(tmp)/name,{'resource_context':context,'namespace_uid':'ns'}); stack.callback(j.close)
@@ -173,21 +218,29 @@ class SharedLedgerTest(unittest.TestCase):
                 if len(calls)==2: row['issuer']={'status':'changed'}
             s._creator_guard=guard; s._open=lambda *args:(None,None,None)
             subject=driver.C1Driver.__new__(driver.C1Driver); subject.supervisor=s; subject.invoked=True; subject.started=False
-            subject.preflight=subject.receiver=subject.trust=subject.target=None
+            subject.preflight=subject.receiver=subject.trust=subject.target=subject.p3_capability=None
             subject.auth_preparation=SimpleNamespace(supervisor=s,package=s.package,context=copy.deepcopy(context),
                 actor='actor',_receipt={'auth':'fixture'},verify_current=lambda token:{'auth':'fixture'})
+            p3_receipt={'objects':{kind+'/'+name:{'state':'absent'} for kind,name in driver.realtime_capability.metadata.MEMBERS}}
+            p3=driver.realtime_capability.RealtimeP3Capability.__new__(driver.realtime_capability.RealtimeP3Capability)
+            p3.creator_preflight=issuer; p3.token='token'; p3.record=copy.deepcopy(row['p3']); p3._refs=(issuer,)
             for owner,name,value in ((driver.issuer,'SOCKET_ROOT',Path(tmp)),(driver.delegated,'ROOT',Path(tmp)),
-                (driver.canonical,'ROOT',Path(tmp)),(driver.creator_config,'LEDGER','config'),(driver.target_jdk,'LEDGER','jdk'),
+                (driver.realtime_p3,'SOCKET_PARENT',Path(tmp)),(driver.canonical,'ROOT',Path(tmp)),
+                (driver.realtime_capability,'LEDGER','p3'),(driver.creator_config,'LEDGER','config'),(driver.target_jdk,'LEDGER','jdk'),
                 (driver.peer_phase,'LEDGER','peer'),(driver.trust_effect,'LEDGER','trust'),(driver.target_plan,'LEDGER','target'),
                 (driver.backup,'AuthToolPreparation',SimpleNamespace)):
                 stack.enter_context(patch.object(owner,name,value))
-            for owner,name,value in ((driver,'_bases',None),(driver,'_directory',None),(driver,'_handshake',{'proof':'issuer'}),
+            for owner,name,value in ((driver,'_bases',None),(driver,'_directory',None),(driver,'_realtime_directory',None),
                 (driver.issuer,'PeerIssuerPreflightPhase',issuer),(driver.issuer,'verify_current',{'proof':'issuer'}),
+                (driver.realtime_capability,'verify_current',p3_receipt),
                 (driver.delegated,'CreatorReceiver',receiver),(driver.delegated,'inspect_existing',{'profile':'creator'}),
                 (driver.delegated,'inspect_space_from_creator',{'profile':'space'}),(driver.role,'inspect_role_from_creator',{'profile':'role'}),
                 (driver.trust_effect,'TrustEffectPhase',trust),(driver.trust_effect,'verify_prepared',{'proof':'trust'}),
                 (driver.target_plan,'TargetPlanPhase',target),(driver.target_plan,'verify_current',{'receipt':{'proof':'target'}})):
                 stack.enter_context(patch.object(owner,name,return_value=value))
+            stack.enter_context(patch.object(driver,'_handshake',side_effect=lambda phase,token,**kw:p3_receipt if kw.get('realtime') else {'proof':'issuer'}))
+            stack.enter_context(patch.object(driver.realtime_capability.RealtimeP3Capability,'__new__',return_value=p3))
+            stack.enter_context(patch.object(driver.realtime_capability.RealtimeP3Capability,'__init__',return_value=None))
             trust.prepare=lambda token:{'proof':'trust'}; target.run=lambda token,actor:{'proof':'target'}
             with self.assertRaises(driver.DriverError):subject._prepare_creator('token')
             self.assertEqual(len(calls),2)
