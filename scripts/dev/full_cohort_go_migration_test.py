@@ -443,10 +443,14 @@ class SecretSnapshotTest(unittest.TestCase):
             self.assertEqual(migration.verify_writer_successor(phase, root)['job']['state'], 'absent')
             state['bound'] = True
         self.cut.bind_migration = bind
+        self.cut.migration_history = []
         self.cut.verify_migration_pending = lambda: self.assertTrue(state['bound'])
         self.cut.verify_migration_running = lambda: self.assertTrue(state['bound'])
         self.cut.finish_migration = lambda: state.update(finished=True)
-        self.cut.accept_migration_cleanup = lambda: state.update(bound=False)
+        def accept_cleanup():
+            self.cut.migration_history.append({'kind': 'go', 'phase': phase, 'finished': True})
+            state.update(bound=False)
+        self.cut.accept_migration_cleanup = accept_cleanup
         with mock.patch.object(self.phase, 'verify', return_value=secret_receipt), \
              mock.patch.object(migration, 'qualified_plan', return_value=proof), \
              mock.patch.object(migration.cohort_restore_journal, 'verify_go_role', return_value=clone, create=True), \
@@ -476,6 +480,9 @@ class SecretSnapshotTest(unittest.TestCase):
             self.assertEqual(migration.verify_completed(phase), result)
             historic = migration.verify_writer_successor(phase, phase.root)
             self.assertEqual((historic['job']['state'], historic['configmap']['state']), ('removed', 'removed'))
+            ordered = {'databases': ['chat_db', 'user_db'], 'metadata': {'migrations': {
+                'chat_db': {'from': 1, 'to': 2}, 'user_db': {'from': 19, 'to': 22}}}}
+            migration._check_order(self.cut, ordered, 'user_db')
             self.base.ledger.row['go_migrations']['chat_db']['steps']['job']['receipt']['to'] = 99
             with self.assertRaises(migration.MigrationError): migration.verify_completed(phase)
 
