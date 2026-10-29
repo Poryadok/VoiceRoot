@@ -20,6 +20,27 @@ KNOWN_FILTERS = frozenset('''global ci_global ci_scripts go_build_shared nats_re
         role search social space story subscription user voice'''.split())
 
 
+def candidate_base(root, event_base, head, candidate):
+    """Resolve a PR merge candidate's actual base, allowing an older event base."""
+    if any(not re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', value)
+           for value in (event_base, head, candidate)):
+        raise ValueError('full commit identities are required')
+    try:
+        parents = subprocess.check_output(
+            ['git', '-C', str(root), 'show', '-s', '--format=%P', candidate],
+            stderr=subprocess.PIPE, text=True).strip().split()
+    except subprocess.CalledProcessError as exc:
+        raise ValueError('candidate commit unavailable') from exc
+    if len(parents) != 2 or parents[1] != head:
+        raise ValueError('candidate does not have the event head as its second parent')
+    base = parents[0]
+    if subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', event_base, base],
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+        raise ValueError('event base is not an ancestor of candidate base')
+    validate_identity(root, base, head, candidate)
+    return base
+
+
 def validate_identity(root, base, head, candidate):
     def git(*args):
         return subprocess.check_output(['git', '-C', str(root), *args],
@@ -306,11 +327,14 @@ def main():
     parser.add_argument('--head', required=True)
     parser.add_argument('--candidate', required=True)
     parser.add_argument('--head-ref', required=True)
+    parser.add_argument('--event-base', action='store_true',
+                        help='resolve the actual merge parent from an older PR event base')
     parser.add_argument('--compare-hosted', action='store_true',
                         help='compare with dorny outputs in HOSTED_FILTER_JSON')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
-    plan = build_plan(root, args.base, args.head, args.candidate, args.head_ref)
+    base = candidate_base(root, args.base, args.head, args.candidate) if args.event_base else args.base
+    plan = build_plan(root, base, args.head, args.candidate, args.head_ref)
     if args.compare_hosted:
         plan['hosted_comparison'] = compare_hosted(
             root, plan, json.loads(os.environ['HOSTED_FILTER_JSON']), args.head_ref)

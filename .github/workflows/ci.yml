@@ -184,7 +184,7 @@ jobs:
           HOSTED_FILTER_JSON: ${{ toJson(steps.filter.outputs) }}
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          python3 scripts/ci/affected_check_plan.py --base "$BASE_SHA" --head "$HEAD_SHA" \
+          python3 scripts/ci/affected_check_plan.py --event-base --base "$BASE_SHA" --head "$HEAD_SHA" \
             --candidate "$CANDIDATE_SHA" --head-ref "$HEAD_REF" --compare-hosted \
             > "$RUNNER_TEMP/affected-check-plan.json"
           cat "$RUNNER_TEMP/affected-check-plan.json"

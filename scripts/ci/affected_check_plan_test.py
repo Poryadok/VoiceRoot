@@ -219,6 +219,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertEqual(selector['with']['predicate-quantifier'], 'some-with-excludes')
         command = next(step for step in job['steps'] if step.get('name') == 'Compare affected checks')
         self.assertIn('--compare-hosted', command['run'])
+        self.assertIn('--event-base', command['run'])
         self.assertEqual(command['env']['CANDIDATE_SHA'], '${{ github.sha }}')
         self.assertNotIn('affected-check-plan', workflow['jobs']['ci-gate']['needs'])
 
@@ -358,6 +359,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
             (root / 'base.txt').write_text('base', encoding='utf-8')
             git('add', '.')
             git('commit', '-qm', 'initial')
+            event_base = git('rev-parse', 'HEAD')
             git('switch', '-qc', 'feature')
             (root / 'feature.txt').write_text('feature', encoding='utf-8')
             git('add', '.')
@@ -370,6 +372,12 @@ class AffectedCheckPlanTests(unittest.TestCase):
             base = git('rev-parse', 'HEAD')
             git('merge', '--no-ff', '-qm', 'merge', head)
             candidate = git('rev-parse', 'HEAD')
+            self.assertEqual(planner.candidate_base(root, event_base, head, candidate), base)
+            self.assertEqual(planner.candidate_base(root, base, head, candidate), base)
+            with self.assertRaises(ValueError):
+                planner.candidate_base(root, head, head, candidate)
+            with self.assertRaises(ValueError):
+                planner.candidate_base(root, event_base, base, candidate)
             self.assertEqual(planner.validate_identity(root, base, head, candidate)['candidate'], candidate)
             with self.assertRaises(ValueError):
                 planner.validate_identity(root, head, base, candidate)
