@@ -48,8 +48,8 @@ def prove(child,config,source,code,binding,unchanged):
         or hashlib.sha256(raw).hexdigest()!=binding.get(CALLER)
         or hashlib.sha256((code/FIXTURE).read_bytes()).hexdigest()!=binding.get(FIXTURE)):
         raise Blocked('story_compatibility_fixture_code_invalid')
-    migrations={name:(source/SQL/name).read_bytes() for name in actor_root.STORY_UP}
-    if {n:hashlib.sha256(v).hexdigest() for n,v in migrations.items()}!=actor_root.STORY_UP:
+    migrations={name:(source/SQL/name).read_bytes() for name in actor_root.STORY_CURRENT4_UP}
+    if {n:hashlib.sha256(v).hexdigest() for n,v in migrations.items()}!=actor_root.STORY_CURRENT4_UP:
         raise Blocked('story_compatibility_fixture_schema_invalid')
     base=guard.ROOT/'story-fixtures'
     try:base.mkdir(mode=0o700)
@@ -140,10 +140,10 @@ def prove(child,config,source,code,binding,unchanged):
         result={'schema':'voice-story-current4-automatic-witness-v1','repository':'Poryadok/VoiceRoot','service':'story','platform':'linux/amd64',
             'content':{'child_sha256':child,'config_sha256':config,'binary_sha256':binary,'build_source_sha':revision},
             'component':{'source_sha':revision,'manifest_sha256':child},
-            'database':{'name':'story_db','version':4,'dirty':False,'up_sha256':actor_root.STORY_UP,
+            'database':{'name':'story_db','version':4,'dirty':False,'up_sha256':actor_root.STORY_CURRENT4_UP,
                 'catalog_before_sha256':before,'catalog_after_sha256':after},
             'fixture':{'contract_sha256':hashlib.sha256(CONTRACT.encode()).hexdigest(),
-                'input_sha256':canonical({'child':child,'config':config,'migrations':actor_root.STORY_UP}),
+                'input_sha256':canonical({'child':child,'config':config,'migrations':actor_root.STORY_CURRENT4_UP}),
                 'source_sha256':binding[FIXTURE],'result_sha256':canonical(evidence),
                 'cases':['health','text_writer','sql_defaults','missing_profile','wrong_count','schema_preservation','cleanup'],
                 'positive_exit':positive_exit,'negative_exit':negative_exit,'missing_profile_code':'Unauthenticated','row_count':1,'cleanup_verified':False},

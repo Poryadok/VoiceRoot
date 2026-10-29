@@ -12,11 +12,19 @@ STORY_IMAGES={
  'ghcr.io/poryadok/voiceroot/story@sha256:900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7':('900de5490b7a688f4cd434f332ff4fc1d92d4cc9168d3a1f522618c749fdcbb7','46192e1ca61e898df57a2aac07657e574b9d209d91106dc0e18ef8a735684970','ab957f054b081573447888ed9550323bd413cbbf'),
  'ghcr.io/poryadok/voiceroot/story@sha256:09c6481710665e056d5b29c092189bff899a78e6c457be5a521edec12bbb0fa9':('09c6481710665e056d5b29c092189bff899a78e6c457be5a521edec12bbb0fa9','56c0f5981f838b86a22595b8848bf2a960c8d060d41d4f200ab59d6e30111016','e0d635a8357bc9fbfa8b29202c33ac0e81b44644')}
 ACL='deploy/nats/acl-intent.yaml'
-STORY_UP={
+STORY_CURRENT4_UP={
     '000001_init.up.sql':'5d4957b2d80de5c28623109572966753567a1b5419caa451e012d5179f12e220',
     '000002_visibility_audience.up.sql':'63b9d54da053d0e9143bf09d993c123d7d479423452b92eb61f247e9e4a2ef16',
     '000003_hidden_from_feed.up.sql':'fe5396f4cb89865f12a31e1e79e7a993f9f9d4346f692539e9ab087b9776be0c',
     '000004_archive_purge_outbox.up.sql':'09117f527f298eceecbc7affbe940dc2d419c927e2ef349738c0e6229b01ecf1'}
+# Historical compatibility witnesses remain bound to exactly these four bytes.
+STORY_UP=STORY_CURRENT4_UP
+# Candidate migration source is independently closed through target version 8.
+STORY_TARGET8_UP={**STORY_CURRENT4_UP,
+    '000005_lfp_consent_journal.up.sql':'a0b23aa978ae94b7fe74cd5b96286e54b0a5f7da04d634565cc9f0e92423f2be',
+    '000006_lfp_actor_provenance.up.sql':'073cba0ddf42ddc74072546b095ac9799e836464fb0a3c237b865e5c5bcc73f8',
+    '000007_media_reference_intents.up.sql':'80216c1e8e27fbb0d7728e06304876e72b8cfddf782b92ea85f31c760c84426f',
+    '000008_reference_inventory.up.sql':'18c405c4ce24c323f9005a6634000e8341e4d5c748c86894c2628919ac89236c'}
 def fail():raise Blocked('existing_service_actor_authority_changed')
 def identity(row):return {k:row['metadata'][k] for k in ('name','uid','resourceVersion')}
 def public_user(credentials,role):
@@ -120,11 +128,11 @@ STORY_SCHEMA_ARGS=('exec','voice-postgres-0','-c','postgres','--','sh','-ceu',ST
 
 
 def story_schema(kube,source,stage):
-    """Fixed compatible candidate schema; isolated fixture PASS is not input."""
+    """Qualify target8 source and the separately observed clean current4."""
     import space_authority
     folder=Path(source)/'src/backend/migrations/story_db'
     hashes={path.name:hash_bytes(path.read_bytes()) for path in folder.glob('*.up.sql')}
-    if hashes!=STORY_UP:fail()
+    if hashes!=STORY_TARGET8_UP:fail()
     try:
         snapshot=stage.snapshots['voice-story'];metadata=snapshot['metadata']
         if (metadata['name']!='voice-story' or metadata['namespace']!='voice-staging'
