@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -62,7 +63,7 @@ func TestProductionLegacy24PopulatedChain(t *testing.T) {
 	require.Equal(t, 24, version)
 	require.False(t, dirty)
 	require.NoError(t, conn.Close(ctx))
-	cmd = exec.CommandContext(ctx, binary, "-mode", "upgrade-legacy24", "-migrations-dir", "../../../migrations/space_db", "-migrate", driver)
+	cmd = exec.CommandContext(ctx, binary, "-mode", "upgrade-legacy24", "-migrations-dir", "../../../migrations/space_db", "-migrate", driver, "-operation-id", "owned-legacy24-integration", "-snapshot-id", "owned-backup-fixture", "-origin-evidence", filepath.Join(t.TempDir(), "original.json"))
 	cmd.Env = append(os.Environ(), "SPACE_NATIVE_ADMIN_URL="+adminURL)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
