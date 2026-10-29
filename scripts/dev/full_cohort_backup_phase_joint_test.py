@@ -144,7 +144,20 @@ class RealPreflightTest(unittest.TestCase):
         """Real capture/readback/restore; Kube, source and GitHub are synthetic."""
         self.scenario(True)
 
-    def scenario(self, succeed):
+    def test_seed_hook_uses_actual_catalog_and_keeps_extra_database(self):
+        def seed(pg):
+            pg.sql(pg.source,'source_admin','postgres','CREATE DATABASE extra_db')
+            pg.sql(pg.source,'source_admin','extra_db',
+                   'CREATE SCHEMA tenant AUTHORIZATION app_writer; CREATE TABLE tenant.items(id integer PRIMARY KEY); '
+                   'ALTER TABLE tenant.items OWNER TO app_writer; INSERT INTO tenant.items VALUES (7)')
+        def checked(work,state):
+            self.assertEqual(set(state['catalog']['databases']),{'postgres','template1','source_admin','extra_db'})
+            self.assertEqual(set(state['catalog']['excluded']),{'template0'})
+            self.assertEqual(backup.verify_completed(work.phase,'fixture-token')['scope'],
+                             'full-cohort-private-backup-and-isolated-restore')
+        self.scenario(True,seed=seed,after_restore=checked)
+
+    def scenario(self, succeed, seed=None, source_files=None, kube_setup=None, after_restore=None):
         images={name:canonical.REGISTRY+'/'+name+'@sha256:'+'b'*64 for name in canonical.IMAGE_NAMES}
         mapped={'voice-'+name+'/'+container:images[name] for name,container in update_images.SERVICES.items()}
         engine={'namespace_uid':'00000000-0000-0000-0000-000000000001',
@@ -168,6 +181,7 @@ class RealPreflightTest(unittest.TestCase):
                    "CREATE ROLE app_writer LOGIN; CREATE SCHEMA tenant AUTHORIZATION app_writer; "
                    "CREATE TABLE tenant.items(id integer PRIMARY KEY); ALTER TABLE tenant.items OWNER TO app_writer; "
                    "INSERT INTO tenant.items VALUES (7)")
+            if seed is not None:seed(pg)
             source_catalog=json.loads(pg.sql(pg.source,'source_admin','postgres',unmanaged.CATALOG_SQL))
             roles=json.loads(pg.sql(pg.source,'source_admin','postgres',media_restore.role_catalog_sql()))
             oid=int(pg.sql(pg.source,'source_admin','postgres',"SELECT oid FROM pg_database WHERE datname='postgres'"))
@@ -176,6 +190,21 @@ class RealPreflightTest(unittest.TestCase):
             selected.update(owner=source_catalog['database_owner'],acl=props['acl_raw'])
             catalog={'databases':{'postgres':oid},'all_databases':{'postgres':oid},'excluded':{},'properties':{'postgres':selected}}
             state.update(pg=pg,roles=roles,source_catalog=source_catalog)
+            if seed is not None:
+                start=pg.sql(pg.source,'source_admin','postgres','SELECT pg_postmaster_start_time()').strip()
+                query=("SELECT json_agg(json_build_object('name',datname,'oid',oid::bigint,'template',datistemplate,"
+                       "'allowconn',datallowconn,'encoding',pg_encoding_to_char(encoding),'collate',datcollate,'ctype',datctype,"
+                       "'locale_provider',datlocprovider::text,'icu_locale',daticulocale,'connection_limit',datconnlimit,"
+                       "'owner',pg_get_userbyid(datdba),'acl',datacl::text) ORDER BY datname) FROM pg_database")
+                rows=json.loads(pg.sql(pg.source,'source_admin','postgres',query));all_dbs={x['name']:x['oid'] for x in rows}
+                active={x['name']:x['oid'] for x in rows if x['allowconn']}
+                excluded={x['name']:{'oid':x['oid'],'template':x['template'],'reason':'connections_disabled_zero_activity'}
+                          for x in rows if not x['allowconn']}
+                properties={x['name']:{k:x[k] for k in ('template','allowconn','encoding','collate','ctype',
+                            'locale_provider','icu_locale','connection_limit','owner','acl')} for x in rows}
+                catalog={'databases':active,'all_databases':all_dbs,'excluded':excluded,'properties':properties}
+                state['source_catalogs']={db:json.loads(pg.sql(pg.source,'source_admin',db,metadata._query_for(db))) for db in active}
+            state.update(engine=engine,start=start,catalog=catalog)
         admin='source_admin' if succeed else 'postgres'
         def configure(base):
             base.context['images']=copy.deepcopy(mapped);base.fence.context['images']=copy.deepcopy(mapped)
@@ -232,7 +261,7 @@ class RealPreflightTest(unittest.TestCase):
             self.enterContext(mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:
                 {'scope':scope,'active_sessions':0,'active_transactions':0}))
             receipt=owner.catalog.run('fixture-token')
-            admission['session_scope']={'engine':receipt['engine'],'server_start':start,'databases':['postgres'],
+            admission['session_scope']={'engine':receipt['engine'],'server_start':start,'databases':sorted(catalog['all_databases']),
                                         'database_oids':catalog['all_databases']}
             return admission,affected.CatalogScopedProbe(owner.catalog,'fixture-token')
         def after(owner,cut,storage,source,namespace_uid):
@@ -244,12 +273,15 @@ class RealPreflightTest(unittest.TestCase):
             self.enterContext(mock.patch.object(metadata.media_backup_upload_phase,'ROOT',owner.journal.path.parent.parent))
             self.enterContext(mock.patch.object(metadata.schema,'kube_engine_snapshot',return_value=lambda:engine))
             if not succeed:self.enterContext(mock.patch.object(metadata.unmanaged,'validate_source_catalog'))
-            self.enterContext(mock.patch.object(source,'_source_files',return_value={'files':{}}))
+            files={} if source_files is None else source_files()
+            self.enterContext(mock.patch.object(source,'_source_files',return_value={'files':files}))
             self.enterContext(mock.patch.object(source,'_read',side_effect=lambda db,*args:
-                (copy.deepcopy(state['roles']) if db=='roles' else copy.deepcopy(state['source_catalog'])) if succeed else
+                (copy.deepcopy(state['roles']) if db=='roles' else copy.deepcopy(state['source_catalogs'][db] if seed is not None else state['source_catalog'])) if succeed else
                 ({'roles':[],'memberships':[]} if db=='roles' else {'database_owner':'postgres'})))
             def tool():source._tool_state({'status':'removed'});return 'd'*64
-            self.enterContext(mock.patch.object(source,'_tool_sha',side_effect=tool))
+            if seed is None:self.enterContext(mock.patch.object(source,'_tool_sha',side_effect=tool))
+            state.update(owner=owner,cut=cut,source=source,storage=storage)
+            if kube_setup is not None:kube_setup(state,self.enterContext)
             storage.run('fixture-token');source.run('fixture-token')
         with self.phases(before_cut=before,after_cut=after,configure=configure) as work:
             self.enterContext(mock.patch.object(cohort_upload_phase,'ROOT',work.root))
@@ -308,14 +340,16 @@ class RealPreflightTest(unittest.TestCase):
                         'pv':{'metadata':{'uid':engine['pv_uid']},'spec':{'claimRef':{'uid':engine['pvc_uid'],'namespace':'voice-dev','name':'pgdata-voice-postgres-0'}}}}
                     return SimpleNamespace(returncode=0,stdout=json.dumps(objects[kind]).encode())
                 if 'pg_postmaster_start_time' in text:
-                    return SimpleNamespace(returncode=0,stdout=json.dumps({'database':'postgres','database_oid':catalog['databases']['postgres'],'role':admin,'server_start':start}).encode())
+                    db=command[-2]
+                    return SimpleNamespace(returncode=0,stdout=json.dumps({'database':db,'database_oid':catalog['databases'][db],
+                                                                           'role':admin,'server_start':start}).encode())
                 if 'pg_read_file' in text:
                     return SimpleNamespace(returncode=0,stdout=json.dumps({'data_directory':'/var/lib/postgresql/data/pgdata','version':'160014','mountinfo':mount}).encode())
                 if 'readlink' in text:
                     return SimpleNamespace(returncode=0,stdout=('/var/lib/postgresql/data/pgdata\n/var/lib/postgresql/data\n'+mount).encode())
                 observations.append(command[-1])
                 if succeed:
-                    program=['pg_dumpall','-U',admin,'--roles-only','--no-role-passwords'] if command[-1]=='roles' else ['pg_dump','-U',admin,'-Fc','-d','postgres']
+                    program=['pg_dumpall','-U',admin,'--roles-only','--no-role-passwords'] if command[-1]=='roles' else ['pg_dump','-U',admin,'-Fc','-d',command[-1]]
                     return original_run(['docker','exec',state['pg'].source,*program],stdout=kwargs['stdout'],stderr=subprocess.DEVNULL,timeout=90)
                 kwargs['stdout'].write(b'synthetic-pg-dump');return SimpleNamespace(returncode=0,stdout=b'')
             with mock.patch.object(capture.subprocess,'run',side_effect=transport):
@@ -323,7 +357,7 @@ class RealPreflightTest(unittest.TestCase):
                     original_psql=media_restore._psql;checked=[]
                     def checked_psql(cid,role,db,sql,timeout=120):
                         result=original_psql(cid,role,db,sql,timeout=timeout)
-                        if db=='postgres' and sql==unmanaged.CATALOG_SQL:
+                        if (db=='postgres' or (seed is not None and db=='extra_db')) and sql==unmanaged.CATALOG_SQL:
                             value=original_psql(cid,role,db,"SELECT id,pg_get_userbyid(relowner) FROM tenant.items CROSS JOIN pg_class WHERE oid='tenant.items'::regclass")
                             self.assertEqual(value.strip(),b'7|app_writer');checked.append(True)
                         return result
@@ -332,12 +366,13 @@ class RealPreflightTest(unittest.TestCase):
                         except backup.BackupError:
                             steps=sorted(work.phase.journal.state['steps']) if work.phase.journal else []
                             self.fail('synthetic joint incomplete; stages='+repr(steps)+'; dump_count='+str(len(observations))+'; upload='+repr(state.get('upload_failure')))
-                    self.assertEqual(len(checked),2)
+                    self.assertEqual(len(checked),4 if seed is not None and 'extra_db' in catalog['databases'] else 2)
                     self.assertEqual(result['scope'],'full-cohort-private-backup-and-isolated-restore')
                     self.assertEqual(backup.verify_completed(work.phase,'fixture-token'),result)
+                    if after_restore is not None:after_restore(work,state)
                 else:
                     with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
-                self.assertEqual(sorted(observations),['postgres','roles'])
+                self.assertEqual(sorted(observations),sorted(list(catalog['databases'])+['roles']))
                 with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
             self.assertEqual(work.base.ledger.row['status'],'active' if succeed else 'uncertain')
 
