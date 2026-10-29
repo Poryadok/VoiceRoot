@@ -62,6 +62,7 @@ on:
       - scripts/dev/writer_cut_space.py
       - scripts/dev/writer_cut_space_test.py
       - scripts/dev/space_fresh_install_phase*.py
+      - scripts/dev/space_creator_runtime_profile*.py
       - scripts/dev/realtime_config_transition*.py
       - scripts/dev/space_p3_issuer*.py
       - scripts/dev/backend_config_transition*.py
@@ -213,6 +214,9 @@ jobs:
           python -B scripts/dev/writer_cut_migration_inventory_test.py
           python -B scripts/dev/writer_cut_space_test.py
           python -B scripts/dev/space_fresh_install_phase_runtime_joint_test.py
+          python -B scripts/dev/space_creator_runtime_profile_test.py
+          python -B scripts/dev/space_creator_runtime_profile_material_test.py
+          python -B scripts/dev/space_creator_runtime_profile_phase_test.py
           python -B scripts/dev/realtime_config_transition_space_service_test.py
           python -B scripts/dev/realtime_config_transition_space_health_test.py
           python -B scripts/dev/realtime_config_transition_joint_test.py
