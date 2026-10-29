@@ -122,14 +122,25 @@ class TargetTrustPhase(jdk.TargetJdkPhase):
                 host.get('NetworkMode')!='none' or host.get('ReadonlyRootfs') is not True or host.get('CapDrop')!=['ALL'] or
                 host.get('SecurityOpt')!=['no-new-privileges'] or host.get('Tmpfs')!={'/scratch':TMPFS} or host.get('PortBindings') or item.get('Mounts')): raise ValueError()
         self._state({'status':'start-pending','name':name,'image_id':roots['config_digest'],'id':cid})
-        self._guard(); listing=_input(['docker','start','-ai',cid],store); self._guard()
-        facts=trust.compare_roots(set(roots['root_fingerprints']),listing,ca_sha)
-        status=json.loads(self._docker(['inspect',cid])); item=status[0] if isinstance(status,list) and len(status)==1 else {}
-        if item.get('Id')!=cid or item.get('State',{}).get('Status')!='exited' or item.get('State',{}).get('ExitCode')!=0: raise ValueError()
-        self._state({'status':'remove-pending','name':name,'image_id':roots['config_digest'],'id':cid})
-        self._docker(['rm','-f','-v',cid],256)
-        if cid in self._docker(['ps','-a','--no-trunc','--format','{{.ID}}']).decode('ascii').splitlines(): raise ValueError()
-        self._state({'status':'removed','name':name,'image_id':roots['config_digest'],'id':cid})
+        error=None; facts=None
+        try:
+            self._guard(); listing=_input(['docker','start','-ai',cid],store); self._guard()
+            facts=trust.compare_roots(set(roots['root_fingerprints']),listing,ca_sha)
+            status=json.loads(self._docker(['inspect',cid])); item=status[0] if isinstance(status,list) and len(status)==1 else {}
+            if item.get('Id')!=cid or item.get('State',{}).get('Status')!='exited' or item.get('State',{}).get('ExitCode')!=0: raise ValueError()
+        except BaseException as failure:error=failure
+        if isinstance(error,metadata.GuardLost): raise error
+        try:
+            self._state({'status':'remove-pending','name':name,'image_id':roots['config_digest'],'id':cid})
+            check=json.loads(self._docker(['inspect',cid])); item=check[0] if isinstance(check,list) and len(check)==1 else {}
+            if item.get('Id')!=cid or item.get('Image')!=roots['config_digest'] or item.get('Config',{}).get('Labels',{}).get('voice.test.owner')!=name: raise ValueError()
+            self._docker(['rm','-f','-v',cid],256)
+            if cid in self._docker(['ps','-a','--no-trunc','--format','{{.ID}}']).decode('ascii').splitlines(): raise ValueError()
+            self._state({'status':'removed','name':name,'image_id':roots['config_digest'],'id':cid})
+        except BaseException as cleanup:
+            if isinstance(error,metadata.GuardLost) or isinstance(cleanup,metadata.GuardLost): raise metadata.GuardLost('target trust cleanup guard unavailable') from None
+            raise TargetTrustError('target trust cleanup uncertain') from None
+        if error is not None: raise error
         if (self._secret('voice-media-jvm-trust','truststore.p12')!=(trust_id,store) or self._secret('voice-media-ca','ca.crt')!=(ca_id,ca) or
                 self._dependencies(token)!=(roots,source)): raise ValueError()
         return {'operation_id':self.fence.context['operation_id'],'source_sha':self.fence.context['commit'],
@@ -187,3 +198,38 @@ def verify_current(phase,token):
         return copy.deepcopy(receipt)
     except metadata.GuardLost: raise
     except BaseException: raise TargetTrustError('target Auth trust receipt unavailable') from None
+
+
+def verify_successor(phase,token,creator_session):
+    """Recheck trust after the exact guarded five-Secret creation successor."""
+    try:
+        import space_creator_runtime_profile_create as creator
+        import space_p3_issuer_preflight as preflight
+        if (type(phase) is not TargetTrustPhase or type(creator_session) is not creator.Session or
+                creator_session.preflight is not phase.preflight or creator_session.package is not phase.package or
+                creator_session.fence.context!=phase.fence.context or creator_session.lock!=phase.lock or
+                creator_session.namespace_uid!=phase.namespace_uid): raise ValueError()
+        phase._guard(); row,rev=phase._ledger(); local=copy.deepcopy(phase.journal.state['steps'][STEP]); receipt=local['receipt']
+        marker={k:v for k,v in local.items() if k!='receipt'}
+        if marker!=phase.record or marker.get('status')!='done' or marker.get('receipt_sha256')!=writer_cut.digest(receipt) or row.get(LEDGER)!=marker: raise ValueError()
+        original=copy.deepcopy(phase.preflight.journal.state['steps'][preflight.STEP]['receipt'])
+        try:roots=jdk.verify_completed(phase.jdk,token); issued=creator.verify_completed(creator_session,token)
+        except BaseException:raise metadata.GuardLost('target trust successor dependency unavailable') from None
+        if (writer_cut.digest(original)!=receipt['preflight_receipt_sha256'] or writer_cut.digest(roots)!=receipt['jdk_receipt_sha256'] or
+                issued.get('preflight_sha256')!=receipt['preflight_receipt_sha256'] or issued.get('operation_id')!=receipt['operation_id'] or
+                issued.get('source_sha')!=receipt['source_sha'] or issued.get('namespace_uid')!=receipt['namespace_uid']): raise ValueError()
+        trust_id,_=phase._secret('voice-media-jvm-trust','truststore.p12'); ca_id,ca=phase._secret('voice-media-ca','ca.crt')
+        ca_sha=hashlib.sha256(material._cert_der(ca)).hexdigest()
+        if (receipt['trust_secret']!=trust_id or receipt['media_ca']!=original['ca'] or
+                original['ca']!={'uid':ca_id['uid'],'resourceVersion':ca_id['resourceVersion'],'der_sha256':ca_sha}): raise ValueError()
+        phase._guard(); after,end=phase._ledger()
+        try:
+            if after!=row or end!=rev or creator_session.fence.ledger.read()!=(row,rev): raise ValueError()
+            phase._locals(after,receipt['jdk_receipt_sha256'],receipt['preflight_receipt_sha256']); creator_session._local()
+        except BaseException:raise metadata.GuardLost('target trust successor authority changed') from None
+        if (phase.record!=marker or phase.journal.state['steps'].get(STEP)!=local or
+                creator_session.record.get('receipt')!=issued or after.get(creator.LEDGER)!=creator_session.record or
+                after.get(creator.EFFECTS)!=creator_session.effects): raise metadata.GuardLost('target trust successor record changed')
+        return copy.deepcopy(receipt)
+    except metadata.GuardLost: raise
+    except BaseException: raise TargetTrustError('target Auth trust successor unavailable') from None
