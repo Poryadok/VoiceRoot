@@ -25,6 +25,10 @@ func verifyLegacy24Intermediate(ctx context.Context, conn *pgx.Conn, origin *leg
 	if err != nil {
 		return nil, errors.New("HOLD: intermediate25 catalog mismatch")
 	}
+	var noNativeSchema bool
+	if err = tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname IN ('native_membership_guard','space_account_ban_guard'))`).Scan(&noNativeSchema); err != nil || !noNativeSchema {
+		return nil, errors.New("HOLD: intermediate25 native schema already exists")
+	}
 	var name, role, current, system string
 	var oid uint32
 	if err = tx.QueryRow(ctx, `SELECT d.datname,d.oid,session_user,current_user,(SELECT system_identifier::text FROM pg_catalog.pg_control_system()) FROM pg_catalog.pg_database d WHERE d.datname='space_db'`).Scan(&name, &oid, &role, &current, &system); err != nil || role != current {
@@ -41,6 +45,10 @@ func verifyLegacy24Intermediate(ctx context.Context, conn *pgx.Conn, origin *leg
 	derived, err := captureLegacy24DerivedTx(ctx, tx)
 	if err != nil || !reflect.DeepEqual(derived, origin.Derived) {
 		return nil, errors.New("HOLD: intermediate25 derived data changed")
+	}
+	extras, err := captureLegacy24ExtrasTx(ctx, tx)
+	if err != nil || !reflect.DeepEqual(extras, origin.Extras) {
+		return nil, errors.New("HOLD: intermediate25 independent data changed")
 	}
 	access, err := captureLegacyAccessTx(ctx, tx)
 	if err != nil || access != origin.AccessSHA256 {
