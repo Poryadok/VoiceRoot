@@ -7,6 +7,7 @@ import re
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import Mock
 import yaml
 import nonnats_plan
 import source_plan
@@ -43,8 +44,11 @@ class Fake:
         return copy.deepcopy(self.objects[(kind, name)])
     def run(self, args, body=None, timeout=30):
         self.calls.append(('run', args))
-        if args[0] == 'apply' and '--dry-run=server' in args:
+        if args[0] in ('apply','create') and '--dry-run=server' in args:
             return copy.deepcopy(body)
+        if args[:2] == ['get','--raw']:
+            name=args[2].split('metadata.name%3D',1)[1].split('&',1)[0]
+            return {'apiVersion':'v1','kind':'ConfigMapList','metadata':{'resourceVersion':'1'},'items':[copy.deepcopy(obj) for (kind,key),obj in self.objects.items() if kind=='ConfigMap' and key==name]}
         if args[0] == 'exec':
             password = 'private-authority'
             if args[1] == 'voice-postgres-0':
@@ -68,7 +72,7 @@ def fixture():
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
     values = {key: 'private-authority' for key in helper.REQUIRED_KEYS}
-    values.update(AUTH_RESEND_FROM='Voice <sender@example.invalid>', USER_R2_BUCKET='voice-staging-avatars', FILE_R2_BUCKET='voice-staging-files')
+    values.update(AUTH_RESEND_FROM='Voice <sender@example.invalid>', USER_R2_BUCKET='voice-staging-avatars', FILE_R2_BUCKET='voice-staging-files', REALTIME_DATABASE_URL='synthetic')
     for key in values:
         if key.endswith('_DATABASE_URL'):
             values[key] = 'postgres://voice:private-authority@voice-postgres:5432/' + key.removesuffix('_DATABASE_URL').lower() + '_db?sslmode=disable'
@@ -88,6 +92,48 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_absent_frontend_configmaps_are_create_only_not_generic_actions(self):
+        kube,params=self.canonical_fixture('full')
+        names={'voice-web-runtime-config','voice-admin-runtime-config','voice-developer-portal-runtime-config'}
+        for name in names:del kube.objects[('ConfigMap',name)]
+        plan=source_plan.compile_plan(SOURCE,params,decoder,kube)
+        row=next(row for row in plan['checks'] if row['id']=='frontends')
+        created=[item for item in row['objects'] if item.get('disposition')=='create']
+        self.assertEqual({item['name'] for item in created},names)
+        self.assertFalse(any(a['manifest']['metadata']['name'] in names for a in plan['actions']))
+
+    def test_compiled_absences_reach_owned_create_only_executor(self):
+        import nonnats_runtime
+        kube,params=self.canonical_fixture('full')
+        names={'voice-web-runtime-config','voice-admin-runtime-config','voice-developer-portal-runtime-config'}
+        for name in names:del kube.objects[('ConfigMap',name)]
+        compiled=source_plan.compile_plan(SOURCE,params,decoder,kube)
+        binding=nonnats_plan.preflight(kube,compiled,'full')
+        old_run=kube.run
+        def execute(args,body=None,timeout=30):
+            if args[0]=='create' and '--dry-run=server' not in args:
+                created=copy.deepcopy(body);name=created['metadata']['name']
+                if ('ConfigMap',name) in kube.objects:raise RuntimeError('already exists')
+                created['metadata'].update(uid=name+'-uid',resourceVersion='9')
+                kube.objects[('ConfigMap',name)]=created
+                return copy.deepcopy(created)
+            return old_run(args,body,timeout)
+        kube.run=execute;state={};events=[];stage=Mock()
+        nonnats_runtime.create_frontends(kube,compiled,binding,state,stage,events.append,lambda:None)
+        self.assertEqual(set(state['frontend_bootstrap']),names)
+        self.assertEqual([e['kind'] for e in events].count('frontend_bootstrap_created'),3)
+        self.assertTrue(nonnats_plan.revalidate(kube,binding))
+
+    def test_realtime_migration_source_and_secret_are_required(self):
+        kube,params=self.canonical_fixture('full')
+        plan=source_plan.compile_plan(SOURCE,params,decoder,kube)
+        migration=next(row for row in plan['checks'] if row['id']=='migrations')
+        self.assertTrue(any(row['path'].startswith('src/backend/migrations/realtime_db/') for row in migration['sources']))
+        secret=next(row for row in migration['objects'] if row['kind']=='Secret' and row['name']=='voice-app-secrets')
+        self.assertIn('REALTIME_DATABASE_URL',secret['desired']['required_keys'])
+        del kube.objects[('Secret','voice-app-secrets')]['data']['REALTIME_DATABASE_URL']
+        with self.assertRaises(nonnats_plan.PlanError):source_plan.compile_plan(SOURCE,params,decoder,kube)
+
     def test_principal_publisher_requires_existing_immutable_public_document(self):
         for fault in ('missing','mutable','extra-key','empty','binary'):
             with self.subTest(fault=fault):

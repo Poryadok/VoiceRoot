@@ -56,6 +56,9 @@ def isolate_gis_first_install(rows, plan, producer):
     for check in plan['checks']:
         if not isinstance(check,dict) or not isinstance(check.get('objects'),list):
             raise Blocked('gis_first_install_plan_scope_invalid')
+        # These objects are created only by a later ordinary rollout, never by
+        # the add-only GIS transition.
+        check['objects']=[o for o in check['objects'] if o.get('disposition')!='create']
         disposition=check.get('disposition')
         for descriptor in check['objects']:
             effective=descriptor.get('disposition',disposition)
@@ -67,7 +70,6 @@ def isolate_gis_first_install(rows, plan, producer):
             identity=(descriptor.get('kind'),descriptor.get('name'))
             if (not isinstance(manifest,dict)
                 or identity!=(manifest.get('kind'),manifest.get('metadata',{}).get('name'))
-                or action.get('row')!=check.get('id')
                 or descriptor.get('desired')!=nonnats_plan.semantic(manifest)
                 or identity in expected):
                 raise Blocked('gis_first_install_deferred_action_invalid')
@@ -153,6 +155,32 @@ class ProducerKube:
     def secret_meta(self,name):
         values=self.run(['get','secret',name,'-o',"jsonpath-as-json={.metadata['uid','resourceVersion']}"])
         return dict(zip(('uid','resourceVersion'),values))
+
+def prebootstrap_image_inventory(source, parameters, producer):
+    """Derive the ordinary full target image keys before bootstrap effects."""
+    import source_plan
+    if parameters.get('mode') not in ('full', 'app-only') or parameters.get('gis_first_install'):
+        raise Blocked('realtime_bootstrap_candidate_invalid')
+    rows=rendered_source(source,parameters,decode_yaml)
+    builder=source_plan._Source(source,parameters,decode_yaml,producer)
+    source_plan._configuration(builder)
+    source_plan._application(builder,images_only=True)
+    source_plan.frontend_objects(builder,deployments_only=True)
+    for action in builder.actions:
+        wanted=action['manifest'];identity=(wanted['kind'],wanted['metadata']['name'])
+        rows=[row for row in rows if (row['kind'],row['metadata']['name'])!=identity]+[wanted]
+    keys=set()
+    for row in rows:
+        if row.get('kind')!='Deployment':continue
+        spec=row['spec']['template']['spec']
+        for container in spec.get('initContainers',[])+spec['containers']:
+            key=row['metadata']['name']+'/'+container['name']
+            if key in keys:raise Blocked('realtime_bootstrap_candidate_invalid')
+            keys.add(key)
+    images=parameters['images']
+    if not keys or any(key not in images for key in keys):raise Blocked('realtime_bootstrap_candidate_changed')
+    return {key:images[key] for key in keys}
+
 
 def main(args,*,producer=None):
     if len(args)!=3:raise Blocked('rollout_compile_arguments_invalid')
