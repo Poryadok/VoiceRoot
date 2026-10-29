@@ -89,17 +89,18 @@ class ExternalKube:
 
 class ExternalPostgres:
     """Bounded synthetic process output; production catalog parser remains active."""
-    def __init__(self,kube):
+    def __init__(self,kube,catalog=None):
         self.kube=kube; self.oid=42; self.reads=0; self.drift=False; self.dirty=False
         databases=sorted((set(schema.OWNERS.values())|set(schema.OPTIONAL_DATABASES.values()))-{'realtime_db','user_db'})
         self.oids={name:100+index for index,name in enumerate(databases)}|{'user_db':self.oid}
+        self.versions={name:min(entry['versions']) for name,entry in (catalog or {}).get('databases',{}).items()}
 
     def process(self,args,limit):
         if args[8]!='exec' or args[9]!='voice-postgres-0':return self.kube.process(args)
         if args[-2]!='postgres':
             name=args[-2]
             value={'database':name,'database_oid':self.oids[name],'role':'voice','pid':123,'server_start':'fixture-start',
-                   'read_only':'on','data_directory':'/var/lib/postgresql/data','version':1,'dirty':self.dirty,'ledger_rows':1,
+                   'read_only':'on','data_directory':'/var/lib/postgresql/data','version':self.versions.get(name,1),'dirty':self.dirty,'ledger_rows':1,
                    'bad_versions':0,'ledger_kind':'flyway' if name=='auth_db' else 'go',
                    'voice_lifecycle_tables_present':True}
             return json.dumps(value).encode()
@@ -161,7 +162,9 @@ class DriverJointTest(unittest.TestCase):
         for name in set(schema.CONTAINERS)-{'auth','realtime'}:
             self.assertEqual(result['workloads'][name][0]['status'],'observed',name)
         for name in ('chat','messaging'):
-            for secondary in result['workloads'][name][0]['result']['secondary']:
+            rows=result['workloads'][name][0]['result']['secondary']
+            self.assertEqual({row['metadata']['database'] for row in rows},set(schema.SECONDARY[name].values()))
+            for secondary in rows:
                 self.assertEqual(secondary['owner_consistency'],'matched')
         self.assertFalse(result['startup_qualified'])
 
