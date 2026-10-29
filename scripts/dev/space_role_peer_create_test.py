@@ -121,11 +121,22 @@ class RoleCreateTest(unittest.TestCase):
             if not entered.wait(5): raise RuntimeError('fixture did not start')
             raise create.schema.GuardLost('lost')
         phase.serve_preflight=lost
+        cancelled=threading.Event(); returned=threading.Event(); failures=[]; original_cancel=client.PeerTrigger.cancel
+        def cancel(control): original_cancel(control); cancelled.set()
+        def run():
+            try:phase.run()
+            except BaseException as error:failures.append(type(error))
+            finally:returned.set()
         try:
-            with mock.patch.object(client.preflight,'verify_current',side_effect=stalled),mock.patch.object(client.socket,'socket') as connect:
-                with self.assertRaises(create.schema.GuardLost):phase.run()
-                release.set(); phase.issue_thread.join(5)
-                self.assertFalse(phase.issue_thread.is_alive()); connect.assert_not_called()
+            with mock.patch.object(client.preflight,'verify_current',side_effect=stalled),mock.patch.object(client.socket,'socket') as connect, \
+                 mock.patch.object(client.PeerTrigger,'cancel',cancel):
+                caller=threading.Thread(target=run); caller.start()
+                try:
+                    self.assertTrue(cancelled.wait(5)); self.assertFalse(returned.wait(.1))
+                finally:
+                    release.set(); caller.join(5)
+                self.assertFalse(caller.is_alive()); self.assertEqual(failures,[create.schema.GuardLost]); connect.assert_not_called()
+                self.assertFalse(phase.issue_thread.is_alive())
         finally:release.set()
 
     def test_trigger_setup_failure_is_uncertain_and_redacted(self):
