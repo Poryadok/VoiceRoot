@@ -21,11 +21,11 @@ current STAGING anchors rather than trusting a supplied success flag.
 
 ## Milestones and validation
 
-- [ ] Real Session test: fixed create/CAS/policy submit, exact private body and
+- [x] Real Session test: fixed create/CAS/policy submit, exact private body and
   one-use command permission; only its response can reach DONE.
 - [ ] Lost reply, claim/source drift, wrong UID/content, pending replay and
   checkpoint failure leave the durable operation uncertain without later writes.
-- [ ] Executable run_prepare produces all plans and validates all children before
+- [x] Executable cold run_prepare produces all plans and validates all children before
   any effect; current issuer/source/node and baseline are rechecked.
 - [ ] Capture and historical loaders bind the complete operation to subsequent
   Realtime and rollout targets and protected PASS ancestry.
@@ -38,13 +38,24 @@ under root's shared-resource instruction until the named main refresh finishes.
 
 ## Progress
 
-- Dependencies GIS d064206, P3 ece2c11 and OCI 39d37a7 integrated normally. OCI
-  collector has a separately reported deadline fix pending; it is not final.
-- Reviewed custody foundation retained. Next checkpoint is the actual executor,
-  not another standalone authority scaffold.
+- Fixed submit checkpoint 2f270e9 adds exclusive durable attempts, exact private
+  body transport and same-Session successful response custody. Lost replies
+  remain PENDING and cannot be retried or completed from matching live state.
+- Dependencies GIS/SQL32 cc5f3fc, P3 completion 9e0432e and OCI deadline fix
+  390abb6 integrated normally. Their scoped reviews do not approve this parent.
+- Cold joined fixture executes actual run_prepare, all three real child plans,
+  preflights and verifiers, 15 Kubernetes effects plus one root policy replacement,
+  publisher completion, and actual Session capture transition. Real OpenSSL and
+  captured services/SQL source are used. Installed helper cohort, Stage baseline,
+  candidate image admission, registry content, Kubernetes and HTTPS transport
+  are explicitly controlled fixtures, not live authority. Ten native Linux tests
+  pass, including missing issuer before effects and committed/lost app CAS reply.
+- Current existing-object path remains HOLD. Protected history and typed capture
+  loaders are implemented but historical/C2 qualification is still incomplete;
+  no C2 or live readiness claim is made. Independent parent review is pending.
 
 ## Risks
 
 Missing STAGING issuer files and unresolved real runtime evidence fail before
-effects. The candidate GIS migration/verifier version mismatch is assigned to
-the existing integration owner and must be fixed before production admission.
+effects. SQL32 source guards are integrated. C2 receipt ancestry and the actual
+caller composition remain required work before the overall deliverable is ready.

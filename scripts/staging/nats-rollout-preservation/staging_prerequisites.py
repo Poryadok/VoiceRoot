@@ -8,6 +8,8 @@ import re
 import stat
 import secrets
 import weakref
+import base64
+import importlib.util
 from pathlib import Path
 
 from controller import Blocked
@@ -32,7 +34,7 @@ BINARY_PINS={'nats-known-baseline/kernel':'9fced2b6eb7ca33d744ceceb1550774ee7a3a
     'nats-rollout-preservation/story-current4-probe':'88b6c89b9e57d028c5371db3faaea9eec4624223f54204b59056525f6971f53a'}
 REQUIRED_HELPERS=frozenset('nats-rollout-preservation/'+name+'.py' for name in
     ('staging_prerequisites','staging_release_policy_prepare','staging_p3_prerequisites','staging_p3_prerequisites_crypto',
-     'staging_gis_material','gis_first_install','gis_prerequisite','source_plan','compiler'))
+     'staging_gis_material','gis_existing_update','gis_first_install','gis_prerequisite','source_plan','compiler'))
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256','approved_sha256',
     'execution_sha256','namespace_uid','marker_sha256','baseline_sha256','actual_before',
     'policy_before_sha256','children','auxiliary_images','renderer_authority_sha256'}
@@ -42,6 +44,7 @@ KUBE_PREFIX=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']
 # A response is usable only in the process and Session which issued the write.
 # Durable attempts remain PENDING after a lost response or process interruption.
 _responses=weakref.WeakKeyDictionary()
+_target_checks=weakref.WeakKeyDictionary()
 
 
 def digest(value):
@@ -151,15 +154,30 @@ def validate_plan(plan,session):
 
 def _checkpoint(session):
     row=session.check()
-    if row.get('phase')!='prerequisites':raise Blocked('staging_prerequisites_phase_invalid')
     state=json.loads(_read_private(_base(session)/'checkpoint.json'),object_pairs_hook=guard.object_pairs)
     if (type(state) is not dict or set(state)!={'schema','plan','initial_resource_fence','status','steps','receipt','preflight_sha256'}
-        or state['schema']!='voice-staging-prerequisites-checkpoint-v1' or state['status']!='RUNNING'
-        or type(state['steps']) is not dict or state['receipt'] is not None):
+        or state['schema']!='voice-staging-prerequisites-checkpoint-v1' or state['status'] not in ('RUNNING','COMPLETE')
+        or type(state['steps']) is not dict or (state['receipt'] is None)!=(state['status']=='RUNNING')):
         raise Blocked('staging_prerequisites_checkpoint_invalid')
     plan=validate_plan(state['plan'],session)
-    session.require_binding(state['initial_resource_fence'])
-    if row.get('target_sha256')!=digest(plan):raise Blocked('staging_prerequisites_binding_changed')
+    initial=state['initial_resource_fence'];current=session.binding()
+    if (set(initial)!=set(current) or any(initial[k]!=current[k] for k in current if k!='target_sha256')
+        or initial['target_sha256']!=digest(plan)):raise Blocked('staging_prerequisites_binding_changed')
+    phase=row.get('phase')
+    if phase=='prerequisites':wanted=digest(plan)
+    elif state['status']=='COMPLETE' and phase in ('prerequisites-captured','realtime-bootstrap','prepare'):
+        captured=_json(_read_private(_base(session)/'capture.json',limit=32<<20));capture_sha=digest(captured)
+        if phase=='prerequisites-captured':wanted=capture_sha
+        elif phase=='realtime-bootstrap':
+            rt=_json(_read_private(guard.ROOT/'installed'/'realtime-bootstrap'/session.operation/'checkpoint.json',limit=32<<20))
+            if rt['plan'].get('prerequisites_sha256')!=capture_sha:raise Blocked('staging_prerequisites_binding_changed')
+            wanted=digest(rt['plan'])
+        else:
+            target=_target_checks.get(session)
+            if target is None or target.get('prerequisites_sha256')!=capture_sha:raise Blocked('staging_prerequisites_target_required')
+            wanted=digest(target)
+    else:raise Blocked('staging_prerequisites_phase_invalid')
+    if row.get('target_sha256')!=wanted:raise Blocked('staging_prerequisites_binding_changed')
     return state
 
 def _store_state(session,before,after):
@@ -196,7 +214,7 @@ def _effect_order(plan):
 
 def record_pending(session,slot,effect_id):
     state=_checkpoint(session)
-    if state['preflight_sha256']!=digest(state['plan']):raise Blocked('staging_prerequisites_preflight_required')
+    if state['status']!='RUNNING' or state['preflight_sha256']!=digest(state['plan']):raise Blocked('staging_prerequisites_preflight_required')
     expected=_effect_order(state['plan']);done=[]
     if set(state['steps'])-set(SLOTS):raise Blocked('staging_prerequisites_checkpoint_invalid')
     for s in SLOTS:
@@ -225,6 +243,7 @@ def record_done(session,slot,effect_id,observation):
     if response is None or response['observation']!=observation or response['checkpoint_sha256']!=digest(state):
         raise Blocked('staging_prerequisites_submit_response_required')
     verified=importlib.import_module(CHILD_MODULES[slot]).verify_effect(session,effect_id,observation)
+    load_authority(session)
     if verified!=observation or _checkpoint(session)!=state:raise Blocked('staging_prerequisites_observation_changed')
     after=copy.deepcopy(state);after['steps'][slot][effect_id]={'status':'DONE','observation':copy.deepcopy(verified)}
     _store_state(session,state,after)
@@ -235,6 +254,8 @@ def require_child(session,slot):
     if slot not in SLOTS:raise Blocked('staging_prerequisites_slot_invalid')
     state=_checkpoint(session);plan=state['plan']['children'][slot]
     if type(plan) is not dict:raise Blocked('staging_prerequisites_child_invalid')
+    for key in ('operation','namespace_uid','source_capture_sha256'):
+        if plan.get(key)!=state['plan'][key]:raise Blocked('staging_prerequisites_child_binding_changed')
     # The fixed child preflight must independently validate its complete plan,
     # payloads and protected issuer/ancestry before any effect is permitted.
     return copy.deepcopy(plan)
@@ -254,6 +275,28 @@ def load_payload(session,slot,effect_id):
         raise Blocked('staging_prerequisites_payload_changed')
     session.check()
     return raw
+
+
+def load_done(session,slot):
+    if slot not in SLOTS:raise Blocked('staging_prerequisites_slot_invalid')
+    state=_checkpoint(session)
+    if state['preflight_sha256']!=digest(state['plan']):raise Blocked('staging_prerequisites_preflight_required')
+    result={}
+    expected={ident for effect_slot,ident in _effect_order(state['plan']) if effect_slot==slot}
+    if set(state['steps'].get(slot,{}))!=expected:raise Blocked('staging_prerequisites_incomplete')
+    for ident in expected:
+        step=state['steps'][slot][ident]
+        if set(step)!={'status','observation'} or step['status']!='DONE':raise Blocked('staging_prerequisites_incomplete')
+        key=hashlib.sha256((slot+'/'+ident).encode()).hexdigest();base=_base(session)/'attempts'
+        intent=_json(_read_private(base/(key+'.json')));response=_json(_read_private(base/(key+'.response.json')))
+        effect=_selected_effect(state,slot,ident)
+        if (intent.get('plan_sha256')!=digest(state['plan']) or intent.get('slot')!=slot or intent.get('effect_id')!=ident
+            or intent.get('operation')!=session.operation or intent.get('payload_sha256')!=effect['payload_sha256']
+            or response.get('intent_sha256')!=digest(intent) or response.get('observation')!=step['observation']):
+            raise Blocked('staging_prerequisites_response_changed')
+        result[ident]=copy.deepcopy(step['observation'])
+    if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
+    return result
 
 def load_authority(session):
     """Return only the fixed root-captured source and its verified workspace."""
@@ -387,7 +430,7 @@ def check_effect(session,slot,effect_id):
     import commands
     from stage_runtime import Kube
     state=_checkpoint(session);effect=_selected_effect(state,slot,effect_id)
-    if (commands.authority_guard!=session.check or state['preflight_sha256']!=digest(state['plan'])
+    if (state['status']!='RUNNING' or commands.authority_guard!=session.check or state['preflight_sha256']!=digest(state['plan'])
         or state['steps'].get(slot,{}).get(effect_id)!={'status':'PENDING'}):
         raise Blocked('staging_prerequisites_effect_not_admitted')
     namespace=Kube().get('namespace','voice-staging')
@@ -401,11 +444,18 @@ def check_effect(session,slot,effect_id):
 
 def _recheck_baseline(session,state):
     import realtime_bootstrap
-    from stage_runtime import Kube
+    from stage_runtime import Kube,pv_storage_path
     baseline=_json(_read_private(_base(session)/'baseline.json',limit=32<<20))
     if digest(baseline)!=state['plan']['baseline_sha256']:
         raise Blocked('staging_prerequisites_baseline_changed')
-    realtime_bootstrap._check_stage(Kube(),baseline['workloads'])
+    kube=Kube();realtime_bootstrap._check_stage(kube,baseline['workloads'])
+    namespace=kube.get('namespace','voice-staging');expected=baseline['expected'];storage=baseline['storage']
+    claim=kube.get('pvc',expected['source_claim']);pv=kube.get('pv',claim['spec']['volumeName'])
+    if (namespace['metadata'].get('uid')!=state['plan']['namespace_uid'] or namespace['metadata'].get('deletionTimestamp')
+        or claim['metadata'].get('uid')!=expected['source_claim_uid'] or claim['metadata'].get('deletionTimestamp')
+        or pv['metadata'].get('deletionTimestamp') or claim['spec']!=storage['claim']['spec'] or pv['spec']!=storage['pv']['spec']
+        or pv_storage_path(pv,claim['metadata']['uid'],claim['metadata']['name'],expected['source_pv_uid'])!=storage['path']):
+        raise Blocked('staging_prerequisites_storage_changed')
     if digest(baseline['workloads']['marker'])!=state['plan']['marker_sha256']:
         raise Blocked('staging_prerequisites_marker_changed')
 
@@ -495,3 +545,555 @@ def submit_effect(session,slot,effect_id):
     _private_write(attempts/(key+'.response.json'),_bytes({'intent_sha256':digest(intent),'object':actual,'observation':observation}))
     _responses.setdefault(session,{})[(slot,effect_id)]={'checkpoint_sha256':digest(state),'observation':copy.deepcopy(observation)}
     return copy.deepcopy(observation)
+
+
+def _source_module(approved,source):
+    """One reviewed source-captured collector; never a caller-selected import."""
+    import root_cli
+    relative='scripts/deploy/staging_p3_auxiliary_image.py';path=Path(source)/relative
+    encrypted_cut.directory(path.parent)
+    if root_cli.public_code_sha(path)!=approved['source_files'].get(relative):
+        raise Blocked('staging_prerequisites_auxiliary_source_changed')
+    spec=importlib.util.spec_from_file_location('_staging_prerequisites_nginx',path)
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    if root_cli.public_code_sha(path)!=approved['source_files'][relative]:
+        raise Blocked('staging_prerequisites_auxiliary_source_changed')
+    return module
+
+
+def _node(kube):
+    # The selected staging local-path storage contract already fixes this node.
+    row=kube.get('node','pmdebook');meta=row['metadata'];info=row.get('status',{}).get('nodeInfo',{})
+    if (meta.get('name')!='pmdebook' or not meta.get('uid') or meta.get('deletionTimestamp')
+        or info.get('operatingSystem')!='linux' or info.get('architecture')!='amd64'
+        or not any(r.get('type')=='Ready' and r.get('status')=='True' for r in row.get('status',{}).get('conditions',[]))):
+        raise Blocked('staging_prerequisites_node_changed')
+    return {'name':'pmdebook','uid':meta['uid'],'os':'linux','architecture':'amd64'}
+
+
+def _collect_auxiliary(session,approved,source,source_capture_sha256,kube):
+    collector=_source_module(approved,source);session.check()
+    node=_node(kube);nonce=secrets.token_hex(16)
+    location=_base(session)/'inputs'/'p3-auxiliary';_private_directory(location)
+    _private_write(location/'nonce.json',_bytes({'operation':session.operation,'nonce':nonce}))
+    raw=collector.collect()
+    if type(raw) is not dict or set(raw)!={'index','manifest','config'}:raise Blocked('staging_prerequisites_auxiliary_invalid')
+    content=collector.validate(raw['index'],raw['manifest'],raw['config'])
+    record={'schema':'voice-staging-p3-auxiliary-image-v1','operation':session.operation,'nonce':nonce,
+        'context':session.context,'helper_sha256':session.helper,'source_capture_sha256':source_capture_sha256,
+        'source_module_sha256':approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py'],**content,'node':node}
+    if _node(kube)!=node:raise Blocked('staging_prerequisites_node_changed')
+    session.check();_verify_helper_source(session,approved,source)
+    for name,value in raw.items():_private_write(location/(name+'.json'),value)
+    _private_write(location/'record.json',_bytes(record))
+    return record
+
+
+def load_auxiliary_image(session,slot):
+    from stage_runtime import Kube
+    if slot!='p3':raise Blocked('staging_prerequisites_slot_invalid')
+    state=_checkpoint(session);authority=load_authority(session);location=_base(session)/'inputs'/'p3-auxiliary'
+    record=_json(_read_private(location/'record.json'));nonce=_json(_read_private(location/'nonce.json'))
+    collector=_source_module(authority['approved'],authority['source'])
+    raw={name:_read_private(location/(name+'.json'),limit=4<<20) for name in ('index','manifest','config')}
+    content=collector.validate(raw['index'],raw['manifest'],raw['config'])
+    expected={'schema':'voice-staging-p3-auxiliary-image-v1','operation':session.operation,'nonce':nonce['nonce'],
+        'context':session.context,'helper_sha256':session.helper,'source_capture_sha256':state['plan']['source_capture_sha256'],
+        'source_module_sha256':authority['approved']['source_files']['scripts/deploy/staging_p3_auxiliary_image.py'],
+        **content,'node':_node(Kube())}
+    if (nonce!={'operation':session.operation,'nonce':record.get('nonce')} or not re.fullmatch(r'[a-f0-9]{32}',nonce['nonce'])
+        or record!=expected or state['plan']['children']['p3']['auxiliary_image']['source_authority_sha256']!=digest(record)):
+        raise Blocked('staging_prerequisites_auxiliary_changed')
+    if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
+    return copy.deepcopy(record)
+
+
+def _secret(kube,name):
+    row=kube.get('secret',name);meta=row['metadata']
+    if (row.get('apiVersion')!='v1' or row.get('kind')!='Secret' or meta.get('name')!=name
+        or meta.get('namespace')!='voice-staging' or not meta.get('uid') or not meta.get('resourceVersion')
+        or meta.get('deletionTimestamp') or type(row.get('data')) is not dict):
+        raise Blocked('staging_prerequisites_anchor_invalid')
+    return row
+
+
+def _qualify_issuer_inputs(session,source_capture_sha256,namespace_uid,kube):
+    """Qualify operator-provided bytes against actual STAGING public anchors."""
+    import staging_p3_prerequisites_crypto as crypto
+    root=guard.ROOT/'installed'/'prerequisite-inputs'
+    # Read BOTH inputs before any generation or cluster effect.
+    raw={slot:_read_private(root/(name+'-issuer.json')) for slot,name in (('gis_material','gis'),('p3','p3'))}
+    values={slot:_json(value) for slot,value in raw.items()}
+    anchors={name:_secret(kube,name) for name in ('voice-media-ca','voice-space-media-client-tls','voice-space-media-server-tls')}
+    decode=lambda name,key:base64.b64decode(anchors[name]['data'][key],validate=True)
+    media=decode('voice-media-ca','jwks-ca.crt');server_ca=decode('voice-media-ca','ca.crt')
+    gis=values['gis_material'];p3=values['p3']
+    if (set(gis)!={'schema','receipt','ca_certificate_pem','ca_private_key_pem','jwks_ca_bundle_pem','ca_secret'}
+        or gis['schema']!='voice-staging-gis-issuer-input-v1' or gis['jwks_ca_bundle_pem'].encode('ascii')!=media
+        or set(p3)!={'schema','receipt','ca_certificate_pem','ca_private_key_pem','trust',
+            'space_client_certificate_pem','space_jwks_certificate_pem','space_server_ca_pem','replay_password_b64'}
+        or p3['schema']!='voice-staging-p3-issuer-input-v1'
+        or p3['space_client_certificate_pem'].encode('ascii')!=decode('voice-space-media-client-tls','tls.crt')
+        or p3['space_jwks_certificate_pem'].encode('ascii')!=decode('voice-space-media-server-tls','tls.crt')
+        or p3['space_server_ca_pem'].encode('ascii')!=server_ca):
+        raise Blocked('staging_prerequisites_issuer_anchor_changed')
+    for slot,item in values.items():
+        ca=item['ca_certificate_pem'].encode('ascii');key=item['ca_private_key_pem'].encode('ascii')
+        crypto.validate_issuer_key(key,ca)
+        crypto._run(['verify','-trusted','{0}','-partial_chain','{1}'],[media,ca])
+        # The supplied receipt is data, never a producer authority.
+        item['receipt']={'schema':'voice-staging-issuer-qualification-v1','operation':session.operation,
+            'namespace_uid':namespace_uid,'source_capture_sha256':source_capture_sha256,
+            'input_sha256':hashlib.sha256(raw[slot]).hexdigest(),'anchors_sha256':digest(anchors)}
+    gis['ca_secret']=copy.deepcopy(anchors['voice-media-ca'])
+    if any(_secret(kube,name)!=row for name,row in anchors.items()):raise Blocked('staging_prerequisites_issuer_anchor_changed')
+    session.check()
+    _private_write(_base(session)/'inputs'/'issuer-anchors.json',_bytes(anchors))
+    for slot,name in (('gis_material','gis'),('p3','p3')):
+        _private_write(_base(session)/'inputs'/(name+'-issuer.json'),_bytes(values[slot]))
+    return values
+
+
+def load_issuer(session,slot):
+    from stage_runtime import Kube
+    if slot not in ('gis_material','p3'):raise Blocked('staging_prerequisites_slot_invalid')
+    state=_checkpoint(session);child=require_child(session,slot)
+    name='gis' if slot=='gis_material' else 'p3';raw=_read_private(_base(session)/'inputs'/(name+'-issuer.json'))
+    issuer=_json(raw);anchors=_json(_read_private(_base(session)/'inputs'/'issuer-anchors.json'))
+    wanted=child['issuer']['private_input_sha256'] if slot=='gis_material' else child['issuer_input_sha256']
+    receipt_sha=child['issuer']['input_receipt_sha256'] if slot=='gis_material' else child['issuer_authority_sha256']
+    receipt=issuer['receipt']
+    if (hashlib.sha256(raw).hexdigest()!=wanted or digest(receipt)!=receipt_sha
+        or receipt.get('schema')!='voice-staging-issuer-qualification-v1' or receipt.get('operation')!=session.operation
+        or receipt.get('namespace_uid')!=state['plan']['namespace_uid']
+        or receipt.get('source_capture_sha256')!=state['plan']['source_capture_sha256'] or receipt.get('anchors_sha256')!=digest(anchors)
+        or set(anchors)!={'voice-media-ca','voice-space-media-client-tls','voice-space-media-server-tls'}):
+        raise Blocked('staging_prerequisites_issuer_changed')
+    kube=Kube()
+    if any(_secret(kube,name)!=row for name,row in anchors.items()):raise Blocked('staging_prerequisites_issuer_anchor_changed')
+    load_authority(session)
+    if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
+    return copy.deepcopy(issuer)
+
+
+def _save_payloads(session,slot,payloads):
+    directory=_base(session)/'payloads'/slot;_private_directory(directory)
+    for effect_id,raw in payloads.items():
+        if effect_id not in EFFECT_IDS[slot] or type(raw) is not bytes:raise Blocked('staging_prerequisites_payload_invalid')
+        _private_write(directory/(hashlib.sha256(effect_id.encode()).hexdigest()+'.json'),raw)
+
+
+def _normal_create(kube,obj):
+    normalized=kube.run(['create','--dry-run=server','-f','/dev/stdin','-o','json'],body=obj)
+    semantic=_semantic(normalized)
+    if (normalized.get('kind')!=obj['kind'] or normalized.get('apiVersion')!=obj['apiVersion']
+        or semantic['metadata'].get('name')!=obj['metadata']['name'] or semantic['metadata'].get('namespace')!='voice-staging'):
+        raise Blocked('staging_prerequisites_normalized_identity_changed')
+    return semantic
+
+
+def _candidate_images(session,request,approved,source,stage,policy,auxiliary,renderer,code,planned_public):
+    import bridge_root
+    import compiler
+    import source_authority
+    from stage_runtime import HUB
+    images={}
+    for name,obj in stage.snapshots.items():
+        if name==HUB:continue
+        service=name.removeprefix('voice-')
+        for container in obj['spec']['template']['spec'].get('initContainers',[])+obj['spec']['template']['spec']['containers']:
+            key=name+'/'+container['name'];image=stage.old_images[key]
+            if image.split('@',1)[0]==source_authority.REGISTRY+'/'+service:image=approved['images'][service]
+            images[key]=image
+    images['voice-p3-principal-jwks/jwks']=auxiliary['image_ref']
+    first=request.get('gis_first_install') is True
+    if first:images['voice-gameintegration/gameintegration']=approved['images']['gameintegration']
+    parameters={**policy,'registry':source_authority.REGISTRY,'tag':approved['source_sha'],'mode':request['mode'],
+        'changed_services':request['changed_services'],'images':images,'contract':_json((Path(code)/'nats-known-baseline'/'deployed-contract.json').read_bytes()),
+        'enrolled':list(stage.snapshots)+(['voice-gameintegration'] if first else [])+['voice-p3-principal-jwks'],
+        'generation':stage.marker['data']['generation'],'dataPVC':stage.marker['data']['dataPVC']}
+    class Preview:
+        # Only this already source/crypto-bound future immutable public object
+        # is projected for the read-only image inventory, never for admission.
+        def get(self,kind,name):
+            if kind.lower()=='configmap' and name=='voice-p3-principal-public':return copy.deepcopy(planned_public)
+            return stage.kube.get(kind,name)
+        def run(self,*args,**kwargs):return stage.kube.run(*args,**kwargs)
+    ordinary=None if first else compiler.prebootstrap_image_inventory(source,parameters,Preview())
+    bridge_root.verify_bootstrap_candidate_images(session,images,renderer,first,ordinary)
+
+
+def run_prepare(actions,request,approved,execution,workspace):
+    """Prepare the three fixed prerequisites inside the already admitted root scope."""
+    import commands
+    import compiler
+    import gis_existing_update
+    import realtime_bootstrap
+    import renderer_root
+    import source_plan
+    import staging_gis_material as gis
+    import staging_p3_prerequisites as p3
+    import staging_p3_prerequisites_crypto as crypto
+    import staging_release_policy_prepare as policy_child
+    from runtime_stage import RolloutStage
+    from stage_runtime import Kube,HUB
+    session=actions.tt_session
+    if (request.get('mode') not in ('full','app-only') or commands.authority_guard!=session.check
+        or Path(workspace)!=guard.ROOT/'installed'/'sources'/session.operation):
+        raise Blocked('staging_prerequisites_prepare_invalid')
+    source_capture_sha256=_capture_authority(actions,session,approved,execution)
+    base=_base(session)
+    for name in ('inputs','payloads','attempts'):_private_directory(base/name)
+    kube=Kube();namespace=kube.get('namespace','voice-staging');namespace_uid=namespace['metadata']['uid']
+    if namespace['metadata'].get('deletionTimestamp'):raise Blocked('staging_prerequisites_namespace_changed')
+    # Source contracts, operator policy and BOTH issuer inputs are checked before
+    # binding the finite mutation phase. Existing identities are never adopted.
+    _,gis_source_sha=gis.source_contract(approved,workspace)
+    service_raw=(Path(workspace)/'deploy/staging/services.yaml').read_bytes()
+    p3_source_sha=digest(p3.source_contract(approved,service_raw))
+    before={ident:{'absent':True,'list_rv':_absence(session,*ident.split('/'))} for ident in EFFECT_IDS['p3']}
+    gis_before={ident:{'absent':True,'list_rv':_absence(session,'Secret',name)} for ident,name in
+        (('gis-signer','voice-gameintegration-principal-signing'),('gis-workload','voice-gameintegration-workload-credentials'),
+         ('gis-tls','voice-gameintegration-jwks-tls'))}
+    app_before=_secret(kube,'voice-app-secrets');app_identity=gis.inspect_app_secret(app_before)
+    if app_identity['credentials']!='absent':raise Blocked('staging_prerequisites_existing_authority_required')
+    gis_before['gis-app-credentials']={key:app_identity[key] for key in ('uid','resourceVersion','data_sha256')}
+    old_policy=_read_private(guard.ROOT/'installed'/'policy.json');old_policy_value=_json(old_policy)
+    descriptor=policy_child.staging_descriptor(approved['source_sha'])
+    policy_child.validate_source(approved,workspace,descriptor)
+    policy_plan,policy_payloads=policy_child.plan(approved,workspace,old_policy,descriptor,operation=session.operation,
+        namespace_uid=namespace_uid,source_capture_sha256=source_capture_sha256,
+        list_rv=_absence(session,'ConfigMap',descriptor['policy_object']['metadata']['name']))
+    _private_write(base/'policy-before.json',old_policy)
+    binding=None if request.get('gis_first_install') is True else gis_existing_update.load_authority(kube)
+    extras=['voice-web','voice-admin','voice-developer-portal']+([HUB] if request['mode']=='full' else [])
+    if binding is not None:extras.append('voice-gameintegration')
+    stage=RolloutStage.capture(kube,session.operation,lambda _:None,extras,**({'gis_binding':binding} if binding is not None else {}))
+    baseline={'expected':stage.expected,'workloads':realtime_bootstrap._stage_view(stage),'original_snapshots':stage.original_snapshots,
+        'storage':{'claim':stage.final_claim,'pv':stage.final_pv,'path':str(stage.final_path)}}
+    _private_write(base/'baseline.json',_bytes(baseline))
+    renderer=None
+    if request['mode']=='full':
+        renderer=renderer_root.prove(kube,stage,approved['source_sha'],approved['images']['nats-hub-config-renderer'])
+        _private_write(base/'renderer-authority.json',_bytes(renderer))
+    issuers=_qualify_issuer_inputs(session,source_capture_sha256,namespace_uid,kube)
+    auxiliary=_collect_auxiliary(session,approved,workspace,source_capture_sha256,kube)
+    gi=issuers['gis_material'];raw_gi=_read_private(base/'inputs'/'gis-issuer.json')
+    gis_payloads=gis.build_create_payloads(session.operation,app_before,gi['ca_certificate_pem'].encode('ascii'),
+        gi['ca_private_key_pem'].encode('ascii'),gi['jwks_ca_bundle_pem'].encode('ascii'))
+    issuer={'input_receipt_sha256':digest(gi['receipt']),'ca_secret_uid':gi['ca_secret']['metadata']['uid'],
+        'ca_public_sha256':hashlib.sha256(gi['jwks_ca_bundle_pem'].encode('ascii')).hexdigest(),
+        'issuer_certificate_sha256':hashlib.sha256(gi['ca_certificate_pem'].encode('ascii')).hexdigest(),
+        'private_input_sha256':hashlib.sha256(raw_gi).hexdigest()}
+    gis_plan,gis_payloads=gis.build_plan(session.operation,namespace_uid,source_capture_sha256,gis_source_sha,issuer,gis_before,{},gis_payloads)
+    pi=issuers['p3']
+    values=crypto.issue_private_bytes(pi['ca_private_key_pem'].encode('ascii'),pi['ca_certificate_pem'].encode('ascii'),
+        {k:v.encode('ascii') for k,v in pi['trust'].items()},pi['space_client_certificate_pem'].encode('ascii'),
+        pi['space_jwks_certificate_pem'].encode('ascii'),pi['space_server_ca_pem'].encode('ascii'),base64.b64decode(pi['replay_password_b64'],validate=True))
+    crypto.validate_issuer_materials(values,pi)
+    rows=[compiler.decode_yaml(piece.encode()) for piece in re.split(r'^---\s*$',service_raw.decode(),flags=re.M)
+          if re.search(r'^  name: (?:voice-p3-principal-jwks|voice-p3-principal-publisher-config)\s*$',piece,re.M)]
+    publisher=[row for row in rows if row.get('metadata',{}).get('name') in ('voice-p3-principal-jwks','voice-p3-principal-publisher-config')]
+    objects=p3.mark_operation(p3.material_objects(values)+p3.publisher_objects(publisher,auxiliary['image_ref'],'sha256:'+auxiliary['manifest_sha256']),session.operation)
+    normalized=[]
+    for obj in objects:
+        value=_normal_create(kube,obj)
+        if value['kind']=='Service':
+            # Only the source-absent Service allocations are deferred to CREATE.
+            if any(k in obj['spec'] for k in ('clusterIP','clusterIPs')):raise Blocked('staging_prerequisites_service_allocation_invalid')
+            value['spec'].pop('clusterIP',None);value['spec'].pop('clusterIPs',None)
+        normalized.append(value)
+    p3_payloads={obj['kind']+'/'+obj['metadata']['name']:_bytes(obj) for obj in normalized}
+    aux={key:auxiliary[key] for key in ('source_ref','image_ref','platform','manifest_sha256','config_sha256','index_sha256')}
+    aux.update(workload='voice-p3-principal-jwks',container='jwks',source_authority_sha256=digest(auxiliary))
+    object_rows=[{'id':ident,'kind':ident.split('/')[0],'name':ident.split('/')[1],'namespace':'voice-staging',
+        'desired_sha256':hashlib.sha256(p3_payloads[ident]).hexdigest(),'payload_sha256':hashlib.sha256(p3_payloads[ident]).hexdigest()} for ident in EFFECT_IDS['p3']]
+    p3_plan={'schema':'voice-staging-p3-prerequisites-plan-v1','operation':session.operation,'namespace_uid':namespace_uid,
+        'source_capture_sha256':source_capture_sha256,'source_contract_sha256':p3_source_sha,
+        'issuer_authority_sha256':digest(pi['receipt']),'issuer_input_sha256':hashlib.sha256(_read_private(base/'inputs'/'p3-issuer.json')).hexdigest(),
+        'auxiliary_image':aux,'objects':object_rows,'effects':[{**row,'before':before[row['id']]} for row in object_rows],'preserved':{}}
+    p3.validate_plan_shape(p3_plan)
+    public=next(row for row in normalized if row['metadata']['name']=='voice-p3-principal-public')
+    _candidate_images(session,request,approved,workspace,stage,policy_child.policy_successor(old_policy_value,descriptor,approved['source_sha']),auxiliary,renderer,actions.code,public)
+    plan={'schema':'voice-staging-prerequisites-plan-v1','operation':session.operation,'context':session.context,'helper_sha256':session.helper,
+        'source_capture_sha256':source_capture_sha256,'approved_sha256':digest(approved),'execution_sha256':digest(execution),
+        'namespace_uid':namespace_uid,'marker_sha256':digest(stage.marker),'baseline_sha256':digest(baseline),'actual_before':stage.old_images,
+        'policy_before_sha256':hashlib.sha256(old_policy).hexdigest(),'children':{'release_policy':policy_plan,'p3':p3_plan,'gis_material':gis_plan},
+        'auxiliary_images':{'voice-p3-principal-jwks/jwks':auxiliary['image_ref']},'renderer_authority_sha256':None if renderer is None else digest(renderer)}
+    for slot,payloads in (('release_policy',policy_payloads),('p3',p3_payloads),('gis_material',gis_payloads)):_save_payloads(session,slot,payloads)
+    _recheck_baseline(session,{'plan':plan});session.check()
+    fence=session.bind_prerequisites(plan,stage.old_images)
+    save(base/'checkpoint.json',{'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':fence,
+        'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None})
+    preflight_all(session)
+    # Readiness is a fixed child implementation, not a supplied callback.
+    if not callable(getattr(p3,'verify_complete',None)):raise Blocked('staging_prerequisites_publisher_verifier_missing')
+    for slot in SLOTS:importlib.import_module(CHILD_MODULES[slot]).execute(session)
+    return _complete(session)
+
+
+def _verify_children(session,state):
+    expected=_effect_order(state['plan'])
+    actual={(slot,ident) for slot,steps in state['steps'].items() for ident in steps}
+    if actual!=set(expected):raise Blocked('staging_prerequisites_incomplete')
+    children={}
+    for slot in SLOTS:
+        module=importlib.import_module(CHILD_MODULES[slot]);observations={}
+        for effect_slot,ident in expected:
+            if effect_slot!=slot:continue
+            step=state['steps'][slot][ident]
+            if set(step)!={'status','observation'} or step['status']!='DONE':raise Blocked('staging_prerequisites_incomplete')
+            if slot=='gis_material' and ident=='gis-app-credentials' and _realtime_app_extension(session,state):
+                observations[ident]=step['observation']
+                continue
+            verified=module.verify_effect(session,ident,step['observation'])
+            if verified!=step['observation']:raise Blocked('staging_prerequisites_observation_changed')
+            observations[ident]=verified
+        for ident,value in state['plan']['children'][slot].get('preserved',{}).items():
+            observations[ident]=module.verify_effect(session,ident,value['observed'])
+        children[slot]=observations
+    return children
+
+
+def _realtime_app_extension(session,state):
+    """Recognize only the completed, response-bound additive Realtime CAS.
+
+    This is local custody validation, not a recursive SQL/parent admission.
+    PENDING, even with the desired key live, never grants the exception.
+    """
+    import realtime_bootstrap as rt
+    from stage_runtime import Kube
+    base=guard.ROOT/'installed'/'realtime-bootstrap'/session.operation
+    try:checkpoint=_json(_read_private(base/'checkpoint.json',limit=32<<20))
+    except FileNotFoundError:return False
+    if checkpoint.get('status')!='COMPLETE':return False
+    plan,receipt,_,_=rt._records(checkpoint,session)
+    captured=_json(_read_private(_base(session)/'capture.json',limit=32<<20))
+    before=_json(_read_private(base/'before-secret.json'));credential=_read_private(base/'credential',limit=128)
+    payload=_json(load_payload(session,'gis_material','gis-app-credentials'))
+    desired=_semantic(payload['before']);desired['data']=payload['after_data']
+    if (plan.get('schema')!='voice-staging-realtime-bootstrap-v2' or plan.get('prerequisites_sha256')!=digest(captured)
+        or _semantic(before)!=desired or rt._secret_identity(before)!=plan['secret']
+        or hashlib.sha256(credential).hexdigest()!=plan['credential_sha256']):
+        raise Blocked('staging_prerequisites_realtime_custody_changed')
+    actual=_secret(Kube(),'voice-app-secrets')
+    if rt._verify_secret_after(before,actual,credential)!=receipt['secret']:
+        raise Blocked('staging_prerequisites_realtime_secret_changed')
+    authority=_json(_read_private(base/'authority.json'))
+    rt._verify_source_capture(session,authority['approved'],authority['execution'])
+    if (digest(authority['approved'])!=plan['source_authority_sha256']
+        or digest(authority['execution'])!=plan['execution_sha256']):raise Blocked('staging_prerequisites_realtime_custody_changed')
+    return True
+
+
+def _complete(session):
+    import staging_p3_prerequisites as p3
+    state=_checkpoint(session)
+    if state['status']!='RUNNING':raise Blocked('staging_prerequisites_reconciliation_required')
+    children=_verify_children(session,state);ready=p3.verify_complete(session)
+    if (type(ready) is not dict or set(ready)!={'receipt','proof'}
+        or ready['receipt'].get('publisher_ready_sha256')!=digest(ready['proof'])
+        or ready['receipt'].get('operation')!=session.operation
+        or ready['receipt'].get('plan_sha256')!=digest(state['plan']['children']['p3'])):
+        raise Blocked('staging_prerequisites_publisher_proof_invalid')
+    children['p3']=ready['receipt']
+    _private_write(_base(session)/'publisher-ready.json',_bytes(ready))
+    plan=state['plan'];actual_after={**plan['actual_before'],**plan['auxiliary_images']}
+    receipt={'schema':'voice-staging-prerequisites-receipt-v1','operation':session.operation,'plan_sha256':digest(plan),
+        'steps_sha256':digest(state['steps']),'namespace_uid':plan['namespace_uid'],'children_receipts':children,
+        'actual_before':plan['actual_before'],'actual_after':actual_after,
+        'publisher_identity':state['steps']['p3']['Deployment/voice-p3-principal-jwks']['observation'],
+        'policy_after_sha256':plan['children']['release_policy']['policy_after_sha256']}
+    _recheck_baseline(session,state)
+    after=copy.deepcopy(state);after.update(status='COMPLETE',receipt=receipt)
+    _store_state(session,state,after)
+    return copy.deepcopy(receipt)
+
+
+def _completed(session):
+    state=_checkpoint(session);plan=state['plan'];receipt=state['receipt']
+    if (state['status']!='COMPLETE' or type(receipt) is not dict
+        or set(receipt)!={'schema','operation','plan_sha256','steps_sha256','namespace_uid','children_receipts',
+            'actual_before','actual_after','publisher_identity','policy_after_sha256'}
+        or receipt['schema']!='voice-staging-prerequisites-receipt-v1' or receipt['operation']!=session.operation
+        or receipt['plan_sha256']!=digest(plan) or receipt['steps_sha256']!=digest(state['steps'])
+        or receipt['namespace_uid']!=plan['namespace_uid'] or receipt['actual_before']!=plan['actual_before']
+        or receipt['actual_after']!={**plan['actual_before'],**plan['auxiliary_images']}):
+        raise Blocked('staging_prerequisites_receipt_changed')
+    children=_verify_children(session,state)
+    original=_json(_read_private(_base(session)/'publisher-ready.json',limit=8<<20))
+    if (set(original)!={'receipt','proof'} or original['receipt'].get('publisher_ready_sha256')!=digest(original['proof'])
+        or original['receipt'].get('operation')!=session.operation or original['receipt'].get('plan_sha256')!=digest(plan['children']['p3'])
+        or receipt['children_receipts']!={**children,'p3':original['receipt']}
+        or receipt['publisher_identity']!=state['steps']['p3']['Deployment/voice-p3-principal-jwks']['observation']
+        or receipt['policy_after_sha256']!=plan['children']['release_policy']['policy_after_sha256']):
+        raise Blocked('staging_prerequisites_receipt_changed')
+    import staging_p3_prerequisites as p3
+    fresh=p3.verify_complete(session)
+    if (fresh['receipt'].get('plan_sha256')!=digest(plan['children']['p3'])
+        or fresh['receipt'].get('publisher_ready_sha256')!=digest(fresh['proof'])):
+        raise Blocked('staging_prerequisites_publisher_proof_invalid')
+    _recheck_baseline(session,state);load_authority(session)
+    if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
+    return state
+
+
+def capture(session,stage):
+    import realtime_bootstrap
+    from runtime_stage import RolloutStage
+    if type(stage) is not RolloutStage or stage.operation!=session.operation:
+        raise Blocked('staging_prerequisites_capture_invalid')
+    state=_completed(session);receipt=state['receipt'];plan=state['plan']
+    baseline=_json(_read_private(_base(session)/'baseline.json',limit=32<<20))
+    expected=copy.deepcopy(baseline['expected'])
+    publisher=receipt['publisher_identity'];expected['deployment_uids']['voice-p3-principal-jwks']=publisher['uid']
+    if stage.expected!=expected or stage.old_images!=receipt['actual_after']:
+        raise Blocked('staging_prerequisites_capture_changed')
+    view=realtime_bootstrap._stage_view(stage)
+    if any(view['snapshots'].get(name)!=row for name,row in baseline['workloads']['snapshots'].items()):
+        raise Blocked('staging_prerequisites_capture_changed')
+    if view['marker']!=baseline['workloads']['marker']:raise Blocked('staging_prerequisites_marker_changed')
+    record={'schema':'voice-staging-prerequisites-capture-v1','operation':session.operation,'context':session.context,
+        'helper_sha256':session.helper,'source_capture_sha256':plan['source_capture_sha256'],'plan_sha256':digest(plan),
+        'receipt_sha256':digest(receipt),'namespace_uid':plan['namespace_uid'],'actual_before':receipt['actual_before'],
+        'actual_after':receipt['actual_after'],'stage':{'expected':stage.expected,'workloads':view,
+            'original_snapshots_sha256':digest(stage.original_snapshots)}}
+    _private_write(_base(session)/'capture-snapshots.json',_bytes(stage.original_snapshots))
+    _private_write(_base(session)/'capture.json',_bytes(record))
+    return record
+
+
+def load_capture(session,*,actual=None,rollout_target=None):
+    import realtime_bootstrap
+    from stage_runtime import Kube
+    if rollout_target is not None:_target_checks[session]=copy.deepcopy(rollout_target)
+    try:
+        state=_completed(session);plan=state['plan'];record=_json(_read_private(_base(session)/'capture.json',limit=32<<20))
+        if (set(record)!={'schema','operation','context','helper_sha256','source_capture_sha256','plan_sha256','receipt_sha256',
+                'namespace_uid','actual_before','actual_after','stage'}
+            or record['schema']!='voice-staging-prerequisites-capture-v1' or record['operation']!=session.operation
+            or record['context']!=session.context or record['helper_sha256']!=session.helper
+            or record['source_capture_sha256']!=plan['source_capture_sha256'] or record['plan_sha256']!=digest(plan)
+            or record['receipt_sha256']!=digest(state['receipt']) or record['namespace_uid']!=plan['namespace_uid']
+            or record['actual_before']!=plan['actual_before'] or record['actual_after']!=state['receipt']['actual_after']
+            or actual is not None and actual!=record['actual_after']
+            or rollout_target is not None and rollout_target.get('prerequisites_sha256')!=digest(record)
+            or digest(_json(_read_private(_base(session)/'capture-snapshots.json',limit=32<<20)))!=record['stage']['original_snapshots_sha256']):
+            raise Blocked('staging_prerequisites_capture_changed')
+        realtime_bootstrap._check_stage(Kube(),record['stage']['workloads'])
+        session.check()
+        return record
+    finally:_target_checks.pop(session,None)
+
+
+def load_renderer(session,stage):
+    import renderer_root
+    state=_checkpoint(session);wanted=state['plan']['renderer_authority_sha256']
+    if wanted is None:return None
+    authority=_json(_read_private(_base(session)/'renderer-authority.json',limit=8<<20))
+    if digest(authority)!=wanted:raise Blocked('staging_prerequisites_renderer_changed')
+    renderer_root.revalidate(stage.kube,stage,authority)
+    session.check()
+    return authority
+
+
+def _historical(operation,seen):
+    if not isinstance(operation,str) or not OP.fullmatch(operation) or operation in seen or len(seen)>=64:
+        raise Blocked('staging_prerequisites_history_invalid')
+    seen=seen|{operation};base=guard.ROOT/'installed'/'prerequisites'/operation
+    rollout=_json(_read_private(guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20))
+    if (rollout.get('status')!='PASS' or rollout.get('phase')!='POST_RESTART' or rollout.get('fence_status')!='RELEASED'
+        or rollout.get('operation')!=operation):raise Blocked('staging_prerequisites_history_not_pass')
+    binding=resource_claim.historical_binding(rollout)
+    state=_json(_read_private(base/'checkpoint.json',limit=32<<20));plan=state['plan'];receipt=state['receipt']
+    record=_json(_read_private(base/'capture.json',limit=32<<20))
+    source=_json(_read_private(guard.ROOT/'installed'/'source-authority'/(operation+'.json')))
+    approved=_json(_read_private(base/'approved.json',limit=32<<20));execution=_json(_read_private(base/'execution.json',limit=8<<20))
+    if (set(plan)!=PLAN_FIELDS or state.get('status')!='COMPLETE' or state.get('preflight_sha256')!=digest(plan)
+        or plan['operation']!=operation or plan['context']!=binding['context'] or plan['helper_sha256']!=binding['helper_sha256']
+        or plan['source_capture_sha256']!=digest(source) or plan['approved_sha256']!=digest(approved)
+        or plan['execution_sha256']!=digest(execution)
+        or source!={'schema':'voice-staging-source-capture-v1','operation':operation,'context':plan['context'],
+            'helper_sha256':plan['helper_sha256'],'approved_sha256':plan['approved_sha256'],'execution_sha256':plan['execution_sha256']}
+        or record!=rollout.get('prerequisites') or rollout['target'].get('prerequisites_sha256')!=digest(record)
+        or record.get('plan_sha256')!=digest(plan) or record.get('receipt_sha256')!=digest(receipt)
+        or receipt.get('operation')!=operation or receipt.get('plan_sha256')!=digest(plan)
+        or receipt.get('steps_sha256')!=digest(state['steps']) or receipt.get('namespace_uid')!=plan['namespace_uid']
+        or record.get('actual_before')!=plan['actual_before']
+        or record.get('actual_after')!={**plan['actual_before'],**plan['auxiliary_images']}
+        or digest(_json(_read_private(base/'capture-snapshots.json',limit=32<<20)))!=record['stage']['original_snapshots_sha256']):
+        raise Blocked('staging_prerequisites_history_changed')
+    manifest=_json(_read_private(base/'code-custody.json'))['manifest']
+    if digest(manifest)!=binding['helper_sha256'] or not REQUIRED_HELPERS<=set(manifest):
+        raise Blocked('staging_prerequisites_history_helper_changed')
+    # Historical helpers are checked as source data; never execute old code.
+    for relative,wanted in manifest.items():
+        if relative in BINARY_PINS:
+            if wanted!=BINARY_PINS[relative]:raise Blocked('staging_prerequisites_history_helper_changed')
+        elif approved['source_files'].get('scripts/staging/'+relative)!=wanted:
+            raise Blocked('staging_prerequisites_history_source_changed')
+    expected=set(_effect_order(plan))
+    if {(slot,ident) for slot,steps in state['steps'].items() for ident in steps}!=expected:
+        raise Blocked('staging_prerequisites_history_incomplete')
+    for slot,ident in expected:
+        step=state['steps'][slot][ident];effect=_selected_effect(state,slot,ident)
+        raw=_read_private(base/'payloads'/slot/(hashlib.sha256(ident.encode()).hexdigest()+'.json'))
+        key=hashlib.sha256((slot+'/'+ident).encode()).hexdigest()
+        intent=_json(_read_private(base/'attempts'/(key+'.json')));result=_json(_read_private(base/'attempts'/(key+'.response.json')))
+        if (step.get('status')!='DONE' or set(step)!={'status','observation'}
+            or hashlib.sha256(raw).hexdigest()!=effect['payload_sha256'] or intent.get('plan_sha256')!=digest(plan)
+            or intent.get('operation')!=operation or intent.get('slot')!=slot or intent.get('effect_id')!=ident
+            or intent.get('payload_sha256')!=effect['payload_sha256'] or result.get('intent_sha256')!=digest(intent)
+            or result.get('observation')!=step['observation']):raise Blocked('staging_prerequisites_history_effect_changed')
+    for slot in SLOTS:
+        for ident,preserved in plan['children'][slot].get('preserved',{}).items():
+            ref=preserved['authority'];previous,_,_=_historical(ref['operation'],seen)
+            if digest(previous['receipt'])!=ref['receipt_sha256']:
+                raise Blocked('staging_prerequisites_history_predecessor_changed')
+    return state,record,rollout
+
+
+def validate_historical_capture(operation):
+    """Protected PASS history only, never current Session or live authority."""
+    return copy.deepcopy(_historical(operation,set())[1])
+
+
+def load_preserved(session,slot,effect_id):
+    from stage_runtime import Kube
+    state=_checkpoint(session);child=require_child(session,slot)
+    if effect_id not in child.get('preserved',{}):raise Blocked('staging_prerequisites_preserved_invalid')
+    current_active=_json(_read_private(guard.ROOT/'installed'/'active-release.json'))
+    expected_active=_json(_read_private(_base(session)/'previous-active.json'))
+    if current_active!=expected_active:raise Blocked('staging_prerequisites_active_changed')
+    previous,_,rollout=_historical(current_active['operation'],set());ref=child['preserved'][effect_id]['authority']
+    if ref!={'operation':previous['plan']['operation'],'receipt_sha256':digest(previous['receipt'])}:
+        raise Blocked('staging_prerequisites_preserved_authority_changed')
+    original=previous['steps'].get(slot,{}).get(effect_id)
+    if original is None:
+        raise Blocked('staging_prerequisites_preserved_chain_unavailable')
+    key=hashlib.sha256((slot+'/'+effect_id).encode()).hexdigest()
+    result=_json(_read_private(guard.ROOT/'installed'/'prerequisites'/ref['operation']/'attempts'/(key+'.response.json')))
+    semantic=_semantic(result['object']);uid=original['observation']['uid']
+    if slot=='p3':
+        # Current raw publisher source must preserve the originally admitted
+        # publisher triple, independently of changes elsewhere in services.yaml.
+        import compiler
+        import source_plan
+        source=load_authority(session)['source']
+        prior=guard.ROOT/'installed'/'sources'/ref['operation']
+        def publisher(root):
+            raw=(Path(root)/'deploy/staging/services.yaml').read_bytes()
+            rows=[compiler.decode_yaml(piece.encode()) for piece in re.split(r'^---\s*$',raw.decode(),flags=re.M) if piece.strip()]
+            return [row for row in rows if row.get('metadata',{}).get('name') in ('voice-p3-principal-jwks','voice-p3-principal-publisher-config')]
+        if publisher(source)!=publisher(prior):raise Blocked('staging_prerequisites_preserved_source_changed')
+        if effect_id=='Deployment/voice-p3-principal-jwks':
+            row=rollout['context']['snapshots']['voice-p3-principal-jwks']
+            if row['metadata']['uid']!=uid or row['spec']['template']!=semantic['spec']['template']:
+                raise Blocked('staging_prerequisites_preserved_template_changed')
+            semantic=_semantic(row)
+    live=Kube().get(semantic['kind'].lower(),semantic['metadata']['name'])
+    if live['metadata'].get('uid')!=uid or _semantic(live)!=semantic:
+        raise Blocked('staging_prerequisites_preserved_live_changed')
+    if _json(_read_private(guard.ROOT/'installed'/'active-release.json'))!=current_active or _checkpoint(session)!=state:
+        raise Blocked('staging_prerequisites_active_changed')
+    return {'authority':copy.deepcopy(ref),'semantic':semantic,'uid':uid}

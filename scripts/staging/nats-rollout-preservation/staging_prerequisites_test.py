@@ -80,6 +80,9 @@ class PrivateCustodyTests(unittest.TestCase):
                 'policy_before_sha256':'1'*64,'children':{'release_policy':{},'p3':{},'gis_material':{'effects':[effect]}},
                 'auxiliary_images':{},'renderer_authority_sha256':None}
             with patch.object(guard,'ROOT',root):
+
+                for item in plan['children'].values():
+                    for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None}
@@ -119,6 +122,9 @@ class PrivateCustodyTests(unittest.TestCase):
                 'policy_before_sha256':'1'*64,'children':{slot:{'effects':[{'id':slot.replace('_','-')+'-effect'}]} for slot in prereq.SLOTS},
                 'auxiliary_images':{},'renderer_authority_sha256':None}
             with patch.object(guard,'ROOT',root),patch.object(prereq,'REQUIRED_HELPERS',frozenset((name,))),patch.object(prereq,'BINARY_PINS',{}):
+
+                for item in plan['children'].values():
+                    for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
                 save(base/'checkpoint.json',{'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None})
@@ -156,6 +162,9 @@ class PrivateCustodyTests(unittest.TestCase):
                     verify_effect=lambda session,effect,obs:(calls.append(('verify',slot,effect)) or copy.deepcopy(obs)))
             modules={name:child(slot) for slot,name in prereq.CHILD_MODULES.items()}
             with patch.object(guard,'ROOT',root),patch.dict(sys.modules,modules):
+
+                for item in plan['children'].values():
+                    for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None};save(base/'checkpoint.json',state)
@@ -206,6 +215,9 @@ class SubmitTests(unittest.TestCase):
                     'children':{'release_policy':child,'p3':{'effects':[]},'gis_material':{'effects':[]}},
                     'auxiliary_images':{},'renderer_authority_sha256':None}
                 stack.enter_context(patch.object(guard,'ROOT',root))
+
+                for item in plan['children'].values():
+                    for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
                 state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':prereq.digest(plan)}
@@ -250,6 +262,193 @@ class SubmitTests(unittest.TestCase):
                     with self.assertRaises(Exception):prereq.submit_effect(session,'release_policy',effect['id'])
                 self.assertEqual(len(writes),1)
                 self.assertIsNone(session._prerequisite_permit)
+
+
+class PrepareCompositionTests(unittest.TestCase):
+    """Real parent/children/Session; Kubernetes, baseline and registry are fixtures."""
+    def test_cold_prepare_executes_all_children_before_typed_capture(self):
+        self._cold_prepare()
+
+    def test_lost_app_cas_reply_never_completes_or_replays(self):
+        self._cold_prepare('lost-app-reply')
+
+    def test_missing_operator_input_prevents_every_effect(self):
+        self._cold_prepare('missing-issuer')
+
+    def _cold_prepare(self,fault=None):
+        import os, shutil, subprocess, base64, yaml, uuid
+        from contextlib import ExitStack
+        import bridge_root, commands, compiler, runtime_stage, stage_runtime
+        import staging_gis_material as gis
+        import staging_p3_prerequisites as p3
+        import staging_p3_prerequisites_crypto as crypto
+        import staging_release_policy_prepare as policy
+        source_root=Path(os.environ.get('VOICE_TEST_SOURCE_ROOT',Path(__file__).resolve().parents[3]))
+        if not (source_root/'deploy/staging/services.yaml').is_file():self.skipTest('requires actual source fixture')
+        with tempfile.TemporaryDirectory(dir='/root') as folder, ExitStack() as stack:
+            root=Path(folder);installed=root/'installed';operation='a'*12
+            workspace=installed/'sources'/operation;code=installed/'code';operator=installed/'prerequisite-inputs'
+            for directory in (workspace,code/'fixture',installed/'source-authority',operator):directory.mkdir(parents=True,mode=0o700)
+            relative=['deploy/staging/services.yaml','scripts/dev/migrations.py',
+                'docker/postgres/provision-gameintegration-runtime-role.sql','docker/postgres/verify-gameintegration-runtime-role.sql',
+                'deploy/templates/provision-gameintegration-runtime-role-job.yaml','deploy/templates/migrate-game-integration-db-job.yaml',
+                'deploy/templates/verify-game-integration-db-job.yaml']
+            relative += [str(path.relative_to(source_root)) for path in (source_root/'src/backend/migrations/game_integration_db').glob('*.sql')]
+            for name in relative:
+                dest=workspace/name;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(source_root/name,dest);dest.chmod(0o600)
+            helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
+            for path in (code/helper,workspace/'scripts/staging'/helper):
+                path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
+            manifest={helper:hashlib.sha256(helper_raw).hexdigest()};save(code/'capture-manifest.json',manifest)
+            context=resource_claim_test.context();card=resource_claim_test.card(context)
+            journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
+            session.admit(start=True)
+            approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
+            approved['source_files']['scripts/staging/'+helper]=manifest[helper]
+            approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
+            execution={'fixture':'source selected by real bridge capture, modeled here'}
+            source={'schema':'voice-staging-source-capture-v1','operation':operation,'context':context,'helper_sha256':session.helper,
+                'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
+            save(installed/'source-authority'/(operation+'.json'),source);save(installed/'policy.json',{'unrelated':'preserve'})
+            actions=bridge_root.Actions(code);actions.tt_session=session
+            def openssl(*args):subprocess.run(['/usr/bin/openssl',*map(str,args)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            key=root/'ca.key';cert=root/'ca.crt';peerkey=root/'peer.key';csr=root/'peer.csr';peer=root/'peer.crt';ext=root/'ext'
+            openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','180','-subj','/CN=synthetic-root',
+                '-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign')
+            openssl('req','-newkey','rsa:2048','-nodes','-keyout',peerkey,'-out',csr,'-subj','/CN=voice-space')
+            ext.write_text('basicConstraints=critical,CA:FALSE\nsubjectAltName=DNS:voice-space.voice-staging.svc\nextendedKeyUsage=serverAuth,clientAuth\n')
+            openssl('x509','-req','-in',csr,'-CA',cert,'-CAkey',key,'-set_serial','1234','-days','150','-extfile',ext,'-out',peer)
+            ca=cert.read_bytes();peer_bytes=peer.read_bytes();ns='00000000-0000-0000-0000-000000000001'
+            b64=lambda b:base64.b64encode(b).decode()
+            def secret(name,data):return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging','uid':str(uuid.uuid5(uuid.NAMESPACE_DNS,name)),'resourceVersion':'1'},'type':'Opaque','data':{k:b64(v) for k,v in data.items()}}
+            live={('secret','voice-media-ca'):secret('voice-media-ca',{'ca.crt':ca,'jwks-ca.crt':ca}),
+                ('secret','voice-space-media-client-tls'):secret('voice-space-media-client-tls',{'tls.crt':peer_bytes,'tls.key':peerkey.read_bytes()}),
+                ('secret','voice-space-media-server-tls'):secret('voice-space-media-server-tls',{'tls.crt':peer_bytes,'tls.key':peerkey.read_bytes()}),
+                ('secret','voice-app-secrets'):secret('voice-app-secrets',{'POSTGRES_PASSWORD':b'synthetic-unused'})}
+            gis_issuer={'schema':'voice-staging-gis-issuer-input-v1','receipt':{},'ca_certificate_pem':ca.decode(),
+                'ca_private_key_pem':key.read_text(),'jwks_ca_bundle_pem':ca.decode(),'ca_secret':{}}
+            p3_issuer={'schema':'voice-staging-p3-issuer-input-v1','receipt':{},'ca_certificate_pem':ca.decode(),
+                'ca_private_key_pem':key.read_text(),'trust':{name:ca.decode() for name in crypto.TRUST_KEYS},
+                'space_client_certificate_pem':peer_bytes.decode(),'space_jwks_certificate_pem':peer_bytes.decode(),
+                'space_server_ca_pem':ca.decode(),'replay_password_b64':b64(b'synthetic-replay-password')}
+            save(operator/'gis-issuer.json',gis_issuer);save(operator/'p3-issuer.json',p3_issuer)
+            if fault=='missing-issuer':(operator/'p3-issuer.json').unlink()
+            marker={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'voice-nats-generation','namespace':'voice-staging','uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}}
+            deployment={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user','namespace':'voice-staging','uid':'user','resourceVersion':'1','generation':1},
+                'spec':{'replicas':1,'template':{'metadata':{'labels':{'app':'voice-user'}},'spec':{'containers':[{'name':'user','image':card['observed']['images']['voice-user/user']}]}}}}
+            live[('configmap','voice-nats-generation')]=marker;live[('deployment','voice-user')]=deployment
+            claim_uid='00000000-0000-0000-0000-000000000002';pv_uid='00000000-0000-0000-0000-000000000003'
+            storage_path='/var/lib/rancher/k3s/storage/pvc-'+claim_uid+'_voice-staging_fixture'
+            claim={'metadata':{'name':'fixture','uid':claim_uid},'spec':{'volumeName':'fixture-pv'}}
+            pv={'metadata':{'name':'fixture-pv','uid':pv_uid},'spec':{'claimRef':{'uid':claim_uid},'local':{'path':storage_path},
+                'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname','operator':'In','values':['pmdebook']}]}]}}}}
+            live[('pvc','fixture')]=claim;live[('pv','fixture-pv')]=pv
+            writes=[];events=[];rv=[10];ready={}
+            def get(kind,name):
+                commands.authority_guard(prereq.KUBE_PREFIX+['get',kind,name,'-o','json'])
+                if kind=='namespace':return {'apiVersion':'v1','kind':'Namespace','metadata':{'name':'voice-staging','uid':ns}}
+                if kind=='node':return {'metadata':{'name':'pmdebook','uid':'node'},'status':{'nodeInfo':{'operatingSystem':'linux','architecture':'amd64'},'conditions':[{'type':'Ready','status':'True'}]}}
+                if kind=='serviceaccount':return {'metadata':{'name':'default','namespace':'voice-staging','uid':'00000000-0000-0000-0000-000000000101','resourceVersion':'1'}}
+                return copy.deepcopy(live[(kind,name)])
+            def normalize(obj):
+                result=copy.deepcopy(obj)
+                if result['kind']=='Service':result['spec'].update(type='ClusterIP',clusterIP='10.2.0.1',clusterIPs=['10.2.0.1'],ipFamilies=['IPv4'])
+                return result
+            def ready_objects(dep):
+                template=copy.deepcopy(dep['spec']['template']);template['metadata']['labels']['pod-template-hash']='abc12'
+                ready['replicasets']=[{'metadata':{'namespace':'voice-staging','uid':'rs','annotations':{'deployment.kubernetes.io/revision':'1'},'ownerReferences':[{'kind':'Deployment','uid':dep['metadata']['uid'],'controller':True}]},
+                    'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-p3-principal-jwks','pod-template-hash':'abc12'}},'template':template}}]
+                ready['replicaset']=ready['replicasets']
+                spec=copy.deepcopy(dep['spec']['template']['spec']);spec.update(nodeName='pmdebook',serviceAccountName='default')
+                spec['volumes'].append({'name':'kube-api-access-abc12','projected':{'defaultMode':420,'sources':[{'serviceAccountToken':{'expirationSeconds':3607,'path':'token'}},
+                    {'configMap':{'name':'kube-root-ca.crt','items':[{'key':'ca.crt','path':'ca.crt'}]}},{'downwardAPI':{'items':[{'path':'namespace','fieldRef':{'apiVersion':'v1','fieldPath':'metadata.namespace'}}]}}]}})
+                spec['containers'][0]['volumeMounts'].append({'name':'kube-api-access-abc12','mountPath':'/var/run/secrets/kubernetes.io/serviceaccount','readOnly':True})
+                ready['pods']=[{'metadata':{'namespace':'voice-staging','uid':'pod','labels':{'app':'voice-p3-principal-jwks'},'ownerReferences':[{'kind':'ReplicaSet','uid':'rs','controller':True}]},'spec':spec,
+                    'status':{'phase':'Running','podIP':'10.2.0.8','conditions':[{'type':'Ready','status':'True'}],'containerStatuses':[{'name':'jwks','ready':True,'state':{'running':{}},'imageID':'docker-pullable://nginx@sha256:'+'d'*64}]}}]
+                ready['endpointslices']=[{'metadata':{'uid':'slice','namespace':'voice-staging','labels':{'kubernetes.io/service-name':'voice-p3-principal-jwks'},'ownerReferences':[{'kind':'Service','uid':live[('service','voice-p3-principal-jwks')]['metadata']['uid'],'controller':True}]},
+                    'ports':[{'name':'https','port':8443,'protocol':'TCP'}],'endpoints':[{'addresses':['10.2.0.8'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':'pod','namespace':'voice-staging'}}]}]
+            def transport(argv,*,body=b'',**kwargs):
+                commands.authority_guard(argv)
+                if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:return prereq._bytes(yaml.safe_load(body))
+                self.assertEqual(argv[:4],prereq.KUBE_PREFIX);args=argv[4:]
+                if args[0]=='get':
+                    if '--raw' in args:
+                        path=args[-1];plural=path.split('/')[5].split('?')[0];name=path.split('%3D')[1].split('&')[0]
+                        kind={'secrets':'Secret','configmaps':'ConfigMap','services':'Service'}[plural]
+                        items=[copy.deepcopy(row) for (k,n),row in live.items() if k==kind.lower() and n==name]
+                    elif args[1] in ready:kind={'replicaset':'ReplicaSet','replicasets':'ReplicaSet','pods':'Pod','endpointslices':'EndpointSlice'}[args[1]];items=copy.deepcopy(ready[args[1]])
+                    else:
+                        kind={'deployments':'Deployment','secret':'Secret','configmap':'ConfigMap','service':'Service','deployment':'Deployment'}[args[1]]
+                        items=[copy.deepcopy(row) for (k,n),row in live.items() if k==kind.lower()]
+                    return prereq._bytes({'apiVersion':'apps/v1' if kind in ('Deployment','ReplicaSet') else 'v1','kind':kind+'List','metadata':{'resourceVersion':str(rv[0])},'items':items})
+                if '--dry-run=server' in args:return prereq._bytes(normalize(json.loads(body)))
+                state=json.loads((prereq._base(session)/'checkpoint.json').read_bytes())
+                self.assertEqual(state['preflight_sha256'],prereq.digest(state['plan']))
+                self.assertEqual(sum(v=={'status':'PENDING'} for group in state['steps'].values() for v in group.values()),1)
+                rv[0]+=1;writes.append(args[:]);events.append('write')
+                if args[0]=='create':
+                    row=normalize(json.loads(body));identity=(row['kind'].lower(),row['metadata']['name']);self.assertNotIn(identity,live)
+                    row['metadata'].update(uid=str(uuid.uuid5(uuid.NAMESPACE_DNS,identity[1])),resourceVersion=str(rv[0]))
+                    if row['kind']=='Deployment':row['metadata']['generation']=1
+                    live[identity]=copy.deepcopy(row)
+                    if row['kind']=='Deployment':
+                        live[identity]['metadata']['annotations']['deployment.kubernetes.io/revision']='1'
+                        live[identity]['status']={'observedGeneration':1,'readyReplicas':1,'availableReplicas':1};ready_objects(live[identity])
+                    return prereq._bytes(row)
+                self.assertEqual(args,['patch','secret','voice-app-secrets','--type=json','--patch-file=/dev/stdin','-o','json'])
+                row=live[('secret','voice-app-secrets')];changes=json.loads(body)
+                self.assertEqual(changes[:3],[{'op':'test','path':'/metadata/uid','value':row['metadata']['uid']},{'op':'test','path':'/metadata/resourceVersion','value':row['metadata']['resourceVersion']},{'op':'test','path':'/data','value':row['data']}])
+                for change in changes[3:]:self.assertEqual(change['op'],'add');row['data'][change['path'].split('/')[-1]]=change['value']
+                row['metadata']['resourceVersion']=str(rv[0])
+                if fault=='lost-app-reply':raise RuntimeError('synthetic_lost_app_response')
+                return prereq._bytes(row)
+            kube=stage_runtime.Kube()
+            stage=object.__new__(runtime_stage.RolloutStage);stage.kube=kube;stage.operation=operation;stage.marker=copy.deepcopy(marker)
+            stage.snapshots={'voice-user':copy.deepcopy(deployment)};stage.original_snapshots=copy.deepcopy(stage.snapshots)
+            stage.old_images=copy.deepcopy(card['observed']['images']);stage.expected={'namespace_uid':ns,'deployment_uids':{'voice-user':'user'},
+                'source_claim':'fixture','source_claim_uid':claim_uid,'source_pv_uid':pv_uid}
+            stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
+            collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
+                'index_sha256':'e'*64,'manifest_sha256':'d'*64,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+'d'*64})
+            stack.enter_context(patch.object(guard,'ROOT',root));stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset((helper,))))
+            stack.enter_context(patch.object(prereq,'BINARY_PINS',{}));stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
+            stack.enter_context(patch.object(runtime_stage.RolloutStage,'capture',return_value=stage))
+            stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
+            stack.enter_context(patch.object(policy,'validate_source',side_effect=lambda approved,source,value:copy.deepcopy(value)))
+            stack.enter_context(patch.object(stage_runtime.Kube,'get',side_effect=get));stack.enter_context(patch.object(commands,'capture',side_effect=transport))
+            stack.enter_context(patch.object(compiler,'capture',side_effect=transport));stack.enter_context(patch.object(stage_runtime,'capture',side_effect=transport))
+            stack.enter_context(patch.object(p3,'probe_jwks',return_value=None));stack.enter_context(resource_claim.command_scope(session.check))
+            for slot in prereq.SLOTS:
+                module=__import__(prereq.CHILD_MODULES[slot]);original=module.preflight_payloads
+                def checked(s,original=original,slot=slot):
+                    self.assertEqual(writes,[]);result=original(s);events.append('preflight:'+slot);return result
+                stack.enter_context(patch.object(module,'preflight_payloads',side_effect=checked))
+            request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
+            if fault=='missing-issuer':
+                with self.assertRaises(FileNotFoundError):prereq.run_prepare(actions,request,approved,execution,workspace)
+                self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
+            if fault=='lost-app-reply':
+                with self.assertRaisesRegex(RuntimeError,'synthetic_lost_app_response'):prereq.run_prepare(actions,request,approved,execution,workspace)
+                self.assertIn('GAME_INTEGRATION_DATABASE_URL',live[('secret','voice-app-secrets')]['data'])
+                state=prereq._checkpoint(session)
+                self.assertEqual(state['steps']['gis_material']['gis-app-credentials'],{'status':'PENDING'})
+                self.assertEqual(state['status'],'RUNNING');self.assertIsNone(state['receipt'])
+                with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
+                with self.assertRaises(Exception):prereq._complete(session)
+                self.assertEqual(len(writes),15);return
+            receipt=prereq.run_prepare(actions,request,approved,execution,workspace)
+            self.assertEqual(events[:4],['candidate',*('preflight:'+slot for slot in prereq.SLOTS)])
+            self.assertEqual(len(writes),15);self.assertEqual(prereq._checkpoint(session)['status'],'COMPLETE')
+            self.assertEqual(json.loads((installed/'policy.json').read_bytes())['unrelated'],'preserve')
+            self.assertEqual(receipt['actual_after'],{**stage.old_images,'voice-p3-principal-jwks/jwks':collector.validate()['image_ref']})
+            stage.snapshots['voice-p3-principal-jwks']=copy.deepcopy(live[('deployment','voice-p3-principal-jwks')]);stage.original_snapshots=copy.deepcopy(stage.snapshots)
+            stage.expected['deployment_uids']['voice-p3-principal-jwks']=stage.snapshots['voice-p3-principal-jwks']['metadata']['uid'];stage.old_images=receipt['actual_after']
+            binding=session.capture_prerequisites(stage)
+            self.assertEqual(session.check()['phase'],'prerequisites-captured')
+            captured=prereq.load_capture(session,actual=receipt['actual_after'])
+            self.assertEqual(binding['target_sha256'],prereq.digest(captured))
+            with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
+            self.assertEqual(len(writes),15)
 
 
 if __name__=='__main__':unittest.main()
