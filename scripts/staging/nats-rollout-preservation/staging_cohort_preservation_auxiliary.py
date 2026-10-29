@@ -81,6 +81,8 @@ def resume(session):
     inputs=_inputs(session)
     if inputs is None:return None
     plan=owner._guard(session);owner._no_pending(session)
+    if owner._state(session).get('status')!='AWAITING_OFF_NODE':raise Blocked('cohort_auxiliary_phase_invalid')
+    owner._offnode_records(session)
     stage=owner._paused_stage(session);original=stage.original_snapshots[NAME];before=stage.kube.get('deployment',NAME)
     paused=stage.snapshots[NAME]
     if (before['metadata'].get('uid')!=paused['metadata']['uid'] or before['metadata'].get('generation')!=paused['metadata']['generation']
@@ -91,6 +93,7 @@ def resume(session):
         or owner.digest(p3.private_semantic(original))!=inputs[0]['preserved'][IDENT]['observed']['semantic_sha256']):
         raise Blocked('cohort_auxiliary_template_changed')
     effect='resume-p3-publisher';path=owner._base(session)/'effects'/(effect+'.json')
+    parent._private_directory(path.parent)
     body=parent._bytes([{'op':'test','path':'/metadata/uid','value':before['metadata']['uid']},
         {'op':'test','path':'/metadata/resourceVersion','value':before['metadata']['resourceVersion']},
         {'op':'test','path':'/metadata/generation','value':before['metadata']['generation']},

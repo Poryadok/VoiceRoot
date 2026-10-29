@@ -89,6 +89,29 @@ class RestoreTransportTests(unittest.TestCase):
                         self.assertEqual(receipt['status'],'COMPLETE')
                         self.assertEqual(receipt['proof']['cleanup'],'verified')
                         self.assertEqual(set(receipt['proof']['databases']),{'postgres','template1'})
+                        # Actual CMS encrypt/decrypt and a second PG restore of
+                        # the extracted capsule. Native NATS bytes/readback and
+                        # GitHub custody are explicit external fixtures here.
+                        import encrypted_cut
+                        base=owner._runtime_base(session);owner.private._private_directory(base)
+                        recovery=root/'installed'/'recovery';owner.private._private_directory(recovery)
+                        result=run(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-nodes',
+                            '-keyout',str(recovery/'recovery-key.pem'),'-out',str(recovery/'recovery-cert.pem'),
+                            '-subj','/CN=isolated-cohort-test','-days','1'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+                        self.assertEqual(result.returncode,0)
+                        for filename in ('recovery-key.pem','recovery-cert.pem'):(recovery/filename).chmod(0o600)
+                        owner.private._private_write(base/'rollout-before.tar',b'native-nats-fixture-only')
+                        native={'archive_sha256':__import__('hashlib').sha256(b'native-nats-fixture-only').hexdigest()}
+                        owner._write(base/'rollout-before-manifest.json',native)
+                        cut={'manifest':native,'manifest_sha256':owner._file_identity(base/'rollout-before-manifest.json')['sha256'],
+                            'census_sha256':'f'*64}
+                        binding=owner._encrypt(session,{'dispatcher_run_id':123,'head_sha':session.context['commit']},cut)
+                        restored=encrypted_cut.decrypt_verify(base,recovery,binding,lambda _: {'external_nats_fixture':True},cohort_session=session)
+                        self.assertEqual(restored['cohort_readback']['cleanup'],'verified')
+                        self.assertNotIn('cohort-before.key',restored['members'])
+                        offnode=owner._read(owner._base(session)/'offnode-restore.json')
+                        self.assertNotEqual(offnode['nonce'],receipt['nonce'])
+                        self.assertEqual(offnode['proof']['databases'],receipt['proof']['databases'])
                         owner._no_pending(session)
         finally:
             docker('rm','-f','-v',cid)

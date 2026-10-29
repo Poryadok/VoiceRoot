@@ -64,3 +64,13 @@ integration, and the independently owned native Space migration qualification.
 The shared STAGING restore deliberately rejects changed Space until that native
 adapter exists. Source projection review/credential successor checks also
 remain part of the joint gate. No live claim or deployment has been performed.
+
+The actual CMS composition subsequently exposed a binding mismatch: decrypt
+requires the private cohort member hashes while GitHub custody accepts exactly
+seven public fields. The producer now retains the complete private binding and
+projects only those seven fields for remote verification. Actual CMS decryption
+and a second isolated PG16 full-catalog restore pass (24.482s); native NATS and
+GitHub remain explicitly synthetic boundaries in this test. Seven focused unit
+tests pass, including missing off-node proof, lost auxiliary CAS reply, altered
+image and exact replica-only response. Off-node receipt/cleanup records are
+independently root-rechecked before auxiliary resume and qualification loading.

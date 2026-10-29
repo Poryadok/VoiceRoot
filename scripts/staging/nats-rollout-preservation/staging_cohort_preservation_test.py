@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import sys
+from types import SimpleNamespace
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'nats-known-baseline'))
 import resource_claim
 from resource_claim_test import context, card
@@ -150,6 +151,45 @@ class CutEffectTests(unittest.TestCase):
                         with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
                             preservation.restore_command(session,argv)
                     self.assertEqual(len(calls),1)
+
+    def test_auxiliary_resume_requires_offnode_and_retains_lost_response(self):
+        import staging_cohort_preservation_auxiliary as auxiliary
+        import staging_p3_prerequisites as p3
+        for fault in ('missing_offnode','lost_reply','wrong_image','success'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory(dir='/root') as directory:
+                root=Path(directory);(root/'installed').mkdir(mode=0o700)
+                with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                    original={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':auxiliary.NAME,'namespace':'voice-staging',
+                        'uid':'publisher','resourceVersion':'3','generation':1},'spec':{'replicas':1,
+                        'template':{'spec':{'containers':[{'name':'jwks','image':'nginx@sha256:'+'c'*64}]}}}}
+                    session,_=self.fixture(root,original)
+                    state=preservation._read(preservation._base(session)/'checkpoint.json');state['status']='AWAITING_OFF_NODE'
+                    preservation.save(preservation._base(session)/'checkpoint.json',state)
+                    paused=copy.deepcopy(original);paused['spec']['replicas']=0;paused['metadata'].update(resourceVersion='4',generation=2)
+                    response=copy.deepcopy(original);response['metadata'].update(resourceVersion='5',generation=3)
+                    if fault=='wrong_image':response['spec']['template']['spec']['containers'][0]['image']='foreign'
+                    child={'preserved':{auxiliary.IDENT:{'observed':{'semantic_sha256':preservation.digest(p3.private_semantic(original))}}}}
+                    stage=SimpleNamespace(original_snapshots={auxiliary.NAME:original},snapshots={auxiliary.NAME:paused},
+                        kube=SimpleNamespace(get=lambda *args:copy.deepcopy(paused)))
+                    calls=[]
+                    def send(argv,**kwargs):
+                        commands.authority_guard(argv);calls.append(argv)
+                        self.assertEqual(json.loads(kwargs['body'])[-1],{'op':'replace','path':'/spec/replicas','value':1})
+                        if fault=='lost_reply':raise RuntimeError('resume_applied_reply_lost')
+                        return json.dumps(response).encode()
+                    with resource_claim.command_scope(session.check),patch.object(auxiliary,'_inputs',return_value=(child,)),\
+                        patch.object(preservation,'_paused_stage',return_value=stage),patch.object(auxiliary,'_health',return_value={'owned_pod_fixture':True}),\
+                        patch.object(commands,'capture',side_effect=send):
+                        if fault=='missing_offnode':
+                            with self.assertRaises(FileNotFoundError):auxiliary.resume(session)
+                            self.assertEqual(calls,[]);continue
+                        with patch.object(preservation,'_offnode_records'):
+                            if fault=='success':
+                                value=auxiliary.resume(session);self.assertEqual(value['response'],response)
+                            else:
+                                with self.assertRaises(Exception):auxiliary.resume(session)
+                                with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):auxiliary.resume(session)
+                            self.assertEqual(len(calls),1)
 
 
 class CatalogTests(unittest.TestCase):

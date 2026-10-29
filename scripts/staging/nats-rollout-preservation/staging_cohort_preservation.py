@@ -987,7 +987,7 @@ def _encrypt(session,execution,cut):
     cipher=encrypted_cut.encrypt_cut(base,guard.ROOT/'installed'/'recovery',cohort_session=session)
     # The member proof remains private. GitHub custody accepts its closed seven
     # public binding fields, never a Secret/key digest in the workflow result.
-    members=cipher.pop('cohort_members')
+    members=cipher['cohort_members']
     if members!=capsule_members(session):raise Blocked('cohort_capsule_changed')
     binding={**cipher,'operation':session.operation,'challenge':secrets.token_hex(16),
         'run_id':execution['dispatcher_run_id'],'head_sha':execution['head_sha'],
@@ -1059,7 +1059,8 @@ def qualify_offnode(actions,request):
     if state.get('cipher_binding')!=binding:raise Blocked('cohort_cipher_changed')
     revalidate_paused(session)
     try:
-        custody=github_custody.verify_artifact(request['token'],binding,base/'rollout-backup.cms',request['artifact_id'])
+        public_binding={key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes','created_at')}
+        custody=github_custody.verify_artifact(request['token'],public_binding,base/'rollout-backup.cms',request['artifact_id'])
         _write(_base(session)/'offnode-custody.json',custody)
         session.check();revalidate_paused(session)
         restored=encrypted_cut.decrypt_verify(base,guard.ROOT/'installed'/'recovery',binding,
@@ -1067,6 +1068,7 @@ def qualify_offnode(actions,request):
         _write(_base(session)/'decrypted-restore.json',restored)
         offnode=_read(_base(session)/'offnode-restore.json');local=_read(_base(session)/'local-restore.json')
         archive=load_backup_archive(session);_no_pending(session);revalidate_paused(session)
+        _offnode_records(session)
         import staging_cohort_preservation_auxiliary as auxiliary
         successor=auxiliary.resume(session)
         receipt={'schema':'voice-staging-cohort-preservation-receipt-v1','operation':session.operation,
@@ -1104,12 +1106,47 @@ def load_qualified(session,*,actual=None,rollout_target=None):
         'decrypted_restore_sha256':'decrypted-restore.json','cipher_binding_sha256':'cipher-binding.json'}.items():
         fixed[name]=digest(_read(_base(session)/file))
     if receipt!=fixed or state.get('status')!='QUALIFIED':raise Blocked('cohort_qualification_changed')
+    _offnode_records(session)
     if actual is not None and actual!=plan['actual_before']:raise Blocked('cohort_actual_changed')
     if rollout_target is not None:
         capture=_read(guard.ROOT/'installed'/'prerequisites'/session.operation/'capture.json')
         if rollout_target.get('prerequisites_sha256')!=digest(capture):raise Blocked('cohort_target_changed')
     revalidate_paused(session)
     return copy.deepcopy(receipt)
+
+
+def _offnode_records(session):
+    """No auxiliary or prerequisite effect can substitute local backup for custody."""
+    plan=load_plan(session);base=_base(session);binding=_read(base/'cipher-binding.json')
+    custody=_read(base/'offnode-custody.json');restored=_read(base/'decrypted-restore.json')
+    archive=_read(base/'archive-record.json');offnode=_read(base/'offnode-restore.json')
+    local=_read(base/'local-restore.json')
+    expected={'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
+        **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
+        'artifact_id':custody.get('artifact_id'),'verified':True}
+    if (custody!=expected or type(custody['artifact_id']) is not int or custody['artifact_id']<=0
+        or binding['operation']!=session.operation or binding['head_sha']!=session.context['commit']
+        or restored.get('schema')!='voice-nats-decrypted-restore-v1'
+        or restored.get('cipher_sha256')!=binding['cipher_sha256'] or restored.get('cipher_bytes')!=binding['cipher_bytes']
+        or restored.get('decrypted_members_verified') is not True
+        or restored.get('remote_equivalence')!='FULL_CIPHERTEXT_SHA256_AND_SIZE'
+        or restored.get('cohort_readback')!={'schema':'voice-staging-cohort-offnode-restore-v1','operation':session.operation,
+            'restore_sha256':digest(offnode),'manifest_sha256':digest(archive['manifest']),
+            'cipher_members_verified':True,'cleanup':'verified'}):raise Blocked('cohort_offnode_receipt_changed')
+    for phase,value in (('local',local),('offnode',offnode)):
+        nonce=value.get('nonce')
+        if (not isinstance(nonce,str) or not re.fullmatch('[a-f0-9]{32}',nonce) or value.get('phase')!=phase
+            or value.get('status')!='COMPLETE' or value.get('plan_sha256')!=digest(plan)
+            or value.get('proof',{}).get('cleanup')!='verified'
+            or value.get('proof',{}).get('manifest_sha256')!=digest(archive['manifest'])
+            or value!=_read(base/'restore'/nonce/'receipt.json')):raise Blocked('cohort_restore_receipt_changed')
+        resources=_read(base/'restore'/nonce/'resources.json')
+        if (value['resources_sha256']!=digest(resources) or not resources['resources']
+            or any(row['status']!='REMOVED' for row in resources['resources'].values())):
+            raise Blocked('cohort_restore_cleanup_changed')
+    if _file_identity(_runtime_base(session)/'rollout-backup.cms')!={
+        'sha256':binding['cipher_sha256'],'bytes':binding['cipher_bytes']}:raise Blocked('cohort_cipher_changed')
+    return copy.deepcopy(custody)
 
 
 def validate_historical_capture(operation):
