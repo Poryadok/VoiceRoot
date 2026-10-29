@@ -164,7 +164,7 @@ class RealPreflightTest(unittest.TestCase):
                 'pod_uid':'00000000-0000-0000-0000-000000000002',
                 'pvc_uid':'00000000-0000-0000-0000-000000000003',
                 'pv_uid':'00000000-0000-0000-0000-000000000004',
-                'container_id':'containerd://'+'c'*64,'restart_count':0}
+                'container_id':'containerd://'+'c'*64,'restart_count':0,'service_ip':'10.0.0.1'}
         start='2026-01-01T00:00:00Z'; catalog={'databases':{'postgres':1},'all_databases':{'postgres':1},
             'excluded':{},'properties':{'postgres':{'allowconn':True}}}
         state={};observations=[]
@@ -265,8 +265,10 @@ class RealPreflightTest(unittest.TestCase):
                                         'database_oids':catalog['all_databases']}
             return admission,affected.CatalogScopedProbe(owner.catalog,'fixture-token')
         def after(owner,cut,storage,source,namespace_uid):
-            expected=engine|{'statefulset_uid':'statefulset','pv_name':'pv','container':'postgres',
+            expected={k:engine[k] for k in ('namespace_uid','pod_uid','pvc_uid','pv_uid','container_id','restart_count')}
+            expected.update({'statefulset_uid':'statefulset','pv_name':'pv','container':'postgres',
                  'mount_path':'/var/lib/postgresql/data','data_directory':'/var/lib/postgresql/data/pgdata','pg_major':16}
+                            )
             observed={'expected':expected,'engine':engine,'server_start':start,'database_oid':catalog['databases']['postgres'],
                       'system_identifier':'7','node':{'name':'node','uid':'uid'}}
             self.enterContext(mock.patch.object(physical.PhysicalPhase,'_observe',return_value=observed))
