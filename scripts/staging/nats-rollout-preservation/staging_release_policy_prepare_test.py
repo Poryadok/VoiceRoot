@@ -2,12 +2,13 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import release_policy_wiring as wiring
 import staging_release_policy_prepare as prepare
@@ -19,6 +20,60 @@ def owners():
 
 
 class DescriptorTests(unittest.TestCase):
+    def test_coordinator_preflight_revalidates_source_payloads_and_live_preimages_before_effects(self):
+        import guard
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);source=root/'installed'/'sources'/('a'*12);path=source/'deploy/staging/services.yaml';path.parent.mkdir(parents=True)
+            raw=(Path(__file__).resolve().parents[3]/'deploy/staging/services.yaml').read_bytes();path.write_bytes(raw)
+            approved={'source_sha':'a'*40,'source_files':{'deploy/staging/services.yaml':hashlib.sha256(raw).hexdigest()}}
+            value=prepare.staging_descriptor('a'*40)
+            installed=root/'installed';old=b'{"s3_signing_endpoint":"fixture","unrelated":{"keep":true}}'
+            policy=installed/'policy.json';policy.write_bytes(old);policy.chmod(0o600)
+            plan,payloads=prepare.plan(approved,source,old,value,operation='a'*12,
+                namespace_uid='12345678-1234-1234-1234-123456789abc',source_capture_sha256='b'*64,list_rv='123')
+            namespace={'metadata':{'name':'voice-staging','uid':plan['namespace_uid']}}
+            listing={'apiVersion':'v1','kind':'ConfigMapList','metadata':{'resourceVersion':'456'},'items':[]}
+            kube=SimpleNamespace(get=Mock(return_value=namespace),run=Mock(return_value=listing))
+            parent=SimpleNamespace(require_child=Mock(return_value=plan),
+                load_payload=Mock(side_effect=lambda _session,_slot,effect:payloads[effect]),
+                load_authority=Mock(return_value={'approved':approved,'execution':{'fixture':'protected'},'source':str(source)}),
+                submit_effect=Mock(),record_pending=Mock())
+            function=getattr(prepare,'preflight_payloads',None)
+            self.assertTrue(callable(function),'fixed release-policy preflight is required')
+            session=SimpleNamespace(operation='a'*12)
+            with patch.dict(sys.modules,{'staging_prerequisites':parent}),patch.object(prepare,'Kube',return_value=kube),patch.object(guard,'ROOT',root):
+                self.assertTrue(function(session))
+                parent.submit_effect.assert_not_called();parent.record_pending.assert_not_called()
+                parent.load_authority.assert_called_with(session)
+                expected_path=('/api/v1/namespaces/voice-staging/configmaps?fieldSelector=metadata.name%3D'+
+                               value['policy_object']['metadata']['name']+'&limit=2')
+                kube.run.assert_called_with(['get','--raw',expected_path])
+                def replace_inode(_argv):
+                    replacement=installed/'replacement.json';replacement.write_bytes(old);replacement.chmod(0o600)
+                    os.replace(replacement,policy)
+                    return listing
+                kube.run.side_effect=replace_inode
+                with self.assertRaises(ValueError):function(session)
+                kube.run.side_effect=None
+                for fault in ('payload','source','old','namespace','present','continue','list_rv','list_type','authority_path','session_op'):
+                    with self.subTest(fault=fault):
+                        if fault=='payload':payloads['commit-root-policy']+=b' '
+                        elif fault=='source':path.write_bytes(raw+b'\n')
+                        elif fault=='old':policy.write_bytes(old+b' ')
+                        elif fault=='namespace':namespace['metadata']['uid']='other'
+                        elif fault=='present':listing['items']=[{'metadata':{'name':'foreign'}}]
+                        elif fault=='continue':listing['metadata']['continue']='more'
+                        elif fault=='list_rv':listing['metadata']['resourceVersion']=''
+                        elif fault=='list_type':listing['kind']='List'
+                        elif fault=='authority_path':parent.load_authority.return_value['source']=str(root/'foreign')
+                        else:session.operation='b'*12
+                        with self.assertRaises(ValueError):function(session)
+                        payloads['commit-root-policy']=prepare._canonical(prepare.policy_successor(json.loads(old),value,approved['source_sha']))
+                        path.write_bytes(raw);policy.write_bytes(old);namespace['metadata']['uid']=plan['namespace_uid']
+                        parent.load_authority.return_value['source']=str(source);session.operation='a'*12
+                        listing.update(kind='ConfigMapList',metadata={'resourceVersion':'456'},items=[])
+                        parent.submit_effect.assert_not_called();parent.record_pending.assert_not_called()
+
     def test_documented_alpha_uses_explicit_environment_placement(self):
         value=prepare.staging_descriptor('a'*40)
         self.assertEqual(value['policy_object']['metadata']['name'],'voice-release-policy-'+('a'*12))
