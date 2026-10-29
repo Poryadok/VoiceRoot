@@ -151,12 +151,19 @@ rejects skips. Its fixtures create and drop databases; point the DSN only at an
 owned disposable PostgreSQL server. The job also runs the protected capture
 transport against the same owned PostgreSQL and an owned Redis service. Its
 named subtests are listed in `scripts/ci/user_capture_required.json`; skips
-are rejected in that focused run.
+are rejected in that focused run. The User admission-eligibility transport
+test also runs with the owned PostgreSQL and Redis services; its named case is
+listed in `scripts/ci/user_admission_required.json`.
 
 The affected Notification PR proof runs `./internal/chatquota` with
 `BE195_REDIS_ADDR` pointing to an owned Redis service, requires the named cases
 in `scripts/ci/notification_quota_required.json`, and rejects skips. Use only a
 disposable Redis server for the local real-Redis concurrency test.
+
+The affected Role PR proof runs `TestRole13` in `./internal/store` against an
+owned PostgreSQL server via `ROLE_MIGRATION_TEST_DSN`. The fixtures create and
+drop disposable databases. The named rollback and concurrency cases in
+`scripts/ci/role_migration_required.json` must run without skips.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.

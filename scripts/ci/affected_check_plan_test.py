@@ -281,10 +281,17 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('--reject-skips', test['run'])
         self.assertIn('job.services.postgres.ports', test['env']['USER_ASSOCIATION_TEST_DSN'])
         capture = next(step for step in job['steps'] if step.get('name') == 'Run User capture transport proof')
-        self.assertIn('TestSpaceCaptureNativeProtectedTransport', capture['run'])
+        for name in ('NativeProtectedTransport', 'CanonicalProducerNativeCompleteCohort',
+                     'CanonicalProducerNativeArchiveAndRawErasure'):
+            self.assertIn(name, capture['run'])
         self.assertIn('--reject-skips', capture['run'])
         self.assertIn('job.services.redis.ports', capture['env']['USER_ASSOCIATION_TEST_REDIS'])
         self.assertIn('job.services.postgres.ports', capture['env']['USER_ASSOCIATION_TEST_DSN'])
+        admission = next(step for step in job['steps'] if step.get('name') == 'Run User admission proof')
+        self.assertIn('TestAdmissionEligibility_NativeExactPairAndRevisionWriters', admission['run'])
+        self.assertIn('--reject-skips', admission['run'])
+        self.assertIn('job.services.redis.ports', admission['env']['USER_ADMISSION_TEST_REDIS_ADDR'])
+        self.assertIn('job.services.postgres.ports', admission['env']['USER_ADMISSION_TEST_DSN'])
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['user'], 'docker_go_services': [],
                   'integration_go_services': ['user'], 'run_go': True, 'run_pkg': True}
@@ -311,6 +318,34 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('notification-quota-integration', selected['checks'])
         matrix['integration_go_services'] = []
         self.assertNotIn('notification-quota-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
+    def test_role_migration_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['role-migration-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')", job['if'])
+        self.assertIn('role-migration-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Role migration proofs')
+        self.assertIn('TestRole13', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['ROLE_MIGRATION_TEST_DSN'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['role'], 'docker_go_services': [],
+                  'integration_go_services': ['role'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/role/main.go']), matrix)
+        self.assertIn('role-migration-integration', selected['checks'])
+        migration = planner.match_filters(rules, ['src/backend/migrations/role_db/000013_game_session_grants.down.sql'])
+        self.assertTrue(migration['svc_role'])
+        self.assertIn('role-migration-integration', planner.make_plan(migration, matrix)['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        self.assertEqual(planner.verify_gate(selected, needs, identity), [])
+        needs['role-migration-integration']['result'] = 'skipped'
+        self.assertIn('role-migration-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('role-migration-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
     def test_cli_uses_committed_candidate_and_actual_go_resolver(self):

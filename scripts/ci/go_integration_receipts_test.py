@@ -66,6 +66,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         prefix = 'TestSpaceCaptureNativeProtectedTransport'
         required_names = {prefix, *(prefix + '/' + name for name in
                                     ('auth', 'role', 'gateway', 'moderation', 'canonical-SQL-full-cohort'))}
+        required_names.update(('TestSpaceCaptureCanonicalProducerNativeCompleteCohort',
+                               'TestSpaceCaptureCanonicalProducerNativeArchiveAndRawErasure'))
         self.assertEqual({name for _, name in cases}, required_names)
         events = [{'Package': package, 'Test': name, 'Action': action}
                   for package, name in cases for action in ('run', 'pass')]
@@ -74,6 +76,34 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         self.assertEqual(receipts.verify_required(events, cases, 0), [])
         missing = [event for event in events if event.get('Test') != prefix + '/canonical-SQL-full-cohort']
         self.assertTrue(receipts.verify_required(missing, cases, 0))
+
+    def test_role_migration_inventory_requires_writer_and_snapshot_fences(self):
+        inventory = json.loads((ROOT / 'scripts/ci/role_migration_required.json').read_text(encoding='utf-8'))
+        cases = inventory['role']
+        package = 'voice/backend/role/internal/store'
+        names = {'TestRole13EmptyDownUpRoundtrip'}
+        for name in ('TestRole13DownRejectsConcurrentFirstWriters', 'TestRole13DownRefusesExistingEvidence'):
+            names.add(name)
+            names.update(name + '/' + kind for kind in ('operation', 'session', 'grant'))
+        name = 'TestRole13DownRejectsStaleTransactionSnapshots'
+        names.add(name)
+        names.update(name + '/' + kind for kind in ('repeatable_read', 'serializable'))
+        self.assertEqual({tuple(case) for case in cases}, {(package, name) for name in names})
+        self.assertEqual(len(cases), len(names))
+        source = (ROOT / 'src/backend/role/internal/store/migration13_down_native_test.go').read_text(encoding='utf-8')
+        discovered = set(re.findall(r'(?m)^func (TestRole13\w+)\(t \*testing\.T\)', source))
+        self.assertEqual(discovered, {name for name in names if '/' not in name})
+
+    def test_user_admission_inventory_names_the_native_transport_case(self):
+        inventory = json.loads((ROOT / 'scripts/ci/user_admission_required.json').read_text(encoding='utf-8'))
+        source = (ROOT / 'src/backend/user/internal/grpcsvc/admission_eligibility_native_test.go').read_text(encoding='utf-8')
+        tests = re.findall(r'(?m)^func (Test\w+)\(t \*testing\.T\)', source)
+        self.assertEqual(inventory['user'], [['voice/backend/user/internal/grpcsvc', name] for name in tests])
+        package, name = inventory['user'][0]
+        skipped = [{'Package': package, 'Test': name, 'Action': 'run'},
+                   {'Package': package, 'Test': name, 'Action': 'skip'},
+                   {'Package': package, 'Action': 'pass'}]
+        self.assertTrue(receipts.verify_required(skipped, inventory['user'], 0))
 
     def test_required_case_must_run_and_pass_exactly_once(self):
         required = [('voice/backend/chat/internal/store', 'TestStoreIntegration')]

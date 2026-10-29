@@ -1,5 +1,7 @@
 {
   "user": [
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureCanonicalProducerNativeCompleteCohort"],
+    ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureCanonicalProducerNativeArchiveAndRawErasure"],
     ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport"],
     ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/auth"],
     ["voice/backend/user/internal/grpcsvc", "TestSpaceCaptureNativeProtectedTransport/role"],
