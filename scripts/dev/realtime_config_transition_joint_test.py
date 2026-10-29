@@ -32,7 +32,7 @@ class MixedTest(unittest.TestCase):
     def setUp(self):
         self.base=fixture.WriterCutTest('test_drain_and_resume_use_current_template_not_old')
         self.addCleanup(self.cleanup,self.base); self.base.setUp()
-        self.names=['chat','notification','realtime','user']
+        self.names=['chat','notification','realtime','space','user']
         sources=[]
         for name in self.names:
             item=fixture.workload('Deployment','voice-'+name,'uid-'+name,1,'old-'+name)
@@ -53,7 +53,11 @@ class MixedTest(unittest.TestCase):
         self.services={'voice-chat':chat,'voice-realtime':realtime_service}; self.old_call=self.base.client.call
         self.authority=authority_fixture.AuthorityTest('test_derives_renderer_input_without_private_values')
         self.addCleanup(self.cleanup,self.authority); self.authority.setUp()
-        sys.modules['realtime_jwks_publisher'].PublisherPhase=Publisher
+        module=sys.modules['realtime_jwks_publisher']; original_class=getattr(module,'PublisherPhase',None)
+        def restore_class():
+            if original_class is None: delattr(module,'PublisherPhase')
+            else: module.PublisherPhase=original_class
+        self.addCleanup(restore_class); module.PublisherPhase=Publisher
         sys.modules['realtime_config_transition_service']=chat_service
         self.authority.cut=self.base.cut; self.authority.publisher.fence=self.base.fence
         self.authority.publisher.lock=self.base.lock; self.authority.publisher.namespace_uid='ns'
@@ -121,6 +125,7 @@ class MixedTest(unittest.TestCase):
         p3.apply(self.base.cut,self.config,'chat')
         backend.apply_development(self.base.cut,self.config,'notification')
         p3.apply(self.base.cut,self.config,'realtime')
+        p3.apply(self.base.cut,self.config,'space')
         backend.apply_development(self.base.cut,self.config,'user')
         self.assertEqual(self.base.cut.config_snapshot['services'],self.names)
         self.assertEqual(self.base.cut.verify_drained()['active_sessions'],0)

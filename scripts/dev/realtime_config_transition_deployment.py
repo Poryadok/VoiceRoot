@@ -24,8 +24,11 @@ class Dependencies:
         import realtime_jwks_publisher as publisher
         if (type(cut) is not writer_cut.WriterCut or type(journal) is not media_operation_journal.Journal
                 or type(session) is not realtime_p3_create_only.Session or type(migration) is not realtime_migration_job.Migration
-                or type(space_phase) is not space_plan.SpacePlanPhase or type(publisher_phase) is not publisher.PublisherPhase
+                or type(publisher_phase) is not publisher.PublisherPhase
                 or not isinstance(token,str) or not token): raise ValueError()
+        if type(space_phase) is not space_plan.SpacePlanPhase:
+            import space_p3_issuer_create as issuer
+            if type(space_phase) is not issuer.Session: raise ValueError()
         self.cut,self.journal,self.session,self.migration,self.space_phase,self.publisher_phase=cut,journal,session,migration,space_phase,publisher_phase
         self.source_root,self.token=source_root,token
         self.intent=copy.deepcopy(journal.intent)
@@ -47,10 +50,10 @@ def _plan(cut,journal,service):
     deps=journal._realtime_config_dependencies; intent=journal.intent
     if (type(deps) is not Dependencies or deps.cut is not cut or deps.journal is not journal or journal.poisoned
             or intent!=deps.intent or journal.state.get('intent')!=intent or intent.get('resource_context')!=cut.fence.context
-            or intent.get('namespace_uid')!=cut.namespace_uid or service not in ('chat','realtime')): raise ValueError()
+            or intent.get('namespace_uid')!=cut.namespace_uid or service not in ('chat','realtime','space')): raise ValueError()
     plan=intent['backend_config_deployments']; names=plan['services']
     if (not isinstance(names,list) or not names or names!=sorted(set(names)) or service not in names
-            or any(x not in ('chat','notification','realtime','user') for x in names)
+            or any(x not in ('chat','notification','realtime','space','user') for x in names)
             or set(plan['sources'])!=set(names) or plan['source_sha']!=cut.fence.context['commit']
             or plan['cut_invocation']!=cut.invocation): raise ValueError()
     bound=cut.journal.state['steps']['writer-cut-config-plan']; row,_=cut.fence.ledger.read()
@@ -71,7 +74,8 @@ def _plan(cut,journal,service):
             or row['writer_cut_effects']['writer-drain-deployment-voice-'+service].get('receipt_sha256')!=writer_cut.digest(drained['receipt'])): raise ValueError()
     evidence=authority.collect(cut,journal,deps.session,deps.migration,deps.space_phase,deps.publisher_phase,deps.source_root,deps.token)
     patch,target=(renderer.render_realtime(source,evidence,cut.fence.context['operation_id']) if service=='realtime'
-                  else renderer.render_chat(source,evidence['assets']['voice-app-config']['keys']))
+                  else renderer.render_chat(source,evidence['assets']['voice-app-config']['keys']) if service=='chat'
+                  else renderer.render_space(source,evidence['assets']['voice-app-config']['keys']))
     return source,target,patch
 
 

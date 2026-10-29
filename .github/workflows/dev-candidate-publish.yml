@@ -55,6 +55,7 @@ on:
       - scripts/dev/writer_cut.py
       - scripts/dev/writer_cut_test.py
       - scripts/dev/writer_cut_successor_test.py
+      - scripts/dev/writer_cut_activation_test.py
       - scripts/dev/writer_cut_migration.py
       - scripts/dev/writer_cut_migration_test.py
       - scripts/dev/writer_cut_migration_inventory_test.py
@@ -162,6 +163,7 @@ jobs:
           python -B scripts/dev/cohort_restore_journal_test.py
           python -B scripts/dev/writer_cut_test.py
           python -B scripts/dev/writer_cut_successor_test.py
+          python -B scripts/dev/writer_cut_activation_test.py
           python -B scripts/dev/writer_cut_migration_test.py
           python -B scripts/dev/writer_cut_migration_inventory_test.py
           python -B scripts/dev/backend_config_transition_test.py

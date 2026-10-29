@@ -10,7 +10,7 @@ import media_operation_guard
 import writer_cut
 
 SERVICES = ('notification','user')
-PLAN_SERVICES = ('chat','notification','realtime','user')
+PLAN_SERVICES = ('chat','notification','realtime','space','user')
 POLICY = ('VOICE_RELEASE_PROFILE','VOICE_RELEASE_POLICY_FILE','VOICE_RELEASE_POLICY_SHA256','VOICE_RELEASE_SNAPSHOT_FILE')
 BASE = probe.BASE
 
