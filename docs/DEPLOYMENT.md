@@ -741,6 +741,13 @@ equality remain mandatory. Missing46–49 are not synthesized. Return success
 only after final complete evidence; no ordinary enrollment/new serving grants
 or provider activation occurs in this command.
 
+The maintenance-window checker permits PostgreSQL's own `autovacuum worker`
+backends, which do physical vacuum/analyze maintenance rather than application
+or competing DDL work. This is a finite exception: foreign client sessions
+(including idle or unnamed sessions), logical replication and unknown backend
+types still block the window. Session identity, effective role, advisory lock
+and freshly created database OID checks remain mandatory.
+
 The new Space Job has zero retries: interruption or output persistence failure
 can leave committed44/45/50 stages, and a later run must HOLD rather than infer
 provenance or resume from endpoint state. Retain partial output and original
