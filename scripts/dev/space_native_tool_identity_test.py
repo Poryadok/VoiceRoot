@@ -106,7 +106,8 @@ class SourceInventoryTests(unittest.TestCase):
                  'source_inventory':source,'request':{'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'1'*32},
                  'content':{'executable_sha256':'2'*64,'migrator_sha256':'3'*64,'sql_inventory_sha256':'c'*64,
                             'embedded_values_observed':True,'runtime_receipt_verified':False,'help_exit_code':0,
-                            'compiled_gate_probe':'native51-source-gates-reached-v1'},
+                            'compiled_gate_probe':'native51-source-gates-reached-v1',
+                            'closure':{'schema':'voice-space-native-local-closure-v1','packages':{},'files':{},'raw_sha256':'9'*64}},
                  'runtime_qualified':False,'deployment_performed':False}
         self.assertEqual(tool.validate_publication(receipt,identity,source),receipt)
         for name,value in [('run_id',8),('source_sha','b'*40),('immutable_image','ghcr.io/poryadok/voiceroot/space@sha256:'+'e'*64),('runtime_qualified',True)]:
@@ -129,7 +130,8 @@ class SourceInventoryTests(unittest.TestCase):
         snapshot={'source_sha':sha,'files':{}}; inventory={'source_sha':sha,'build_source_sha256':'b'*64,'sql_inventory_sha256':'c'*64}
         context=(Path('/source'),identity,snapshot,inventory,{'cycle':1},Registry())
         proof={'executable_sha256':'d'*64,'migrator_sha256':'e'*64,'sql_inventory_sha256':'c'*64,'embedded_values_observed':True,
-               'runtime_receipt_verified':False,'help_exit_code':0,'compiled_gate_probe':'native51-source-gates-reached-v1'}
+               'runtime_receipt_verified':False,'help_exit_code':0,'compiled_gate_probe':'native51-source-gates-reached-v1',
+               'closure':{'schema':'voice-space-native-local-closure-v1','packages':{},'files':{},'raw_sha256':'9'*64}}
         request={'schema':'voice-full-application-build-request-v1','cycle':1,'request_id':'1'*32}
         context=(Path('/source'),identity,snapshot,inventory,request,Registry())
         with tempfile.TemporaryDirectory() as folder, mock.patch.dict(os.environ,{'RUNNER_TEMP':folder}), \

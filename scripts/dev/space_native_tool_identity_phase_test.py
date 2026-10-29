@@ -56,7 +56,8 @@ class ToolPhaseTest(unittest.TestCase):
             'source_inventory':inventory,'request':self.pkg.receipt['request'],
             'content':{'executable_sha256':'6'*64,'migrator_sha256':'7'*64,'sql_inventory_sha256':'2'*64,
                        'embedded_values_observed':True,'runtime_receipt_verified':False,'help_exit_code':0,
-                       'compiled_gate_probe':'native51-source-gates-reached-v1'},
+                       'compiled_gate_probe':'native51-source-gates-reached-v1',
+                       'closure':{'schema':'voice-space-native-local-closure-v1','packages':{},'files':{},'raw_sha256':'9'*64}},
             'runtime_qualified':False,'deployment_performed':False}
         self.capture={'artifact_id':42,'artifact_sha256':'8'*64,'publication':publication}
 
