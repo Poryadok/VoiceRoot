@@ -11,6 +11,7 @@ from pathlib import Path
 import secrets
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -28,11 +29,22 @@ from story_media_backup_restore_integration_test import Journal, POSTGRES, MIGRA
 class UnmanagedIntegrationTest(unittest.TestCase):
     def test_restore_queries_ignore_shadowed_migration_ledger(self):
         fixture=fixtures.PopulatedRestoreTest();self.addCleanup(cleanup_fixture,fixture);fixture.setUp()
-        fixture.sql(fixture.target,'target_admin','postgres',
-            'CREATE SCHEMA shadow; CREATE TABLE public.schema_migrations(version bigint,dirty boolean); '
+        deadline=time.monotonic()+60
+        while True:
+            ready=subprocess.run(['docker','exec',fixture.target,'sh','-ec',
+                'test "$(cat /proc/1/comm)" = postgres && exec psql -X -qAt -v ON_ERROR_STOP=1 -U target_admin -d postgres -c "SELECT 1"'],
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=10)
+            if ready.returncode==0 and ready.stdout.strip()==b'1':break
+            if time.monotonic()>=deadline:
+                raise RuntimeError('shadow fixture final-postgres readiness failed; exit='+str(ready.returncode)+'; stderr=redacted')
+        sql=('CREATE SCHEMA shadow; CREATE TABLE public.schema_migrations(version bigint,dirty boolean); '
             'CREATE TABLE shadow.schema_migrations(version bigint,dirty boolean); '
             'INSERT INTO public.schema_migrations VALUES (25,false); INSERT INTO shadow.schema_migrations VALUES (99,true); '
             'ALTER ROLE target_admin SET search_path=shadow,public,pg_catalog')
+        result=subprocess.run(['docker','exec','-i',fixture.target,'psql','-X','-qAt','-v','ON_ERROR_STOP=1',
+                               '-U','target_admin','-d','postgres'],input=sql.encode(),stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
+        if result.returncode:
+            raise RuntimeError('shadow fixture setup failed; exit='+str(result.returncode)+'; stderr=redacted')
         result=json.loads(media._psql(fixture.target,'target_admin','postgres',media.CATALOG))
         self.assertEqual(result['history'],[{'version':25,'dirty':False}])
 
