@@ -331,7 +331,8 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
         sources = migration_inventory(source_root, databases, source_metadata['migrations'],full_catalog)
         changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
         native_space=None
-        if _staging is not None and 'space_db' in changed and not callable(getattr(staging,'native_space_rehearsal',None)):
+        if (_staging is not None and 'space_db' in changed
+            and any(not callable(getattr(staging,name,None)) for name in ('native_space_rehearsal','load_native_space_rehearsal'))):
             raise CohortRestoreError('staging Space native migration qualification required')
         if media_restore._docker('info', '--format', '{{.OSType}}').strip() != b'linux':
             raise CohortRestoreError('Linux Docker required')
@@ -410,7 +411,8 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             if mode == 'migrate':
                 if _staging is not None and db=='space_db':
                     native_space=staging.native_space_rehearsal(session)
-                    if type(native_space) is not dict or native_space.get('status')!='COMPLETE':
+                    if (type(native_space) is not dict or native_space.get('status')!='COMPLETE'
+                        or staging.load_native_space_rehearsal(session)!=native_space):
                         raise CohortRestoreError('staging Space native rehearsal incomplete')
                 elif full_catalog:
                     _run_go_as_role(postgres, admin, db, migration_roles[db]['role'])
