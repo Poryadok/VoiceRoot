@@ -136,5 +136,32 @@ class PhaseTest(unittest.TestCase):
         self.assertEqual(result['missing'],['voice-space-media-server-tls']); self.assertEqual(set(result['present']),{name})
         self.assertEqual(self.writes,[]); self.assertEqual(self.base.ledger.read(),before)
 
+    def test_package_record_changed_during_last_ledger_read_is_refused(self):
+        self.package.journal.state['steps'][package.STEP]={'status':'done'}
+        original=self.package.fence.ledger.read
+        def drift():
+            result=original(); self.package.journal.state['steps'].pop(package.STEP,None); return result
+        with patch.object(self.package.fence.ledger,'read',side_effect=drift):
+            with self.assertRaises(ValueError): self.phase._guard()
+
+    def test_terminal_drain_drift_is_uncertain(self):
+        for name,obj in self.desired.items():
+            current=copy.deepcopy(obj); current['metadata'].update(uid='uid-'+name,resourceVersion='1'); self.actual[name]=current
+            self.identities[name]={'state':'present','uid':'uid-'+name,'resourceVersion':'1','keys':sorted(metadata.MEMBERS[name])}
+        self.initial['creator_secrets']=copy.deepcopy(self.identities)
+        self.preflight.record['creator_secrets']=copy.deepcopy(self.identities)
+        self.preflight.record['receipt_sha256']=subject.writer_cut.digest(self.initial)
+        self.preflight.journal.state['steps'][self.preflight.step]=copy.deepcopy(self.preflight.record)|{'receipt':copy.deepcopy(self.initial)}
+        self.base.ledger.row[self.preflight.ledger]=copy.deepcopy(self.preflight.record)
+        original=self.base.cut.verify_drained
+        def drift():
+            result=original()
+            if self.phase.record and self.phase.record.get('status')=='done':
+                self.identities['voice-space-principal-signing']['resourceVersion']='2'
+            return result
+        with patch.object(self.base.cut,'verify_drained',side_effect=drift):
+            with self.assertRaises(subject.DelegatedError): self.phase.run()
+        self.assertEqual(self.base.ledger.row['status'],'uncertain'); self.assertFalse(self.phase.completed)
+
 
 if __name__=='__main__': unittest.main()

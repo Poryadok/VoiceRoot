@@ -106,14 +106,18 @@ class _Receiver:
         if local!=self.effects: raise ValueError()
 
     def _guard(self):
-        self._local(); media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
+        self._local(); dependencies=copy.deepcopy(tuple((p.journal.intent,p.journal.state) for p in
+                                                       (self.package,self.cut,self.preflight)))
+        media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
         self.preflight._authority(); self.cut._guard(); row,rev=self.fence.ledger.read()
         if (not self.fence.owned(row) or row.get('status')!='active' or self.preflight.fence.ledger.read()!=(row,rev)
                 or self.cut.fence.ledger.read()!=(row,rev) or self.package.fence.ledger.read()!=(row,rev)
                 or (self.record is not None and row.get(self.ledger)!=self.record) or row.get(self.effects_key,{})!=self.effects
                 or (self.initial is not None and (row.get(self.preflight.ledger)!=self.preflight.record
                     or self.preflight.record.get('receipt_sha256')!=writer_cut.digest(self.initial)))): raise ValueError()
-        self._local(); return row,rev
+        self._local()
+        if dependencies!=tuple((p.journal.intent,p.journal.state) for p in (self.package,self.cut,self.preflight)): raise ValueError()
+        return row,rev
 
     def _drained(self):
         self._guard(); self.cut.verify_drained(); self._guard()
@@ -298,7 +302,7 @@ class _Receiver:
                      'source_sha':self.fence.context['commit'],'namespace_uid':self.namespace_uid,'preflight_sha256':writer_cut.digest(self.initial),
                      'ca':copy.deepcopy(self.initial['ca']),'objects':identities,'public_jwks':jwks,
                      'scope':'fixed-peer-secrets-no-runtime-readiness'}
-            done=self.record|{'status':'done','receipt':copy.deepcopy(receipt)}; self._write(record=done); self._current(); self._drained()
+            done=self.record|{'status':'done','receipt':copy.deepcopy(receipt)}; self._write(record=done); self._current(); self._drained(); self._current()
             if self.record!=done or self.journal.state['steps'].get(self.step)!=done: raise ValueError()
             self.proof=copy.deepcopy(receipt); self.completed=True; return copy.deepcopy(receipt)
         except BaseException:
