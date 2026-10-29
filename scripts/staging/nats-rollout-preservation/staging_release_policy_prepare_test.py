@@ -20,6 +20,72 @@ def owners():
 
 
 class DescriptorTests(unittest.TestCase):
+    def test_same_candidate_preserved_policy_requires_protected_history_and_exact_live_objects(self):
+        import guard
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);operation='b'*12;source=root/'installed'/'sources'/operation
+            path=source/'deploy/staging/services.yaml';path.parent.mkdir(parents=True)
+            raw=(Path(__file__).resolve().parents[3]/'deploy/staging/services.yaml').read_bytes();path.write_bytes(raw)
+            approved={'source_sha':'a'*40,'source_files':{'deploy/staging/services.yaml':hashlib.sha256(raw).hexdigest()}}
+            value=prepare.staging_descriptor('a'*40)
+            old=prepare._canonical({'release_policy':value,'unrelated':{'keep':'exact'}})
+            policy=root/'installed'/'policy.json';policy.write_bytes(old);policy.chmod(0o600)
+            expected=value['policy_object'];live=copy.deepcopy(expected)
+            live['metadata'].update(uid='12345678-aaaa-aaaa-aaaa-123456789abc',resourceVersion='456')
+            ref={'operation':'a'*12,'receipt_sha256':'d'*64}
+            cm={'kind':'ConfigMap','name':expected['metadata']['name'],'namespace':'voice-staging',
+                'uid':live['metadata']['uid'],'resourceVersion':'456','semantic_sha256':hashlib.sha256(prepare._canonical(expected)).hexdigest()}
+            root_observation={'kind':'RootPolicy','name':'installed-policy','sha256':hashlib.sha256(old).hexdigest()}
+            preserved={'create-policy-configmap':{'authority':ref,'observed':cm},
+                       'commit-root-policy':{'authority':ref,'observed':root_observation}}
+            build=getattr(prepare,'build_preserved_plan',None)
+            self.assertTrue(callable(build),'protected same-candidate policy reuse is required')
+            record,payloads=build(approved,source,old,value,operation=operation,
+                namespace_uid='12345678-1234-1234-1234-123456789abc',source_capture_sha256='b'*64,preserved=preserved)
+            self.assertEqual(record['effects'],[]);self.assertEqual(payloads,{})
+            for fault in ('missing','unrelated_origin','same_operation','foreign_name'):
+                malformed=copy.deepcopy(preserved)
+                if fault=='missing':malformed.pop('commit-root-policy')
+                elif fault=='unrelated_origin':malformed['commit-root-policy']['authority']={'operation':'c'*12,'receipt_sha256':'d'*64}
+                elif fault=='same_operation':
+                    for row in malformed.values():row['authority']['operation']=operation
+                else:malformed['create-policy-configmap']['observed']['name']='foreign'
+                with self.subTest(fault=fault),self.assertRaises(ValueError):
+                    build(approved,source,old,value,operation=operation,namespace_uid=record['namespace_uid'],
+                          source_capture_sha256='b'*64,preserved=malformed)
+            namespace={'metadata':{'name':'voice-staging','uid':record['namespace_uid']}}
+            kube=SimpleNamespace(get=Mock(side_effect=lambda kind,name:namespace if kind=='namespace' else live),run=Mock())
+            qualified={'create-policy-configmap':{'authority':ref,'semantic':expected,'uid':cm['uid']},
+                       'commit-root-policy':{'authority':ref,'semantic':json.loads(old),'sha256':root_observation['sha256']}}
+            parent=SimpleNamespace(require_child=Mock(return_value=record),load_authority=Mock(return_value={
+                'approved':approved,'execution':{'fixture':'protected'},'source':str(source)}),
+                load_preserved=Mock(side_effect=lambda _s,_slot,effect:copy.deepcopy(qualified[effect])),
+                load_payload=Mock(),submit_effect=Mock(),record_pending=Mock(),record_done=Mock())
+            session=SimpleNamespace(operation=operation,check=Mock())
+            with patch.dict(sys.modules,{'staging_prerequisites':parent}),patch.object(prepare,'Kube',return_value=kube),patch.object(guard,'ROOT',root):
+                self.assertTrue(prepare.preflight_payloads(session))
+                prepare.execute(session)
+                self.assertEqual(prepare.verify_effect(session,'create-policy-configmap',cm),cm)
+                self.assertEqual(prepare.verify_effect(session,'commit-root-policy',root_observation),root_observation)
+                parent.submit_effect.assert_not_called();parent.record_pending.assert_not_called();parent.record_done.assert_not_called()
+                parent.load_payload.assert_not_called();kube.run.assert_not_called()
+                for fault in ('uid','rv','data','namespace','root_bytes','authority'):
+                    with self.subTest(fault=fault):
+                        saved_live=copy.deepcopy(live);saved_namespace=copy.deepcopy(namespace)
+                        if fault=='uid':live['metadata']['uid']='12345678-bbbb-bbbb-bbbb-123456789abc'
+                        elif fault=='rv':live['metadata']['resourceVersion']='457'
+                        elif fault=='data':live['data']['policy.json']+=' '
+                        elif fault=='namespace':namespace['metadata']['uid']='other'
+                        elif fault=='root_bytes':policy.write_bytes(old+b' ')
+                        else:qualified['create-policy-configmap']['authority']={'operation':'c'*12,'receipt_sha256':'e'*64}
+                        with self.assertRaises(ValueError):prepare.preflight_payloads(session)
+                        live.clear();live.update(saved_live);namespace.clear();namespace.update(saved_namespace)
+                        policy.write_bytes(old);qualified['create-policy-configmap']['authority']=ref
+                        parent.submit_effect.assert_not_called();parent.record_pending.assert_not_called()
+            with self.assertRaises(ValueError):
+                build(dict(approved,source_sha='c'*40),source,old,value,operation=operation,
+                    namespace_uid=record['namespace_uid'],source_capture_sha256='b'*64,preserved=preserved)
+
     def test_coordinator_preflight_revalidates_source_payloads_and_live_preimages_before_effects(self):
         import guard
         with tempfile.TemporaryDirectory() as folder:
