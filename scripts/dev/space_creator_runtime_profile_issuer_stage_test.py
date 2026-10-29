@@ -24,7 +24,7 @@ class StageTest(unittest.TestCase):
         self.op='media-c1-'+'a'*32; self.sock=self.root/'packet.sock'
         self.server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET); self.server.bind(str(self.sock)); self.server.listen(1)
         self.addCleanup(self.server.close)
-        self.request={'context':{'operation_id':self.op},'namespace_uid':'namespace','lock':{},'ca':{},
+        self.request={'context':{'operation_id':self.op,'commit':'b'*40},'namespace_uid':'namespace','lock':{},'ca':{},
                       'creator_secrets':{name:{'state':'absent'} for name in packet.FAMILIES},'preflight_sha256':'c'*64}
         self.cert=self.root/'cert'; self.cert.write_bytes(b'fixture')
         metadata=types.ModuleType('space_p3_issuer_preflight_metadata_root')
@@ -88,6 +88,13 @@ class StageTest(unittest.TestCase):
 
     def test_partial_existing_secret_never_starts_generation(self):
         self.request['creator_secrets']['voice-role-media-server-tls']={'state':'present','uid':'old','resourceVersion':'5','keys':['tls.crt']}
+        thread=self.serve('ok')
+        with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
+        thread.join(timeout=5); issuer._prepare.assert_not_called()
+        self.assertFalse((self.root/('space-creator-'+'a'*32+'.once')).exists())
+
+    def test_foreign_candidate_never_starts_generation(self):
+        self.request['context']['commit']='d'*40
         thread=self.serve('ok')
         with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5); issuer._prepare.assert_not_called()

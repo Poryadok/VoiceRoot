@@ -31,7 +31,7 @@ def _unique(pairs):
         result[key]=value
     return result
 
-def _exchange(channel,operation_id):
+def _exchange(channel,operation_id,source_sha):
     from space_p3_issuer_preflight_metadata_root import MEMBERS
     if channel.send(b'PREFLIGHT-REQUEST\n')!=len(b'PREFLIGHT-REQUEST\n'): raise ValueError()
     raw,ancillary,flags,_=channel.recvmsg(65537,1)
@@ -39,7 +39,7 @@ def _exchange(channel,operation_id):
     request=json.loads(raw,object_pairs_hook=_unique)
     if channel.recv(64)!=b'PREFLIGHT-READY\n': raise ValueError()
     if (set(request)!={'context','namespace_uid','lock','ca','creator_secrets','preflight_sha256'} or
-        request['context'].get('operation_id')!=operation_id or
+        request['context'].get('operation_id')!=operation_id or request['context'].get('commit')!=source_sha or
         not re.fullmatch(r'[a-f0-9]{64}',request['preflight_sha256']) or
         set(request['creator_secrets'])!=set(MEMBERS) or set(MEMBERS)!=set(packet.FAMILIES)):
         raise ValueError()
@@ -73,7 +73,7 @@ def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
             channel.settimeout(120); channel.connect(str(exporter._socket_path(suffix)))
             pid,uid,_=struct.unpack('3i',channel.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
             if uid!=exporter.existing._pmd_uid() or pid!=consumer_pid or exporter.existing._start_ticks(pid)!=consumer_start_ticks: raise ValueError()
-            first=_exchange(channel,operation_id); _guard(first)
+            first=_exchange(channel,operation_id,source_sha); _guard(first)
             missing=sorted(name for name,item in first['creator_secrets'].items() if item=={'state':'absent'})
             if not missing: raise ValueError()
             destination=exporter.ROOT/('space-creator-'+suffix)
@@ -100,7 +100,7 @@ def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
                 receipt=_prepare(destination,media,missing,operation_id,source_sha,first['namespace_uid'],first['preflight_sha256'])
             finally:
                 tempfile.tempdir=old_tempdir; os.umask(old_umask)
-            second=_exchange(channel,operation_id)
+            second=_exchange(channel,operation_id,source_sha)
             if second!=first: raise ValueError()
             _guard(second)
             credentials.write_private(destination/'receipt.json',json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
