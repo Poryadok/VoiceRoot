@@ -4,6 +4,7 @@ import copy
 import hashlib
 import importlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,7 +26,78 @@ def generate():
     return function() if callable(function) else None
 
 
+def captured_source(root):
+    checkout = Path(__file__).resolve().parents[3]
+    paths = ['deploy/staging/services.yaml', 'scripts/dev/migrations.py',
+        'docker/postgres/provision-gameintegration-runtime-role.sql', 'docker/postgres/verify-gameintegration-runtime-role.sql',
+        'deploy/templates/provision-gameintegration-runtime-role-job.yaml', 'deploy/templates/migrate-game-integration-db-job.yaml',
+        'deploy/templates/verify-game-integration-db-job.yaml']
+    paths += [p.relative_to(checkout).as_posix() for p in sorted((checkout/'src/backend/migrations/game_integration_db').glob('*.sql'))]
+    capture = {}
+    for relative in paths:
+        dest = root / relative; dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(checkout / relative, dest)
+        capture[relative] = hashlib.sha256(dest.read_bytes()).hexdigest()
+    return {'source_sha':'a'*40,'source_files':capture}
+
+
 class GeneratedMaterialTest(unittest.TestCase):
+    def test_source_contract_uses_real_captured_sql_and_caller_wiring(self):
+        module = importlib.import_module('staging_gis_material')
+        checkout = Path(__file__).resolve().parents[3]
+        paths = ['deploy/staging/services.yaml', 'scripts/dev/migrations.py',
+            'docker/postgres/provision-gameintegration-runtime-role.sql',
+            'docker/postgres/verify-gameintegration-runtime-role.sql',
+            'deploy/templates/provision-gameintegration-runtime-role-job.yaml',
+            'deploy/templates/migrate-game-integration-db-job.yaml',
+            'deploy/templates/verify-game-integration-db-job.yaml']
+        paths += [p.relative_to(checkout).as_posix() for p in sorted(
+            (checkout/'src/backend/migrations/game_integration_db').glob('*.sql'))]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); capture = {}
+            for relative in paths:
+                dest = root / relative; dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(checkout / relative, dest)
+                capture[relative] = hashlib.sha256(dest.read_bytes()).hexdigest()
+            approved = {'source_sha':'a'*40,'source_files':capture}
+            contract = getattr(module, 'source_contract', None)
+            self.assertTrue(callable(contract), 'source-bound GIS material contract is required')
+            result, digest = contract(approved, root)
+            self.assertEqual(result['schema'], 'voice-staging-gis-material-source-contract-v1')
+            self.assertEqual(digest, hashlib.sha256(json.dumps(result, sort_keys=True,
+                separators=(',', ':'), ensure_ascii=True).encode()).hexdigest())
+            service = root/'deploy/staging/services.yaml'; raw = service.read_bytes()
+            service.write_bytes(raw.replace(b'key: GAME_INTEGRATION_NOTIFICATION_WORKLOAD_KEY_B64',
+                                            b'key: GAME_INTEGRATION_REALTIME_WORKLOAD_KEY_B64'))
+            approved['source_files']['deploy/staging/services.yaml'] = hashlib.sha256(service.read_bytes()).hexdigest()
+            with self.assertRaises(module.MaterialError): contract(approved, root)
+            for old, new in (
+                (b'https://voice-gameintegration:8443/internal/v1/principal/jwks.json', b'https://foreign:8443/internal/v1/principal/jwks.json'),
+                (b'secretName: voice-gameintegration-jwks-tls', b'secretName: voice-foreign-tls'),
+                (b'{name: principal-jwks, port: 8443}', b'{name: principal-jwks, port: 9443}'),
+                (b'{name: principal-jwks, port: 8443}', b'{name: principal-jwks, port: 8443, targetPort: 9999}'),
+                (b'{name: principal-jwks, port: 8443}', b'{name: principal-jwks, port: 8443, protocol: UDP}'),
+                (b'ports: [{name: http, port: 8080}, {name: principal-jwks, port: 8443}]',
+                 b'ports: [{name: http, port: 8080}, {name: principal-jwks, port: 8443}, {name: http, port: 8080}]'),
+                (b'matchLabels: {app: voice-gameintegration}', b'matchLabels: {app: foreign}'),
+                (b'matchLabels: {app: voice-gameintegration}',
+                 b'matchLabels: {app: voice-gameintegration}\n    matchExpressions: [{key: app, operator: NotIn, values: [voice-gameintegration]}]'),
+                (b'GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR, value: ":8443"',
+                 b'GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR, value: ":9443"'),
+                (b'"gameintegration":"https://voice-gameintegration:8443/internal/v1/principal/jwks.json"',
+                 b'"gameintegration":"https://foreign","gameintegration":"https://voice-gameintegration:8443/internal/v1/principal/jwks.json"'),
+                (b'- {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}',
+                 b'- {name: principal-tls, mountPath: /etc/voice/principal/tls, readOnly: true}\n            - {name: other, mountPath: /etc/voice/principal/tls, readOnly: true}'),
+                (b'- name: principal-signing\n          secret: {secretName: voice-gameintegration-principal-signing',
+                 b'- name: principal-signing\n          secret: {secretName: voice-gameintegration-principal-signing, items: []}\n        - name: principal-signing\n          secret: {secretName: voice-gameintegration-principal-signing')):
+                changed = raw.replace(old,new)
+                self.assertNotEqual(changed,raw)
+                service.write_bytes(changed)
+                approved['source_files']['deploy/staging/services.yaml'] = hashlib.sha256(changed).hexdigest()
+                with self.assertRaises(module.MaterialError): contract(approved, root)
+            service.write_bytes(raw); approved['source_files']['deploy/staging/services.yaml'] = hashlib.sha256(raw).hexdigest()
+            extra = root/'src/backend/migrations/game_integration_db/foreign.sql'; extra.write_text('SELECT 1;')
+            with self.assertRaises(module.MaterialError): contract(approved, root)
     def test_private_keys_and_partner_credentials_are_fresh_and_compatible(self):
         values = generate()
         self.assertIsInstance(values, dict, 'GIS material generation is required')
@@ -373,8 +445,12 @@ class ClosedPlanTest(unittest.TestCase):
 class AppEffectVerificationTest(ClosedPlanTest):
     def test_preflight_validates_every_private_payload_before_dispatch(self):
         module = importlib.import_module('staging_gis_material')
+        import guard
         base = self.plan(); before = AppSecretObservationTest().secret()
         with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp)/'installed'/'sources'/base['operation']
+            approved = captured_source(source)
+            _, base['source_contract_sha256'] = module.source_contract(approved, source)
             ca, key = JWKSTLSMaterialTest().create_ca(Path(tmp), 'issuer')
             base['issuer']['ca_public_sha256'] = hashlib.sha256(ca).hexdigest()
             base['issuer']['issuer_certificate_sha256'] = hashlib.sha256(ca).hexdigest()
@@ -393,13 +469,19 @@ class AppEffectVerificationTest(ClosedPlanTest):
             kube = SimpleNamespace(get=Mock(side_effect=lambda _kind, name: before if name == 'voice-app-secrets' else namespace if name == 'voice-staging' else issuer_ca),
                 run=Mock(return_value={'apiVersion': 'v1', 'kind': 'SecretList', 'metadata': {'resourceVersion': '5'}, 'items': []}))
             parent = SimpleNamespace(require_child=Mock(return_value=plan), load_payload=Mock(side_effect=lambda _s, _slot, name: payloads[name]),
-                load_issuer=Mock(return_value=issuer), submit_effect=Mock())
+                load_issuer=Mock(return_value=issuer), load_authority=Mock(return_value={
+                    'approved':approved,'execution':{'fixture':'protected'},'source':str(source)}), submit_effect=Mock())
             preflight = getattr(module, 'preflight_payloads', None)
             self.assertTrue(callable(preflight), 'fixed GIS preflight is required')
-            with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
-                preflight(SimpleNamespace(check=Mock()))
+            with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}), patch.object(guard, 'ROOT', Path(tmp)):
+                preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
                 parent.submit_effect.assert_not_called()
-                guarded=SimpleNamespace(check=Mock(side_effect=[None, RuntimeError('claim changed')]))
+                service=source/'deploy/staging/services.yaml'; source_bytes=service.read_bytes()
+                service.write_bytes(source_bytes+b'\n')
+                with self.assertRaises(module.MaterialError):
+                    preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
+                service.write_bytes(source_bytes)
+                guarded=SimpleNamespace(operation='123456abcdef',check=Mock(side_effect=[None, RuntimeError('claim changed')]))
                 with self.assertRaisesRegex(RuntimeError,'claim changed'): preflight(guarded)
                 self.assertEqual(guarded.check.call_count,2)
                 valid_listing = {'apiVersion': 'v1', 'kind': 'SecretList', 'metadata': {'resourceVersion': '5'}, 'items': []}
@@ -411,11 +493,11 @@ class AppEffectVerificationTest(ClosedPlanTest):
                     else: listing['kind'] = 'List'
                     kube.run.return_value = listing
                     with self.subTest(fault=fault):
-                        with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(check=Mock()))
+                        with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
                 kube.run.return_value = valid_listing
                 changed_rv = copy.deepcopy(valid_listing); changed_rv['metadata']['resourceVersion'] = '6'
                 kube.run.return_value = changed_rv
-                preflight(SimpleNamespace(check=Mock()))
+                preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
                 kube.run.return_value = valid_listing
                 workload = json.loads(payloads['gis-workload'])
                 workload['metadata']['annotations']['voice.poryadok.io/prerequisites-operation'] = 'abcdef123456'
@@ -434,7 +516,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 parent.load_preserved = Mock(return_value={'authority': authority, 'semantic': workload, 'uid': observed['uid']})
                 kube.get.side_effect = lambda _kind, name: (before if name == 'voice-app-secrets' else
                     namespace if name == 'voice-staging' else workload_live if name == observed['name'] else issuer_ca)
-                preflight(SimpleNamespace(check=Mock()))
+                preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
                 parent.load_preserved.assert_called_once()
                 parent.require_child.return_value = plan
                 paths = {'/api/v1/namespaces/voice-staging/secrets?fieldSelector=metadata.name%3D' +
@@ -447,7 +529,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
                                                    base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
                 parent.require_child.return_value = plan
-                with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(check=Mock()))
+                with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
                 payloads['gis-workload'] = original_workload
                 broken_app = json.loads(payloads['gis-app-credentials'])
                 broken_app['after_data']['GAME_INTEGRATION_DB_PASSWORD'] = base64.b64encode(b'x').decode()
@@ -457,7 +539,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
                                                    base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
                 parent.require_child.return_value = plan
-                with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(check=Mock()))
+                with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(operation='123456abcdef',check=Mock()))
                 parent.submit_effect.assert_not_called()
     def test_preserved_effect_requires_protected_ancestry_and_fresh_exact_observation(self):
         module = importlib.import_module('staging_gis_material')

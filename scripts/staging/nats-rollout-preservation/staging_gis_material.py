@@ -10,6 +10,7 @@ import os
 import re
 import secrets
 import subprocess
+from pathlib import Path
 
 
 class MaterialError(RuntimeError):
@@ -489,6 +490,132 @@ def build_create_payloads(operation, app_before, ca_certificate, ca_key, jwks_bu
             'gis-app-credentials': _canonical({'before': app_before, 'after_data': after})}
 
 
+def source_contract(approved, source):
+    """Decode captured source; the protected coordinator qualifies its custody."""
+    import gis_prerequisite
+    import yaml
+    try:
+        if (type(approved) is not dict or type(approved.get('source_files')) is not dict
+            or not isinstance(approved.get('source_sha'), str) or not re.fullmatch(r'[a-f0-9]{40}', approved['source_sha'])):
+            raise ValueError()
+        root = Path(source); files = approved['source_files']
+        fixed = {'deploy/staging/services.yaml', 'scripts/dev/migrations.py',
+            'docker/postgres/provision-gameintegration-runtime-role.sql',
+            'docker/postgres/verify-gameintegration-runtime-role.sql',
+            'deploy/templates/provision-gameintegration-runtime-role-job.yaml',
+            'deploy/templates/migrate-game-integration-db-job.yaml',
+            'deploy/templates/verify-game-integration-db-job.yaml'}
+        prefix = 'src/backend/migrations/game_integration_db/'
+        migrations = {name for name in files if isinstance(name, str) and name.startswith(prefix)}
+        if not migrations or not fixed.issubset(files): raise ValueError()
+        directory = root / prefix
+        if directory.is_symlink() or not directory.is_dir(): raise ValueError()
+        actual = {prefix + entry.name for entry in directory.iterdir()}
+        if actual != migrations: raise ValueError()
+        for relative in fixed | migrations:
+            path = root
+            for component in Path(relative).parts:
+                path = path / component
+                if path.is_symlink(): raise ValueError()
+            if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != files[relative]:
+                raise ValueError()
+        inputs = gis_prerequisite.source_inputs(root, files)
+        raw = (root/'deploy/staging/services.yaml').read_bytes()
+        if len(raw) > 2 << 20: raise ValueError()
+        class UniqueLoader(yaml.SafeLoader):
+            pass
+        def mapping(loader, node, deep=False):
+            result = {}
+            for key_node, value_node in node.value:
+                key = loader.construct_object(key_node, deep=deep)
+                if not isinstance(key, str) or key in result: raise ValueError()
+                result[key] = loader.construct_object(value_node, deep=deep)
+            return result
+        UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+        if any(isinstance(token, (yaml.tokens.AliasToken, yaml.tokens.AnchorToken)) for token in yaml.scan(raw)):
+            raise ValueError()
+        documents = list(yaml.load_all(raw, Loader=UniqueLoader))
+        identities = [('Deployment', 'voice-gameintegration'), ('Deployment', 'voice-notification'),
+                      ('Deployment', 'voice-realtime'), ('Deployment', 'voice-role'), ('Service', 'voice-gameintegration')]
+        selected = {}
+        for kind, name in identities:
+            rows = [row for row in documents if isinstance(row, dict) and row.get('kind') == kind
+                    and row.get('metadata', {}).get('name') == name]
+            if len(rows) != 1 or rows[0].get('metadata', {}).get('namespace') != 'voice-staging': raise ValueError()
+            selected[kind+'/'+name] = rows[0]
+        def container(name):
+            spec = selected['Deployment/voice-'+name]['spec']['template']['spec']
+            rows = [row for row in spec['containers'] if row.get('name') == name]
+            if len(rows) != 1: raise ValueError()
+            env = rows[0].get('env', [])
+            if len({row['name'] for row in env}) != len(env): raise ValueError()
+            return spec, rows[0], {row['name']: row for row in env}
+        gis_spec, gis_container, gis_env = container('gameintegration')
+        deployment = selected['Deployment/voice-gameintegration']
+        if (deployment['spec'].get('selector') != {'matchLabels':{'app':'voice-gameintegration'}}
+            or deployment['spec']['template'].get('metadata',{}).get('labels',{}).get('app') != 'voice-gameintegration'):
+            raise ValueError()
+        def ref(env, key, secret, secret_key):
+            if env.get(key) != {'name': key, 'valueFrom': {'secretKeyRef': {'name': secret, 'key': secret_key}}}:
+                raise ValueError()
+        ref(gis_env, 'DATABASE_URL', 'voice-app-secrets', 'GAME_INTEGRATION_DATABASE_URL')
+        for name in ('notification', 'realtime'):
+            key = 'GAME_INTEGRATION_'+name.upper()+'_WORKLOAD_KEY_B64'
+            ref(gis_env, key, 'voice-gameintegration-workload-credentials', key)
+            _, _, caller = container(name)
+            ref(caller, key, 'voice-gameintegration-workload-credentials', key)
+            if caller.get('GAME_INTEGRATION_CONSENT_URL') != {'name':'GAME_INTEGRATION_CONSENT_URL','value':'http://voice-gameintegration:8080'}:
+                raise ValueError()
+        for name, value in {'GAME_INTEGRATION_PRINCIPAL_PRIVATE_KEY_FILE':'/etc/voice/principal/keys/current.pem',
+            'GAME_INTEGRATION_PRINCIPAL_NEXT_PRIVATE_KEY_FILE':'/etc/voice/principal/keys/next.pem',
+            'GAME_INTEGRATION_PRINCIPAL_KID':'current', 'GAME_INTEGRATION_PRINCIPAL_NEXT_KID':'next',
+            'GAME_INTEGRATION_PRINCIPAL_JWKS_LISTEN_ADDR':':8443',
+            'GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_CERT_FILE':'/etc/voice/principal/tls/tls.crt',
+            'GAME_INTEGRATION_PRINCIPAL_JWKS_TLS_KEY_FILE':'/etc/voice/principal/tls/tls.key'}.items():
+            if gis_env.get(name) != {'name':name,'value':value}: raise ValueError()
+        def named(rows, *, mounts=False):
+            values = {row['name']: row for row in rows}
+            if len(values) != len(rows): raise ValueError()
+            if mounts and len({row['mountPath'] for row in rows}) != len(rows): raise ValueError()
+            return values
+        volumes = named(gis_spec.get('volumes', []))
+        mounts = named(gis_container.get('volumeMounts', []), mounts=True)
+        for item, secret, directory_name, keys in (
+                ('principal-signing','voice-gameintegration-principal-signing','/etc/voice/principal/keys',('current.pem','next.pem')),
+                ('principal-tls','voice-gameintegration-jwks-tls','/etc/voice/principal/tls',('tls.crt','tls.key'))):
+            if mounts.get(item) != {'name':item,'mountPath':directory_name,'readOnly':True}: raise ValueError()
+            volume = volumes.get(item, {}).get('secret', {})
+            if volume.get('secretName') != secret or volume.get('items') != [{'key':key,'path':key} for key in keys]: raise ValueError()
+        role_spec, role_container, role_env = container('role')
+        def json_pairs(items):
+            result = {}
+            for key, value in items:
+                if key in result: raise ValueError()
+                result[key] = value
+            return result
+        if json.loads(role_env['S2S_JWKS_URLS_JSON']['value'], object_pairs_hook=json_pairs).get('gameintegration') != 'https://voice-gameintegration:8443/internal/v1/principal/jwks.json': raise ValueError()
+        if role_env.get('S2S_JWKS_CA_FILE') != {'name':'S2S_JWKS_CA_FILE','value':'/etc/voice/media/ca/jwks-ca.crt'}: raise ValueError()
+        role_volumes = named(role_spec.get('volumes', []))
+        role_mounts = named(role_container.get('volumeMounts', []), mounts=True)
+        if (role_mounts.get('media-ca') != {'name':'media-ca','mountPath':'/etc/voice/media/ca','readOnly':True}
+            or role_volumes.get('media-ca',{}).get('secret',{}).get('secretName') != 'voice-media-ca'
+            or {'key':'jwks-ca.crt','path':'jwks-ca.crt'} not in role_volumes['media-ca']['secret'].get('items',[])):
+            raise ValueError()
+        service = selected['Service/voice-gameintegration']['spec']
+        ports = service.get('ports', [])
+        if (service.get('selector') != {'app':'voice-gameintegration'} or len(ports) != 2
+            or {row.get('name'):row.get('port') for row in ports} != {'http':8080,'principal-jwks':8443}
+            or any(row.get('targetPort',row.get('port')) != row.get('port') or row.get('protocol','TCP') != 'TCP' for row in ports)):
+            raise ValueError()
+        if hashlib.sha256((root/'deploy/staging/services.yaml').read_bytes()).hexdigest() != files['deploy/staging/services.yaml']:
+            raise ValueError()
+        contract = {'schema':'voice-staging-gis-material-source-contract-v1','source_sha':approved['source_sha'],
+            'services_blob_sha256':files['deploy/staging/services.yaml'], 'gis_prerequisite_inputs':inputs,'material_wiring':selected}
+        return contract, hashlib.sha256(_canonical(contract)).hexdigest()
+    except (AttributeError, KeyError, TypeError, ValueError, OSError, UnicodeError, yaml.YAMLError, gis_prerequisite.Blocked):
+        raise MaterialError('staging_gis_source_contract_invalid') from None
+
+
 def build_plan(operation, namespace_uid, source_capture_sha256, source_contract_sha256,
                issuer, before, preserved, payloads):
     """Build closed private descriptors; the coordinator qualifies every input."""
@@ -545,10 +672,18 @@ def preflight_payloads(session):
     """Validate protected inputs once before the first GIS effect, never after a create."""
     import staging_prerequisites as parent
     import stage_runtime
+    import guard
     try:
         session.check()
         plan = parent.require_child(session, 'gis_material')
         validate_plan(plan)
+        authority = parent.load_authority(session)
+        if (type(authority) is not dict or set(authority) != {'approved','execution','source'}
+            or getattr(session, 'operation', None) != plan['operation']
+            or authority['source'] != str(guard.ROOT/'installed'/'sources'/plan['operation'])):
+            raise ValueError()
+        _, source_sha = source_contract(authority['approved'], authority['source'])
+        if source_sha != plan['source_contract_sha256']: raise ValueError()
         kube = stage_runtime.Kube()
         namespace = kube.get('namespace', 'voice-staging')
         if (namespace['metadata'].get('uid') != plan['namespace_uid']
@@ -606,7 +741,8 @@ def preflight_payloads(session):
                 if not publics[0] or publics[0] == publics[1]: raise ValueError()
             elif effect_id == 'gis-tls':
                 _verify_issuer_tls(parent, session, plan, obj, kube)()
-        if parent.require_child(session, 'gis_material') != plan: raise ValueError()
+        if (parent.require_child(session, 'gis_material') != plan or parent.load_authority(session) != authority
+            or source_contract(authority['approved'], authority['source'])[1] != source_sha): raise ValueError()
         session.check()
         return True
     except (KeyError, TypeError, ValueError, UnicodeError, binascii.Error, OSError,
