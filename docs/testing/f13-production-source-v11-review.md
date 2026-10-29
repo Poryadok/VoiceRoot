@@ -1,50 +1,116 @@
-# Independent production source consumption contract review
+# Independent exact-H2 production-source consumption review
 
-Verdict: **SOURCE_CONSUMPTION_CONTRACT_CLEAR**, exclusively for source H `5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29`, tree `343796ef28dab0b535948cf975157e53b15c1935`, and the frozen Marusya-192 packet identified below. Reviewer: Marusya-193, independent accounting role auditor, GPT-6.1 Sol medium. This is the existing production source contract review for the PR1051/1086 foundation assembler. It is not actual producer, historical fold, hosted-event, runtime, release or deployment acceptance.
+Verdict: SOURCE_CONSUMPTION_CONTRACT_CLEAR for the supported source-consumption
+contract and the twenty actual data artifacts reviewed here. Reviewer:
+Marusya-205, independent gpt-6.1-sol/medium auditor, fresh focused packet context.
+This is original prose for this packet, not a renamed prior production verdict.
 
-## Exact independent bindings
+Exact H2 is `a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259`, tree
+`228c7591e2397c660f0811754b0e6fc608fc4fb8`. The bound Native v5 record SHA256 is
+`a220c85d67ed0bc56eecb24347f165d6f892a30e636cebf39303ff67b47056db`;
+the separate Role v3 record SHA256 is
+`f63595ab202fc1bf8852077cc637d5cbf416047ac02ff89ca66af9ead0c7a702`.
+The complete current-input artifact SHA256 is
+`8dea92c498d0b2af490b33ccdd164c513a68b5339c6fd17c96301ee39320c8c5`;
+the exact H2-to-twelve-template carrier diff SHA256 is
+`9035cb46f4cb881a342f2164855b7c104ad84a4f1699d61e580d62d4cdfa252f`;
+the source-policy-v3.md SHA256 is
+`a146b061235aa05e55bd2fc9fb67b3ba94de76bbc9431d0946f637a029ee71d8`.
+These bindings approve consumption of the specified evidence within its stated
+scope. They do not approve nonexistent R2/K2 commits or an actual release event.
 
-- Native v5 record SHA256: `61e3725265c7df86ccbc6afcdabfed046863cf1ca7ab8560dc0f90b9acb97568`.
-- Role v3 record SHA256: `1f5cb6d3c925a93881ecc26a52f84b3be5172de7e21515cee8a143e24fc2f376`.
-- Complete current-input artifact SHA256: `6bc1d8846c97a09639911d0dd43d15af4c23279139a53c76e2cf12ca3ba6f92e`.
-- Exact twelve-carrier draft diff SHA256: `e79916890de0cd97d6690f84ce8458a85dfdb1b06b8878349a64862e7e991ad4`.
-- Source policy v3 SHA256: `a146b061235aa05e55bd2fc9fb67b3ba94de76bbc9431d0946f637a029ee71d8`.
-- Unapplied mechanical pin boundary SHA256: `01c194821b3d518cb361bfcabd4c75803f123306d43f120470b425b55651d663`.
-- Twenty-artifact draft manifest SHA256: `7f1768d50b7ddded54c12cfa52f3c368eb2f4cadda0a217971841707039aee3a`.
-- Frozen packet ZIP SHA256: `3c7022efdc297ff431dcb54dba5d7c14234c15424b09c2716ae4ec02b368b026`; packet SHA256SUMS.json SHA256: `d546da17d4db99f7b6dbccc35f49bf09cf4fcebddf2d2df74476c6a114d2875a`.
+I independently verified the 2,230,495-byte packet SHA256
+`e0d38f990bd7c8e566cb3608a525037a73c2698fd99b05cb0ab15b56fc23403e`,
+all unique packet members and its checksum manifest against disk, all twenty
+artifact sizes/hashes, and unchanged assembler bytes against the original
+Marusya-194 assembler. Genuine Marusya-204 Native/Role extension prose remains
+verbatim and separately scoped; it is evidence for this review, not this verdict.
 
-This prose is the independent production review evidence. There is no invented production review JSON marker. Its own bytes are deliberately outside its input binding set; the guarded assembler must hash and publish these actual bytes as a separate proof.
+The current-input inventory was reconstructed directly from reference
+`d6ac6d2f4b85eb691a00f729eb2192e63ae0091f` and H2 Git trees and the complete
+raw no-renames delta. All 2452 rows, including missing/deleted entries, retain
+ORIGINAL_CONTRIBUTION_GATES_REQUIRED. No outside-unit path receives admission.
+The static DAG supplement SHA256 is
+`1560fba2ea09effcb8b294d5ada39e83d1f2a41bb0b1571515e1d5c006d3a932`.
+I independently checked the complete ordered parent listing for all 2289
+commits, all 1024 incoming edge identities, and independently recomputed every
+edge's complete best-base set. These are static facts. I did not independently
+recompute every supplement commit delta hash, and none of these observations
+substitutes for the uninterrupted actual collector or its source-owner rows.
 
-## Complete consumption boundary
+I checked actual record entries and Role blob SHA256 values against H2, both
+immediate predecessor record hashes, and every participating evidence hash.
+Independent unit checks matched 501 Native and 269 Role compiled paths and
+complete 89/24 dependency directory maps, with 540/269 immediate entries.
+The 356-entry Voice tree and 200 historical source artifacts are unchanged from
+old H. All eleven Role correction rows and the historical runtime gap equal
+the predecessor. Native retains exactly A1-A4/B1-B4 at the original evidence
+source, with historical execution and causal labels preserved as described by
+204. There is no fresh H2 runtime execution or expansion of a literal B proof.
+The Role source/component evidence is independent from Native path authority;
+144c69 HOLD and the unconditional post-creation nickname-recheck gap remain.
 
-I read the frozen request and reviewed the actual proposed `f13_release_source.py` Native v5, Role v3 and production v11 loaders, record-delta enforcement, continuation and event checks. I checked their actual production dispatch, materialization and producer collection consumers. The carrier files were compared byte-for-byte to immutable combined proposal `6b8353d78cde7116483dddff1e797f3cd9794b4d`, rather than treating the older indexed master implementation as the proposal. Existing 188 code acceptance and 190 template verification are supporting evidence for those exact bytes; they do not supply this production source verdict or final K acceptance.
+I inspected the actual template consumption path: production_record recursively
+loads v1-v10 via load_bootstrap_fix, preserves predecessor artifacts, binds both
+new subordinate hashes and the entire current-input inventory, and denies
+runtime, activation and current/future path grants. Native/Role loaders enforce
+their distinct complete units, inventories and extension evidence. This review
+does not claim those private draft loaders were executed.
 
-`production_record` recursively calls the existing v1-v10 predecessor chain, protects historical evidence, loads both separately typed current units, binds both record hashes, and reconstructs the exact current-input inventory from Git. I independently reconstructed that inventory against reference `d6ac6d2f4b85eb691a00f729eb2192e63ae0091f`: all 2452 changed paths, complete reference/current mode/type/OID entries including absence, ordering and raw no-renames delta digest exactly match. Every row retains `ORIGINAL_CONTRIBUTION_GATES_REQUIRED`. The review marker is evidence consumed under the pinned source contract; it does not classify those rows as accepted contributions or grant a path whitelist.
+The event contract retains actual B/S/T, exact HEAD/event SHA, push-before or PR
+context, two ordered event parents and complete source/result tree equality.
+Collection base `2c8bdf9e2f420b724575096beb4fcf5cb4ea00be` remains distinct
+from actual event B. Shallow history rejects. The typed 69cc live pending
+operation authenticates the exact true/true child; nested 132 remains bound to
+that operation and reconstructed Git topology. Ordinary children retain their
+original partition rules. Actual owners, all best bases, cumulative runtime OR,
+guarded intermediate taint, original M/J/corrected-F/DC0/132 obligations and
+full child maps remain producer/final-fold obligations. Endpoint equality,
+synthetic rows, static inventories or a cached checkpoint cannot discharge them.
 
-Native v5 conserves the complete predecessor-derived 99 projection entries, 500 context entries, 501 compiled paths and 89 complete dependency-directory inventories, canonical proto context and whole Voice tree. All eight A1-A4/B1-B4 clauses remain separately bound to the accepted original b2 evidence. I verified all emitted Native proof hashes. The mapped extension review contains the original 191 report verbatim (SHA256 `44b86ac64c15d92bb3cacf418d631b2c676e6525a2de1fa8cca510c88ae3fb03`), and the mapped inventory embeds the complete original 191 inventory (SHA256 `b9938365bb2915b22bbc6467040e61d7bb8187eed437496e8f208e6abd0f3301`). I independently reconstructed all 377 b2-to-H changed-tree rows and verified the mapping. The writer's appended schema-binding prose is data-only; it cannot broaden 191's Native/Role-only verdict. The original runtime archive, source/B-clause, wire, transport and compiled proofs retain their original identities and scope.
+I independently rebuilt the candidate carrier tree in an isolated object store
+from H2 plus the twelve exact reviewed `6b8353d78cde7116483dddff1e797f3cd9794b4d`
+templates. Tree `e7e1877d1101351e26c51f5bfdd5f1bdf8f9f5a6` reproduces the
+bound carrier diff byte-for-byte. Each of the twelve template hashes, including
+the eleven script module bytes, matches that immutable source. Subsequent
+mechanical edits are restricted to FOUNDATION_BASE, RECORD_COMMIT,
+NATIVE_SHA256, PRODUCTION_SHA256 and ROLE_SHA256. Exact final bytes still need
+their independent K2 review; this review grants no sixth pin or semantic edit.
 
-Role v3 conserves all eleven original correction entries and the separate complete 272-entry context, 269 compiled paths and package inventories. The actual loader derives its source inputs from the raw Go evidence, revalidates predecessor and original correction ancestry, compares current/evidence unit entries and complete directories, and verifies both existing Role source/extension review block types and their exact hashes. I checked the emitted proof references and original evidence bindings. This retains the historical runtime gap, actual prior/incoming metadata and flags, runtime OR, 144c69 HOLD and nickname-recheck limitation. Neither the separate Role unit nor its Native wire comparison adds any path to Native permission or supplies historical runtime success.
+The proposed normal K2 merge with ordered parents [oldK,R2] is conditionally
+compatible: R2 must have sole parent H2, and R2 must be an ancestor of K2.
+_record_delta permits exactly named additions and preserves every H2 entry;
+_carrier compares the entire K2 tree to R2 outside twelve carriers, checks actual
+executing bytes and modes, and requires later carrier bytes. Therefore every
+R2 artifact and every other H2 entry must survive conflict resolution exactly.
+Preserving original 1051/1086 and oldK ancestry is necessary, but does not prove
+their actual source-contribution gates. check_continuation verifies complete
+units, directory inventories, Voice tree, protected artifacts and exact carriers
+on every new DAG commit; mutation followed by restoration still rejects. A new
+pre-foundation import needs its separately reviewed contract.
 
-The actual production loader hashes evidence and checks review membership; the assembler additionally demands this real independent prose and exact source/input/carrier/policy/Role/Native bindings. Neither mechanism turns a text marker into a full producer result. Review authenticity comes from this independent scoped review and normal publication/review custody, not a self-authored status field. The twenty frozen artifacts are legitimate source-only assembler inputs. The null-status, null-review-hash production template is outside those twenty and must remain unpublished; it is not a loaded production record.
+The unapproved production template deliberately has null status and null review
+hash, is outside the twenty artifacts, and cannot satisfy the inspected approved
+status predicate. This prose may feed the unchanged supported assembler for a
+new 24-artifact proposal, with the first twenty artifacts conserved exactly.
+Private full loader preflight and selected exact committed Docker checks are
+NOT_RUN here and remain mandatory. R2, K2, five actual pins, actual source
+contribution success, full producer/fold and hosted gates remain unproven.
+Observe current master before publication; if it advances, preserve this exact
+H2 evidence and repeat the bounded delta qualification. No merge freeze follows.
 
-## Outside-unit obligations and continuation
+Reproduction: check.py independently reached all packet/input/DAG/unit/hash and
+template checks, then exited 1 during isolated read-tree because its alternates
+file initially used Windows CRLF. That local harness defect was corrected to
+write LF bytes. carrier_check.py repeated the isolated setup and remaining exact
+diff/template checks, exit 0; unit_check.py independently completed, exit 0.
+The earlier failed setup is not represented as a successful full checker run.
+The checked-in ignored check.py now contains the correction for reproduction.
 
-I accept the source-consumption boundary only with the original gates intact. Changes outside the complete Native and Role units still require the genuine uninterrupted collection and final fold from fixed `2c8bdf9e2f420b724575096beb4fcf5cb4ea00be` to actual S: all original contribution/producer obligations, actual owners, every independently reconstructed best base, nested maps, accumulated runtime OR and guarded intermediate taint. The shell still calls the actual recursive collector with `true,true`; it does not replace collection with the 2452-row endpoint inventory. The typed 69cc pending-operation/nested-132 route retains the original M/J/corrected-F/DC0/132 obligations. Supporting 2285-commit/1023-edge `current-input-dag.json` (SHA256 `f377f870db33a82fff08fade1e64fe486351426aad6925c981cbb30becf69928`) is observed Git data only, not an owner ledger, runtime-OR verdict or completed producer proof.
-
-The actual event B/S/T remains distinct from fixed H and the collection base. R must be source-only and a direct child of this exact H; the record delta adds exactly the named records/evidence and changes no existing source. K must descend R and change only the twelve carrier paths. F must have actual ordered parents `[H,K]` with full K/F tree parity. The event binds actual HEAD/SHA, ordered parents, real push-before or PR context, base ancestry and complete source/result tree equality. Continuation derives actual F on the first-parent history, preserves all R evidence and exact K carriers, and checks every newly introduced DAG commit, complete units, full directories and Voice tree. Intermediate mutation followed by restoration and imported pre-F branches cannot gain bounded reuse from endpoint equality. No current/future outside-unit source authority, cache checkpoint, fake event or replacement baseline is accepted.
-
-## Exact carrier and pin boundary
-
-I independently regenerated the full-index binary/no-renames selected-path H-to-6B patch and obtained exactly the bound diff bytes. All twelve carrier paths, actual proposal blobs and modes agree with the packet inventory and exact 6B templates. This confirms the source-only R versus later K separation; it does not replace independent final K code review.
-
-The only permitted mechanical substitutions are the five existing top-level None values in `scripts/ci/f13_release_source.py`: `FOUNDATION_BASE` (exact H), `RECORD_COMMIT` (actual direct-child R), `NATIVE_SHA256`, `PRODUCTION_SHA256` and `ROLE_SHA256` (corresponding immutable R artifact hashes). I verified the five AST assignments and bound template hash `58f70b9dd60de2a63c17cf7bd0e687dfeae40dbffad1b0a879c9e1b32552a889`. Normalizing only those assignment values back to None must recover the exact reviewed template bytes. No other byte, path, mode, type, scope or guard may change. Executing-carrier identity checks establish identity and do not replace final independent K review.
-
-## Verification and remaining work
-
-Executed `rtk proxy python tmp/swarm/marusya193/audit_packet.py`, exit0: packet and manifest hashes, all 270 listed packet members, exact immutable 6B carrier blobs, exact H/tree, full actual 2452-row inventory, Native/Role sizes, original191 verbatim inclusion and five unapplied pins passed. Additional bounded immutable Git checks passed for the exact full-index carrier diff, all mapped Native changed-tree rows, original inventory conservation and all emitted Native/Role proof hashes. No duplicate 301-test run or actual producer was performed. The author's exact unmodified private Native/Role loader receipt remains supporting schema evidence, correctly labelled as a private fixture.
-
-Read-only `git ls-remote origin refs/heads/master` returned this exact H during review on 2026-10-29. This observation is not a reservation: revalidate actual master before committing R and immediately before F. Any advancement leaves this verdict valid only for exact 5d and requires exact delta review/re-freeze; it does not freeze unrelated PRs.
-
-The legitimate writer may now supply this actual review, bound diff and policy to the existing guarded assembler, produce the full twenty-four source artifacts, and verify those outputs before normal publication. Actual R and K do not yet exist. Independent final K review, actual unmodified full producer/fold on the real integrated candidate and hosted real-event gate remain mandatory. No full-source/producer PASS, historical Role runtime PASS, runtime activation, deployment, 144c69 HOLD discharge or A1 rollout/automation release is supplied. No unresolved named security-semantic question requires Astra escalation from this scoped contract review.
-
-Only this reviewer's ignored `tmp/swarm/marusya193/` evidence was written. No author packet, source, pins, Git metadata, PR, ownership, environment or automation was changed; no event variables, lazy fetch, shared object/config mutation or CUA was used. Direct CodeGraph preceded source exploration. No product code changed, so no AST refresh is claimed.
+No product edit, Git ref/index mutation, lease, container, cache/prefetch change,
+CI poll, hosted run, DEV/STAGING action, provider action or acceptance occurred.
+Only this auditor's ignored evidence directory and isolated object/index store
+were written. All owned command handles are terminal. Two optional read-only
+process diagnostics failed (shell quoting and unavailable psutil); the first
+was stopped through its own handle. Neither produced audit evidence or affected
+the scoped checks. Author 203 owns release continuation and resource acquisition.

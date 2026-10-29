@@ -1,19 +1,19 @@
-# Independent exact-5d Role extension
+# Independent exact-H2 Role extension
 
-ACCEPT for the unchanged complete Role unit at this exact source only. See report.md for scope and limitations.
+**ACCEPT** for exact H2 complete unchanged Role unit only. Independently reconstructed all 534 original raw Go objects and 269 compiled paths, all 283 required/context/compiled/manifest/immediate-child entries, complete 24 directories, 13 manifests and eleven corrections. Actual H2 Git mode/type/blob and every original inventory SHA256 match accepted 70a. Three generated cache inputs remain outside source. Full inventory.json and report.md bind the independently verified new H→H2 edge; no old review was relabeled. Historical source review retains original execution labels. No Role runtime, activation, producer, path grant or production contract approval.
 
 ```json
 {
   "type": "ROLE-V3-INDEPENDENT-EXTENSION-REVIEW-v1",
   "status": "ACCEPT",
-  "reviewer": "Marusya-191 independent gpt-6.1-sol/medium",
-  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
-  "source_tree": "343796ef28dab0b535948cf975157e53b15c1935",
+  "reviewer": "Marusya-204 independent gpt-6.1-sol/medium",
+  "source": "a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259",
+  "source_tree": "228c7591e2397c660f0811754b0e6fc608fc4fb8",
   "evidence_source": "70a3ca533e23d7454782428304c180e76fad74e1",
   "evidence_tree": "7545653c7fe149d95e685b5e1b886772bad2499e",
-  "delta_sha256": "de69527339b73d2e2a4a42fd69a26e4cc93609c72829e197dcde2b31e4f027de",
+  "delta_sha256": "88fbddfabc3c4aeec7f9cbdfb205e16787190aa898a03f1f71d5bdd3b38ba63d",
   "inventory_sha256": "21a8cca1edc0f8a35894f118771ab1021ca33aab92f630731a1576a7002005e0",
-  "extension_evidence_sha256": "f818a081bc17c8a982d8737aee8d9b477dfd3f4980728027068d3ac606bf1a7a",
+  "extension_evidence_sha256": "1401204303f2ca59af62ec97feb246357015370a2338f7e056db78e97320fdf5",
   "source_review_sha256": "889a7a331664acc04e1afab4ce9eb603f9624b8aab4783beced41eef829e21e8",
   "runtime_pass": false,
   "activation_authority": false,

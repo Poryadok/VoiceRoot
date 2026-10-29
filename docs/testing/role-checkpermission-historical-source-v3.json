@@ -2,7 +2,7 @@
   "activation_authority": false,
   "closure": {
     "path": "docs/testing/role-checkpermission-source-v3-closure.json",
-    "sha256": "6d6a90df60dac9081805fde37600e3cc853038aa493b77311ec8c4ece7f9f91c"
+    "sha256": "b0cb756c2ba4d8a3bf10447edd23e5525b56892f5fc2222f911740ed4594e1e6"
   },
   "compiled_evidence": {
     "path": "docs/testing/role-source-v3-evidence/source-inventory.json",
@@ -2462,11 +2462,11 @@
   "evidence": [
     {
       "path": "docs/testing/role-source-v3-evidence/extension-inventory.json",
-      "sha256": "f818a081bc17c8a982d8737aee8d9b477dfd3f4980728027068d3ac606bf1a7a"
+      "sha256": "1401204303f2ca59af62ec97feb246357015370a2338f7e056db78e97320fdf5"
     },
     {
       "path": "docs/testing/role-source-v3-evidence/extension-review.md",
-      "sha256": "894d3aa17c935fa1baed511e723d65b709601a321e47eb1bcd204fcf9ab700e5"
+      "sha256": "28ee47da3c392daf84655c86df9f35f811dd8eb5d0d47fdc3e1e6ea4cc70c118"
     },
     {
       "path": "docs/testing/role-source-v3-evidence/runtime-evidence.zip",
@@ -2484,7 +2484,7 @@
   "evidence_source": "70a3ca533e23d7454782428304c180e76fad74e1",
   "extension_evidence": {
     "path": "docs/testing/role-source-v3-evidence/extension-inventory.json",
-    "sha256": "f818a081bc17c8a982d8737aee8d9b477dfd3f4980728027068d3ac606bf1a7a"
+    "sha256": "1401204303f2ca59af62ec97feb246357015370a2338f7e056db78e97320fdf5"
   },
   "generic_identical_blob_authority": false,
   "historical_runtime_gap": "Old9dc composition unconditionally rechecked nickname after accepted creation;144c69 HOLD. Original author/runtime evidence and taint stay historical. No executed historical cross-merge success is invented.",
@@ -2602,8 +2602,8 @@
     "docs/testing/role-source-v3-evidence/extension-review.md"
   ],
   "runtime_pass": false,
-  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
-  "source_tree": "343796ef28dab0b535948cf975157e53b15c1935",
+  "source": "a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259",
+  "source_tree": "228c7591e2397c660f0811754b0e6fc608fc4fb8",
   "status": "SOURCE_CONSUMPTION_CONTRACT_CLEAR",
   "version": "MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v3"
 }

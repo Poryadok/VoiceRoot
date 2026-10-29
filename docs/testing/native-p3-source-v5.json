@@ -6200,7 +6200,7 @@
   "current_or_future_path_authority": false,
   "delta_review": {
     "path": "docs/testing/native-p3-source-v5-delta-review.json",
-    "sha256": "cb211c8aff7f481f99cd07c1a98d3d0e21526e8eaadd0685c950bca4155f34a2"
+    "sha256": "181a4ca256968bd7c4cf1c651620bf310363c90c629462395c97bdb77248d4a8"
   },
   "evidence": [
     {
@@ -6217,7 +6217,7 @@
     },
     {
       "path": "docs/testing/native-p3-source-v5-delta-review.json",
-      "sha256": "cb211c8aff7f481f99cd07c1a98d3d0e21526e8eaadd0685c950bca4155f34a2"
+      "sha256": "181a4ca256968bd7c4cf1c651620bf310363c90c629462395c97bdb77248d4a8"
     },
     {
       "path": "docs/testing/native-p3-source-v5-evidence.zip",
@@ -6225,15 +6225,15 @@
     },
     {
       "path": "docs/testing/native-p3-source-v5-extension-inventory.json",
-      "sha256": "05ea5e96e1d811911f4603f88ba8f26c3f46c5ac284d5dace30ad631a781a7aa"
+      "sha256": "0c30ecb3714126cbf22ecdc745f52838451f73bcc51b0bf7156d924e008bb448"
     },
     {
       "path": "docs/testing/native-p3-source-v5-extension-review.md",
-      "sha256": "ad6c2161ec97405b31971fb849644eff444ddea0e08afa67044ad298a092fe8f"
+      "sha256": "63332594542e16463238f49eb91d8607c851b025db4f5e390af528f1028533b8"
     },
     {
       "path": "docs/testing/native-p3-source-v5-extension.json",
-      "sha256": "7d0f6dd35775d1f4f9f3fb3f32e35cd438297e43b55e6e5ef19f488c8b8ffea8"
+      "sha256": "a7bf2ab54062a58851b726fc5720324529c35a89314c8fdb3fddd800fe940996"
     },
     {
       "path": "docs/testing/native-p3-source-v5-independent-review.md",
@@ -6251,7 +6251,7 @@
   "evidence_source": "b2b566f1103e29058da0e8b786cbd8f0dd028d83",
   "extension_evidence": {
     "path": "docs/testing/native-p3-source-v5-extension.json",
-    "sha256": "7d0f6dd35775d1f4f9f3fb3f32e35cd438297e43b55e6e5ef19f488c8b8ffea8"
+    "sha256": "a7bf2ab54062a58851b726fc5720324529c35a89314c8fdb3fddd800fe940996"
   },
   "predecessor": {
     "path": "docs/testing/native-p3-source-v4.json",
@@ -7318,8 +7318,8 @@
     }
   ],
   "runtime_pass": false,
-  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29",
-  "source_tree": "343796ef28dab0b535948cf975157e53b15c1935",
+  "source": "a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259",
+  "source_tree": "228c7591e2397c660f0811754b0e6fc608fc4fb8",
   "status": "SOURCE_APPLICABILITY_CLEAR",
   "version": "NATIVE-P3-SOURCE-v5"
 }

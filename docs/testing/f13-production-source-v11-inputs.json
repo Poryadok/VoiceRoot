@@ -1,5 +1,5 @@
 {
-  "delta_sha256": "e79cad58a394d022a137b03ca303897d284bb292871160afff5955add65aa283",
+  "delta_sha256": "f169b16f9111d22ccdcda24b176aba2acc141133f1bcd0b70ba5582cca091960",
   "entries": [
     {
       "current_entry": "100644 blob dc3984abe8d6f808c1570c0c7a4791347e7a2889\t.agent/AGENTS.md",
@@ -2450,13 +2450,13 @@
       "reference_entry": ""
     },
     {
-      "current_entry": "100644 blob 042a89523eab93aa545b0623810685a3c19fd547\tscripts/ci/f13_f54_history.py",
+      "current_entry": "100644 blob 2d66436abf438de2e23a1bd336484f616e65cb94\tscripts/ci/f13_f54_history.py",
       "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
       "path": "scripts/ci/f13_f54_history.py",
       "reference_entry": "100644 blob 8ccba60abeb31817d932094f90f412e3bd339c3d\tscripts/ci/f13_f54_history.py"
     },
     {
-      "current_entry": "100644 blob a0c17df8924eb56b61d48263d90749e96f665400\tscripts/ci/f13_f54_history_test.py",
+      "current_entry": "100644 blob 8b991b1dd98ac1afce267cf7ee406627a69097e8\tscripts/ci/f13_f54_history_test.py",
       "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
       "path": "scripts/ci/f13_f54_history_test.py",
       "reference_entry": "100644 blob 043e03a8928e02f6857951b6ad00ebc9f79f090e\tscripts/ci/f13_f54_history_test.py"
@@ -2516,7 +2516,7 @@
       "reference_entry": ""
     },
     {
-      "current_entry": "100644 blob 7bb1300bdf6ec667cba2be7c1da273f6f872b91c\tscripts/ci/f13_native_p3_successor_integration_test.py",
+      "current_entry": "100644 blob 3b364c45f7385a5b157bf55e0e9e47eb5840fa65\tscripts/ci/f13_native_p3_successor_integration_test.py",
       "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
       "path": "scripts/ci/f13_native_p3_successor_integration_test.py",
       "reference_entry": ""
@@ -2546,7 +2546,7 @@
       "reference_entry": ""
     },
     {
-      "current_entry": "100644 blob e2be958e3cde436a8b48939efa5b78cc2fc1dd3d\tscripts/ci/f13_role_conditional_successor_test.py",
+      "current_entry": "100644 blob fc761d4aa2b4450f1144d99fdb030e0e43c008ac\tscripts/ci/f13_role_conditional_successor_test.py",
       "disposition": "ORIGINAL_CONTRIBUTION_GATES_REQUIRED",
       "path": "scripts/ci/f13_role_conditional_successor_test.py",
       "reference_entry": ""
@@ -14715,5 +14715,5 @@
     }
   ],
   "reference": "d6ac6d2f4b85eb691a00f729eb2192e63ae0091f",
-  "source": "5dbc0bb4836a5d0cc9d0343d516ab43c551a9a29"
+  "source": "a8ce5dcfbef972ca4faa1bb909fe2fdf86f9f259"
 }
