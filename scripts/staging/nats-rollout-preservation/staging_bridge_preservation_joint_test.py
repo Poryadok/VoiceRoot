@@ -57,7 +57,7 @@ def stage_cluster_fixture(session,store_kube=None):
             'status':{'phase':'Running','containerStatuses':statuses(template['spec']['containers']),
                       'initContainerStatuses':statuses(template['spec'].get('initContainers',[]))}})
     fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace,'resourceVersion':'1'}},
-           ('configmap','voice-nats-generation'):{'metadata':{'uid':'cbafb90c-6974-4642-86d6-09b2eef1c843','resourceVersion':'1'},
+           ('configmap','voice-nats-generation'):{'metadata':{'name':'voice-nats-generation','namespace':'voice-staging','uid':'cbafb90c-6974-4642-86d6-09b2eef1c843','resourceVersion':'1'},
                  'data':{'phase':'active','generation':'r20260930a4','dataPVC':'fixture'}},
            ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
            ('pv','pv'):{'metadata':{'uid':pv},'spec':{'claimRef':{'uid':claim},
@@ -66,6 +66,8 @@ def stage_cluster_fixture(session,store_kube=None):
                     'operator':'In','values':['pmdebook']}]}]}}}},
            ('service','voice-nats'):{'metadata':{'uid':'service','resourceVersion':'1'}}}
     class Cluster:
+        objects=fixed
+        deployments=rows
         def get(self,kind,name):
             session.check()
             if kind=='deployment':return copy.deepcopy(rows[name])
@@ -385,6 +387,20 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
     return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:1]==['patch']:
+    kind,name=tail[1:3]
+    obj=cluster.deployments[name] if kind=='deployment' else cluster.objects[(kind,name)]
+    patch=json.loads(kwargs['body'])
+    assert patch[0]['value']==obj['metadata']['uid'] and patch[1]['value']==obj['metadata']['resourceVersion']
+    for op in patch[2:]:
+     parts=op['path'].strip('/').split('/'); parent=obj
+     for part in parts[:-1]:parent=parent[part]
+     if op['op']=='test':assert parent[parts[-1]]==op['value']
+     elif op['op'] in ('add','replace'):parent[parts[-1]]=copy.deepcopy(op['value'])
+     else:raise AssertionError('unsupported synthetic CAS')
+    obj['metadata']['resourceVersion']=str(int(obj['metadata']['resourceVersion'])+1)
+    if kind=='deployment':obj['metadata']['generation']+=1
+    return json.dumps(obj).encode()
    if 'VOICE_TEST_SPACE_OCI' in os.environ and tail==['create','-f','/dev/stdin','-o','json']:
     value=json.loads(kwargs['body']);assert value['kind']=='Job' and value['metadata']['name']=='voice-space-inspect-'+session.operation
     image=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())
