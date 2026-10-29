@@ -240,12 +240,12 @@ class RootCompositionContract(unittest.TestCase):
                 binding['nats-known-baseline/kernel']=hashlib.sha256(path.read_bytes()).hexdigest()
                 from root_main import save
                 save(code/'capture-manifest.json',binding)
-            contract = {'scripts': []}
+            contract = json.loads((code / 'nats-known-baseline' / 'deployed-contract.json').read_bytes())
+            bootstrap_target = {}
             for part in ('realtime', 'notification', 'search', 'analytics-chat'):
                 raw = (source / ('deploy/templates/nats-' + part + '-bootstrap.yaml')).read_bytes().split(b'---')[0]
                 script = source_plan_test.decoder(raw)['data']['bootstrap.sh']
-                contract['scripts'].append({'part': part, 'sha256': hashlib.sha256(script.encode()).hexdigest()})
-            (code / 'nats-known-baseline' / 'deployed-contract.json').write_text(json.dumps(contract))
+                bootstrap_target[part] = hashlib.sha256(script.encode()).hexdigest()
             optional = {'s3_signing_endpoint', 'gateway_host', 'storage_host', 'livekit_host', 'web_host',
                 'admin_host', 'developer_portal_host', 'gateway_tls_secret', 'storage_tls_secret',
                 'image_pull_secret', 'apply_observability', 'minio_image', 'minio_mc_image',
@@ -290,7 +290,7 @@ class RootCompositionContract(unittest.TestCase):
                 compile_params.update(registry=source_authority.REGISTRY, tag=approved['source_sha'], mode='app-only',
                     changed_services=[], images={key: value for key, value in old_images.items()
                                                 if not key.startswith(runtime_stage.HUB + '/')},
-                    contract=contract, enrolled=list(stage.snapshots), generation=marker['data']['generation'],
+                    contract=contract, bootstrap_target_scripts=bootstrap_target, enrolled=list(stage.snapshots), generation=marker['data']['generation'],
                     dataPVC=marker['data']['dataPVC'])
                 parameter = root / 'expected-parameters.json'
                 output = root / ('target-' + approved['source_sha'] + '.json')
@@ -383,7 +383,7 @@ class RootCompositionContract(unittest.TestCase):
                     patch.object(runtime_stage.RolloutStage, 'capture', new=captures),
                     patch.object(actor_root, 'preflight', return_value=None), patch.object(actor_root, 'revalidate'),
                     patch.object(bridge_root, 'actor_after_realtime_bootstrap', return_value=None),
-                    patch.object(nats_root_plan, 'preflight', return_value={'scripts': {}, 'plan': {'actions': []}, 'binding': {}}),
+                    patch.object(nats_root_plan, 'preflight', return_value={'scripts': {key:{'sha256':value} for key,value in bootstrap_target.items()}, 'plan': {'actions': []}, 'binding': {}}),
                     patch.object(realtime_bootstrap, 'run_prepare', new=c1),
                     patch.object(realtime_bootstrap, 'load_completed', side_effect=c1_load),
                     patch.object(realtime_bootstrap, 'load_plan', return_value=c1_plan),
