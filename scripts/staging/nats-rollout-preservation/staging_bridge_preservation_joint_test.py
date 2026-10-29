@@ -39,7 +39,7 @@ def stage_cluster_fixture(session,store_kube=None):
         spec={'containers':[{'name':container,'image':image}]}
         if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
         template={'metadata':{'labels':{'app':name}},'spec':spec}
-        if store_kube is not None and name in ('voice-user','voice-file'):
+        if store_kube is not None and ('Deployment',name) in store_kube.objects:
             template=copy.deepcopy(store_kube.get('Deployment',name)['spec']['template'])
         rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
                     'spec':{'replicas':1,'template':template}}
