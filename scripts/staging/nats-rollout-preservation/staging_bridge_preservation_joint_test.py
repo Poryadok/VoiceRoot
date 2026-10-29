@@ -689,6 +689,20 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     '-e','POSTGRES_PASSWORD='+pg_password.decode(),
     'postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6'],text=True).strip()
    atexit.register(lambda:subprocess.run(['docker','rm','-f','-v',pg_container],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
+   # The production dumper starts the fixed kubectl command as a process.
+   # This isolated runner maps only its two exact dump forms to owned PG.
+   wrapper=Path('/usr/local/bin/k3s')
+   assert not wrapper.exists()
+   wrapper.write_text('#!/usr/bin/python3\nimport os,re,sys\n'
+    'prefix='+repr(['kubectl','--namespace','voice-staging','exec','-i','voice-postgres-0','-c','postgres','--'])+'\n'
+    'args=sys.argv[1:]\n'
+    'assert args[:len(prefix)]==prefix\n'
+    'tail=args[len(prefix):]\n'
+    'roles='+repr('export PGPASSWORD="$POSTGRES_PASSWORD"; exec pg_dumpall --roles-only --username="$POSTGRES_USER"')+'\n'
+    'dump='+repr('export PGPASSWORD="$POSTGRES_PASSWORD"; exec pg_dump --format=custom --create --username="$POSTGRES_USER" --dbname="$1"')+'\n'
+    'assert tail==["sh","-ceu",roles] or (tail[:3]==["sh","-ceu",dump] and len(tail)==5 and tail[3]=="--" and re.fullmatch("[a-z_][a-z0-9_]{0,62}",tail[4]))\n'
+    'os.execv("/usr/bin/docker",["docker","exec","-i",'+repr(pg_container)+',*tail])\n')
+   wrapper.chmod(0o755)
    subprocess.run(['docker','start',pg_container],check=True,stdout=subprocess.DEVNULL)
    deadline=time.monotonic()+60
    while subprocess.run(['docker','exec',pg_container,'pg_isready','-h','127.0.0.1','-U',pg_user],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
@@ -721,7 +735,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     card['observed']['images']=copy.deepcopy(preview.old_images)
    trace_errors=[]
    def trace(frame,event,arg):
-    if event=='exception' and frame.f_code.co_filename.endswith(('space_native_tool_identity_staging.py','source_authority.py','github_custody.py')):
+    if event=='exception' and frame.f_code.co_filename.endswith(('space_native_tool_identity_staging.py','source_authority.py','github_custody.py','story_media_backup_cohort.py','staging_cohort_preservation_pg.py')):
      trace_errors.append((frame.f_code.co_name,frame.f_lineno,arg[0].__name__,str(arg[1])))
     return trace
    if 'VOICE_TEST_SPACE_OCI' in os.environ:sys.settrace(trace)
@@ -733,7 +747,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     raise AssertionError('producer blocked: '+str(exc)) from exc
    except Exception as exc:
     if 'VOICE_TEST_SPACE_OCI' in os.environ:
-     raise AssertionError('positive producer stopped: '+type(exc).__name__+': '+str(exc)+' reader='+repr(trace_errors[-8:])+' requests='+repr(github_calls)) from exc
+     raise AssertionError('positive producer stopped: '+type(exc).__name__+': '+str(exc)+' trace='+repr(trace_errors[-12:])+' requests='+repr(github_calls)) from exc
     if type(exc).__name__!='StagingToolError' or str(exc)!='STAGING native publication unavailable' or not github_calls:
      raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
   checkpoint=root/'installed'/'cohort-preservation'/session.operation/'checkpoint.json'
