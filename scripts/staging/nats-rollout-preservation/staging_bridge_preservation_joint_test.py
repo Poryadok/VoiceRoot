@@ -265,6 +265,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    name='voice-nats-service-credentials-r20260930a4'
    nats_secrets[name]=secret(name,{role+'.creds':(nats/'inputs'/(role+'.creds')).read_bytes()
     for role in ('social','realtime','space','messaging','story')})
+   name='voice-nats-hub-tls-r20260930a4'
+   nats_secrets[name]=secret(name,{})
    deployed=json.loads((code/'nats-known-baseline'/'deployed-contract.json').read_bytes())
    for item in deployed['scripts']:
     raw=(workspace/'scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004'/
