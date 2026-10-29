@@ -76,7 +76,7 @@ def stage_cluster_fixture(session,store_kube=None):
         def run(self,args,**kwargs):
             session.check()
             if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
-            if args[:2]==['get','pods,replicasets'] and args[-1].startswith('go-template='):
+            if args==['get','pods,replicasets','-o','go-template='+stage_runtime.FENCE_TEMPLATE]:
                 result=[]
                 for item in images:
                     if item['kind']=='Pod':
