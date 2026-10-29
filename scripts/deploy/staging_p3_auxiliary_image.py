@@ -3,9 +3,13 @@
 No cluster, node, runtime, build provenance, or approval is established here.
 """
 import hashlib
+import base64
 import http.client
 import json
+import os
 import re
+import selectors
+import signal
 import ssl
 import time
 import urllib.parse
@@ -94,7 +98,7 @@ def _redirect(location):
         raise ImageError('Docker Hub blob redirect refused') from None
 
 
-def _get(host,path,headers,deadline,limit):
+def _get_network(host,path,headers,deadline,limit):
     remaining=deadline-time.monotonic()
     if remaining<=0: raise ValueError()
     connection=http.client.HTTPSConnection(host,timeout=min(10,remaining),context=ssl.create_default_context())
@@ -115,6 +119,61 @@ def _get(host,path,headers,deadline,limit):
             if len(data)>limit: raise ValueError()
         return response.status,None,bytes(data)
     finally: connection.close()
+
+
+def _get(host,path,headers,deadline,limit):
+    """Run one fixed request in an owned process with a hard wall deadline."""
+    if not hasattr(os,'fork') or deadline<=time.monotonic() or type(limit) is not int or not 0<limit<=LIMIT: raise ValueError()
+    readfd,writefd=os.pipe(); pid=None; reaped=False
+    try:
+        pid=os.fork()
+        if pid==0:
+            try:
+                os.close(readfd)
+                # The worker needs only its result pipe and standard runtime descriptors.
+                maximum=os.sysconf('SC_OPEN_MAX')
+                os.closerange(3,writefd); os.closerange(writefd+1,maximum)
+                null=os.open('/dev/null',os.O_WRONLY)
+                os.dup2(null,1); os.dup2(null,2)
+                if null not in (1,2,writefd): os.close(null)
+                status,location,body=_get_network(host,path,headers,deadline,limit)
+                raw=json.dumps({'status':status,'location':location,'body':base64.b64encode(body).decode('ascii')},
+                               separators=(',',':')).encode('ascii')
+                if len(raw)>4*LIMIT: raise ValueError()
+                data=memoryview(raw)
+                while data:
+                    n=os.write(writefd,data)
+                    if n<=0: raise ValueError()
+                    data=data[n:]
+                os._exit(0)
+            except BaseException: os._exit(1)
+        os.close(writefd); writefd=-1; os.set_blocking(readfd,False)
+        output=bytearray()
+        with selectors.DefaultSelector() as selector:
+            selector.register(readfd,selectors.EVENT_READ)
+            while True:
+                remaining=deadline-time.monotonic()
+                if remaining<=0 or not selector.select(remaining): raise TimeoutError()
+                chunk=os.read(readfd,65536)
+                if not chunk: break
+                output.extend(chunk)
+                if len(output)>4*LIMIT: raise ValueError()
+        _,status=os.waitpid(pid,0); reaped=True
+        if not os.WIFEXITED(status) or os.WEXITSTATUS(status)!=0: raise ValueError()
+        value=json.loads(output,object_pairs_hook=_pairs)
+        if type(value) is not dict or set(value)!={'status','location','body'} or type(value['status']) is not int \
+           or value['location'] is not None and not isinstance(value['location'],str): raise ValueError()
+        body=base64.b64decode(value['body'],validate=True)
+        if len(body)>limit: raise ValueError()
+        return value['status'],value['location'],body
+    finally:
+        os.close(readfd)
+        if writefd>=0: os.close(writefd)
+        if pid is not None and pid>0 and not reaped:
+            try: os.kill(pid,signal.SIGKILL)
+            except ProcessLookupError: pass
+            try: os.waitpid(pid,0)
+            except ChildProcessError: pass
 
 
 def collect():

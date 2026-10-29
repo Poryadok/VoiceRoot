@@ -1,6 +1,10 @@
 """Fixed Docker Hub nginx OCI qualification; no cluster or rollout authority."""
 import hashlib
 import json
+import os
+import socket
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -78,6 +82,37 @@ class MetadataTest(unittest.TestCase):
         with patch.object(image,'_get',side_effect=TimeoutError('sensitive diagnostics')):
             with self.assertRaises(image.ImageError) as error: image.collect()
         self.assertNotIn('sensitive diagnostics',str(error.exception))
+
+    @unittest.skipUnless(hasattr(os,'fork'),'Linux deadline worker required')
+    def test_slow_drip_cannot_exceed_absolute_deadline(self):
+        listener=socket.socket(); listener.bind(('127.0.0.1',0)); listener.listen(1); listener.settimeout(2)
+        address=listener.getsockname(); stopped=threading.Event()
+        def drip():
+            try:
+                writer,_=listener.accept()
+                with writer:
+                    while not stopped.wait(.02): writer.sendall(b'x')
+            except OSError: pass
+        thread=threading.Thread(target=drip); thread.start()
+        def slow(*args):
+            reader=socket.create_connection(address,timeout=2)
+            stream=reader.makefile('rb'); stream.read(65536)
+            return 200,None,b''
+        owned=[]; fork=os.fork
+        def start():
+            pid=fork()
+            if pid: owned.append(pid)
+            return pid
+        try:
+            before=time.monotonic()
+            with patch.object(image,'_get_network',side_effect=slow), patch.object(image.os,'fork',side_effect=start):
+                with self.assertRaises(Exception): image._get('fixed','/fixed',{},time.monotonic()+.3,1024)
+            elapsed=time.monotonic()-before; self.assertGreaterEqual(elapsed,.2); self.assertLess(elapsed,2)
+            self.assertEqual(len(owned),1)
+            with self.assertRaises(ChildProcessError): os.waitpid(owned[0],os.WNOHANG)
+        finally:
+            stopped.set(); thread.join(timeout=2); listener.close()
+        self.assertFalse(thread.is_alive())
 
 
 if __name__=='__main__': unittest.main()
