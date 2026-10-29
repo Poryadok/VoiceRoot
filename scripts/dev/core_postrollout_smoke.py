@@ -181,6 +181,7 @@ class CoreSmoke:
             raise SmokeError('completed release changed')
         self._custody()
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+        self._custody()
         return receipt
 
     def _row(self, expected):
@@ -190,6 +191,7 @@ class CoreSmoke:
                 row.get('core_smoke') != expected or not isinstance(revision, tuple) or len(revision) != 2 or
                 any(not isinstance(v,str) or not v for v in revision)):
             raise SmokeError('smoke ledger changed')
+        self._custody()
         return row, revision
 
     def _step(self, name, private, action):

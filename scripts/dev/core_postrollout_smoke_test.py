@@ -175,6 +175,30 @@ class CoreSmokeTest(unittest.TestCase):
         with self.assertRaises(smoke.SmokeError): self.phase.run_dev()
         self.assertEqual(len(self.server.calls),0)
 
+    def test_close_during_final_authority_read_refuses_proof(self):
+        self.phase.run_dev()
+        expected=self.j.state['steps']['core-smoke']['ledger']
+        original=self.base.ledger.read
+        def closes():
+            value=original()
+            self.j.close()
+            return value
+        with patch.object(self.base.ledger,'read',side_effect=closes):
+            with self.assertRaises(smoke.SmokeError): self.phase._row(expected)
+
+    def test_close_during_final_guard_refuses_authority(self):
+        original=self.client.call
+        seen=0
+        def closes(*args):
+            nonlocal seen
+            value=original(*args)
+            if args[1]=='configmap':
+                seen+=1
+                if seen==2: self.j.close()
+            return value
+        with patch.object(self.client,'call',side_effect=closes):
+            with self.assertRaises(smoke.SmokeError): self.phase._guard()
+
     def test_fixture_mail_ignores_proxy_environment_and_is_bounded(self):
         class MailClient:
             def call(self,*args):
