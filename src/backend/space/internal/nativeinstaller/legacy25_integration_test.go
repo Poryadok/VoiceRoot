@@ -52,9 +52,21 @@ func TestProductionLegacy25PopulatedChainAndRetainedVerify(t *testing.T) {
 	require.NoError(t, err)
 	const space = "11111111-1111-4111-8111-111111111111"
 	const owner = "22222222-2222-4222-8222-222222222222"
+	const member = "33333333-3333-4333-8333-333333333333"
+	const room = "44444444-4444-4444-8444-444444444444"
+	const node = "55555555-5555-4555-8555-555555555555"
+	const banned = "66666666-6666-4666-8666-666666666666"
 	_, err = conn.Exec(ctx, `INSERT INTO public.spaces (id,name,owner_profile_id) VALUES ($1,'legacy fixture',$2)`, space, owner)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `INSERT INTO public.space_members (space_id,profile_id) VALUES ($1,$2)`, space, owner)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO public.space_members (space_id,profile_id,nickname) VALUES ($1,$2,'existing member')`, space, member)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO public.voice_rooms (id,space_id,name) VALUES ($1,$2,'existing voice')`, room, space)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO public.space_tree_nodes (id,space_id,kind,voice_room_id) VALUES ($1,$2,'voice_room',$3)`, node, space, room)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO public.space_bans (space_id,account_id,banned_by_profile_id,reason) VALUES ($1,$2,$3,'existing ban')`, space, banned, owner)
 	require.NoError(t, err)
 	var version int
 	var dirty bool
@@ -74,6 +86,12 @@ func TestProductionLegacy25PopulatedChainAndRetainedVerify(t *testing.T) {
 	defer conn.Close(context.Background())
 	var count int
 	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.spaces WHERE id=$1 AND owner_profile_id=$2`, space, owner).Scan(&count))
+	require.Equal(t, 1, count)
+	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.space_members WHERE space_id=$1 AND profile_id=$2 AND nickname='existing member'`, space, member).Scan(&count))
+	require.Equal(t, 1, count)
+	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.space_tree_nodes WHERE id=$1 AND space_id=$2 AND voice_room_id=$3`, node, space, room).Scan(&count))
+	require.Equal(t, 1, count)
+	require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM public.space_bans WHERE space_id=$1 AND account_id=$2 AND reason='existing ban'`, space, banned).Scan(&count))
 	require.Equal(t, 1, count)
 	require.NoError(t, conn.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&version, &dirty))
 	require.Equal(t, 51, version)
