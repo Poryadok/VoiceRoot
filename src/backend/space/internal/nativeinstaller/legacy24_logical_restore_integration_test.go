@@ -3,6 +3,7 @@
 package nativeinstaller
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"os"
@@ -90,8 +91,9 @@ func TestLegacy24LogicalRestoreCanonicalEquivalence(t *testing.T) {
 	if password, ok := target.User.Password(); ok {
 		pgEnv = append(pgEnv, "PGPASSWORD="+password)
 	}
-	archive := filepath.Join(t.TempDir(), "original.dump")
+	archiveDir := t.TempDir()
 	roundtrip := func(oldName string) {
+		archive := filepath.Join(archiveDir, oldName+".dump")
 		cmd := exec.CommandContext(ctx, dump, "--format=custom", "--file", archive, "space_db")
 		cmd.Env = pgEnv
 		require.NoError(t, cmd.Run(), "private dump failed")
@@ -184,4 +186,28 @@ func TestLegacy24LogicalRestoreCanonicalEquivalence(t *testing.T) {
 	_, err = verifyLegacy24Preserved(ctx, conn, cloned)
 	require.NoError(t, err, "restored original rows and rights survive native initialization")
 	require.NoError(t, conn.Close(ctx))
+	pool.Close()
+	if binary := os.Getenv("NATIVE_INSTALLER_TEST_BINARY"); binary != "" {
+		cliAdmin := os.Getenv("NATIVE_INSTALLER_TEST_CLI_ADMIN_URL")
+		require.NotEmpty(t, cliAdmin)
+		_, err = admin.Exec(ctx, `ALTER DATABASE space_db RENAME TO space_upgraded`)
+		require.NoError(t, err)
+		owned["space_upgraded"] = owned["space_db"]
+		delete(owned, "space_db")
+		create("space_db")
+		restoreCmd := exec.CommandContext(ctx, restore, "--dbname", "space_db", filepath.Join(archiveDir, "space_original24.dump"))
+		restoreCmd.Env = pgEnv
+		require.NoError(t, restoreCmd.Run())
+		private := filepath.Join(t.TempDir(), "original.json")
+		cli := exec.CommandContext(ctx, binary, "-mode", "upgrade-legacy24", "-migrations-dir", "../../../migrations/space_db", "-migrate", driver, "-operation-id", "owned-clone-test", "-snapshot-id", "owned-clone-backup", "-origin-evidence", private)
+		cli.Env = append(os.Environ(), "SPACE_NATIVE_ADMIN_URL="+cliAdmin)
+		var out, diag bytes.Buffer
+		cli.Stdout, cli.Stderr = &out, &diag
+		require.NoError(t, cli.Run(), "actual source-bound clone upgrade failed: %s", diag.String())
+		receipt, err := ReadLegacy24Receipt(bytes.NewReader(out.Bytes()))
+		require.NoError(t, err)
+		require.Equal(t, owned["space_db"], receipt.Source24.DatabaseOID)
+		require.Equal(t, original.PreimageSHA256, receipt.PreimageSHA256)
+		require.Equal(t, uint64(2), receipt.InitializationCount)
+	}
 }
