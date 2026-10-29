@@ -14,6 +14,13 @@ import auth_live_migration_phase_probe as probe
 
 
 class AuthMigrationContract(unittest.TestCase):
+    def test_clone_provenance_matches_current_protected_cohort(self):
+        keys=('manifest_sha256','custody_sha256','restore_sha256','metadata_sha256')
+        current={k:str(i)*64 for i,k in enumerate(keys,1)}
+        live._bind_clone_provenance(current,current)
+        for key in keys:
+            changed={**current,key:'f'*64}
+            with self.subTest(key=key),self.assertRaises(ValueError): live._bind_clone_provenance(changed,current)
     def test_c1_data_checks_bind_original_rows_roles_and_catalog_to_clone(self):
         clone={'original_table_columns':{'accounts':['id']},'before_markers':{'accounts':{'count':1,'sha256':'a'}},
                'expected_after_markers':{'accounts':{'count':1,'sha256':'b'}},
@@ -255,7 +262,7 @@ class AuthMigrationContract(unittest.TestCase):
              patch.object(live,'verified_sources',return_value=(binding,{})),patch.object(live,'source_catalog',return_value=({'V26__x.sql':b'sql'},{})), \
              patch.object(live,'candidate_blob',return_value=b'{}'),patch.object(live,'expected_history',return_value=self.before), \
              patch.object(live.eligibility,'observe_candidate',return_value={}),patch.object(live.probe,'inspect',return_value=observed), \
-             patch.object(live,'validate_clone_receipt'),patch.object(live,'flyway_platform',return_value=tool['flyway_platform_digest']), \
+             patch.object(live,'validate_clone_receipt'),patch.object(live,'_bind_clone_provenance'),patch.object(live,'flyway_platform',return_value=tool['flyway_platform_digest']), \
              patch.object(live,'_c1_data_snapshot',return_value={'before':True}), \
              patch.object(live.probe,'verify_login',return_value={'uid':'secret-uid','resourceVersion':'5'}), \
              patch.object(live,'observe_node',return_value={'name':'node-one','uid':'node-id'}),patch.object(live,'verify_writer_successor'):
@@ -267,11 +274,12 @@ class AuthMigrationContract(unittest.TestCase):
         operation='media-c1-'+'a'*32; source='b'*40
         tool={'node_name':'node-one','node_uid':'node-id','flyway_platform_digest':'sha256:'+'c'*64}
         cm,job=live.c1_objects(operation,{'V26__authority.sql':b'SELECT 1;'},tool['node_name'])
+        provenance={key:str(i)*64 for i,key in enumerate(('manifest_sha256','custody_sha256','restore_sha256','metadata_sha256'),1)}
         clone={'before_markers':{},'expected_after_markers':{},'roles_sha256':'f'*64,
-               'before_catalog_sha256':'1'*64,'after_catalog_sha256':'2'*64}
+               'before_catalog_sha256':'1'*64,'after_catalog_sha256':'2'*64,**provenance}
         inputs={'candidate':{'source_sha':source,'image':'img','policy':{'flyway':'disabled','persistence':'jdbc','selector':'absent'},
                              'route':{'host':'voice-postgres','database':'auth_db','role':'voice'}},
-                'metadata':{'migrations':{'auth_db':{'files':{}}}},'history':self.before,'provenance':{},
+                'metadata':{'migrations':{'auth_db':{'files':{}}}},'history':self.before,'provenance':provenance,
                 'node':{'name':'node-one','uid':'node-id'},'credential':{'uid':'secret-uid','resourceVersion':'5'},
                 'before_data':live._expected_c1_data(clone,True),'clone_receipt_sha256':live._digest(clone)}
         def obj(x): return {'state':'absent','name':x['metadata']['name'],'spec_sha256':live._digest(x),'uid':None,'resourceVersion':None}
@@ -285,7 +293,7 @@ class AuthMigrationContract(unittest.TestCase):
         phase=SimpleNamespace(phases=p,_guard=lambda:None)
         binding={'operation_id':operation,'source_sha':source,'snapshot_id':'snapshot',
                  'sources':{'auth_db':{'database_oid':42}}}
-        with patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live,'verified_sources',return_value=(binding,{})), \
+        with patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live,'verified_sources',return_value=(binding,provenance)), \
              patch.object(live,'source_catalog',return_value=({'V26__authority.sql':b'SELECT 1;'},{})), \
              patch.object(live,'validate_clone_receipt'):
             p.journal.state['steps']['cohort-auth-flyway']={}

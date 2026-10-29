@@ -183,6 +183,14 @@ def _expected_c1_data(clone, before):
             'catalog_sha256':clone['before_catalog_sha256' if before else 'after_catalog_sha256']}
 
 
+def _bind_clone_provenance(clone, provenance):
+    keys=('manifest_sha256','custody_sha256','restore_sha256','metadata_sha256')
+    if (not isinstance(clone,dict) or not isinstance(provenance,dict) or set(provenance)!=set(keys)
+            or any(not isinstance(provenance[k],str) or not re.fullmatch(r'[0-9a-f]{64}',provenance[k])
+                   or clone.get(k)!=provenance[k] for k in keys)):
+        raise ValueError('clone and current cohort provenance differ')
+
+
 def verify_writer_successor(phase, source_root):
     """Reconstruct the planned C1 objects from protected state; never create them."""
     try:
@@ -215,6 +223,7 @@ def verify_writer_successor(phase, source_root):
         if catalog!=inputs['metadata']['migrations']['auth_db']['files']: raise ValueError()
         clone=steps['cohort-auth-flyway-private']; clone_record=steps['cohort-auth-flyway']
         if _digest(clone)!=inputs['clone_receipt_sha256']: raise ValueError()
+        _bind_clone_provenance(clone,provenance)
         if inputs['before_data']!=_expected_c1_data(clone,True): raise ValueError()
         validate_clone_receipt(clone,clone_record,row.get('cohort_auth_flyway'),record['operation_id'],
                                record['snapshot_id'],record['source_sha'],catalog,inputs['history'])
@@ -698,6 +707,7 @@ def init_c1(phase, cut, source_root, actor, token, metadata):
                 or projected!=metadata['catalog']['auth_db']['history']): raise ValueError()
         row,_=p.fence.ledger.read(); steps=p.journal.state['steps']
         clone=steps['cohort-auth-flyway-private']
+        _bind_clone_provenance(clone,provenance)
         validate_clone_receipt(clone,steps['cohort-auth-flyway'],row.get('cohort_auth_flyway'),operation,
                                binding['snapshot_id'],binding['source_sha'],catalog,observed['history'])
         before_data=_c1_data_snapshot(auth['engine'],clone,True,lambda:readback._guard(phase,drain))

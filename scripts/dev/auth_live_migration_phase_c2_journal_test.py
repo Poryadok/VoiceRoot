@@ -40,6 +40,9 @@ class C2JournalTest(unittest.TestCase):
             history=[{'version':str(n),'script':f'V{n}__fixture.sql','checksum':n,'type':'SQL','success':True} for n in (1,26)]
             metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
                 [{k:r[k] for k in ('version','script','checksum','success')} for r in history]}}}
+            with patch.object(live.restore,'_source'):
+                _,provenance=live.verified_sources(work.phase,metadata,26)
+            work.journal.state['steps']['cohort-auth-flyway-private']=copy.deepcopy(provenance); work.journal.save()
             observation={'history':history,'sessions':[],'prepared':0}
             cut=SimpleNamespace(verify_drained=lambda:None)
             with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'), \
@@ -51,6 +54,12 @@ class C2JournalTest(unittest.TestCase):
                  patch.object(live,'observe_node',return_value={'name':'node-one','uid':'node-id'}), \
                  patch.object(live.probe,'verify_login',return_value={'uid':'secret','resourceVersion':'1'}), \
                  patch.object(live,'verify_writer_successor'):
+                work.journal.state['steps']['cohort-auth-flyway-private']['manifest_sha256']='f'*64
+                work.journal.save()
+                with self.assertRaises(live.PhaseError): live.init_c1(work.phase,cut,'.','actor','token',metadata)
+                self.assertNotIn('auth_live_c1',work.base.ledger.row)
+                work.journal.state['steps']['cohort-auth-flyway-private']=copy.deepcopy(provenance)
+                work.journal.save()
                 result=live.init_c1(work.phase,cut,'.','actor','token',metadata)
             self.assertEqual(result['job']['state'],'absent')
             self.assertEqual(work.base.ledger.row['auth_live_c1'],result)

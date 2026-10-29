@@ -107,6 +107,14 @@ class EligibilityTests(unittest.TestCase):
         for env in ([{'name':'AUTH_FLYWAY_ENABLED','valueFrom':{'secretKeyRef':{'name':'s','key':'x'}}}],
                     [{'name':'AUTH_FLYWAY_ENABLED','valueFrom':{'fieldRef':{'fieldPath':'metadata.name'}}}]):
             with self.assertRaises(EligibilityError): resolve_environment({'env':env},{})
+
+    def test_dotted_envfrom_overrides_are_never_silently_dropped(self):
+        for prefix,key in (('', 'spring.flyway.enabled'), ('spring.', 'config.location'),
+                           ('auth.', 'role.identity.selector.keys.dir')):
+            container={'envFrom':[{'prefix':prefix,'configMapRef':{'name':'c'}}],
+                       'env':[{'name':'AUTH_FLYWAY_ENABLED','value':'false'}]}
+            with self.subTest(prefix=prefix,key=key),self.assertRaises(EligibilityError):
+                check_environment(resolve_environment(container,{('configmap','c'):{key:'true'}}))
     def test_explicit_disabled_flyway_and_default_jdbc(self):
         self.assertEqual(check_environment({'AUTH_FLYWAY_ENABLED':'false'}),
                          {'flyway':'disabled', 'persistence':'jdbc', 'selector':'absent'})

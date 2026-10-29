@@ -216,7 +216,9 @@ def resolve_environment(container, sources, image_env=None):
         for key,value in source(kind,item[field]).items():
             if not isinstance(key,str) or not isinstance(value,str): raise EligibilityError('invalid source data')
             name=prefix+key
-            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',name): result[name]=value
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',name):
+                raise EligibilityError('unsupported envFrom variable name')
+            result[name]=value
     seen=set()
     for item in container.get('env',[]):
         if not isinstance(item,dict) or set(item)-{'name','value','valueFrom'}: raise EligibilityError('invalid environment entry')
