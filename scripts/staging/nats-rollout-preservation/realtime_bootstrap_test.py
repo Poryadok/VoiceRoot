@@ -46,6 +46,10 @@ class CatalogTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'lost'):bootstrap._capture_readonly('catalog')
             self.assertIsNone(session._prerequisite_readonly_permit)
             self.assertEqual(module.load_capture.call_count,3)
+            module.load_capture.side_effect=[{'protected':'fixture'},bootstrap.Blocked('parent_changed')]
+            commands.capture.side_effect=capture
+            with self.assertRaisesRegex(bootstrap.Blocked,'parent_changed'):bootstrap._capture_readonly('catalog')
+            self.assertIsNone(session._prerequisite_readonly_permit)
     def test_existing_database_or_role_is_never_adopted(self):
         for catalog in ({'role': None, 'database': {'oid': 42}},
                         {'role': {'oid': 41}, 'database': None},

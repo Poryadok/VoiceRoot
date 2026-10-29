@@ -412,9 +412,18 @@ class Actions:
                 if current_renderer!=expected_renderer and not source_authority.same_image_content(current_renderer,expected_renderer,image_deadline):
                     raise Blocked('renderer_rollback_current_image_changed')
                 renderer_image=previous['renderer_authority']['descriptor']['images']['old']
-            renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
+            if prerequisites is not None:
+                renderer_authority=staging_prerequisites.load_renderer(self.tt_session,stage)
+                if renderer_authority['descriptor']['images']['target']!=renderer_image:
+                    raise Blocked('staging_prerequisites_renderer_changed')
+            else:
+                renderer_authority=renderer_root.prove(kube,stage,approved['source_sha'],renderer_image)
         import actor_root
+        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
+            raise Blocked('staging_prerequisites_capture_changed')
         actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+        if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
+            raise Blocked('staging_prerequisites_capture_changed')
         if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         nats_authority=None
         if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
