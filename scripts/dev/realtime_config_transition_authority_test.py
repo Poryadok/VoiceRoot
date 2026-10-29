@@ -40,7 +40,7 @@ class AuthorityTest(unittest.TestCase):
         chatmod=SimpleNamespace(verify_chat_service=lambda *a:{'receipt':{'uid':'chat'}})
         self.patches=[patch.dict(sys.modules,{'realtime_jwks_publisher':pubmod,'realtime_config_transition_service':chatmod}),
             patch.object(authority.inputs,'observe',side_effect=lambda *a:copy.deepcopy(self.p3)),
-            patch.object(authority.space_plan,'verify',side_effect=lambda *a:copy.deepcopy(self.space)),
+            patch.object(authority,'_space',side_effect=lambda *a:(copy.deepcopy(self.space),b'public-space')),
             patch.object(authority.redis,'observe',return_value={'scope':'sampled'}),
             patch.object(authority,'_realtime_service',side_effect=lambda *a:copy.deepcopy(self.service)),
             patch.object(authority.transport,'get',side_effect=lambda k,n:copy.deepcopy(self.values[k,n]) if n!=credential['name'] else (_ for _ in ()).throw(AssertionError('credential must not use P3 transport'))),
@@ -64,6 +64,19 @@ class AuthorityTest(unittest.TestCase):
         self.cut.client.call=read
         with self.assertRaises(authority.AuthorityError):
             authority.collect(self.cut,object(),self.session,self.migration,self.phase,self.publisher,'/source','token')
+
+    def test_issuer_proof_must_match_p3_certificate_and_ca(self):
+        ca={'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}
+        self.p3['public_sources']['voice-media-ca']=copy.deepcopy(ca)
+        self.p3['public_sources']['voice-space-media-server-tls']['der_sha256']='b'*64
+        proof={'schema':'voice-dev-space-p3-issuer-v1',
+               'tls':{'uid':'space-cert','resourceVersion':'7','certificate_sha256':'b'*64},
+               'media_ca':copy.deepcopy(ca)}
+        with patch.object(authority,'_space',return_value=(proof,b'public-space')):
+            authority.collect(self.cut,object(),self.session,self.migration,self.phase,self.publisher,'/source','token')
+            proof['tls']['certificate_sha256']='c'*64
+            with self.assertRaises(authority.AuthorityError):
+                authority.collect(self.cut,object(),self.session,self.migration,self.phase,self.publisher,'/source','token')
 
 
 if __name__=='__main__': unittest.main()

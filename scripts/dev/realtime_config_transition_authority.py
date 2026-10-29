@@ -2,6 +2,7 @@
 import base64
 import copy
 import hashlib
+import json
 import re
 
 import realtime_config_transition_inputs as inputs
@@ -13,6 +14,19 @@ import writer_cut
 
 
 class AuthorityError(RuntimeError): pass
+
+
+def _space(cut,phase,token):
+    if type(phase) is space_plan.SpacePlanPhase:
+        proof=space_plan.verify(phase,cut,token)
+        return proof,base64.b64decode(proof['observation']['jwks_bytes'],validate=True)
+    import space_p3_issuer_create as issuer
+    if type(phase) is not issuer.Session or phase.fence.context!=cut.fence.context or phase.lock!=cut.lock or phase.namespace_uid!=cut.namespace_uid: raise ValueError()
+    proof=issuer.verify_completed(phase); row,rev=cut.fence.ledger.read()
+    if (phase.fence.ledger.read()!=(row,rev) or proof.get('schema')!='voice-dev-space-p3-issuer-v1'
+            or proof.get('operation_id')!=cut.fence.context['operation_id'] or proof.get('source_sha')!=cut.fence.context['commit']
+            or proof.get('namespace_uid')!=cut.namespace_uid or proof.get('scope')!='space-two-secret-create-only'): raise ValueError()
+    return proof,json.dumps(proof['public_jwks'],sort_keys=True,separators=(',',':'),allow_nan=False).encode()
 
 
 def _realtime_service(cut):
@@ -46,7 +60,13 @@ def collect(cut,journal,session,migration,space_phase,publisher_phase,source_roo
         if not isinstance(token,str) or not token: raise ValueError()
         cut._guard(); before,revision=cut.fence.ledger.read()
         p3=inputs.observe(cut,session,migration,source_root)
-        public_plan=space_plan.verify(space_phase,cut,token)
+        public_plan,space_jwks=_space(cut,space_phase,token)
+        if public_plan.get('schema')=='voice-dev-space-p3-issuer-v1':
+            tls=p3['public_sources']['voice-space-media-server-tls']
+            ca=p3['public_sources']['voice-media-ca']
+            if (any(public_plan['tls'][k]!=tls[k] for k in ('uid','resourceVersion'))
+                    or public_plan['tls']['certificate_sha256']!=tls['der_sha256']
+                    or public_plan['media_ca']!=ca): raise ValueError()
         published=publisher.verify_publisher(publisher_phase)
         if (publisher_phase.fence.context!=cut.fence.context or publisher_phase.lock!=cut.lock
                 or publisher_phase.namespace_uid!=cut.namespace_uid or published['operation_id']!=cut.fence.context['operation_id']
@@ -84,7 +104,7 @@ def collect(cut,journal,session,migration,space_phase,publisher_phase,source_roo
         expected_space=p3['public_sources']['voice-space-media-server-tls']
         if raw_space[0].decode()!=expected_space['uid'] or raw_space[1].decode()!=expected_space['resourceVersion']: raise ValueError()
         public_values={'realtime.json':values['voice-p3-principal-public']['realtime.json'].encode(),
-            'space-jwks.json':base64.b64decode(public_plan['observation']['jwks_bytes'],validate=True),
+            'space-jwks.json':space_jwks,
             'space-jwks-tls.crt':base64.b64decode(raw_space[2],validate=True),
             'realtime-tls.crt':secret_value('voice-realtime-p3-tls','tls.crt'),
             'chat-tls.crt':secret_value('voice-chat-realtime-p3-tls','tls.crt'),
@@ -97,7 +117,7 @@ def collect(cut,journal,session,migration,space_phase,publisher_phase,source_roo
                 'public_hashes':{k:hashlib.sha256(v).hexdigest() for k,v in public_values.items()},'service':realtime,
                 'transport_evidence_sha256':writer_cut.digest({'publisher':published,'redis':redis_proof,'chat_service':chat['receipt'],
                                                                'space_plan':public_plan})}
-        if (inputs.observe(cut,session,migration,source_root)!=p3 or space_plan.verify(space_phase,cut,token)!=public_plan
+        if (inputs.observe(cut,session,migration,source_root)!=p3 or _space(cut,space_phase,token)!=(public_plan,space_jwks)
                 or publisher.verify_publisher(publisher_phase)!=published or redis.observe(cut.fence,cut.client,cut.lock,cut.namespace_uid)!=redis_proof
                 or chat_service.verify_chat_service(cut,journal)!=chat or _realtime_service(cut)!=realtime): raise ValueError()
         latest=cut.client.call('get','configmap','voice-app-config','-o','json')

@@ -53,7 +53,11 @@ class MixedTest(unittest.TestCase):
         self.services={'voice-chat':chat,'voice-realtime':realtime_service}; self.old_call=self.base.client.call
         self.authority=authority_fixture.AuthorityTest('test_derives_renderer_input_without_private_values')
         self.addCleanup(self.cleanup,self.authority); self.authority.setUp()
-        sys.modules['realtime_jwks_publisher'].PublisherPhase=Publisher
+        module=sys.modules['realtime_jwks_publisher']; original_class=getattr(module,'PublisherPhase',None)
+        def restore_class():
+            if original_class is None: delattr(module,'PublisherPhase')
+            else: module.PublisherPhase=original_class
+        self.addCleanup(restore_class); module.PublisherPhase=Publisher
         sys.modules['realtime_config_transition_service']=chat_service
         self.authority.cut=self.base.cut; self.authority.publisher.fence=self.base.fence
         self.authority.publisher.lock=self.base.lock; self.authority.publisher.namespace_uid='ns'
