@@ -183,6 +183,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   assert not (root/'installed'/'prerequisites').exists()
   from root_main import save
   save(root/'installed'/'policy.json',{'unrelated':'preserve'})
+  (root/'installed'/'prerequisite-inputs').mkdir(mode=0o700)
   Cluster, names, claim=stage_cluster_fixture(session); cluster=Cluster()
   original_get=cluster.get
   def get(kind,name):
