@@ -113,6 +113,7 @@ def check_container(container):
         for mount in mounts:
             path=mount['mountPath']
             if not isinstance(path,str) or not path.startswith('/') or posixpath.normpath(path)!=path: raise ValueError()
+            if path.startswith('/application'): raise ValueError()
             if any(path==x or path.startswith(x+'/') or x.startswith(path.rstrip('/')+'/') for x in forbidden): raise ValueError()
     except BaseException:
         raise EligibilityError('unsupported candidate Auth container') from None

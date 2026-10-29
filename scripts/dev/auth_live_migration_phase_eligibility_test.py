@@ -51,7 +51,9 @@ class EligibilityTests(unittest.TestCase):
         container={'name':'auth','image':'ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64}
         check_container(container)
         for extra in ({'command':['java']},{'args':['--spring.flyway.enabled=true']},
-                      {'workingDir':'/tmp'},{'volumeMounts':[{'name':'x','mountPath':'/config/x'}]}):
+                      {'workingDir':'/tmp'},{'volumeMounts':[{'name':'x','mountPath':'/config/x'}]},
+                      {'volumeMounts':[{'name':'x','mountPath':'/application-default.properties'}]},
+                      {'volumeMounts':[{'name':'x','mountPath':'/application-prod.yml'}]}):
             with self.assertRaises(EligibilityError): check_container({**container,**extra})
     def test_private_reference_snapshot_detects_race(self):
         container={'env':[{'name':'AUTH_FLYWAY_ENABLED','valueFrom':{'secretKeyRef':{'name':'s','key':'enabled'}}}]}

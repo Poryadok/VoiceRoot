@@ -20,7 +20,7 @@ def _login(password):
     script=('IFS= read -r encoded; PGPASSWORD="$(printf %s "$encoded" | base64 -d)"; '
             'export PGPASSWORD; export PGAPPNAME=voice-auth-credential-proof; '
             'export PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=5000 -c lock_timeout=3000"; '
-            "exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U voice -d auth_db -c \"SELECT json_build_object('database',current_database(),'database_oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),'server_start',pg_postmaster_start_time(),'role',current_user)\"")
+            "exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U voice -d auth_db -c \"SELECT json_build_object('database',current_database(),'database_oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),'server_start',pg_postmaster_start_time(),'role',current_user)\"")
     args=['kubectl','--kubeconfig','/home/pmd/.kube/config','--context','default','--namespace','voice-dev',
           '--request-timeout=15s','exec','-i','voice-postgres-0','-c','postgres','--','sh','-ec',script]
     result=subprocess.run(args,input=base64.b64encode(password)+b'\n',stdout=subprocess.PIPE,
