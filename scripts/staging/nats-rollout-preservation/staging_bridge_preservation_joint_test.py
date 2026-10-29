@@ -147,7 +147,7 @@ class BridgePreservationAdmission(unittest.TestCase):
             for path in workspace.rglob('*'):
                 path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
-import copy, hashlib, json, sys
+import base64, copy, hashlib, json, subprocess, sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -183,7 +183,24 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   assert not (root/'installed'/'prerequisites').exists()
   from root_main import save
   save(root/'installed'/'policy.json',{'unrelated':'preserve'})
-  (root/'installed'/'prerequisite-inputs').mkdir(mode=0o700)
+  inputs=root/'installed'/'prerequisite-inputs';inputs.mkdir(mode=0o700)
+  def openssl(*args):
+   subprocess.run(['/usr/bin/openssl',*map(str,args)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+  key=root/'ca.key';cert=root/'ca.crt';peerkey=root/'peer.key';csr=root/'peer.csr';peer=root/'peer.crt';ext=root/'ext'
+  openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',key,'-out',cert,'-days','180',
+   '-subj','/CN=synthetic-root','-addext','basicConstraints=critical,CA:TRUE',
+   '-addext','keyUsage=critical,keyCertSign,cRLSign')
+  openssl('req','-newkey','rsa:2048','-nodes','-keyout',peerkey,'-out',csr,'-subj','/CN=voice-space')
+  ext.write_text('basicConstraints=critical,CA:FALSE\nsubjectAltName=DNS:voice-space.voice-staging.svc\nextendedKeyUsage=serverAuth,clientAuth\n')
+  openssl('x509','-req','-in',csr,'-CA',cert,'-CAkey',key,'-set_serial','1234','-days','150','-extfile',ext,'-out',peer)
+  ca=cert.read_text();leaf=peer.read_text()
+  import staging_p3_prerequisites_crypto as crypto
+  save(inputs/'gis-issuer.json',{'schema':'voice-staging-gis-issuer-input-v1','receipt':{},'ca_certificate_pem':ca,
+   'ca_private_key_pem':key.read_text(),'jwks_ca_bundle_pem':ca,'ca_secret':{}})
+  save(inputs/'p3-issuer.json',{'schema':'voice-staging-p3-issuer-input-v1','receipt':{},'ca_certificate_pem':ca,
+   'ca_private_key_pem':key.read_text(),'trust':{name:ca for name in crypto.TRUST_KEYS},
+   'space_client_certificate_pem':leaf,'space_jwks_certificate_pem':leaf,'space_server_ca_pem':ca,
+   'replay_password_b64':base64.b64encode(b'synthetic-replay-password').decode()})
   Cluster, names, claim=stage_cluster_fixture(session); cluster=Cluster()
   original_get=cluster.get
   def get(kind,name):
@@ -191,6 +208,11 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
       'uid':'00000000-0000-4000-8000-000000000004','resourceVersion':'1'},'type':'Opaque',
       'data':{'POSTGRES_PASSWORD':'Zml4dHVyZQ=='}}
+   if kind=='secret' and name in ('voice-media-ca','voice-space-media-client-tls','voice-space-media-server-tls'):
+    data=({'ca.crt':ca,'jwks-ca.crt':ca} if name=='voice-media-ca' else {'tls.crt':leaf,'tls.key':peerkey.read_text()})
+    return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
+      'uid':'00000000-0000-4000-8000-000000000005','resourceVersion':'1'},'type':'Opaque',
+      'data':{k:base64.b64encode(v.encode()).decode() for k,v in data.items()}}
    return original_get(kind,name)
   def capture(argv,**kwargs):
    commands.authority_guard(argv)
@@ -206,9 +228,9 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
        patch.object(stage_runtime.Kube,'_run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
-   except FileNotFoundError as exc:
-    assert str(exc.filename).endswith('/installed/prerequisite-inputs/gis-issuer.json'), str(exc)
-   else: raise AssertionError('missing issuer input admitted')
+   except KeyError as exc:
+    assert exc.args==(('node','pmdebook'),), str(exc)
+   else: raise AssertionError('missing synthetic node admitted')
   assert not (root/'installed'/'cohort-preservation').exists()
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
