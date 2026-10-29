@@ -89,8 +89,9 @@ def verify_go_role(phase, metadata_phase, token, database):
         if type(phase) is not phases.CohortPhases or type(metadata_phase) is not metadata_source.BackupMetadataPhase:
             raise ValueError()
         p=phase.phases
-        phase._guard(); row, revision=p.fence.ledger.read()
-        binding, _, marker, _ = readback._snapshot(phase,row)
+        phase._guard(); row, revision=p.fence.ledger.read(); row=copy.deepcopy(row)
+        snapshot=copy.deepcopy(readback._snapshot(phase,row))
+        binding, _, marker, _ = snapshot
         if 'full_catalog' not in binding: raise ValueError()
         source=metadata_source.verify_completed(metadata_phase,token)
         changed=[db for db in binding['databases'] if restore.classify_plan(db,source['metadata']['migrations'][db],True)=='migrate']
@@ -121,11 +122,29 @@ def verify_go_role(phase, metadata_phase, token, database):
                 or receipt.get('snapshot_id')!=binding['snapshot_id'] or receipt.get('source_sha')!=binding['source_sha']
                 or receipt.get('manifest_sha256')!=marker['manifest_sha256'] or receipt.get('cleanup')!='verified'
                 or receipt.get('databases',{}).get(database)!={'mode':'migrate','from':expected[database]['from'],'to':expected[database]['to']}
-                or receipt.get('migration_logins')!=expected or not isinstance(resources,dict) or not resources
-                or resources!=local_resources or any(v.get('status')!='removed' for v in resources.values())):
+                or receipt.get('migration_logins')!=expected or not isinstance(resources,dict)
+                or set(resources)!={'postgres','migrate'} or resources!=local_resources):
             raise ValueError()
+        for resource in resources.values():
+            name=resource.get('name')
+            if (set(resource)!={'status','nonce','name','labels','operation_id','invocation_nonce','container_id'}
+                    or resource['status']!='removed' or resource['operation_id']!=binding['operation_id']
+                    or resource['invocation_nonce']!=p.invocation or not isinstance(name,str)
+                    or not re.fullmatch(r'voice-media-restore-[0-9a-f]{32}',name)
+                    or resource['labels']!={'voice.test.owner':name}
+                    or not isinstance(resource['nonce'],str) or not re.fullmatch(r'[0-9a-f]{32}',resource['nonce'])
+                    or not isinstance(resource['container_id'],str) or not re.fullmatch(r'[0-9a-f]{64}',resource['container_id'])):
+                raise ValueError()
+        if any(len({resource[key] for resource in resources.values()})!=2 for key in ('nonce','name','container_id')):
+            raise ValueError()
+        verified_done=copy.deepcopy(done);verified_readback=copy.deepcopy(readback_done);verified_resources=copy.deepcopy(local_resources)
         phase._guard()
-        if p.fence.ledger.read()!=(row,revision) or metadata_phase.fence.ledger.read()!=(row,revision): raise ValueError()
+        if (p.fence.ledger.read()!=(row,revision) or metadata_phase.fence.ledger.read()!=(row,revision)
+                or readback._snapshot(phase,row)!=snapshot
+                or p.journal.state['steps'].get('cohort-restore')!=verified_done
+                or p.journal.state['steps'].get('cohort-readback')!=verified_readback
+                or {name.removeprefix('cohort-restore-resource-'):value for name,value in p.journal.state['steps'].items()
+                    if name.startswith('cohort-restore-resource-')}!=verified_resources): raise ValueError()
         return {'database':database,**expected[database],'source_sha':binding['source_sha'],
                 'snapshot_id':binding['snapshot_id'],'manifest_sha256':marker['manifest_sha256'],
                 'migration_roles_sha256':role_digest,'scope':'isolated-clone-migration-login-only'}

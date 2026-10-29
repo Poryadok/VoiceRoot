@@ -53,7 +53,12 @@ class RoleReceiptTest(unittest.TestCase):
         self.metadata['migrations']={'voice_db':{'from':14,'to':15}}
         roles=self.result['migration_roles']
         digest=hashlib.sha256(json.dumps(roles,sort_keys=True,separators=(',', ':'),ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
-        marker={'manifest_sha256':'c'*64}; resource={'postgres':{'status':'removed'}}
+        marker={'manifest_sha256':'c'*64}
+        def terminal(ch):
+            name='voice-media-restore-'+ch*32
+            return {'status':'removed','nonce':ch*32,'name':name,'labels':{'voice.test.owner':name},
+                    'operation_id':'fixture','invocation_nonce':'invocation','container_id':ch*64}
+        resource={'postgres':terminal('a'),'migrate':terminal('b')}
         intent={'status':'pending','operation_id':'fixture','snapshot_id':'snap','invocation_nonce':'invocation',
                 'manifest_sha256':marker['manifest_sha256'],'artifact_id':1,'migration_roles_sha256':digest}
         receipt={'operation_id':'fixture','snapshot_id':'snap','source_sha':'a'*40,
@@ -66,13 +71,34 @@ class RoleReceiptTest(unittest.TestCase):
         self.phase.fence.ledger.read=lambda:(row,revision)
         p=SimpleNamespace(fence=self.phase.fence,lock=self.phase.lock,namespace_uid='fixture',invocation='invocation',
                           journal=SimpleNamespace(state={'steps':{'cohort-restore':copy.deepcopy(done),'cohort-readback':readback,
-                              'cohort-restore-resource-postgres':resource['postgres']}}))
+                              'cohort-restore-resource-postgres':resource['postgres'],
+                              'cohort-restore-resource-migrate':resource['migrate']}}))
         cp=object.__new__(phases.CohortPhases);cp.phases=p;cp.catalog_phase=self.catalog
-        with patch.object(phases.CohortPhases,'_guard'),patch.object(journal.readback,'_snapshot',return_value=(self.binding,None,marker,None)), \
+        with patch.object(phases.CohortPhases,'_guard') as guard,patch.object(journal.readback,'_snapshot',return_value=(self.binding,None,marker,None)), \
              patch.object(source,'verify_completed',return_value=self.result), \
              patch.object(restore,'classify_plan',return_value='migrate'):
             value=journal.verify_go_role(cp,self.phase,'token','voice_db')
             self.assertEqual((value['role'],value['from'],value['to']),('service_login',14,15))
+            for field in ('cohort-restore','cohort-readback','cohort-restore-resource-postgres'):
+                original=copy.deepcopy(p.journal.state['steps'])
+                calls=[]
+                def mutate():
+                    calls.append(1)
+                    if len(calls)==2: p.journal.state['steps'].pop(field)
+                guard.side_effect=mutate
+                with self.subTest(field=field),self.assertRaises(journal.RestoreError):
+                    journal.verify_go_role(cp,self.phase,'token','voice_db')
+                p.journal.state['steps']=original
+            guard.side_effect=None
+            for altered in ({'status':'removed'}, terminal('c') | {'invocation_nonce':'foreign'},
+                            {k:v for k,v in terminal('c').items() if k!='container_id'}):
+                original=copy.deepcopy(resource['postgres'])
+                row['cohort_restore_resources']['postgres']=altered
+                p.journal.state['steps']['cohort-restore-resource-postgres']=copy.deepcopy(altered)
+                with self.subTest(resource=altered),self.assertRaises(journal.RestoreError):
+                    journal.verify_go_role(cp,self.phase,'token','voice_db')
+                row['cohort_restore_resources']['postgres']=original
+                p.journal.state['steps']['cohort-restore-resource-postgres']=copy.deepcopy(original)
             row['cohort_restore']['receipt']['migration_logins']['voice_db']['role']='forged'
             with self.assertRaises(journal.RestoreError):journal.verify_go_role(cp,self.phase,'token','voice_db')
 
