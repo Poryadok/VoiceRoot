@@ -12,6 +12,7 @@ import secrets
 import subprocess
 import tempfile
 import time
+import tarfile
 import unittest
 from unittest.mock import patch
 
@@ -54,6 +55,19 @@ class UnmanagedIntegrationTest(unittest.TestCase):
         fixture.sql(fixture.source,'source_admin','postgres','CREATE ROLE app_writer LOGIN')
         fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE extra_db')
         fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE gateway_db')
+        for db in ('auth_db','voice_db'):
+            fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE '+db)
+        fixture.sql(fixture.source,'source_admin','auth_db',
+            "CREATE TABLE public.flyway_schema_history(installed_rank int PRIMARY KEY, version varchar(50), script varchar(1000) NOT NULL, checksum int, success bool NOT NULL);"
+            "INSERT INTO public.flyway_schema_history VALUES (1,'32','V32__linked_oauth_transport.sql',123,true)")
+        voice_folder=Path('/work/src/backend/migrations/voice_db')
+        auth_folder=Path('/work/src/backend/auth/src/main/resources/db/migration')
+        for migration in sorted(voice_folder.glob('*.up.sql')):
+            if int(migration.name[:6])<=14:fixture.sql(fixture.source,'source_admin','voice_db',migration.read_text())
+        fixture.sql(fixture.source,'source_admin','voice_db',
+                    'CREATE TABLE public.schema_migrations(version bigint NOT NULL,dirty boolean NOT NULL); INSERT INTO public.schema_migrations VALUES (14,false)')
+        for db in ('auth_db','voice_db'):
+            fixture.sql(fixture.source,'source_admin',db,'CREATE TABLE public.fixture_marker(id int PRIMARY KEY); INSERT INTO public.fixture_marker VALUES (1)')
         fixture.sql(fixture.source,'source_admin','postgres','ALTER DATABASE gateway_db CONNECTION LIMIT 7')
         fixture.sql(fixture.source,'source_admin','postgres','REVOKE CONNECT ON DATABASE gateway_db FROM PUBLIC')
         gateway_folder=Path('/work/src/backend/migrations/gateway_db')
@@ -66,13 +80,14 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                 "CREATE SCHEMA tenant AUTHORIZATION app_writer; CREATE TABLE tenant.events(id bigint PRIMARY KEY, value text); "
                 "ALTER TABLE tenant.events OWNER TO app_writer; INSERT INTO tenant.events VALUES (7,'kept'); "
                 "CREATE TABLE public.schema_migrations(version bigint,dirty boolean); INSERT INTO public.schema_migrations VALUES (991,true)")
-        databases=sorted(('extra_db','postgres','template1','custom_template','gateway_db'))
+        databases=sorted(('extra_db','postgres','template1','custom_template','gateway_db','auth_db','voice_db'))
         catalogs={db:json.loads(fixture.sql(fixture.source,'source_admin',db,
+            restore.AUTH_CATALOG if db=='auth_db' else media.CATALOG if db=='voice_db' else
             restore.GATEWAY_CATALOG if db=='gateway_db' else unmanaged.CATALOG_SQL)) for db in databases}
         properties={}
         for db in databases:
             source_catalog=(json.loads(fixture.sql(fixture.source,'source_admin',db,unmanaged.CATALOG_SQL))
-                            if db=='gateway_db' else catalogs[db])
+                            if db in ('gateway_db','auth_db','voice_db') else catalogs[db])
             value=source_catalog['database_properties']
             properties[db]={key:value[key] for key in ('template','allowconn','encoding','collate','ctype','locale_provider','icu_locale','connection_limit')}
             properties[db].update(owner=source_catalog['database_owner'],acl=value['acl_raw'])
@@ -88,14 +103,26 @@ class UnmanagedIntegrationTest(unittest.TestCase):
         roles=json.loads(fixture.sql(fixture.source,'source_admin','postgres',media.role_catalog_sql()))
         plans={db:{'engine':'unmanaged','from':None,'to':None,'files':{}} for db in databases}
         plans['gateway_db']['files']={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in gateway_folder.glob('*.sql')}
+        plans['auth_db']={'engine':'flyway','from':32,'to':32,
+                          'files':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in auth_folder.glob('*.sql')}}
+        plans['voice_db']={'engine':'golang-migrate','from':14,'to':15,
+                           'files':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in voice_folder.glob('*.sql')}}
         metadata={'catalog':catalogs,'roles':roles,'migrations':plans}
+        tool_journal=Journal();resources=[]
+        try:
+            cid=media._create(tool_journal,resources,'migrate',MIGRATE,['--entrypoint','/bin/true'])
+            raw=media._docker('cp',cid+':/usr/local/bin/migrate','-')
+            with tarfile.open(fileobj=io.BytesIO(raw),mode='r:') as archive:
+                files=archive.getmembers();self.assertEqual(len(files),1);self.assertEqual(files[0].name,'migrate')
+                tool_sha=hashlib.sha256(archive.extractfile(files[0]).read()).hexdigest()
+        finally:media._cleanup(tool_journal,resources)
         binding={'operation_id':event['operation_id'],'snapshot_id':'capture-'+'c'*32,'source_sha':event['source_sha'],
                  'databases':databases,'sources':{db:{'engine':engine,'server_start':start,'database_oid':oids[db]} for db in databases},
                  'full_catalog':{'receipt_sha256':digest(event),'properties':properties},
                  'dump_receipts':{name:'d'*64 for name in databases+['roles']},
                  'restore_inputs':{'catalog_sha256':digest(catalogs),'roles_catalog_sha256':digest(roles),
                     'migration_catalog_sha256':digest(plans),'postgres_image':POSTGRES,'migrate_image':MIGRATE,
-                    'migrate_binary_sha256':'e'*64,'postgres_major':16}}
+                    'migrate_binary_sha256':tool_sha,'postgres_major':16}}
         binding['sources']['roles']={'engine':engine,'server_start':start}
         phase=object.__new__(affected.FullCatalogPhase)
         with tempfile.TemporaryDirectory() as directory:
@@ -123,7 +150,9 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                     self.assertEqual(value['acl'],json.loads(fixture.sql(fixture.source,'source_admin',db,unmanaged.CATALOG_SQL))['database_properties']['acl'])
                     events.append('gateway')
                 if sql=='ALTER DATABASE template0 WITH ALLOW_CONNECTIONS true':events.append('template')
-                if sql==unmanaged.CATALOG_SQL and db!='gateway_db':
+                if sql in (media.CATALOG,restore.AUTH_CATALOG):
+                    self.assertEqual(original(cid,admin,db,'SELECT count(*) FROM public.fixture_marker').strip(),b'1')
+                if sql==unmanaged.CATALOG_SQL and db not in ('gateway_db','auth_db','voice_db'):
                     self.assertEqual(original(cid,admin,db,'SELECT id,value FROM tenant.events').strip(),b'7|kept')
                     self.assertEqual(original(cid,admin,db,'SELECT version,dirty FROM public.schema_migrations').strip(),b'991|t')
                     observed.append(db)
@@ -131,8 +160,11 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             with patch.object(affected.FullCatalogPhase,'verify_current',return_value=event),patch.object(media,'_psql',side_effect=psql):
                 receipt=restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
             self.assertEqual(receipt['cleanup'],'verified')
-            self.assertEqual(receipt['databases'],{db:{'mode':'restore-only','from':None,'to':None} for db in databases})
-            extras=[db for db in databases if db!='gateway_db']
+            expected={db:{'mode':'restore-only','from':None,'to':None} for db in databases}
+            expected['auth_db']={'mode':'restore-only','from':32,'to':32}
+            expected['voice_db']={'mode':'migrate','from':14,'to':15}
+            self.assertEqual(receipt['databases'],expected)
+            extras=[db for db in databases if db not in ('gateway_db','auth_db','voice_db')]
             self.assertEqual(sorted(observed),sorted(extras*2))
             self.assertIn('gateway',events);self.assertIn('template',events)
             self.assertLess(events.index('gateway'),events.index('template'))
