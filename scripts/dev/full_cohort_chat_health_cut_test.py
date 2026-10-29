@@ -38,6 +38,7 @@ class CutIntegrationTest(unittest.TestCase):
             self.assertEqual(base.cut.accept_activation_health('chat_health', phase, 'token')['stage'], 'realtime')
             before = len(base.client.patches)
             with self.assertRaises(writer_cut.RecoveryRequired): base.cut.activate_next()
+            self.assertEqual(len(calls), 2)
             self.assertEqual(len(base.client.patches), before)
             self.assertEqual(base.ledger.row['status'], 'uncertain')
 
