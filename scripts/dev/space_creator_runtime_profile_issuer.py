@@ -77,9 +77,9 @@ def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
             missing=sorted(name for name,item in first['creator_secrets'].items() if item=={'state':'absent'})
             if not missing: raise ValueError()
             destination=exporter.ROOT/('space-creator-'+suffix)
-            reservation=exporter.ROOT/('space-creator-'+suffix+'.once')
+            reservation=exporter.ROOT/'space-creator-issuance.once'
             fd=os.open(reservation,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-            try: os.write(fd,b'Potentially issued; reconcile before retry.\n'); os.fsync(fd)
+            try: os.write(fd,('space-creator-'+suffix+'\n').encode('ascii')); os.fsync(fd)
             finally: os.close(fd)
             parent_fd=os.open(exporter.ROOT,os.O_RDONLY|os.O_DIRECTORY)
             try: os.fsync(parent_fd)

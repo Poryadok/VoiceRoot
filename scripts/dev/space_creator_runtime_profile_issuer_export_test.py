@@ -16,6 +16,7 @@ class ExportTest(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup); self.root=Path(self.tmp.name)
         self.op='media-c1-'+'a'*32; self.path=self.root/('space-creator-'+'a'*32); self.path.mkdir(mode=0o700)
+        reservation=self.root/'space-creator-issuance.once'; reservation.write_text(self.path.name+'\n'); os.chmod(reservation,0o600)
         for name,data in {'complete':b'Creator profile issuance complete; runtime not qualified.\n',
                           'media-public.crt':b'fixture','objects.json':json.dumps({'issuer_receipt':{'object_names':['voice-role-media-server-tls']}}).encode()}.items():
             (self.path/name).write_bytes(data); os.chmod(self.path/name,0o600)

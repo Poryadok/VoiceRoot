@@ -29,7 +29,7 @@ Linux tests must cover each subset, unknown members, existing/partial objects, m
 
 ## Progress and decisions
 
-The five-object catalog is source-backed. The root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently reviewed root metadata observer before and after generation. A joint fixture exercises the real protected phase, socket exchange, root CA/key check and actual leaf creation; Kubernetes and TT remain fixture inputs. The bundle source anchor intentionally holds until the complete payload is independently reviewed. No caller-supplied list or boolean is an authority.
+The five-object catalog is source-backed. The root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently reviewed root metadata observer before and after generation. A root-owned global one-shot reservation prevents a second operation from silently repeating an uncertain issuance; reconciliation is required. A joint fixture exercises the real protected phase, socket exchange, root CA/key check and actual leaf creation; Kubernetes and TT remain fixture inputs. The bundle source anchor intentionally holds until the complete payload is independently reviewed. No caller-supplied list or boolean is an authority.
 
 ## Risks and follow-ups
 

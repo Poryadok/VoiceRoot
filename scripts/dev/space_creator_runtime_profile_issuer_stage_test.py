@@ -62,21 +62,25 @@ class StageTest(unittest.TestCase):
         thread.join(timeout=5)
         self.assertEqual(result['object_names'],sorted(packet.FAMILIES))
         self.assertEqual(issuer._guard.call_count,3)
-        self.assertTrue((self.root/('space-creator-'+'a'*32+'.once')).is_file())
+        self.assertTrue((self.root/'space-creator-issuance.once').is_file())
         self.assertTrue((self.root/('space-creator-'+'a'*32)/'complete').is_file())
 
     def test_no_ready_prevents_any_generation(self):
         thread=self.serve('no-ready')
         with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5); issuer._prepare.assert_not_called()
-        self.assertFalse((self.root/('space-creator-'+'a'*32+'.once')).exists())
+        self.assertFalse((self.root/'space-creator-issuance.once').exists())
 
     def test_post_generation_drift_is_durable_hold(self):
         thread=self.serve('drift')
         with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5)
-        self.assertTrue((self.root/('space-creator-'+'a'*32+'.once')).exists())
+        self.assertTrue((self.root/'space-creator-issuance.once').exists())
         self.assertFalse((self.root/('space-creator-'+'a'*32)/'complete').exists())
+        self.op='media-c1-'+'b'*32; self.request['context']['operation_id']=self.op
+        thread=self.serve('ok')
+        with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
+        thread.join(timeout=5); self.assertEqual(issuer._prepare.call_count,1)
 
     def test_existing_complete_secret_is_not_reissued(self):
         name='voice-gateway-principal-signing'
@@ -91,14 +95,14 @@ class StageTest(unittest.TestCase):
         thread=self.serve('ok')
         with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5); issuer._prepare.assert_not_called()
-        self.assertFalse((self.root/('space-creator-'+'a'*32+'.once')).exists())
+        self.assertFalse((self.root/'space-creator-issuance.once').exists())
 
     def test_foreign_candidate_never_starts_generation(self):
         self.request['context']['commit']='d'*40
         thread=self.serve('ok')
         with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
         thread.join(timeout=5); issuer._prepare.assert_not_called()
-        self.assertFalse((self.root/('space-creator-'+'a'*32+'.once')).exists())
+        self.assertFalse((self.root/'space-creator-issuance.once').exists())
 
     def test_guarded_stage_with_real_ca_and_real_generated_leaf(self):
         archive=self.root/'archive'; archive.mkdir(mode=0o700)

@@ -64,6 +64,7 @@ def export(operation_id,source_sha,namespace_uid,preflight_sha256,consumer_pid,c
         suffix=operation_id[-32:]; existing._check_root_custody(ROOT)
         directory=ROOT/('space-creator-'+suffix); existing._check_root_custody(directory)
         if ((directory/'handoff-started').exists() or (directory/'handoff-started').is_symlink() or
+            _read(ROOT/'space-creator-issuance.once',128)!=(directory.name+'\n').encode('ascii') or
             _read(directory/'complete',1024)!=b'Creator profile issuance complete; runtime not qualified.\n'):
             raise ValueError()
         envelope=json.loads(_read(directory/'objects.json',524288),object_pairs_hook=_unique); media=_read(directory/'media-public.crt',65536)
