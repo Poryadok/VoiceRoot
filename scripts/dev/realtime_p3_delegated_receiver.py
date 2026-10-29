@@ -51,7 +51,7 @@ def _request_matches(session,request):
             or request['context']!=session.fence.context or request['namespace_uid']!=session.namespace_uid
             or request['lock']!=session.lock or request['issuer_source_sha']!=session.plan['issuer_source_sha']
             or not isinstance(request['capability_sha256'],str) or not re.fullmatch(r'[a-f0-9]{64}',request['capability_sha256'])
-            or request['objects']!={kind+'/'+name:{'state':'absent'} for kind,name in packet.MEMBERS}): raise ValueError()
+            or request['objects']!={kind.lower()+'/'+name:{'state':'absent'} for kind,name in packet.MEMBERS}): raise ValueError()
     for field,identity in zip(('principal','media','space'),creation.PUBLIC):
         current=session.roots[identity]
         expected={'uid':current['uid'],'resourceVersion':current['resourceVersion'],

@@ -17,7 +17,7 @@ class RequestTest(unittest.TestCase):
         session=SimpleNamespace(roots=roots,fence=SimpleNamespace(context={'operation_id':'op'}),namespace_uid='ns',
                                 lock={'uid':'lock'},plan={'issuer_source_sha':'b'*40})
         request={'context':{'operation_id':'op'},'namespace_uid':'ns','lock':{'uid':'lock'},'issuer_source_sha':'b'*40,
-                 'capability_sha256':'a'*64,'objects':{kind+'/'+name:{'state':'absent'} for kind,name in packet.MEMBERS}}
+                 'capability_sha256':'a'*64,'objects':{kind.lower()+'/'+name:{'state':'absent'} for kind,name in packet.MEMBERS}}
         for name,identity in zip(('principal','media','space'),creation.PUBLIC):
             value=roots[identity]
             request[name]={'uid':value['uid'],'resourceVersion':'1','der_sha256':hashlib.sha256(value['certificate']).hexdigest()}
