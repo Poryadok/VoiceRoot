@@ -1,16 +1,23 @@
 """Offline real-keytool check; fixture image is not a P1 qualification."""
 
 import hashlib
+import base64
+import copy
 import json
 import os
 import re
 import subprocess
 import unittest
+from unittest import mock
 import uuid
 
 import space_creator_runtime_profile_target_trust as target
 import space_creator_runtime_profile_trust as trust
 import space_creator_runtime_profile_trust_effect as effect
+import space_creator_runtime_profile_trust_effect_test as fixture
+import space_creator_runtime_profile_jdk as jdk
+import space_p3_issuer_preflight as issuer
+import writer_cut
 
 
 class RealKeytoolTest(unittest.TestCase):
@@ -67,6 +74,35 @@ class RealKeytoolTest(unittest.TestCase):
         cid = create(*options, target.SCRIPT)
         with self.assertRaises(ValueError):
             target._input([docker, 'start', '-ai', cid], jks)
+
+        # Actual effect/tool/guard/journals; issuer, package and Kubernetes remain synthetic.
+        phase_fixture = fixture.EffectStateTest('test_missing_create_has_private_keyed_receipt_and_detects_drift')
+        phase_fixture.setUp(); self.addCleanup(phase_fixture.doCleanups)
+        image_info = json.loads(run('image', 'inspect', image))[0]
+        phase_fixture.roots.update(image=image_info['RepoDigests'][0], config_digest=image_info['Id'],
+                                   root_fingerprints=sorted(roots))
+        phase_fixture.source['ca']['der_sha256'] = ca_sha
+        for phase, module, receipt in ((phase_fixture.phase.jdk, jdk, phase_fixture.roots),
+                                       (phase_fixture.phase.preflight, issuer, phase_fixture.source)):
+            phase.record = {'status': 'done', 'receipt_sha256': writer_cut.digest(receipt)}
+            phase.journal.state['steps'][module.STEP] = copy.deepcopy(phase.record) | {'receipt': copy.deepcopy(receipt)}
+            phase.journal.save(); phase_fixture.base.ledger.row[module.LEDGER] = copy.deepcopy(phase.record)
+
+        def kube(args, payload=None):
+            if args[:3] == ['get', 'secret', 'voice-media-ca']:
+                return b'ca\n1\n\n' + base64.b64encode(ca)
+            return phase_fixture.kube(args, payload)
+
+        actual_tool = effect.TrustEffectPhase._tool.__get__(phase_fixture.phase)
+        with mock.patch.object(effect.private, '_run', side_effect=kube), \
+             mock.patch.object(effect.target.material, '_cert_der', return_value=der), \
+             mock.patch.object(phase_fixture.phase, '_tool', actual_tool):
+            plan = phase_fixture.phase.prepare('token')
+            self.assertEqual(plan['mode'], 'create'); self.assertEqual(phase_fixture.writes, [])
+            receipt = phase_fixture.phase.run('token')
+            self.assertEqual(receipt['mode'], 'create')
+            self.assertEqual(effect.verify_current(phase_fixture.phase, 'token'), receipt)
+            self.assertEqual(len(phase_fixture.writes), 1)
 
 
 if __name__ == '__main__':

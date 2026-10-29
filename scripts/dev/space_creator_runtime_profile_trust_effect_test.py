@@ -134,8 +134,12 @@ class EffectStateTest(unittest.TestCase):
                        'metadata': {'name': effect.SECRET, 'namespace': 'voice-dev', 'uid': 'trust-uid', 'resourceVersion': '2'},
                        'data': {effect.KEY: base64.b64encode(store).decode(), 'other': base64.b64encode(b'preserve').decode()}}
 
+    def prepare_run(self):
+        self.phase.prepare('token')
+        return self.phase.run('token')
+
     def test_missing_create_has_private_keyed_receipt_and_detects_drift(self):
-        receipt = self.phase.run('token')
+        receipt = self.prepare_run()
         self.assertEqual(receipt['mode'], 'create'); self.assertEqual(len(self.writes), 1)
         self.assertNotIn('generated-public-store', json.dumps(receipt))
         self.assertEqual(effect.verify_current(self.phase, 'token'), receipt)
@@ -144,24 +148,24 @@ class EffectStateTest(unittest.TestCase):
 
     def test_existing_compatible_is_preserved_and_incompatible_uses_cas(self):
         self.existing(b'compatible'); before = copy.deepcopy(self.secret)
-        receipt = self.phase.run('token')
+        receipt = self.prepare_run()
         self.assertEqual(receipt['mode'], 'preserve'); self.assertEqual(self.secret, before); self.assertEqual(self.writes, [])
 
     def test_known_incompatible_uses_cas_and_preserves_other_key(self):
-        self.existing(b'incompatible'); receipt = self.phase.run('token')
+        self.existing(b'incompatible'); receipt = self.prepare_run()
         self.assertEqual(receipt['mode'], 'replace'); self.assertEqual(len(self.writes), 1)
         self.assertEqual(self.secret['metadata']['uid'], 'trust-uid')
         self.assertEqual(base64.b64decode(self.secret['data']['other']), b'preserve')
 
     def test_missing_key_uses_cas_and_preserves_other_key(self):
         self.existing(b'compatible'); del self.secret['data'][effect.KEY]
-        receipt = self.phase.run('token')
+        receipt = self.prepare_run()
         self.assertEqual(receipt['mode'], 'replace'); self.assertEqual(len(self.writes), 1)
         self.assertEqual(base64.b64decode(self.secret['data']['other']), b'preserve')
 
     def test_checkpoint_failure_has_no_secret_or_tool_effect(self):
         with mock.patch.object(self.phase.journal, 'save', side_effect=OSError('fixture')):
-            with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
+            with self.assertRaises(effect.TrustEffectError): self.phase.prepare('token')
         self.assertEqual(self.writes, []); self.phase._tool.assert_not_called()
 
     def test_changed_secret_before_cas_is_rejected(self):
@@ -170,14 +174,17 @@ class EffectStateTest(unittest.TestCase):
             result = self.tool(roots, script, payload)
             if script == effect.GENERATE: self.secret['metadata']['resourceVersion'] = '3'
             return result
+        self.phase.prepare('token')
         self.phase._tool.side_effect = changed
         with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
         self.assertEqual(self.writes, [])
 
     def test_undrained_cut_rejects_before_tool_or_secret(self):
+        self.phase.prepare('token')
+        tool_calls = self.phase._tool.call_count
         with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
-        self.assertEqual(self.writes, []); self.phase._tool.assert_not_called()
-        self.assertNotIn(effect.STEP, self.phase.journal.state['steps'])
+        self.assertEqual(self.writes, []); self.assertEqual(self.phase._tool.call_count, tool_calls)
+        self.assertEqual(self.phase.journal.state['steps'][effect.STEP]['status'], 'prepared')
 
     def test_resumed_cut_before_cas_is_rejected(self):
         self.existing(b'incompatible')
@@ -187,6 +194,7 @@ class EffectStateTest(unittest.TestCase):
                 targets = [copy.deepcopy(item) for item in self.base.client.workloads.values()]
                 self.base.cut.resume(targets)
             return result
+        self.phase.prepare('token')
         self.phase._tool.side_effect = resumed
         with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
         self.assertEqual(self.writes, [])
@@ -200,12 +208,13 @@ class EffectStateTest(unittest.TestCase):
 
     def test_private_store_is_rejected_without_writing(self):
         self.existing(b'private')
-        with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
+        with self.assertRaises(effect.TrustEffectError): self.phase.prepare('token')
         self.assertEqual(self.writes, [])
-        with self.assertRaises(effect.target.metadata.GuardLost): self.phase.run('token')
+        with self.assertRaises(effect.target.metadata.GuardLost): self.phase.prepare('token')
 
     def test_committed_lost_reply_requires_reconciliation(self):
         self.lost = True
+        self.phase.prepare('token')
         with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
         self.assertIsNotNone(self.secret); self.assertEqual(len(self.writes), 1)
         with self.assertRaises(effect.target.metadata.GuardLost): self.phase.run('token')
@@ -241,9 +250,9 @@ class EffectStateTest(unittest.TestCase):
         actual_tool = effect.TrustEffectPhase._tool.__get__(self.phase)
         with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=docker), \
              mock.patch.object(effect.target, '_input', side_effect=input_data):
-            receipt = self.phase.run('token')
+            receipt = self.prepare_run()
         self.assertEqual(receipt['mode'], 'create')
-        self.assertEqual(sum(args[0] == 'rm' for args in commands), 2)
+        self.assertEqual(sum(args[0] == 'rm' for args in commands), 4)
         self.assertEqual(self.phase.record['tool']['status'], 'removed')
 
     def test_timed_out_owned_container_is_removed_before_reconciliation(self):
@@ -269,7 +278,7 @@ class EffectStateTest(unittest.TestCase):
         actual_tool = effect.TrustEffectPhase._tool.__get__(self.phase)
         with mock.patch.object(self.phase, '_tool', actual_tool), mock.patch.object(self.phase, '_docker', side_effect=docker), \
              mock.patch.object(effect.target, '_input', side_effect=TimeoutError('fixture')):
-            with self.assertRaises(effect.TrustEffectError): self.phase.run('token')
+            with self.assertRaises(effect.TrustEffectError): self.phase.prepare('token')
         self.assertEqual([args for args in commands if args[0] == 'rm'], [['rm', '-f', '-v', cid]])
         self.assertEqual(self.phase.journal.state['steps'][effect.STEP]['tool']['status'], 'removed')
         self.assertEqual(self.writes, [])

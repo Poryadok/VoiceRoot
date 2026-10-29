@@ -19,6 +19,7 @@ import writer_cut
 
 STEP = 'space-creator-trust-effect'
 LEDGER = 'space_creator_trust_effect'
+PLAN_STEP = 'space-creator-trust-plan'
 KEY_FILE = 'space-creator-trust-hmac.key'
 SECRET = 'voice-media-jvm-trust'
 KEY = 'truststore.p12'
@@ -148,14 +149,16 @@ class TrustEffectPhase(target.TargetTrustPhase):
         item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
         cfg, host = item.get('Config', {}), item.get('HostConfig', {})
         if (item.get('Id') != cid or item.get('Image') != roots['config_digest'] or
-                cfg.get('Labels', {}).get('voice.test.owner') != name or cfg.get('Entrypoint') != ['/bin/sh'] or
-                cfg.get('Cmd') != ['-ec', script] or cfg.get('User') != '65532:65532' or cfg.get('OpenStdin') is not True or
-                host.get('NetworkMode') != 'none' or host.get('ReadonlyRootfs') is not True or host.get('CapDrop') != ['ALL'] or
-                host.get('SecurityOpt') != ['no-new-privileges'] or host.get('Tmpfs') != {'/scratch': target.TMPFS} or
-                host.get('LogConfig', {}).get('Type') != 'none' or host.get('PortBindings') or item.get('Mounts')):
+                cfg.get('Labels', {}).get('voice.test.owner') != name):
             raise ValueError()
         removed = False
         try:
+            if (cfg.get('Entrypoint') != ['/bin/sh'] or cfg.get('Cmd') != ['-ec', script] or
+                    cfg.get('User') != '65532:65532' or cfg.get('OpenStdin') is not True or
+                    host.get('NetworkMode') != 'none' or host.get('ReadonlyRootfs') is not True or host.get('CapDrop') != ['ALL'] or
+                    host.get('SecurityOpt') != ['no-new-privileges'] or host.get('Tmpfs') != {'/scratch': target.TMPFS} or
+                    host.get('LogConfig', {}).get('Type') != 'none' or host.get('PortBindings') or item.get('Mounts')):
+                raise ValueError()
             self._state(self.record | {'tool': {'status': 'start-pending', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
             self._guard(); output = target._input(['docker', 'start', '-ai', cid], payload); self._guard()
             detail = json.loads(self._docker(['inspect', cid])); item = detail[0] if isinstance(detail, list) and len(detail) == 1 else {}
@@ -172,16 +175,17 @@ class TrustEffectPhase(target.TargetTrustPhase):
                 if cid in self._docker(['ps', '-a', '--no-trunc', '--format', '{{.ID}}']).decode('ascii').splitlines(): raise ValueError()
                 self._state(self.record | {'tool': {'status': 'removed', 'name': name, 'image_id': roots['config_digest'], 'id': cid}})
 
-    def run(self, token):
+    def prepare(self, token):
+        """Qualify the fixed Secret without mutating it, before the writer cut."""
         pending = False
         try:
             self._guard(); roots, source = self._dependencies(token)
-            self.preflight.cut.verify_drained()
             ca_id, pem, ca_sha = self._ca(source)
             old, old_data = self._read_store()
             if old_data is not None and KEY in old_data and not old_data[KEY]: raise ValueError()
+            if ca_sha in set(roots['root_fingerprints']): raise ValueError()
             row, revision = self._ledger()
-            if STEP in self.journal.state['steps'] or LEDGER in row: raise ValueError()
+            if STEP in self.journal.state['steps'] or PLAN_STEP in self.journal.state['steps'] or LEDGER in row: raise ValueError()
             marker = {'status': 'pending', 'nonce': secrets.token_hex(16),
                       'operation_id': self.fence.context['operation_id'], 'source_sha': self.fence.context['commit']}
             pending = True
@@ -196,6 +200,43 @@ class TrustEffectPhase(target.TargetTrustPhase):
             if old_data is not None and KEY in old_data:
                 listing = self._tool(roots, target.SCRIPT, old_data[KEY])
                 if classify_listing(listing, set(roots['root_fingerprints']), ca_sha) == 'preserve': mode = 'preserve'
+            if mode == 'replace' and old.get('immutable') is True: raise ValueError()
+            if mode != 'preserve':
+                candidate = self._tool(roots, GENERATE, pem)
+                if not candidate or len(candidate) > 1048576: raise ValueError()
+                candidate_listing = self._tool(roots, target.SCRIPT, candidate)
+                trust.compare_roots(set(roots['root_fingerprints']), candidate_listing, ca_sha)
+            if (self._read_store() != (old, old_data) or self._ca(source) != (ca_id, pem, ca_sha) or
+                    self._dependencies(token) != (roots, source) or self._key() != key): raise ValueError()
+            plan = {'operation_id': self.fence.context['operation_id'], 'source_sha': self.fence.context['commit'],
+                    'namespace_uid': self.namespace_uid, 'mode': mode, 'old': prior,
+                    'media_ca': source['ca'], 'jdk_receipt_sha256': writer_cut.digest(roots),
+                    'issuer_receipt_sha256': writer_cut.digest(source), 'root_count': len(roots['root_fingerprints']),
+                    'scope': 'c1-public-truststore-read-only-plan'}
+            self.journal.state['steps'][PLAN_STEP] = copy.deepcopy(plan); self.journal.save()
+            self._state(self.record | {'status': 'prepared', 'plan_sha256': writer_cut.digest(plan)})
+            return verify_prepared(self, token)
+        except BaseException as error:
+            if pending:
+                self.poisoned = True
+                try: self.fence.uncertain('creator trust preflight outcome uncertain')
+                except BaseException: pass
+            if isinstance(error, target.metadata.GuardLost): raise
+            raise TrustEffectError('creator trust preflight unavailable; reconcile if pending') from None
+
+    def run(self, token):
+        pending = False
+        try:
+            plan = verify_prepared(self, token)
+            self.preflight.cut.verify_drained()
+            roots, source = self._dependencies(token); ca_id, pem, ca_sha = self._ca(source)
+            old, old_data = self._read_store(); key = self._key()
+            prior, mode = plan['old'], plan['mode']
+            current_prior = None if old is None else {'uid': old['metadata']['uid'],
+                'resourceVersion': old['metadata']['resourceVersion'], 'data_hmac': _mac(key, old_data)}
+            if current_prior != prior: raise ValueError()
+            pending = True
+            self._state(self.record | {'status': 'pending'})
             if mode != 'preserve':
                 if old is not None and old.get('immutable') is True: raise ValueError()
                 store = self._tool(roots, GENERATE, pem)
@@ -231,7 +272,7 @@ class TrustEffectPhase(target.TargetTrustPhase):
             else:
                 actual, current_data = self._read_store()
                 if (actual, current_data) != (old, old_data): raise ValueError()
-                facts = trust.compare_roots(set(roots['root_fingerprints']), listing, ca_sha)
+                facts = {'root_count': plan['root_count'], 'store_count': plan['root_count'] + 1}
             self._guard()
             if self._dependencies(token) != (roots, source) or self._ca(source) != (ca_id, pem, ca_sha): raise ValueError()
             self.preflight.cut.verify_drained()
@@ -264,6 +305,39 @@ class TrustEffectPhase(target.TargetTrustPhase):
             raise TrustEffectError('creator trust Secret unavailable; reconcile if pending') from None
 
 
+def verify_prepared(phase, token):
+    """Recheck typed dependencies, private plan and exact original Secret."""
+    try:
+        if type(phase) is not TrustEffectPhase: raise ValueError()
+        phase._guard(); row, revision = phase._ledger()
+        marker = copy.deepcopy(phase.journal.state['steps'][STEP])
+        plan = copy.deepcopy(phase.journal.state['steps'][PLAN_STEP])
+        if (marker != phase.record or marker.get('status') != 'prepared' or row.get(LEDGER) != marker or
+                marker.get('plan_sha256') != writer_cut.digest(plan) or plan.get('mode') not in ('create', 'replace', 'preserve')):
+            raise ValueError()
+        roots, source = phase._dependencies(token); phase._ca(source)
+        actual, data = phase._read_store(); key = phase._key()
+        if actual is None:
+            prior = None
+        else:
+            prior = {'uid': actual['metadata']['uid'], 'resourceVersion': actual['metadata']['resourceVersion'],
+                     'data_hmac': _mac(key, data)}
+        if (plan.get('old') != prior or (plan['mode'] == 'create') != (actual is None) or
+                plan.get('media_ca') != source['ca'] or plan.get('jdk_receipt_sha256') != writer_cut.digest(roots) or
+                plan.get('issuer_receipt_sha256') != writer_cut.digest(source) or
+                plan.get('root_count') != len(roots['root_fingerprints']) or
+                plan.get('operation_id') != phase.fence.context['operation_id'] or
+                plan.get('source_sha') != phase.fence.context['commit'] or plan.get('namespace_uid') != phase.namespace_uid):
+            raise ValueError()
+        phase._guard()
+        if (phase._ledger() != (row, revision) or phase.journal.state['steps'].get(STEP) != marker or
+                phase.journal.state['steps'].get(PLAN_STEP) != plan): raise ValueError()
+        phase._locals(row, writer_cut.digest(roots), writer_cut.digest(source))
+        return plan
+    except target.metadata.GuardLost: raise
+    except BaseException: raise TrustEffectError('creator trust preflight changed') from None
+
+
 def verify_current(phase, token):
     try:
         if type(phase) is not TrustEffectPhase: raise ValueError()
@@ -272,6 +346,9 @@ def verify_current(phase, token):
         marker = {k: v for k, v in local.items() if k != 'receipt'}
         if (marker != phase.record or marker.get('status') != 'done' or row.get(LEDGER) != marker or
                 marker.get('receipt_sha256') != writer_cut.digest(receipt)): raise ValueError()
+        plan = phase.journal.state['steps'][PLAN_STEP]
+        if (marker.get('plan_sha256') != writer_cut.digest(plan) or
+                receipt.get('mode') != plan.get('mode') or receipt.get('old') != plan.get('old')): raise ValueError()
         roots, source = phase._dependencies(token); phase._ca(source)
         actual, data = phase._read_store(); key = phase._key()
         if (actual is None or receipt['secret'] != {k: actual['metadata'][k] for k in ('uid', 'resourceVersion')} or
