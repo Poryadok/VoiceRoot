@@ -1,6 +1,7 @@
 """Fixed Realtime migration inputs. Rendering is not authority or execution."""
 import hashlib
 import copy
+import ipaddress
 import json
 from pathlib import Path
 import re
@@ -84,6 +85,68 @@ def admitted_job(intended, actual):
         raise RecoveryRequired('Job generated metadata labels invalid')
     meta.pop('labels')
     return auth_user_candidate_probe.admitted_job(intended,value)
+
+
+def verify_writer_job(authored, actual):
+    """Validate one actual Job against the source-reconstructed authored Job."""
+    try:
+        meta = actual.get('metadata',{})
+        if (meta.get('name')!=authored['metadata']['name'] or meta.get('namespace')!='voice-dev' or
+                not isinstance(meta.get('uid'),str) or not meta['uid'] or
+                not isinstance(meta.get('resourceVersion'),str) or not meta['resourceVersion'] or
+                meta.get('deletionTimestamp') or
+                meta.get('annotations',{}).get('voice.io/source-sha')!=authored['metadata']['annotations']['voice.io/source-sha']):
+            raise RecoveryRequired('Job metadata differs')
+        return admitted_job(authored,actual)
+    except BaseException:
+        raise RecoveryRequired('writer Job identity unavailable') from None
+
+
+def verify_writer_pod(authored, job, pod, execution):
+    """Validate a Job-owned Pod before using its IP for session correlation."""
+    try:
+        accepted = verify_writer_job(authored,job)
+        if (not isinstance(execution,dict) or set(execution)!={'database','database_oid','role','application_name',
+                'container_name','node_name','node_uid','platform_digest'} or execution['database']!='realtime_db' or
+                type(execution['database_oid']) is not int or execution['database_oid']<=0 or
+                execution['role']!='realtime' or execution['container_name']!='migrate' or
+                execution['application_name']!=authored['metadata']['name'] or
+                not isinstance(execution['node_uid'],str) or not execution['node_uid'] or
+                execution['platform_digest'] not in PLATFORMS.values()): raise RecoveryRequired('execution differs')
+        meta = pod.get('metadata',{}); spec = copy.deepcopy(pod.get('spec',{})); status = pod.get('status',{})
+        owner = [o for o in meta.get('ownerReferences',[]) if o.get('controller') is True]
+        if (pod.get('apiVersion')!='v1' or pod.get('kind')!='Pod' or meta.get('namespace')!='voice-dev' or
+                not isinstance(meta.get('uid'),str) or not meta['uid'] or not isinstance(meta.get('resourceVersion'),str) or
+                not meta['resourceVersion'] or meta.get('deletionTimestamp') or len(owner)!=1 or
+                owner[0].get('kind')!='Job' or owner[0].get('uid')!=job['metadata']['uid'] or
+                spec.pop('nodeName',None)!=execution['node_name'] or spec.get('hostNetwork',False) is not False):
+            raise RecoveryRequired('Pod identity differs')
+        name = authored['metadata']['name']; uid = job['metadata']['uid']
+        generated = {'batch.kubernetes.io/controller-uid':uid,'controller-uid':uid,
+                     'batch.kubernetes.io/job-name':name,'job-name':name}
+        labels = copy.deepcopy(meta.get('labels',{}))
+        if labels != accepted['template']['metadata']['labels']:
+            raise RecoveryRequired('Pod labels differ from admitted Job template')
+        for key,value in generated.items():
+            if key in labels and labels.pop(key)!=value: raise RecoveryRequired('Pod generated labels differ')
+        template = authored['spec']['template']
+        if labels != template['metadata']['labels']: raise RecoveryRequired('Pod labels differ')
+        intended = {'apiVersion':'v1','kind':'Pod','metadata':{'name':'template','namespace':'voice-dev',
+                    'labels':template['metadata']['labels']},'spec':template['spec']}
+        observed = copy.deepcopy(intended); observed['spec'] = spec
+        auth_user_candidate_probe.admitted_pod(intended,observed)
+        addresses = status.get('podIP'); containers = status.get('containerStatuses',[])
+        image_id = containers[0].get('imageID','') if len(containers)==1 else ''
+        image_match = re.fullmatch(r'(?:docker-pullable://[^@]+@|containerd://|docker://)?(sha256:[0-9a-f]{64})',image_id)
+        if (status.get('phase') not in ('Running','Succeeded') or not isinstance(addresses,str) or
+                str(ipaddress.ip_address(addresses)) != addresses or len(containers)!=1 or
+                containers[0].get('name')!='migrate' or not containers[0].get('containerID') or
+                type(containers[0].get('restartCount')) is not int or containers[0]['restartCount']!=0 or
+                not image_match or image_match.group(1)!=execution['platform_digest']):
+            raise RecoveryRequired('Pod runtime differs')
+        return {'pod_uid':meta['uid'],'pod_ip':addresses}
+    except BaseException:
+        raise RecoveryRequired('writer Pod identity unavailable') from None
 
 
 class Migration:

@@ -67,6 +67,37 @@ class RendererTest(unittest.TestCase):
             else: bad['metadata']['labels']['extra']='untrusted'
             with self.assertRaises(job.RecoveryRequired): job.admitted_job(intended,bad)
 
+    def test_writer_job_and_pod_are_exact_owned_single_container(self):
+        with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':self.source,'files':self.files}):
+            _, intended = job.render(self.root,self.source,self.operation,self.secret,self.migrate,self.node)
+        actual = copy.deepcopy(intended); meta = actual['metadata']; meta.update(uid='uid',resourceVersion='1')
+        name = meta['name']; generated = {'batch.kubernetes.io/controller-uid':'uid','controller-uid':'uid',
+            'batch.kubernetes.io/job-name':name,'job-name':name}
+        meta['labels'] = {'app':name,**generated}
+        actual['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':'uid'}}
+        actual['spec']['template']['metadata']['labels'].update(generated)
+        execution = {'database':'realtime_db','database_oid':13,'role':'realtime','application_name':name,
+            'container_name':'migrate','node_name':'fixture-node','node_uid':'node-uid',
+            'platform_digest':job.PLATFORMS['amd64']}
+        pod = {'apiVersion':'v1','kind':'Pod','metadata':{'name':'job-pod','namespace':'voice-dev','uid':'pod-uid',
+                'resourceVersion':'2','labels':{'app':name,**generated},
+                'ownerReferences':[{'kind':'Job','uid':'uid','controller':True}]},
+               'spec':copy.deepcopy(intended['spec']['template']['spec']),
+               'status':{'phase':'Running','podIP':'10.1.2.3','containerStatuses':[{'name':'migrate',
+                    'imageID':'docker-pullable://example@'+job.PLATFORMS['amd64'],
+                    'containerID':'containerd://id','restartCount':0}]}}
+        pod['spec']['nodeName']='fixture-node'
+        job.verify_writer_job(intended,actual)
+        job.verify_writer_pod(intended,actual,pod,execution)
+        for field in ('owner','hostnetwork','image','missing-label'):
+            bad=copy.deepcopy(pod)
+            if field=='owner': bad['metadata']['ownerReferences'][0]['uid']='foreign'
+            if field=='hostnetwork': bad['spec']['hostNetwork']=True
+            if field=='image': bad['status']['containerStatuses'][0]['imageID']='bad'
+            if field=='missing-label': del bad['metadata']['labels']['controller-uid']
+            with self.subTest(field=field), self.assertRaises(job.RecoveryRequired):
+                job.verify_writer_pod(intended,actual,bad,execution)
+
 
 class PhaseTest(unittest.TestCase):
     def setup_operation(self):
