@@ -379,14 +379,22 @@ class FullCohortImageApply:
         cut = self.admission.cut
         auth = getattr(cut, 'auth_successor', None)
         auth_step = steps.get('writer-cut-auth-successor')
-        if (auth is None) != (auth_step is None):
-            raise RecoveryRequired('Auth successor custody changed')
+        if auth is None or auth_step is None:
+            raise RecoveryRequired('Auth successor custody absent')
         if auth is not None:
             details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
                        'receipt_sha256': auth['receipt_sha256']}
             if (auth_step['details'] != details or auth_step['receipt'] != details or
                     not cut._auth_successor_matches(row)):
                 raise RecoveryRequired('Auth successor receipt changed')
+            candidate = auth.get('proof', {}).get('candidate', {})
+            plan = self.intent['full_cohort']
+            if ('voice-auth' not in plan['cut'] or self._target('voice-auth').get('replicas') != 0 or
+                    digest(auth['proof']) != auth['receipt_sha256'] or
+                    candidate.get('target_spec_sha256') != digest(self._target('voice-auth')) or
+                    candidate.get('image') != plan['images']['voice-auth/auth'] or
+                    candidate.get('platform_digest') != plan['platform_digests']['voice-auth/auth']):
+                raise RecoveryRequired('Auth target is not source-qualified')
         inventory = getattr(cut, 'resume_inventory', None)
         inventory_step = steps.get('writer-cut-resume-inventory')
         if (inventory is None) != (inventory_step is None):

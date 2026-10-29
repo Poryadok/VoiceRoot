@@ -94,6 +94,8 @@ class FakeWriterCut:
         self.config_snapshot = None
         self.successors = {}
         self.proof_calls = 0
+        proof = journal.state['steps']['fixture-auth-proof']
+        self.auth_successor = {'proof': copy.deepcopy(proof), 'receipt_sha256': cohort.digest(proof)}
         self.probe = lambda scope: {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
 
     def _guards(self):
@@ -101,6 +103,9 @@ class FakeWriterCut:
 
     def _guard(self):
         pass
+
+    def _auth_successor_matches(self, row):
+        return row.get('fixture_auth_proof') == self.auth_successor['receipt_sha256']
 
     def _recheck_config_successors(self):
         pass
@@ -182,6 +187,16 @@ class FullCohortTest(unittest.TestCase):
                     'responseResourceVersion': '2', 'resourceVersion': '2', 'generation': 2})
         record('writer-cut-drained', {'session_scope': {'role': 'writer'}},
                {'scope': {'role': 'writer'}, 'active_sessions': 0, 'active_transactions': 0})
+        auth_target = copy.deepcopy(workloads['voice-auth']['spec'])
+        auth_target['template']['spec']['containers'][0]['image'] = self.context['images']['voice-auth/auth']
+        proof = {'candidate': {'target_spec_sha256': cohort.digest(auth_target),
+                               'image': self.context['images']['voice-auth/auth'],
+                               'platform_digest': self.intent['full_cohort']['platform_digests']['voice-auth/auth']}}
+        self.cut_journal.state['steps']['fixture-auth-proof'] = copy.deepcopy(proof)
+        self.ledger.row['fixture_auth_proof'] = cohort.digest(proof)
+        details = {'operation_id': self.context['operation_id'], 'cut_invocation': 'd' * 32,
+                   'receipt_sha256': cohort.digest(proof)}
+        record('writer-cut-auth-successor', details, copy.deepcopy(details))
         self.cut_journal.save()
         self.client = Cluster(self.lock, self.journal)
         self.ledger.client = self.client
@@ -228,6 +243,28 @@ class FullCohortTest(unittest.TestCase):
         self.assertEqual(phase.admission.cut.proof_calls, 1)
         self.assertEqual(len(result), 23)
         self.assertEqual(self.client.patches, 23)
+
+    def test_auth_target_mismatch_holds_before_any_image_patch(self):
+        phase = self.new()
+        binding = phase.admission.cut.auth_successor
+        binding['proof']['candidate']['target_spec_sha256'] = 'f' * 64
+        binding['receipt_sha256'] = cohort.digest(binding['proof'])
+        self.ledger.row['fixture_auth_proof'] = binding['receipt_sha256']
+        step = self.cut_journal.state['steps']['writer-cut-auth-successor']
+        step['details']['receipt_sha256'] = binding['receipt_sha256']
+        step['receipt']['receipt_sha256'] = binding['receipt_sha256']
+        step['details_sha256'] = cohort.digest(step['details'])
+        self.ledger.row['writer_cut_effects']['writer-cut-auth-successor'].update(
+            details_sha256=step['details_sha256'], receipt_sha256=cohort.digest(step['receipt']))
+        self.cut_journal.save()
+        with self.assertRaises(cohort.RecoveryRequired): phase.apply()
+        self.assertEqual(self.client.patches, 0)
+
+    def test_missing_auth_successor_holds_before_any_image_patch(self):
+        phase = self.new()
+        phase.admission.cut.auth_successor = None
+        with self.assertRaises(cohort.RecoveryRequired): phase.apply()
+        self.assertEqual(self.client.patches, 0)
 
     def test_already_target_images_are_observed_without_a_patch(self):
         names = ('voice-web', 'voice-admin', 'voice-developer-portal')

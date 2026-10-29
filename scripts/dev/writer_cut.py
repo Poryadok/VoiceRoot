@@ -650,7 +650,7 @@ class WriterCut:
             record = self._reserve('writer-cut-auth-successor', details)
             self._complete('writer-cut-auth-successor', record, details)
             self.auth_successor = {'phase': phase, 'root': source_root, 'receipt_sha256': digest(proof),
-                                   'steps': steps, 'markers': markers}
+                                   'proof': copy.deepcopy(proof), 'steps': steps, 'markers': markers}
             self._recheck_auth_successor()
             return copy.deepcopy(details)
         except BaseException:
@@ -662,6 +662,7 @@ class WriterCut:
         binding = self.auth_successor
         journal = binding['phase'].phases.journal
         return (not journal.poisoned and journal.dirfd is not None and journal.lockfd is not None and
+                digest(binding['proof']) == binding['receipt_sha256'] and
                 journal.state['steps'] == binding['steps'] and
                 all(row.get(k) == value for k, value in binding['markers'].items()))
 
