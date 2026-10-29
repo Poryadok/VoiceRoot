@@ -82,6 +82,7 @@ class WriterCut:
         self.config_snapshot = None
         self.migration = None
         self.migration_history = []
+        self.resume_inventory = None
         self._identity()
 
     def _identity(self):
@@ -145,7 +146,8 @@ class WriterCut:
         for name, entry in self.journal.state['steps'].items():
             if not (name.startswith('writer-drain-') or name.startswith('writer-resume-') or
                     name in ('writer-cut-drained', 'writer-cut-config-plan') or
-                    name.startswith('writer-cut-config-successor-') or name.startswith('writer-cut-migration-')):
+                    name.startswith('writer-cut-config-successor-') or name.startswith('writer-cut-migration-') or
+                    name == 'writer-cut-resume-inventory'):
                 continue
             if name == exclude: continue
             if (not isinstance(entry, dict) or entry.get('status') not in ('pending', 'done') or
@@ -242,7 +244,7 @@ class WriterCut:
             if kind == 'jobs' and self.migration is not None:
                 import writer_cut_migration
                 state, pod = writer_cut_migration.observe(self, self.migration, allow_removed=self.migration['finished'])
-                if self.migration['finished']:
+                if self.migration['finished'] and not self._has_resumed_effect():
                     receipt = writer_cut_migration.sessions(self, state, pod)
                     if receipt['attributed_sessions']: raise RecoveryRequired('terminal migration sessions remain')
                 uid = state['job']['uid'] if state['job']['state'] in ('owned', 'done', 'removing') else None
@@ -266,9 +268,12 @@ class WriterCut:
             import writer_cut_migration
             for binding in self.migration_history:
                 writer_cut_migration.verify_cleaned(self, binding)
-                _, state = writer_cut_migration.normalized(self, binding['kind'], binding['phase'], binding['root'])
-                receipt = writer_cut_migration.sessions(self, state, None)
-                if receipt['attributed_sessions']: raise RecoveryRequired('cleaned migration sessions remain')
+                if not self._has_resumed_effect():
+                    _, state = writer_cut_migration.normalized(self, binding['kind'], binding['phase'], binding['root'])
+                    receipt = writer_cut_migration.sessions(self, state, None)
+                    if receipt['attributed_sessions']: raise RecoveryRequired('cleaned migration sessions remain')
+        if self._has_resumed_effect() and (self.migration is not None or self.migration_history):
+            self._resumed_sessions()
 
     def _patch(self, kind, name, patch):
         filename = '.writer-patch-' + secrets.token_hex(16)
@@ -593,7 +598,9 @@ class WriterCut:
         for step, entry in sorted(self.journal.state['steps'].items()):
             if not step.startswith('writer-resume-'):
                 continue
-            if entry.get('status') != 'done': raise RecoveryRequired('resume effect pending')
+            if entry.get('status') == 'pending':
+                continue
+            if entry.get('status') != 'done': raise RecoveryRequired('resume effect invalid')
             source = entry['details']['source']; spec = entry['details']['target_spec']; receipt = entry['receipt']
             key = (source['kind'], source['metadata']['name'])
             if (key not in admitted or step != 'writer-resume-' + key[0].lower() + '-' + key[1] or
@@ -614,6 +621,70 @@ class WriterCut:
         return {'operation_id': self.fence.context['operation_id'], 'namespace_uid': self.namespace_uid,
                 'invocation': self.invocation, 'controllers': result}
 
+    def bind_resume_inventory(self, inventory_phase, token):
+        """Bind authenticated pre-cut routes without persisting the token."""
+        import full_cohort_inventory_phase
+        try:
+            if (not self.drained or self.resume_inventory is not None or
+                    type(inventory_phase) is not full_cohort_inventory_phase.InventoryPhase or
+                    any(k.startswith('writer-resume-') for k in self.journal.state['steps']) or
+                    inventory_phase.fence.context != self.fence.context or inventory_phase.lock != self.lock or
+                    inventory_phase.namespace_uid != self.namespace_uid or
+                    inventory_phase.fence.ledger.client is not inventory_phase.client):
+                raise RecoveryRequired('resume inventory identity invalid')
+            self._guard()
+            left, lrev = self.fence.ledger.read()
+            right, rrev = inventory_phase.fence.ledger.read()
+            if left != right or lrev != rrev or not self._owned(left):
+                raise RecoveryRequired('resume inventory ledger differs')
+            receipt = inventory_phase.verify_receipt(token)
+            left, lrev = self.fence.ledger.read()
+            right, rrev = inventory_phase.fence.ledger.read()
+            if left != right or lrev != rrev or not self._owned(left):
+                raise RecoveryRequired('resume inventory ledger changed')
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': self.invocation,
+                       'inventory_sha256': digest(receipt)}
+            record = self._reserve('writer-cut-resume-inventory', details)
+            self._complete('writer-cut-resume-inventory', record, details)
+            self.resume_inventory = {'phase': inventory_phase, 'token': token, 'receipt_sha256': digest(receipt)}
+            observed = self._resumed_sessions()
+            if observed['attributed_sessions']:
+                raise RecoveryRequired('sessions precede writer resume')
+            return copy.deepcopy(details)
+        except BaseException:
+            self._uncertain()
+
+    def _has_resumed_effect(self):
+        return any(k.startswith('writer-resume-') and v.get('status') == 'done'
+                   for k, v in self.journal.state['steps'].items() if isinstance(v, dict))
+
+    def _resumed_sessions(self):
+        import writer_cut_pg_probe
+        bound = self.resume_inventory
+        if bound is None: raise RecoveryRequired('resume inventory not bound')
+        phase = bound['phase']
+        def same_ledger():
+            left, lrev = self.fence.ledger.read()
+            right, rrev = phase.fence.ledger.read()
+            if left != right or lrev != rrev or not self._owned(left):
+                raise RecoveryRequired('resume inventory ledger changed')
+        same_ledger()
+        receipt = phase.verify_receipt(bound['token'])
+        if digest(receipt) != bound['receipt_sha256']:
+            raise RecoveryRequired('resume inventory receipt changed')
+        observed = writer_cut_pg_probe.inspect_resumed(self, phase, bound['token'])
+        if (not isinstance(observed, dict) or set(observed) !=
+                {'scope', 'active_sessions', 'active_transactions', 'attributed_sessions'} or
+                observed['scope'] != self.admission['session_scope'] or
+                type(observed['active_sessions']) is not int or observed['active_sessions'] != 0 or
+                type(observed['active_transactions']) is not int or observed['active_transactions'] != 0 or
+                not isinstance(observed['attributed_sessions'], list)):
+            raise RecoveryRequired('unattributed resumed sessions remain')
+        if digest(phase.verify_receipt(bound['token'])) != bound['receipt_sha256']:
+            raise RecoveryRequired('resume inventory changed during observation')
+        same_ledger()
+        return observed
+
     def _migration_resume_guard(self):
         """Check terminal migration without assuming already-resumed writers are zero."""
         import writer_cut_migration as migration
@@ -622,9 +693,12 @@ class WriterCut:
         if not self.migration['finished']:
             raise RecoveryRequired('migration is not terminal')
         state, pod = migration.observe(self, self.migration, allow_removed=True)
-        receipt = migration.sessions(self, state, pod)
-        if receipt['attributed_sessions']:
-            raise RecoveryRequired('terminal migration sessions remain')
+        if self._has_resumed_effect():
+            self._resumed_sessions()
+        else:
+            receipt = migration.sessions(self, state, pod)
+            if receipt['attributed_sessions']:
+                raise RecoveryRequired('terminal migration sessions remain')
         after, next_pod = migration.observe(self, self.migration, allow_removed=True)
         if state != after or pod != next_pod:
             raise RecoveryRequired('migration changed before writer resume')
@@ -842,6 +916,8 @@ class WriterCut:
         try:
             if not self.drained or not isinstance(targets, list) or len(targets) != len(self.admission['controllers']):
                 raise RecoveryRequired('current target admission required')
+            if (self.migration is not None or self.migration_history) and self.resume_inventory is None:
+                raise RecoveryRequired('qualified resume inventory required')
             if self.migration is not None:
                 self.verify_migration_running()
                 if not self.migration['finished']: raise RecoveryRequired('migration is not terminal')

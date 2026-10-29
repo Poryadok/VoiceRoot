@@ -63,6 +63,30 @@ effect changes a spec, the image phase must retain that bound input and verify
 its own per-workload successor plus the unchanged cut/config journal and ledger;
 the pre-image live check no longer describes that changed workload.
 
+For the fixed Auth and Realtime migration producers, bind their authenticated
+source plan with `bind_migration(kind, phase, source_root)` before the Job
+create. The producer records pending before POST and the accepted Job UID after
+POST before calling `verify_migration_running()`. The cut checks source-owned
+Job and Pod validators, the unchanged unrelated Job inventory, pinned node and
+scoped session observation. `finish_migration()` requires the source terminal
+receipt, a Complete Job, its original successful Pod and zero migration
+sessions. Auth cleanup is accepted only after the producer's exact UID removal
+receipts and absence checks. A lost response remains uncertain and is not replayed.
+The existing cooperative fence and trusted Kubernetes admission authorize the
+POST; later IP/application-name matching correlates sessions and does not prove
+cryptographic peer identity or provide atomic revocation. Unknown or ambiguous
+network attribution holds the operation.
+
+Before restoring writers after a registered migration, bind the authenticated
+inventory via `bind_resume_inventory(inventory_phase, token)`. The token remains
+in memory; only the receipt digest enters the protected journal and ledger. The
+fixed resumed-session observer must qualify source routes and owned Pod identities:
+it is preflighted before any resume CAS, and after the first CAS it can accept
+only sessions belonging to completed, verified resume effects. Missing observer
+or source evidence holds before mutation. `current_resumed_proof()` returns
+private exact completed controller receipts for that observer, never the pending
+effect currently being submitted.
+
 After migrations, call `resume(targets)` with the separately admitted current
 target objects, not the old objects. The target UID/generation/full spec must match,
 targets and predecessor Pods must be retired, and the CAS restores only each
