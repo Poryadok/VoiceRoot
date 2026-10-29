@@ -465,6 +465,102 @@ def load_live_completed(session):
     return copy.deepcopy(receipt)
 
 
+def validate_historical_live_completed(operation):
+    """Validate the original protected PASS and native effects without a paused read."""
+    import resource_claim
+    from types import SimpleNamespace
+    if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
+        raise Blocked('space_live_history_invalid')
+    qualified=owner.validate_historical_capture(operation)
+    rollout=owner._read(owner.guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20)
+    binding=resource_claim.historical_binding(rollout)
+    root=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
+    base=root/'space-live';plan=owner._read(base/'plan.json');receipt=owner._read(base/'complete.json')
+    archive=owner._read(root/'archive-record.json');catalog=owner._read(root/'catalog.json');metadata=owner._read(root/'metadata.json')
+    tool_record=owner._read(root/'space-tool.json');tool=tool_record['authenticated_publication']['publication']
+    offnode=owner._read(root/'offnode-restore.json');rehearsal=offnode['proof']['native_space']
+    role=metadata['source']['catalog']['space_db']['database_owner']
+    original={'engine':catalog['engine'],'server_start':catalog['server_start'],'database_name':'space_db',
+        'database_oid':catalog['databases']['space_db'],'database_owner':role,'schema_owner':role,'installer_role':role}
+    authority={'schema':'voice-staging-space-native-authority-v1','operation':operation,
+        'preservation_sha256':owner.digest(qualified),'tool':tool,'rehearsal':rehearsal,'original':original}
+    data_session=SimpleNamespace(operation=operation,context=binding['context'])
+    docs=_live_documents(data_session,tool,plan['node'],plan['documents']['pvc']['spec']['storageClassName'],archive['binding']['snapshot_id'])
+    if (plan.get('schema')!='voice-staging-space-live-plan-v1' or plan.get('operation')!=operation
+        or plan.get('binding')!=binding or plan.get('authority_sha256')!=owner.digest(authority)
+        or plan.get('archive_sha256')!=qualified['archive_sha256'] or plan.get('namespace_uid')!=qualified['namespace_uid']
+        or plan.get('documents')!=docs or plan.get('tool_platform_digest')!=tool['platform_digest']
+        or plan.get('tool_config_digest')!=tool['config_digest'] or tool.get('source_sha')!=binding['context']['commit']
+        or owner.digest(catalog)!=archive['catalog_ref']['record_sha256']
+        or owner.digest(metadata)!=archive['metadata_ref']['record_sha256']
+        or metadata.get('catalog_sha256')!=owner.digest(catalog)
+        or metadata['source']['catalog']['space_db']['schema_owner']!=role
+        or catalog['properties']['space_db']['owner']!=role
+        or offnode['proof'].get('space_native_rehearsal_sha256')!=owner.digest(rehearsal)):
+        raise Blocked('space_live_history_changed')
+    effects=base/'effects';names={'pvc-create.json','bind-create.json','bind-delete.json','upgrade-create.json',
+        'upgrade-delete.json','verify-create.json','verify-delete.json'}
+    if {path.name for path in effects.iterdir()}!=names:raise Blocked('space_live_history_changed')
+    for name in names:
+        effect=owner._read(effects/name);kind,verb=name[:-5].split('-')
+        fields={'schema','operation','effect','plan_sha256','binding','argv','body_sha256','status','response'}
+        if (set(effect)!=fields or effect.get('schema')!='voice-staging-space-live-effect-v1'
+            or effect.get('operation')!=operation or effect.get('effect')!=kind+'-'+verb
+            or effect.get('plan_sha256')!=owner.digest(plan) or effect.get('binding')!=binding
+            or effect.get('status')!='DONE' or not owner.guard.UUID.fullmatch(str(effect.get('response',{}).get('uid','')))):
+            raise Blocked('space_live_history_changed')
+        if verb=='create':
+            if (effect['argv']!=owner.PREFIX+['create','-f','/dev/stdin','-o','json']
+                or effect['body_sha256']!=hashlib.sha256(owner.private._bytes(docs[kind])).hexdigest()
+                or set(effect['response'])!={'uid','resourceVersion','creationTimestamp','spec_sha256'}
+                or not effect['response']['resourceVersion'] or not effect['response']['creationTimestamp']
+                or not re.fullmatch('[a-f0-9]{64}',effect['response']['spec_sha256'])):
+                raise Blocked('space_live_history_changed')
+        else:
+            response=effect['response'];name=docs[kind]['metadata']['name']
+            if set(response)!={'uid','resourceVersion'} or not response['resourceVersion']:
+                raise Blocked('space_live_history_changed')
+            options={'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
+                'preconditions':{'uid':response['uid'],'resourceVersion':response['resourceVersion']}}
+            if (effect['argv']!=owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin']
+                or effect['body_sha256']!=hashlib.sha256(owner.private._bytes(options)).hexdigest()):
+                raise Blocked('space_live_history_changed')
+    closed={kind:_live_closed(data_session,plan,kind) for kind in ('bind','upgrade','verify')}
+    bind=owner._read(base/'bind-result.json')
+    if (set(bind)!={'schema','operation','plan_sha256','job_uid','pod_uid','volume'}
+        or bind.get('schema')!='voice-staging-space-live-bind-result-v1' or bind.get('operation')!=operation
+        or bind.get('plan_sha256')!=owner.digest(plan) or bind.get('job_uid')!=closed['bind']['job_uid']
+        or bind.get('pod_uid')!=closed['bind']['pod_uid']):raise Blocked('space_live_history_changed')
+    upgrade=owner._read(base/'upgrade-result.json');verify=owner._read(base/'verify-result.json')
+    for kind,result in (('upgrade',upgrade),('verify',verify)):
+        if (set(result)!={'schema','operation','kind','plan_sha256','job_uid','pod_uid','pod_before_rv','pod_after_rv','volume','hashes'}
+            or result.get('schema')!='voice-staging-space-live-job-result-v1' or result.get('operation')!=operation
+            or result.get('kind')!=kind or result.get('plan_sha256')!=owner.digest(plan)
+            or not result.get('pod_before_rv') or not result.get('pod_after_rv')
+            or set(result.get('hashes',{}))!={'/evidence/origin.json','/evidence/completed.jsonl'}
+            or any(not isinstance(value,str) or not re.fullmatch('[a-f0-9]{64}',value) for value in result['hashes'].values())):
+            raise Blocked('space_live_history_changed')
+    expected={'schema':'voice-staging-space-live-complete-v1','status':'COMPLETE','operation':operation,
+        'plan_sha256':owner.digest(plan),'authority_sha256':plan['authority_sha256'],'volume':closed['verify']['volume'],
+        'upgrade_result_sha256':owner.digest(upgrade),'verify_result_sha256':owner.digest(verify),
+        'upgrade_closed_sha256':owner.digest(closed['upgrade']),'verify_closed_sha256':owner.digest(closed['verify']),
+        'evidence_hashes':copy.deepcopy(verify['hashes'])}
+    if (receipt!=expected or rollout.get('native_space_migration')!=receipt
+        or [event for event in rollout.get('events',[]) if event.get('kind')=='native_space_migration_complete']
+            !=[{'kind':'native_space_migration_complete','receipt_sha256':owner.digest(receipt)}]
+        or upgrade.get('job_uid')!=closed['upgrade']['job_uid'] or upgrade.get('pod_uid')!=closed['upgrade']['pod_uid']
+        or verify.get('job_uid')!=closed['verify']['job_uid'] or verify.get('pod_uid')!=closed['verify']['pod_uid']
+        or upgrade.get('hashes')!=verify.get('hashes')
+        or receipt['volume'].get('pvc_uid')!=owner._read(effects/'pvc-create.json')['response']['uid']
+        or receipt['volume'].get('pvc_uid')==plan['postgres_pvc_uid']
+        or receipt['volume'].get('pv_uid')==plan['postgres_pv_uid']
+        or any(any(result['volume'][key]!=receipt['volume'][key] for key in ('pvc_uid','pv_uid','pv_name'))
+               for result in (bind,upgrade,verify))
+        or any(any(closed[kind]['volume'][key]!=receipt['volume'][key] for key in ('pvc_uid','pv_uid','pv_name'))
+               for kind in ('bind','upgrade','verify'))):raise Blocked('space_live_history_changed')
+    return copy.deepcopy(receipt)
+
+
 def _identity(session,kube):
     namespace,before=realtime_bootstrap.engine_snapshot(kube)
     value=pg._query(session,'space_db',IDENTITY_SQL,'space-inspect-identity')

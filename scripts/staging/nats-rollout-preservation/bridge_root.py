@@ -177,11 +177,16 @@ class Actions:
     def recover(self,request):
         if request['action']=='status':return self.execute(request)
         operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
+        session=getattr(self,'tt_session',None)
+        if (request['action']=='prepare' and session is not None and operation==session.operation
+            and session.check().get('phase')=='cohort-preservation'):
+            import staging_cohort_preservation
+            return staging_cohort_preservation.prepared_result(session)
         try:base,state=self.state(operation)
         except (OSError,Blocked):return None
         if request['action']=='authorize':
             import migrations
-            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'),state=state)
         if request['action']=='resume-cipher-upload':
             import preserved_upload
             _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
@@ -316,7 +321,16 @@ class Actions:
     def _prepare(self,request,previous=None,repair=None,*,cohort_ref=None):
         import migrations
         if cohort_ref is None:
-            migrations.require_preserving_admission(request.get('mode'))
+            cohort_start=(request.get('mode') in ('full','app-only') and previous is None and repair is None
+                          and request.get('provisional_staging') is not True)
+            if cohort_start:
+                import commands,resource_claim
+                session=getattr(self,'tt_session',None)
+                if (type(session) is not resource_claim.Session or commands.authority_guard!=session.check
+                    or session.operation!=request.get('nonce','')[:12]
+                    or session.check().get('phase')!='prepare' or session.check().get('target_sha256') is not None):
+                    raise Blocked('staging_migration_preservation_authority_missing')
+            if not cohort_start:migrations.require_preserving_admission(request.get('mode'))
             if repair is None:self._idle()
             else:self._idle(admitted_parent=repair['operation'])
             operation=request['nonce'][:12]
@@ -332,6 +346,9 @@ class Actions:
             if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
                 if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
                 record_source_authority(self.tt_session,approved,execution)
+            if cohort_start:
+                import staging_cohort_preservation
+                return staging_cohort_preservation.prepare(self,request,approved,execution,workspace)
         else:
             import staging_cohort_preservation
             if previous is not None or repair is not None or request.get('provisional_staging') is True:
@@ -696,10 +713,31 @@ class Actions:
         return preserved_upload.result(base,state,record)
 
     def execute(self,request):
+        if request['action']=='status':
+            session=getattr(self,'tt_session',None)
+            if (session is not None and request.get('operation')==session.operation
+                and session.check().get('phase')=='cohort-preservation'):
+                import staging_cohort_preservation
+                return staging_cohort_preservation.prepared_result(session)
+        if request['action']=='authorize':
+            session=getattr(self,'tt_session',None)
+            if session is not None and session.check().get('phase')=='cohort-preservation':
+                import staging_cohort_preservation
+                if request.get('operation')!=session.operation:raise Blocked('cohort_continuation_invalid')
+                qualified=staging_cohort_preservation.qualify_offnode(self,request)
+                loaded=staging_cohort_preservation.load_prepared(session)
+                continuation={**request,**loaded['request']}
+                state=self._prepare(continuation,cohort_ref=qualified)
+                base=root_cli.operation_path(str(guard.ROOT/('rollout-'+session.operation)))
+                transaction.authorize(Kube(),base,state,state['cut']['manifest']['archive_sha256'],
+                    state['cut']['manifest_sha256'],state['contract'])
+                gid=grp.getgrnam('pmd').gr_gid
+                for name in ('apply-authorization.json','apply-manifests.json'):os.chown(base/name,0,gid);(base/name).chmod(0o440)
+                return summary(state)|{'authorization':str(base/'apply-authorization.json')}
         if request['action']=='authorize-expired-native':
             import migrations
             _,state=self.state(request['operation'])
-            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'),state=state)
         expired_actions={'prepare-expired-native':self._prepare_expired_native,
             'authorize-expired-native':self._authorize_expired_native,'finish-expired-native':self._finish_expired_native,
             'prepare-expired-finish':self._prepare_expired_finish,'authorize-expired-finish':self._authorize_expired_finish}
@@ -735,7 +773,7 @@ class Actions:
         if request['action']=='status':return summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
             import migrations
-            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'),state=state)
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             upload_record=None

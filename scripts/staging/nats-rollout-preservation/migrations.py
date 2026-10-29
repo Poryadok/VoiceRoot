@@ -14,10 +14,21 @@ DATABASES=('bot','story','moderation','subscription','user','search','social','c
 LEGACY_DSN=('bot','story','moderation','subscription','search')
 CREATE_PROJECTION="jsonpath-as-json={.metadata['name','uid']}"
 
-def require_preserving_admission(mode, plan=None):
-    """Hold migrations until the protected all-store preservation producer is wired."""
-    if mode in ('full', 'app-only') or plan:
+def require_preserving_admission(mode, plan=None, *, state=None):
+    """Require the actual target-bound Session and its preserved cohort receipt."""
+    if mode not in ('full','app-only') and not plan:return None
+    import commands,resource_claim,staging_cohort_preservation,transaction
+    session=getattr(commands.authority_guard,'__self__',None)
+    if (type(session) is not resource_claim.Session or commands.authority_guard!=session.check
+        or type(state) is not dict or state.get('operation')!=session.operation
+        or type(state.get('target')) is not dict or state['target'].get('mode')!=mode
+        or plan!=state.get('migrations') or transaction.canonical(plan)!=state['target'].get('migration_sha256')):
         raise Blocked('staging_migration_preservation_authority_missing')
+    row=session.check()
+    if row.get('phase')!='prepare' or row.get('target_sha256')!=transaction.canonical(state['target']):
+        raise Blocked('staging_migration_preservation_authority_missing')
+    session.require_binding(state.get('resource_fence'))
+    return staging_cohort_preservation.load_qualified(session,rollout_target=state['target'])
 
 def validate_plan(plan,mode):
     if mode not in ('full','app-only','images-only') or not isinstance(plan,list) or len(plan)>len(DATABASES)+1:
@@ -122,8 +133,8 @@ def legacy_credentials(kube,plan,operation,secret_metadata):
             'metadata':{'name':'voice-rollout-'+operation+'-database-urls','namespace':guard.NS,
                         'labels':{'voice-rollout-operation':operation}},'data':data}
 
-def execute(kube,stage,plan,mode,secret_metadata,journal):
-    require_preserving_admission(mode,plan)
+def execute(kube,stage,plan,mode,secret_metadata,journal,*,state=None):
+    require_preserving_admission(mode,plan,state=state)
     if preflight(kube,plan,mode)!=secret_metadata:raise Blocked('rollout_database_secret_changed')
     completed=[]
     copied=legacy_credentials(kube,plan,stage.operation,secret_metadata)
@@ -136,9 +147,18 @@ def execute(kube,stage,plan,mode,secret_metadata,journal):
             raise Blocked('rollout_migration_secret_create_invalid')
         journal({'kind':'migration_authority_copy_created','name':result[0],'uid':result[1]})
     compiled=documents(plan,stage.operation)
-    for cm,job in zip(compiled[::2],compiled[1::2]):
+    for row,cm,job in zip(plan,compiled[::2],compiled[1::2]):
         stage.verify_final_storage()
+        require_preserving_admission(mode,plan,state=state)
         if kube.secret_meta('voice-app-secrets')!={k:secret_metadata[k] for k in ('uid','resourceVersion')}:raise Blocked('rollout_database_secret_changed')
+        if row['database']=='space':
+            import commands,staging_space_native
+            session=getattr(commands.authority_guard,'__self__',None)
+            receipt=staging_space_native.execute_live(session)
+            if receipt!=staging_space_native.load_live_completed(session):raise Blocked('space_live_receipt_changed')
+            state['native_space_migration']=receipt
+            journal({'kind':'native_space_migration_complete','receipt_sha256':__import__('transaction').canonical(receipt)})
+            continue
         # create, never apply/delete: another operation's same-name resources
         # cannot be adopted or overwritten, including a failed old Job.
         identities=[]

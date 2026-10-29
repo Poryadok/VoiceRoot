@@ -610,7 +610,7 @@ def rollback_gis_first_install(kube,base,state,journal):
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
-    migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
+    migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'),state=state)
     if state.get('gis_first_install') is not None:
         import gis_first_install as gis
         gis.validate_normalized_binding(state['target'],state['gis_first_install'])
@@ -720,7 +720,7 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
             state['active_contract']=active;save(Path(base)/'checkpoint.json',state)
         if not renderer_recovery:
             state['migration_jobs']=migrations.execute(kube,stage,state['migrations'],state['target']['mode'],
-                                                        state['migration_secret_metadata'],journal)
+                                                        state['migration_secret_metadata'],journal,state=state)
             if migrations.bot_migration.required(state['migrations']):
                 after=migrations.preflight(kube,state['migrations'],state['target']['mode'])
                 expected=copy.deepcopy(state['migration_secret_metadata'])
