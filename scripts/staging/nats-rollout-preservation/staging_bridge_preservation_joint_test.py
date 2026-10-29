@@ -249,7 +249,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     'spec':{'volumeName':'fixture-postgres-pv'},'status':{'phase':'Bound'}},
    ('persistentvolume','fixture-postgres-pv'):{'metadata':{'uid':pg_volume,'resourceVersion':'1'},
     'spec':{'claimRef':{'uid':pg_claim,'name':'pgdata-voice-postgres-0','namespace':'voice-staging'}}}}
-  nats_secrets={}
+  nats_secrets={};bootstrap_configmaps={}
   if 'VOICE_TEST_NATS_INPUTS' in os.environ:
    import actor_root, bootstrap_auth, bootstrap_selection
    nats=Path(os.environ['VOICE_TEST_NATS_INPUTS']);config=(nats/'server.conf').read_text()
@@ -265,6 +265,16 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    name='voice-nats-service-credentials-r20260930a4'
    nats_secrets[name]=secret(name,{role+'.creds':(nats/'inputs'/(role+'.creds')).read_bytes()
     for role in ('social','realtime','space','messaging','story')})
+   deployed=json.loads((code/'nats-known-baseline'/'deployed-contract.json').read_bytes())
+   for item in deployed['scripts']:
+    raw=(workspace/'scripts/staging/nats-known-baseline/testdata/deployed-bootstrap-20261004'/
+     (item['part']+'-bootstrap.sh')).read_bytes()
+    if len(raw)!=item['bytes'] or hashlib.sha256(raw).hexdigest()!=item['sha256']:
+     raise AssertionError('deployed bootstrap fixture source changed')
+    name='voice-nats-'+item['part']+'-bootstrap'
+    bootstrap_configmaps[name]={'apiVersion':'v1','kind':'ConfigMap',
+     'metadata':{'name':name,'namespace':'voice-staging','uid':item['configMapUID'],
+      'resourceVersion':item['configMapResourceVersion']},'data':{'bootstrap.sh':raw.decode()}}
    synthetic_account_sha=hashlib.sha256(account.encode()).hexdigest()
    # Explicit external synthetic identity seam; actual JWT/ACL/auth checks run.
    actor_root.ACCOUNT_SHA=synthetic_account_sha
@@ -273,6 +283,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   def get(kind,name):
    session.check()
    if kind.lower()=='secret' and name in nats_secrets:return copy.deepcopy(nats_secrets[name])
+   if kind.lower()=='configmap' and name in bootstrap_configmaps:return copy.deepcopy(bootstrap_configmaps[name])
    if (kind.lower(),name) in pg_objects:return copy.deepcopy(pg_objects[(kind.lower(),name)])
    if (kind,name)==('node','pmdebook'):
     if 'VOICE_TEST_OCI' not in os.environ:raise KeyError((kind,name))
