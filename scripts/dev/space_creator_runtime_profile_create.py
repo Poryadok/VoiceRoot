@@ -25,6 +25,7 @@ import realtime_p3_root_export as root_export
 import resource_fencing
 import space_creator_runtime_profile_issuer_packet as packet
 import space_creator_runtime_profile_issuer_source as source
+import space_creator_runtime_profile_material as material
 import space_p3_issuer_preflight as preflight
 import space_p3_issuer_preflight_metadata_root as metadata
 import space_native_tool_identity as native
@@ -35,6 +36,7 @@ STEP='space-creator-material-create'
 LEDGER='space_creator_material_create'
 EFFECTS='space_creator_material_effects'
 FRAME=b'SPACE-CREATOR-PROFILE\n'
+ACK=b'SPACE-CREATOR-ACCEPTED\n'
 
 
 class CreateError(RuntimeError): pass
@@ -53,8 +55,8 @@ def _create(obj,dry):
     return json.loads(private._run(args,json.dumps(obj,separators=(',',':')).encode('ascii')))
 
 
-def _receive(listener):
-    """Receive one root-only seqpacket and sealed anonymous packet FD."""
+def _receive(listener,phase):
+    """Accept one root packet only after its exact protected crypto checks."""
     fds=[]
     try:
         listener.settimeout(300); connection,_=listener.accept()
@@ -71,17 +73,22 @@ def _receive(listener):
                 if len(payload)%numbers.itemsize: invalid=True
                 numbers.frombytes(payload[:len(payload)-len(payload)%numbers.itemsize]); fds.extend(numbers)
             if invalid or flags & (socket.MSG_TRUNC|socket.MSG_CTRUNC) or data!=FRAME or len(ancillary)!=1 or len(fds)!=1 or root_export._start_ticks(pid)!=start: raise ValueError()
-        fd=fds[0]; info=os.fstat(fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=0 or stat.S_IMODE(info.st_mode)!=0o600 or
-                not 0<info.st_size<=channel.MAX_PACKET or fcntl.fcntl(fd,fcntl.F_GET_SEALS)&channel.REQUIRED_SEALS!=channel.REQUIRED_SEALS): raise ValueError()
-        raw=bytearray(); offset=0
-        while offset<info.st_size:
-            value=os.pread(fd,min(65536,info.st_size-offset),offset)
-            if not value: raise ValueError()
-            raw.extend(value); offset+=len(value)
-        after=os.fstat(fd)
-        if (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns): raise ValueError()
-        return json.loads(raw,object_pairs_hook=channel._unique)
+            fd=fds[0]; info=os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_nlink!=0 or stat.S_IMODE(info.st_mode)!=0o600 or
+                    not 0<info.st_size<=channel.MAX_PACKET or fcntl.fcntl(fd,fcntl.F_GET_SEALS)&channel.REQUIRED_SEALS!=channel.REQUIRED_SEALS): raise ValueError()
+            raw=bytearray(); offset=0
+            while offset<info.st_size:
+                value=os.pread(fd,min(65536,info.st_size-offset),offset)
+                if not value: raise ValueError()
+                raw.extend(value); offset+=len(value)
+            after=os.fstat(fd)
+            if (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns): raise ValueError()
+            envelope=json.loads(raw,object_pairs_hook=channel._unique); phase._check_current()
+            phase.objects=packet.validate(envelope,phase.fence.context['operation_id'],phase.fence.context['commit'],phase.namespace_uid,
+                                          writer_cut.digest(phase.initial),phase.missing,phase.media)
+            phase._distinct_keys(); phase._check_current()
+            if root_export._start_ticks(pid)!=start or connection.send(ACK)!=len(ACK): raise ValueError()
+            return envelope
     finally:
         for fd in fds:
             try:os.close(fd)
@@ -114,6 +121,10 @@ def _values(obj,name):
             obj['metadata'].get('deletionTimestamp') or not isinstance(obj.get('data'),dict) or set(obj['data'])!=metadata.MEMBERS[name]): raise ValueError()
     values={key:base64.b64decode(value,validate=True) for key,value in obj['data'].items()}
     if any(not value or len(value)>131072 for value in values.values()): raise ValueError()
+    if name=='voice-gateway-principal-signing':
+        for key in ('current.pem','next.pem'):material._pem(values[key],b'PRIVATE KEY')
+    else:
+        material._pem(values['tls.crt'],b'CERTIFICATE'); material._pem(values['tls.key'],b'PRIVATE KEY')
     return values
 
 
@@ -142,14 +153,19 @@ class Session:
         self.listener=self.dirfd=self.inode=self.initial=self.media=self.objects=self.proof=self.envelope=None
         self.completed=False; self.exchanged=False; self.poisoned=False
         self.refs=(journal,fence,client,fence.ledger,package,issuer_preflight); self.custody=native.SpaceNativeToolPhase._custody(journal)
+        self.identity=(copy.deepcopy(fence.context),copy.deepcopy(lock),namespace_uid,self.source_root,token,self.suffix)
 
     def _local(self):
         if (self.poisoned or self.refs!=(self.journal,self.fence,self.client,self.fence.ledger,self.package,self.preflight) or
                 self.client.journal is not self.journal or self.fence.ledger.client is not self.client or self.journal.poisoned or
+                (self.fence.context,self.lock,self.namespace_uid,self.source_root,self.token,self.suffix)!=self.identity or
+                self.preflight.package is not self.package or self.preflight.fence.context!=self.fence.context or
+                self.preflight.lock!=self.lock or self.preflight.namespace_uid!=self.namespace_uid or
                 self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
                 native.SpaceNativeToolPhase._custody(self.journal)!=self.custody): raise ValueError()
         self.preflight._local()
-        if self.record is not None and self.journal.state['steps'].get(STEP)!=self.record: raise ValueError()
+        if self.record is not None and (self.journal.state['steps'].get(STEP)!=self.record or self.record.get('missing')!=self.missing or
+                self.record.get('issuer_source_sha')!=source.REVIEWED_SOURCE): raise ValueError()
         local={k.removeprefix('space-creator-secret-'):v for k,v in self.journal.state['steps'].items() if k.startswith('space-creator-secret-')}
         if local!=self.effects: raise ValueError()
 
@@ -293,10 +309,7 @@ class Session:
     def finish(self):
         try:
             if not self.exchanged or self.listener is None or self.record.get('status')!='ready': raise ValueError()
-            self._socket(); self._check_current(); self.envelope=_receive(self.listener); self._check_current()
-            self.objects=packet.validate(self.envelope,self.fence.context['operation_id'],self.fence.context['commit'],self.namespace_uid,
-                                         writer_cut.digest(self.initial),self.missing,self.media)
-            self._distinct_keys(); self._check_current()
+            self._socket(); self._check_current(); self.envelope=_receive(self.listener,self); self._check_current()
             for name in self.missing:
                 self._check_current(); self._drained()
                 if _get(name) is not None or not _closed(_create(self.objects[name],True),self.objects[name],False): raise ValueError()
@@ -314,8 +327,11 @@ class Session:
                      'issuer_source_sha':source.REVIEWED_SOURCE,'namespace_uid':self.namespace_uid,
                      'preflight_sha256':writer_cut.digest(self.initial),'objects':copy.deepcopy(self.effects),
                      'scope':'creator-missing-only-secret-create-no-runtime-readiness'}
-            self.proof=receipt; self._write(record=self.record|{'status':'done','receipt':copy.deepcopy(receipt)})
-            self._check_current(); self.completed=True; return copy.deepcopy(receipt)
+            self.proof=copy.deepcopy(receipt); done=self.record|{'status':'done','receipt':copy.deepcopy(receipt)}
+            effects=copy.deepcopy(self.effects); self._write(record=done); self._check_current(); schema._fence(self._local)
+            if (self.proof!=receipt or self.record!=done or self.effects!=effects or
+                    self.journal.state['steps'].get(STEP)!=done): raise schema.GuardLost('Creator terminal record changed')
+            self.completed=True; return copy.deepcopy(receipt)
         except BaseException as error:
             if self.pending and not self.completed:self._uncertain()
             if isinstance(error,schema.GuardLost):raise
