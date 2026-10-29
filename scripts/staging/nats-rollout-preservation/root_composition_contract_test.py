@@ -161,7 +161,7 @@ class RootCompositionContract(unittest.TestCase):
             installed = root / 'installed'
             (installed / 'sources').mkdir(parents=True, exist_ok=True)
             kube, params = source_plan_test.SourceTests().canonical_fixture('app-only')
-            ordinary = ordinary_fault not in (None,'source_tamper','helper_tamper','binary_tamper','binary_missing')
+            ordinary = ordinary_fault not in (None,'source_tamper','helper_tamper','binary_tamper','binary_missing','binary_wrong_pin')
             if c2_mode:
                 for index, obj in enumerate(kube.objects.values()):
                     obj.setdefault('metadata', {})['uid'] = str(uuid.UUID(int=index + 1))
@@ -235,6 +235,11 @@ class RootCompositionContract(unittest.TestCase):
                 kube.run = normalized_apply
             code = installed / 'code'
             binding = root_composition_fixture.helper_binding(source, code)
+            if ordinary_fault=='binary_wrong_pin':
+                path=code/'nats-known-baseline/kernel';path.write_bytes(b'counterfeit kernel')
+                binding['nats-known-baseline/kernel']=hashlib.sha256(path.read_bytes()).hexdigest()
+                from root_main import save
+                save(code/'capture-manifest.json',binding)
             contract = {'scripts': []}
             for part in ('realtime', 'notification', 'search', 'analytics-chat'):
                 raw = (source / ('deploy/templates/nats-' + part + '-bootstrap.yaml')).read_bytes().split(b'---')[0]
@@ -409,11 +414,12 @@ class RootCompositionContract(unittest.TestCase):
                     stack.enter_context(patch.object(c2, '_observe', return_value=copy.deepcopy(live)))
                     stack.enter_context(patch.object(stage_runtime, 'Kube', return_value=kube))
                 with resource_claim.command_scope(session.check):
-                    if ordinary_fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing'):
+                    if ordinary_fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing','binary_wrong_pin'):
                         reason={'source_tamper':'staging_prerequisites_source_changed',
                                 'helper_tamper':'rollout_captured_code_changed',
                                 'binary_tamper':'rollout_captured_code_changed',
-                                'binary_missing':'rollout_code_custody_invalid'}[ordinary_fault]
+                                'binary_missing':'rollout_code_custody_invalid',
+                                'binary_wrong_pin':'staging_prerequisites_helper_changed'}[ordinary_fault]
                         with self.assertRaisesRegex(bridge_root.Blocked,reason):actions._prepare(request)
                         c1.assert_not_called();gis_execute.assert_not_called();captures.assert_not_called()
                         self.assertEqual(session.check()['phase'],'prepare')
@@ -493,7 +499,7 @@ class RootCompositionContract(unittest.TestCase):
         self._exercise_bridge()
 
     def test_source_and_helper_drift_are_rejected_before_effects(self):
-        for fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing'):
+        for fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing','binary_wrong_pin'):
             with self.subTest(fault=fault):self._exercise_bridge(fault)
 
     def test_bridge_rejects_foreign_candidate_before_any_prerequisite_effect(self):
