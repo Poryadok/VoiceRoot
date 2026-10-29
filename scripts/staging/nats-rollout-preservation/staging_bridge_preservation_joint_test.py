@@ -158,20 +158,21 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import bridge_root, commands, guard, resource_claim, stage_runtime, staging_prerequisites as parent
 import staging_cohort_preservation as producer
-import compiler, yaml
+import compiler, source_authority, yaml
 sys.path.append(sys.argv[3])
 from staging_bridge_preservation_joint_test import stage_cluster_fixture
 root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
 binding=json.loads((code/'capture-manifest.json').read_bytes()); pins=json.loads(sys.argv[2])
 c=dict(project='voice',resource='STAGING',actor='operator',claim='11111111-1111-4111-8111-111111111111',generation=7,
  window='22222222-2222-4222-8222-222222222222',revision=12,operation_id='stg-run-17',commit='c'*40,
- images={'voice-user/user':'registry/user@sha256:'+'c'*64})
+ images={'voice-gameintegration/gameintegration':source_authority.REGISTRY+'/gameintegration@sha256:'+'c'*64})
 card=dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['actor'],claim=c['claim'],
  generation=c['generation'],window=c['window'],revision=c['revision'],operation=2,
  candidate=dict(state='known',commit=c['commit'],images=copy.deepcopy(c['images'])),
  observed=dict(state='known',claim=c['claim'],window=c['window'],operation=1,
  images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
-approved={'source_sha':c['commit'],'source_files':{p.relative_to(workspace).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+approved={'source_sha':c['commit'],'images':{'gameintegration':c['images']['voice-gameintegration/gameintegration']},
+ 'source_files':{p.relative_to(workspace).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
  for p in workspace.rglob('*') if p.is_file()}}
 execution={'head_sha':c['commit']}; session=resource_claim.Session(c,'a'*12,resource_claim.digest(binding),
  lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
