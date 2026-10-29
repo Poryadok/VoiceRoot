@@ -341,6 +341,37 @@ class CutEffectTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_space_identity_rechecks_original_oid_owner_and_schema(self):
+        import staging_cohort_preservation_pg as pg
+        from stage_runtime import Kube
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                session,_=CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+                with resource_claim.command_scope(session.check):
+                    plan=preservation.load_plan(session);base=preservation._base(session)
+                    catalog={'schema':'voice-staging-cohort-catalog-v1','operation':session.operation,
+                        'plan_sha256':preservation.digest(plan),'engine':{'system_identifier':'123'},
+                        'server_start':'start','databases':{'space_db':42},'properties':{'space_db':{'owner':'original_owner'}}}
+                    metadata={'schema':'voice-staging-cohort-metadata-v1','operation':session.operation,
+                        'plan_sha256':preservation.digest(plan),'catalog_sha256':preservation.digest(catalog),
+                        'source':{'catalog':{'space_db':{'database_owner':'original_owner','schema_owner':'original_owner'}}}}
+                    preservation._write(base/'catalog.json',catalog);preservation._write(base/'metadata.json',metadata)
+                    preservation._write(base/'archive-record.json',{'catalog_ref':preservation._reference(session,catalog),
+                        'metadata_ref':preservation._reference(session,metadata)})
+                    engine={'engine':catalog['engine'],'server_start':'start'}
+                    current={'database_name':'space_db','database_oid':42,'database_owner':'original_owner',
+                        'schema_owner':'original_owner','installer_role':'original_owner'}
+                    method=getattr(pg,'guard_space_identity',None);self.assertTrue(callable(method))
+                    with patch.object(pg,'guard_identity',return_value=engine) as physical,patch.object(Kube,'_run',return_value=current) as query:
+                        self.assertEqual(method(session),{**engine,**current})
+                        self.assertEqual(query.call_args.args[0],pg.SPACE_IDENTITY_ARGS)
+                        self.assertEqual(physical.call_count,2)
+                        for key,value in (('database_oid',43),('database_owner','foreign'),('schema_owner','foreign'),('installer_role','foreign')):
+                            with self.subTest(key=key):
+                                query.return_value={**current,key:value}
+                                with self.assertRaisesRegex(Exception,'cohort_space_identity_changed'):method(session)
+
     def test_guard_postgres_uses_exact_read_and_rejects_engine_drift(self):
         import realtime_bootstrap
         import staging_cohort_preservation_pg as pg
