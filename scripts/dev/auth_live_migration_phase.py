@@ -19,6 +19,7 @@ import cohort_backup_phases
 import media_backup_phase
 import media_operation_journal
 import resource_fencing
+import full_cohort_package_phase as package_phase
 from frontend_runtime_executor import KubectlTransport
 
 
@@ -34,10 +35,43 @@ def _phase_identity(phase):
             or p.fence.ledger.client is not p.client): raise ValueError()
 
 
+def bind_package(phase, package, token):
+    """Bind a source-owned package phase for repeated guarded verification."""
+    try:
+        _phase_identity(phase)
+        if (type(package) is not package_phase.PackagePhase or not isinstance(token,str) or not token
+                or hasattr(phase,'_auth_package_binding')): raise ValueError()
+        phase._auth_package_binding=(package,token)
+        try: _package_authority(phase)
+        except BaseException:
+            del phase._auth_package_binding
+            raise
+    except BaseException: raise PhaseError('protected candidate package authority unavailable') from None
+
+
 def _package_authority(phase):
-    # The protected package producer/consumer contract has not yet been wired.
-    # An image reference in the resource card alone does not prove its source.
-    raise PhaseError('protected candidate package authority unavailable')
+    try:
+        _phase_identity(phase); p=phase.phases
+        package,token=phase._auth_package_binding
+        if (type(package) is not package_phase.PackagePhase or not isinstance(token,str) or not token
+                or package.fence.context!=p.fence.context or package.namespace_uid!=p.namespace_uid
+                or package.lock['metadata']['uid']!=p.lock['metadata']['uid']
+                or package.lock['data']['resource_operation']!=p.fence.context['operation_id']
+                or p.lock['data']['resource_operation']!=p.fence.context['operation_id']): raise ValueError()
+        _,left=p.fence.ledger.read(); _,right=package.fence.ledger.read()
+        if (not isinstance(left,tuple) or not isinstance(right,tuple) or len(left)!=2 or len(right)!=2
+                or left[0]!=right[0] or not left[0]): raise ValueError()
+        receipt=package.verify_current(token)
+        if (receipt.get('source_sha')!=p.fence.context['commit'] or receipt.get('operation_id')!=p.fence.context['operation_id']
+                or receipt.get('images')!=p.fence.context['images']
+                or receipt.get('platform_digests',{}).get('voice-auth/auth')!=p.intent['auth_live_candidate']['platform_digest']):
+            raise ValueError()
+        if 'auth_live_tool' in p.intent:
+            tool=p.intent['auth_live_tool']; nodes=receipt.get('nodes',[])
+            if not any(n.get('name')==tool['node_name'] and n.get('uid')==tool['node_uid']
+                       and n.get('architecture')=='amd64' for n in nodes): raise ValueError()
+        return receipt
+    except BaseException: raise PhaseError('protected candidate package authority unavailable') from None
 
 
 def observe_node(client, engine, intent, guard):

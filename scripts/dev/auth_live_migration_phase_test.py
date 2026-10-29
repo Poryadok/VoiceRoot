@@ -148,6 +148,25 @@ class AuthMigrationContract(unittest.TestCase):
         phase=SimpleNamespace(phases=SimpleNamespace())
         with self.assertRaises(live.PhaseError): live.no_op_c2(phase,lambda:None,'.','actor','token',{})
 
+    def test_package_authority_requires_same_fence_and_exact_image_platform(self):
+        image='ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64; platform='sha256:'+'b'*64
+        context={'commit':'c'*40,'operation_id':'media-c2-'+'d'*32,'images':{'voice-auth/auth':image}}
+        lock={'metadata':{'uid':'lock'},'data':{'resource_operation':context['operation_id']}}
+        ledger=SimpleNamespace(read=lambda:({},('ledger-uid','1')))
+        p=SimpleNamespace(fence=SimpleNamespace(context=context,ledger=ledger),lock=lock,namespace_uid='ns',
+                          intent={'auth_live_candidate':{'platform_digest':platform}})
+        phase=SimpleNamespace(phases=p)
+        class Package:
+            def __init__(self): self.fence=SimpleNamespace(context=copy.deepcopy(context),ledger=ledger); self.lock=copy.deepcopy(lock); self.namespace_uid='ns'
+            def verify_current(self,token): return {'source_sha':context['commit'],'operation_id':context['operation_id'],
+                'images':context['images'],'platform_digests':{'voice-auth/auth':platform}}
+        package=Package()
+        with patch.object(live,'_phase_identity'),patch.object(live.package_phase,'PackagePhase',Package):
+            live.bind_package(phase,package,'fixture-token')
+            self.assertEqual(live._package_authority(phase)['source_sha'],context['commit'])
+            p.intent['auth_live_candidate']['platform_digest']='sha256:'+'e'*64
+            with self.assertRaises(live.PhaseError): live._package_authority(phase)
+
     def test_node_snapshot_requires_exact_pg_pod_node_and_ready_amd64(self):
         pod={'metadata':{'uid':'pg-id','name':'voice-postgres-0','namespace':'voice-dev'},'spec':{'nodeName':'node-one'}}
         node={'metadata':{'name':'node-one','uid':'node-id','resourceVersion':'5'},'spec':{},'status':{
