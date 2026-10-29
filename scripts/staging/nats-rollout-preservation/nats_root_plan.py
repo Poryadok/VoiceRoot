@@ -118,7 +118,8 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
     notification=Path(source)/'deploy/templates/nats-notification-bootstrap.yaml'
     v5_actual=dict(actual)
     if not notification.is_symlink() and notification.is_file():v5_actual['notification']=hashlib.sha256(notification.read_bytes()).hexdigest()
-    if v5_actual==V6_TARGET_FILES:version=V6_SCHEMA
+    if v5_actual==V7_TARGET_FILES:version=V7_SCHEMA
+    elif v5_actual==V6_TARGET_FILES:version=V6_SCHEMA
     elif v5_actual==V5_TARGET_FILES:version=SCHEMA
     elif actual==TARGET_FILES:version=V4_SCHEMA
     else:fail()

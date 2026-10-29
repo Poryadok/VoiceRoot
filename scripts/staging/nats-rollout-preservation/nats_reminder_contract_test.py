@@ -2,6 +2,7 @@
 import copy
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 import nats_root_plan_test as fixtures
 import nats_contract_plan as plan
@@ -11,7 +12,7 @@ from controller import Blocked
 
 class ReminderContractTests(unittest.TestCase):
     def setUp(self):
-        fixture=fixtures.CanonicalBootstrapTests(methodName='runTest');fixture.setUp();self.addCleanup(fixture.doCleanups)
+        fixture=fixtures.CanonicalBootstrapTests(methodName='runTest');fixture.setUp();self.addCleanup(fixture.doCleanups);self.fixture=fixture
         self.source=fixture.source;self.streams=fixture.streams;self.fresh_auth=fixture.fresh_auth;self.enrollment=fixture.enrollment
         source=Path(__file__).resolve().parents[3]/'deploy/templates/nats-realtime-bootstrap.yaml'
         (self.source/'deploy/templates/nats-realtime-bootstrap.yaml').write_bytes(source.read_bytes())
@@ -41,6 +42,27 @@ class ReminderContractTests(unittest.TestCase):
         self.assertEqual(len(root._validated_normalized_consumers(auth,self.enrollment['auth_proof'],version=plan.V7_SCHEMA)),5)
         auth['normalized_reminder_stream']['subjects']=['foreign']
         with self.assertRaises(Blocked):root._validated_normalized_consumers(auth,self.enrollment['auth_proof'],version=plan.V7_SCHEMA)
+
+    def test_root_selector_requires_exact_reviewed_four_file_tuple(self):
+        import bootstrap_selection,yaml
+        auth=copy.deepcopy(self.fresh_auth);auth['schema']='voice-bootstrap-auth-v6'
+        stream,config=plan.V7_DECLARATIONS[-1]
+        auth['normalized_consumers'].append({'stream':stream,'durable':config['durable_name'],'config':copy.deepcopy(config)})
+        auth['normalized_consumers_sha256']=plan.digest(auth['normalized_consumers'])
+        auth['normalized_reminder_stream']={'name':stream,'subjects':[plan.REMINDER_SUBJECT],'storage':'file',
+            'retention':'limits','max_age':604800000000000,'duplicate_window':120000000000}
+        auth['normalized_reminder_stream_sha256']=plan.digest(auth['normalized_reminder_stream'])
+        fixture=self.fixture
+        with patch.object(root,'monitor',return_value=fixture.tree),patch.object(root,'census',return_value={'fixture_census':True}), \
+             patch.object(bootstrap_selection,'ACCOUNT_SHA',fixture.sha),patch('bootstrap_auth.prove',return_value=auth) as prove:
+            result=root.preflight(fixture.kube,self.source,fixture.enrollment,fixture.contract,yaml.safe_load)
+            self.assertEqual(result['plan']['schema'],plan.V7_SCHEMA)
+            self.assertEqual(result['binding']['live_auth_sha256'],plan.digest(auth))
+            self.assertEqual(prove.call_args.kwargs['version'],'voice-bootstrap-auth-v6')
+            prove.reset_mock()
+            path=self.source/'deploy/templates/nats-realtime-bootstrap.yaml';path.write_bytes(path.read_bytes()+b'\n# foreign\n')
+            with self.assertRaises(Blocked):root.preflight(fixture.kube,self.source,fixture.enrollment,fixture.contract,yaml.safe_load)
+            prove.assert_not_called()
 
     def test_reminder_subject_overlap_fails_before_any_intent(self):
         normalized={(stream,config['durable_name']):copy.deepcopy(config)
