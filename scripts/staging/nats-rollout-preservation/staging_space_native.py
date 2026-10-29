@@ -27,9 +27,9 @@ sync -f /evidence
 sha256sum /evidence/origin.json /evidence/completed.jsonl
 '''
 LIVE_VERIFY_SCRIPT='''umask 077
-set -C
-/usr/local/bin/native-migrate -mode verify-legacy24 -migrations-dir /migrations -migrate /usr/local/bin/migrate -prior-evidence /evidence/completed.jsonl -origin-evidence /evidence/origin.json > /tmp/verified.json
-sha256sum /evidence/origin.json /evidence/completed.jsonl /tmp/verified.json
+/usr/local/bin/native-migrate -mode verify-legacy24 -migrations-dir /migrations -migrate /usr/local/bin/migrate -prior-evidence /evidence/completed.jsonl -origin-evidence /evidence/origin.json > /dev/null
+sha256sum /evidence/origin.json /evidence/completed.jsonl
+printf 'verification=ok\\n'
 '''
 LIVE_BIND_SCRIPT='test -w /evidence; exec sleep 300'
 
@@ -56,23 +56,33 @@ def _live_documents(session,tool,node,storage_class,snapshot):
         verify=mode=='verify';probe=mode=='bind';name=claim+'-'+mode
         return {'apiVersion':'batch/v1','kind':'Job','metadata':{'name':name,'namespace':'voice-staging','labels':labels},
             'spec':{'backoffLimit':0,'activeDeadlineSeconds':360,'template':{'metadata':{'labels':labels},'spec':{
-                'nodeName':node,'restartPolicy':'Never','automountServiceAccountToken':False,
-                'securityContext':{'runAsNonRoot':True,'runAsUser':65532,'runAsGroup':65532,'fsGroup':65532},
-                'volumes':[{'name':'evidence','persistentVolumeClaim':{'claimName':claim,'readOnly':verify}},
-                           {'name':'tmp','emptyDir':{}}],
+                'affinity':{'nodeAffinity':{'requiredDuringSchedulingIgnoredDuringExecution':{'nodeSelectorTerms':[
+                    {'matchFields':[{'key':'metadata.name','operator':'In','values':[node]}]}]}}},
+                'restartPolicy':'Never','automountServiceAccountToken':False,
+                'securityContext':{'runAsNonRoot':True,'runAsUser':65532,'runAsGroup':65532},
+                'volumes':[{'name':'evidence','persistentVolumeClaim':{'claimName':claim,'readOnly':verify}}],
                 'containers':[{'name':'native','image':image,'imagePullPolicy':'IfNotPresent',
                     'command':['/bin/sh','-ceu',LIVE_BIND_SCRIPT if probe else LIVE_VERIFY_SCRIPT if verify else LIVE_UPGRADE_SCRIPT,'native-space',owner_id,snapshot],
-                    'env':[] if probe else copy.deepcopy(env),'volumeMounts':[{'name':'evidence','mountPath':'/evidence','readOnly':verify},
-                        {'name':'tmp','mountPath':'/tmp'}],
+                    'env':[] if probe else copy.deepcopy(env),'volumeMounts':[{'name':'evidence','mountPath':'/evidence','readOnly':verify}],
                     'securityContext':{'allowPrivilegeEscalation':False,'readOnlyRootFilesystem':True,'capabilities':{'drop':['ALL']}}}]}}}}
     return {'pvc':pvc,'bind':job('bind'),'upgrade':job('upgrade'),'verify':job('verify')}
 
 
 def _live_context(session):
     """Revalidate protected live authority and derive all execution inputs."""
+    return _live_context_core(session,False)
+
+
+def _live_running_context(session):
+    """Use the fixed postgres-only authority while the native Job may run."""
+    return _live_context_core(session,True)
+
+
+def _live_context_core(session,running):
     row=session.check()
     if row.get('phase')!='prepare' or not row.get('target_sha256'):raise Blocked('space_live_phase_invalid')
-    authority=space.load_native_authority(session);qualified=owner.load_qualified(session)
+    authority=(space.load_native_authority_during_job(session) if running else space.load_native_authority(session))
+    qualified=owner.load_qualified(session)
     archive=owner._read(owner._base(session)/'archive-record.json')
     if owner.digest(archive)!=qualified.get('archive_sha256'):raise Blocked('space_live_source_changed')
     owner.revalidate_paused(session);kube=Kube()
@@ -81,9 +91,14 @@ def _live_context(session):
     pvc=kube.get('persistentvolumeclaim','pgdata-voice-postgres-0')
     config=kube.get('configmap','voice-app-config');secret=kube.get('secret','voice-app-secrets')
     node=pod.get('spec',{}).get('nodeName');storage_class=pvc.get('spec',{}).get('storageClassName')
+    if not isinstance(storage_class,str) or not storage_class:raise Blocked('space_live_source_changed')
+    storage=kube.get('storageclass',storage_class);storage_meta=storage.get('metadata',{})
     if (namespace!=original['engine']['namespace_uid'] or engine['pod']['uid']!=original['engine']['pod_uid']
         or engine['pvc']['uid']!=original['engine']['pvc_uid'] or engine['pv']['uid']!=original['engine']['pv_uid']
         or pvc.get('metadata',{}).get('uid')!=original['engine']['pvc_uid']
+        or storage_meta.get('name')!=storage_class or not storage_meta.get('uid') or not storage_meta.get('resourceVersion')
+        or storage_meta.get('deletionTimestamp') or not isinstance(storage.get('provisioner'),str) or not storage['provisioner']
+        or storage.get('volumeBindingMode','Immediate') not in ('Immediate','WaitForFirstConsumer')
         or config.get('data',{}).get('POSTGRES_USER')!=original['installer_role']
         or not secret.get('data',{}).get('POSTGRES_PASSWORD')):
         raise Blocked('space_live_source_changed')
@@ -95,12 +110,15 @@ def _live_context(session):
             raise Blocked('space_live_source_changed')
     docs=_live_documents(session,authority['tool'],node,storage_class,archive['binding']['snapshot_id'])
     if realtime_bootstrap.engine_snapshot(kube)!=(namespace,engine):raise Blocked('space_live_source_changed')
-    if (space.load_native_authority(session)!=authority or owner.load_qualified(session)!=qualified
+    again=(space.load_native_authority_during_job(session) if running else space.load_native_authority(session))
+    if (again!=authority or owner.load_qualified(session)!=qualified
         or owner._read(owner._base(session)/'archive-record.json')!=archive):raise Blocked('space_live_source_changed')
     session.check()
     return {'schema':'voice-staging-space-live-plan-v1','operation':session.operation,'binding':session.binding(),
         'authority_sha256':owner.digest(authority),'archive_sha256':owner.digest(archive),
-        'namespace_uid':namespace,'postgres_pvc_uid':engine['pvc']['uid'],'postgres_pv_uid':engine['pv']['uid'],
+        'namespace_uid':namespace,'node':node,'storage_class_uid':storage_meta['uid'],
+        'storage_class_sha256':owner.digest(storage),'storage_provisioner':storage['provisioner'],
+        'postgres_pvc_uid':engine['pvc']['uid'],'postgres_pv_uid':engine['pv']['uid'],
         'tool_platform_digest':authority['tool']['platform_digest'],'tool_config_digest':authority['tool']['config_digest'],
         'config_sha256':owner.digest(config),'secret_sha256':owner.digest(secret),'documents':docs}
 
@@ -121,6 +139,12 @@ def prepare_live(session):
 def _live_checked_plan(session):
     plan=owner._read(_live_base(session)/'plan.json')
     if _live_context(session)!=plan:raise Blocked('space_live_source_changed')
+    return plan
+
+
+def _live_checked_running_plan(session):
+    plan=owner._read(_live_base(session)/'plan.json')
+    if _live_running_context(session)!=plan:raise Blocked('space_live_source_changed')
     return plan
 
 
@@ -147,9 +171,16 @@ def _live_volume(session,plan):
         or spec.get('accessModes')!=['ReadWriteOnce'] or spec.get('dataSource') or spec.get('dataSourceRef')
         or not isinstance(volume_name,str) or not volume_name):raise Blocked('space_live_volume_changed')
     pv=kube.get('persistentvolume',volume_name);pm=pv.get('metadata',{});ps=pv.get('spec',{});claim=ps.get('claimRef',{})
+    import datetime
+    try:
+        pv_created=datetime.datetime.fromisoformat(pm['creationTimestamp'].replace('Z','+00:00'))
+        pvc_created=datetime.datetime.fromisoformat(created['response']['creationTimestamp'].replace('Z','+00:00'))
+        if pv_created.tzinfo is None or pvc_created.tzinfo is None or pv_created<pvc_created:raise ValueError()
+    except (KeyError,TypeError,ValueError):raise Blocked('space_live_volume_changed') from None
     if (pm.get('name')!=volume_name or not owner.guard.UUID.fullmatch(str(pm.get('uid','')))
         or not pm.get('resourceVersion') or pm.get('deletionTimestamp') or pv.get('status',{}).get('phase')!='Bound'
         or pm['uid']==plan['postgres_pv_uid'] or meta['uid']==plan['postgres_pvc_uid']
+        or pm.get('annotations',{}).get('pv.kubernetes.io/provisioned-by')!=plan['storage_provisioner']
         or ps.get('storageClassName')!=spec['storageClassName'] or claim.get('uid')!=meta['uid']
         or claim.get('name')!=name or claim.get('namespace')!='voice-staging'):
         raise Blocked('space_live_volume_changed')
@@ -232,10 +263,13 @@ def _live_create(session,kind):
         or meta.get('name')!=desired['metadata']['name'] or meta.get('namespace')!='voice-staging'
         or meta.get('deletionTimestamp') or any(meta.get('labels',{}).get(key)!=value for key,value in desired['metadata']['labels'].items())
         or not owner.guard.UUID.fullmatch(str(meta.get('uid',''))) or not meta.get('resourceVersion')
-        or not spec_ok or owner._read(path)!=intent or _live_checked_plan(session)!=plan):
+        or not isinstance(meta.get('creationTimestamp'),str) or not meta['creationTimestamp']
+        or not spec_ok or owner._read(path)!=intent):
         raise Blocked('space_live_create_uncertain')
-    owner.save(path,{**intent,'status':'DONE','response':{'uid':meta['uid'],'resourceVersion':meta['resourceVersion'],
+    owner.save(path,{**intent,'status':'DONE','response':{'uid':meta['uid'],'resourceVersion':meta['resourceVersion'],'creationTimestamp':meta['creationTimestamp'],
         'spec_sha256':owner.digest(response['spec'])}})
+    if (_live_checked_running_plan(session) if kind in ('upgrade','verify') else _live_checked_plan(session))!=plan:
+        raise Blocked('space_live_source_changed')
     return copy.deepcopy(meta)
 
 
@@ -260,7 +294,7 @@ def _live_job_observation(session,plan,kind,*,running):
         or not owner.guard.UUID.fullmatch(str(pm.get('uid','')))
         or not pm.get('resourceVersion') or pm.get('deletionTimestamp') or len(owners)!=1
         or owners[0].get('kind')!='Job' or owners[0].get('uid')!=meta['uid']
-        or ps.get('nodeName')!=template.get('nodeName') or ps.get('containers')!=template.get('containers')
+        or ps.get('nodeName')!=plan['node'] or ps.get('affinity')!=template.get('affinity') or ps.get('containers')!=template.get('containers')
         or ps.get('volumes')!=template.get('volumes') or ps.get('automountServiceAccountToken') is not False
         or ps.get('securityContext')!=template.get('securityContext') or ps.get('initContainers') or ps.get('ephemeralContainers')
         or len(statuses)!=1 or len(pod.get('status',{}).get('containerStatuses',[]))!=1
@@ -279,7 +313,9 @@ def _live_job_observation(session,plan,kind,*,running):
 def _live_hashes(raw,kind):
     try:lines=raw.decode('ascii').splitlines()
     except (UnicodeError,AttributeError):raise Blocked('space_live_output_invalid') from None
-    paths=['/evidence/origin.json','/evidence/completed.jsonl']+(['/tmp/verified.json'] if kind=='verify' else [])
+    paths=['/evidence/origin.json','/evidence/completed.jsonl']
+    if kind=='verify':
+        if len(lines)!=3 or lines.pop()!='verification=ok':raise Blocked('space_live_output_invalid')
     if len(lines)!=len(paths):raise Blocked('space_live_output_invalid')
     result={}
     for line,path in zip(lines,paths):
@@ -371,7 +407,8 @@ def _live_wait_job(session,plan,kind):
             if phase=='Failed':raise Blocked('space_live_job_failed')
             if kind=='bind' and phase=='Running' or kind!='bind' and status.get('succeeded')==1:
                 return _live_job_observation(session,plan,kind,running=kind=='bind')
-        if _live_checked_plan(session)!=plan:raise Blocked('space_live_source_changed')
+        if (_live_checked_running_plan(session) if kind in ('upgrade','verify') else _live_checked_plan(session))!=plan:
+            raise Blocked('space_live_source_changed')
         if time.monotonic()>=deadline:raise Blocked('space_live_job_timeout')
         time.sleep(1)
 
