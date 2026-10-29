@@ -2,7 +2,7 @@
 import copy
 import json
 from pathlib import Path
-from nats_contract_plan import ContractError,DECLARATIONS,V4_SCHEMA,V4_MIGRATION_ID,stream_updates_for,declarations_for
+from nats_contract_plan import ContractError,DECLARATIONS,V4_SCHEMA,V4_MIGRATION_ID,V7_SCHEMA,REMINDER_STREAM,stream_updates_for,declarations_for,validated_actions
 _STREAMS=tuple(dict.fromkeys(stream for stream,_ in DECLARATIONS))
 _CONSUMERS={(stream,config['durable_name']):config for stream,config in DECLARATIONS}
 _CONSUMER_OBJECTS=frozenset(stream+'/'+durable for stream,durable in _CONSUMERS)
@@ -32,6 +32,13 @@ class Actor:
         self.consumers={(stream,config['durable_name']):config for stream,config in declarations_for(selected)}
         self.consumer_objects=frozenset(s+'/'+d for s,d in self.consumers)
         self.write={'$JS.API.STREAM.UPDATE.'+name:name for name in self.streams}
+        self.reminder_create=None
+        if selected['schema']==V7_SCHEMA:
+            validated_actions(selected)
+            creates=[action for action in selected['actions'] if action['api']=='$JS.API.STREAM.CREATE.'+REMINDER_STREAM]
+            if creates:
+                self.reminder_create=copy.deepcopy(creates[0]['after'])
+                self.write[creates[0]['api']]=REMINDER_STREAM
         self.write.update({'$JS.API.CONSUMER.CREATE.'+s+'.'+d:s+'/'+d for s,d in self.consumers})
         names=set(self.streams)|{s for s,_ in self.consumers}
         self.info={name:'$JS.API.STREAM.INFO.'+name for name in names}
@@ -71,6 +78,7 @@ class Actor:
                     and isinstance(error['description'],str) and 0<len(error['description'])<=256):return None
                 fail()
             if missing and api in self.consumer_info_apis and row['error'].get('err_code')==10014:return None
+            if missing and api==self.info.get(REMINDER_STREAM) and row['error'].get('err_code')==10059:return None
             if missing and api.startswith('$JS.API.STREAM.MSG.GET.') and row['error'].get('err_code')==10037:return None
             fail()
         return row
@@ -102,7 +110,7 @@ class Actor:
         return row['message']
     def info_config(self,obj):
         if obj not in self.info:fail()
-        row=self._request(self.info[obj],None,missing=obj in self.consumer_objects)
+        row=self._request(self.info[obj],None,missing=obj in self.consumer_objects or obj==REMINDER_STREAM and self.reminder_create is not None)
         if row is None:return None
         if not isinstance(row.get('config'),dict):fail()
         if '/' not in obj:
@@ -113,7 +121,9 @@ class Actor:
         return persistent_config(row['config'])
     def mutate(self,api,payload):
         if api not in self.write or not isinstance(payload,dict):fail()
-        if '.STREAM.UPDATE.' in api:
+        if api=='$JS.API.STREAM.CREATE.'+REMINDER_STREAM:
+            if payload!=self.reminder_create:fail()
+        elif '.STREAM.UPDATE.' in api:
             if payload.get('name')!=self.write[api]:fail()
         else:
             stream_durable=self.write[api]

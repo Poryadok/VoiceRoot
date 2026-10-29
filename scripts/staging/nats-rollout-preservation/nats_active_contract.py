@@ -1,7 +1,7 @@
 """Exact active-contract receipt versions accepted by the rollout bridge."""
 import re
 from controller import Blocked
-from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,V4_MIGRATION_ID,V5_SOURCE_HASHES,V5_SCRIPT_HASHES,V5_SCRIPT_BYTES,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID,V6_DECLARATIONS,V6_MIGRATION_ID,V6_SOURCE_HASHES,V6_SCRIPT_HASHES,V6_SCRIPT_BYTES
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V3_MIGRATION_ID,V4_MIGRATION_ID,V5_SOURCE_HASHES,V5_SCRIPT_HASHES,V5_SCRIPT_BYTES,MIGRATION_ID as CURRENT_NATS_MIGRATION_ID,V6_DECLARATIONS,V6_MIGRATION_ID,V6_SOURCE_HASHES,V6_SCRIPT_HASHES,V6_SCRIPT_BYTES,V7_DECLARATIONS,V7_MIGRATION_ID,V7_SOURCE_HASHES,V7_SCRIPT_HASHES,V7_SCRIPT_BYTES
 
 LEGACY_NATS_MIGRATION_ID='space-chat-social-24h-friend-removed-v1'
 SOURCE_PATHS=('deploy/templates/nats-realtime-bootstrap.yaml',
@@ -12,6 +12,7 @@ VERSIONS={
     V4_MIGRATION_ID:('voice-nats-additive-census-proof-v3',tuple((s,c['durable_name']) for s,c in DECLARATIONS)),
     CURRENT_NATS_MIGRATION_ID:('voice-nats-additive-census-proof-v4',tuple((s,c['durable_name']) for s,c in DECLARATIONS)),
     V6_MIGRATION_ID:('voice-nats-additive-census-proof-v5',tuple((s,c['durable_name']) for s,c in V6_DECLARATIONS)),
+    V7_MIGRATION_ID:('voice-nats-additive-census-proof-v6',tuple((s,c['durable_name']) for s,c in V7_DECLARATIONS)),
 }
 PROOF_KEYS={'schema','migration_id','before_sha256','after_sha256','messages',
     'old_consumers_preserved','created_consumers'}
@@ -28,7 +29,7 @@ def _recovery_attempt_matches(attempt,*,opened=False):
         and (not opened or attempt['kind']=='nats_contract_broker_opened'))
 
 def _allowed_streams(migration_id):
-    return ('chat_events','social_events','role_events')+(('voice_events','user_events') if migration_id in (CURRENT_NATS_MIGRATION_ID,V6_MIGRATION_ID) else ())
+    return ('chat_events','social_events','role_events')+(('voice_events','user_events') if migration_id in (CURRENT_NATS_MIGRATION_ID,V6_MIGRATION_ID,V7_MIGRATION_ID) else ())
 def _stream_updates_match(value,migration_id):
     if not isinstance(value,dict) or len(value)>len(_allowed_streams(migration_id)):return False
     for stream,row in value.items():
@@ -53,7 +54,7 @@ def _observations_match(observations,migration_id):
                     {'server_image','container_id','started_at','finished_at','stream_updates'},
                     {'server_image','container_id','started_at','finished_at','stream_updates','migration_id'})
                 or not all(_bounded_text(recovery.get(key)) for key in ('server_image','container_id','started_at','finished_at'))
-                or ('migration_id' in recovery and (migration_id not in (CURRENT_NATS_MIGRATION_ID,V6_MIGRATION_ID) or recovery['migration_id']!=migration_id))
+                or ('migration_id' in recovery and (migration_id not in (CURRENT_NATS_MIGRATION_ID,V6_MIGRATION_ID,V7_MIGRATION_ID) or recovery['migration_id']!=migration_id))
                 or ('stream_updates' in recovery and not _stream_updates_match(recovery['stream_updates'],migration_id))):return False
         elif set(row)==stream_keys:
             if (row.get('stream') not in _allowed_streams(migration_id)
@@ -89,6 +90,7 @@ def _proof_matches(proof,migration_id):
     expected=PROOF_KEYS
     if migration_id==V6_MIGRATION_ID:
         expected=expected|{'deliver_all_cut','deliver_all_cut_sha256','created_consumer_evidence'}
+    if migration_id==V7_MIGRATION_ID:expected=expected|{'created_reminder_stream'}
     # Both reviewed producers emit the recovery-observation extension on the
     # changed-contract path; their no-op path emits the base proof shape. The
     # migration ID still fixes the census schema, so an extension never permits
@@ -105,6 +107,10 @@ def _proof_matches(proof,migration_id):
         return False
     for key in ('messages','old_consumers_preserved','created_consumers'):
         if type(proof.get(key)) is not int or proof[key]<0:return False
+    if migration_id==V7_MIGRATION_ID and proof['created_reminder_stream'] is not None:
+        created=proof['created_reminder_stream']
+        if (not isinstance(created,dict) or set(created)!={'name','config_sha256'}
+            or created['name']!='notification_reminder_hints' or not _sha256(created['config_sha256'])):return False
     if 'ephemeral_recovery_observations' in proof and not _observations_match(proof['ephemeral_recovery_observations'],migration_id):return False
     if migration_id==V6_MIGRATION_ID:
         from nats_deliver_all import cut_shape,validate_evidence
@@ -134,6 +140,8 @@ def validate_identity(active_contract,expected,baseline_pairs):
         raise Blocked('nats_active_contract_identity_changed')
     if migration_id==V6_MIGRATION_ID and not _v5_scripts_match(contract,V6_SCRIPT_HASHES,V6_SCRIPT_BYTES):
         raise Blocked('nats_active_contract_identity_changed')
+    if migration_id==V7_MIGRATION_ID and not _v5_scripts_match(contract,V7_SCRIPT_HASHES,V7_SCRIPT_BYTES):
+        raise Blocked('nats_active_contract_identity_changed')
     baseline=_pairs(baseline_pairs)
     actual=_pairs(contract.get('consumer_pairs') if isinstance(contract,dict) else None)
     if baseline is None or actual is None:raise Blocked('nats_active_contract_identity_changed')
@@ -141,7 +149,7 @@ def validate_identity(active_contract,expected,baseline_pairs):
     expected_pairs=sorted(set(baseline)|set(additions))
     if sorted(actual)!=expected_pairs:raise Blocked('nats_active_contract_identity_changed')
     sources=active_contract.get('sources')
-    wanted_sources=V6_SOURCE_HASHES if migration_id==V6_MIGRATION_ID else V5_SOURCE_HASHES if migration_id==CURRENT_NATS_MIGRATION_ID else None
+    wanted_sources=V7_SOURCE_HASHES if migration_id==V7_MIGRATION_ID else V6_SOURCE_HASHES if migration_id==V6_MIGRATION_ID else V5_SOURCE_HASHES if migration_id==CURRENT_NATS_MIGRATION_ID else None
     paths=tuple(wanted_sources) if wanted_sources is not None else SOURCE_PATHS
     if (not isinstance(sources,dict) or set(sources)!=set(paths)
         or (wanted_sources is not None and sources!=wanted_sources)

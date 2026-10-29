@@ -18,6 +18,8 @@ SCHEMA='voice-nats-additive-contract-v5'
 MIGRATION_ID='chat-space-social-role-media-music-participant-auth-observations-v5'
 V6_SCHEMA='voice-nats-additive-contract-v6'
 V6_MIGRATION_ID='chat-space-social-role-media-music-a3-roster-v6'
+V7_SCHEMA='voice-nats-additive-contract-v7'
+V7_MIGRATION_ID='chat-space-social-role-media-music-reminder-v7'
 VOICE_SUBJECTS_10=frozenset('voice.call_incoming voice.call_accepted voice.call_declined voice.call_missed voice.call_ended voice.state_changed voice.screen_share_started voice.screen_share_stopped voice.call_started voice.member_joined'.split())
 VOICE_ADDITIONS=('voice.participant_joined','voice.participant_left')
 VOICE_SUBJECTS_12=VOICE_SUBJECTS_10|frozenset(VOICE_ADDITIONS)
@@ -36,6 +38,11 @@ V5_SCRIPT_HASHES={'realtime':'b98c6a643dc6bd357049fe19f4de467b038cbf92e4019768b6
     'search':'217334b7503c008444d90eb8b49a2510ce67a7470998112bcf56eb1cbe8ca906',
     'notification':'3a705777cc116695c1ea74307968b8faccc87091572b639473f673c97103bbad'}
 V5_SCRIPT_BYTES={'realtime':10460,'analytics-chat':12470,'search':4224,'notification':4620}
+V7_SOURCE_HASHES={**V5_SOURCE_HASHES,'deploy/templates/nats-realtime-bootstrap.yaml':'047ad5729521563f4ae60a3e8fce8c3fb46523784fe80f6497b60f5314e2ffcb'}
+V7_SCRIPT_HASHES={**V5_SCRIPT_HASHES,'realtime':'6f7d085916308d8e7ddec872adc8b9efe07e4b846d9f30c3fde42cf38c4b022e'}
+V7_SCRIPT_BYTES={**V5_SCRIPT_BYTES,'realtime':10694}
+REMINDER_STREAM='notification_reminder_hints'
+REMINDER_SUBJECT='notification.subscription_grace_reminder'
 V6_SOURCE_HASHES={
     'deploy/templates/nats-realtime-bootstrap.yaml':'69b92bbf6e1ec0c66d846a8a2dbf78cbbea6f4c479190f5ecf91d9adf67cdca7',
     'deploy/templates/nats-analytics-chat-bootstrap.yaml':'24cfd23d207cc0ecc17419bd795d26f277cd7598bd7bcf2a0c9ee9739e9962ca',
@@ -88,6 +95,11 @@ V6_DECLARATIONS=V4_DECLARATIONS+(
     ('voice_events',{'name':'matchmaking_voice_roster_v1','durable_name':'matchmaking_voice_roster_v1',
         'filter_subject':'voice.roster_membership_changed','deliver_policy':'all','ack_policy':'explicit'}),
 )
+V7_DECLARATIONS=V4_DECLARATIONS+(
+    (REMINDER_STREAM,{'name':'rt_realtime1_subscription_reminder','durable_name':'rt_realtime1_subscription_reminder',
+        'filter_subject':REMINDER_SUBJECT,'deliver_subject':'_INBOX.voice.realtime1.subscription_reminder',
+        'deliver_policy':'new','ack_policy':'explicit'}),
+)
 DECLARATION=DECLARATIONS[0][1]  # Compatibility for the existing friend-removal fixture.
 class ContractError(ValueError): pass
 def fail(): raise ContractError('nats_additive_contract_unsupported')
@@ -98,13 +110,14 @@ def declarations_for(plan):
     if key==(V4_SCHEMA,V4_MIGRATION_ID):return V4_DECLARATIONS
     if key==(SCHEMA,MIGRATION_ID):return DECLARATIONS
     if key==(V6_SCHEMA,V6_MIGRATION_ID):return V6_DECLARATIONS
+    if key==(V7_SCHEMA,V7_MIGRATION_ID):return V7_DECLARATIONS
     fail()
 def stream_updates_for(plan):
     declarations_for(plan)
-    return ('chat_events','social_events','role_events')+ (('voice_events','user_events') if plan['schema'] in (SCHEMA,V6_SCHEMA) else ())
+    return ('chat_events','social_events','role_events')+ (('voice_events','user_events') if plan['schema'] in (SCHEMA,V6_SCHEMA,V7_SCHEMA) else ())
 def proof_schema_for(plan):
     declarations_for(plan)
-    return {V3_SCHEMA:'voice-nats-additive-census-proof-v2',V4_SCHEMA:'voice-nats-additive-census-proof-v3',SCHEMA:'voice-nats-additive-census-proof-v4',V6_SCHEMA:'voice-nats-additive-census-proof-v5'}[plan['schema']]
+    return {V3_SCHEMA:'voice-nats-additive-census-proof-v2',V4_SCHEMA:'voice-nats-additive-census-proof-v3',SCHEMA:'voice-nats-additive-census-proof-v4',V6_SCHEMA:'voice-nats-additive-census-proof-v5',V7_SCHEMA:'voice-nats-additive-census-proof-v6'}[plan['schema']]
 def validated_targets(plan):
     declarations=declarations_for(plan)
     rows=plan.get('consumer_targets')
@@ -118,12 +131,19 @@ def validated_targets(plan):
 def validated_actions(plan):
     declarations=validated_targets(plan)
     fixed={'$JS.API.STREAM.UPDATE.'+name:name for name in stream_updates_for(plan)}
+    if plan['schema']==V7_SCHEMA:fixed['$JS.API.STREAM.CREATE.'+REMINDER_STREAM]=REMINDER_STREAM
     fixed.update({'$JS.API.CONSUMER.CREATE.'+s+'.'+c['durable_name']:s+'/'+c['durable_name'] for s,c in declarations})
     actions=plan.get('actions')
     if not isinstance(actions,list):fail()
     seen=set()
     for action in actions:
         if not isinstance(action,dict) or fixed.get(action.get('api'))!=action.get('object') or action['api'] in seen:fail()
+        if action['api']=='$JS.API.STREAM.CREATE.'+REMINDER_STREAM:
+            config=action.get('after')
+            if (set(action)!={'api','object','before','after'} or action['before'] is not None
+                or not isinstance(config,dict) or config.get('name')!=REMINDER_STREAM
+                or config.get('subjects')!=[REMINDER_SUBJECT] or config.get('storage')!='file'
+                or config.get('retention')!='limits' or config.get('max_age')!=604800000000000):fail()
         seen.add(action['api'])
     return declarations
 def digest(value): return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
@@ -151,13 +171,15 @@ def _consumer_hashes(normalized_consumers,declarations=DECLARATIONS):
         hashes[(stream,config['durable_name'])]=digest(normalized)
     return hashes
 
-def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHEMA):
+def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHEMA,normalized_reminder_stream=None):
     # Historical direct callers retain their v4 semantics. Only fixed root
     # source authority can select the new v5 transition.
-    if version not in (V4_SCHEMA,SCHEMA,V6_SCHEMA):fail()
+    if version not in (V4_SCHEMA,SCHEMA,V6_SCHEMA,V7_SCHEMA):fail()
+    v7=version==V7_SCHEMA
     v6=version==V6_SCHEMA
-    v5=version in (SCHEMA,V6_SCHEMA)
-    declarations=V6_DECLARATIONS if v6 else DECLARATIONS
+    v5=version in (SCHEMA,V6_SCHEMA,V7_SCHEMA)
+    declarations=V7_DECLARATIONS if v7 else V6_DECLARATIONS if v6 else DECLARATIONS
+    if not v7 and normalized_reminder_stream is not None:fail()
     sources={}; texts={}
     for role in (('realtime','analytics-chat','search','notification') if v5 else ('realtime','analytics-chat')):
         path='deploy/templates/nats-'+role+'-bootstrap.yaml'
@@ -165,6 +187,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         if len(raw)>65536:fail()
         texts[role]=raw.decode('utf8');sources[path]=hashlib.sha256(raw).hexdigest()
     if v6 and sources!=V6_SOURCE_HASHES:fail()
+    if v7 and sources!=V7_SOURCE_HASHES:fail()
     chat=[];social=[]
     for role in ('realtime','analytics-chat'):
         text=texts[role]
@@ -204,6 +227,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         if not isinstance(config,dict) or config.get('name')!=name or not isinstance(config.get('subjects'),list):fail()
         additions={'chat_events':CHAT_ADDITIONS|{'space.voice_room_access_invalidated'},'role_events':ROLE_ADDITIONS}
         if v5:additions.update(voice_events=frozenset(VOICE_ADDITIONS)|({'voice.roster_membership_changed'} if v6 else set()),user_events=frozenset(USER_ADDITIONS))
+        if v7:additions[REMINDER_STREAM]={REMINDER_SUBJECT}
         own=additions.get(name,set());all_additions=set().union(*additions.values())
         if any(subject_overlap(added,subject) for added in (all_additions-own) for subject in config['subjects']):fail()
     for stream,config in V3_DECLARATIONS:
@@ -212,6 +236,8 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
     music_line='    consumer file_events messaging_music_metadata file.processed _INBOX.voice.messaging.messaging_music_metadata new messaging_music_metadata'
     if texts['analytics-chat'].splitlines().count(music_line)!=1:fail()
     if v6 and texts['analytics-chat'].splitlines().count('    pull_consumer voice_events matchmaking_voice_roster_v1 voice.roster_membership_changed all')!=1:fail()
+    if v7 and (texts['realtime'].splitlines().count('    stream '+REMINDER_STREAM+' '+REMINDER_SUBJECT)!=1
+        or texts['realtime'].splitlines().count('    consumer '+REMINDER_STREAM+' rt_realtime1_subscription_reminder '+REMINDER_SUBJECT+' _INBOX.voice.realtime1.subscription_reminder')!=1):fail()
     file_stream=streams.get('file_events',{}).get('config',{})
     if (file_stream.get('name')!='file_events' or file_stream.get('storage')!='file'
         or file_stream.get('retention')!='limits' or 'file.processed' not in file_stream.get('subjects',[])):fail()
@@ -239,6 +265,16 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
         observed[name]={'config_sha256':digest(before)}
         if before!=after:actions.append({'api':'$JS.API.STREAM.UPDATE.'+name,'object':name,'before':before,'after':after})
     if not isinstance(consumers,dict):fail()
+    if v7:
+        target=normalized_reminder_stream
+        if (not isinstance(target,dict) or target.get('name')!=REMINDER_STREAM or target.get('subjects')!=[REMINDER_SUBJECT]
+            or target.get('storage')!='file' or target.get('retention')!='limits' or target.get('max_age')!=604800000000000):fail()
+        existing=streams.get(REMINDER_STREAM)
+        if existing is None:
+            if any(isinstance(key,tuple) and len(key)==2 and key[0]==REMINDER_STREAM for key in consumers):fail()
+            actions.append({'api':'$JS.API.STREAM.CREATE.'+REMINDER_STREAM,'object':REMINDER_STREAM,'before':None,'after':copy.deepcopy(target)})
+        elif existing.get('config')!=target:fail()
+        else:observed[REMINDER_STREAM]={'config_sha256':digest(target)}
     for stream,config in declarations:
         durable=config['durable_name'];key=(stream,durable);consumer=consumers.get(key)
         if consumer is not None:
@@ -249,7 +285,7 @@ def compile_plan(source,streams,consumers,normalized_consumers,*,version=V4_SCHE
                 'after':{'stream_name':stream,'action':'create','config':copy.deepcopy(config)},
                 'normalized_config_sha256':normalized_hashes[key]})
     targets=[{'stream':stream,'name':config['durable_name'],'config_sha256':normalized_hashes[(stream,config['durable_name'])]} for stream,config in declarations]
-    return {'schema':version,'migration_id':V6_MIGRATION_ID if v6 else MIGRATION_ID if v5 else V4_MIGRATION_ID,'sources':sources,'observed':observed,'consumer_targets':targets,'actions':actions}
+    return {'schema':version,'migration_id':V7_MIGRATION_ID if v7 else V6_MIGRATION_ID if v6 else MIGRATION_ID if v5 else V4_MIGRATION_ID,'sources':sources,'observed':observed,'consumer_targets':targets,'actions':actions}
 
 
 def execute(plan,actor,journal):
@@ -260,6 +296,7 @@ def execute(plan,actor,journal):
     """
     declarations=validated_actions(plan)
     fixed={'$JS.API.STREAM.UPDATE.'+name:name for name in stream_updates_for(plan)}
+    if plan['schema']==V7_SCHEMA:fixed['$JS.API.STREAM.CREATE.'+REMINDER_STREAM]=REMINDER_STREAM
     for stream,config in declarations:
         fixed['$JS.API.CONSUMER.CREATE.'+stream+'.'+config['durable_name']]=stream+'/'+config['durable_name']
     seen=set();receipt=[]
@@ -269,6 +306,7 @@ def execute(plan,actor,journal):
         seen.add(api);actor.assert_closed_isolation()
         current=actor.info_config(obj)
         expected_hash=action.get('normalized_config_sha256',digest(action['after']))
+        if plan['schema']==V7_SCHEMA and action['before'] is None and current is not None:fail()
         if current is not None and digest(current)==expected_hash:
             journal({'kind':'nats_contract_applied','object':obj,'config_sha256':expected_hash,'recovered_exact_target':True})
             receipt.append({'object':obj,'config_sha256':expected_hash});continue
@@ -307,7 +345,19 @@ def verify_census(plan,before,after,*,deliver_all=None):
         return result
     old_streams=indexed(before['streams'],lambda row:row['name'])
     new_streams=indexed(after['streams'],lambda row:row['name'])
-    if set(old_streams)!=set(new_streams):fail()
+    stream_creates=[a for a in plan['actions'] if a['api'].startswith('$JS.API.STREAM.CREATE.')]
+    if stream_creates:
+        if (plan['schema']!=V7_SCHEMA or len(stream_creates)!=1
+            or stream_creates[0]['object']!=REMINDER_STREAM or REMINDER_STREAM in old_streams):fail()
+    expected_streams=set(old_streams)|({REMINDER_STREAM} if stream_creates else set())
+    if expected_streams!=set(new_streams):fail()
+    if stream_creates:
+        row=new_streams[REMINDER_STREAM];state=row.get('state',{})
+        if (row.get('config_sha256')!=digest(stream_creates[0]['after'])
+            or any(state.get(field)!=0 for field in ('messages','bytes','last_seq'))
+            or state.get('consumer_count')!=1 or state.get('first_seq') not in (0,1)
+            or state.get('num_deleted',0)!=0 or state.get('deleted',[]) or state.get('num_subjects',0)!=0
+            or state.get('subjects',{}) or state.get('lost')):fail()
     old_consumers=indexed(before['consumers'],lambda row:(row['stream'],row['name']))
     new_consumers=indexed(after['consumers'],lambda row:(row['stream'],row['name']))
     target_by_key={(row['stream'],row['name']):row['config_sha256'] for row in plan.get('consumer_targets',[])}
@@ -327,7 +377,7 @@ def verify_census(plan,before,after,*,deliver_all=None):
         if plan['schema']==V6_SCHEMA and key==('voice_events','matchmaking_voice_roster_v1'):
             # Validated before semantic() removed waiting/activity observations.
             continue
-        row=new_consumers[key];initial={'consumer_seq':0,'stream_seq':old_streams[key[0]]['state']['last_seq']}
+        row=new_consumers[key];initial={'consumer_seq':0,'stream_seq':old_streams[key[0]]['state']['last_seq'] if key[0] in old_streams else 0}
         if (row.get('durable')!=key[1] or row.get('config_sha256')!=target_by_key[key]
             or any(row.get(field)!=0 for field in ('num_ack_pending','num_redelivered','num_pending'))
             or row.get('delivered')!=initial or row.get('ack_floor')!={'consumer_seq':0,'stream_seq':0}):fail()
@@ -350,6 +400,9 @@ def verify_census(plan,before,after,*,deliver_all=None):
         'before_sha256':digest(before),'after_sha256':digest(after),
         'messages':sum(row['state']['messages'] for row in new_streams.values()),
         'old_consumers_preserved':len(old_consumers),'created_consumers':len(create_actions)}
+    if plan['schema']==V7_SCHEMA:
+        result['created_reminder_stream']=({'name':REMINDER_STREAM,'config_sha256':digest(stream_creates[0]['after'])}
+            if stream_creates else None)
     if plan['schema']==V6_SCHEMA:result.update(deliver_all_cut=all_cut,
         deliver_all_cut_sha256=digest(all_cut),created_consumer_evidence=all_created)
     return result

@@ -30,10 +30,11 @@ class PublicRecoveryTests(unittest.TestCase):
                 if args[0]=='authorize-expired-native':
                     # A public request without its protected source checkpoint
                     # must stop before the mocked handler is dispatched.
-                    with self.assertRaises(FileNotFoundError) as error:
-                        bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
-                    self.assertEqual(error.exception.filename,
-                        str(bridge_root.guard.ROOT/('rollout-'+row['operation'])))
+                    absent=Path(directory)/'absent-root'
+                    with patch.object(bridge_root.guard,'ROOT',absent),patch.object(bridge_root.root_cli,'ROOT',absent):
+                        with self.assertRaises(FileNotFoundError) as error:
+                            bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
+                    self.assertEqual(error.exception.filename,str(absent/('rollout-'+row['operation'])))
                     getattr(actions,method).assert_not_called()
                     continue
                 result=bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
