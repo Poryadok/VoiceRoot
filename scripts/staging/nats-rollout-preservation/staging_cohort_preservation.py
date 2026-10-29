@@ -507,6 +507,71 @@ def capture_stage(session,receipt):
     return stage
 
 
+def load_prepared(session):
+    """Fixed authorize input loader; never recapture or accept caller source."""
+    plan=load_plan(session);_phase_continuity(session,plan);_no_pending(session)
+    approved,execution,prepared=_source(session,plan)
+    if (set(prepared)!={'schema','plan','request'}
+        or prepared['schema']!='voice-staging-prerequisites-prepared-v1'
+        or set(prepared['request'])!={'mode','changed_services','gis_first_install'}
+        or prepared['request']['mode'] not in ('full','app-only')
+        or type(prepared['request']['gis_first_install']) is not bool
+        or not isinstance(prepared['request']['changed_services'],list)
+        or any(not isinstance(name,str) or not name for name in prepared['request']['changed_services'])):
+        raise Blocked('cohort_prepared_inputs_changed')
+    return {'request':copy.deepcopy(prepared['request']),'approved':copy.deepcopy(approved),
+        'execution':copy.deepcopy(execution),'workspace':str(guard.ROOT/'installed'/'sources'/session.operation)}
+
+
+def capture_final_stage(session):
+    """Add only the completed cold-created P3 publisher to the paused view.
+
+    Existing workloads retain the original pre-cut snapshots. Existing P3 uses
+    the separate response-bound replica successor; no active cohort recapture
+    or extra workload can enter through this loader.
+    """
+    import staging_p3_prerequisites as p3
+    receipt=load_qualified(session);stage=capture_stage(session,receipt)
+    state=private._completed(session);plan=state['plan'];name='voice-p3-principal-jwks';ident='Deployment/'+name
+    if (plan.get('schema')!='voice-staging-prerequisites-plan-v2'
+        or plan.get('preservation_sha256')!=digest(receipt)):
+        raise Blocked('cohort_final_capture_binding_changed')
+    images=plan['auxiliary_images'];key=name+'/jwks'
+    if set(images)!={key}:raise Blocked('cohort_final_capture_images_changed')
+    ready=p3.verify_complete(session)
+    current=stage.kube.get('deployment',name);meta=current['metadata'];spec=current['spec']
+    proof=ready['proof']['deployment'];identity=state['receipt']['publisher_identity']
+    if (ready['receipt'].get('operation')!=session.operation
+        or ready['receipt'].get('plan_sha256')!=digest(plan['children']['p3'])
+        or ready['receipt'].get('publisher_ready_sha256')!=digest(ready['proof'])
+        or meta.get('uid')!=identity['uid'] or meta.get('uid')!=proof['uid']
+        or meta.get('generation')!=proof['generation'] or meta.get('deletionTimestamp')
+        or digest(p3.private_semantic(current))!=proof['semantic_sha256'] or spec.get('replicas',1)!=1
+        or spec['template']['spec'].get('initContainers')
+        or [(row.get('name'),row.get('image')) for row in spec['template']['spec'].get('containers',[])]!=[('jwks',images[key])]):
+        raise Blocked('cohort_final_publisher_changed')
+    if name in stage.snapshots:
+        wanted=stage.snapshots[name]
+        if (meta['uid']!=wanted['metadata']['uid'] or meta['generation']!=wanted['metadata']['generation']
+            or _cut_semantic(current)!=_cut_semantic(wanted)):
+            raise Blocked('cohort_final_publisher_changed')
+    else:
+        step=state['steps'].get('p3',{}).get(ident)
+        if (ident in plan['children']['p3']['preserved'] or step is None or step.get('status')!='DONE'
+            or step.get('observation')!=identity or name in stage.original_snapshots
+            or name in stage.expected['deployment_uids'] or key in stage.old_images):
+            raise Blocked('cohort_final_publisher_unowned')
+        stage.snapshots[name]=copy.deepcopy(current)
+        stage.original_snapshots[name]=copy.deepcopy(current)
+        stage.expected['deployment_uids'][name]=meta['uid']
+        stage.old_images[key]=images[key]
+    if stage.old_images!=state['receipt']['actual_after']:
+        raise Blocked('cohort_final_capture_images_changed')
+    if private._checkpoint(session)!=state:raise Blocked('cohort_final_capture_binding_changed')
+    revalidate_paused(session);session.check()
+    return stage
+
+
 def load_auxiliary_successor(session):
     import staging_cohort_preservation_auxiliary as auxiliary
     plan=load_plan(session);_phase_continuity(session,plan)
