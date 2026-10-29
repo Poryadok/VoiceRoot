@@ -36,19 +36,22 @@ class CryptoFixture(unittest.TestCase):
             serverkey.write_bytes(values['voice-p3-principal-jwks-tls']['tls.key'])
             context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); context.load_cert_chain(servercert,serverkey)
             expected=values['voice-p3-principal-public']['realtime.json']
-            def exchange(body):
+            def exchange(body,status=b'200 OK'):
                 listener=socket.socket(); listener.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
                 listener.bind(('127.0.0.1',8443)); listener.listen(1)
                 def server():
                     try:
                         conn,_=listener.accept()
                         with context.wrap_socket(conn,server_side=True) as tls:
-                            tls.recv(4096); tls.sendall(b'HTTP/1.0 200 OK\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
+                            tls.recv(4096); tls.sendall(b'HTTP/1.0 '+status+b'\r\nContent-Length: '+str(len(body)).encode()+b'\r\n\r\n'+body)
                     finally: listener.close()
                 thread=threading.Thread(target=server,daemon=True); thread.start()
                 return thread
             thread=exchange(expected); p3.probe_jwks('127.0.0.1',ca,expected); thread.join(5); self.assertFalse(thread.is_alive())
             thread=exchange(b'wrong')
+            with self.assertRaises(p3.PrerequisiteError): p3.probe_jwks('127.0.0.1',ca,expected)
+            thread.join(5); self.assertFalse(thread.is_alive())
+            thread=exchange(expected,b'302 Found')
             with self.assertRaises(p3.PrerequisiteError): p3.probe_jwks('127.0.0.1',ca,expected)
             thread.join(5); self.assertFalse(thread.is_alive())
             changed=copy.deepcopy(values); changed['voice-p3-principal-public']['realtime.json']=b'{"keys":[]}'
