@@ -55,6 +55,8 @@ class CaptureTests(unittest.TestCase):
              'spec': {'clusterIP': '10.0.0.1', 'selector': {'app': 'voice-space'}, 'ports': [{'port': 8443, 'protocol': 'TCP'}]}}).encode()
         if name == 'voice-space-principal-signing' and any(x.startswith('go-template=') for x in args):
             return b'signer-uid\n4\n1\n1\n1'
+        if kind == 'secret' and any(x.startswith('go-template=') for x in args):
+            return ('uid-'+name+'\n1\n1').encode()
         if '-o' in args and args[args.index('-o') + 1].startswith('jsonpath='):
             expression = args[args.index('-o') + 1]
             if '.metadata.uid' in expression: return ('uid-' + name + '\n1').encode()
@@ -270,6 +272,25 @@ class CaptureTests(unittest.TestCase):
             return self.runner(args)
         with self.assertRaisesRegex(capture.common.Hold,'p3_stage_media_ca_identity'):
             self.invoke(dest,runner=runner,mode='issuer-plan')
+
+    def test_public_metadata_distinguishes_absence_and_unknown_transport(self):
+        snap={'source_sha':'a'*40,'files':{'deploy/staging/services.yaml':self.manifest_sha}}
+        calls=[]
+        def absent(args):
+            if 'voice-media-ca' in args:
+                calls.append(args); return b''
+            return self.runner(args)
+        with patch.object(capture,'source_snapshot',return_value=snap),patch.object(capture,'SPACE_DOCUMENT_SHA',self.document_sha):
+            result=capture.observe_public_metadata(self.root,'a'*40,lambda _:None,'ns',lambda:None,absent)
+            self.assertEqual(result['objects']['voice-media-ca']['state'],'absent')
+            self.assertFalse(result['objects']['voice-media-ca']['key_present'])
+            self.assertFalse(result['admission_qualified']); self.assertTrue(all('--ignore-not-found=true' in a for a in calls))
+            def broken(args):
+                if 'voice-media-ca' in args: raise OSError('private-sentinel')
+                return self.runner(args)
+            with self.assertRaises(capture.common.Hold) as error:
+                capture.observe_public_metadata(self.root,'a'*40,lambda _:None,'ns',lambda:None,broken)
+            self.assertEqual(str(error.exception),'public_metadata_observation_failed')
 
     def test_restart_and_source_authority_fail_closed(self):
         dest = self.root / 'private'; dest.mkdir(mode=0o700)

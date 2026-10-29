@@ -245,6 +245,46 @@ def observe_signer(source_root,source_sha,source_authority,space_pod,namespace_u
     except Exception: raise common.Hold('signer_observation_failed') from None
 
 
+def observe_public_metadata(source_root,source_sha,source_authority,namespace_uid,claim_guard,
+                            run_bytes=common.linux_private_bytes):
+    """Distinguish observed absent public references from unknown transport."""
+    try:
+        if not isinstance(source_sha,str) or not re.fullmatch(r'[a-f0-9]{40}',source_sha) or not namespace_uid: raise ValueError()
+        def guard():
+            common._fence(claim_guard)
+            try:
+                raw=common._external(run_bytes,['kubectl','--kubeconfig','/home/pmd/.kube/config','--context','default',
+                    '--request-timeout=15s','get','namespace','voice-dev','-o','json'])
+                meta=json.loads(raw)['metadata']
+                if meta.get('name')!='voice-dev' or meta.get('uid')!=namespace_uid: raise ValueError()
+            except Exception: raise common.GuardLost('namespace_guard_failed') from None
+            common._fence(claim_guard)
+        def authorize():
+            if common._external(source_authority,source_sha) is False: raise ValueError()
+        def read():
+            result={}
+            for name,(key,_) in PUBLIC.items():
+                template=('{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}{{"\\n"}}'
+                    '{{range $k,$v := .data}}{{if eq $k "'+key+'"}}1{{end}}{{end}}')
+                raw=_call(run_bytes,guard,'get','secret',name,'--ignore-not-found=true','-o','go-template='+template)
+                if raw==b'': result[name]={'state':'absent','uid':None,'resource_version':None,'key_present':False}; continue
+                fields=raw.decode('ascii').split('\n')
+                if (len(fields)!=3 or any(not re.fullmatch(r'[A-Za-z0-9.-]{1,128}',s) for s in fields[:2])
+                        or fields[2] not in ('','1')): raise ValueError()
+                result[name]={'state':'present','uid':fields[0],'resource_version':fields[1],'key_present':fields[2]=='1'}
+            return result
+        guard(); authorize(); snapshot=source_snapshot(Path(source_root),source_sha); _source_contract(source_root,snapshot)
+        values=read()
+        if read()!=values: raise ValueError()
+        authorize()
+        if source_snapshot(Path(source_root),source_sha)!=snapshot: raise ValueError()
+        guard()
+        return {'status':'observed','source_sha':source_sha,'namespace_uid':namespace_uid,'objects':values,
+                'scope':'public-reference-metadata-only','admission_qualified':False}
+    except common.GuardLost: raise
+    except Exception: raise common.Hold('public_metadata_observation_failed') from None
+
+
 def _service(service, pod):
     meta, spec = service['metadata'], service['spec']
     if meta.get('name') != 'voice-space' or meta.get('namespace') != 'voice-dev': raise common.Hold('space_service_invalid')
