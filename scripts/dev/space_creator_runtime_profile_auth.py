@@ -74,7 +74,7 @@ class AuthTrustPhase:
                           inventory_phase.fence,inventory_phase.client,inventory_phase.fence.ledger)
         self._custodies=tuple(native.SpaceNativeToolPhase._custody(j) for j in (journal,package_phase.journal,inventory_phase.journal))
 
-    def _guard(self):
+    def _local(self):
         try:
             refs=(self.journal,self.fence,self.client,self.fence.ledger,self.package,self.package.journal,self.package.fence,
                   self.package.client,self.package.fence.ledger,self.inventory,self.inventory.journal,self.inventory.fence,
@@ -86,7 +86,10 @@ class AuthTrustPhase:
                 self.inventory.fence.ledger.client is not self.inventory.client or
                 tuple(native.SpaceNativeToolPhase._custody(j) for j in (self.journal,self.package.journal,self.inventory.journal))!=self._custodies): raise ValueError()
         except BaseException: raise metadata.GuardLost('Auth trust identity changed') from None
+    def _guard(self):
+        self._local()
         metadata._fence(lambda:media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid))
+        self._local()
 
     def _ledger(self):
         try:
@@ -173,6 +176,8 @@ class AuthTrustPhase:
             current[LEDGER]=copy.deepcopy(done); current['step']=STEP+'-done'; self.fence.ledger.write(end,current)
             self.record=copy.deepcopy(done); self._guard()
             if self._ledger()[0].get(LEDGER)!=done: raise ValueError()
+            self._local()
+            if self.record!=done or self.journal.state['steps'].get(STEP)!=done|{'receipt':receipt}: raise ValueError()
             return copy.deepcopy(receipt)
         except BaseException as error:
             if pending:
@@ -192,6 +197,7 @@ def verify_completed(phase,token):
         if phase._observe(token)!=receipt: raise ValueError()
         phase._guard(); after,end=phase._ledger()
         if after!=row or end!=rev or phase.journal.state['steps'].get(STEP)!=local: raise ValueError()
+        phase._local()
         return copy.deepcopy(receipt)
     except metadata.GuardLost: raise
     except BaseException: raise AuthTrustError('Auth trust receipt unavailable') from None
