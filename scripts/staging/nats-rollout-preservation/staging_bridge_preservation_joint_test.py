@@ -411,6 +411,25 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
      assert rows[0]['Id']==fixture['config_digest']
      rows[0]['RepoDigests']=[image] # Synthetic registry digest binding.
      return json.dumps(rows).encode()
+    if argv[:2]==['/usr/bin/docker','--host=unix:///var/run/docker.sock']:
+     # The production guard has already accepted the exact argv. Map only the
+     # modeled PV's source to the verified owned daemon volume subdirectory.
+     pv='/var/lib/rancher/k3s/storage/pvc-00000000-0000-0000-0000-000000000002_voice-staging_fixture'
+     volume=os.environ['VOICE_TEST_NATS_VOLUME'];store=os.environ['VOICE_TEST_NATS_STORE']
+     info=json.loads(subprocess.check_output(['docker','volume','inspect',volume]))[0]
+     assert info['Labels']=={'voice.test.owner':'wt30-joint'} and store==info['Mountpoint']+'/original'
+     mapped=[]
+     for arg in argv[2:]:
+      prefix='type=bind,source='+pv
+      if arg.startswith(prefix):
+       rest=arg[len(prefix):]
+       assert rest.startswith(',target=') or rest.startswith('/')
+       arg='type=bind,source='+store+rest
+      mapped.append(arg)
+     result=subprocess.run(['docker',*mapped],input=kwargs.get('body'),stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+      timeout=kwargs.get('timeout',60))
+     if result.returncode:raise AssertionError('owned docker command failed: '+repr(mapped[:2]))
+     return result.stdout
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
     return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
