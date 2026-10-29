@@ -245,10 +245,13 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 	const bufSize = 1 << 20
 	lis := bufconn.Listen(bufSize)
 	inviteFixture := newInviteIngressFixture(t)
-	var svc *SpaceGRPC
+	var svc, bootstrapSvc *SpaceGRPC
 	// Legacy ledger fixtures explicitly inject a request-bound verified actor for
 	// the migrated audit method. This is not a production admission interceptor.
 	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, request any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName && bootstrapSvc != nil {
+			return bootstrapSvc.CreateSpace(ctx, request.(*spacev1.CreateSpaceRequest))
+		}
 		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpace_FullMethodName || info.FullMethod == spacev1.SpaceService_UpdateSpaceMmConfig_FullMethodName {
 			return inviteFixture.serveSettings(ctx, request, info, svc)
 		}
@@ -284,6 +287,17 @@ func startSpaceGRPCTestServer(t *testing.T, pool *pgxpool.Pool, opts ...spaceSer
 		}
 		if svc.ProfileAccounts == nil {
 			svc.ProfileAccounts = permissiveProfileAccounts{}
+		}
+	}
+	// This bootstrap-only peer must not become the shared ownership runtime.
+	// Legacy ownership tests configure a complete protected client or exercise
+	// the ledger without a Role dependency.
+	if svc.OwnershipRoles == nil {
+		bootstrapRoles, bootstrapIssuer := newBootstrapLedgerFixture(t, svc.Roles)
+		bootstrapSvc = &SpaceGRPC{
+			Store: svc.Store, Roles: svc.Roles, SpaceEvents: svc.SpaceEvents, Logger: svc.Logger,
+			SeedSpaceProActive: svc.SeedSpaceProActive,
+			OwnershipRoles:     bootstrapRoles, PrincipalIssuer: bootstrapIssuer,
 		}
 	}
 	spacev1.RegisterSpaceServiceServer(srv, svc)

@@ -144,6 +144,29 @@ class Fence:
         # A takeover during persistence cannot authorize the following workload write.
         self.authority()
 
+    def begin_with_predecessor(self,client,lock,namespace_uid,journal):
+        """Capture a completed C1 row in the same CAS that starts C2."""
+        import full_cohort_predecessor_phase as predecessor
+        if (not re.fullmatch(r'media-c2-[a-f0-9]{32}',self.context['operation_id']) or
+                type(self.check) is not ResourceCheck or
+                getattr(self.on_uncertain,'__self__',None) is not self.check or
+                getattr(self.on_uncertain,'__func__',None) is not ResourceCheck.mark_uncertain):
+            raise RuntimeError('predecessor capture requires the C2 operation')
+        self.authority()
+        previous,revision=self.ledger.read()
+        descriptor=predecessor.capture(self,client,lock,namespace_uid,journal,previous,revision)
+        attempted=False
+        try:
+            attempted=True
+            self.ledger.write(revision,self.context | dict(status='active',step='admitted',predecessor=descriptor))
+            self.authority()
+            predecessor.load(self,client,lock,namespace_uid,journal)
+        except BaseException:
+            if attempted:
+                try: self.admission_uncertain('C2 predecessor begin outcome uncertain')
+                except BaseException: pass
+            raise
+
     def before_step(self,step):
         self.authority()
         row,revision=self.ledger.read()

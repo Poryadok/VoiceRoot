@@ -27,6 +27,14 @@ CATALOG_DOCUMENT_COMMIT = 'eaa4c1a30921cea1f030ee53de89c71695cbfc87'
 COLD_START_DOCUMENT_COMMIT = '9bb0f3306e04e15fffcd899df21dd4094fa11b0c'
 COLD_START_DOCUMENT_ENTRY = {'mode': '100644', 'type': 'blob',
                              'oid': 'c188c69aadd32f189ed80cf3ab9682f589442a24'}
+# Independently reviewed by Marusya-142 for private historical restoration only.
+# The added owning-service contracts are substantive; no current/runtime authority.
+COMMUNITY_ROLE_DOCUMENT_COMMIT = '8c6557ae11ee53212c082d3708263e701c20e974'
+COMMUNITY_ROLE_DOCUMENT_ENTRY = {'mode': '100644', 'type': 'blob',
+                                 'oid': '43217ef76502773259ab12f64baf5c097c8fb84a'}
+AUDIO_DATA_STORES_COMMIT = '1c3c9630b2f61e22c6e8579290b3443f0425eaa1'
+AUDIO_DATA_STORES_ENTRY = {'mode': '100644', 'type': 'blob',
+                           'oid': 'af464029d432a499f58db19b6fa440fb5c0c0d7c'}
 DATA_STORES_COMMIT = 'f3a0ac5dc372379b4d175655fb612b917a408948'
 # The reviewed catalog/message-view documentation carried by the A1 aggregate.
 # This remains a test-fixture source tuple, never production authority.
@@ -68,6 +76,19 @@ INVENTORY_VOICE_PATHS = frozenset({
     'src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go',
 })
 
+# Marusya-142 independently reproduced this complete generated closure from
+# its pinned protos. Removal is private fixture construction, never authority.
+MULTI_OWNER_INVENTORY_SOURCE = '1cc1d46023bd31c473136fa285446ba30e9ef99a'
+MULTI_OWNER_INVENTORY_ENTRIES = {
+    'src/backend/voice/pb/voice/' + name: {'mode': '100644', 'type': 'blob', 'oid': oid}
+    for name, oid in (
+        ('common/v1/reference_inventory.pb.go', '3d8918d448ab7c7c50e798f689fdb4862944ebaa'),
+        ('messaging/v1/reference_inventory.pb.go', '9c80d62ca8592f302d50ba638037665d35264e07'),
+        ('messaging/v1/reference_inventory_grpc.pb.go', 'ebb0f17c392ede2d83407b94deaf68495919578c'),
+        ('story/v1/reference_inventory.pb.go', 'b505d59b968af59177acd22ad5161a748d48efcc'),
+        ('story/v1/reference_inventory_grpc.pb.go', '06656fe9cd9478cbacde07b63eacb6b32bef5035'))}
+MULTI_OWNER_INVENTORY_VOICE_PATHS = frozenset(MULTI_OWNER_INVENTORY_ENTRIES)
+
 
 def git(*args, data=None, env=None):
     return subprocess.check_output(['git', '-C', str(ROOT), *args], input=data, env=env).decode().strip()
@@ -75,17 +96,26 @@ def git(*args, data=None, env=None):
 
 def reviewed_cold_start_document(source):
     document = 'docs/microservices/space-service.md'
-    ancestor = subprocess.run(
-        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
-         COLD_START_DOCUMENT_COMMIT, source], capture_output=True).returncode == 0
-    return (ancestor and legacy.entry(ROOT, source, document) == COLD_START_DOCUMENT_ENTRY
-            and legacy.entry(ROOT, COLD_START_DOCUMENT_COMMIT, document)
-            == COLD_START_DOCUMENT_ENTRY)
+    for reviewed, expected in (
+            (COLD_START_DOCUMENT_COMMIT, COLD_START_DOCUMENT_ENTRY),
+            (COMMUNITY_ROLE_DOCUMENT_COMMIT, COMMUNITY_ROLE_DOCUMENT_ENTRY)):
+        ancestor = subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', reviewed, source],
+            capture_output=True).returncode == 0
+        if (ancestor and legacy.entry(ROOT, source, document) == expected
+                and legacy.entry(ROOT, reviewed, document) == expected):
+            return True
+    return False
 
 
 def reviewed_stores_source(source):
     stores = 'docs/DATA_STORES.md'
     actual = legacy.entry(ROOT, source, stores)
+    if actual == AUDIO_DATA_STORES_ENTRY and legacy.entry(
+            ROOT, AUDIO_DATA_STORES_COMMIT, stores) == AUDIO_DATA_STORES_ENTRY:
+        return subprocess.run(
+            ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
+             AUDIO_DATA_STORES_COMMIT, source], capture_output=True).returncode == 0
     if actual == INVENTORY_DATA_STORES_ENTRY and legacy.entry(
             ROOT, INVENTORY_DATA_STORES_COMMIT, stores) == INVENTORY_DATA_STORES_ENTRY:
         return subprocess.run(
@@ -129,11 +159,16 @@ def reviewed_catalog_voice_additions(source, record):
     inventory_ancestor = subprocess.run(
         ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', INVENTORY_DATA_STORES_COMMIT, source],
         capture_output=True).returncode == 0
-    expected_added = CATALOG_VOICE_PATHS | (INVENTORY_VOICE_PATHS if inventory_ancestor else frozenset())
+    multi_owner_ancestor = subprocess.run(
+        ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', MULTI_OWNER_INVENTORY_SOURCE, source],
+        capture_output=True).returncode == 0
+    inventory_paths = (MULTI_OWNER_INVENTORY_VOICE_PATHS if multi_owner_ancestor else
+                       INVENTORY_VOICE_PATHS if inventory_ancestor else frozenset())
+    inventory_source = MULTI_OWNER_INVENTORY_SOURCE if multi_owner_ancestor else INVENTORY_DATA_STORES_COMMIT
+    expected_added = CATALOG_VOICE_PATHS | inventory_paths
     legacy.require(added == expected_added, 'v2_fixture_unreviewed_voice_source')
     for paths, reviewed in ((CATALOG_VOICE_PATHS, CATALOG_DATA_STORES_COMMIT),
-                            (INVENTORY_VOICE_PATHS if inventory_ancestor else frozenset(),
-                             INVENTORY_DATA_STORES_COMMIT)):
+                            (inventory_paths, inventory_source)):
         if not paths:
             continue
         ancestor = subprocess.run(
@@ -142,6 +177,10 @@ def reviewed_catalog_voice_additions(source, record):
         legacy.require(ancestor and all(
             legacy.entry(ROOT, source, name) == legacy.entry(ROOT, reviewed, name)
             for name in paths), 'v2_fixture_unreviewed_voice_source')
+        if reviewed == MULTI_OWNER_INVENTORY_SOURCE:
+            legacy.require(all(legacy.entry(ROOT, reviewed, name) == expected
+                               for name, expected in MULTI_OWNER_INVENTORY_ENTRIES.items()),
+                           'v2_fixture_unreviewed_voice_source')
     return added
 
 
@@ -199,6 +238,15 @@ class ReviewedJWKSFixtureTest(unittest.TestCase):
 
 
 class C2ReviewedStoresSourceTest(unittest.TestCase):
+    def test_reviewed_audio_source_and_descendant_are_exact(self):
+        source = '1c3c9630b2f61e22c6e8579290b3443f0425eaa1'
+        expected = {'mode': '100644', 'type': 'blob',
+                    'oid': 'af464029d432a499f58db19b6fa440fb5c0c0d7c'}
+        for current in (source, git('rev-parse', 'HEAD')):
+            with self.subTest(source=current):
+                self.assertEqual(legacy.entry(ROOT, current, 'docs/DATA_STORES.md'), expected)
+                self.assertTrue(reviewed_stores_source(current))
+
     def test_inventory_tuple_and_unknown_content_mode_missing_and_ancestry(self):
         stores = 'docs/DATA_STORES.md'
         current = INVENTORY_DATA_STORES_COMMIT
@@ -250,6 +298,15 @@ class C2ReviewedStoresSourceTest(unittest.TestCase):
 
 
 class ReviewedColdStartDocumentTest(unittest.TestCase):
+    def test_reviewed_community_role_source_and_descendant_are_exact(self):
+        source = '8c6557ae11ee53212c082d3708263e701c20e974'
+        expected = {'mode': '100644', 'type': 'blob',
+                    'oid': '43217ef76502773259ab12f64baf5c097c8fb84a'}
+        for current in (source, git('rev-parse', 'HEAD')):
+            with self.subTest(source=current):
+                self.assertEqual(legacy.entry(ROOT, current, 'docs/microservices/space-service.md'), expected)
+                self.assertTrue(reviewed_cold_start_document(current))
+
     def test_exact_reviewed_source_and_descendant(self):
         source = '9bb0f3306e04e15fffcd899df21dd4094fa11b0c'
         expected = {'mode': '100644', 'type': 'blob',
@@ -279,6 +336,83 @@ class ReviewedColdStartDocumentTest(unittest.TestCase):
                     git('write-tree', env=env), [BASE if variant == 'ancestry' else current])
             with self.subTest(variant=variant):
                 self.assertFalse(reviewed_cold_start_document(changed))
+
+
+class ReviewedCurrentDocumentSourcesTest(unittest.TestCase):
+    def test_each_new_tuple_rejects_content_mode_missing_and_disconnected_ancestry(self):
+        for name, current, check in (
+                ('docs/DATA_STORES.md', '1c3c9630b2f61e22c6e8579290b3443f0425eaa1',
+                 reviewed_stores_source),
+                ('docs/microservices/space-service.md', '8c6557ae11ee53212c082d3708263e701c20e974',
+                 reviewed_cold_start_document)):
+            for variant in ('content', 'mode', 'missing', 'ancestry'):
+                with tempfile.TemporaryDirectory() as directory:
+                    env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                    git('read-tree', current, env=env)
+                    entry = legacy.entry(ROOT, current, name)
+                    if variant == 'missing':
+                        git('update-index', '--force-remove', '--', name, env=env)
+                    elif variant != 'ancestry':
+                        mode = '100755' if variant == 'mode' else entry['mode']
+                        oid = entry['oid'] if variant == 'mode' else git(
+                            'hash-object', '-w', '--stdin', data=b'unreviewed document source\n')
+                        git('update-index', '--cacheinfo', mode + ',' + oid + ',' + name, env=env)
+                    source = RealGitSuccessorTest.commit(git('write-tree', env=env),
+                        [BASE if variant == 'ancestry' else current])
+                with self.subTest(path=name, variant=variant):
+                    self.assertFalse(check(source))
+
+
+class ReviewedMultiOwnerInventorySourceTest(unittest.TestCase):
+    def test_complete_reviewed_inventory_source_and_descendant(self):
+        record = successor.load_record(ROOT)
+        source = '1cc1d46023bd31c473136fa285446ba30e9ef99a'
+        paths = INVENTORY_VOICE_PATHS | {
+            'src/backend/voice/pb/voice/messaging/v1/reference_inventory.pb.go',
+            'src/backend/voice/pb/voice/messaging/v1/reference_inventory_grpc.pb.go'}
+        for current in (source, git('rev-parse', 'HEAD')):
+            with self.subTest(source=current):
+                self.assertEqual(reviewed_catalog_voice_additions(current, record),
+                                 CATALOG_VOICE_PATHS | paths)
+
+    def test_mixed_old_and_new_inventory_closure_rejects(self):
+        record = successor.load_record(ROOT)
+        name = 'src/backend/voice/pb/voice/common/v1/reference_inventory.pb.go'
+        old = legacy.entry(ROOT, INVENTORY_DATA_STORES_COMMIT, name)
+        self.assertNotEqual(old, MULTI_OWNER_INVENTORY_ENTRIES[name])
+        with tempfile.TemporaryDirectory() as directory:
+            env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+            git('read-tree', MULTI_OWNER_INVENTORY_SOURCE, env=env)
+            git('update-index', '--cacheinfo', old['mode'] + ',' + old['oid'] + ',' + name, env=env)
+            source = RealGitSuccessorTest.commit(git('write-tree', env=env),
+                                                 [MULTI_OWNER_INVENTORY_SOURCE])
+        with self.assertRaisesRegex(legacy.Rejected, '^v2_fixture_unreviewed_voice_source$'):
+            reviewed_catalog_voice_additions(source, record)
+
+    def test_complete_inventory_rejects_each_changed_mode_content_missing_and_disconnected_source(self):
+        record = successor.load_record(ROOT)
+        current = '1cc1d46023bd31c473136fa285446ba30e9ef99a'
+        paths = INVENTORY_VOICE_PATHS | {
+            'src/backend/voice/pb/voice/messaging/v1/reference_inventory.pb.go',
+            'src/backend/voice/pb/voice/messaging/v1/reference_inventory_grpc.pb.go'}
+        for name in sorted(paths):
+            for variant in ('content', 'mode', 'missing', 'ancestry'):
+                with tempfile.TemporaryDirectory() as directory:
+                    env = dict(os.environ, GIT_INDEX_FILE=str(Path(directory) / 'index'))
+                    git('read-tree', current, env=env)
+                    entry = legacy.entry(ROOT, current, name)
+                    if variant == 'missing':
+                        git('update-index', '--force-remove', '--', name, env=env)
+                    elif variant != 'ancestry':
+                        mode = '100755' if variant == 'mode' else entry['mode']
+                        oid = entry['oid'] if variant == 'mode' else git(
+                            'hash-object', '-w', '--stdin', data=b'unreviewed inventory source\n')
+                        git('update-index', '--cacheinfo', mode + ',' + oid + ',' + name, env=env)
+                    source = RealGitSuccessorTest.commit(git('write-tree', env=env),
+                        [BASE if variant == 'ancestry' else current])
+                with self.subTest(path=name, variant=variant), self.assertRaisesRegex(
+                        legacy.Rejected, '^v2_fixture_unreviewed_voice_source$'):
+                    reviewed_catalog_voice_additions(source, record)
 
 
 class RealGitSuccessorTest(unittest.TestCase):
@@ -439,7 +573,7 @@ class RealGitSuccessorTest(unittest.TestCase):
         self.assertEqual(legacy.entry(ROOT, D1_C2_DATA_STORES_COMMIT,
                                       'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
         self.assertEqual(legacy.entry(ROOT, git('rev-parse', 'HEAD'),
-                                      'docs/DATA_STORES.md'), INVENTORY_DATA_STORES_ENTRY)
+                                      'docs/DATA_STORES.md'), AUDIO_DATA_STORES_ENTRY)
         self.assertTrue(reviewed_stores_source(D1_C2_DATA_STORES_COMMIT))
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
 
@@ -477,7 +611,7 @@ class RealGitSuccessorTest(unittest.TestCase):
         actual = {name for name in legacy.tree(str(ROOT), self.source) if name.startswith(prefix)}
         self.assertEqual(actual, expected)
         self.assertEqual(reviewed_catalog_voice_additions(git('rev-parse', 'HEAD'), self.record),
-                         CATALOG_VOICE_PATHS | INVENTORY_VOICE_PATHS)
+                         CATALOG_VOICE_PATHS | MULTI_OWNER_INVENTORY_VOICE_PATHS)
         unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
         with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
             reviewed_catalog_voice_additions(unknown, self.record)

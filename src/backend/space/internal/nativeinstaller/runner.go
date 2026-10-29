@@ -326,17 +326,11 @@ func Run(ctx context.Context, c Config) (err error) {
 	defer pool.Close()
 	s := &store.SpaceStore{Pool: pool}
 	checkWindow := func(windowCtx context.Context) error {
-		var ok bool
-		if err := admin.QueryRow(windowCtx, `SELECT pg_backend_pid()=$1 AND session_user=$2 AND current_user=session_user AND EXISTS(SELECT 1 FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory' AND granted) AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname='space_db' AND application_name<>$3)`, pid, role, cfg.RuntimeParams["application_name"]).Scan(&ok); err != nil || !ok {
-			return errors.New("HOLD: exclusive owning maintenance window lost")
-		}
+		var creation *store.NativeInstallerSourceFacts
 		if r.Created {
-			var oid uint32
-			if err := admin.QueryRow(windowCtx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&oid); err != nil || oid != r.Creation.DatabaseOID {
-				return errors.New("HOLD: created target identity changed")
-			}
+			creation = r.Creation
 		}
-		return nil
+		return checkMaintenanceWindow(windowCtx, admin, pid, role, cfg.RuntimeParams["application_name"], creation)
 	}
 	if err = checkWindow(ctx); err != nil {
 		return err
@@ -447,6 +441,23 @@ func Run(ctx context.Context, c Config) (err error) {
 		return err
 	}
 	return emit("complete")
+}
+
+func checkMaintenanceWindow(ctx context.Context, admin *pgx.Conn, pid int32, role, applicationName string, creation *store.NativeInstallerSourceFacts) error {
+	var ok bool
+	// Autovacuum is server-owned physical maintenance, not an application or
+	// privileged DDL competitor. Exempt only that known backend type; logical
+	// replication, unknown types and NULL metadata still fail closed.
+	if err := admin.QueryRow(ctx, `SELECT pg_backend_pid()=$1 AND session_user=$2 AND current_user=session_user AND EXISTS(SELECT 1 FROM pg_locks WHERE pid=pg_backend_pid() AND locktype='advisory' AND granted) AND NOT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname='space_db' AND backend_type IS DISTINCT FROM 'autovacuum worker' AND application_name IS DISTINCT FROM $3)`, pid, role, applicationName).Scan(&ok); err != nil || !ok {
+		return errors.New("HOLD: exclusive owning maintenance window lost")
+	}
+	if creation != nil {
+		var oid uint32
+		if err := admin.QueryRow(ctx, `SELECT oid FROM pg_database WHERE datname='space_db'`).Scan(&oid); err != nil || oid != creation.DatabaseOID {
+			return errors.New("HOLD: created target identity changed")
+		}
+	}
+	return nil
 }
 
 func runNativeCatalog51(ctx context.Context, s *store.SpaceStore, prior *store.NativeInstallerSourceFacts, migrationsDir string, window func(context.Context) error) (receipt *store.NativeMembershipCatalog51Receipt, err error) {

@@ -7,7 +7,7 @@ provenance. The policy does not change already-running PR #875 or rerun it.
 | --- | --- | --- |
 | Exact current PR parents, clean complete merge tree, immutable SQL tree entries, source-disabled regression guard | Every PR, required `current-diff-contract` | base/head/target, validator digest, changed paths, diagnostics artifact |
 | F05–F12 provisioning/docs and all original CI-script checks | Path-selected four `ci-script-tests` shards, required as a matrix | job/step logs, unchanged failure propagation |
-| Unit/widget discovery, serial isolation | Four required `flutter-unit-tests` shards on the original Flutter selector | test logs and per-shard failed golden artifacts |
+| Unit/widget discovery, serial isolation | Four required `flutter-unit-tests` file shards on the original Flutter selector | canonical inventory, shard receipts, test logs and per-shard failed golden artifacts |
 | F13 historical source ownership, pinned checkpoints, aliases, octopus/nested contribution fixtures | Required master gate before release/staging; nightly; every manual dispatch; PRs changing the historical validator/scope/base helpers; named release branches | full log and checkout SHA, retained 14 days even on failure |
 | Auth/permissions, proto compatibility, affected service integration, Compose/A1 proofs | Existing selected mandatory jobs | existing logs/artifacts and runtime evidence |
 
@@ -50,8 +50,12 @@ Go/Flutter/dependency and Docker content caches still execute validation and
 respect their toolchain/content identities. No `continue-on-error` or synthetic
 success is introduced.
 
-Compose E2E builds current images through its original Compose up build path
-and executes the complete smoke suite.
+Compose E2E and the attachment restart proof explicitly build current Compose
+images before starting the stack with --no-build. An isolated Buildx builder
+uses per-service, per-platform content caches for build preparation; cached
+layers do not restore runtime state or replace the required smoke and restart
+checks. Build failures remain fatal. Hosted cold and warm timings are needed
+to establish the effect on job latency.
 
 Compose E2E's host Go commands restore module downloads and compiled objects
 using the explicit Gateway, Notification and shared pkg `go.sum` paths.
@@ -65,6 +69,11 @@ restores; it does not establish warm host-cache performance. The isolated proof
 with a warm compilation cache and failure after a source mutation.
 
 ## PR scope and image verification
+
+On selected PRs, Auth Maven/Testcontainers and the Auth image build execute in
+independent jobs against the same checked-out candidate. The gate requires both
+to succeed. Master retains the existing sequential test, image load, smoke and
+publish path. A cold image cache still performs the full image build.
 
 Path detection uses dorny v4 `some-with-excludes`: positive globs select inputs
 and negative globs exclude them. Docs-only changes still require the current
