@@ -37,11 +37,16 @@ INSTALLER_MEMBER='nats-rollout-preservation/installer.py'
 # observed installed binary pins, and this independently authorized installer.
 GIS_INSTALLED_TARGET_PROJECTION='d64f32b7383e06cd454d2f302ebce656ef7dfcb8b97b3012f20824f2b74615ef'
 GIS_INSTALLED_NEW_MEMBER='nats-rollout-preservation/gis_existing_update.py'
-# Exact full 23 prerequisite candidate: e49806531d5b05b6a521b249a9eed46e520699ab,
+# Provisional full 23 prerequisite candidate: 83950c631442553a551cdacdf659a996ab2a3cf3,
 # observed installed binary pins, and the independently authorized installer.
-FULL23_INSTALLED_TARGET_PROJECTION='8f5e1095a702b4bcde11ae5be2111457cf61a05010da1b2bfd95200ed8180dae'
+FULL23_INSTALLED_TARGET_PROJECTION='54aa6eca4a2f7435224fac6e3ac5f4953601122d91fded31eb7dd3953fc62ff4'
 FULL23_NEW_MEMBERS=frozenset(('nats-rollout-preservation/realtime_bootstrap.py',
-                             'nats-rollout-preservation/realtime_bootstrap_existing.py'))
+                             'nats-rollout-preservation/realtime_bootstrap_existing.py',
+                             'nats-rollout-preservation/staging_prerequisites.py',
+                             'nats-rollout-preservation/staging_p3_prerequisites.py',
+                             'nats-rollout-preservation/staging_p3_prerequisites_crypto.py',
+                             'nats-rollout-preservation/staging_gis_material.py',
+                             'nats-rollout-preservation/staging_release_policy_prepare.py'))
 
 # Closed source predecessor, not an assertion about the actual installed host.
 # Unchanged members/binaries must exactly match the reviewed successor bundle.
