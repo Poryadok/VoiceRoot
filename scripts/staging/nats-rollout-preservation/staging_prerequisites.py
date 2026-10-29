@@ -123,8 +123,12 @@ def _capture_authority(actions,session,approved,execution):
 def validate_plan(plan,session):
     """Validate the closed protected identity; child preflight remains mandatory."""
     try:
-        if (type(plan) is not dict or set(plan)!=PLAN_FIELDS
-            or plan['schema']!='voice-staging-prerequisites-plan-v1'
+        version=plan.get('schema') if type(plan) is dict else None
+        fields=PLAN_FIELDS|({'preservation_sha256'} if version=='voice-staging-prerequisites-plan-v2' else set())
+        if (type(plan) is not dict or set(plan)!=fields
+            or version not in ('voice-staging-prerequisites-plan-v1','voice-staging-prerequisites-plan-v2')
+            or version=='voice-staging-prerequisites-plan-v2' and
+                (not isinstance(plan['preservation_sha256'],str) or not SHA.fullmatch(plan['preservation_sha256']))
             or plan['operation']!=session.operation or plan['context']!=session.context
             or plan['helper_sha256']!=session.helper or not OP.fullmatch(plan['operation'])
             or any(not isinstance(plan[k],str) or not SHA.fullmatch(plan[k]) for k in
@@ -465,6 +469,10 @@ def _recheck_baseline(session,state):
     baseline=_json(_read_private(_base(session)/'baseline.json',limit=32<<20))
     if digest(baseline)!=state['plan']['baseline_sha256']:
         raise Blocked('staging_prerequisites_baseline_changed')
+    if 'preservation_sha256' in state['plan']:
+        import staging_cohort_preservation
+        staging_cohort_preservation.revalidate_paused(session)
+        return
     kube=Kube();realtime_bootstrap._check_stage(kube,baseline['workloads'])
     namespace=kube.get('namespace','voice-staging');expected=baseline['expected'];storage=baseline['storage']
     claim=kube.get('pvc',expected['source_claim']);pv=kube.get('pv',claim['spec']['volumeName'])
@@ -758,8 +766,8 @@ def _candidate_images(session,request,approved,source,stage,policy,auxiliary,ren
     bridge_root.verify_bootstrap_candidate_images(session,images,renderer,first,ordinary)
 
 
-def run_prepare(actions,request,approved,execution,workspace):
-    """Prepare the three fixed prerequisites inside the already admitted root scope."""
+def prepare_inputs(actions,request,approved,execution,workspace):
+    """Prepare immutable, private prerequisite inputs before the writer cut."""
     import commands
     import compiler
     import gis_existing_update
@@ -887,6 +895,39 @@ def run_prepare(actions,request,approved,execution,workspace):
         'auxiliary_images':{'voice-p3-principal-jwks/jwks':auxiliary['image_ref']},'renderer_authority_sha256':None if renderer is None else digest(renderer),
         'previous_active_sha256':digest(active) if existing else None}
     for slot,payloads in (('release_policy',policy_payloads),('p3',{} if existing else p3_payloads),('gis_material',gis_payloads)):_save_payloads(session,slot,payloads)
+    _recheck_baseline(session,{'plan':plan});session.check()
+    prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':plan,
+              'request':{'mode':request['mode'],'changed_services':copy.deepcopy(request['changed_services']),
+                         'gis_first_install':request.get('gis_first_install') is True}}
+    _private_write(base/'prepared.json',_bytes(prepared))
+    session.check()
+    return {'stage':stage,'inputs_sha256':digest(prepared)}
+
+
+def run_prepare(actions,request,approved,execution,workspace,*,preservation_ref):
+    """Continue only from the root-loaded, restore-qualified preservation receipt."""
+    import commands
+    import staging_cohort_preservation
+    import staging_p3_prerequisites as p3
+    session=actions.tt_session
+    if (commands.authority_guard!=session.check or Path(workspace)!=guard.ROOT/'installed'/'sources'/session.operation):
+        raise Blocked('staging_prerequisites_prepare_invalid')
+    base=_base(session)
+    receipt=staging_cohort_preservation.load_qualified(session)
+    if receipt!=preservation_ref:raise Blocked('staging_prerequisites_preservation_changed')
+    prepared=_json(_read_private(_base(session)/'prepared.json',limit=32<<20))
+    if (type(prepared) is not dict or set(prepared)!={'schema','plan','request'}
+        or prepared['schema']!='voice-staging-prerequisites-prepared-v1'
+        or digest(prepared)!=receipt.get('prerequisite_inputs_sha256')):
+        raise Blocked('staging_prerequisites_prepared_changed')
+    plan=copy.deepcopy(prepared['plan'])
+    if (plan['approved_sha256']!=digest(approved) or plan['execution_sha256']!=digest(execution)
+        or request.get('mode') not in ('full','app-only')
+        or prepared['request']!={'mode':request.get('mode'),'changed_services':request.get('changed_services'),
+                                  'gis_first_install':request.get('gis_first_install') is True}):
+        raise Blocked('staging_prerequisites_prepared_changed')
+    plan['schema']='voice-staging-prerequisites-plan-v2';plan['preservation_sha256']=digest(receipt)
+    stage=staging_cohort_preservation.capture_stage(session,receipt)
     _recheck_baseline(session,{'plan':plan});session.check()
     fence=session.bind_prerequisites(plan,stage.old_images)
     save(base/'checkpoint.json',{'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':fence,
