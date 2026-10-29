@@ -112,6 +112,7 @@ class CreateOnlyTest(unittest.TestCase):
         fake_source = SimpleNamespace(verify=lambda *args:None)
         cut=SimpleNamespace(journal=object(),client=object(),fence=SimpleNamespace(ledger=object()),
                             verify_drained=lambda:(_ for _ in ()).throw(ValueError('drain lost')))
+        cut.fence.context=self.base.context; cut.lock=self.base.lock; cut.namespace_uid='ns'
         def received(session,*_):
             session._delegated_cut=cut; session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
             return self.envelope

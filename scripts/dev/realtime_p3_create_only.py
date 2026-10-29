@@ -72,9 +72,11 @@ class Session:
     def _guard(self):
         if (self.journal.poisoned or self.journal.intent != self.intent or self.journal.state.get('intent') != self.intent): raise ValueError()
         media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
+        if self._delegated_refs is not None and self._delegated_cut is None: raise ValueError()
         if self._delegated_cut is not None:
             cut=self._delegated_cut
-            if self._delegated_refs!=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger): raise ValueError()
+            if (self._delegated_refs!=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+                    or cut.fence.context!=self.fence.context or cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid): raise ValueError()
             cut.verify_drained()
             if self._delegated_refs!=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger): raise ValueError()
         row, _ = self.fence.ledger.read()

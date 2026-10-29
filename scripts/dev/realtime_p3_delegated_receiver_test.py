@@ -1,8 +1,10 @@
 import copy
 import hashlib
+import sys
+import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import realtime_p3_create_only as creation
 import realtime_p3_create_only_packet as packet
@@ -28,6 +30,32 @@ class RequestTest(unittest.TestCase):
                 elif change=='source':altered['issuer_source_sha']='c'*40
                 else:altered['unexpected']=True
                 with self.subTest(change=change),self.assertRaises(ValueError):receiver._request_matches(session,altered)
+
+    def test_failed_accept_cancels_and_joins_trigger_before_return(self):
+        class Cut:
+            def __init__(self):
+                self.fence=SimpleNamespace(context={'op':'same'},ledger=SimpleNamespace(read=lambda:({},1)))
+                self.lock={'uid':'lock'}; self.namespace_uid='ns'; self.journal=object(); self.client=object()
+        class Peer:pass
+        class Session:pass
+        class Capability:pass
+        cut=Cut(); pre=Peer(); pre.cut=cut; pre.fence=cut.fence; pre.lock=cut.lock; pre.namespace_uid='ns'
+        cap=Capability(); cap.creator_preflight=pre; cap.token='token'
+        session=Session(); session.fence=cut.fence; session.lock=cut.lock; session.namespace_uid='ns'
+        session.listener=Mock(); session.listener.accept.side_effect=OSError('fixture'); session.handoff={'status':'ready'}
+        session._delegated_cut=None; session.journal=object()
+        cancelled=threading.Event(); finished=threading.Event()
+        class Handle:
+            def run(self):cancelled.wait(5); finished.set()
+            def cancel(self):cancelled.set()
+        authority=SimpleNamespace(RealtimeP3Capability=Capability,verify_current=lambda *_:None)
+        client=SimpleNamespace(new_issue_trigger=lambda *_:Handle())
+        with patch.dict(sys.modules,{'dev_realtime_p3_issuer_capability':authority,'dev_realtime_p3_issuer_client':client}), \
+             patch.object(receiver.creation,'Session',Session),patch.object(receiver.peer,'PeerIssuerPreflightPhase',Peer), \
+             patch.object(receiver.writer_cut,'WriterCut',Cut),patch.object(receiver.native.SpaceNativeToolPhase,'_custody',return_value='custody'), \
+             patch.object(receiver,'_current'):
+            with self.assertRaises(receiver.creation.CreateError):receiver.receive(session,cap,'token')
+        self.assertTrue(cancelled.is_set()); self.assertTrue(finished.is_set())
 
 
 if __name__=='__main__':unittest.main()

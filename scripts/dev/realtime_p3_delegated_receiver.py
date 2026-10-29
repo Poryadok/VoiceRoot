@@ -61,7 +61,7 @@ def receive(session,capability,token):
     """Return a validated private packet only after the root service terminal OK."""
     import dev_realtime_p3_issuer_capability as authority
     import dev_realtime_p3_issuer_client as client
-    fds=[]; connection=None
+    fds=[]; connection=None; worker=None; handle=None
     try:
         if (type(session) is not creation.Session or type(capability) is not authority.RealtimeP3Capability
                 or not isinstance(token,str) or not token or session.listener is None
@@ -77,9 +77,9 @@ def receive(session,capability,token):
         session._delegated_cut=cut; session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
         custody=native.SpaceNativeToolPhase._custody(session.journal)
         _current(session,custody,capability,token)
-        result=[]
+        result=[]; handle=client.new_issue_trigger(capability,token,session)
         def invoke():
-            try:client.trigger_issue(capability,token,session); result.append(True)
+            try:handle.run(); result.append(True)
             except BaseException:result.append(False)
         worker=threading.Thread(target=invoke,daemon=True); worker.start(); deadline=time.monotonic()+300
         session.listener.settimeout(300); connection,_=session.listener.accept(); connection.settimeout(30)
@@ -132,6 +132,10 @@ def receive(session,capability,token):
         raise creation.CreateError('delegated P3 handoff unavailable') from None
     finally:
         if connection is not None:connection.close()
+        if worker is not None and worker.is_alive():
+            try:handle.cancel()
+            except BaseException:pass
+            worker.join(timeout=5)
         for fd in fds:
             try:os.close(fd)
             except OSError:pass
