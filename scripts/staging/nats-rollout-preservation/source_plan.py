@@ -467,6 +467,86 @@ def _application(builder, *, images_only=False):
         if keys: builder.secret('principal-secrets', name, keys)
 
 
+def preservation_projection(source, parameters, decoder, kube):
+    """Read-only, source-rendered store comparison before the writer cut.
+
+    The returned record is private evidence, not authority by itself. Its caller
+    must bind it to the protected source, session and current storage identities.
+    """
+    try:
+        p=dict(parameters)
+        if p.get('mode') not in ('full','app-only'):_fail('preservation_projection_mode_invalid')
+        b=_Source(source,p,decoder,kube);_configuration(b)
+        app=b.get('Secret','voice-app-secrets')
+        credentials=b.secret('minio-credentials','voice-minio-credentials',('MINIO_ROOT_USER','MINIO_ROOT_PASSWORD'))
+        selected_keys=('USER_R2_ENDPOINT','USER_R2_REGION','USER_R2_BUCKET','USER_R2_PUBLIC_BASE_URL',
+                       'FILE_R2_ENDPOINT','FILE_R2_REGION','FILE_R2_BUCKET','CLICKHOUSE_DSN','CLICKHOUSE_PASSWORD')
+        if any(key not in app.get('data',{}) for key in selected_keys):_fail('preservation_store_secret_missing')
+        b.read('scripts/staging/ensure-minio-credentials.sh','minio-credentials')
+        b.read('scripts/storage/apply-minio-cors.sh','minio-cors')
+        minio=b.documents('deploy/staging/minio.yaml','minio-cors')
+        minio_ids=[(obj['kind'],obj['metadata']['name']) for obj in minio]
+        expected_minio={('StatefulSet','voice-minio'),('Service','voice-minio'),('Job','voice-minio-create-avatars-bucket'),('Job','voice-minio-create-files-bucket')}
+        if set(minio_ids)!=expected_minio or len(minio_ids)!=len(expected_minio):_fail('preservation_minio_source_invalid')
+        states=[obj for obj in minio if obj['kind']=='StatefulSet' and obj['metadata']['name']=='voice-minio']
+        if len(states)!=1:_fail('preservation_minio_source_invalid')
+        b.add('minio-cors',states[0],action=True);_preserve_claims(b,states[0])
+        if p['mode']=='full':
+            private={'__LIVEKIT_API_KEY__':_value(app,'LIVEKIT_API_KEY'),'__LIVEKIT_API_SECRET__':_value(app,'LIVEKIT_API_SECRET')}
+            infra=b.documents('deploy/staging/infra.yaml','infra',private,skip_nats=True)
+            wanted={('Service','voice-redis'),('Deployment','voice-redis'),('Service','voice-clickhouse'),('StatefulSet','voice-clickhouse')}
+            selected=[obj for obj in infra if (obj['kind'],obj['metadata']['name']) in wanted]
+            if {(obj['kind'],obj['metadata']['name']) for obj in selected}!=wanted or len(selected)!=len(wanted):_fail('preservation_infra_source_invalid')
+            for obj in selected:
+                b.add('infra',obj)
+                if obj['kind']=='StatefulSet':_preserve_claims(b,obj)
+            for obj in minio:
+                if obj['kind']=='Job':
+                    observed=b.get('Job',obj['metadata']['name'])
+                    if observed.get('status',{}).get('succeeded')!=1 or observed.get('status',{}).get('active',0):_fail('canonical_minio_bucket_job_incomplete')
+                    desired=copy.deepcopy(obj['spec']['template']);actual=copy.deepcopy(observed['spec']['template'])
+                    actual.setdefault('metadata',{}).setdefault('labels',{})
+                    for key in ('controller-uid','job-name','batch.kubernetes.io/controller-uid','batch.kubernetes.io/job-name'):actual['metadata']['labels'].pop(key,None)
+                    if not actual['metadata']['labels']:actual['metadata'].pop('labels',None)
+                    if not actual['metadata']:actual.pop('metadata',None)
+                    if actual!=desired:_fail('unsupported_minio_bucket_job_change')
+                elif obj['kind']=='Service':b.add('infra',obj)
+                elif obj['kind']!='StatefulSet':_fail('preservation_minio_source_invalid')
+        services=b.documents('deploy/staging/services.yaml','migrations')
+        for name in ('user','file'):
+            docs=[obj for obj in services if obj.get('kind')=='Deployment' and obj['metadata']['name']=='voice-'+name]
+            if len(docs)!=1:_fail('preservation_r2_source_invalid')
+            def env(obj):
+                containers=[c for c in obj['spec']['template']['spec']['containers'] if c['name']==name]
+                if len(containers)!=1:_fail('preservation_r2_container_invalid')
+                values=[entry for entry in containers[0].get('env',[]) if entry.get('name','').startswith(name.upper()+'_R2_')]
+                if len({entry['name'] for entry in values})!=len(values):_fail('preservation_r2_environment_invalid')
+                return sorted(values,key=lambda item:item['name'])
+            expected={name.upper()+'_R2_'+suffix for suffix in ('ENDPOINT','SIGNING_ENDPOINT','REGION','ACCESS_KEY_ID','SECRET_ACCESS_KEY','BUCKET')}
+            if name=='user':expected.add('USER_R2_PUBLIC_BASE_URL')
+            desired_env=env(docs[0])
+            if {entry['name'] for entry in desired_env}!=expected:_fail('preservation_r2_source_invalid')
+            if desired_env!=env(b.get('Deployment','voice-'+name)):_fail('unsupported_r2_configuration_change_'+name)
+        config=b.documents('deploy/staging/configmap-app.yaml','domains')[0]
+        current=b.get('ConfigMap',config['metadata']['name'])
+        redis_addr=config.get('data',{}).get('REDIS_ADDR')
+        if not isinstance(redis_addr,str) or not redis_addr or redis_addr!=current.get('data',{}).get('REDIS_ADDR'):_fail('unsupported_redis_configuration_change')
+        identities=[]
+        for (kind,name),obj in sorted(b.live.items()):
+            meta=obj.get('metadata',{})
+            if not meta.get('uid') or not meta.get('resourceVersion'):_fail('preservation_store_identity_invalid')
+            semantic=guard.semantic(obj)
+            if kind=='Secret':
+                keys=selected_keys if name=='voice-app-secrets' else ('MINIO_ROOT_USER','MINIO_ROOT_PASSWORD')
+                semantic={'data':{key:obj['data'][key] for key in keys}}
+            identities.append({'kind':kind,'name':name,'uid':meta['uid'],'resourceVersion':meta['resourceVersion'],'semantic_sha256':guard.digest(semantic)})
+        sources=sorted({(entry['path'],entry['sha256']) for row in b.rows.values() for entry in row['sources']})
+        return {'schema':'voice-staging-store-projection-v1','mode':p['mode'],'sources':[{'path':path,'sha256':sha} for path,sha in sources],
+                'identities':identities}
+    except PlanError:raise
+    except Exception:_fail('preservation_store_projection_invalid')
+
+
 def compile_plan(source, parameters, decoder, kube):
     """Return a canonical plan, with specific unsupported-change vetoes."""
     try:
