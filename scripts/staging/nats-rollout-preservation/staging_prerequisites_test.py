@@ -296,6 +296,9 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_operator_trust_expansion_is_rejected_before_effects(self):
         self._cold_prepare('expanded-trust')
 
+    def test_completed_realtime_addition_requires_exact_private_custody(self):
+        self._cold_prepare('rt-extension')
+
     def _cold_prepare(self,fault=None):
         import os, shutil, subprocess, base64, yaml, uuid
         from contextlib import ExitStack
@@ -481,6 +484,63 @@ class PrepareCompositionTests(unittest.TestCase):
             self.assertEqual(binding['target_sha256'],prereq.digest(captured))
             with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
             self.assertEqual(len(writes),15)
+            if fault=='rt-extension':
+                # SQL execution is not claimed here: construct its protected
+                # COMPLETE records, then run the actual parent/RT validators.
+                import realtime_bootstrap as rt
+                before=copy.deepcopy(live[('secret','voice-app-secrets')]);password=b'r'*43
+                after=copy.deepcopy(before);after['metadata']['resourceVersion']='901'
+                after['data']['REALTIME_DATABASE_URL']=rt.secret_patch(before,password)[-1]['value']
+                pg={'statefulset':{'uid':'sts','resourceVersion':'1'},
+                    'pod':{'uid':'pgpod','resourceVersion':'1','container_id':'ctr','restart_count':0},
+                    'pvc':{'name':'pgdata-voice-postgres-0','uid':'pgpvc','resourceVersion':'1'},
+                    'pv':{'name':'pgpv','uid':'pgpv','resourceVersion':'1'},
+                    'service':{'uid':'pgsvc','resourceVersion':'1','cluster_ip':'10.0.0.1'},
+                    'endpoints':{'uid':'pgep','resourceVersion':'1','pod_ip':'10.0.0.2'},
+                    'slice':{'uid':'pgslice','resourceVersion':'1'},'system_identifier':'12345'}
+                view=rt._stage_view(stage)
+                plan={'schema':'voice-staging-realtime-bootstrap-v2','operation':session.operation,
+                    'context':session.context,'helper_sha256':session.helper,'source_sha':context['commit'],
+                    'source_files_sha256':prereq.digest(approved['source_files']),
+                    'source_authority_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution),
+                    'stage_sha256':prereq.digest(view),'credential_sha256':hashlib.sha256(password).hexdigest(),
+                    'actual_images':stage.old_images,'namespace_uid':ns,'postgres':pg,
+                    'secret':rt._secret_identity(before),'active_marker_sha256':prereq.digest(stage.marker),
+                    'prerequisites_sha256':prereq.digest(captured)}
+                role={'oid':13,'login':True,'superuser':False,'createdb':False,'createrole':False,
+                    'inherit':False,'replication':False,'bypassrls':False,'memberships':0,
+                    'connection_limit':-1,'valid_until':None,'config':None}
+                role_row={'role':role,'database':None};final={'role':role,'database':{'oid':29,'owner_oid':13}}
+                def done(old,request,value):return {'status':'DONE','before_sha256':prereq.digest(old),
+                    'request_sha256':prereq.digest(request),'readback':value}
+                steps={'role':done({'role':None,'database':None},{'kind':'role','credential_sha256':plan['credential_sha256']},role_row),
+                    'database':done(role_row,{'kind':'database','owner_oid':13},final),
+                    'secret':done(plan['secret'],{'kind':'secret','plan_sha256':prereq.digest(plan)},rt._secret_identity(after))}
+                rt_receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','plan_sha256':prereq.digest(plan),
+                    'steps_sha256':prereq.digest(steps),'role_oid':13,'database_oid':29,'owner_oid':13,
+                    'secret':rt._secret_identity(after),'migration_pass':False}
+                checkpoint={'schema':'voice-staging-realtime-bootstrap-checkpoint-v1','plan':plan,'status':'COMPLETE',
+                    'resource_fence':{**session.binding(),'target_sha256':prereq.digest(plan)},'steps':steps,'receipt':rt_receipt}
+                rtbase=installed/'realtime-bootstrap'/session.operation;rtbase.mkdir(parents=True,mode=0o700)
+                for name,value in [('checkpoint.json',checkpoint),('before-secret.json',before),
+                    ('authority.json',{'approved':approved,'execution':execution}),('stage.json',view)]:save(rtbase/name,value)
+                (rtbase/'credential').write_bytes(password);(rtbase/'credential').chmod(0o600)
+                live[('secret','voice-app-secrets')]=copy.deepcopy(after)
+                self.assertEqual(prereq.load_capture(session),captured)
+                checkpoint['status']='RUNNING';save(rtbase/'checkpoint.json',checkpoint)
+                with self.assertRaises(Exception):prereq.load_capture(session)
+                checkpoint['status']='COMPLETE';save(rtbase/'checkpoint.json',checkpoint)
+                for field in ('uid','resourceVersion'):
+                    altered=copy.deepcopy(before);altered['metadata'][field]='foreign';save(rtbase/'before-secret.json',altered)
+                    with self.assertRaises(Exception):prereq.load_capture(session)
+                save(rtbase/'before-secret.json',before)
+                live[('secret','voice-app-secrets')]['data']['UNRELATED']='Zm9yZWlnbg=='
+                with self.assertRaises(Exception):prereq.load_capture(session)
+                live[('secret','voice-app-secrets')]=copy.deepcopy(after)
+                self.assertEqual(prereq.load_capture(session),captured)
+                save(rtbase/'authority.json',{'approved':{**approved,'forged':True},'execution':execution})
+                with self.assertRaises(Exception):prereq.load_capture(session)
+                self.assertEqual(len(writes),15);return
             if fault=='c2':
                 # A durable rollout PASS is modeled here; this is not a claim
                 # that the transaction/runtime boundary ran in this fixture.

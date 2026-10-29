@@ -65,6 +65,12 @@ under root's shared-resource instruction until the named main refresh finishes.
   Parent-to-Realtime Secret extension and the full caller/candidate/renderer
   qualification remain separate outstanding integration evidence. Independent
   review of this successor, including C2, remains required; no live claim.
+- Reviewed P3 routing checks 363b358 integrated; the affected P3 and parent
+  composition rerun passes 18 tests. A further parent test passes for actual
+  capture revalidation after a modeled protected Realtime COMPLETE: PENDING,
+  before UID/RV, unrelated Secret data and authority changes are rejected.
+  It executes the real local receipt/source/Secret validators, not SQL effects;
+  the actual Realtime producer join remains outstanding.
 
 ## Risks
 
