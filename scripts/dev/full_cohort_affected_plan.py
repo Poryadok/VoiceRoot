@@ -208,6 +208,15 @@ def verify_effective_catalog(probe,cut):
     return result
 
 
+def verify_provisioned_catalog(probe,cut):
+    """Verify the typed provision successor without sampling sessions."""
+    scope=cut.current_provisioned_session_scope()
+    current=_verify_catalog(probe,cut,scope)
+    if cut.current_provisioned_session_scope()!=scope:
+        raise AffectedError('provisioned scope changed')
+    return current
+
+
 def inspect_provisioned(probe,cut):
     """Sample global zero against the protected, freshly provisioned scope."""
     try:
