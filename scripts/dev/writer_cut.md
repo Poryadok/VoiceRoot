@@ -74,7 +74,8 @@ match. Pending supplies no IP for session attribution. Running and Succeeded
 require the full pinned node, image, container and IP identity. Pod UID changes,
 failed phases and the existing bounded timeout hold the operation. If an owned
 Realtime Pod appears or gains runtime identity during a session sample, the cut
-resamples once with the validated identity and requires a stable result; it never
+resamples with each strictly advancing validated identity, at most twice for
+absent to Pending to runtime, then requires a stable full result; it never
 reuses the earlier sample or accepts a changed UID or established runtime IP. `finish_migration()` requires the source terminal
 receipt, a Complete Job, its original successful Pod and zero migration
 sessions. Auth cleanup is accepted only after the producer's exact UID removal
