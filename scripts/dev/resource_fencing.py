@@ -148,7 +148,9 @@ class Fence:
         """Capture a completed C1 row in the same CAS that starts C2."""
         import full_cohort_predecessor_phase as predecessor
         if (not re.fullmatch(r'media-c2-[a-f0-9]{32}',self.context['operation_id']) or
-                not callable(self.on_uncertain)):
+                type(self.check) is not ResourceCheck or
+                getattr(self.on_uncertain,'__self__',None) is not self.check or
+                getattr(self.on_uncertain,'__func__',None) is not ResourceCheck.mark_uncertain):
             raise RuntimeError('predecessor capture requires the C2 operation')
         self.authority()
         previous,revision=self.ledger.read()

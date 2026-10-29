@@ -106,7 +106,7 @@ class PreBeginTests(unittest.TestCase):
         client = frontend_runtime_executor.KubectlTransport.__new__(frontend_runtime_executor.KubectlTransport)
         ledger = resource_fencing.KubeLedger(client)
         check = resource_fencing.ResourceCheck(phase.TT_ENDPOINT, ctx)
-        fence = resource_fencing.Fence(ctx, check, ledger, on_uncertain=lambda reason: None)
+        fence = resource_fencing.Fence(ctx, check, ledger, on_uncertain=check.mark_uncertain)
         old = dict(ctx, status='complete', generation=1, actual=ctx['images']) | completed()
         old['claim'] = '33333333-3333-4333-8333-333333333333'
         old['window'] = '44444444-4444-4444-8444-444444444444'
