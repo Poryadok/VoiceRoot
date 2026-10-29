@@ -53,11 +53,11 @@ class FutureHistoryTests(unittest.TestCase):
              patch.object(installer,'_upgrade_idle_transition') as transition:
             with self.assertRaises(installer.Blocked):installer.upgrade_idle_full23_installed_cohort_v1(Path('/capture'))
             transition.assert_not_called()
-    def test_new_history_paths_must_both_be_absent(self):
+    def test_new_history_paths_must_all_be_absent(self):
         with tempfile.TemporaryDirectory() as folder:
             installed=Path(folder)
             installer.require_future_history_absent(installed)
-            for name in ('source-authority','realtime-bootstrap'):
+            for name in ('source-authority','realtime-bootstrap','prerequisites'):
                 path=installed/name;path.mkdir()
                 with self.assertRaisesRegex(installer.Blocked,'bridge_full23_future_history_present'):
                     installer.require_future_history_absent(installed)
@@ -68,7 +68,7 @@ class FutureHistoryTests(unittest.TestCase):
                 path.unlink()
 
     def test_actual_full23_idle_transition_vetoes_presence_before_replacement(self):
-        for name in ('source-authority','realtime-bootstrap'):
+        for name in ('source-authority','realtime-bootstrap','prerequisites'):
             with self.subTest(name=name),tempfile.TemporaryDirectory() as folder:
                 root=Path(folder);installed=root/'installed';installed.mkdir(mode=0o750)
                 for child,mode in (('inbox',0o1730),('processing',0o700),('journal',0o700),('responses',0o750),('recovery',0o700)):
