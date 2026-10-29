@@ -65,6 +65,27 @@ class HistoricalVerifierTests(unittest.TestCase):
                 self.old.pop('extra',None)
 
 class Tests(unittest.TestCase):
+    def test_story_schema_uses_exact_readonly_command_under_prerequisite_session(self):
+        import resource_claim,resource_claim_test
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        session.admit(start=True);session.journal.row.update(phase='prerequisites-captured',target_sha256='d'*64)
+        session.expected_target='d'*64
+        prefix=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']
+        with tempfile.TemporaryDirectory() as td:
+            source=Path(td);kube,stage,*_=self.fixture(source,'story');copy_historical_story_schema(source)
+            seen=[]
+            def run(args,*_a,**_kw):
+                argv=prefix+args;session.check(argv);seen.append(argv)
+                return {'database':'story_db','version':4,'dirty':False,'username':'voice'}
+            kube.run.side_effect=run
+            with patch('space_authority.capture',return_value={'root-pg':'bound'}):root.story_schema(kube,source,stage)
+            self.assertEqual(seen,[prefix+list(root.STORY_SCHEMA_ARGS)])
+            for bad in (prefix[:-1]+['voice-dev']+list(root.STORY_SCHEMA_ARGS),
+                        ['kubectl','--namespace','voice-staging']+list(root.STORY_SCHEMA_ARGS),
+                        prefix+list(root.STORY_SCHEMA_ARGS[:-1])+['SELECT 1; DELETE FROM schema_migrations;']):
+                with self.subTest(argv=bad),self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):
+                    session.check(bad)
     def test_dynamic_root_witness_is_captured_before_real_fence_and_drift_vetoes_revalidation(self):
         import runtime_stage,story_witness
         from story_witness_test import witness
