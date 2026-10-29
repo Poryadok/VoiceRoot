@@ -1,4 +1,4 @@
-"""Journalled, run-owned local Docker networks and volumes.
+"""Journalled, run-owned local Docker containers, networks and volumes.
 
 This primitive does not intercept Testcontainers or Compose and must not be used
 as evidence that those workloads are isolated. Uncertain operations fail closed.
@@ -6,6 +6,7 @@ as evidence that those workloads are isolated. Uncertain operations fail closed.
 import json
 import os
 from pathlib import Path
+import posixpath
 import re
 import stat
 import subprocess
@@ -45,7 +46,7 @@ class DockerCLI:
     def create(self, kind, name, labels):
         options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
         if kind == 'network':
-            return self._call('network', 'create', '--driver', 'bridge', *options, name)
+            return self._call('network', 'create', '--driver', 'bridge', '--internal', *options, name)
         if kind == 'volume':
             return self._call('volume', 'create', '--driver', 'local', *options, name)
         raise OwnershipError('unsupported Docker resource')
@@ -57,30 +58,76 @@ class DockerCLI:
                 raise ValueError()
             value = rows[0]
             if kind == 'network':
-                if value.get('Driver') != 'bridge' or value.get('Scope') != 'local':
+                if value.get('Driver') != 'bridge' or value.get('Scope') != 'local' or value.get('Internal') is not True:
                     raise ValueError()
                 identifier = value['Id']
             elif kind == 'volume':
                 if value.get('Driver') != 'local':
                     raise ValueError()
                 identifier = value['Name']
+            elif kind == 'container':
+                identifier = value['Id']
+                host = value['HostConfig']
+                if host.get('Privileged') or host.get('Binds'):
+                    raise ValueError()
+                mounts = {}
+                for mount in value.get('Mounts', []):
+                    if mount.get('Type') != 'volume' or mount.get('Destination') in mounts:
+                        raise ValueError()
+                    mounts[mount['Destination']] = mount['Name']
+                bindings = host.get('PortBindings') or {}
+                if bindings:
+                    raise ValueError()
+                running = value.get('State', {}).get('Running') is True
+                if running:
+                    actual = value.get('NetworkSettings', {}).get('Ports') or {}
+                    if not isinstance(actual, dict) or any(entries not in (None, []) for entries in actual.values()):
+                        raise ValueError()
+                return {'id': identifier, 'name': value['Name'].removeprefix('/'), 'kind': kind,
+                        'labels': value['Config'].get('Labels') or {}, 'image': value['Image'],
+                        'network': host['NetworkMode'], 'mounts': mounts, 'ports': [], 'running': running}
             else:
                 raise ValueError()
-            return {'id': identifier, 'name': value['Name'], 'labels': value.get('Labels') or {}, 'kind': kind}
+            return {'id': identifier, 'name': value['Name'], 'labels': value.get('Labels') or {}, 'kind': kind,
+                    'internal': kind == 'network'}
         except (ValueError, KeyError, TypeError, AttributeError):
             raise OwnershipError('Docker resource inspection was invalid') from None
 
     def remove(self, kind, identifier):
-        self._call(kind, 'rm', identifier)
+        self._call(kind, 'rm', *(['-f'] if kind == 'container' else []), identifier)
 
     def exists(self, kind, identifier):
         if kind == 'network':
             rows = self._call('network', 'ls', '--no-trunc', '--format', '{{.ID}}').splitlines()
         elif kind == 'volume':
             rows = self._call('volume', 'ls', '--format', '{{.Name}}').splitlines()
+        elif kind == 'container':
+            rows = self._call('container', 'ls', '-a', '--no-trunc', '--format', '{{.ID}}').splitlines()
         else:
             raise OwnershipError('unsupported Docker resource')
         return identifier in rows
+
+    def image(self, identifier):
+        try:
+            rows = json.loads(self._call('image', 'inspect', identifier))
+            if not isinstance(rows, list) or len(rows) != 1:
+                raise ValueError()
+            image = rows[0]
+            volumes = image['Config'].get('Volumes') or {}
+            if image.get('Os') != 'linux' or image.get('Id') != identifier or not isinstance(volumes, dict):
+                raise ValueError()
+            return {'id': identifier, 'volumes': sorted(volumes)}
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise OwnershipError('Docker image inspection was invalid') from None
+
+    def create_container(self, name, labels, image_id, network_id, mounts, ports):
+        options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
+        for target, volume in sorted(mounts.items()):
+            options.extend(('--mount', 'type=volume,source=' + volume + ',target=' + target))
+        return self._call('container', 'create', '--name', name, '--network', network_id, *options, image_id)
+
+    def start(self, identifier):
+        self._call('container', 'start', identifier)
 
 
 class OwnedRun:
@@ -167,19 +214,51 @@ class OwnedRun:
             raise OwnershipError('invalid ownership journal')
         names = set()
         for item in state['resources']:
-            if (not isinstance(item, dict) or set(item) != {'kind', 'name', 'nonce', 'id', 'state'}
-                    or item['kind'] not in ('network', 'volume') or item['state'] not in ('creating', 'ready', 'removing', 'removed')
+            if not isinstance(item, dict):
+                raise OwnershipError('invalid ownership record')
+            kind = item.get('kind')
+            keys = {'kind', 'name', 'nonce', 'id', 'state'}
+            if kind == 'container':
+                keys |= {'image', 'network', 'mounts', 'ports'}
+            if (set(item) != keys
+                    or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'ready', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
                     or item['name'] != self.run_id + '-' + item['kind'] + '-' + item['nonce']
                     or item['name'] in names or not isinstance(item['id'], str)):
                 raise OwnershipError('invalid ownership record')
+            if item['state'] == 'starting' and kind != 'container':
+                raise OwnershipError('invalid resource state')
             if item['state'] == 'creating':
                 if item['id']:
                     raise OwnershipError('invalid creating resource identity')
-            elif ((item['kind'] == 'network' and not re.fullmatch(r'[0-9a-f]{64}', item['id']))
+            elif ((item['kind'] in ('network', 'container') and not re.fullmatch(r'[0-9a-f]{64}', item['id']))
                   or (item['kind'] == 'volume' and item['id'] != item['name'])):
                 raise OwnershipError('invalid resource identity')
+            if kind == 'container':
+                if (not isinstance(item['image'], str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', item['image'])
+                        or not isinstance(item['network'], str) or not re.fullmatch(r'[0-9a-f]{64}', item['network'])
+                        or not isinstance(item['mounts'], dict) or not isinstance(item['ports'], list)):
+                    raise OwnershipError('invalid container specification')
+                self._validate_mounts_ports(item['mounts'], item['ports'])
             names.add(item['name'])
+        networks = {item['id'] for item in state['resources'] if item['kind'] == 'network' and item['id']}
+        volumes = {item['name'] for item in state['resources'] if item['kind'] == 'volume'}
+        for item in state['resources']:
+            if item['kind'] == 'container' and (item['network'] not in networks or
+                                                any(name not in volumes for name in item['mounts'].values())):
+                raise OwnershipError('container references a foreign resource')
+
+    @staticmethod
+    def _validate_mounts_ports(mounts, ports):
+        for target, volume in mounts.items():
+            if (not isinstance(target, str) or not re.fullmatch(r'/[A-Za-z0-9_./-]+', target)
+                    or target == '/' or posixpath.normpath(target) != target or not isinstance(volume, str)):
+                raise OwnershipError('invalid container mount')
+        targets = sorted(mounts)
+        if any(b.startswith(a.rstrip('/') + '/') for i, a in enumerate(targets) for b in targets[i + 1:]):
+            raise OwnershipError('overlapping container mounts')
+        if ports:
+            raise OwnershipError('host ports are unavailable for internal-only containers')
 
     def _save(self):
         self._validate()
@@ -209,11 +288,17 @@ class OwnedRun:
                 or not isinstance(observed.get('labels'), dict)
                 or any(observed['labels'].get(key) != value for key, value in labels.items())):
             raise OwnershipError('Docker resource ownership changed')
+        if item['kind'] == 'network' and observed.get('internal') is not True:
+            raise OwnershipError('owned network is not internal')
+        if item['kind'] == 'container' and any(observed.get(key) != item[key]
+                                               for key in ('image', 'network', 'mounts', 'ports')):
+            raise OwnershipError('Docker container specification changed')
+        return observed
 
     def create_resource(self, kind):
         self._validate()
         self._check_daemon()
-        if kind not in ('network', 'volume') or any(r['state'] in ('creating', 'removing') for r in self.state['resources']):
+        if kind not in ('network', 'volume') or any(r['state'] in ('creating', 'starting', 'removing') for r in self.state['resources']):
             raise OwnershipError('unsupported resource or unresolved operation')
         nonce = uuid.uuid4().hex
         item = {'kind': kind, 'name': self.run_id + '-' + kind + '-' + nonce,
@@ -233,12 +318,67 @@ class OwnedRun:
         self._save()
         return item['name']
 
+    def create_container(self, image_id, network_name, mounts, ports):
+        self._validate()
+        self._check_daemon()
+        if (not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id)
+                or not isinstance(mounts, dict) or not isinstance(ports, list)
+                or any(r['state'] in ('creating', 'starting', 'removing') for r in self.state['resources'])):
+            raise OwnershipError('invalid image or unresolved operation')
+        self._validate_mounts_ports(mounts, ports)
+        networks = [r for r in self.state['resources'] if r['kind'] == 'network' and r['name'] == network_name and r['state'] == 'ready']
+        volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
+        if len(networks) != 1 or any(name not in volumes for name in mounts.values()):
+            raise OwnershipError('container network or volumes are not owned by this run')
+        image = self.engine.image(image_id)
+        if (not isinstance(image, dict) or image.get('id') != image_id or not isinstance(image.get('volumes'), list)
+                or set(image['volumes']) != set(mounts)):
+            raise OwnershipError('all declared image volumes must be owned and mounted')
+        self._inspect(networks[0])
+        for name in mounts.values():
+            self._inspect(volumes[name])
+        nonce = uuid.uuid4().hex
+        item = {'kind': 'container', 'name': self.run_id + '-container-' + nonce, 'nonce': nonce,
+                'id': '', 'state': 'creating', 'image': image_id, 'network': networks[0]['id'],
+                'mounts': dict(mounts), 'ports': sorted(ports)}
+        self.state['resources'].append(item)
+        self._save()
+        labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': nonce, 'voice.ci.kind': 'container'}
+        identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'])
+        self._check_daemon()
+        if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
+            raise OwnershipError('Docker container identity is invalid')
+        item['id'] = identifier
+        self._inspect(item)
+        item['state'] = 'ready'
+        self._save()
+        return item['name']
+
+    def start_container(self, name):
+        self._validate()
+        self._check_daemon()
+        matches = [r for r in self.state['resources'] if r['kind'] == 'container' and r['name'] == name and r['state'] == 'ready']
+        if len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'removing') for r in self.state['resources']):
+            raise OwnershipError('container is not ready or an operation is unresolved')
+        item = matches[0]
+        self._inspect(item)
+        item['state'] = 'starting'
+        self._save()
+        self.engine.start(item['id'])
+        self._check_daemon()
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('container did not start')
+        item['state'] = 'ready'
+        self._save()
+
     def cleanup(self):
         self._validate()
         self._check_daemon()
-        if any(item['state'] in ('creating', 'removing') for item in self.state['resources']):
+        if any(item['state'] in ('creating', 'starting', 'removing') for item in self.state['resources']):
             raise OwnershipError('uncertain operation requires reconciliation')
-        ready = [item for item in reversed(self.state['resources']) if item['state'] == 'ready']
+        order = {'container': 0, 'volume': 1, 'network': 2}
+        ready = sorted((item for item in reversed(self.state['resources']) if item['state'] == 'ready'),
+                       key=lambda item: order[item['kind']])
         for item in ready:
             self._inspect(item)
         for item in ready:
