@@ -8,15 +8,15 @@ from pathlib import Path
 import tempfile,uuid
 from bootstrap_root import secret_bytes,ACCOUNT_SHA,hash_bytes
 from nats_contract_actor import Actor
-from nats_contract_plan import DECLARATIONS,V6_DECLARATIONS,V6_SCHEMA,V6_MIGRATION_ID,digest
+from nats_contract_plan import DECLARATIONS,V6_DECLARATIONS,V6_SCHEMA,V6_MIGRATION_ID,V7_DECLARATIONS,V7_SCHEMA,V7_MIGRATION_ID,REMINDER_STREAM,REMINDER_SUBJECT,digest
 from controller import Blocked
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from scenario import ready
 import guard
 
 def prove(credentials,operator,unchanged,required_get_streams=None,*,version='voice-bootstrap-auth-v4'):
-    if version not in ('voice-bootstrap-auth-v4','voice-bootstrap-auth-v5'):raise Blocked('bootstrap_auth_version_invalid')
-    declarations=V6_DECLARATIONS if version=='voice-bootstrap-auth-v5' else DECLARATIONS
+    if version not in ('voice-bootstrap-auth-v4','voice-bootstrap-auth-v5','voice-bootstrap-auth-v6'):raise Blocked('bootstrap_auth_version_invalid')
+    declarations=V7_DECLARATIONS if version=='voice-bootstrap-auth-v6' else V6_DECLARATIONS if version=='voice-bootstrap-auth-v5' else DECLARATIONS
     unchanged()
     with tempfile.TemporaryDirectory(prefix='bootstrap-auth-',dir=guard.ROOT) as td:
         base=Path(td);base.chmod(0o750);os.chown(base,0,65532)
@@ -38,14 +38,24 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
         else:runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
         try:
             broker=runtime.start_broker('proof',store);ready(runtime,broker)
-            actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,unchanged,
-                **({'plan':{'schema':V6_SCHEMA,'migration_id':V6_MIGRATION_ID}} if version=='voice-bootstrap-auth-v5' else {}))
+            reminder_config={'name':REMINDER_STREAM,'subjects':[REMINDER_SUBJECT],'storage':'file',
+                'retention':'limits','max_age':604800000000000,'duplicate_window':120000000000}
+            selected=None
+            if version=='voice-bootstrap-auth-v5':selected={'schema':V6_SCHEMA,'migration_id':V6_MIGRATION_ID}
+            if version=='voice-bootstrap-auth-v6':
+                selected={'schema':V7_SCHEMA,'migration_id':V7_MIGRATION_ID,
+                    'consumer_targets':[{'stream':s,'name':c['durable_name'],'config_sha256':'0'*64} for s,c in declarations],
+                    'actions':[{'api':'$JS.API.STREAM.CREATE.'+REMINDER_STREAM,'object':REMINDER_STREAM,
+                        'before':None,'after':reminder_config}]}
+            actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,unchanged,**({'plan':selected} if selected else {}))
             stream_subjects={}
             for stream,declaration in declarations:
                 stream_subjects.setdefault(stream,[]).append(declaration['filter_subject'])
             for name,subjects in stream_subjects.items():
                 cfg={'name':name,'subjects':subjects,'storage':'file','retention':'limits','max_age':604800000000000,'duplicate_window':120000000000}
-                actor._request('$JS.API.STREAM.CREATE.'+name,cfg)
+                if name==REMINDER_STREAM and version=='voice-bootstrap-auth-v6':actor.mutate('$JS.API.STREAM.CREATE.'+name,cfg)
+                else:actor._request('$JS.API.STREAM.CREATE.'+name,cfg)
+            normalized_stream=actor.info_config(REMINDER_STREAM) if version=='voice-bootstrap-auth-v6' else None
             if version=='voice-bootstrap-auth-v5':
                 # Qualify actual retained bootstrap UPDATE/INFO rights on an
                 # empty disposable realm before opening a populated archive.
@@ -82,6 +92,9 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
                 'reply_prefix':'_INBOX.voice.bootstrap.reply','normalized_consumer':legacy,
                 'normalized_consumer_sha256':digest(legacy),'normalized_consumers':normalized_consumers,
                 'normalized_consumers_sha256':digest(normalized_consumers)}
+            if normalized_stream is not None:
+                result['normalized_reminder_stream']=normalized_stream
+                result['normalized_reminder_stream_sha256']=digest(normalized_stream)
             if get_proof is not None:result['get_permissions']=get_proof
             return result
         finally:

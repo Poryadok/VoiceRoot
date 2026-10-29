@@ -10,7 +10,7 @@ from controller import Blocked,file_sha
 from docker_runtime import DockerRuntime,NATS_IMAGE
 from native_store import archive_closed_store
 from nats_contract_actor import Actor
-from nats_contract_plan import declarations_for,stream_updates_for,SCHEMA,MIGRATION_ID,V6_SCHEMA,V6_MIGRATION_ID,ContractError,digest,execute,verify_census
+from nats_contract_plan import declarations_for,stream_updates_for,SCHEMA,MIGRATION_ID,V6_SCHEMA,V6_MIGRATION_ID,V7_SCHEMA,REMINDER_STREAM,ContractError,digest,execute,verify_census
 from preserve import verify_post_apply,isolated_census,canonical,recovered_census
 from scenario import ready
 
@@ -91,6 +91,15 @@ def recovered_consumer_create_actions(plan,consumers,events):
         recovered.append(action)
     return recovered
 
+def _records_preserved(before,after,allow_reminder,account):
+    old={row['path']:row for row in before['files'] if '/msgs/' in row['path']}
+    new={row['path']:row for row in after['files'] if '/msgs/' in row['path']}
+    if any(new.get(path)!=row for path,row in old.items()):return False
+    extra=set(new)-set(old)
+    prefix='jetstream/'+account+'/streams/'+REMINDER_STREAM+'/msgs/'
+    return not extra or allow_reminder and all(path.startswith(prefix) and len(path)>len(prefix) for path in extra)
+
+
 def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutation_guard=None):
     plan=state['nats_contract'];binding=state.get('nats_contract_binding',{})
     enrollment=state.get('bootstrap_enrollment',{})
@@ -106,7 +115,7 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         from nats_deliver_all import collect_created
         created=collect_created(runtime,state,archive,manifest,row,stage.verify_final_storage) if archive is not None else []
         return {'deliver_all':{'cut':state['nats_deliver_all_cut'],'created':created,'authority_plan':plan}}
-    def records(row):return {f['path']:f for f in row['files'] if '/msgs/' in f['path']}
+    v7=plan.get('schema')==V7_SCHEMA
     def old_consumer_states_unchanged(manifest):
         old={f['path']:f for f in state['cut']['manifest']['files'] if '/obs/' in f['path'] and Path(f['path']).name=='o.dat'}
         current={f['path']:f for f in manifest['files']}
@@ -126,10 +135,10 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         stage.verify_final_storage();runtime.no_operation_containers(running_only=True)
         attempt=Path(tempfile.mkdtemp(prefix='contract-retry-',dir=base));archive=attempt/'current.tar'
         manifest=archive_closed_store(stage.final_path,archive)
-        if records(manifest)!=records(state['cut']['manifest']):raise Blocked('nats_migration_record_bytes_changed')
+        if not _records_preserved(state['cut']['manifest'],manifest,v7,state['cut']['census']['account']):raise Blocked('nats_migration_record_bytes_changed')
         old_consumer_states_unchanged(manifest)
         recovery={'stream_updates':stream_updates(state,archive,manifest)}
-        if plan['schema'] in (SCHEMA,V6_SCHEMA):recovery['migration_id']=plan['migration_id']
+        if plan['schema'] in (SCHEMA,V6_SCHEMA,V7_SCHEMA):recovery['migration_id']=plan['migration_id']
         current=isolated_census(runtime,archive,manifest,'contract-retry',recovery)
         current,observations=recovered_census(state['cut']['census'],current,recovery,state['cut']['manifest'])
         partial=copy.deepcopy(plan);partial['actions']=[]
@@ -167,10 +176,10 @@ def apply_contract(base,state,stage,journal,*,before_selected_start=None,mutatio
         journal({'kind':'nats_contract_broker_closed',**attempt,'finished_at':dt.datetime.now(dt.timezone.utc).isoformat()});closed=True
         attempt=Path(tempfile.mkdtemp(prefix='contract-post-',dir=base));archive=attempt/'nats-post-migration.tar'
         manifest=archive_closed_store(stage.final_path,archive)
-        if records(manifest)!=records(state['cut']['manifest']):raise Blocked('nats_migration_record_bytes_changed')
+        if not _records_preserved(state['cut']['manifest'],manifest,v7,state['cut']['census']['account']):raise Blocked('nats_migration_record_bytes_changed')
         old_state_count=old_consumer_states_unchanged(manifest)
         recovery={'stream_updates':stream_updates(state,archive,manifest)}
-        if plan['schema'] in (SCHEMA,V6_SCHEMA):recovery['migration_id']=plan['migration_id']
+        if plan['schema'] in (SCHEMA,V6_SCHEMA,V7_SCHEMA):recovery['migration_id']=plan['migration_id']
         row=isolated_census(runtime,archive,manifest,'contract-after',recovery)
         compared,observations=recovered_census(state['cut']['census'],row,recovery,state['cut']['manifest'])
         proof=verify_census(plan,state['cut']['census'],compared,**all_proof(archive,manifest,compared))

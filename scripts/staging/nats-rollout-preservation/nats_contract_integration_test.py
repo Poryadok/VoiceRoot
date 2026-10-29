@@ -169,11 +169,15 @@ class HostedTransportTests(unittest.TestCase):
 
             manifest_path = bundle / 'capture/capture-manifest.json'
             manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-            self.assertLessEqual(len(manifest), 85)
+            source = Path(__file__).resolve().parents[3]
+            captured = integration._captured_python_sources(source)
+            self.assertEqual(set(manifest), set(captured) | {'nats-known-baseline/kernel'})
+            self.assertLessEqual(len(manifest), 101)
             self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
             for relative, wanted in manifest.items():
                 content = (bundle / 'capture' / relative).read_bytes()
                 self.assertEqual(hashlib.sha256(content).hexdigest(), wanted)
+                if relative in captured:self.assertEqual(content, captured[relative].read_bytes())
             for relative in (
                 'nats-rollout-preservation/closed_archive.py',
                 'nats-rollout-preservation/closed_durable.py',

@@ -60,6 +60,7 @@ class ResourceTests(unittest.TestCase):
               'candidate':{'commit':c['commit'],'images':copy.deepcopy(c['images'])}}
         adapter=Mock()
         identity=Mock();identity.IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','fixed-identity']
+        identity.SPACE_IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','fixed-space-identity']
         with patch.dict(sys.modules,{'staging_cohort_preservation':adapter,'staging_cohort_preservation_pg':identity}):
             bad=copy.deepcopy(plan);bad['candidate']['commit']='d'*40
             before=copy.deepcopy(journal.row)
@@ -99,6 +100,14 @@ class ResourceTests(unittest.TestCase):
             fixed=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+identity.IDENTITY_ARGS
             session.check(fixed)
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(fixed+['altered'])
+            space_fixed=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+identity.SPACE_IDENTITY_ARGS
+            session.check(space_fixed)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(space_fixed[:-1]+['changed-sql'])
+            endpoints=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','endpointslices','-l',
+                       'kubernetes.io/service-name=voice-postgres','-o','json']
+            session.check(endpoints)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(endpoints[:7]+['kubernetes.io/service-name=other']+endpoints[8:])
             with self.assertRaisesRegex(RuntimeError,'advance_required'):
                 session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()

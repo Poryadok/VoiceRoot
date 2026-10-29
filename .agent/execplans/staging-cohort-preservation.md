@@ -138,3 +138,98 @@ old-policy/candidate-source circular dependency found by the WT30 joint test.
 Prepared/source/policy drift negatives and the focused suite pass (13/13,
 1.551s). Native inspect-before-cut, logical restore profile resolution and the
 unified actual bridge fixture remain outstanding; live deployment stays HOLD.
+
+The future live native handoff now has a fixed read-only Space identity query:
+original database OID, database/schema owner and installer role must match the
+protected catalog/metadata, with the physical engine checked before and after.
+The capability test failed before implementation, then passed with OID/owner/
+schema/installer drift negatives using a real Root Session and synthetic Kube
+observations. Its exact argv still requires WT25's separate Session allowlist
+change; it is not an enabled live migration path. The native authority loader
+and final Go/image rehearsal remain the next joined checkpoint.
+
+The fixed load_native_authority entrypoint now joins the qualified receipt to
+the current completed off-node attempt, original archive and retained native
+command/sidecar/event records. It returns the separately observed original
+engine/database owner identity; clone identities remain rehearsal evidence.
+Local/PENDING/foreign-attempt and changed proof-digest cases are refused. The
+focused handoff test uses real Root Session/private records but explicitly
+stubs qualification, native retained-proof verification and PostgreSQL; it is
+not evidence of the pending real native clone success.
+
+Final reviewed Go source 3e7a8bcb6780 was normally integrated at 25bd1d70a74d.
+One bounded immutable-source Tool build completed in 52.765s, image
+sha256:39e8247b70b8fcee059edb23017adec9706c9a39de3b7a7fafd3c72ddae451d2.
+The real native fixture now passes (2/2, 38.355s): original PG16 Space24 with
+data, guarded full-catalog archive and restore, original-owner clone execution,
+actual native upgrade24-to51 and same-image original verification, root-retained
+sidecar/eight events, tamper rejection and owned cleanup. The original source
+database remains24 with its seeded row. The new fixed Space identity read also
+executes on the actual source PostgreSQL under the real Session gate.
+The first attempt failed at the synthetic Kube-to-Docker test mapping, which
+was corrected without changing production checks; no image rebuild was needed.
+Build and final logs are retained under tmp/preservation-native. The image is
+test-owned, not a CI publication. Source/Kubernetes/CI admission boundaries are
+still explicit fixtures; off-node-native/live Job composition and independent
+review of the native producer remain required before activation.
+
+The same immutable image now also passes the real off-node-native composition
+(2/2, 74.167s): CMS encryption/decryption, extracted archive, a distinct second
+native PostgreSQL clone, original verifier and cleanup, then the actual
+load_native_authority with fresh original database identity. No native retained
+proof or qualified loader is mocked in this path. Repeated qualification does
+not repeat remote/restore work; a PENDING off-node record is refused. GitHub
+retrieval, native NATS bytes, source/Kubernetes/paused admission and absence of
+an auxiliary remain explicit external fixtures. The final retained log is
+tmp/preservation-native/native-25bd-offnode.log. Whole Stage inspect-before-cut
+and live Job integration remain separate and are not asserted by this result.
+
+The publication reader proves remote bytes but does not populate the local
+Docker cache. A root-approved fixed prepare_tool now runs after typed binding
+and before fencing: exact authenticated immutable child pull, bounded private
+Docker config credential, actual config/platform/RepoDigest/source readback and
+finally cleanup. No caller image/path or token argv/environment is accepted.
+Durable response-bound effects and retained availability proof reject wrong
+config and lost response without replay. The capability test was RED before
+implementation; two focused tests now pass with real Root Session and synthetic
+registry/Docker observations. This delta awaits independent review; the prior
+real native/CMS evidence does not claim a real authenticated future-P1 pull.
+
+The independently reviewed inspector a643ae20 is now called after typed binding
+and Tool preparation, before the writer fence. Fresh inspection is checked at
+that point; immutable availability and inspection hashes are carried in current
+and historical preservation receipts. Historical inspection validation runs
+only after the producer's full released-PASS/source/parent ancestry checks.
+Missing and changed selected-Space proofs were RED before the helper and now
+pass their refusal tests. The 17 focused checks pass. A repeated actual native
+PG/CMS/off-node composition passes 3/3 (91.869s) with the new receipt binding;
+its future registry/reference and Kube source-inspection observations are
+explicit fixtures, while the executable, PostgreSQL, archive, CMS, clone,
+native verification and off-node authority loader remain real. The final log
+is tmp/preservation-native/native-inspector-bound.log. Whole source-backed
+_start_cut integration remains with WT30; this checkpoint does not replace it.
+
+The separate V7 populated native fixture now passes (1/1, 47.388s) on the
+unchanged Stage 83a862506c62 transition implementation. It uses the actual pinned
+NATS 2.12.12 server, signed disposable bootstrap/business credentials, real
+RootJournal/Session and plan binding, actual source compiler, native decoder
+9fced2b6eb7ca33d744ceceb1550774ee7a3a6f423c1a3561ab2d3afba107548,
+closed archive, apply_contract, and post-census verifier. Six old streams and
+four explicit-ACK durables include three real pending social messages; all
+16 old message/consumer-state native files remain exact. Only the empty reminder
+stream and its durable are added. A second copy loses the reply after a real
+CREATE: one mutation-issued event remains, retry is refused without another
+issued event or adopted result. The original archive hash never changes, and
+owned containers are removed. No transition, native decoder or post-proof is
+mocked. The TT card and physical PVC/fence are disposable external identities;
+the fixture does not prove release/source admission, actual off-node custody,
+active delivery/ACK advancement, full Stage integration, or live authorization.
+The test-only source is nats_reminder_native_clone_test.py. Retained command is
+tmp/preservation-native/reminder-native-command.json; final log
+reminder-native-third.log SHA256
+e6dbc24353fafc073c010fd85bf13c7236ef120b4147c05f7774d101790e0eff.
+The immutable dependency archive is reminder-native-source.tar SHA256
+82b9a1c1bdc0bda31046510ef67d1936e0bef25d077d6b44a88cd760c1b190c6.
+Earlier failures were fixture setup (missing installed directory and a V4 actor
+used to read V5 voice/user streams); production checks were unchanged. V7 source
+selection remains disabled pending Stage ownership and independent review.

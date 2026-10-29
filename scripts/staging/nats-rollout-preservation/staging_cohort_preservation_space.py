@@ -5,6 +5,7 @@ image, database URL, path, command, sidecar or claimed migration result enters
 this API. The clone's original evidence never authorizes a live migration.
 """
 import copy
+import base64
 import hashlib
 import json
 import os
@@ -56,6 +57,105 @@ def load_tool(session):
         or publication['immutable_image']!='ghcr.io/poryadok/voiceroot/space-native-installer@'+publication['platform_digest']):
         raise Blocked('cohort_space_tool_changed')
     return copy.deepcopy(publication)
+
+
+def _available_image(raw,tool):
+    try:rows=owner.private._json(raw)
+    except Exception:raise Blocked('cohort_space_image_changed') from None
+    if (not isinstance(rows,list) or len(rows)!=1 or rows[0].get('Id')!=tool['config_digest']
+        or rows[0].get('Os')!='linux' or rows[0].get('Architecture')!='amd64'
+        or tool['immutable_image'] not in rows[0].get('RepoDigests',[])
+        or rows[0].get('Config',{}).get('User')!='65532:65532'
+        or rows[0]['Config'].get('Entrypoint')!=['/usr/local/bin/native-migrate']
+        or rows[0]['Config'].get('Labels',{}).get('org.opencontainers.image.revision')!=tool['source_sha']):
+        raise Blocked('cohort_space_image_changed')
+    return {'config_digest':rows[0]['Id'],'image':tool['immutable_image'],
+        'platform':{'os':'linux','architecture':'amd64'},'source_sha':tool['source_sha']}
+
+
+def prepare_tool(session,token):
+    """Fetch only the authenticated immutable Tool before any writer is fenced."""
+    plan=owner._guard(session);owner._no_pending(session);tool=load_tool(session)
+    if not isinstance(token,str) or not 1<=len(token)<=16384 or any(ord(c)<33 or ord(c)>126 for c in token):
+        raise Blocked('cohort_space_registry_credential_invalid')
+    base=owner._base(session);path=base/'space-tool-available.json'
+    record={'schema':'voice-staging-space-tool-available-v1','operation':session.operation,
+        'plan_sha256':owner.digest(plan),'tool_sha256':owner.digest(tool),'status':'PENDING','commands':[]}
+    owner._write(path,record)
+    auth=base/'tool-pull-auth';auth.mkdir(mode=0o700);owner.private._private_directory(auth)
+    descriptor=os.open(auth,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    identity=os.fstat(descriptor)
+    config=owner.private._bytes({'auths':{'ghcr.io':{'auth':base64.b64encode(('Poryadok:'+token).encode()).decode()}}})
+    try:
+        owner.private._private_write(auth/'config.json',config)
+        for label,argv,limit,timeout in (
+            ('pull',DOCKER+['--config',str(auth),'pull','--platform','linux/amd64',tool['immutable_image']],1<<20,600),
+            ('inspect',DOCKER+['image','inspect',tool['immutable_image']],2<<20,30)):
+            owner._guard(session);owner._no_pending(session)
+            if (load_tool(session)!=tool or owner._read(path)!=record
+                or _private_generated(auth/'config.json',uid=0,limit=32768)!=config):
+                raise Blocked('cohort_space_tool_availability_changed')
+            effect_id='space-tool-'+label
+            intent={'schema':'voice-staging-cohort-effect-v1','operation':session.operation,'effect_id':effect_id,
+                'binding':session.binding(),'argv':argv,'body_sha256':hashlib.sha256(b'').hexdigest(),'status':'PENDING'}
+            effect=base/'effects'/(effect_id+'.json');owner.private._private_directory(effect.parent);owner._write(effect,intent)
+            raw=owner._send(session,effect_id,argv,b'',limit=limit,timeout=timeout)
+            if (owner._read(effect)!=intent or load_tool(session)!=tool or owner._read(path)!=record
+                or _private_generated(auth/'config.json',uid=0,limit=32768)!=config):
+                raise Blocked('cohort_space_tool_availability_changed')
+            observation=_available_image(raw,tool) if label=='inspect' else None
+            if label=='inspect':owner.private._private_write(base/'space-tool-image.json',raw)
+            done={**intent,'status':'DONE','response_sha256':hashlib.sha256(raw).hexdigest()}
+            owner.save(effect,done);record['commands'].append({'effect_id':effect_id,'sha256':owner.digest(done)})
+            owner.save(path,record)
+    finally:
+        try:
+            current=os.stat(auth,follow_symlinks=False)
+            if (current.st_dev,current.st_ino)!=(identity.st_dev,identity.st_ino):
+                raise Blocked('cohort_space_auth_directory_changed')
+            try:os.unlink('config.json',dir_fd=descriptor)
+            except FileNotFoundError:pass
+            os.rmdir(auth)
+        finally:os.close(descriptor)
+    owner._guard(session)
+    if load_tool(session)!=tool or owner._read(path)!=record:raise Blocked('cohort_space_tool_availability_changed')
+    record.update(status='COMPLETE',observation=observation,credential_cleanup='verified')
+    owner.save(path,record)
+    return load_available_tool(session)
+
+
+def _available_record(operation,plan,tool):
+    base=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
+    record=owner._read(base/'space-tool-available.json');state=owner._read(base/'checkpoint.json')
+    fields={'schema','operation','plan_sha256','tool_sha256','status','commands','observation','credential_cleanup'}
+    if (set(record)!=fields or record['schema']!='voice-staging-space-tool-available-v1'
+        or record['operation']!=operation or record['plan_sha256']!=owner.digest(plan)
+        or record['tool_sha256']!=owner.digest(tool) or record['status']!='COMPLETE'
+        or record['credential_cleanup']!='verified' or (base/'tool-pull-auth').exists()
+        or not isinstance(record['commands'],list) or len(record['commands'])!=2):
+        raise Blocked('cohort_space_tool_availability_changed')
+    raw=_private_generated(base/'space-tool-image.json',uid=0,limit=2<<20)
+    if _available_image(raw,tool)!=record['observation']:raise Blocked('cohort_space_image_changed')
+    for ref,(label,argv) in zip(record['commands'],(
+        ('pull',DOCKER+['--config',str(base/'tool-pull-auth'),'pull','--platform','linux/amd64',tool['immutable_image']]),
+        ('inspect',DOCKER+['image','inspect',tool['immutable_image']]))):
+        ident='space-tool-'+label
+        if set(ref)!={'effect_id','sha256'} or ref['effect_id']!=ident:raise Blocked('cohort_space_tool_availability_changed')
+        effect=owner._read(base/'effects'/(ident+'.json'))
+        if (effect.get('status')!='DONE' or effect.get('operation')!=operation or effect.get('effect_id')!=ident
+            or effect.get('argv')!=argv or effect.get('binding')!=state['initial_resource_fence']
+            or effect.get('body_sha256')!=hashlib.sha256(b'').hexdigest() or owner.digest(effect)!=ref['sha256']
+            or not re.fullmatch('[a-f0-9]{64}',str(effect.get('response_sha256')))
+            or label=='inspect' and effect['response_sha256']!=hashlib.sha256(raw).hexdigest()):
+            raise Blocked('cohort_space_tool_availability_changed')
+    return copy.deepcopy(record)
+
+
+def load_available_tool(session):
+    plan=owner.load_plan(session);owner._phase_continuity(session,plan);owner._no_pending(session)
+    tool=load_tool(session);record=_available_record(session.operation,plan,tool)
+    if load_tool(session)!=tool or owner.load_plan(session)!=plan:raise Blocked('cohort_space_tool_availability_changed')
+    return record
 
 
 def _private_generated(path,*,uid,limit):
@@ -218,12 +318,19 @@ def load_native_space_rehearsal(session):
     """Authenticate the current attempt's retained result, including after cleanup."""
     owner._guard(session);owner._no_pending(session)
     attempt=owner._read(owner._base(session)/'restore-attempt.json')
+    result=_retained_rehearsal(session,attempt,owner.load_backup_archive(session),load_tool(session))
+    owner._guard(session)
+    return result
+
+
+def _retained_rehearsal(session,attempt,archive,tool):
+    """Verify retained bytes under the caller's already authenticated phase."""
     if (attempt.get('operation')!=session.operation or attempt.get('plan_sha256')!=owner.digest(owner.load_plan(session))
         or attempt.get('status') not in ('RUNNING','COMPLETE') or attempt.get('phase') not in ('local','offnode')
         or not re.fullmatch('[a-f0-9]{32}',str(attempt.get('nonce')))):
         raise Blocked('cohort_space_attempt_changed')
     nonce=attempt['nonce'];base=owner._base(session)/'restore'/nonce
-    record=owner._read(base/'native-space.json');archive=owner.load_backup_archive(session);tool=load_tool(session)
+    record=owner._read(base/'native-space.json')
     fields={'schema','operation','attempt','plan_sha256','archive_sha256','tool_sha256','clone_id','status',
         'resources','commands','clone_identity','origin_sha256','events_sha256','verification_sha256','receipt'}
     if (set(record)!=fields or record['schema']!='voice-staging-cohort-space-rehearsal-v1'
@@ -257,5 +364,32 @@ def load_native_space_rehearsal(session):
             raise Blocked('cohort_space_command_changed')
     if owner._read(base/'native-space.json')!=record or owner._read(owner._base(session)/'restore-attempt.json')!=attempt:
         raise Blocked('cohort_space_rehearsal_changed')
-    owner._guard(session)
+    owner._phase_continuity(session,owner.load_plan(session))
     return copy.deepcopy(record)
+
+
+def load_native_authority(session):
+    """Transfer qualified off-node evidence, never clone identity, to live code."""
+    import staging_cohort_preservation_pg as pg
+    qualified=owner.load_qualified(session);plan=owner.load_plan(session);base=owner._base(session)
+    archive=owner._read(base/'archive-record.json');offnode=owner._read(base/'offnode-restore.json')
+    tool=load_tool(session)
+    if (owner.digest(archive)!=qualified['archive_sha256']
+        or owner.digest(offnode)!=qualified['offnode_restore_sha256']
+        or offnode.get('operation')!=session.operation or offnode.get('plan_sha256')!=owner.digest(plan)
+        or offnode.get('phase')!='offnode' or offnode.get('status')!='COMPLETE'
+        or owner._read(base/'restore-attempt.json')!=offnode):
+        raise Blocked('cohort_space_offnode_changed')
+    rehearsal=_retained_rehearsal(session,offnode,archive,tool)
+    if (offnode.get('proof',{}).get('native_space')!=rehearsal
+        or offnode['proof'].get('space_native_rehearsal_sha256')!=owner.digest(rehearsal)):
+        raise Blocked('cohort_space_offnode_changed')
+    original=pg.guard_space_identity(session)
+    result={'schema':'voice-staging-space-native-authority-v1','operation':session.operation,
+        'preservation_sha256':owner.digest(qualified),'tool':tool,'original':original,'rehearsal':rehearsal}
+    if (owner.load_qualified(session)!=qualified or load_tool(session)!=tool
+        or owner._read(base/'archive-record.json')!=archive or owner._read(base/'offnode-restore.json')!=offnode
+        or _retained_rehearsal(session,offnode,archive,tool)!=rehearsal
+        or pg.guard_space_identity(session)!=original):
+        raise Blocked('cohort_space_authority_changed')
+    return copy.deepcopy(result)

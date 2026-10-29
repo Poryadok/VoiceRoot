@@ -16,6 +16,7 @@ import (
 // Detached private observation only. Neither these hashes nor the catalog
 // comparison assert that a caller possesses backup or maintenance authority.
 type legacy24OriginObservation struct {
+	DatabaseOwner      string                            `json:"-"`
 	Target             *store.NativeInstallerSourceFacts `json:"target"`
 	CatalogSHA256      string                            `json:"catalog_sha256"`
 	PreimageSHA256     string                            `json:"preimage_sha256"`
@@ -66,10 +67,10 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	if err = tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM pg_namespace WHERE nspname IN ('native_membership_guard','space_account_ban_guard'))`).Scan(&noNativeSchema); err != nil || !noNativeSchema {
 		return nil, errors.New("HOLD: legacy24 native schema already exists")
 	}
-	var name, role, current, system string
+	var name, role, current, system, owner string
 	var oid uint32
-	if err = tx.QueryRow(ctx, `SELECT d.datname,d.oid,session_user,current_user,(SELECT system_identifier::text FROM pg_catalog.pg_control_system()) FROM pg_catalog.pg_database d WHERE d.datname='space_db'`).Scan(&name, &oid, &role, &current, &system); err != nil ||
-		name != "space_db" || oid == 0 || role == "" || role != current || !regexp.MustCompile(`^[1-9][0-9]{0,19}$`).MatchString(system) {
+	if err = tx.QueryRow(ctx, `SELECT d.datname,d.oid,session_user,current_user,(SELECT system_identifier::text FROM pg_catalog.pg_control_system()),pg_get_userbyid(d.datdba) FROM pg_catalog.pg_database d WHERE d.datname='space_db'`).Scan(&name, &oid, &role, &current, &system, &owner); err != nil ||
+		name != "space_db" || oid == 0 || role == "" || owner == "" || role != current || !regexp.MustCompile(`^[1-9][0-9]{0,19}$`).MatchString(system) {
 		return nil, errors.New("legacy24 target identity unavailable")
 	}
 	accessHash, err := captureLegacyAccessTx(ctx, tx)
@@ -137,7 +138,7 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	if err = tx.Commit(ctx); err != nil {
 		return nil, errors.New("legacy24 source unavailable")
 	}
-	return &legacy24OriginObservation{Target: &store.NativeInstallerSourceFacts{Version: 24, DatabaseSystemID: system,
+	return &legacy24OriginObservation{DatabaseOwner: owner, Target: &store.NativeInstallerSourceFacts{Version: 24, DatabaseSystemID: system,
 		DatabaseName: name, DatabaseOID: oid, InstallerRole: role}, CatalogSHA256: catalog,
 		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, StableAccessSHA256: stableAccess, Rows: rows, Derived: derived, Spaces: spaces, Extras: extras, Functions: functions}, nil
 }

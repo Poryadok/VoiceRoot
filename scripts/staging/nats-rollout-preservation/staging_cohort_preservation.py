@@ -88,7 +88,7 @@ def _source(session,plan):
     if digest(approved['source_files'])!=plan['source_inventory_sha256']:raise Blocked('cohort_source_changed')
     for filename in ('staging_cohort_preservation.py','staging_cohort_preservation_runtime.py',
         'staging_cohort_preservation_pg.py','staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py',
-        'staging_cohort_preservation_space.py'):
+        'staging_cohort_preservation_space.py','staging_space_native.py'):
         name='scripts/staging/nats-rollout-preservation/'+filename
         wanted=approved['source_files'].get(name)
         if (custody['manifest'].get('nats-rollout-preservation/'+filename)!=wanted or wanted is None
@@ -358,6 +358,11 @@ def _start_cut(actions,request,approved,execution,workspace):
         _save_state(session,state)
     owned=CohortStage.from_captured(session,stage,journal);owned.runtime_base=runtime
     try:
+        if tool['selected']:
+            space.prepare_tool(session,request['token'])
+            import staging_space_native as inspector
+            inspected=inspector.inspect_source(session)
+            if inspector.load_inspection(session)!=inspected:raise Blocked('cohort_space_inspection_changed')
         root_main.revalidate_inputs(owned.kube,contract,provenance)
         owned.fence()
         state.update(status='PAUSED',context=transaction.context(owned))
@@ -844,6 +849,11 @@ def load_native_space_rehearsal(session):
     return load(session)
 
 
+def load_native_authority(session):
+    from staging_cohort_preservation_space import load_native_authority as load
+    return load(session)
+
+
 def _end_restore(session,proof):
     nonce=restore_attempt(session);base=_base(session)
     resources=_read(base/'restore'/nonce/'resources.json')
@@ -1234,6 +1244,32 @@ def prepare(actions,request,approved,execution,workspace):
         raise
 
 
+def _space_record_hashes(base,plan):
+    tool=_read(base/'space-tool.json')
+    if (set(tool)!={'schema','operation','source_capture_sha256','approved_sha256','selected','authenticated_publication'}
+        or tool['schema']!='voice-staging-cohort-space-tool-v1' or tool['operation']!=plan['operation']
+        or tool['source_capture_sha256']!=plan['source_capture_sha256'] or tool['approved_sha256']!=plan['approved_sha256']
+        or digest(tool)!=plan['space_tool_sha256'] or type(tool['selected']) is not bool):
+        raise Blocked('cohort_space_tool_changed')
+    fields={'space_tool_available_sha256':'space-tool-available.json','space_inspection_sha256':'space-inspection.json'}
+    if not tool['selected']:
+        if tool['authenticated_publication'] is not None or any((base/name).exists() for name in fields.values()):
+            raise Blocked('cohort_space_proof_changed')
+        return {key:None for key in fields}
+    return {key:digest(_read(base/name)) for key,name in fields.items()}
+
+
+def _verify_space_proofs(session):
+    plan=load_plan(session);expected=_space_record_hashes(_base(session),plan)
+    if expected['space_inspection_sha256'] is not None:
+        import staging_cohort_preservation_space as space
+        import staging_space_native as inspector
+        actual={'space_tool_available_sha256':digest(space.load_available_tool(session)),
+            'space_inspection_sha256':digest(inspector.load_retained_inspection(session))}
+        if actual!=expected:raise Blocked('cohort_space_proof_changed')
+    return expected
+
+
 def qualify_offnode(actions,request):
     """Fixed authorize continuation: verify remote bytes and restore before effects."""
     import bridge_root
@@ -1272,6 +1308,7 @@ def qualify_offnode(actions,request):
             'custody_sha256':digest(custody),'decrypted_restore_sha256':digest(restored),
             'cipher_binding_sha256':digest(binding),'resource_fence':state['initial_resource_fence'],
             'auxiliary_successor_sha256':None if successor is None else digest(successor)}
+        receipt.update(_verify_space_proofs(session))
         _write(_base(session)/'qualified.json',receipt)
         state.update(status='QUALIFIED',phase='COHORT_QUALIFIED');_save_state(session,state)
         return load_qualified(session)
@@ -1291,6 +1328,7 @@ def load_qualified(session,*,actual=None,rollout_target=None):
         'resource_fence':state['initial_resource_fence']}
     auxiliary=_base(session)/'auxiliary-successor.json'
     fixed['auxiliary_successor_sha256']=digest(_read(auxiliary)) if auxiliary.exists() else None
+    fixed.update(_verify_space_proofs(session))
     for name,file in {'paused_sha256':'paused.json','archive_sha256':'archive-record.json',
         'native_cut_sha256':'native-cut.json','local_restore_sha256':'local-restore.json',
         'offnode_restore_sha256':'offnode-restore.json','custody_sha256':'offnode-custody.json',
@@ -1384,6 +1422,7 @@ def validate_historical_capture(operation):
         'custody_sha256':'offnode-custody.json','decrypted_restore_sha256':'decrypted-restore.json',
         'cipher_binding_sha256':'cipher-binding.json'}.items():fixed[key]=digest(_read(root/file))
     fixed['auxiliary_successor_sha256']=digest(_read(root/'auxiliary-successor.json')) if (root/'auxiliary-successor.json').exists() else None
+    fixed.update(_space_record_hashes(root,plan))
     if (state.get('status')!='QUALIFIED' or set(plan)!=PLAN_FIELDS or plan['schema']!=SCHEMA or receipt!=fixed
         or plan['operation']!=operation or plan['context']!=binding['context'] or plan['helper_sha256']!=binding['helper_sha256']
         or state['initial_resource_fence']!={**binding,'target_sha256':digest(plan)}
@@ -1412,4 +1451,11 @@ def validate_historical_capture(operation):
             raise Blocked('cohort_history_restore_changed')
     if any(_read(path).get('status')!='DONE' for path in (root/'effects').iterdir()):
         raise Blocked('cohort_history_incomplete')
+    if fixed['space_inspection_sha256'] is not None:
+        import staging_cohort_preservation_space as space
+        import staging_space_native as inspector
+        tool=_read(root/'space-tool.json')['authenticated_publication']['publication']
+        if (digest(space._available_record(operation,plan,tool))!=fixed['space_tool_available_sha256']
+            or digest(inspector.validate_historical_inspection(operation))!=fixed['space_inspection_sha256']):
+            raise Blocked('cohort_space_proof_changed')
     return copy.deepcopy(receipt)

@@ -8,7 +8,7 @@ from bootstrap_selection import select
 from bootstrap_root import secret_bytes
 from controller import Blocked
 from docker_runtime import NATS_IMAGE
-from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V4_SCHEMA,SCHEMA,V5_SOURCE_HASHES,V6_SCHEMA,V6_DECLARATIONS,V6_SOURCE_HASHES,compile_plan,digest
+from nats_contract_plan import DECLARATIONS,V3_DECLARATIONS,V4_SCHEMA,SCHEMA,V5_SOURCE_HASHES,V6_SCHEMA,V6_DECLARATIONS,V6_SOURCE_HASHES,V7_SCHEMA,V7_DECLARATIONS,V7_SOURCE_HASHES,compile_plan,digest
 from rollout_census import census
 from stage_runtime import HUB
 
@@ -18,6 +18,7 @@ TARGET_FILES={'realtime':'1122d97dca3b185aecb43e0ae41d1c255d0adc46090f9f1c3dd8fa
 V4_TARGET_FILES=TARGET_FILES
 V5_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-bootstrap.yaml'):sha for path,sha in V5_SOURCE_HASHES.items()}
 V6_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-bootstrap.yaml'):sha for path,sha in V6_SOURCE_HASHES.items()}
+V7_TARGET_FILES={path.removeprefix('deploy/templates/nats-').removesuffix('-bootstrap.yaml'):sha for path,sha in V7_SOURCE_HASHES.items()}
 def fail():raise Blocked('nats_migration_root_preflight_refused')
 
 _LEGACY_AUTH_KEYS={'verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256'}
@@ -27,7 +28,9 @@ def _validated_normalized_consumers(live_auth,enrolled_auth,*,version=V4_SCHEMA)
     """Extend exact prior defaults without changing immutable enrollment bytes."""
     if not isinstance(enrolled_auth,dict) or set(enrolled_auth) not in (_LEGACY_AUTH_KEYS,_V3_AUTH_KEYS,_V4_AUTH_KEYS):fail()
     v6=version==V6_SCHEMA
-    if not isinstance(live_auth,dict) or set(live_auth)!=_V4_AUTH_KEYS or live_auth.get('schema')!=('voice-bootstrap-auth-v5' if v6 else 'voice-bootstrap-auth-v4'):fail()
+    v7=version==V7_SCHEMA
+    keys=_V4_AUTH_KEYS|({'normalized_reminder_stream','normalized_reminder_stream_sha256'} if v7 else set())
+    if not isinstance(live_auth,dict) or set(live_auth)!=keys or live_auth.get('schema')!=('voice-bootstrap-auth-v6' if v7 else 'voice-bootstrap-auth-v5' if v6 else 'voice-bootstrap-auth-v4'):fail()
     if {key:live_auth[key] for key in _LEGACY_AUTH_KEYS}!={key:enrolled_auth[key] for key in _LEGACY_AUTH_KEYS}:fail()
     def normalized_map(auth,declarations):
         rows=auth['normalized_consumers']
@@ -45,6 +48,14 @@ def _validated_normalized_consumers(live_auth,enrolled_auth,*,version=V4_SCHEMA)
         if (legacy!=auth['normalized_consumer']
             or digest(legacy)!=auth['normalized_consumer_sha256']):fail()
         return result
+    if v7:
+        rows=live_auth.get('normalized_consumers');stream=live_auth.get('normalized_reminder_stream')
+        if not isinstance(rows,list) or len(rows)!=len(V7_DECLARATIONS) or not isinstance(stream,dict) or digest(stream)!=live_auth['normalized_reminder_stream_sha256']:fail()
+        projection={key:value for key,value in live_auth.items() if key not in ('normalized_reminder_stream','normalized_reminder_stream_sha256')}
+        projection.update(schema='voice-bootstrap-auth-v4',normalized_consumers=rows[:len(DECLARATIONS)],
+            normalized_consumers_sha256=digest(rows[:len(DECLARATIONS)]))
+        _validated_normalized_consumers(projection,enrolled_auth)
+        return normalized_map(live_auth,V7_DECLARATIONS)
     if v6:
         # A new live proof extends normalization; it never rewrites enrollment.
         rows=live_auth.get('normalized_consumers')
@@ -107,7 +118,8 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
     notification=Path(source)/'deploy/templates/nats-notification-bootstrap.yaml'
     v5_actual=dict(actual)
     if not notification.is_symlink() and notification.is_file():v5_actual['notification']=hashlib.sha256(notification.read_bytes()).hexdigest()
-    if v5_actual==V6_TARGET_FILES:version=V6_SCHEMA
+    if v5_actual==V7_TARGET_FILES:version=V7_SCHEMA
+    elif v5_actual==V6_TARGET_FILES:version=V6_SCHEMA
     elif v5_actual==V5_TARGET_FILES:version=SCHEMA
     elif actual==TARGET_FILES:version=V4_SCHEMA
     else:fail()
@@ -126,12 +138,13 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
     from bootstrap_auth import prove
     def unchanged():select(kube,enrollment,generation)
     live_auth=prove(secret_bytes(kube.get('secret',enrollment['secret']['name']),'bootstrap.creds'),kube.get('secret','voice-nats-operator-'+generation),unchanged,
-        **({'version':'voice-bootstrap-auth-v5'} if version==V6_SCHEMA else {}))
+        **({'version':'voice-bootstrap-auth-v6'} if version==V7_SCHEMA else {'version':'voice-bootstrap-auth-v5'} if version==V6_SCHEMA else {}))
     normalized=_validated_normalized_consumers(live_auth,enrollment['auth_proof'],version=version)
-    plan=compile_plan(source,streams,current,normalized,version=version)
-    selected=V6_TARGET_FILES if version==V6_SCHEMA else V5_TARGET_FILES if version==SCHEMA else TARGET_FILES
+    plan=compile_plan(source,streams,current,normalized,version=version,
+        **({'normalized_reminder_stream':live_auth['normalized_reminder_stream']} if version==V7_SCHEMA else {}))
+    selected=V7_TARGET_FILES if version==V7_SCHEMA else V6_TARGET_FILES if version==V6_SCHEMA else V5_TARGET_FILES if version==SCHEMA else TARGET_FILES
     expected_sources={'deploy/templates/nats-'+part+'-bootstrap.yaml':sha for part,sha in selected.items()}
-    planned_paths=set(expected_sources) if version in (SCHEMA,V6_SCHEMA) else set(expected_sources)-{'deploy/templates/nats-search-bootstrap.yaml'}
+    planned_paths=set(expected_sources) if version in (SCHEMA,V6_SCHEMA,V7_SCHEMA) else set(expected_sources)-{'deploy/templates/nats-search-bootstrap.yaml'}
     if plan['sources']!={path:expected_sources[path] for path in planned_paths}:fail()
     scripts={}
     for part in selected:
@@ -145,5 +158,5 @@ def _from_tree(kube,source,enrollment,contract,decoder,tree):
         if cm['kind']!='ConfigMap' or cm['metadata']['name']!='voice-nats-'+part+'-bootstrap':fail()
         script=cm['data']['bootstrap.sh'];scripts[part]={'sha256':hashlib.sha256(script.encode()).hexdigest(),'script':script}
     binding={'plan_sha256':digest(plan),'server_image':NATS_IMAGE,'enrollment_sha256':digest(enrollment),'sources':plan['sources']}
-    if version==V6_SCHEMA:binding['live_auth_sha256']=digest(live_auth)
+    if version in (V6_SCHEMA,V7_SCHEMA):binding['live_auth_sha256']=digest(live_auth)
     return {'plan':plan,'binding':binding,'scripts':scripts,'live_census_sha256':digest(row)}

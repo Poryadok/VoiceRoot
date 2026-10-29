@@ -95,6 +95,10 @@ class CutEffectTests(unittest.TestCase):
         if preflight is not None:
             plan['preflight_sha256']=preservation.digest(preflight)
             preservation._write(path/'preflight.json',preflight)
+        tool={'schema':'voice-staging-cohort-space-tool-v1','operation':session.operation,
+            'source_capture_sha256':plan['source_capture_sha256'],'approved_sha256':plan['approved_sha256'],
+            'selected':False,'authenticated_publication':None}
+        plan['space_tool_sha256']=preservation.digest(tool);preservation._write(path/'space-tool.json',tool)
         preservation._write(path/'precut.json',precut)
         preservation._write(path/'checkpoint.json',{'schema':'voice-staging-cohort-preservation-checkpoint-v1','plan':plan})
         session.bind_cohort_preservation(plan,plan['actual_before'])
@@ -341,6 +345,61 @@ class CutEffectTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_selected_space_proofs_are_required_and_hash_bound(self):
+        import staging_space_native as inspector
+        import staging_cohort_preservation_space as native
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                session,_=CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+                with resource_claim.command_scope(session.check):
+                    method=getattr(preservation,'_space_record_hashes',None);self.assertTrue(callable(method))
+                    base=preservation._base(session);plan=preservation.load_plan(session)
+                    self.assertEqual(method(base,plan),{'space_tool_available_sha256':None,'space_inspection_sha256':None})
+                    selected=preservation._read(base/'space-tool.json');selected.update(selected=True,authenticated_publication={'publication':{}})
+                    plan={**plan,'space_tool_sha256':preservation.digest(selected)};preservation.save(base/'space-tool.json',selected)
+                    with self.assertRaises(Exception):method(base,plan)
+                    available={'actual_loader_fixture':'available'};inspection={'actual_loader_fixture':'inspection'}
+                    preservation._write(base/'space-tool-available.json',available);preservation._write(base/'space-inspection.json',inspection)
+                    expected={'space_tool_available_sha256':preservation.digest(available),'space_inspection_sha256':preservation.digest(inspection)}
+                    self.assertEqual(method(base,plan),expected)
+                    with patch.object(preservation,'load_plan',return_value=plan),patch.object(native,'load_available_tool',return_value=available),\
+                        patch.object(inspector,'load_retained_inspection',return_value=inspection):
+                        self.assertEqual(preservation._verify_space_proofs(session),expected)
+                        preservation.save(base/'space-inspection.json',{'tampered':True})
+                        with self.assertRaisesRegex(Exception,'cohort_space_proof_changed'):preservation._verify_space_proofs(session)
+
+    def test_space_identity_rechecks_original_oid_owner_and_schema(self):
+        import staging_cohort_preservation_pg as pg
+        from stage_runtime import Kube
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                session,_=CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+                with resource_claim.command_scope(session.check):
+                    plan=preservation.load_plan(session);base=preservation._base(session)
+                    catalog={'schema':'voice-staging-cohort-catalog-v1','operation':session.operation,
+                        'plan_sha256':preservation.digest(plan),'engine':{'system_identifier':'123'},
+                        'server_start':'start','databases':{'space_db':42},'properties':{'space_db':{'owner':'original_owner'}}}
+                    metadata={'schema':'voice-staging-cohort-metadata-v1','operation':session.operation,
+                        'plan_sha256':preservation.digest(plan),'catalog_sha256':preservation.digest(catalog),
+                        'source':{'catalog':{'space_db':{'database_owner':'original_owner','schema_owner':'original_owner'}}}}
+                    preservation._write(base/'catalog.json',catalog);preservation._write(base/'metadata.json',metadata)
+                    preservation._write(base/'archive-record.json',{'catalog_ref':preservation._reference(session,catalog),
+                        'metadata_ref':preservation._reference(session,metadata)})
+                    engine={'engine':catalog['engine'],'server_start':'start'}
+                    current={'database_name':'space_db','database_oid':42,'database_owner':'original_owner',
+                        'schema_owner':'original_owner','installer_role':'original_owner'}
+                    method=getattr(pg,'guard_space_identity',None);self.assertTrue(callable(method))
+                    with patch.object(pg,'guard_identity',return_value=engine) as physical,patch.object(Kube,'_run',return_value=current) as query:
+                        self.assertEqual(method(session),{**engine,**current})
+                        self.assertEqual(query.call_args.args[0],pg.SPACE_IDENTITY_ARGS)
+                        self.assertEqual(physical.call_count,2)
+                        for key,value in (('database_oid',43),('database_owner','foreign'),('schema_owner','foreign'),('installer_role','foreign')):
+                            with self.subTest(key=key):
+                                query.return_value={**current,key:value}
+                                with self.assertRaisesRegex(Exception,'cohort_space_identity_changed'):method(session)
+
     def test_guard_postgres_uses_exact_read_and_rejects_engine_drift(self):
         import realtime_bootstrap
         import staging_cohort_preservation_pg as pg

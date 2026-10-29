@@ -27,6 +27,16 @@ class PublicRecoveryTests(unittest.TestCase):
                 for _,name in self.rows():setattr(actions,name,Mock(side_effect=AssertionError('wrong action')))
                 expected={'status':'WAITING','operation':row['operation']};getattr(actions,method).side_effect=None
                 getattr(actions,method).return_value=expected
+                if args[0]=='authorize-expired-native':
+                    # A public request without its protected source checkpoint
+                    # must stop before the mocked handler is dispatched.
+                    absent=Path(directory)/'absent-root'
+                    with patch.object(bridge_root.guard,'ROOT',absent),patch.object(bridge_root.root_cli,'ROOT',absent):
+                        with self.assertRaises(FileNotFoundError) as error:
+                            bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
+                    self.assertEqual(error.exception.filename,str(absent/('rollout-'+row['operation'])))
+                    getattr(actions,method).assert_not_called()
+                    continue
                 result=bridge.dispatch(Path(directory),row,actions.execute,lambda request:None)
                 self.assertEqual(result,expected)
                 self.assertEqual(result,bridge.dispatch(Path(directory),row,actions.execute,lambda request:None))
@@ -107,20 +117,21 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertTrue({'staging_prerequisites.py','staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
             'staging_gis_material.py','staging_release_policy_prepare.py'} <= set(bundle.ROLLOUT))
         self.assertTrue({'staging_cohort_preservation.py','staging_cohort_preservation_pg.py','staging_cohort_preservation_runtime.py',
-            'staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py','staging_cohort_preservation_space.py'} <= set(bundle.ROLLOUT))
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,100)
+            'staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py','staging_cohort_preservation_space.py',
+            'staging_space_native.py'} <= set(bundle.ROLLOUT))
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,101)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}
-            for index in range(100):
+            for index in range(101):
                 name='module'+str(index)+'.py';raw=('pinned source '+str(index)).encode()
                 path=code/name;path.write_bytes(raw);path.chmod(0o440);manifest[name]=hashlib.sha256(raw).hexdigest()
             def write():
                 path=code/'capture-manifest.json'
                 if path.exists():path.chmod(0o600)
                 path.write_text(json.dumps(manifest));path.chmod(0o440)
-            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py','module89.py','module90.py','module91.py','module92.py','module93.py','module94.py','module95.py','module96.py','module97.py','module98.py','module99.py')]
+            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py','module89.py','module90.py','module91.py','module92.py','module93.py','module94.py','module95.py','module96.py','module97.py','module98.py','module99.py','module100.py')]
             write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest.update(last[:1]);write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest.update(last[1:3]);write();self.assertEqual(root_cli.code_binding(code),manifest)
