@@ -107,6 +107,78 @@ class CryptoFixture(unittest.TestCase):
                     p3.preflight_payloads(session)
                 with mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=late,get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'foreign'}})),self.assertRaises(p3.PrerequisiteError):
                     p3.preflight_payloads(session)
+            live={ident:json.loads(rawmap[ident]) for ident in rawmap}; done={}
+            for ident,row in live.items():
+                kind,name=ident.split('/'); row['metadata'].update(uid='uid-'+name,resourceVersion='1')
+                if kind=='Deployment': row['metadata']['generation']=1
+                if kind=='Service': row['spec'].update(clusterIP='10.2.0.1',clusterIPs=['10.2.0.1'])
+                done[ident]={'kind':kind,'name':name,'namespace':'voice-staging','uid':row['metadata']['uid'],
+                             'resourceVersion':'1','semantic_sha256':resource_claim.digest(p3.private_semantic(row))}
+                if kind=='Deployment': done[ident]['generation']=1
+            deployment=live['Deployment/voice-p3-principal-jwks']; deployment['metadata']['annotations']['deployment.kubernetes.io/revision']='1'
+            deployment['status']={'observedGeneration':1,'readyReplicas':1,'availableReplicas':1}
+            template=deployment['spec']['template']; rs_template=copy.deepcopy(template)
+            rs_template['metadata']['labels']['pod-template-hash']='abc12'
+            rs={'metadata':{'namespace':'voice-staging','uid':'rsuid','annotations':{'deployment.kubernetes.io/revision':'1'},
+                            'ownerReferences':[{'kind':'Deployment','uid':deployment['metadata']['uid'],'controller':True}]},
+                'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-p3-principal-jwks','pod-template-hash':'abc12'}},'template':rs_template}}
+            podspec=copy.deepcopy(template['spec']); podspec['nodeName']='node'; podspec['serviceAccountName']='default'
+            podspec['volumes'].append({'name':'kube-api-access-abc12','projected':{'defaultMode':420,'sources':[
+                {'serviceAccountToken':{'expirationSeconds':3607,'path':'token'}},
+                {'configMap':{'name':'kube-root-ca.crt','items':[{'key':'ca.crt','path':'ca.crt'}]}},
+                {'downwardAPI':{'items':[{'path':'namespace','fieldRef':{'apiVersion':'v1','fieldPath':'metadata.namespace'}}]}}]}})
+            podspec['containers'][0]['volumeMounts'].append({'name':'kube-api-access-abc12','mountPath':'/var/run/secrets/kubernetes.io/serviceaccount','readOnly':True})
+            pod={'metadata':{'namespace':'voice-staging','uid':'poduid','labels':{'app':'voice-p3-principal-jwks'},
+                             'ownerReferences':[{'kind':'ReplicaSet','uid':'rsuid','controller':True}]},'spec':podspec,
+                 'status':{'phase':'Running','podIP':'10.2.0.8','conditions':[{'type':'Ready','status':'True'}],
+                           'containerStatuses':[{'name':'jwks','ready':True,'state':{'running':{}},'imageID':'docker-pullable://nginx@sha256:'+'d'*64}]}}
+            svc_uid=live['Service/voice-p3-principal-jwks']['metadata']['uid']
+            endpoint={'metadata':{'uid':'sliceuid','namespace':'voice-staging','labels':{'kubernetes.io/service-name':'voice-p3-principal-jwks'},
+                                  'ownerReferences':[{'kind':'Service','uid':svc_uid,'controller':True}]},
+                      'ports':[{'name':'https','port':8443,'protocol':'TCP'}],
+                      'endpoints':[{'addresses':['10.2.0.8'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':'poduid','namespace':'voice-staging'}}]}
+            node={'metadata':{'name':'node','uid':'nodeuid'},'status':{'nodeInfo':{'operatingSystem':'linux','architecture':'amd64'},'conditions':[{'type':'Ready','status':'True'}]}}
+            account={'metadata':{'name':'default','namespace':'voice-staging','uid':'00000000-0000-0000-0000-000000000101','resourceVersion':'1'}}
+            evidence={'node':{'name':'node','uid':'nodeuid','os':'linux','architecture':'amd64'},'manifest_sha256':'d'*64}
+            def get(kind,name):
+                if kind=='namespace': return {'kind':'Namespace','metadata':{'name':'voice-staging','uid':'ns'}}
+                if kind=='node': return copy.deepcopy(node)
+                if kind=='serviceaccount': return copy.deepcopy(account)
+                key=next(i for i in live if i.lower()==kind+'/'+name)
+                return copy.deepcopy(live[key])
+            def list_ready(args,body=None,timeout=30):
+                return {'metadata':{'resourceVersion':'11'},'items':copy.deepcopy({'replicasets':[rs],'replicaset':[rs],'pods':[pod],'endpointslices':[endpoint]}[args[1]])}
+            reader=SimpleNamespace(get=get,run=list_ready)
+            with mock.patch.object(parent,'require_child',return_value=plan),mock.patch.object(parent,'load_payload',side_effect=lambda s,slot,i:rawmap[i]), \
+                 mock.patch.object(parent,'load_issuer',return_value=issuer,create=True),mock.patch.object(parent,'load_done',return_value=done,create=True), \
+                 mock.patch.object(p3,'_source_and_image',return_value=(publisher,evidence)),mock.patch.object(stage_runtime,'Kube',return_value=reader), \
+                 mock.patch.object(p3,'probe_jwks',return_value=True) as tls:
+                completed=p3.verify_complete(session)
+                self.assertEqual(completed['receipt']['objects'],done)
+                self.assertEqual(completed['proof']['pod']['uid'],'poduid'); tls.assert_called_once()
+                pod['spec']['containers'][0]['image']='foreign'
+                with self.assertRaises(p3.PrerequisiteError): p3.verify_complete(session)
+            preserved_live=copy.deepcopy(live); prior='9'*12; provenances={}; preserved={}
+            for ident,row in preserved_live.items():
+                row['metadata']['annotations']['voice.poryadok.io/prerequisites-operation']=prior
+                kind,name=ident.split('/'); semantic=p3.private_semantic(row)
+                authority={'operation':prior,'receipt_sha256':'a'*64}
+                observation={'kind':kind,'name':name,'namespace':'voice-staging','uid':row['metadata']['uid'],
+                             'resourceVersion':row['metadata']['resourceVersion'],'semantic_sha256':resource_claim.digest(semantic)}
+                if kind=='Deployment': observation['generation']=row['metadata']['generation']
+                preserved[ident]={'authority':authority,'observed':observation}
+                provenances[ident]={'authority':authority,'semantic':semantic,'uid':row['metadata']['uid']}
+            c2plan={**copy.deepcopy(plan),'effects':[],'preserved':preserved}
+            def list_preserved(args,body=None,timeout=30):
+                self.assertEqual(args[0],'get'); return {'metadata':{'resourceVersion':'22'},
+                    'items':[copy.deepcopy(row) for row in preserved_live.values() if row['kind'].lower()==args[1]]}
+            reader2=SimpleNamespace(run=list_preserved,get=lambda kind,name:{'kind':'Namespace','metadata':{'name':'voice-staging','uid':'ns'}})
+            with mock.patch.object(parent,'require_child',return_value=c2plan),mock.patch.object(parent,'load_issuer',return_value=issuer,create=True), \
+                 mock.patch.object(parent,'load_preserved',side_effect=lambda s,slot,i:copy.deepcopy(provenances[i]),create=True), \
+                 mock.patch.object(p3,'_source_and_image',return_value=(publisher,evidence)),mock.patch.object(stage_runtime,'Kube',return_value=reader2):
+                self.assertTrue(p3.preflight_payloads(session))
+                preserved_live['Secret/voice-realtime-principal-signing']['data']['current.pem']='eA=='
+                with self.assertRaises(p3.PrerequisiteError): p3.preflight_payloads(session)
             bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
             with self.assertRaises(crypto.CryptoError): crypto.validate_issuer_materials(generated,bad)
             proof=crypto.validate_values(values,trust,peer_cert,peer_cert,ca)
