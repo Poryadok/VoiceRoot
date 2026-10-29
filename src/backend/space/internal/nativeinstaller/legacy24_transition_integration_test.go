@@ -5,6 +5,7 @@ package nativeinstaller
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/url"
 	"os"
 	"os/exec"
@@ -67,6 +68,48 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `INSERT INTO public.space_members(space_id,profile_id,nickname) VALUES($1,$2,'second fixture')`, space, member2)
 	require.NoError(t, err)
+	oldRevision, oldBuild, oldDriver := SourceRevision, BuildSourceSHA256, MigrateSHA256
+	t.Cleanup(func() { SourceRevision, BuildSourceSHA256, MigrateSHA256 = oldRevision, oldBuild, oldDriver })
+	SourceRevision, BuildSourceSHA256 = strings.Repeat("a", 40), strings.Repeat("b", 64)
+	MigrateSHA256, err = fileSHA(driver)
+	require.NoError(t, err)
+	var inspect bytes.Buffer
+	require.NoError(t, InspectLegacy24(ctx, Config{AdminURL: adminURL, MigrationsDir: "../../../migrations/space_db", MigratePath: driver, Output: &inspect}))
+	require.Contains(t, inspect.String(), `"event":"inspected-legacy24"`)
+	require.NotContains(t, inspect.String(), "legacy fixture")
+	require.NotContains(t, inspect.String(), space)
+	var inspection struct {
+		Event            string `json:"event"`
+		Schema           string `json:"schema"`
+		SourceRevision   string `json:"source_revision"`
+		BuildSHA256      string `json:"build_sha256"`
+		ExecutableSHA256 string `json:"executable_sha256"`
+		MigratorSHA256   string `json:"migrator_sha256"`
+		InventorySHA256  string `json:"inventory_sha256"`
+		Target           struct {
+			DatabaseName     string `json:"database_name"`
+			DatabaseOID      uint32 `json:"database_oid"`
+			DatabaseSystemID string `json:"database_system_id"`
+			InstallerRole    string `json:"installer_role"`
+			Version          int64  `json:"version"`
+		} `json:"target"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(inspect.Bytes()))
+	decoder.DisallowUnknownFields()
+	require.NoError(t, decoder.Decode(&inspection))
+	require.Equal(t, "voice.space.native-legacy24-inspection.v1", inspection.Schema)
+	require.Equal(t, SourceRevision, inspection.SourceRevision)
+	require.Equal(t, BuildSourceSHA256, inspection.BuildSHA256)
+	require.Equal(t, "space_db", inspection.Target.DatabaseName)
+	require.Equal(t, oid, inspection.Target.DatabaseOID)
+	require.EqualValues(t, 24, inspection.Target.Version)
+	require.NotEmpty(t, inspection.Target.DatabaseSystemID)
+	require.NotEmpty(t, inspection.Target.InstallerRole)
+	var stillVersion int
+	var stillDirty bool
+	require.NoError(t, conn.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&stillVersion, &stillDirty))
+	require.Equal(t, 24, stillVersion)
+	require.False(t, stillDirty)
 	dataHash := func() string {
 		var value string
 		require.NoError(t, conn.QueryRow(ctx, `SELECT encode(sha256(convert_to(jsonb_build_object('spaces',(SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id) FROM public.spaces s),'members',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.space_id,m.profile_id) FROM public.space_members m))::text,'UTF8')),'hex')`).Scan(&value))
@@ -120,6 +163,9 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	require.NoError(t, err)
 	_, err = observeLegacy24Origin(ctx, conn)
 	require.Error(t, err, "unsupported external view must HOLD")
+	inspect.Reset()
+	require.Error(t, InspectLegacy24(ctx, Config{AdminURL: adminURL, MigrationsDir: "../../../migrations/space_db", MigratePath: driver, Output: &inspect}), "inspection must reject unsupported extras")
+	require.Empty(t, inspect.String())
 	_, err = conn.Exec(ctx, `DROP VIEW legacy_extra.unsupported`)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `CREATE SCHEMA native_membership_guard`)
