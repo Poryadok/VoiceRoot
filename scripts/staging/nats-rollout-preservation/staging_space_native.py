@@ -165,6 +165,7 @@ def inspect_source(session):
     """Run the pinned read-only inspector and remove only its response-bound Job."""
     plan=owner._guard(session);owner._no_pending(session);tool=space.load_tool(session);kube=Kube()
     identity=_identity(session,kube);config=kube.get('configmap','voice-app-config');secret=kube.get('secret','voice-app-secrets')
+    if identity['namespace_uid']!=plan['namespace_uid']:raise Blocked('space_inspect_namespace_changed')
     user=config.get('data',{}).get('POSTGRES_USER')
     if (not isinstance(user,str) or not re.fullmatch('[a-z_][a-z0-9_]{0,62}',user)
         or not secret.get('data',{}).get('POSTGRES_PASSWORD') or identity['database']['session_user']!=user):
@@ -252,7 +253,8 @@ def _retained_record(base,operation,plan,tool):
     fields={'schema','operation','plan_sha256','tool_sha256','identity','job_uid','result','cleanup','credential_binding','pod_observation'}
     if (type(receipt) is not dict or set(receipt)!=fields or receipt['schema']!='voice-staging-space-inspection-v1'
         or receipt['operation']!=operation or receipt['plan_sha256']!=owner.digest(plan)
-        or receipt['tool_sha256']!=owner.digest(tool) or receipt['cleanup']!='verified'):
+        or receipt['tool_sha256']!=owner.digest(tool) or receipt['cleanup']!='verified'
+        or receipt.get('identity',{}).get('namespace_uid')!=plan.get('namespace_uid')):
         raise Blocked('space_inspect_receipt_changed')
     created=owner._read(base/'effects'/'space-inspect-create.json')
     deleted=owner._read(base/'effects'/'space-inspect-delete.json')

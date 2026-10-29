@@ -12,6 +12,16 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_changed_namespace_blocks_before_job_effect(self):
+        kube=Mock();kube.get.return_value={}
+        with patch.object(native.owner,'_guard',return_value={'namespace_uid':'original'}), \
+             patch.object(native.owner,'_no_pending'),patch.object(native.space,'load_tool',return_value={}), \
+             patch.object(native,'Kube',return_value=kube),patch.object(native,'_identity',return_value={'namespace_uid':'foreign'}), \
+             patch.object(native,'_mutate') as mutate:
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_namespace_changed'):
+                native.inspect_source(SimpleNamespace())
+            mutate.assert_not_called();kube.run.assert_not_called()
+
     def test_pod_reread_requires_same_uid_spec_and_image_but_allows_new_rv(self):
         status={'name':'inspect','imageID':'immutable','state':{'terminated':{'exitCode':0}}}
         original={'metadata':{'uid':'owned'},'spec':{'nodeName':'node'},'status':{'containerStatuses':[status]}}
@@ -64,7 +74,7 @@ class InspectSourceTest(unittest.TestCase):
                     'source_inventory':{'build_source_sha256':'d'*64},'platform_digest':'sha256:'+'c'*64,
                     'config_digest':'sha256:'+'e'*64,'content':{'executable_sha256':'f'*64,
                     'migrator_sha256':'1'*64,'sql_inventory_sha256':'2'*64}}
-                identity={'namespace_uid':'ns','engine':{},'database':{'system_identifier':'42','server_start':'t',
+                identity={'namespace_uid':'namespace','engine':{},'database':{'system_identifier':'42','server_start':'t',
                     'database_oid':123,'database_owner':'admin','session_user':'admin','schema_owner':'admin'}}
                 config={'metadata':{'uid':'config','resourceVersion':'1'},'data':{'POSTGRES_USER':'admin'}}
                 secret={'metadata':{'uid':'secret','resourceVersion':'2'},'data':{'POSTGRES_PASSWORD':base64.b64encode(b'private').decode()}}
@@ -219,7 +229,7 @@ class InspectSourceTest(unittest.TestCase):
         kube.run.return_value=copy.deepcopy(job)
         observe=[('admin\n'+hashlib.sha256(b'private').hexdigest()+'  -\n').encode(),
                  json.dumps({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8'},'items':[pod]}).encode(),json.dumps(result).encode()]
-        with patch.object(native,'Kube',return_value=kube),patch.object(native.owner,'_guard',return_value={'fixture':'plan'}), \
+        with patch.object(native,'Kube',return_value=kube),patch.object(native.owner,'_guard',return_value={'namespace_uid':'ns'}), \
              patch.object(native.owner,'_no_pending'),patch.object(native.space,'load_tool',return_value=tool), \
              patch.object(native,'_identity',return_value=identity),patch.object(native,'_mutate',return_value=('path',{},json.dumps(job).encode())), \
              patch.object(native,'_done'),patch.object(native.owner,'_observation',side_effect=observe), \
