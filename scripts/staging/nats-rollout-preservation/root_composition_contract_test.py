@@ -496,6 +496,9 @@ class RootCompositionContract(unittest.TestCase):
         for fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing'):
             with self.subTest(fault=fault):self._exercise_bridge(fault)
 
+    def test_bridge_rejects_foreign_candidate_before_any_prerequisite_effect(self):
+        root_composition_fixture.exercise_candidate_drift(self)
+
     def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
         self._exercise_bridge('c2')
 
