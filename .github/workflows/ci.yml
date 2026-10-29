@@ -422,7 +422,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
@@ -436,7 +436,7 @@ jobs:
         working-directory: src/frontend
         run: |
           flutter pub get
-          flutter test --reporter expanded --concurrency=1 --no-pub --total-shards=4 --shard-index=${{ matrix.shard }}
+          flutter test --reporter expanded --concurrency=1 --no-pub --total-shards=8 --shard-index=${{ matrix.shard }}
       - name: Retain failing golden diagnostics
         if: failure()
         uses: actions/upload-artifact@v6
