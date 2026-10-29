@@ -64,6 +64,10 @@ class RenderTest(unittest.TestCase):
         command = pod['containers'][0]['command'][-1]
         self.assertLess(command.index('VOICE_DB_SERVICE_IP'), command.index('exec migrate'))
         self.assertNotIn('fixture-password', str(job))
+        actual = dict(config, metadata=config['metadata'] | {'uid': 'uid', 'resourceVersion': '1'})
+        self.assertEqual(migration.verify_writer_configmap(config, actual)['uid'], 'uid')
+        with self.assertRaises(migration.MigrationError):
+            migration.verify_writer_configmap(config, actual | {'binaryData': {'000099_injected.up.sql': 'U0VMRUNUIDE7'}})
 
     def test_special_database_and_unsafe_names_rejected(self):
         for db in ('space_db', 'auth_db', 'gateway_db', 'realtime_db', 'game_integration_db', 'postgres'):
@@ -148,6 +152,15 @@ class RenderTest(unittest.TestCase):
             with self.assertRaises(migration.MigrationError): migration.verify_writer_pod(authored, job, bad, execution)
             bad = copy.deepcopy(pod); bad['status']['containerStatuses'][0]['imageID'] = 'sha256:' + 'f' * 64
             with self.assertRaises(migration.MigrationError): migration.verify_writer_pod(authored, job, bad, execution)
+
+    def test_job_admission_rejects_injected_owner(self):
+        _, authored = migration.render('media-c1-' + 'a' * 32, 'b' * 40, 'chat_db',
+                                       {'000001_init.up.sql': b'SELECT 1;'},
+                                       {'name': 'node', 'uid': 'node-uid', 'hostname': 'node', 'architecture': 'amd64'},
+                                       {'host': 'voice-postgres', 'service_ip': '10.0.0.1', 'role': 'voice', 'sslmode': 'disable'})
+        actual = copy.deepcopy(authored)
+        actual['metadata'].update(uid='uid', ownerReferences=[{'uid': 'foreign'}])
+        with self.assertRaises(migration.MigrationError): migration.verify_writer_job(authored, actual, dry=True)
 
     def test_metadata_role_is_source_login_and_secret_drift_is_rejected(self):
         plans = {'chat_db': {'from': 1, 'to': 2}, 'space_db': {'from': 25, 'to': 25}}
@@ -409,7 +422,7 @@ class SecretSnapshotTest(unittest.TestCase):
              mock.patch.object(migration.schema, 'kube_engine_snapshot', return_value=lambda: source['engine']), \
              mock.patch.object(migration.realtime_migration_job, 'admitted_job', side_effect=lambda expected, actual: expected['spec']), \
              mock.patch.object(migration.auth_user_candidate_probe, 'admitted_pod'), \
-             mock.patch.object(migration, 'verify_writer_job', side_effect=lambda expected, actual: expected['spec']), \
+             mock.patch.object(migration, 'verify_writer_job', side_effect=lambda expected, actual, **kwargs: expected['spec']), \
              mock.patch.object(migration, 'verify_writer_pod', return_value={'uid': 'pod-uid', 'ip': '10.0.0.4'}), \
              mock.patch.object(migration, '_private_kube', return_value={}):
             phase = migration.Migration(self.phase)

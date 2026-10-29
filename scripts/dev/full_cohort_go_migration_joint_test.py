@@ -79,13 +79,19 @@ class JointTest(unittest.TestCase):
                        'migration_logins': {'chat_db': {'role': 'chat_login', 'from': 1, 'to': 2}}}
             done = {'status': 'done', 'intent': intent, 'receipt': receipt}
             readback = {'status': 'done', 'intent': {'manifest_sha256': manifest}, 'receipt': {'artifact_id': 1}}
-            resources = {'postgres': {'status': 'removed'}}
+            resources = {}
+            for index, kind in enumerate(('postgres', 'migrate'), 1):
+                name = 'voice-media-restore-' + str(index) * 32
+                resources[kind] = {'status': 'removed', 'nonce': str(index) * 32, 'name': name,
+                                   'labels': {'voice.test.owner': name}, 'operation_id': binding['operation_id'],
+                                   'invocation_nonce': 'invocation', 'container_id': str(index) * 64}
             base.ledger.row.update(cohort_restore=copy.deepcopy(done), cohort_readback=copy.deepcopy(readback),
                                    cohort_restore_resources=copy.deepcopy(resources))
             j = media_operation_journal.Journal(Path(base.tmp.name) / 'cohort-journal', base.journal.intent)
             self.addCleanup(j.close)
             j.state['steps'].update({'cohort-restore': copy.deepcopy(done), 'cohort-readback': copy.deepcopy(readback),
-                                     'cohort-restore-resource-postgres': resources['postgres']}); j.save()
+                                     'cohort-restore-resource-postgres': resources['postgres'],
+                                     'cohort-restore-resource-migrate': resources['migrate']}); j.save()
             cohort = object.__new__(cohort_backup_phases.CohortPhases)
             cohort.phases = SimpleNamespace(fence=base.fence, lock={}, namespace_uid='ns', invocation='invocation', journal=j)
             cohort.catalog_phase = catalog

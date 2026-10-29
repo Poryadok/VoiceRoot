@@ -485,9 +485,20 @@ class SecretSnapshot:
             raise MigrationError('migration credential cleanup uncertain' if started else 'migration credential cleanup not admitted') from None
 
 
-def verify_writer_job(authored, actual):
+def verify_writer_job(authored, actual, *, dry=False):
     """Apply the existing exact Kubernetes Job admission checks."""
     try:
+        meta = actual['metadata']
+        allowed = {'name', 'namespace', 'uid', 'resourceVersion', 'creationTimestamp', 'managedFields',
+                   'generation', 'annotations', 'labels'}
+        if (not isinstance(meta, dict) or set(meta) - allowed or
+                meta.get('annotations') != authored['metadata']['annotations']):
+            raise ValueError()
+        if dry:
+            if (meta.get('name') != authored['metadata']['name'] or meta.get('namespace') != 'voice-dev' or
+                    not isinstance(meta.get('uid'), str) or not meta['uid']):
+                raise ValueError()
+            return realtime_migration_job.admitted_job(authored, actual)
         return realtime_migration_job.verify_writer_job(authored, actual)
     except BaseException:
         raise MigrationError('migration Job identity unavailable') from None
@@ -556,7 +567,8 @@ def _config_receipt(intended, actual, *, require_identity=True):
         allowed = {'name', 'namespace', 'uid', 'resourceVersion', 'creationTimestamp', 'managedFields', 'generation', 'annotations'}
         if (not isinstance(meta, dict) or set(meta) - allowed or actual.get('apiVersion') != 'v1' or
                 actual.get('kind') != 'ConfigMap' or actual.get('immutable') is not True or
-                actual.get('data') != intended['data'] or meta.get('name') != intended['metadata']['name'] or
+                actual.get('data') != intended['data'] or actual.get('binaryData') not in (None, {}) or
+                meta.get('name') != intended['metadata']['name'] or
                 meta.get('namespace') != 'voice-dev' or meta.get('annotations') != intended['metadata']['annotations'] or
                 require_identity and any(not isinstance(meta.get(k), str) or not meta[k] for k in ('uid', 'resourceVersion'))):
             raise ValueError()
@@ -691,7 +703,7 @@ class Migration:
             self._step('config', config_step | {'status': 'done'}, config_receipt)
             self._guard()
             dry = self.client.call('create', '--dry-run=server', '-f', '-', '-o', 'json', body=job)
-            dry_spec = realtime_migration_job.admitted_job(job, dry)
+            dry_spec = verify_writer_job(job, dry, dry=True)
             template = dry_spec['template']
             dry_pod = {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'name': 'voice-go-check-' + self.fence.context['operation_id'][-32:],
                        'namespace': 'voice-dev', 'labels': copy.deepcopy(template['metadata']['labels']),
@@ -710,7 +722,7 @@ class Migration:
                     self.secret.verify() != secret_done['receipt']):
                 raise ValueError()
             submitted = self.client.call('create', '-f', '-', '-o', 'json', body=job)
-            accepted = realtime_migration_job.admitted_job(job, submitted)
+            accepted = verify_writer_job(job, submitted)
             jm = submitted['metadata']; uid, rv = jm.get('uid'), jm.get('resourceVersion')
             if any(not isinstance(x, str) or not x for x in (uid, rv)) or jm.get('annotations', {}).get('voice.io/source-sha') != self.fence.context['commit']:
                 raise ValueError()
