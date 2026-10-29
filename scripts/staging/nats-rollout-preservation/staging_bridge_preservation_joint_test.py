@@ -30,6 +30,13 @@ import stage_runtime
 class BridgePreservationAdmission(unittest.TestCase):
     def test_actual_stage_capture_with_owned_synthetic_cluster(self):
         """Build the same read-only stage seam without replacing capture/preflight."""
+        root=Path(self.enterContext(tempfile.TemporaryDirectory(dir='/root')))
+        (root/'installed').mkdir(mode=0o700)
+        candidate=context();tt_card=card(candidate)
+        session=resource_claim.Session(candidate,'a'*12,'b'*64,lambda:copy.deepcopy(tt_card),
+                                       resource_claim.RootJournal(root))
+        self.enterContext(patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)))
+        session.admit(start=True)
         namespace='00000000-0000-0000-0000-000000000001'
         claim='00000000-0000-0000-0000-000000000002'
         pv='00000000-0000-0000-0000-000000000003'
@@ -61,10 +68,12 @@ class BridgePreservationAdmission(unittest.TestCase):
                ('service','voice-nats'):{'metadata':{'uid':'service','resourceVersion':'1'}}}
         class Cluster:
             def get(self,kind,name):
+                session.check()
                 if kind=='deployment':return copy.deepcopy(rows[name])
                 if kind=='replicaset':return copy.deepcopy(replicasets[name])
                 return copy.deepcopy(fixed[(kind,name)])
             def run(self,args,**kwargs):
+                session.check()
                 if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
                 if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
                 raise AssertionError('unexpected external cluster request')
@@ -75,6 +84,7 @@ class BridgePreservationAdmission(unittest.TestCase):
         self.assertEqual(len(result.old_images),len(names)-1)
         self.assertEqual(result.expected['source_claim_uid'],claim)
         self.assertTrue(any(row['kind']=='rollout_original_capture' for row in events))
+        self.assertEqual(session.check()['phase'],'prepare')
 
     def test_producer_imports_from_captured_helper_directory(self):
         source = Path(__file__).resolve().parents[3]
