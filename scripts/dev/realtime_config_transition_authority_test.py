@@ -93,19 +93,45 @@ class AuthorityTest(unittest.TestCase):
 
     def test_fixed9_space_requires_current_tls_and_verified_binding(self):
         import realtime_p3_create_only_crypto as crypto
+        import space_creator_runtime_profile_delegated as delegated
         import space_creator_runtime_profile_target_trust as target
-        phase=SimpleNamespace(proof={'objects':{'voice-space-media-server-tls':{'uid':'space-cert','resourceVersion':'7'}},
-            'public_jwks':{'voice-space-principal-signing':{'keys':[]}},'ca':{'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}})
-        binding=authority.BoundFixed9SpaceAuthority(self.cut,object(),object(),phase,object(),'token')
+        import space_role_peer_create as role
+        from unittest import mock
+        cut=authority.writer_cut.WriterCut.__new__(authority.writer_cut.WriterCut)
+        cut.fence=self.cut.fence; cut.lock={}; cut.namespace_uid='ns'; cut.client=object(); cut.journal=object(); cut._guard=mock.Mock(); cut._identity=mock.Mock()
+        trust=target.TargetTrustPhase.__new__(target.TargetTrustPhase); creator=delegated.CreatorReceiver.__new__(delegated.CreatorReceiver)
+        phase=delegated.SpaceReceiver.__new__(delegated.SpaceReceiver); role_phase=role.Session.__new__(role.Session)
+        for item in (trust,creator,phase,role_phase):item.fence=cut.fence; item.lock={}; item.namespace_uid='ns'
+        creator.cut=cut; phase.cut=cut; trust.preflight=SimpleNamespace(cut=cut); role_phase.preflight=SimpleNamespace(cut=cut)
+        import full_cohort_package_phase as package
+        trust.record={'status':'done'}; trust.journal=SimpleNamespace(state={'steps':{target.STEP:{'receipt':{'jdk_receipt_sha256':'j','preflight_receipt_sha256':'p'}}}})
+        trust.package=SimpleNamespace(journal=SimpleNamespace(state={'steps':{package.STEP:{'status':'done'}}})); trust._locals=mock.Mock()
+        for item in (creator,phase,role_phase):item.initial={}; item.record={}; item.effects={}; item.proof={}; item._local=mock.Mock()
+        phase.proof={'objects':{'voice-space-media-server-tls':{'uid':'space-cert','resourceVersion':'7'}},
+            'public_jwks':{'voice-space-principal-signing':{'keys':[]}},'ca':{'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}}
+        binding=authority.BoundFixed9SpaceAuthority(cut,trust,creator,phase,role_phase,'token')
         self.assertNotIn('token',repr(binding))
         self.patches[2].stop()
         with patch.object(target,'verify_fixed9_successor') as verify, patch.object(crypto,'der',return_value=b'der'):
-            proof,jwks=authority._space(self.cut,binding,'token')
+            proof,jwks=authority._space(cut,binding,'token')
             self.assertEqual(proof['schema'],'voice-dev-space-delegated-v1'); self.assertEqual(jwks,b'{"keys":[]}')
             self.assertEqual(verify.call_count,2)
-            with self.assertRaises(ValueError):authority._space(self.cut,binding,'wrong')
+            with self.assertRaises(ValueError):authority._space(cut,binding,'wrong')
             with patch.object(authority.transport,'public_certificate',return_value=b'foreign\n7\ncHVibGlj'):
-                with self.assertRaises(ValueError):authority._space(self.cut,binding,'token')
+                with self.assertRaises(ValueError):authority._space(cut,binding,'token')
+            other=authority.writer_cut.WriterCut.__new__(authority.writer_cut.WriterCut)
+            other.fence=cut.fence; other.lock={}; other.namespace_uid='ns'; other.client=object(); other.journal=object(); other._guard=mock.Mock()
+            bypass=authority.BoundFixed9SpaceAuthority(other,trust,creator,phase,role_phase,'token')
+            with self.assertRaises(ValueError):authority._space(other,bypass,'token')
+            reads=0
+            def late_package_change():
+                nonlocal reads
+                reads+=1
+                if reads==15:trust.package.journal.state['steps'].pop(package.STEP)
+                return {'status':'active'},'1'
+            cut.fence.ledger.read=late_package_change
+            with self.assertRaises(ValueError):authority._space(cut,binding,'token')
+            self.assertEqual(reads,15)
 
     def test_fixed9_binding_rejects_untyped_inputs(self):
         with self.assertRaises(authority.AuthorityError):
