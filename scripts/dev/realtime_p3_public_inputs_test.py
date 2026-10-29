@@ -17,7 +17,7 @@ class CaptureTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         manifest = self.root / 'deploy/staging/services.yaml'
         manifest.parent.mkdir(parents=True)
-        manifest.write_bytes(b'kind: Deployment\nmetadata:\n  name: voice-space\nspec:\n  template:\n    spec:\n      containers:\n        - name: space\n          env:\n            - ' + capture.SOURCE_LINES[0] + b'\n            - ' + capture.SOURCE_LINES[1] + b'\n          volumeMounts:\n            - ' + capture.SOURCE_LINES[2] + b'\n      volumes:\n        - name: media-server\n          ' + capture.SOURCE_LINES[3] + b'\n')
+        manifest.write_bytes(b'kind: Deployment\nmetadata:\n  name: voice-space\nspec:\n  template:\n    spec:\n      containers:\n        - name: space\n          env:\n            - ' + capture.SOURCE_LINES[0] + b'\n            - ' + capture.SOURCE_LINES[1] + b'\n            - ' + capture.SOURCE_LINES[4] + b'\n          volumeMounts:\n            - ' + capture.SOURCE_LINES[2] + b'\n      volumes:\n        - name: media-server\n          ' + capture.SOURCE_LINES[3] + b'\n')
         self.manifest_sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
         self.document_sha = self.manifest_sha
         def openssl(*args):
@@ -37,6 +37,7 @@ class CaptureTests(unittest.TestCase):
         self.pod = {'metadata': {'name': 'voice-space-abc', 'uid': 'pod', 'resourceVersion': '3', 'labels': {'app': 'voice-space'}},
                     'spec': {'containers': [{'name': 'space', 'env': [
                         {'name': 'SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE', 'value': '/etc/voice/media/server/tls.crt'},
+                        {'name': 'SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE', 'value': '/etc/voice/media/server/tls.key'},
                         {'name': 'SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN', 'value': ':8443'}],
                         'volumeMounts': [{'name': 'media-server', 'mountPath': '/etc/voice/media/server', 'readOnly': True}]}],
                         'volumes': [{'name': 'media-server', 'secret': {'secretName': 'voice-space-media-server-tls',
@@ -59,10 +60,10 @@ class CaptureTests(unittest.TestCase):
             return base64.b64encode(value) if kind == 'secret' else value
         raise AssertionError('unexpected transport')
 
-    def invoke(self, destination, guard=lambda: None, runner=None, workload=None, authority=lambda sha: None):
+    def invoke(self, destination, guard=lambda: None, runner=None, workload=None, authority=lambda sha: None, mode='serving'):
         snap = {'source_sha': 'a' * 40, 'files': {'deploy/staging/services.yaml': self.manifest_sha}}
         with patch.object(capture, 'source_snapshot', return_value=snap), patch.object(capture, 'SPACE_DOCUMENT_SHA', self.document_sha), patch.object(capture.common, 'kube_workload_snapshot', return_value=workload or (lambda: dict(self.identity))):
-            return capture.capture(self.root, 'a' * 40, authority, 'voice-space-abc', 'ns', guard, destination, runner or self.runner)
+            return capture.capture(self.root, 'a' * 40, authority, 'voice-space-abc', 'ns', guard, destination, runner or self.runner, mode=mode)
 
     def test_real_chain_and_private_files(self):
         dest = self.root / 'private'; dest.mkdir(mode=0o700)
@@ -79,6 +80,50 @@ class CaptureTests(unittest.TestCase):
         self.pod['spec']['volumes'][0]['secret']['secretName'] = 'other'
         with self.assertRaises(capture.common.Hold): self.invoke(dest)
         self.assertEqual(list(dest.iterdir()), [])
+
+    def test_fixed_space_env_categories_without_values(self):
+        for field,prefix in [('SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE','space_cert_env'),
+                             ('SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE','space_key_env'),
+                             ('SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN','space_listen_env')]:
+            for fault in ('absent','duplicate','mismatch'):
+                with self.subTest(field=field,fault=fault):
+                    original=self.pod['spec']['containers'][0]['env']
+                    env=[dict(x) for x in original]; selected=next(x for x in env if x['name']==field)
+                    if fault=='absent': env.remove(selected)
+                    if fault=='duplicate': env.append(dict(selected))
+                    if fault=='mismatch': selected['value']='private-sentinel'
+                    self.pod['spec']['containers'][0]['env']=env
+                    dest=self.root/(prefix+'-'+fault); dest.mkdir(mode=0o700)
+                    with self.assertRaises(capture.common.Hold) as error: self.invoke(dest)
+                    self.assertEqual(str(error.exception),prefix+'_'+fault)
+                    self.assertNotIn('private-sentinel',str(error.exception)); self.assertEqual(list(dest.iterdir()),[])
+                    self.pod['spec']['containers'][0]['env']=original
+
+    def test_issuer_plan_captures_crypto_without_claiming_current_serving(self):
+        dest=self.root/'issuer-plan'; dest.mkdir(mode=0o700)
+        self.pod['spec']['containers'][0]['env']=[]
+        self.pod['spec']['containers'][0]['volumeMounts']=[]
+        def runner(args):
+            if 'service' in args: raise AssertionError('issuer plan must not claim serving')
+            return self.runner(args)
+        result=self.invoke(dest,runner=runner,mode='issuer-plan')
+        self.assertEqual(result['scope'],'issuer-source-plan-only')
+        self.assertIsNone(result['space_service_spec']); self.assertFalse(result['admission_qualified'])
+        self.assertEqual(result['current_space_config'],{'space_cert_env':'absent','space_key_env':'absent',
+            'space_listen_env':'absent','space_mount':'mismatch'})
+        self.assertIn('current_space_https',result['unobserved'])
+        with self.assertRaises(capture.common.Hold):
+            other=self.root/'serving'; other.mkdir(mode=0o700); self.invoke(other)
+
+    def test_key_only_shadow_is_not_valid_mount(self):
+        self.pod['spec']['containers'][0]['volumeMounts'].append(
+            {'name':'foreign','mountPath':'/etc/voice/media/server/tls.key','readOnly':True})
+        dest=self.root/'shadow-serving'; dest.mkdir(mode=0o700)
+        with self.assertRaisesRegex(capture.common.Hold,'space_mount_invalid'): self.invoke(dest)
+        self.assertEqual(list(dest.iterdir()),[])
+        planned=self.root/'shadow-plan'; planned.mkdir(mode=0o700)
+        result=self.invoke(planned,mode='issuer-plan')
+        self.assertEqual(result['current_space_config']['space_mount'],'mismatch')
 
     def test_service_missing_identity_fails(self):
         dest = self.root / 'private'; dest.mkdir(mode=0o700)
