@@ -107,7 +107,7 @@ class PhaseTest(unittest.TestCase):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','lost-job','pod-image','dryrun','invocation-ack'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','pod-image','job-label','dryrun','invocation-ack'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -135,7 +135,10 @@ class PhaseTest(unittest.TestCase):
                 result = copy.deepcopy(objects['ConfigMap'])
                 if fault=='config-drift': result['metadata']['uid']='foreign'
                 return result
-            if args[:2]==('get','job'): return copy.deepcopy(objects['Job'])
+            if args[:2]==('get','job'):
+                result = copy.deepcopy(objects['Job'])
+                if fault=='job-label': result['metadata']['labels']['controller-uid']='foreign'
+                return result
             if args[:2]==('get','pods'):
                 owned = objects['Job']; pod_spec = copy.deepcopy(owned['spec']['template']['spec'])
                 pod_spec['nodeName']='fixture-node'
@@ -163,6 +166,8 @@ class PhaseTest(unittest.TestCase):
             return record
         def finish(name, record, receipt):
             original_finish(name,record,receipt)
+            if fault=='local-role' and name=='config':
+                provision.state['steps']['realtime-db-role']['nonce']='foreign'
             if fault=='terminal' and name=='job':
                 base.ledger.row['realtime_migration']['steps'][name]['receipt_sha256']='f'*64
         schema = {'database_oid':13,'version':1,'dirty':False,'scope':'realtime-login-schema-readiness'}
@@ -176,7 +181,7 @@ class PhaseTest(unittest.TestCase):
                 self.assertEqual(base.ledger.row['status'],'uncertain')
                 if fault=='config': self.assertNotIn('ConfigMap',objects)
                 if fault=='job': self.assertNotIn('Job',objects)
-                if fault in ('config-drift','dryrun'): self.assertNotIn('Job',objects)
+                if fault in ('config-drift','local-role','dryrun'): self.assertNotIn('Job',objects)
                 return
             receipt = worker.run()
         self.assertEqual(receipt['schema'],schema)

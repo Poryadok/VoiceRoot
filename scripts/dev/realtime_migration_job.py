@@ -113,6 +113,10 @@ class Migration:
                     row.get('realtime_db_provision')!=self.bound_provision or
                     self.provision_journal.poisoned or self.provision_journal.intent!=self.provision_intent or
                     self.provision_journal.state.get('intent')!=self.provision_intent or
+                    self.provision_journal.state['steps'].get('realtime-db-invocation') !=
+                        {'status':'pending','nonce':self.bound_provision['nonce']} or
+                    self.provision_journal.state['steps'].get('realtime-db-role') !=
+                        self.bound_provision['steps']['role'] or
                     self.secret.journal.state['steps'].get('realtime-secret') !=
                         self.bound_secret | {'password_sha256':hashlib.sha256(self.password).hexdigest()} or
                     self.provision_journal.state['steps'].get('realtime-db-database') !=
@@ -207,7 +211,12 @@ class Migration:
             if (not self.fence.owned(row) or row.get('status')!='active' or
                     private != secret_record | {'password_sha256':hashlib.sha256(self.password).hexdigest()} or
                     secret_record.get('status')!='done' or secret_record.get('receipt')!=spec['credential'] or
-                    provision_record.get('operation_id')!=operation or role.get('status')!='done' or
+                    provision_record.get('operation_id')!=operation or
+                    not isinstance(provision_record.get('nonce'),str) or
+                    not re.fullmatch(r'[0-9a-f]{32}',provision_record['nonce']) or
+                    set(provision_record.get('steps',{}))!={'role','database'} or role.get('status')!='done' or
+                    self.provision_journal.state['steps'].get('realtime-db-invocation') !=
+                        {'status':'pending','nonce':provision_record['nonce']} or
                     not realtime_db_provision._valid_role(role.get('catalog',{}).get('role')) or
                     self.provision_journal.state['steps'].get('realtime-db-role')!=role or
                     database.get('status')!='done' or database.get('catalog',{}).get('database',{}).get('oid')!=spec['database_oid'] or
@@ -282,6 +291,8 @@ class Migration:
                         current.get('metadata',{}).get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha'] or
                         current.get('metadata',{}).get('uid')!=uid or current.get('spec')!=accepted_spec):
                     raise RecoveryRequired('Job identity changed')
+                if admitted_job(planned,current)!=accepted_spec:
+                    raise RecoveryRequired('Job admission changed')
                 conditions = current.get('status',{}).get('conditions',[])
                 if any(c.get('type')=='Failed' and c.get('status')=='True' for c in conditions):
                     raise RecoveryRequired('migration Job failed')
