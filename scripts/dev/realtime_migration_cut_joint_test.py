@@ -24,7 +24,7 @@ class JointTest(unittest.TestCase):
         base = base_fixture.PhaseTest(); base.setUp(); self.addCleanup(base.doCleanups)
         renderer = migration_fixture.RendererTest(); renderer.setUp(); self.addCleanup(renderer.doCleanups)
         password = b'a' * 32
-        objects = {}; events = []; observed = []; pod_phases = []
+        objects = {}; events = []; observed = []; pod_phases = []; runtime_ip = ['10.1.2.3']
         lifecycle = fault not in (None, 'lost', 'busy')
         tick = [0]
         def advance(seconds):
@@ -32,6 +32,7 @@ class JointTest(unittest.TestCase):
         def current_phase():
             if not lifecycle: return 'Succeeded'
             if fault == 'timeout': return 'Scheduling'
+            if fault == 'emergence' and tick[0] == 0: return 'Absent'
             return ('Scheduling', 'Pulling', 'Running', 'Succeeded')[min(tick[0] // 2, 3)]
         self.enterContext(mock.patch.object(migration.time, 'sleep', side_effect=advance))
         self.enterContext(mock.patch.object(migration.time, 'monotonic', side_effect=lambda: tick[0]))
@@ -81,6 +82,8 @@ class JointTest(unittest.TestCase):
                             'imageID':'containerd://'+migration.PLATFORMS['amd64'],
                             'state':{'terminated':{'exitCode':0}}}]}}
                     phase = current_phase(); pod_phases.append(phase)
+                    if phase == 'Absent': return {'items':[]}
+                    pod['status']['podIP'] = runtime_ip[0]
                     if phase in ('Scheduling', 'Pulling'):
                         pod['status']={'phase':'Pending'}
                         if phase == 'Scheduling': pod['spec'].pop('nodeName')
@@ -91,7 +94,7 @@ class JointTest(unittest.TestCase):
                     elif phase == 'Running':
                         pod['status']['phase']='Running'
                         pod['status']['containerStatuses'][0]['state']={'running':{'startedAt':'fixture'}}
-                    if fault == 'wrong-uid' and phase != 'Scheduling': pod['metadata']['uid']='foreign'
+                    if fault in ('wrong-uid','mid-wrong-uid') and phase != 'Scheduling': pod['metadata']['uid']='foreign'
                     if fault == 'wrong-node': pod['spec']['nodeName']='foreign'
                     if fault == 'wrong-image' and phase == 'Pulling':
                         pod['status']['containerStatuses'][0]['imageID']='containerd://sha256:'+'f'*64
@@ -182,9 +185,13 @@ class JointTest(unittest.TestCase):
                 self.assertIsNone(identity['pod_uid'])
             self.assertEqual(scope['database_oids']['realtime_db'],13)
             if fault=='busy' and state=='pending': value['active_sessions']=1
+            if fault in ('mid-observation','mid-wrong-uid','mid-busy','mid-ip-drift','emergence') and state == 'owned' and tick[0] == 0 and cut.migration.get('job_uid'):
+                tick[0] = 4
+            elif fault == 'mid-busy' and tick[0] == 4: value['active_sessions'] = 1
+            elif fault == 'mid-ip-drift' and tick[0] == 4: runtime_ip[0] = '10.1.2.' + str(int(runtime_ip[0].rsplit('.',1)[1]) + 1)
             return value
         self.enterContext(mock.patch.object(writer_cut_migration.writer_cut_pg_probe,'inspect_migration',side_effect=sessions))
-        if fault and fault != 'progression':
+        if fault and fault not in ('progression','mid-observation','emergence'):
             with self.assertRaises(migration.RecoveryRequired): phase.run(cut)
             self.assertEqual(base.ledger.row['status'],'uncertain')
             self.assertIn('pending',observed)
@@ -203,14 +210,18 @@ class JointTest(unittest.TestCase):
             self.assertEqual(migration_j.state['steps']['job']['status'],'done')
             self.assertEqual(base.ledger.row['realtime_migration']['status'],'done')
             self.assertTrue(cut.migration['finished'])
-            if lifecycle: self.assertTrue({'Scheduling','Pulling','Running','Succeeded'}.issubset(pod_phases))
+            if lifecycle:
+                expected = {'Absent','Running','Succeeded'} if fault == 'emergence' else {'Scheduling','Running','Succeeded'} if fault == 'mid-observation' else {'Scheduling','Pulling','Running','Succeeded'}
+                self.assertTrue(expected.issubset(pod_phases))
             step='writer-cut-migration-finish-'+phase.invocation
             self.assertEqual(cut_j.state['steps'][step]['status'],'done')
             self.assertEqual(base.ledger.row['writer_cut_effects'][step]['status'],'done')
 
+    def test_pod_appears_during_session_sample(self): self.exercise('emergence')
+    def test_pending_to_running_during_session_sample(self): self.exercise('mid-observation')
     def test_pending_progression(self): self.exercise('progression')
     def test_pending_identity_failure_and_timeout(self):
-        for fault in ('wrong-uid','wrong-node','wrong-image','pending-execution','failed-job','failed-pod','timeout'):
+        for fault in ('wrong-uid','wrong-node','wrong-image','pending-execution','failed-job','failed-pod','timeout','mid-wrong-uid','mid-busy','mid-ip-drift'):
             with self.subTest(fault=fault): self.exercise(fault)
 
     def test_success(self): self.exercise(None)
