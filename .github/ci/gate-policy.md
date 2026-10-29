@@ -53,11 +53,16 @@ success is introduced.
 The PR `affected-check-plan` job produces an advisory comparison artifact using
 the exact base, head, merge candidate and branch name. The planner records both
 sides of renames and deletions, reuses the Go and Docker selectors, and compares
-its selection with the existing path-filter outputs. Unclassified code or
-unsupported filter grammar widens the proposed plan. This comparison has no gate
-authority yet: the existing required jobs remain in force, and a successful
-comparison is not a local preflight receipt or release qualification. For a
-clean checkout of the exact candidate with Git, Bash, jq and Python available:
+its selection with the existing path-filter outputs. Separately, PR routing uses
+the planner to widen unclassified code or unsupported filter grammar before job
+selection. The required gate recomputes the plan at the candidate and rejects
+missing, skipped, cancelled or failed selected jobs, in addition to the existing
+gate. When the event base is stale, its ancestry and the candidate's actual
+parents and merge tree are checked before using the actual base. Job-level
+success does not prove every required Go matrix case ran; the inventory and
+member receipts described below are still required. Neither the comparison nor
+this gate is a local preflight receipt or release qualification. For a clean
+checkout of the exact candidate with Git, Bash, jq and Python available:
 
 ```bash
 python3 scripts/ci/affected_check_plan.py --base "$BASE_SHA" --head "$HEAD_SHA" \

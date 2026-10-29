@@ -52,10 +52,11 @@ def evaluate(expression, values):
 
 
 GATE = block('ci-gate')
-ENV = dict(re.findall(r'^          (\w+): (\$\{\{.*?\}\})$', GATE, re.M))
+LEGACY_GATE = GATE.split('      - name: Verify required jobs ran\n', 1)[1]
+ENV = dict(re.findall(r'^          (\w+): (\$\{\{.*?\}\})$', LEGACY_GATE, re.M))
 # The existing Compose selection uses a folded YAML scalar.
 ENV['RUN_COMPOSE_E2E'] = re.search(
-    r'RUN_COMPOSE_E2E: >-\n(.*?)(?=^          JOB_)', GATE, re.M | re.S
+    r'RUN_COMPOSE_E2E: >-\n(.*?)(?=^          JOB_)', LEGACY_GATE, re.M | re.S
 ).group(1).strip()
 OUTPUTS = set(re.findall(r'needs\.changes\.outputs\.([\w-]+)', WORKFLOW))
 

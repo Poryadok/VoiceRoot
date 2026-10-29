@@ -27,16 +27,18 @@ class FastGateRoutingTests(unittest.TestCase):
             matrix = next(s for s in changes['steps'] if s.get('name') == name)
             self.assertEqual(matrix['env']['CI_GLOBAL'], '${{ steps.scope.outputs.ci_global }}')
             self.assertIn('.ci_global = $value', matrix['run'])
-        for event, raw, scripts, expected in (
-                ('pull_request', 'false', 'true', 'false'),
-                ('push', 'false', 'true', 'true'),
-                ('workflow_dispatch', 'false', 'true', 'true'),
-                ('push', 'false', 'false', 'false'),
-                ('pull_request', 'true', 'true', 'true')):
+        for event, raw, scripts, affected, expected in (
+                ('pull_request', 'false', 'true', 'false', 'false'),
+                ('pull_request', 'false', 'false', 'true', 'true'),
+                ('push', 'false', 'true', '', 'true'),
+                ('workflow_dispatch', 'false', 'true', '', 'true'),
+                ('push', 'false', 'false', '', 'false'),
+                ('pull_request', 'true', 'true', 'false', 'true')):
             with tempfile.TemporaryDirectory() as directory:
                 output = Path(directory) / 'output'
                 env = dict(os.environ, EVENT_NAME=event, CI_GLOBAL=raw,
-                           CI_SCRIPTS=scripts, GITHUB_OUTPUT=output.as_posix())
+                           CI_SCRIPTS=scripts, AFFECTED_GLOBAL=affected,
+                           GITHUB_OUTPUT=output.as_posix())
                 result = subprocess.run([policy.bash(), '-c', step['run']],
                                         env=env, text=True, capture_output=True)
                 self.assertEqual(result.returncode, 0, result.stderr)

@@ -329,12 +329,19 @@ def main():
     parser.add_argument('--head-ref', required=True)
     parser.add_argument('--event-base', action='store_true',
                         help='resolve the actual merge parent from an older PR event base')
+    parser.add_argument('--verify-needs', action='store_true',
+                        help='reject required PR jobs that did not succeed')
     parser.add_argument('--compare-hosted', action='store_true',
                         help='compare with dorny outputs in HOSTED_FILTER_JSON')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     base = candidate_base(root, args.base, args.head, args.candidate) if args.event_base else args.base
     plan = build_plan(root, base, args.head, args.candidate, args.head_ref)
+    if args.verify_needs:
+        needs = json.loads(os.environ['NEEDS_JSON'])
+        failures = verify_gate(plan, needs, plan['identity'])
+        if failures:
+            raise SystemExit('affected checks did not succeed: ' + ', '.join(failures))
     if args.compare_hosted:
         plan['hosted_comparison'] = compare_hosted(
             root, plan, json.loads(os.environ['HOSTED_FILTER_JSON']), args.head_ref)

@@ -223,6 +223,26 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertEqual(command['env']['CANDIDATE_SHA'], '${{ github.sha }}')
         self.assertNotIn('affected-check-plan', workflow['jobs']['ci-gate']['needs'])
 
+    def test_required_gate_recomputes_plan_and_unknown_scope_widens_before_routing(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        steps = workflow['jobs']['changes']['steps']
+        scope = next(step for step in steps if step.get('id') == 'scope')
+        affected = next(step for step in steps if step.get('id') == 'affected_scope')
+        self.assertLess(steps.index(affected), steps.index(scope))
+        self.assertIn('--event-base', affected['run'])
+        self.assertIn('steps.affected_scope.outputs.ci_global', scope['env']['AFFECTED_GLOBAL'])
+        self.assertIn('AFFECTED_GLOBAL', scope['run'])
+        for output in ('global', 'code', 'history_audit', 'windows_desktop'):
+            self.assertIn('steps.affected_scope.outputs.unresolved',
+                          workflow['jobs']['changes']['outputs'][output])
+        self.assertIn('unresolved_filter_configuration != null', affected['run'])
+        gate = next(step for step in workflow['jobs']['ci-gate']['steps']
+                    if step.get('name') == 'Verify affected PR checks')
+        self.assertIn('--verify-needs', gate['run'])
+        self.assertIn('--event-base', gate['run'])
+        self.assertIn('toJson(needs)', gate['env']['NEEDS_JSON'])
+
     def test_cli_uses_committed_candidate_and_actual_go_resolver(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
@@ -270,6 +290,17 @@ class AffectedCheckPlanTests(unittest.TestCase):
             self.assertEqual(hosted, plan)
             self.assertEqual(comparison['filter_disagreements'], [])
             self.assertEqual(comparison['hosted_only_checks'], [])
+            needs = {name: {'result': 'success'} for name in plan['checks']}
+            needs['flutter-unit-receipts'] = {'result': 'success'}
+            env['NEEDS_JSON'] = json.dumps(needs)
+            verify_cmd = [sys.executable, str(root / 'scripts/ci/affected_check_plan.py'),
+                          '--base', base, '--head', head, '--candidate', head,
+                          '--head-ref', 'codex/example', '--verify-needs']
+            subprocess.run(verify_cmd, cwd=root, env=env, check=True, capture_output=True)
+            needs['backend-go-integration-pr'] = {'result': 'skipped'}
+            env['NEEDS_JSON'] = json.dumps(needs)
+            self.assertNotEqual(subprocess.run(verify_cmd, cwd=root, env=env,
+                                               capture_output=True).returncode, 0)
 
     def test_advisory_plan_matches_existing_pr_gate_for_representative_inputs(self):
         spec = importlib.util.spec_from_file_location(
