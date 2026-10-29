@@ -6,6 +6,27 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_publisher_endpoint_requires_owned_single_ready_pod_and_exact_image(self):
+        d={'metadata':{'uid':'dep','generation':2},'status':{'observedGeneration':2,'readyReplicas':1,'availableReplicas':1}}
+        rs={'metadata':{'uid':'rs','ownerReferences':[{'kind':'Deployment','uid':'dep','controller':True}]},'spec':{'replicas':1}}
+        pod={'metadata':{'uid':'pod','labels':{'app':'voice-p3-principal-jwks'},
+                         'ownerReferences':[{'kind':'ReplicaSet','uid':'rs','controller':True}]},
+             'spec':{'nodeName':'node'},'status':{'phase':'Running','podIP':'10.2.3.4',
+             'conditions':[{'type':'Ready','status':'True'}],
+             'containerStatuses':[{'name':'jwks','ready':True,'state':{'running':{}},'imageID':'docker-pullable://nginx@sha256:'+'b'*64}]}}
+        sl={'metadata':{'labels':{'kubernetes.io/service-name':'voice-p3-principal-jwks'}},
+            'ports':[{'name':'https','port':8443,'protocol':'TCP'}],
+            'endpoints':[{'addresses':['10.2.3.4'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':'pod','namespace':'voice-staging'}}]}
+        node={'metadata':{'name':'node','uid':'node-uid'},'status':{'nodeInfo':{'operatingSystem':'linux','architecture':'amd64'},
+                'conditions':[{'type':'Ready','status':'True'}]}}
+        args=(d,[rs],[pod],[sl],node,'node-uid','sha256:'+'b'*64)
+        self.assertEqual(p3.publisher_endpoint(*args),'10.2.3.4')
+        for index in (1,2,3):
+            bad=list(copy.deepcopy(args)); bad[index].append(copy.deepcopy(bad[index][0]))
+            with self.subTest(index=index),self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+        bad=list(copy.deepcopy(args)); bad[2][0]['status']['containerStatuses'][0]['imageID']='sha256:'+'c'*64
+        with self.assertRaises(p3.PrerequisiteError): p3.publisher_endpoint(*bad)
+
     def test_service_server_allocation_has_only_exact_bounded_difference(self):
         intended={'apiVersion':'v1','kind':'Service','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging'},
                   'spec':{'type':'ClusterIP','selector':{'app':'voice-p3-principal-jwks'},'ports':[{'port':8443}],

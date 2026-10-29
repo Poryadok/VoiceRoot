@@ -3,6 +3,9 @@ import base64
 import copy
 import ipaddress
 import re
+import socket
+import ssl
+import time
 import source_plan
 import gis_first_install
 
@@ -71,6 +74,81 @@ def service_allocation(intended,actual):
         if live!=wanted: raise ValueError()
         return list(addresses)
     except Exception: raise PrerequisiteError('staging P3 Service allocation invalid') from None
+
+
+def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform_digest):
+    """Correlate snapshots only; full spec, source and fresh reads are separate."""
+    try:
+        def controller(row,kind,uid):
+            refs=row['metadata'].get('ownerReferences',[])
+            owners=[ref for ref in refs if ref.get('controller') is True]
+            return len(owners)==1 and owners[0].get('kind')==kind and owners[0].get('uid')==uid
+        meta=deployment['metadata']; status=deployment['status']; generation=meta['generation']; dep_uid=meta['uid']
+        if (not dep_uid or type(generation) is not int or generation<1 or status.get('observedGeneration')!=generation
+            or status.get('readyReplicas')!=1 or status.get('availableReplicas')!=1): raise ValueError()
+        owned=[r for r in replicasets if controller(r,'Deployment',dep_uid) and r.get('spec',{}).get('replicas',0)!=0]
+        if len(owned)!=1: raise ValueError()
+        rs_uid=owned[0]['metadata']['uid']
+        if not rs_uid or owned[0]['metadata'].get('deletionTimestamp') or owned[0]['spec']['replicas']!=1: raise ValueError()
+        selected=[p for p in pods if p.get('metadata',{}).get('labels',{}).get('app')=='voice-p3-principal-jwks']
+        if len(selected)!=1: raise ValueError()
+        pod=selected[0]; pm=pod['metadata']; ps=pod['status']; pod_uid=pm['uid']
+        if (not pod_uid or pm.get('deletionTimestamp') or not controller(pod,'ReplicaSet',rs_uid)
+            or ps.get('phase')!='Running' or [{'type':'Ready','status':'True'}][0] not in
+               [{'type':v.get('type'),'status':v.get('status')} for v in ps.get('conditions',[])]): raise ValueError()
+        statuses=ps['containerStatuses']
+        if (len(statuses)!=1 or statuses[0].get('name')!='jwks' or statuses[0].get('ready') is not True
+            or 'running' not in statuses[0].get('state',{}) or not re.fullmatch(r'sha256:[0-9a-f]{64}',platform_digest)
+            or not re.fullmatch(r'(?:docker-pullable|containerd)://[^@\s]+@'+re.escape(platform_digest),statuses[0].get('imageID',''))): raise ValueError()
+        if (not isinstance(node_uid,str) or not node_uid or node['metadata'].get('uid')!=node_uid
+            or pod['spec'].get('nodeName')!=node['metadata'].get('name')
+            or node['status'].get('nodeInfo',{}).get('operatingSystem')!='linux'
+            or node['status'].get('nodeInfo',{}).get('architecture')!='amd64'
+            or not any(c.get('type')=='Ready' and c.get('status')=='True' for c in node['status'].get('conditions',[]))): raise ValueError()
+        matching=[s for s in slices if s.get('metadata',{}).get('labels',{}).get('kubernetes.io/service-name')=='voice-p3-principal-jwks']
+        if len(matching)!=1 or matching[0].get('ports')!=[{'name':'https','port':8443,'protocol':'TCP'}]: raise ValueError()
+        endpoints=matching[0]['endpoints']
+        if len(endpoints)!=1: raise ValueError()
+        endpoint=endpoints[0]; address=ps['podIP']; ip=ipaddress.ip_address(address)
+        if (ip.is_unspecified or ip.is_multicast or ip.is_loopback or ip.is_link_local or endpoint.get('addresses')!=[address]
+            or endpoint.get('conditions',{}).get('ready') is not True
+            or endpoint.get('targetRef',{}).get('kind')!='Pod' or endpoint['targetRef'].get('uid')!=pod_uid
+            or endpoint['targetRef'].get('namespace')!=NAMESPACE): raise ValueError()
+        return address
+    except Exception: raise PrerequisiteError('staging P3 publisher endpoint not qualified') from None
+
+
+def probe_jwks(address,ca,expected):
+    """Probe fixed HTTPS path; address/CA must already be authenticated by caller."""
+    try:
+        ipaddress.ip_address(address)
+        if not isinstance(ca,bytes) or not isinstance(expected,bytes) or not 0<len(expected)<=131072: raise ValueError()
+        context=ssl.create_default_context(cadata=ca.decode('ascii'))
+        host='voice-p3-principal-jwks.voice-staging.svc'
+        with socket.create_connection((address,8443),timeout=5) as raw:
+            with context.wrap_socket(raw,server_hostname=host) as tls:
+                deadline=time.monotonic()+5
+                tls.sendall(('GET /realtime.json HTTP/1.0\r\nHost: '+host+'\r\nConnection: close\r\n\r\n').encode('ascii'))
+                data=bytearray()
+                while True:
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0: raise ValueError()
+                    tls.settimeout(remaining); chunk=tls.recv(8192)
+                    if not chunk: break
+                    data.extend(chunk)
+                    if len(data)>len(expected)+16384: raise ValueError()
+                head,body=bytes(data).split(b'\r\n\r\n',1)
+                lines=head.split(b'\r\n')
+                if lines[0] not in (b'HTTP/1.0 200 OK',b'HTTP/1.1 200 OK'): raise ValueError()
+                headers={}
+                for line in lines[1:]:
+                    key,value=line.split(b':',1); key=key.strip().lower()
+                    if not key or key in headers: raise ValueError()
+                    headers[key]=value.strip()
+                if (headers.get(b'content-length')!=str(len(expected)).encode() or b'location' in headers
+                    or b'content-encoding' in headers or b'transfer-encoding' in headers or body!=expected): raise ValueError()
+        return True
+    except Exception: raise PrerequisiteError('staging P3 publisher HTTPS proof unavailable') from None
 
 
 def validate_plan_shape(plan):
