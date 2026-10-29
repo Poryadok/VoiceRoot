@@ -1,5 +1,6 @@
 """Isolated media backup restore and exact migration qualification."""
 import hashlib
+import contextvars
 import io
 import json
 import os
@@ -13,6 +14,8 @@ import time
 import uuid
 
 import story_media_backup as backup
+
+_STAGING_SESSION=contextvars.ContextVar('voice_staging_restore_session',default=None)
 
 DATABASES = ('file_db', 'story_db', 'messaging_db')
 SQL_NAME = re.compile(r'([0-9]{6})_[a-z0-9_]+\.(up|down)\.sql')
@@ -121,6 +124,10 @@ def _quote_identifier(value):
 
 
 def _docker(*args, input=None, timeout=120):
+    session=_STAGING_SESSION.get()
+    if session is not None:
+        import staging_cohort_preservation
+        return staging_cohort_preservation.restore_command(session,['docker',*args],body=b'' if input is None else input,timeout=timeout)
     result = subprocess.run(['docker', *args], input=input, stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, timeout=timeout)
     if result.returncode:

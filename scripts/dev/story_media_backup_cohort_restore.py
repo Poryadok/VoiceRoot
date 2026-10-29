@@ -125,8 +125,8 @@ def migration_inventory(root, databases, plans, full_catalog=False):
         raise CohortRestoreError('cohort source inventory rejected') from None
 
 
-def _source(binding, databases, metadata, postgres_image, migrate_image):
-    cohort._members(binding, databases)
+def _source_shape(binding, databases, metadata, postgres_image, migrate_image):
+    cohort._members_shape(binding, databases)
     inputs = binding.get('restore_inputs')
     keys = {'catalog_sha256', 'roles_catalog_sha256', 'migration_catalog_sha256',
             'postgres_image', 'migrate_image', 'migrate_binary_sha256', 'postgres_major'}
@@ -192,7 +192,16 @@ def _source(binding, databases, metadata, postgres_image, migrate_image):
                         raise CohortRestoreError('Flyway source inventory differs')
 
 
+def _source(binding, databases, metadata, postgres_image, migrate_image):
+    cohort._members(binding,databases)
+    return _source_shape(binding,databases,metadata,postgres_image,migrate_image)
+
+
 def _decrypt_command(root, key, binding, databases, manifest, member, command):
+    session=media_restore._STAGING_SESSION.get()
+    if session is not None:
+        import staging_cohort_preservation
+        return staging_cohort_preservation.restore_member(session,member,command)
     process = subprocess.Popen(['docker', 'exec', '-i', *command], stdin=subprocess.PIPE,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     def expire():
@@ -251,6 +260,22 @@ def _qualified_roles(phase, token, catalog_phase, binding, databases, metadata, 
     return roles
 
 
+def _qualified_staging_roles(session, binding, databases, metadata, changed, catalog_ref, metadata_ref):
+    import staging_cohort_preservation as staging
+    staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+    record=staging.load_metadata(session,metadata_ref)
+    if record.get('source')!=metadata or set(record.get('migration_roles',{}))!=set(changed):
+        raise CohortRestoreError('staging migration source receipt mismatch')
+    roles=record['migration_roles']
+    for db in changed:
+        role=roles[db]['role']
+        matches=[row for row in metadata['roles']['roles'] if row['name']==role]
+        if len(matches)!=1 or matches[0]['login'] is not True:
+            raise CohortRestoreError('migration login absent from source')
+    staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+    return roles
+
+
 def _run_go_as_role(cid, admin, db, role):
     """Run the pinned migration binary as a restored login, with a clone-only password."""
     password = secrets.token_hex(32)
@@ -272,8 +297,8 @@ def _run_go_as_role(cid, admin, db, role):
     identity()
 
 
-def qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal,
-            catalog_phase=None, catalog_token=None, metadata_phase=None, metadata_token=None):
+def _qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal,
+             catalog_phase=None, catalog_token=None, metadata_phase=None, metadata_token=None, *, _staging=None):
     """Restore a caller-authorized exact set; this does not prove its completeness."""
     if any(not callable(getattr(journal, name, None)) for name in ('begin', 'created', 'begin_remove', 'removed', 'uncertain')):
         raise CohortRestoreError('cohort resource journal required')
@@ -287,18 +312,30 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
         binding, databases, manifest, source_metadata = (snapshot['binding'], snapshot['databases'],
                                                          snapshot['manifest'], snapshot['metadata'])
         full_catalog='full_catalog' in binding
-        if full_catalog: unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
+        if _staging is not None:
+            import staging_cohort_preservation as staging
+            session,catalog_ref,metadata_ref=_staging
+            if not full_catalog:raise CohortRestoreError('staging full catalog required')
+            staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+            if staging.load_metadata(session,metadata_ref).get('source')!=source_metadata:
+                raise CohortRestoreError('staging metadata changed')
+        elif full_catalog: unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
         elif catalog_phase is not None or catalog_token is not None: raise CohortRestoreError('unexpected catalog authority')
-        _source(binding, databases, source_metadata, postgres_image, migrate_image)
-        cohort.verify(root, key, binding, databases, manifest)
+        if _staging is None:
+            _source(binding, databases, source_metadata, postgres_image, migrate_image)
+            cohort.verify(root, key, binding, databases, manifest)
+        else:
+            _source_shape(binding, databases, source_metadata, postgres_image, migrate_image)
+            cohort.verify_staging(session,binding,databases,manifest,catalog_ref,metadata_ref)
         sources = migration_inventory(source_root, databases, source_metadata['migrations'],full_catalog)
         if media_restore._docker('info', '--format', '{{.OSType}}').strip() != b'linux':
             raise CohortRestoreError('Linux Docker required')
         postgres_id = media_restore._check_image(postgres_image)
         changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
-        migration_roles = (_qualified_roles(metadata_phase, metadata_token, catalog_phase, binding, databases,
-                                            source_metadata, changed) if full_catalog and changed else {})
-        if not (full_catalog and changed) and (metadata_phase is not None or metadata_token is not None):
+        migration_roles = ((_qualified_staging_roles(session,binding,databases,source_metadata,changed,catalog_ref,metadata_ref)
+                            if _staging is not None else _qualified_roles(metadata_phase, metadata_token, catalog_phase, binding, databases,
+                                            source_metadata, changed)) if full_catalog and changed else {})
+        if _staging is None and not (full_catalog and changed) and (metadata_phase is not None or metadata_token is not None):
             raise CohortRestoreError('unexpected migration authority')
         migrate_id = media_restore._check_image(migrate_image) if changed else None
         admin = 'voice_cohort_' + secrets.token_hex(12); password = secrets.token_hex(24)
@@ -384,8 +421,13 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
                 raise CohortRestoreError('migrated ledger differs')
             results[db] = {'mode': mode, 'from': plan['from'], 'to': plan['to']}
         if full_catalog:
-            unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
-            if changed and _qualified_roles(metadata_phase,metadata_token,catalog_phase,binding,databases,source_metadata,changed) != migration_roles:
+            if _staging is None:
+                unmanaged.verify_catalog_phase(catalog_phase,catalog_token,binding)
+                final_roles=(_qualified_roles(metadata_phase,metadata_token,catalog_phase,binding,databases,source_metadata,changed) if changed else {})
+            else:
+                staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+                final_roles=(_qualified_staging_roles(session,binding,databases,source_metadata,changed,catalog_ref,metadata_ref) if changed else {})
+            if final_roles != migration_roles:
                 raise CohortRestoreError('migration source authority changed')
         receipt = {'operation_id': binding['operation_id'], 'snapshot_id': binding['snapshot_id'], 'source_sha': binding['source_sha'],
                    'manifest_sha256': hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(',', ':'),
@@ -402,3 +444,25 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
         media_restore._cleanup(journal, resources)
     receipt['cleanup'] = 'verified'
     return receipt
+
+
+def qualify(root, key, binding, databases, manifest, source_metadata, source_root, postgres_image, migrate_image, journal,
+            catalog_phase=None, catalog_token=None, metadata_phase=None, metadata_token=None):
+    return _qualify(root,key,binding,databases,manifest,source_metadata,source_root,postgres_image,migrate_image,journal,
+                    catalog_phase,catalog_token,metadata_phase,metadata_token)
+
+
+def qualify_staging(session,binding,databases,manifest,catalog_ref,metadata_ref):
+    """Restore only the root-loaded STAGING cohort through fixed guarded transport."""
+    import staging_cohort_preservation as staging
+    staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+    context=staging.restore_context(session,catalog_ref,metadata_ref)
+    if type(context) is not dict or set(context)!={'root','key','source_root','postgres_image','migrate_image','journal','source_metadata'}:
+        raise CohortRestoreError('staging restore context invalid')
+    token=media_restore._STAGING_SESSION.set(session)
+    try:
+        return _qualify(context['root'],context['key'],binding,databases,manifest,context['source_metadata'],
+                        context['source_root'],context['postgres_image'],context['migrate_image'],context['journal'],
+                        _staging=(session,catalog_ref,metadata_ref))
+    finally:
+        media_restore._STAGING_SESSION.reset(token)

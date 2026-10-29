@@ -217,3 +217,37 @@ def decrypt(root, key, binding, databases, manifest, member, destination):
         backup._decrypt_snapshot(fd, key, manifest['files'][member], destination)
     except Exception:
         raise CohortError('cohort decryption rejected') from None
+
+
+def decrypt_staging(session, member):
+    """Decrypt one root-selected member to a private, single-attempt path."""
+    try:
+        import guard
+        import staging_cohort_preservation as staging
+        record=staging.load_backup_archive(session)
+        if type(record) is not dict or set(record)!={'binding','databases','manifest','catalog_ref','metadata_ref'}:
+            raise CohortError('staging archive invalid')
+        binding,databases,manifest,catalog_ref,metadata_ref=(record[k] for k in
+            ('binding','databases','manifest','catalog_ref','metadata_ref'))
+        members=staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+        if member not in members:raise CohortError('staging member invalid')
+        root,key=staging.backup_custody(session)
+        _verify_validated(root,key,binding,databases,manifest,members)
+        nonce=staging.restore_attempt(session)
+        if not isinstance(nonce,str) or not re.fullmatch(r'[a-f0-9]{32}',nonce):raise CohortError('staging restore attempt invalid')
+        directory=guard.ROOT/'installed'/'cohort-preservation'/session.operation/'restore-input'
+        filename=member+'-'+nonce+'.plain'
+        with backup.private_directory(directory) as dirfd:
+            output_fd=os.open(filename,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=dirfd)
+            try:
+                with os.fdopen(output_fd,'wb') as output, backup.private_directory(root) as archivefd:
+                    input_fd=os.open(member+'.enc',os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=archivefd)
+                    backup._decrypt_snapshot(input_fd,key,manifest['files'][member],output)
+                    output.flush();os.fsync(output.fileno())
+                if staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)!=members:
+                    raise CohortError('staging authority changed')
+            except BaseException:
+                os.unlink(filename,dir_fd=dirfd)
+                raise
+        return directory/filename
+    except Exception:raise CohortError('staging cohort decryption rejected') from None
