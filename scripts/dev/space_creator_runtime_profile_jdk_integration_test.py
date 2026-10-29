@@ -1,11 +1,14 @@
 """Disposable local Docker/keytool fixture; no cluster or release authority."""
 import os
 import io
+import hashlib
+import json
 import subprocess
 import tarfile
 import unittest
 
 import space_creator_runtime_profile_trust as trust
+import space_creator_runtime_profile_target_trust as target_trust
 
 
 @unittest.skipUnless(os.environ.get('CREATOR_DOCKER_INTEGRATION')=='1','explicit disposable Docker fixture only')
@@ -44,7 +47,41 @@ class DockerJdkTest(unittest.TestCase):
                    '--tmpfs','/scratch:rw,noexec,nosuid,nodev,size=2m,mode=0700,uid=65532,gid=65532','--user','65532:65532',
                    '--entrypoint','/bin/sh','eclipse-temurin:25-jre','-ec',script).decode().strip()
         self.assertRegex(target,r'^[a-f0-9]{64}$'); self.addCleanup(lambda:run('rm','-f','-v',target))
+        info=json.loads(run('inspect',target))[0]
+        self.assertTrue(info['Config']['OpenStdin'])
+        self.assertEqual(info['HostConfig']['Tmpfs'],{'/scratch':'rw,noexec,nosuid,nodev,size=2m,mode=0700,uid=65532,gid=65532'})
+        self.assertEqual(info['HostConfig']['SecurityOpt'],['no-new-privileges'])
+        self.assertEqual(info['HostConfig']['CapDrop'],['ALL']); self.assertTrue(info['HostConfig']['ReadonlyRootfs'])
+        self.assertFalse(info['Mounts'])
         try: listing=run('start','-ai',target,input=data)
         except subprocess.CalledProcessError as error:
             raise AssertionError((error.stdout+error.stderr).decode('utf-8','replace')[:512]) from None
         self.assertGreater(len(trust.parse(listing)),0)
+
+    def test_real_pkcs12_roots_and_media_ca_via_tmpfs(self):
+        docker=os.environ['CREATOR_DOCKER_CLI']
+        def run(*args,input=None):
+            return subprocess.run([docker,*args],input=input,stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=45).stdout
+        generator=('cd /tmp; openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=Fixture '
+                   '-keyout ca.key -out ca.crt >/dev/null 2>&1; '
+                   'keytool -importkeystore -noprompt -srckeystore /opt/java/openjdk/lib/security/cacerts -srcstorepass changeit '
+                   '-destkeystore store.p12 -deststoretype PKCS12 -deststorepass changeit >/dev/null 2>&1; '
+                   'keytool -importcert -noprompt -alias fixture -file ca.crt -keystore store.p12 -storepass changeit >/dev/null 2>&1; '
+                   'openssl x509 -in ca.crt -outform DER -out ca.der; '
+                   'keytool -list -v -keystore /opt/java/openjdk/lib/security/cacerts -storepass changeit -J-Duser.language=en -J-Duser.country=US > roots.txt; '
+                   'tar -cf - store.p12 ca.der roots.txt')
+        cid=run('create','--network','none','--cap-drop','ALL','--entrypoint','/bin/sh','eclipse-temurin:25-jre','-ec',generator).decode().strip()
+        self.assertRegex(cid,r'^[a-f0-9]{64}$'); self.addCleanup(lambda:run('rm','-f','-v',cid))
+        raw=run('start','-a',cid)
+        with tarfile.open(fileobj=io.BytesIO(raw),mode='r:') as archive:
+            members=archive.getmembers(); self.assertEqual({m.name for m in members},{'store.p12','ca.der','roots.txt'})
+            files={m.name:archive.extractfile(m).read(1048577) for m in members if m.isfile()}
+            self.assertEqual(len(files),3); self.assertTrue(all(len(v)<=1048576 for v in files.values()))
+        script='umask 077; cat > /scratch/store; exec /opt/java/openjdk/bin/keytool -list -v -keystore /scratch/store -storetype PKCS12 -storepass changeit -J-Duser.language=en -J-Duser.country=US'
+        target=run('create','-i','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges',
+                   '--tmpfs','/scratch:rw,noexec,nosuid,nodev,size=2m,mode=0700,uid=65532,gid=65532','--user','65532:65532',
+                   '--entrypoint','/bin/sh','eclipse-temurin:25-jre','-ec',script).decode().strip()
+        self.assertRegex(target,r'^[a-f0-9]{64}$'); self.addCleanup(lambda:run('rm','-f','-v',target))
+        listing=target_trust._input([docker,'start','-ai',target],files['store.p12'])
+        result=trust.compare_roots(trust.parse(files['roots.txt']),listing,hashlib.sha256(files['ca.der']).hexdigest())
+        self.assertEqual(result['store_count'],result['root_count']+1)
