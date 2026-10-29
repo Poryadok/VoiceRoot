@@ -18,7 +18,7 @@ import writer_cut
 STEP='space-creator-target-trust'
 LEDGER='space_creator_target_trust'
 TMPFS='rw,noexec,nosuid,nodev,size=2m,mode=0700,uid=65532,gid=65532'
-SCRIPT=('umask 077; cat > /scratch/store; exec /opt/java/openjdk/bin/keytool -list -v '
+SCRIPT=('umask 077; cat > /scratch/store; /usr/bin/openssl pkcs12 -in /scratch/store -passin pass:changeit -noout; exec /opt/java/openjdk/bin/keytool -list -v '
         '-keystore /scratch/store -storetype PKCS12 -storepass changeit -J-Duser.language=en -J-Duser.country=US')
 
 
@@ -69,6 +69,7 @@ class TargetTrustPhase(jdk.TargetJdkPhase):
     def _locals(self,row,jdk_digest,preflight_digest):
         try:
             import space_p3_issuer_preflight as preflight
+            if self._target_refs!=(self.jdk,self.preflight): raise ValueError()
             self._local(); self.jdk._local(); self.preflight._local()
             local=self.jdk.journal.state['steps'][jdk.STEP]; marker={k:v for k,v in local.items() if k!='receipt'}
             prelocal=self.preflight.journal.state['steps'][preflight.STEP]
@@ -182,7 +183,7 @@ def verify_current(phase,token):
         phase._guard(); after,end=phase._ledger()
         if after!=row or end!=rev or phase.journal.state['steps'].get(STEP)!=local: raise ValueError()
         phase._locals(after,receipt['jdk_receipt_sha256'],receipt['preflight_receipt_sha256'])
-        if phase.journal.state['steps'].get(STEP)!=local: raise ValueError()
+        if phase.record!=marker or phase.journal.state['steps'].get(STEP)!=local: raise metadata.GuardLost('target trust record changed')
         return copy.deepcopy(receipt)
     except metadata.GuardLost: raise
     except BaseException: raise TargetTrustError('target Auth trust receipt unavailable') from None
