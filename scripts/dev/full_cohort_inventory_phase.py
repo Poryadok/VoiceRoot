@@ -219,8 +219,8 @@ class InventoryPhase:
                 except BaseException: pass
             raise InventoryError('inventory observation uncertain; reconcile' if pending else 'inventory not admitted') from None
 
-    def verify_current(self, token):
-        """Revalidate the protected receipt against current source, routes and inventory."""
+    def verify_receipt(self, token):
+        """Authenticate the historical private receipt without asserting current Pods."""
         try:
             local = copy.deepcopy(self.journal.state['steps'][STEP])
             receipt = local['receipt']
@@ -233,6 +233,18 @@ class InventoryPhase:
             self.expected_marker=copy.deepcopy(marker); self._guard()
             package_receipt=self._package(token)
             if receipt['package_sha256']!=package_receipt['package_sha256']: raise ValueError()
+            self._guard()
+            if self.journal.state['steps'].get(STEP)!=local: raise ValueError()
+            return copy.deepcopy(receipt)
+        except BaseException:
+            raise InventoryError('inventory receipt unavailable') from None
+
+    def verify_current(self, token):
+        """Revalidate the protected receipt against current source, routes and inventory."""
+        try:
+            receipt=self.verify_receipt(token)
+            local=copy.deepcopy(self.journal.state['steps'][STEP])
+            package_receipt=self._package(token)
             def authority(sha):
                 return sha==self.fence.context['commit'] and self._package(token)==package_receipt
             catalog=metadata.catalog_from_source(canonical.ROOT,self.fence.context['commit'],authority)
@@ -243,7 +255,7 @@ class InventoryPhase:
             if (final_pods!=pods or final_projection!=projection or observed!=receipt['database_observations'] or
                     self._package(token)!=package_receipt): raise ValueError()
             self._guard()
-            if self.journal.state['steps'].get(STEP)!=local: raise ValueError()
+            if self.journal.state['steps'].get(STEP)!=local or self.verify_receipt(token)!=receipt: raise ValueError()
             return copy.deepcopy(receipt)
         except BaseException:
             raise InventoryError('inventory receipt no longer current') from None

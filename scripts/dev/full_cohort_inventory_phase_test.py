@@ -87,6 +87,7 @@ class PhaseTest(unittest.TestCase):
             self.assertEqual(self.base.ledger.row['full_cohort_inventory']['status'],'done')
             self.assertEqual(self.phase.verify_current('fixture-token'),result)
             self.client.fixture.pods[0]['status']['containerStatuses'][0]['restartCount']=1
+            self.assertEqual(self.phase.verify_receipt('fixture-token'),result)
             with self.assertRaises(inventory.InventoryError): self.phase.verify_current('fixture-token')
             with self.assertRaises(inventory.InventoryError): self.phase.run('fixture-token')
 
