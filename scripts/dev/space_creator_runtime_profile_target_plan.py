@@ -81,16 +81,17 @@ def render_auth(source,image,sources,image_env,config_keys):
     effective=auth.resolve_environment(container,sources,image_env); auth.check_environment(effective); route=auth.check_database_route(effective)
     if any(effective.get(key)!=image_env.get(key) for key in ('PATH','JAVA_HOME')): raise ValueError()
     _check_auth_overrides(effective)
-    # A replacement must not materialize an arbitrary environment-sourced value.
-    for name in ('JAVA_TOOL_OPTIONS','S2S_JWKS_URLS_JSON'):
+    def can_replace(name):
         existing=[x for x in container.get('env',[]) if x.get('name')==name]
-        if effective.get(name) and (len(existing)!=1 or set(existing[0])!={'name','value'}): raise ValueError()
+        return not effective.get(name) or (len(existing)==1 and set(existing[0])=={'name','value'})
     options=shlex.split(effective.get('JAVA_TOOL_OPTIONS',''))
     for option in options:
         if option.startswith('-Djavax.net.ssl.') and option not in TRUST_OPTIONS: raise ValueError()
-    options=[option for option in options if option not in TRUST_OPTIONS]+TRUST_OPTIONS
     if len(options)!=len(set(options)): raise ValueError()
-    _entry(container,'JAVA_TOOL_OPTIONS',' '.join(options),config_keys,replace=True)
+    if not all(option in options for option in TRUST_OPTIONS):
+        if not can_replace('JAVA_TOOL_OPTIONS'): raise ValueError()
+        options=[option for option in options if option not in TRUST_OPTIONS]+TRUST_OPTIONS
+        _entry(container,'JAVA_TOOL_OPTIONS',' '.join(options),config_keys,replace=True)
     raw=effective.get('S2S_JWKS_URLS_JSON','')
     jwks=json.loads(raw,object_pairs_hook=_unique) if raw else {}
     if not isinstance(jwks,dict) or any(not isinstance(k,str) or not isinstance(v,str) for k,v in jwks.items()): raise ValueError()
@@ -98,10 +99,13 @@ def render_auth(source,image,sources,image_env,config_keys):
         parsed=urllib.parse.urlsplit(value)
         if (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}',key) or parsed.scheme!='https'
                 or not parsed.hostname or parsed.username is not None or parsed.fragment or parsed.query): raise ValueError()
+    complete=all(jwks.get(key)==value for key,value in (('gateway',GATEWAY_JWKS),('space',SPACE_JWKS)))
     for key,value in (('gateway',GATEWAY_JWKS),('space',SPACE_JWKS)):
         if key in jwks and jwks[key]!=value: raise ValueError()
         jwks[key]=value
-    _entry(container,'S2S_JWKS_URLS_JSON',json.dumps(jwks,sort_keys=True,separators=(',',':')),config_keys,replace=True)
+    if not complete:
+        if not can_replace('S2S_JWKS_URLS_JSON'): raise ValueError()
+        _entry(container,'S2S_JWKS_URLS_JSON',json.dumps(jwks,sort_keys=True,separators=(',',':')),config_keys,replace=True)
     for name,value in (('AUTH_SESSION_FLOOR_GRPC_PORT','9092'),('AUTH_GRPC_TLS_CERT_FILE','/etc/voice/media/server/tls.crt'),
                        ('AUTH_GRPC_TLS_KEY_FILE','/etc/voice/media/server/tls.key'),
                        ('AUTH_SESSION_FLOOR_TLS_CLIENT_CA_FILE','/etc/voice/media/ca/ca.crt'),

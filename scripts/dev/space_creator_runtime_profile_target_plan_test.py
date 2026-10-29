@@ -48,6 +48,21 @@ class RenderTest(unittest.TestCase):
             with self.subTest(name=name),self.assertRaises((ValueError,subject.auth.EligibilityError)):
                 subject.render_auth(source,'ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64,{}, {},[])
 
+    def test_existing_exact_config_refs_are_preserved_without_values(self):
+        source=self.auth(); entries=source['spec']['template']['spec']['containers'][0]['env']
+        for name in ('JAVA_TOOL_OPTIONS','S2S_JWKS_URLS_JSON'):
+            entries.append({'name':name,'valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':name}}})
+        values={'JAVA_TOOL_OPTIONS':' '.join(subject.TRUST_OPTIONS),
+                'S2S_JWKS_URLS_JSON':'{"gateway":"'+subject.GATEWAY_JWKS+'","space":"'+subject.SPACE_JWKS+'"}'}
+        target,_=subject.render_auth(source,'ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64,
+                                     {('configmap','voice-app-config'):values},{},list(values))
+        selected=[x for x in target['template']['spec']['containers'][0]['env'] if x['name'] in values]
+        self.assertEqual(selected,entries[-2:]); self.assertNotIn(subject.GATEWAY_JWKS,str(selected))
+        values['JAVA_TOOL_OPTIONS']='-XX:MaxRAMPercentage=75.0'
+        with self.assertRaises(ValueError):
+            subject.render_auth(source,'ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64,
+                                {('configmap','voice-app-config'):values},{},list(values))
+
     def test_gateway_target_and_command_override_hold(self):
         source=workload('gateway'); original=copy.deepcopy(source)
         target=subject.render_gateway(source,'ghcr.io/poryadok/voiceroot/gateway@sha256:'+'b'*64,[])
