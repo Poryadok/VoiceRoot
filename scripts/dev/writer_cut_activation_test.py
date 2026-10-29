@@ -29,6 +29,8 @@ class ActivationTest(unittest.TestCase):
         self.cut.resume_inventory = {'fixture': True}
         self.inventory_patch = mock.patch.object(self.cut, '_resume_inventory_matches', return_value=True)
         self.inventory_patch.start(); self.addCleanup(self.inventory_patch.stop)
+        self.scope_patch = mock.patch.object(self.cut, '_effective_scope_matches', return_value=True)
+        self.scope_patch.start(); self.addCleanup(self.scope_patch.stop)
         ordered = []
         for source in sources:
             obj = self.client.workloads[(source['kind'], source['metadata']['name'])]
@@ -140,6 +142,16 @@ class ActivationTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(len(self.client.patches), before)
         self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_coherent_cut_barrier_deletion_cannot_preserve_stage(self):
+        self.cut.prepare_activation(self.phase, 'token')
+        self.cut.activate_next()
+        self.accept('space_health')
+        step = 'writer-cut-space-health'
+        del self.cut.journal.state['steps'][step]
+        del self.ledger.row['writer_cut_effects'][step]
+        self.ledger.version += 1
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_activation_stage()
 
 
 if __name__ == '__main__': unittest.main()
