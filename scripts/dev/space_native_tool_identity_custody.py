@@ -23,13 +23,18 @@ def digest(value):
 def _equivalent(contract,source):
     files=source['files']
     if (set(contract)!={'schema','packages','files','workspace','raw_sha256'} or
-        contract['schema']!='voice-space-native-local-closure-v1' or not contract['packages'] or
-        not isinstance(contract['files'],dict) or any(files.get(k)!=v for k,v in contract['files'].items())): raise ValueError()
+        contract['schema']!='voice-space-native-local-closure-v1' or not isinstance(contract['packages'],dict) or
+        not contract['packages'] or not re.fullmatch(r'[a-f0-9]{64}',contract['raw_sha256']) or
+        not isinstance(contract['files'],dict) or any(not isinstance(k,str) or not isinstance(v,str) or
+            not re.fullmatch(r'[a-f0-9]{64}',v) or files.get(k)!=v for k,v in contract['files'].items())): raise ValueError()
     if contract['workspace']!=[name for name in ('src/backend/go.work','src/backend/go.work.sum') if name in files]: raise ValueError()
     module_dirs={name.removesuffix('/go.mod') for name in contract['files'] if name.endswith('/go.mod')}
     for directory in module_dirs:
         if any((directory+'/'+name in files)!=(directory+'/'+name in contract['files']) for name in ('go.mod','go.sum')): raise ValueError()
     for directory,members in contract['packages'].items():
+        if (not isinstance(directory,str) or not directory.startswith('src/backend/') or
+            not isinstance(members,list) or members!=sorted(set(members)) or any(name not in contract['files'] for name in members)):
+            raise ValueError()
         actual=sorted(name for name in files if name.startswith(directory+'/') and '/' not in name.removeprefix(directory+'/')
                       and name.endswith(('.go','.s','.S','.c','.cc','.cpp','.cxx','.h','.hh','.hpp','.hxx','.f','.F','.m','.mm','.syso','.swig','.swigcxx')) and not name.endswith('_test.go'))
         if actual!=members: raise ValueError()
