@@ -683,6 +683,11 @@ def load_catalog(session,ref):
     return copy.deepcopy(value)
 
 
+def guard_postgres(session):
+    from staging_cohort_preservation_pg import guard_identity
+    return guard_identity(session)
+
+
 def load_metadata(session,ref):
     value=_record(session,'metadata.json',ref,'voice-staging-cohort-metadata-v1')
     catalog=_read(_base(session)/'catalog.json')

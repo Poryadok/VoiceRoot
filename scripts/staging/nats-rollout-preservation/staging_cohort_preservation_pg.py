@@ -27,6 +27,32 @@ CATALOG_SQL="""SELECT json_build_object(
  FROM pg_database d;"""
 PSQL='export PGPASSWORD="$POSTGRES_PASSWORD"; exec psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$1"'
 EXEC=owner.PREFIX+['exec','-i','voice-postgres-0','-c','postgres','--']
+IDENTITY_SQL="SELECT json_build_object('system_identifier',(SELECT system_identifier::text FROM pg_catalog.pg_control_system()),'server_start',pg_catalog.pg_postmaster_start_time())"
+IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','sh','-ceu',
+    'export PGPASSWORD="$POSTGRES_PASSWORD"; export PGOPTIONS="-c default_transaction_read_only=on -c search_path=pg_catalog,public,pg_temp"; exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres -c "$1"',
+    '--',IDENTITY_SQL]
+
+
+def guard_identity(session):
+    """Same original physical engine, while approved new databases may exist."""
+    import realtime_bootstrap
+    from stage_runtime import Kube
+    plan=owner.load_plan(session);owner._phase_continuity(session,plan);owner._no_pending(session)
+    record=owner._read(owner._base(session)/'archive-record.json')
+    old=owner._record(session,'catalog.json',record['catalog_ref'],'voice-staging-cohort-catalog-v1')
+    kube=Kube();namespace,engine=realtime_bootstrap.engine_snapshot(kube)
+    value=kube.run(list(IDENTITY_ARGS))
+    current={'namespace_uid':namespace,'pod_uid':engine['pod']['uid'],'pvc_uid':engine['pvc']['uid'],
+        'pv_uid':engine['pv']['uid'],'container_id':engine['pod']['container_id'],
+        'restart_count':engine['pod']['restart_count'],'system_identifier':value.get('system_identifier')}
+    if (set(value)!={'system_identifier','server_start'} or current!=old['engine']
+        or value['server_start']!=old['server_start'] or namespace!=plan['namespace_uid']
+        or realtime_bootstrap.engine_snapshot(kube)!=(namespace,engine)):
+        raise Blocked('cohort_postgres_changed')
+    if owner._record(session,'catalog.json',record['catalog_ref'],'voice-staging-cohort-catalog-v1')!=old:
+        raise Blocked('cohort_postgres_changed')
+    session.check()
+    return {'engine':copy.deepcopy(current),'server_start':value['server_start']}
 
 
 def _query(session,database,query,label):

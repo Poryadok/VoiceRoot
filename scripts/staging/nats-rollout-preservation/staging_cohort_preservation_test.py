@@ -269,6 +269,41 @@ class CutEffectTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_guard_postgres_uses_exact_read_and_rejects_engine_drift(self):
+        import realtime_bootstrap
+        import staging_cohort_preservation_pg as pg
+        from stage_runtime import Kube
+        for fault in ('none','system','restart','after'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory(dir='/root') as directory:
+                root=Path(directory);(root/'installed').mkdir(mode=0o700)
+                with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                    session,_=CutEffectTests().fixture(root,{'metadata':{'uid':'user'},'spec':{'replicas':1}})
+                    with resource_claim.command_scope(session.check):
+                        plan=preservation.load_plan(session)
+                        engine={'pod':{'uid':'pod','container_id':'container','restart_count':0},'pvc':{'uid':'pvc'},'pv':{'uid':'pv'}}
+                        current={'namespace_uid':'namespace','pod_uid':'pod','container_id':'container','restart_count':0,
+                            'pvc_uid':'pvc','pv_uid':'pv','system_identifier':'123'}
+                        old={'schema':'voice-staging-cohort-catalog-v1','operation':session.operation,
+                            'plan_sha256':preservation.digest(plan),'engine':current,'server_start':'start'}
+                        base=preservation._base(session)
+                        preservation._write(base/'catalog.json',old)
+                        preservation._write(base/'archive-record.json',{'catalog_ref':preservation._reference(session,old)})
+                        value={'system_identifier':'wrong' if fault=='system' else '123','server_start':'start'}
+                        if fault=='restart':engine['pod']['restart_count']=1
+                        after=copy.deepcopy(engine)
+                        if fault=='after':after['pod']['uid']='foreign'
+                        def query(args):
+                            self.assertEqual(args,pg.IDENTITY_ARGS);commands.authority_guard(preservation.PREFIX+args)
+                            return copy.deepcopy(value)
+                        with patch.object(Kube,'_run',side_effect=query),patch.object(realtime_bootstrap,'engine_snapshot',
+                            side_effect=[('namespace',engine),('namespace',after)]):
+                            if fault=='none':self.assertEqual(preservation.guard_postgres(session),{'engine':current,'server_start':'start'})
+                            else:
+                                with self.assertRaisesRegex(Exception,'cohort_postgres_changed'):
+                                    preservation.guard_postgres(session)
+                        changed=pg.IDENTITY_ARGS.copy();changed[-1]+='; SELECT 1'
+                        with self.assertRaises(Exception):session.check(preservation.PREFIX+changed)
+
     def test_closed_copy_requalifies_exact_frozen_authority_not_live_census(self):
         import nats_root_plan
         original={'plan':{'source':'exact'},'binding':{'source':'exact'},'scripts':{},'live_census_sha256':'precut'}
