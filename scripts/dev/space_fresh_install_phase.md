@@ -81,3 +81,12 @@ not establish live provenance or real composed native execution. Actual typed
 CUT/runtime composition, independent source review, real PostgreSQL/Kubernetes
 qualification and C2 continuity remain required before live use. The existing
 primitive PostgreSQL and tool fixtures are separate evidence.
+
+`verify_historical(phase, token)` authenticates the completed protected record,
+original native/tool/physical/runtime evidence and recorded final catalog. It
+does not query PostgreSQL or call CUT and does not claim that catalog is current.
+The central source-owned catalog observer uses this exact Space successor with
+any subsequently qualified Realtime creation, then compares the combined
+expected catalog against actual engine/OIDs/properties. `verify_completed`
+retains its strict current Space-only catalog check. Both readers return detached
+data and recheck local evidence and the shared ledger after external verifiers.

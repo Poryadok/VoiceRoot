@@ -75,8 +75,8 @@ class PhaseTest(unittest.TestCase):
         self.client.call=self.call
         self.cm={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'sql','namespace':'voice-dev','annotations':{}},
                  'immutable':True,'data':{'000045_a.up.sql':'45','000050_a.up.sql':'50','000051_a.up.sql':'51'}}
-        self.job={'apiVersion':'batch/v1','kind':'Job','metadata':{'name':'native','namespace':'voice-dev','annotations':{}},
-            'spec':{'backoffLimit':0,'template':{'spec':{'containers':[{'name':'migrate','image':self.tool_receipt['immutable_image'],
+        self.job={'apiVersion':'batch/v1','kind':'Job','metadata':{'name':'native','namespace':'voice-dev','annotations':{},'labels':{'app':'space-native'}},
+            'spec':{'backoffLimit':0,'template':{'metadata':{'labels':{'app':'space-native'}},'spec':{'restartPolicy':'Never','containers':[{'name':'migrate','image':self.tool_receipt['immutable_image'],
                 'env':[{'name':'SPACE_NATIVE_INSTALLER_MODE','value':'provision'}]}]}}}}
         event=event_fixture.CreatedEventTest();event.setUp();self.created=event.raw()
         self.complete=copy.deepcopy(event.receipt)
@@ -112,16 +112,14 @@ class PhaseTest(unittest.TestCase):
                 self.receipt={'new_oid':proof['new_oid'],'role':'space_runtime','scope':'synthetic-runtime'}
                 return copy.deepcopy(self.receipt)
         self.runtime_module=types.SimpleNamespace(SpaceRuntimeRolePhase=Runtime,
-            verify_completed=lambda p,token:copy.deepcopy(p.receipt),verify_prepared=lambda p,token:copy.deepcopy(p.prepared))
+            verify_completed=lambda p,token:copy.deepcopy(p.receipt),verify_receipt=lambda p,token:copy.deepcopy(p.receipt),
+            verify_prepared=lambda p,token:copy.deepcopy(p.prepared))
         self.patches=[mock.patch.dict(sys.modules,{'space_fresh_install_phase_runtime':self.runtime_module}),
             mock.patch.object(pg_module,'KubeSpacePostgres',PG),
             mock.patch.object(physical_module,'verify_receipt',return_value=self.physical_receipt,create=True),
             mock.patch.object(tools,'verify_completed',return_value=self.tool_receipt),
             mock.patch.object(plan_module,'render',side_effect=lambda *a:copy.deepcopy((self.cm,self.job))),
-            mock.patch.object(catalog_module,'_full_catalog',side_effect=lambda *a:self.current_catalog()),
-            mock.patch.object(job_module,'job',side_effect=lambda authored,actual:copy.deepcopy(actual['spec'])),
-            mock.patch.object(job_module,'pod',side_effect=lambda authored,job,pod,digest:{
-                'name':pod['metadata']['name'],'uid':pod['metadata']['uid'],'resourceVersion':'1','pod_ip':'10.0.0.9','container_id':'containerd://fixture'})]
+            mock.patch.object(catalog_module,'_full_catalog',side_effect=lambda *a:self.current_catalog())]
         for patcher in self.patches:patcher.start();self.addCleanup(patcher.stop)
 
     def current_catalog(self):
@@ -141,14 +139,22 @@ class PhaseTest(unittest.TestCase):
             obj=copy.deepcopy(body);obj['metadata'].update(uid='uid-'+obj['metadata']['name'],resourceVersion='1')
             if obj['kind']=='Job':
                 obj['status']={'succeeded':1,'active':0,'conditions':[{'type':'Complete','status':'True'}]};self.oid=42
+                obj['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':obj['metadata']['uid']}}
+                obj['spec']['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']=obj['metadata']['uid']
             self.objects[(obj['kind'].lower(),obj['metadata']['name'])]=obj
             if self.fail_create and obj['kind']=='Job':raise TimeoutError('secret-in-error')
             return copy.deepcopy(obj)
         if args[:2]==('get','pods'):
             name=args[3].split('=',1)[1]
             if ('job',name) not in self.objects:return {'items':[]}
-            return {'items':[{'metadata':{'name':name+'-pod','uid':name+'-pod-uid','resourceVersion':'1'},
-                'status':{'phase':'Succeeded','containerStatuses':[{'name':'migrate','state':{'terminated':{'exitCode':0}}}]}}]}
+            job=self.objects[('job',name)]
+            return {'items':[{'apiVersion':'v1','kind':'Pod','metadata':{'name':name+'-pod','uid':name+'-pod-uid',
+                'namespace':'voice-dev','resourceVersion':'1','labels':copy.deepcopy(job['spec']['template']['metadata']['labels']),
+                'ownerReferences':[{'kind':'Job','name':name,'uid':job['metadata']['uid'],'controller':True}]},
+                'spec':copy.deepcopy(job['spec']['template']['spec']),
+                'status':{'phase':'Succeeded','podIP':'10.0.0.9','containerStatuses':[{'name':'migrate',
+                    'containerID':'containerd://fixture','imageID':'containerd://'+self.tool_receipt['platform_digest'],
+                    'restartCount':0,'state':{'terminated':{'exitCode':0}}}]}}]}
         if args[0]=='get':return copy.deepcopy(self.objects.get((args[1],args[2]),{}))
         if args[0]=='delete':
             path=args[1].removeprefix('--raw=');kind='job' if '/jobs/' in path else 'configmap';name=path.rsplit('/',1)[1]
@@ -172,6 +178,30 @@ class PhaseTest(unittest.TestCase):
         self.assertTrue(p.poisoned);self.assertEqual(self.backing.row['status'],'uncertain')
         with self.assertRaises(phase_module.SpaceFreshError):p.run()
         self.assertEqual(self.drops,[11])
+
+    def test_historical_receipt_does_not_claim_current_catalog(self):
+        p=self.phase();completed=p.run()
+        with mock.patch.object(p,'_catalog',side_effect=AssertionError('no current PG read')), \
+             mock.patch.object(p.pg,'snapshot',side_effect=AssertionError('no PG read')), \
+             mock.patch.object(self.runtime_module,'verify_completed',side_effect=AssertionError('historical runtime only')):
+            receipt=phase_module.verify_historical(p,'token')
+        self.assertEqual(receipt['new_oid'],42)
+        self.assertEqual(receipt['catalog'],completed['catalog'])
+        self.assertEqual(receipt['original_catalog_sha256'],phase_module._digest(self.original))
+        receipt['catalog']['all_databases']['space_db']=999
+        self.assertEqual(phase_module.verify_historical(p,'token')['catalog']['all_databases']['space_db'],42)
+
+    def test_historical_final_guard_local_drift_is_rejected(self):
+        p=self.phase();p.run();original=p._guard
+        def mutate():
+            original()
+            self.journal.state['steps'].pop(phase_module.STEP,None)
+        with mock.patch.object(p,'_stable',wraps=p._stable) as stable:
+            original_stable=stable._mock_wraps
+            def final(before):
+                with mock.patch.object(p,'_guard',side_effect=mutate):original_stable(before)
+            stable.side_effect=final
+            with self.assertRaises(phase_module.SpaceFreshError):phase_module.verify_historical(p,'token')
 
     def test_missing_reset_intent_has_no_effect(self):
         del self.journal.intent['space_fresh_install']
@@ -278,6 +308,32 @@ class PhaseTest(unittest.TestCase):
         self.assertNotIn('secret-in-error',str(error.exception))
         self.assertEqual(len([c for c in self.calls if c[:2]==('create','Job')]),1)
         self.assertFalse(any(c[0]=='delete' for c in self.calls))
+
+    def test_pending_pod_must_keep_exact_uid_until_running(self):
+        p=self.phase();call=self.client.call;pending=True
+        def delayed(*args,body=None):
+            nonlocal pending
+            result=call(*args,body=body)
+            if args[:2]==('get','pods') and result['items'] and pending:
+                pending=False;result['items'][0]['status']['phase']='Pending';self.oid=0
+            elif args[:2]==('get','pods') and result['items']:
+                self.oid=42
+            return result
+        with mock.patch.object(self.client,'call',side_effect=delayed),mock.patch.object(phase_module.time,'sleep'):
+            self.assertEqual(p.run()['new_oid'],42)
+
+    def test_changed_owned_pod_uid_refuses_before_grants(self):
+        p=self.phase();call=self.client.call;reads=0
+        def changed(*args,body=None):
+            nonlocal reads
+            result=call(*args,body=body)
+            if args[:2]==('get','pods') and result['items']:
+                reads+=1
+                if reads>1:result['items'][0]['metadata']['uid']='foreign'
+            return result
+        with mock.patch.object(self.client,'call',side_effect=changed),mock.patch.object(p.runtime,'run',wraps=p.runtime.run) as grants:
+            with self.assertRaises(phase_module.SpaceFreshError):p.run()
+            grants.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()
