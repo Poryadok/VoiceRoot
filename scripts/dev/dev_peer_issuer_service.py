@@ -258,7 +258,8 @@ def serve(channel):
             os.close(fd)
     request = json.loads(raw, object_pairs_hook=_unique)
     if (set(request) != {'action', 'profile', 'operation_id', 'source_sha', 'run_id', 'run_attempt'} or
-            request['action'] not in ('preflight', 'issue') or request['profile'] not in metadata.PROFILES or
+            not ((request['action'] in ('preflight', 'issue') and request['profile'] in metadata.PROFILES) or
+                 (request['action'] in ('p3-capability', 'p3-issue') and request['profile'] == 'realtime')) or
             not re.fullmatch(r'media-c1-[a-f0-9]{32}', request['operation_id']) or
             not re.fullmatch(r'[a-f0-9]{40}', request['source_sha'])):
         raise ValueError()
@@ -267,8 +268,14 @@ def serve(channel):
         raise ValueError()
     if request['action'] == 'preflight':
         check(request['operation_id'], request['source_sha'], request['profile'], pid, start)
-    else:
+    elif request['action'] == 'issue':
         issue(request['operation_id'], request['source_sha'], request['profile'], pid, start)
+    else:
+        import dev_realtime_p3_issuer_service as p3_service
+        if request['action'] == 'p3-capability':
+            p3_service.capability_check(sys.modules[__name__], request['operation_id'], request['source_sha'], pid, start)
+        else:
+            p3_service.issue(sys.modules[__name__], request['operation_id'], request['source_sha'], pid, start)
     if root_export._start_ticks(pid) != start or channel.send(b'OK\n') != 3:
         raise ValueError()
 
