@@ -17,7 +17,7 @@ class CaptureTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         manifest = self.root / 'deploy/staging/services.yaml'
         manifest.parent.mkdir(parents=True)
-        manifest.write_bytes(b'kind: Deployment\nmetadata:\n  name: voice-space\nspec:\n  template:\n    spec:\n      containers:\n        - name: space\n          env:\n            - ' + capture.SOURCE_LINES[0] + b'\n            - ' + capture.SOURCE_LINES[1] + b'\n            - ' + capture.SOURCE_LINES[4] + b'\n          volumeMounts:\n            - ' + capture.SOURCE_LINES[2] + b'\n      volumes:\n        - name: media-server\n          ' + capture.SOURCE_LINES[3] + b'\n')
+        manifest.write_bytes(b'kind: Deployment\nmetadata:\n  name: voice-space\nspec:\n  template:\n    spec:\n      containers:\n        - name: space\n          env:\n            - ' + capture.SOURCE_LINES[0] + b'\n            - ' + capture.SOURCE_LINES[1] + b'\n            - ' + capture.SOURCE_LINES[4] + b'\n            - ' + capture.SOURCE_LINES[5] + b'\n            - ' + capture.SOURCE_LINES[6] + b'\n          volumeMounts:\n            - ' + capture.SOURCE_LINES[2] + b'\n            - ' + capture.SOURCE_LINES[7] + b'\n      volumes:\n        - name: media-server\n          ' + capture.SOURCE_LINES[3] + b'\n        - name: media-signing\n          ' + capture.SOURCE_LINES[8] + b'\n')
         self.manifest_sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
         self.document_sha = self.manifest_sha
         def openssl(*args):
@@ -53,6 +53,8 @@ class CaptureTests(unittest.TestCase):
         if kind == 'pod': return json.dumps(self.pod).encode()
         if kind == 'service': return json.dumps({'metadata': {'name': name, 'namespace': 'voice-dev', 'uid': 'svc', 'resourceVersion': '2'},
              'spec': {'clusterIP': '10.0.0.1', 'selector': {'app': 'voice-space'}, 'ports': [{'port': 8443, 'protocol': 'TCP'}]}}).encode()
+        if name == 'voice-space-principal-signing' and any(x.startswith('go-template=') for x in args):
+            return b'signer-uid\n4\n1\n1\n1'
         if '-o' in args and args[args.index('-o') + 1].startswith('jsonpath='):
             expression = args[args.index('-o') + 1]
             if '.metadata.uid' in expression: return ('uid-' + name + '\n1').encode()
@@ -111,6 +113,9 @@ class CaptureTests(unittest.TestCase):
         self.assertIsNone(result['space_service_spec']); self.assertFalse(result['admission_qualified'])
         self.assertEqual(result['current_space_config'],{'space_cert_env':'absent','space_key_env':'absent',
             'space_listen_env':'absent','space_mount':'mismatch'})
+        self.assertEqual(result['current_signer']['configuration'],{'signing_dir':'absent','active_kid_ref':'absent','signing_mount':'mismatch'})
+        self.assertEqual(result['current_signer']['secret'],{'state':'present','uid':'signer-uid','resource_version':'4',
+            'keys':['current.pem','next.pem','active-kid']})
         self.assertIn('current_space_https',result['unobserved'])
         with self.assertRaises(capture.common.Hold):
             other=self.root/'serving'; other.mkdir(mode=0o700); self.invoke(other)
@@ -124,6 +129,36 @@ class CaptureTests(unittest.TestCase):
         planned=self.root/'shadow-plan'; planned.mkdir(mode=0o700)
         result=self.invoke(planned,mode='issuer-plan')
         self.assertEqual(result['current_space_config']['space_mount'],'mismatch')
+
+    def test_signer_metadata_absence_and_drift_are_distinct(self):
+        dest=self.root/'signer-absent'; dest.mkdir(mode=0o700)
+        def missing(args):
+            if 'voice-space-principal-signing' in args: return b''
+            return self.runner(args)
+        result=self.invoke(dest,runner=missing,mode='issuer-plan')
+        self.assertEqual(result['current_signer']['secret']['state'],'absent')
+        dest=self.root/'signer-drift'; dest.mkdir(mode=0o700); calls=0
+        def changed(args):
+            nonlocal calls
+            if 'voice-space-principal-signing' in args:
+                calls+=1; return b'signer-uid\n4\n1\n1\n1' if calls==1 else b'signer-uid\n5\n1\n1\n1'
+            return self.runner(args)
+        with self.assertRaisesRegex(capture.common.Hold,'space_identity_changed'):
+            self.invoke(dest,runner=changed,mode='issuer-plan')
+        self.assertEqual(list(dest.iterdir()),[])
+
+    def test_exact_signer_reference_reports_only_fixed_metadata(self):
+        pod=self.pod['spec']; container=pod['containers'][0]
+        container['env'].extend([{'name':'SPACE_PRINCIPAL_SIGNING_KEYS_DIR','value':'/etc/voice/media/signing'},
+            {'name':'SPACE_PRINCIPAL_ACTIVE_KID','valueFrom':{'secretKeyRef':{
+                'name':'voice-space-principal-signing','key':'active-kid'}}}])
+        container['volumeMounts'].append({'name':'signer','mountPath':'/etc/voice/media/signing','readOnly':True})
+        pod['volumes'].append({'name':'signer','secret':{'secretName':'voice-space-principal-signing',
+            'items':[{'key':'current.pem','path':'current.pem'},{'key':'next.pem','path':'next.pem'}]}})
+        dest=self.root/'signer-exact'; dest.mkdir(mode=0o700)
+        result=self.invoke(dest,mode='issuer-plan')
+        self.assertEqual(result['current_signer']['configuration'],{'signing_dir':'exact','active_kid_ref':'exact','signing_mount':'exact'})
+        self.assertNotIn('PRIVATE KEY',repr(result))
 
     def test_service_missing_identity_fails(self):
         dest = self.root / 'private'; dest.mkdir(mode=0o700)
