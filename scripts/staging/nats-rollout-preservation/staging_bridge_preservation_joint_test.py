@@ -696,6 +696,9 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     time.sleep(.2)
    subprocess.run(['docker','exec','-i',pg_container,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',pg_user],
     input=b'CREATE DATABASE space_db;',check=True,stdout=subprocess.DEVNULL)
+   assert re.fullmatch('[a-z_][a-z0-9_]{0,62}',pg_user)
+   subprocess.run(['docker','exec','-i',pg_container,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',pg_user,'-d','space_db'],
+    input=('ALTER SCHEMA public OWNER TO '+pg_user+';').encode(),check=True,stdout=subprocess.DEVNULL)
    migrate=subprocess.check_output(['docker','create','--label','voice.test.owner=wt30-joint','--network','container:'+pg_container,
     '--entrypoint','/usr/local/bin/migrate','voice-wt30-native-tool:46b6e99','-path','/migrations',
     '-database','postgres://'+pg_user+':'+pg_password.decode()+'@127.0.0.1:5432/space_db?sslmode=disable','goto','24'],text=True).strip()
