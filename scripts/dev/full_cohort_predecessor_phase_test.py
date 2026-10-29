@@ -96,7 +96,10 @@ class PreBeginTests(unittest.TestCase):
         with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'{"events":[]}')):
             self.assertEqual(phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT)), {'events':[]})
         self.assertEqual(self_url, [(phase.TT_ENDPOINT + '/api/projects/voice/resources/DEV', 10)])
-        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'x' * ((2 << 20) + 1))):
+        large=json.dumps({'events':[], 'padding':'x'*(3<<20)}).encode()
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(large)):
+            self.assertEqual(phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT))['padding'], 'x'*(3<<20))
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'x' * ((8 << 20) + 1))):
             with self.assertRaises(phase.PredecessorError):
                 phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT))
 

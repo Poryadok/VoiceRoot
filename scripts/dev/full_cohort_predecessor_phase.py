@@ -94,8 +94,8 @@ def _read_history(check):
     try:
         with urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect()).open(
                 check.endpoint + '/api/projects/voice/resources/DEV', timeout=10) as response:
-            raw = response.read((2 << 20) + 1)
-        if len(raw) > 2 << 20: raise ValueError()
+            raw = response.read((8 << 20) + 1)
+        if len(raw) > 8 << 20: raise ValueError()
         return json.loads(raw)
     except (OSError, ValueError):
         raise PredecessorError('C1 deployment history unavailable') from None
