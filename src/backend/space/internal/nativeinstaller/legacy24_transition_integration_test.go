@@ -54,10 +54,13 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close(context.Background()) })
 	const space = "11111111-1111-4111-8111-111111111111"
+	const secondSpace = "55555555-5555-4555-8555-555555555555"
 	const owner = "22222222-2222-4222-8222-222222222222"
 	const member = "33333333-3333-4333-8333-333333333333"
 	const member2 = "44444444-4444-4444-8444-444444444444"
 	_, err = conn.Exec(ctx, `INSERT INTO public.spaces(id,name,owner_profile_id) VALUES($1,'legacy fixture',$2)`, space, owner)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `INSERT INTO public.spaces(id,name,owner_profile_id) VALUES($1,'empty legacy fixture',$2)`, secondSpace, owner)
 	require.NoError(t, err)
 	_, err = conn.Exec(ctx, `INSERT INTO public.space_members(space_id,profile_id,nickname) VALUES($1,$2,'member fixture')`, space, member)
 	require.NoError(t, err)
@@ -265,7 +268,13 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		final, err := s.InspectNativeInstallerSource(ctx, 51)
 		require.NoError(t, err)
 		require.Equal(t, transition51.NewSealSHA256, final.SealSHA256)
-		require.NoError(t, s.InitializeNativeMembership(ctx, uuid.MustParse(space)))
+		require.Equal(t, []string{space, secondSpace}, origin.Spaces)
+		for _, id := range origin.Spaces {
+			require.NoError(t, s.InitializeNativeMembership(ctx, uuid.MustParse(id)))
+		}
+		var initialized int
+		require.NoError(t, conn.QueryRow(ctx, `SELECT count(*) FROM native_membership_guard.spaces WHERE state='COMPLETE' AND space_id=ANY($1::uuid[])`, origin.Spaces).Scan(&initialized))
+		require.Equal(t, len(origin.Spaces), initialized, "every original Space is initialized")
 		finalTx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 		require.NoError(t, err)
 		_, err = finalTx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`)
