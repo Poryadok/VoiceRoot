@@ -223,6 +223,7 @@ jobs:
           python -B scripts/dev/space_creator_runtime_profile_config_test.py
           python -B scripts/dev/space_creator_runtime_profile_auth_test.py
           python -B scripts/dev/space_creator_runtime_profile_jdk_test.py
+          python -B scripts/dev/space_creator_runtime_profile_target_trust_test.py
           python -B scripts/dev/space_creator_runtime_profile_trust_test.py
           python -B scripts/dev/space_p3_issuer_preflight_bundle_test.py
           python -B scripts/dev/space_p3_issuer_preflight_source_test.py
