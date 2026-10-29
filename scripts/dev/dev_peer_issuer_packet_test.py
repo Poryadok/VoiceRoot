@@ -42,4 +42,14 @@ class PacketTest(unittest.TestCase):
         env['objects']['items'][0]['data']=copy.deepcopy(self.objects['voice-space-media-client-tls']['data'])
         with self.assertRaises(packet.PacketError): packet.validate(env,'role','media-c1-'+'a'*32,'b'*40,'ns','c'*64,names,self.media)
 
+    def test_space_server_requires_short_and_full_names(self):
+        name='voice-space-media-server-tls'
+        material=reset.ResetMaterial(self.root)
+        material.tls(name,(self.root/'fixture-ca.key',self.root/'fixture-ca.crt'),
+                     'voice-space.voice-dev.svc','serverAuth')
+        env=self.envelope('space',[name])
+        env['objects']['items'][0]=material.items[0]
+        with self.assertRaises(packet.PacketError):
+            packet.validate(env,'space','media-c1-'+'a'*32,'b'*40,'ns','c'*64,[name],self.media)
+
 if __name__=='__main__': unittest.main()

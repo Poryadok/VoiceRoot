@@ -12,13 +12,7 @@ import dev_peer_issuer_source as reviewed
 import source_authority as github
 
 INSTALLED = Path('/opt/voice-dev-peer-issuer')
-FILES = tuple('scripts/dev/' + name for name in reviewed.FILES) + (
-    'scripts/dev/dev_peer_issuer_source.py',
-    'scripts/dev/canonical_application_package.py',
-    'scripts/dev/publish_candidate.py',
-    'scripts/staging/nats-rollout-preservation/source_authority.py',
-    'scripts/staging/nats-rollout-preservation/github_custody.py',
-)
+FILES = tuple('scripts/dev/' + name for name in reviewed.FILES) + reviewed.ROOT_PATHS + (reviewed.SELF,)
 
 
 def _installed(path):

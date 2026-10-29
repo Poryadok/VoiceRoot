@@ -112,6 +112,17 @@ def _sync_dir(path):
         os.close(fd)
 
 
+def _assert_no_legacy(profile):
+    marker = {'creator': 'space-creator-issuance.once', 'space': 'space-p3-issuance.once', 'role': None}[profile]
+    if marker is None:
+        return
+    try:
+        (ROOT / marker).lstat()
+    except FileNotFoundError:
+        return
+    raise ValueError('legacy issuance needs reconciliation')
+
+
 def check(operation, source_sha, profile, pid, start):
     with _connect(operation, profile, 'preflight', pid, start) as channel:
         request = json.loads(_read(channel, 65536), object_pairs_hook=_unique)
@@ -144,6 +155,7 @@ def issue(operation, source_sha, profile, pid, start):
                          if first['creator_secrets'][name] == {'state': 'absent'})
         if not missing:
             raise ValueError()
+        _assert_no_legacy(profile)
         directory = ROOT / ('dev-peer-' + profile + '-' + operation[-32:])
         reservation = ROOT / ('dev-peer-' + profile + '-issuance.once')
         fd = os.open(reservation, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
