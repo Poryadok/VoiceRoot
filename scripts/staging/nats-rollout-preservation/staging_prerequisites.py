@@ -17,6 +17,13 @@ from root_main import save
 SLOTS=('release_policy','p3','gis_material')
 CHILD_MODULES={'release_policy':'staging_release_policy_prepare','p3':'staging_p3_prerequisites',
                'gis_material':'staging_gis_material'}
+EFFECT_IDS={'release_policy':('create-policy-configmap','commit-root-policy'),
+    'p3':('Secret/voice-realtime-principal-signing','Secret/voice-realtime-p3-tls',
+          'Secret/voice-chat-realtime-p3-tls','Secret/voice-p3-principal-jwks-tls',
+          'Secret/voice-p3-principal-replay','Secret/voice-p3-principal-trust',
+          'ConfigMap/voice-p3-principal-public','ConfigMap/voice-p3-principal-publisher-config',
+          'Service/voice-p3-principal-jwks','Deployment/voice-p3-principal-jwks'),
+    'gis_material':('gis-signer','gis-workload','gis-tls','gis-app-credentials')}
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256','approved_sha256',
     'execution_sha256','namespace_uid','marker_sha256','baseline_sha256','actual_before',
     'policy_before_sha256','children','auxiliary_images','renderer_authority_sha256'}
@@ -114,13 +121,17 @@ def _effect_order(plan):
     result=[]
     for slot in SLOTS:
         child=plan['children'][slot]
-        if not isinstance(child,dict) or not isinstance(child.get('effects'),list) or not child['effects']:
+        if not isinstance(child,dict) or not isinstance(child.get('effects'),list):
             raise Blocked('staging_prerequisites_child_invalid')
+        ids=[]
         for effect in child['effects']:
-            if not isinstance(effect,dict) or not isinstance(effect.get('id'),str) or not re.fullmatch(r'[a-z0-9-]{1,64}',effect['id']):
+            if not isinstance(effect,dict) or effect.get('id') not in EFFECT_IDS[slot]:
                 raise Blocked('staging_prerequisites_effect_invalid')
-            result.append((slot,effect['id']))
-    if len(result)!=len(set(result)):raise Blocked('staging_prerequisites_effect_invalid')
+            ids.append(effect['id'])
+        # Fixed child preflight must prove the omitted inventory is preserved.
+        if ids!=[i for i in EFFECT_IDS[slot] if i in ids]:
+            raise Blocked('staging_prerequisites_effect_invalid')
+        result.extend((slot,i) for i in ids)
     return result
 
 def record_pending(session,slot,effect_id):
@@ -137,6 +148,11 @@ def record_pending(session,slot,effect_id):
             done.append((s,key))
     if set(done)!=set(expected[:len(done)]) or len(done)>=len(expected) or expected[len(done)]!=(slot,effect_id):
         raise Blocked('staging_prerequisites_effect_order')
+    for prior_slot,prior_id in expected[:len(done)]:
+        observation=state['steps'][prior_slot][prior_id]['observation']
+        if importlib.import_module(CHILD_MODULES[prior_slot]).verify_effect(session,prior_id,observation)!=observation:
+            raise Blocked('staging_prerequisites_observation_changed')
+    if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
     after=copy.deepcopy(state);after['steps'].setdefault(slot,{})[effect_id]={'status':'PENDING'}
     _store_state(session,state,after)
 
@@ -162,15 +178,29 @@ def require_child(session,slot):
 
 def load_payload(session,slot,effect_id):
     plan=require_child(session,slot)
-    if not isinstance(effect_id,str) or not re.fullmatch(r'[a-z0-9-]{1,64}',effect_id):
+    if not isinstance(effect_id,str) or effect_id not in EFFECT_IDS[slot]:
         raise Blocked('staging_prerequisites_effect_invalid')
     effects=plan.get('effects')
     if type(effects) is not list:raise Blocked('staging_prerequisites_effect_invalid')
     selected=[row for row in effects if type(row) is dict and row.get('id')==effect_id]
     if len(selected)!=1 or not isinstance(selected[0].get('payload_sha256'),str) or not SHA.fullmatch(selected[0]['payload_sha256']):
         raise Blocked('staging_prerequisites_effect_invalid')
-    raw=_read_private(_base(session)/'payloads'/slot/(effect_id+'.json'))
+    raw=_read_private(_base(session)/'payloads'/slot/(hashlib.sha256(effect_id.encode('ascii')).hexdigest()+'.json'))
     if hashlib.sha256(raw).hexdigest()!=selected[0]['payload_sha256']:
         raise Blocked('staging_prerequisites_payload_changed')
     session.check()
     return raw
+
+def load_authority(session):
+    """Return only the fixed root-captured source and its verified workspace."""
+    state=_checkpoint(session);plan=state['plan']
+    approved=json.loads(_read_private(_base(session)/'approved.json'),object_pairs_hook=guard.object_pairs)
+    execution=json.loads(_read_private(_base(session)/'execution.json'),object_pairs_hook=guard.object_pairs)
+    source=guard.ROOT/'installed'/'sources'/session.operation
+    encrypted_cut.directory(source)
+    if (not isinstance(approved,dict) or approved.get('source_sha')!=session.context['commit']
+        or not isinstance(approved.get('source_files'),dict) or digest(approved)!=plan['approved_sha256']
+        or not isinstance(execution,dict) or digest(execution)!=plan['execution_sha256']):
+        raise Blocked('staging_prerequisites_source_changed')
+    if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
+    return {'approved':copy.deepcopy(approved),'execution':copy.deepcopy(execution),'source':str(source)}
