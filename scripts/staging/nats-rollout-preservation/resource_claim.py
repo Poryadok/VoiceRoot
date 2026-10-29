@@ -87,6 +87,7 @@ class Session:
         self.repair_guard=None
         self._prerequisite_permit=None
         self._prerequisite_readonly_permit=None
+        self._cohort_permit=None
 
     def authority(self):
         row=self.check_card();c=self.context
@@ -157,8 +158,16 @@ class Session:
             raise RuntimeError('staging_executor_target_changed')
         if getattr(self,'expected_phase',None) is not None and row.get('phase')!=self.expected_phase:
             raise RuntimeError('staging_executor_phase_changed')
-        if argv and row.get('phase') in ('prerequisites','prerequisites-captured'):
+        if argv and row.get('phase') in ('cohort-preservation','prerequisites','prerequisites-captured'):
             args=list(argv);permit=self._prerequisite_permit
+            cohort=self._cohort_permit
+            if (row['phase']=='cohort-preservation' and type(cohort) is dict
+                and set(cohort)=={'effect_id','argv','body_sha256'}
+                and isinstance(cohort['effect_id'],str) and cohort['effect_id']
+                and isinstance(cohort['argv'],list) and args==cohort['argv']
+                and isinstance(cohort['body_sha256'],str) and re.fullmatch(r'[a-f0-9]{64}',cohort['body_sha256'])):
+                self._cohort_permit=None
+                return row
             if (row['phase']=='prerequisites' and permit is not None and args==permit):
                 self._prerequisite_permit=None
                 return row
@@ -204,7 +213,7 @@ class Session:
 
     def bind_target(self,commit,images,actual,target_sha256):
         row=self.check();card=self.authority();observed=card.get('observed',{})
-        if row.get('phase') in ('realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
+        if row.get('phase') in ('cohort-preservation','realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if (commit!=self.context['commit'] or images!=self.context['images']
             or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
             or observed.get('window')!=self.context['window'] or observed.get('operation')!=card.get('operation',0)-1
@@ -216,11 +225,31 @@ class Session:
             return
         row['target_sha256']=target_sha256;self.journal.save(row);self.expected_target=target_sha256
 
+    def bind_cohort_preservation(self,plan,actual_before):
+        import staging_cohort_preservation
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        staging_cohort_preservation.validate_plan(plan,self)
+        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+            or plan.get('actual_before')!=actual_before
+            or plan.get('candidate')!={'commit':self.context['commit'],'images':self.context['images']}
+            or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
+            or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual_before):
+            raise RuntimeError('staging_cohort_baseline_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_cohort_baseline_changed')
+        row.update(phase='cohort-preservation',target_sha256=digest(plan))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
     def bind_prerequisites(self,plan,actual_before):
         import staging_prerequisites
+        import staging_cohort_preservation
         row=self.check();card=self.authority();observed=card.get('observed',{})
         staging_prerequisites.validate_plan(plan,self)
-        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+        if row.get('phase')!='cohort-preservation':raise RuntimeError('staging_cohort_preservation_required')
+        receipt=staging_cohort_preservation.load_qualified(self,actual=actual_before)
+        if (plan.get('schema')!='voice-staging-prerequisites-plan-v2'
+            or plan.get('preservation_sha256')!=digest(receipt)
             or plan.get('actual_before')!=actual_before or observed.get('state')!='known'
             or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
             or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual_before):
@@ -327,7 +356,7 @@ class Session:
         # it must neither reopen apply nor create uncertainty in a safe window.
         if self.owned(previous) and (previous.get('status')=='complete' or previous.get('phase')=='awaiting-ci'):return
         row=self.check()
-        if row.get('phase') in ('realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
+        if row.get('phase') in ('cohort-preservation','realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if not row.get('target_sha256'):raise RuntimeError('staging_resource_target_unbound')
         row['phase']='apply-ready';self.journal.save(row)
 

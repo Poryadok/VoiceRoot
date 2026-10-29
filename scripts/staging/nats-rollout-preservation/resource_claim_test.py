@@ -37,6 +37,50 @@ class MemoryJournal:
 
 
 class ResourceTests(unittest.TestCase):
+    def test_cohort_binding_rejects_unbound_effects_and_target_replacement(self):
+        import sys
+        from unittest.mock import Mock
+        c=context();authority=card(c);journal=MemoryJournal()
+        session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(authority),journal)
+        session.admit(start=True)
+        plan={'actual_before':copy.deepcopy(authority['observed']['images']),
+              'candidate':{'commit':c['commit'],'images':copy.deepcopy(c['images'])}}
+        adapter=Mock()
+        with patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
+            bad=copy.deepcopy(plan);bad['candidate']['commit']='d'*40
+            before=copy.deepcopy(journal.row)
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_baseline_changed'):
+                session.bind_cohort_preservation(bad,plan['actual_before'])
+            self.assertEqual(journal.row,before)
+            binding=session.bind_cohort_preservation(plan,plan['actual_before'])
+            self.assertEqual(binding['target_sha256'],claim.digest(plan))
+            self.assertEqual(session.check()['phase'],'cohort-preservation')
+            argv=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','scale','deployment/voice-user','--replicas=0']
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            session._cohort_permit={'effect_id':'scale-user','argv':argv,'body_sha256':'invalid'}
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            session._cohort_permit={'effect_id':'scale-user','argv':argv,'body_sha256':'c'*64}
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(argv[:-1]+['--replicas=1'])
+            session.check(argv);self.assertIsNone(session._cohort_permit)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):
+                session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+            with self.assertRaisesRegex(RuntimeError,'actual_finish_required'):
+                session.complete('PASS',c['images'])
+            receipt={'schema':'fixture-qualified'};adapter.load_qualified.return_value=receipt
+            parent=Mock();next_plan={'schema':'voice-staging-prerequisites-plan-v2',
+                'actual_before':plan['actual_before'],'preservation_sha256':claim.digest(receipt)}
+            with patch.dict(sys.modules,{'staging_prerequisites':parent}):
+                altered=dict(next_plan,preservation_sha256='f'*64)
+                with self.assertRaisesRegex(RuntimeError,'baseline_changed'):
+                    session.bind_prerequisites(altered,plan['actual_before'])
+                self.assertEqual(session.check()['phase'],'cohort-preservation')
+                result=session.bind_prerequisites(next_plan,plan['actual_before'])
+                self.assertEqual(result['target_sha256'],claim.digest(next_plan))
+                self.assertEqual(session.check()['phase'],'prerequisites')
+
     def fixture(self):
         c=context(); current=card(c); journal=MemoryJournal()
         session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
