@@ -390,7 +390,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    with zipfile.ZipFile(archive,'w') as z:z.writestr('space-native-tool.json',json.dumps(pub))
    archive=archive.getvalue()
    repo={'id':9,'full_name':'Poryadok/VoiceRoot','private':False,'default_branch':'master'}
-   run={'id':17,'run_attempt':1,'head_sha':c['commit'],'head_branch':'master','event':'push',
+   run_record={'id':17,'run_attempt':1,'head_sha':c['commit'],'head_branch':'master','event':'push',
     'path':'.github/workflows/ci.yml','status':'completed','conclusion':'success',
     'repository':repo,'head_repository':repo}
    jobs=[]
@@ -411,7 +411,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     suffix=url[len(source_authority.API):]
     if suffix=='':value=repo
     elif suffix=='/git/ref/heads/master':value={'ref':'refs/heads/master','object':{'type':'commit','sha':c['commit']}}
-    elif suffix=='/actions/runs/17':value=run
+    elif suffix=='/actions/runs/17':value=run_record
     elif suffix.startswith('/actions/runs/17/attempts/1/jobs?'):value={'total_count':len(jobs),'jobs':jobs}
     elif suffix.startswith('/actions/runs/17/artifacts?'):value={'total_count':1,'artifacts':[artifact]}
     elif suffix=='/actions/artifacts/109':value=artifact
