@@ -393,7 +393,13 @@ class WriterCut:
             step = 'backend-config-deployment-' + name
             entry = snapshot['steps'].get(step)
             ledger = snapshot['effects'].get(step)
-            proof = backend_config_transition.verify_deployment_successor(self, config_journal, service)
+            if service in ('notification', 'user'):
+                proof = backend_config_transition.verify_deployment_successor(self, config_journal, service)
+            elif service in ('chat', 'realtime'):
+                import realtime_config_transition
+                proof = realtime_config_transition.verify_deployment_successor(self, config_journal, service)
+            else:
+                raise RecoveryRequired('unknown config successor')
             if (not isinstance(entry, dict) or set(entry) != {'status', 'nonce', 'details', 'details_sha256', 'receipt'} or
                     entry['status'] != 'done' or not isinstance(entry['nonce'], str) or
                     not re.fullmatch(r'[0-9a-f]{32}', entry['nonce']) or
@@ -492,7 +498,7 @@ class WriterCut:
                     not isinstance(plan, dict) or plan.get('source_sha') != self.fence.context['commit'] or
                     plan.get('cut_invocation') != self.invocation or not isinstance(plan.get('services'), list) or
                     not plan['services'] or len(plan['services']) != len(set(plan['services'])) or
-                    set(plan['services']) - {'user', 'notification', 'realtime'}):
+                    set(plan['services']) - {'user', 'notification', 'realtime', 'chat'}):
                 raise RecoveryRequired('config source or cut identity changed')
             selected = {o['metadata']['name'] for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
             if any('voice-' + s not in selected for s in plan['services']):
@@ -726,7 +732,7 @@ class WriterCut:
                     not isinstance(plan, dict) or plan.get('source_sha') != self.fence.context['commit'] or
                     plan.get('cut_invocation') != self.invocation or not isinstance(plan.get('services'), list) or
                     not plan['services'] or len(plan['services']) != len(set(plan['services'])) or
-                    set(plan['services']) - {'user', 'notification', 'realtime'}):
+                    set(plan['services']) - {'user', 'notification', 'realtime', 'chat'}):
                 raise RecoveryRequired('config source or cut identity changed')
             selected = {o['metadata']['name']: o for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
             if any('voice-' + s not in selected for s in plan['services']):
