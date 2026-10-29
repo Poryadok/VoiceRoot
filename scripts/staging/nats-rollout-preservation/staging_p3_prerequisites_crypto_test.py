@@ -2,6 +2,7 @@
 import copy
 import base64
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -54,6 +55,11 @@ class CryptoFixture(unittest.TestCase):
                     'space_jwks_certificate_pem':peer_cert.decode(),'space_server_ca_pem':ca.decode(),
                     'replay_password_b64':base64.b64encode(b'fixture-password').decode()}
             self.assertEqual(crypto.validate_issuer_materials(generated,issuer)['scope'],'offline-material-only')
+            rows=p3.material_objects(generated)
+            for row in rows: row['metadata']['annotations']={'voice.poryadok.io/prerequisites-operation':'fixture'}
+            payloads={row['kind']+'/'+row['metadata']['name']:json.dumps(row,sort_keys=True,separators=(',',':')).encode() for row in rows}
+            restored=p3.decode_material_payloads(payloads,{ident:'fixture' for ident in payloads})
+            self.assertEqual(crypto.validate_issuer_materials(restored,issuer)['scope'],'offline-material-only')
             bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
             with self.assertRaises(crypto.CryptoError): crypto.validate_issuer_materials(generated,bad)
             proof=crypto.validate_values(values,trust,peer_cert,peer_cert,ca)
