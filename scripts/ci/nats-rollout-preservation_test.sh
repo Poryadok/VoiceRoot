@@ -14,7 +14,9 @@ sudo -n true || { echo 'STAGING_PG_TESTS_REQUIRE_NONINTERACTIVE_SUDO' >&2; exit 
 }
 pg_fixture="$(sudo -n mktemp -d /var/tmp/voice-staging-pg-ci.XXXXXXXX)"
 case "$pg_fixture" in /var/tmp/voice-staging-pg-ci.*) ;; *) echo 'STAGING_PG_FIXTURE_INVALID' >&2; exit 1;; esac
-cleanup_pg_fixture() { sudo -n rm -rf -- "$pg_fixture"; }
+qualified_fixture="$(mktemp -d /tmp/voice-staging-qualified.XXXXXXXX)"
+case "$qualified_fixture" in /tmp/voice-staging-qualified.*) ;; *) echo 'STAGING_QUALIFIED_FIXTURE_INVALID' >&2; exit 1;; esac
+cleanup_pg_fixture() { sudo -n rm -rf -- "$pg_fixture"; rm -rf -- "$qualified_fixture"; }
 trap cleanup_pg_fixture EXIT
 git -C "$ROOT" archive HEAD | sudo -n tar -xf - -C "$pg_fixture"
 sudo -n chmod -R a-w "$pg_fixture"
@@ -26,12 +28,16 @@ sudo -n sh -eu -c '
   export TMPDIR="$2"
   python3 -B -m unittest realtime_bootstrap_pg_test realtime_bootstrap_composition_test realtime_bootstrap_existing_pg_test
 ' sh "$pg_fixture" "$pg_tmp"
+# Build the mandatory fixture binaries while exact historical Git source is
+# still available; the isolated inner source copy deliberately has no .git.
+python3 "$ROOT/scripts/ci/staging_qualified_helpers.py" --root "$ROOT" --output "$qualified_fixture/binaries"
 # The pinned official Go toolchain supplies mandatory server-helper parity;
 # the Python fixture image intentionally has no Go installation.
 docker run --rm --network none --entrypoint tar \
   golang@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c \
   -C /usr/local -cf - go | docker run --rm -i --pids-limit 128 --memory 2g \
   --mount "type=bind,source=${pg_fixture},target=/work,readonly" \
+  --mount "type=bind,source=${qualified_fixture}/binaries,target=/qualified,readonly" \
   -e PYTHONPATH=/tmp/repo/scripts/dev:/tmp/repo/scripts/staging/nats-known-baseline:/tmp/repo/scripts/staging/nats-rollout-preservation \
   python@sha256:1b668429b3511ab407d8e00648891631b0b1a4d7e15e3ca70f38ab5b91ad4ab4 \
   sh -eu -c '
@@ -40,6 +46,9 @@ docker run --rm --network none --entrypoint tar \
     mkdir -p /tmp/repo/src/backend/auth/src/main/resources/db /tmp/repo/docker/clickhouse /etc/systemd/system
     mkdir -m 700 /fixture
     export TMPDIR=/fixture
+    mkdir -m 700 /fixture/qualified-binaries
+    cp /qualified/kernel /qualified/bootstrap-renewer /qualified/story-current4-probe /qualified/provenance.json /fixture/qualified-binaries/
+    chmod 400 /fixture/qualified-binaries/*
     cp -R /work/scripts /work/deploy /work/.github /tmp/repo/
     cp /work/docker-compose.voice-space-media.yml /tmp/repo/
     cp -R /work/src/backend/migrations /tmp/repo/src/backend/
