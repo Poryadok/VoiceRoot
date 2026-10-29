@@ -79,3 +79,35 @@ The fixed NativeRuntime now accepts the shared exact healthz readiness command a
 An owned shared-volume Linux runner now executes actual pinned NATS 2.12.12 with a populated file stream. Closed capture, first isolated restore, and actual native readback through a second isolated copy pass (1/1, 4.622s), with real RootSession and command permits. Source/Kubernetes/paused admission remains synthetic; this fixture has no consumers and does not claim native consumer decoder coverage. The runner and its named volume are test-owned; no live PVC is mounted.
 
 The PG/CMS fixture now enters the actual qualify_offnode Actions/Session continuation and load_qualified, rather than invoking decrypt alone. Actual encrypted readback and second PG restore pass (23.782s); repeated qualification performs no second remote/restore operation, and altered PENDING offnode receipt is rejected. GitHub retrieval, NATS readback, paused/Kube/source admission and absence of an auxiliary remain explicit external fixtures in this test.
+
+The readonly PostgreSQL transport now pins search_path inside its transaction.
+An actual PG16 public function overload and inherited role search_path falsify
+the old query (RED 2.232s); the fixed complete PG/CMS test passes (30.706s).
+Exact retained logs and source hashes are in ignored
+tmp/preservation-pg-review/evidence.json. Independent scoped review closed this
+P2 on commit 1a8afe02e8f4; it did not clear later producer additions.
+
+Pre-cut actor/NATS planning authorities are now root-captured and included in
+the preservation plan. A fixed ScratchRuntime requalifies signed actor and
+bootstrap authentication only in disposable empty network-none brokers, under
+the permanent Root Session preservation marker and one-use exact command/body
+permits. Every command and owned cleanup is durable; lost replies remain
+PENDING. Actual signed actor/bootstrap proof and populated native NATS copy
+tests plus ten focused unit tests pass together (12/12, 21.065s). An additional
+foreign-command/lost-reply boundary test passes (1/1). Crypto/source/Kubernetes
+admission fixtures remain explicit; no live credential or data mount is used.
+
+Closed NATS copies now invoke the existing closed_copy_preflight and compare
+the frozen source plan/binding/scripts, while allowing the actual closed census
+to differ from the planning observation. This callback's source-authority
+comparison is unit-tested; the populated native-copy fixture explicitly mocks
+that authority boundary and the separate scratch fixture executes real auth.
+The fixed load_rollout_continuation transfers only the existing qualified cut,
+custody, provenance, contract and paused events. Its actual PG/CMS Root Session
+join and altered-event refusal pass (26.721s), with NATS bytes still synthetic.
+
+Remaining: independent review of this immutable producer delta, actual Stage
+bridge continuation composition, and the separately owned native Space24
+adapter/tool publication. No native Space rehearsal or live rollout readiness
+is asserted by these tests. Manual AST refresh remains deferred to the root
+owner's already-running repository graph process.

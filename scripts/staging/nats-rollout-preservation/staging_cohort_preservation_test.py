@@ -16,7 +16,7 @@ import staging_cohort_preservation as preservation
 
 
 class CutEffectTests(unittest.TestCase):
-    def fixture(self, root, before,namespace_uid='namespace'):
+    def fixture(self, root, before,namespace_uid='namespace',preflight=None):
         c=context(); current=card(c)
         journal=resource_claim.RootJournal(root)
         session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
@@ -29,6 +29,9 @@ class CutEffectTests(unittest.TestCase):
         plan.update(schema=preservation.SCHEMA,operation=session.operation,context=c,
             helper_sha256=session.helper,namespace_uid=namespace_uid,actual_before=current['observed']['images'],
             candidate={'commit':c['commit'],'images':c['images']},precut_capture_sha256=preservation.digest(precut))
+        if preflight is not None:
+            plan['preflight_sha256']=preservation.digest(preflight)
+            preservation._write(path/'preflight.json',preflight)
         preservation._write(path/'precut.json',precut)
         preservation._write(path/'checkpoint.json',{'schema':'voice-staging-cohort-preservation-checkpoint-v1','plan':plan})
         session.bind_cohort_preservation(plan,plan['actual_before'])
@@ -266,6 +269,20 @@ class CutEffectTests(unittest.TestCase):
 
 
 class CatalogTests(unittest.TestCase):
+    def test_closed_copy_requalifies_exact_frozen_authority_not_live_census(self):
+        import nats_root_plan
+        original={'plan':{'source':'exact'},'binding':{'source':'exact'},'scripts':{},'live_census_sha256':'precut'}
+        frozen={'nats':original,'enrollment':{},'contract':{}}
+        current={**copy.deepcopy(original),'live_census_sha256':'closed-copy'}
+        session=SimpleNamespace(operation='a'*12)
+        with patch.object(preservation,'load_preflight',return_value=frozen),patch.object(preservation,'revalidate_paused'),\
+            patch.object(nats_root_plan,'closed_copy_preflight',return_value=current) as qualify:
+            self.assertEqual(preservation._closed_copy_authority(session,'runtime','broker',{'tree':1}),current)
+            self.assertEqual(qualify.call_args.args[-3:],('runtime','broker',{'tree':1}))
+            current['binding']={'source':'foreign'}
+            with self.assertRaisesRegex(Exception,'cohort_closed_copy_authority_changed'):
+                preservation._closed_copy_authority(session,'runtime','broker',{'tree':1})
+
     def test_full_catalog_refuses_active_clients_prepared_or_unreadable_database(self):
         import staging_cohort_preservation_pg as pg
         engine={'pod':{'uid':'pod','container_id':'containerd://'+'a'*64,'restart_count':0},'pvc':{'uid':'pvc'},'pv':{'uid':'pv'}}

@@ -36,8 +36,9 @@ PREFIX=['/usr/local/bin/k3s','kubectl','--namespace',NS]
 SCHEMA='voice-staging-cohort-preservation-plan-v1'
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256',
     'approved_sha256','execution_sha256','namespace_uid','precut_capture_sha256',
-    'actual_before','candidate','prerequisite_inputs_sha256','source_inventory_sha256','stores_sha256'}
+    'actual_before','candidate','prerequisite_inputs_sha256','source_inventory_sha256','stores_sha256','preflight_sha256'}
 _terminal_reads=weakref.WeakKeyDictionary()
+_active_auth=weakref.WeakKeyDictionary()
 _shared_cache={}
 
 
@@ -86,7 +87,7 @@ def _source(session,plan):
     custody=_read(parent/'code-custody.json')
     if digest(approved['source_files'])!=plan['source_inventory_sha256']:raise Blocked('cohort_source_changed')
     for filename in ('staging_cohort_preservation.py','staging_cohort_preservation_runtime.py',
-        'staging_cohort_preservation_pg.py','staging_cohort_preservation_auxiliary.py'):
+        'staging_cohort_preservation_pg.py','staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py'):
         name='scripts/staging/nats-rollout-preservation/'+filename
         wanted=approved['source_files'].get(name)
         if (custody['manifest'].get('nats-rollout-preservation/'+filename)!=wanted or wanted is None
@@ -146,6 +147,12 @@ def _observation(session,label,argv,body=b'',*,limit=4<<20,timeout=30,pass_fds=(
 
 
 def _no_pending(session):
+    auth=_base(session)/'auth'
+    if auth.exists():
+        for path in auth.iterdir():
+            value=_read(path)
+            if value.get('status')!='COMPLETE' and _active_auth.get(session)!=value.get('nonce'):
+                raise Blocked('cohort_auth_reconciliation_required')
     folder=_base(session)/'effects'
     if not folder.exists():return
     paths=list(folder.iterdir())
@@ -305,15 +312,18 @@ def _start_cut(actions,request,approved,execution,workspace):
     parent_plan=_read(parent/'prepared.json')['plan']
     stores=_capture_stores(session,stage,request,approved,workspace)
     _write(base/'stores.json',stores)
+    contract=private._json(root_main.public_read(actions.code/'nats-known-baseline'/'deployed-contract.json'))
+    preflight=bridge_root.capture_cohort_authorities(actions,request,approved,workspace,stage,contract)
+    _preflight_shape(preflight,session)
+    _write(base/'preflight.json',preflight);contract=preflight['contract']
     plan={'schema':SCHEMA,'operation':session.operation,'context':session.context,'helper_sha256':session.helper,
         'source_capture_sha256':parent_plan['source_capture_sha256'],'approved_sha256':digest(approved),
         'execution_sha256':digest(execution),'namespace_uid':stage.expected['namespace_uid'],
         'precut_capture_sha256':digest(precut),'actual_before':stage.old_images,
         'candidate':{'commit':session.context['commit'],'images':session.context['images']},
         'prerequisite_inputs_sha256':prepared['inputs_sha256'],'source_inventory_sha256':digest(approved['source_files']),
-        'stores_sha256':digest(stores)}
+        'stores_sha256':digest(stores),'preflight_sha256':digest(preflight)}
     validate_plan(plan,session);_source(session,plan)
-    contract=private._json(root_main.public_read(actions.code/'nats-known-baseline'/'deployed-contract.json'))
     try:enrollment=root_main.private_json(guard.ROOT/'bootstrap-enrollment.json')
     except FileNotFoundError:enrollment=None
     provenance=root_main.capture_inputs(stage.kube,runtime,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
@@ -511,8 +521,10 @@ def load_prepared(session):
     """Fixed authorize input loader; never recapture or accept caller source."""
     plan=load_plan(session);_phase_continuity(session,plan);_no_pending(session)
     approved,execution,prepared=_source(session,plan)
-    if (set(prepared)!={'schema','plan','request'}
+    if (set(prepared)!={'schema','plan','request','gis_authority_sha256'}
         or prepared['schema']!='voice-staging-prerequisites-prepared-v1'
+        or not isinstance(prepared['gis_authority_sha256'],str)
+        or not re.fullmatch('[a-f0-9]{64}',prepared['gis_authority_sha256'])
         or set(prepared['request'])!={'mode','changed_services','gis_first_install'}
         or prepared['request']['mode'] not in ('full','app-only')
         or type(prepared['request']['gis_first_install']) is not bool
@@ -521,6 +533,28 @@ def load_prepared(session):
         raise Blocked('cohort_prepared_inputs_changed')
     return {'request':copy.deepcopy(prepared['request']),'approved':copy.deepcopy(approved),
         'execution':copy.deepcopy(execution),'workspace':str(guard.ROOT/'installed'/'sources'/session.operation)}
+
+
+def _preflight_shape(value,session):
+    if (type(value) is not dict or set(value)!={'schema','operation','services','actor','nats','enrollment','contract'}
+        or value['schema']!='voice-staging-cohort-preflight-v1' or value['operation']!=session.operation
+        or not isinstance(value['services'],list) or len(set(value['services']))!=len(value['services'])
+        or any(not isinstance(name,str) or not re.fullmatch('[a-z0-9-]+',name) for name in value['services'])
+        or any(not isinstance(value[key],dict) for key in ('nats','enrollment','contract'))
+        or value['actor'] is not None and not isinstance(value['actor'],dict)):
+        raise Blocked('cohort_preflight_changed')
+
+
+def load_preflight(session):
+    plan=load_plan(session);_phase_continuity(session,plan)
+    value=_read(_base(session)/'preflight.json');_preflight_shape(value,session)
+    if digest(value)!=plan['preflight_sha256']:raise Blocked('cohort_preflight_changed')
+    return copy.deepcopy(value)
+
+
+def auth_runtime(session,base,kind):
+    from staging_cohort_preservation_auth import ScratchRuntime
+    return ScratchRuntime(session,base,kind)
 
 
 def capture_final_stage(session):
@@ -1001,6 +1035,24 @@ def qualify_decrypted(session,recovered_directory):
         'cipher_members_verified':True,'cleanup':'verified'}
 
 
+def _closed_copy_authority(session,runtime,broker,tree):
+    """Requalify the captured source authority against an owned closed copy."""
+    import compiler
+    import nats_root_plan
+    from stage_runtime import Kube
+    frozen=load_preflight(session);revalidate_paused(session)
+    current=nats_root_plan.closed_copy_preflight(Kube(),
+        guard.ROOT/'installed'/'sources'/session.operation,frozen['enrollment'],
+        frozen['contract'],compiler.decode_yaml,runtime,broker,tree)
+    keys={'plan','binding','scripts','live_census_sha256'}
+    if (set(current)!=keys or set(frozen['nats'])!=keys
+        or any(current[key]!=frozen['nats'][key] for key in keys-{'live_census_sha256'})):
+        raise Blocked('cohort_closed_copy_authority_changed')
+    if load_preflight(session)!=frozen:raise Blocked('cohort_preflight_changed')
+    revalidate_paused(session)
+    return current
+
+
 def _capture_native(session):
     import preserve
     import root_main
@@ -1009,7 +1061,9 @@ def _capture_native(session):
     stage=_paused_stage(session);state=_state(session);base=_runtime_base(session)
     revalidate_paused(session)
     cut=preserve.capture_cut(NativeRuntime(session),stage.final_path,
-        lambda:revalidate_paused(session),live_catalog=transaction.require_original_live_census(stage,state['events']))
+        lambda:revalidate_paused(session),
+        validate=lambda runtime,broker,tree,row,manifest:_closed_copy_authority(session,runtime,broker,tree),
+        live_catalog=transaction.require_original_live_census(stage,state['events']))
     save(base/'rollout-before-manifest.json',cut['manifest'])
     cut['manifest_sha256']=root_main.file_sha(base/'rollout-before-manifest.json')
     _write(_base(session)/'native-cut.json',cut)
@@ -1029,7 +1083,9 @@ def _native_readback(session,archive):
     authority=lambda:revalidate_paused(session)
     states=closed_native_states(runtime,archive,cut['manifest'],cut['census'],authority)
     catalog=native_catalog(runtime,archive,cut['manifest'],authority)
-    observed=observe_copy(runtime,archive,cut['manifest'],'decrypted-readback',authority,native_only=True)
+    observed=observe_copy(runtime,archive,cut['manifest'],'decrypted-readback',authority,
+        validate=lambda runtime,broker,tree,row,manifest,records:_closed_copy_authority(session,runtime,broker,tree),
+        native_only=True)
     verify_catalog(catalog,observed['census'])
     compared,ephemeral=recovered_census(cut['census'],observed['census'],observed['recovery'],cut['manifest'])
     if canonical(cut['census'])!=cut['census_sha256'] or semantic(compared)!=semantic(cut['census']):
@@ -1180,6 +1236,24 @@ def load_qualified(session,*,actual=None,rollout_target=None):
     return copy.deepcopy(receipt)
 
 
+def load_rollout_continuation(session):
+    """Transfer the already qualified cut into the fixed transaction caller."""
+    import root_main
+    from native_store import verify_archive
+    receipt=load_qualified(session);state=_state(session);preflight=load_preflight(session)
+    paused=_read(_base(session)/'paused.json');cut=_read(_base(session)/'native-cut.json')
+    if (state.get('cut')!=cut or state.get('events')!=paused['events']
+        or state.get('contract')!=preflight['contract']
+        or root_main.file_sha(_runtime_base(session)/'rollout-before-manifest.json')!=cut['manifest_sha256']
+        or not verify_archive(_runtime_base(session)/'rollout-before.tar',cut['manifest'])):
+        raise Blocked('cohort_continuation_changed')
+    result={'cut':cut,'custody':_offnode_records(session),'provenance':state['provenance'],
+        'contract':preflight['contract'],'events':paused['events']}
+    if load_qualified(session)!=receipt or _state(session)!=state:
+        raise Blocked('cohort_continuation_changed')
+    return copy.deepcopy(result)
+
+
 def _offnode_records(session):
     """No auxiliary or prerequisite effect can substitute local backup for custody."""
     plan=load_plan(session);base=_base(session);binding=_read(base/'cipher-binding.json')
@@ -1251,7 +1325,8 @@ def validate_historical_capture(operation):
         or captured.get('plan_sha256')!=digest(successor['plan']) or rollout.get('prerequisites')!=captured
         or rollout['target'].get('prerequisites_sha256')!=digest(captured)
         or digest(_read(root/'precut.json'))!=plan['precut_capture_sha256']
-        or digest(_read(root/'stores.json'))!=plan['stores_sha256']):raise Blocked('cohort_history_changed')
+        or digest(_read(root/'stores.json'))!=plan['stores_sha256']
+        or digest(_read(root/'preflight.json'))!=plan['preflight_sha256']):raise Blocked('cohort_history_changed')
     for phase in ('local','offnode'):
         restored=_read(root/(phase+'-restore.json'))
         nonce=restored.get('nonce')

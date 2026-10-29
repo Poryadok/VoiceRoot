@@ -83,7 +83,9 @@ class RestoreTransportTests(unittest.TestCase):
                     patch.object(owner,'revalidate_paused'),patch.object(owner,'shared_module',side_effect=shared),\
                     patch('realtime_bootstrap.engine_snapshot',return_value=(namespace,engine)),\
                     patch.object(commands,'capture',side_effect=capture),patch.object(subprocess,'Popen',side_effect=popen):
-                    session,_=cut_tests.CutEffectTests().fixture(root,before,namespace)
+                    preflight={'schema':'voice-staging-cohort-preflight-v1','operation':'a'*12,
+                        'services':[],'actor':None,'nats':{},'enrollment':{},'contract':{}}
+                    session,_=cut_tests.CutEffectTests().fixture(root,before,namespace,preflight=preflight)
                     owner.private._private_directory(root/'installed'/'sources')
                     owner.private._private_directory(root/'installed'/'sources'/session.operation)
                     with resource_claim.command_scope(session.check):
@@ -114,9 +116,10 @@ class RestoreTransportTests(unittest.TestCase):
                             'census_sha256':'f'*64}
                         binding=owner._encrypt(session,{'dispatcher_run_id':123,'head_sha':session.context['commit']},cut)
                         owner._write(owner._base(session)/'native-cut.json',cut)
-                        owner._write(owner._base(session)/'paused.json',{'external_paused_stage_fixture':True})
+                        owner._write(owner._base(session)/'paused.json',{'external_paused_stage_fixture':True,'events':[]})
                         state=owner._state(session);state.update(status='AWAITING_OFF_NODE',cipher_binding=binding,
-                            initial_resource_fence=session.binding())
+                            initial_resource_fence=session.binding(),cut=cut,events=[],contract={},
+                            provenance={'external_nats_source_fixture':True})
                         owner._save_state(session,state)
                         import bridge_root
                         import github_custody
@@ -137,6 +140,17 @@ class RestoreTransportTests(unittest.TestCase):
                             self.assertEqual(owner.qualify_offnode(actions,request),qualified)
                             self.assertEqual(remote.call_count,1)
                         self.assertEqual(owner.load_qualified(session),qualified)
+                        # NATS bytes are explicitly synthetic here; PG/CMS,
+                        # Session and qualified continuation records are real.
+                        with patch('native_store.verify_archive',return_value=True):
+                            continuation=owner.load_rollout_continuation(session)
+                            self.assertEqual(continuation,{'cut':cut,'custody':custody,
+                                'provenance':{'external_nats_source_fixture':True},'contract':{},'events':[]})
+                            state=owner._state(session);original=copy.deepcopy(state)
+                            state['events']=[{'foreign':'event'}];owner._save_state(session,state)
+                            with self.assertRaisesRegex(Exception,'cohort_continuation_changed'):
+                                owner.load_rollout_continuation(session)
+                            owner._save_state(session,original)
                         restored=owner._read(owner._base(session)/'decrypted-restore.json')
                         self.assertEqual(restored['cohort_readback']['cleanup'],'verified')
                         self.assertNotIn('cohort-before.key',restored['members'])

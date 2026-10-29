@@ -32,7 +32,8 @@ class NativeTransportTests(unittest.TestCase):
             root=Path(directory);(root/'installed').mkdir(mode=0o700)
             before={'metadata':{'name':'voice-user','namespace':'voice-staging','uid':'user',
                 'resourceVersion':'3','generation':1},'spec':{'replicas':1}}
-            with patch.object(guard,'ROOT',root),patch.object(owner,'_source'),patch.object(owner,'revalidate_paused'):
+            with patch.object(guard,'ROOT',root),patch.object(owner,'_source'),patch.object(owner,'revalidate_paused'),\
+                patch.object(owner,'_closed_copy_authority'):
                 session,_=cut_tests.CutEffectTests().fixture(root,before)
                 base=owner._runtime_base(session);base.mkdir(mode=0o700)
                 inputs=base/'inputs';inputs.mkdir(mode=0o700)
