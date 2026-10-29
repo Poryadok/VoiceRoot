@@ -19,6 +19,52 @@ IDENTITY_SQL="""SELECT json_build_object('system_identifier',(pg_control_system(
  'schema_owner',pg_get_userbyid(n.nspowner)) FROM pg_database d CROSS JOIN pg_namespace n
  WHERE d.datname=current_database() AND d.datname='space_db' AND n.nspname='public';"""
 PG_CREDENTIAL_SCRIPT='printf "%s\\n" "$POSTGRES_USER"; printf %s "$POSTGRES_PASSWORD" | sha256sum'
+LIVE_UPGRADE_SCRIPT='''umask 077
+set -C
+/usr/local/bin/native-migrate -mode upgrade-legacy24 -migrations-dir /migrations -migrate /usr/local/bin/migrate -operation-id "$1" -snapshot-id "$2" -origin-evidence /evidence/origin.json > /evidence/completed.jsonl
+sync -f /evidence/completed.jsonl
+sync -f /evidence
+sha256sum /evidence/origin.json /evidence/completed.jsonl
+'''
+LIVE_VERIFY_SCRIPT='''umask 077
+set -C
+/usr/local/bin/native-migrate -mode verify-legacy24 -migrations-dir /migrations -migrate /usr/local/bin/migrate -prior-evidence /evidence/completed.jsonl -origin-evidence /evidence/origin.json > /tmp/verified.json
+sha256sum /evidence/origin.json /evidence/completed.jsonl /tmp/verified.json
+'''
+
+
+def _live_documents(session,tool,node,storage_class,snapshot):
+    """Build only the operation-owned PVC and the two fixed Tool jobs."""
+    operation=session.operation;owner_id=session.context['operation_id']
+    if (not re.fullmatch(r'[a-f0-9]{12}',operation)
+        or not isinstance(node,str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',node)
+        or not isinstance(storage_class,str) or not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',storage_class)
+        or any(not isinstance(value,str) or not re.fullmatch(r'[A-Za-z0-9._:-]{1,256}',value) for value in (owner_id,snapshot))):
+        raise Blocked('space_live_binding_invalid')
+    image=tool['immutable_image'];build=tool['source_inventory']['build_source_sha256']
+    if (not re.fullmatch(r'ghcr\.io/poryadok/voiceroot/space-native-installer@sha256:[a-f0-9]{64}',image)
+        or not re.fullmatch(r'[a-f0-9]{64}',build)):raise Blocked('space_live_tool_invalid')
+    claim='voice-space-native-'+operation;labels={'voice-space-native-operation':operation}
+    pvc={'apiVersion':'v1','kind':'PersistentVolumeClaim','metadata':{'name':claim,'namespace':'voice-staging','labels':labels},
+        'spec':{'accessModes':['ReadWriteOnce'],'storageClassName':storage_class,'resources':{'requests':{'storage':'16Mi'}}}}
+    env=[{'name':'PGHOST','value':'voice-postgres'},{'name':'PGPORT','value':'5432'},
+        {'name':'PGUSER','valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':'POSTGRES_USER'}}},
+        {'name':'PGPASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}},
+        {'name':'PGSSLMODE','value':'disable'},{'name':'SPACE_NATIVE_REQUIRED_SOURCE_SHA256','value':build}]
+    def job(mode):
+        verify=mode=='verify';name=claim+'-'+mode
+        return {'apiVersion':'batch/v1','kind':'Job','metadata':{'name':name,'namespace':'voice-staging','labels':labels},
+            'spec':{'backoffLimit':0,'activeDeadlineSeconds':360,'template':{'metadata':{'labels':labels},'spec':{
+                'nodeName':node,'restartPolicy':'Never','automountServiceAccountToken':False,
+                'securityContext':{'runAsNonRoot':True,'runAsUser':65532,'runAsGroup':65532,'fsGroup':65532},
+                'volumes':[{'name':'evidence','persistentVolumeClaim':{'claimName':claim,'readOnly':verify}},
+                           {'name':'tmp','emptyDir':{}}],
+                'containers':[{'name':'native','image':image,'imagePullPolicy':'IfNotPresent',
+                    'command':['/bin/sh','-ceu',LIVE_VERIFY_SCRIPT if verify else LIVE_UPGRADE_SCRIPT,'native-space',owner_id,snapshot],
+                    'env':copy.deepcopy(env),'volumeMounts':[{'name':'evidence','mountPath':'/evidence','readOnly':verify},
+                        {'name':'tmp','mountPath':'/tmp'}],
+                    'securityContext':{'allowPrivilegeEscalation':False,'readOnlyRootFilesystem':True,'capabilities':{'drop':['ALL']}}}]}}}}
+    return {'pvc':pvc,'upgrade':job('upgrade'),'verify':job('verify')}
 
 
 def _identity(session,kube):

@@ -12,6 +12,29 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_live_documents_keep_private_evidence_on_owned_volume(self):
+        session=SimpleNamespace(operation='a'*12,context={'operation_id':'stg-run-17'})
+        tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+              'source_inventory':{'build_source_sha256':'d'*64}}
+        docs=native._live_documents(session,tool,'node-a','local-path','snapshot-1')
+        pvc=docs['pvc'];self.assertEqual(pvc['spec']['storageClassName'],'local-path')
+        self.assertEqual(pvc['spec']['accessModes'],['ReadWriteOnce'])
+        self.assertNotIn('volumeName',pvc['spec']);self.assertNotIn('dataSource',pvc['spec'])
+        for mode in ('upgrade','verify'):
+            spec=docs[mode]['spec']['template']['spec'];container=spec['containers'][0]
+            self.assertEqual(spec['nodeName'],'node-a');self.assertFalse(spec['automountServiceAccountToken'])
+            self.assertEqual(spec['securityContext']['runAsUser'],65532)
+            self.assertEqual(spec['volumes'][0]['persistentVolumeClaim']['claimName'],pvc['metadata']['name'])
+            self.assertEqual(spec['volumes'][0]['persistentVolumeClaim']['readOnly'],mode=='verify')
+            self.assertEqual(container['image'],tool['immutable_image']);self.assertTrue(container['securityContext']['readOnlyRootFilesystem'])
+            self.assertFalse(any('hostPath' in row for row in spec['volumes']))
+        self.assertIn('set -C',native.LIVE_UPGRADE_SCRIPT)
+        self.assertIn('> /evidence/completed.jsonl',native.LIVE_UPGRADE_SCRIPT)
+        self.assertIn('sync -f /evidence/completed.jsonl',native.LIVE_UPGRADE_SCRIPT)
+        self.assertNotIn('cat ',native.LIVE_VERIFY_SCRIPT)
+        with self.assertRaisesRegex(native.Blocked,'space_live_binding_invalid'):
+            native._live_documents(session,tool,'node-a','local-path','$(foreign)')
+
     def test_changed_namespace_blocks_before_job_effect(self):
         kube=Mock();kube.get.return_value={}
         with patch.object(native.owner,'_guard',return_value={'namespace_uid':'original'}), \
