@@ -50,6 +50,7 @@ KNOWN_HOLDS = frozenset({'source_identity_invalid','source_authority_failed','sp
     'source_snapshot_changed','destination_invalid','destination_changed','public_write_failed'})
 STAGE_HOLDS = frozenset({'p3_stage_source','p3_stage_workload','p3_stage_pod','p3_stage_mount',
     'p3_stage_service','p3_stage_public_identity','p3_stage_public_value','p3_stage_public_pem',
+    'p3_stage_principal_ca_identity','p3_stage_media_ca_identity','p3_stage_space_cert_identity',
     'p3_stage_config','p3_stage_recheck','p3_stage_destination','p3_stage_write','p3_stage_crypto',
     'p3_stage_postcheck'})
 
@@ -208,6 +209,42 @@ def _signer_identity(run,guard):
             'keys':[name for name,present in zip(('current.pem','next.pem','active-kid'),lines[2:]) if present=='1']}
 
 
+def observe_signer(source_root,source_sha,source_authority,space_pod,namespace_uid,claim_guard,
+                   run_bytes=common.linux_private_bytes):
+    """Prepare-only signer metadata; never reads Secret values or issues keys."""
+    try:
+        if not isinstance(source_sha,str) or not re.fullmatch(r'[a-f0-9]{40}',source_sha) or not namespace_uid: raise ValueError()
+        def guard():
+            common._fence(claim_guard)
+            try:
+                raw=common._external(run_bytes,['kubectl','--kubeconfig','/home/pmd/.kube/config','--context','default',
+                    '--request-timeout=15s','get','namespace','voice-dev','-o','json'])
+                meta=json.loads(raw)['metadata']
+                if meta.get('name')!='voice-dev' or meta.get('uid')!=namespace_uid: raise ValueError()
+            except Exception: raise common.GuardLost('namespace_guard_failed') from None
+            common._fence(claim_guard)
+        def authorize():
+            if common._external(source_authority,source_sha) is False: raise ValueError()
+        guard(); authorize(); snapshot=source_snapshot(Path(source_root),source_sha); _source_contract(source_root,snapshot)
+        workload=common.kube_workload_snapshot('space',space_pod,run_bytes,guard); before=workload()
+        pod=_get(run_bytes,guard,'pod',space_pod)
+        if pod['metadata'].get('uid')!=before['pod_uid'] or pod['metadata'].get('resourceVersion')!=before['pod_rv']: raise ValueError()
+        signer={'configuration':_signer_categories(pod),'secret':_signer_identity(run_bytes,guard)}
+        config=_env_categories(pod)
+        try: _mount(pod); config['space_mount']='exact'
+        except common.Hold: config['space_mount']='mismatch'
+        if workload()!=before or _signer_identity(run_bytes,guard)!=signer['secret']: raise ValueError()
+        authorize()
+        if source_snapshot(Path(source_root),source_sha)!=snapshot: raise ValueError()
+        guard()
+        return {'status':'observed','source_sha':source_sha,'namespace_uid':namespace_uid,
+                'space_identity':{k:before[k] for k in ('pod_uid','pod_rv','deployment_uid','deployment_rv','container_id','restart_count')},
+                'current_space_config':config,'current_signer':signer,'scope':'signer-metadata-only',
+                'admission_qualified':False}
+    except common.GuardLost: raise
+    except Exception: raise common.Hold('signer_observation_failed') from None
+
+
 def _service(service, pod):
     meta, spec = service['metadata'], service['spec']
     if meta.get('name') != 'voice-space' or meta.get('namespace') != 'voice-dev': raise common.Hold('space_service_invalid')
@@ -295,8 +332,15 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
         stage = 'p3_stage_service'
         service = _service(_get(run_bytes, guard, 'service', 'voice-space'), pod) if mode == 'serving' else None
         identities, values = {}, {}
+        stages={'voice-principal-ca':'p3_stage_principal_ca_identity',
+                'voice-media-ca':'p3_stage_media_ca_identity','voice-space-media-server-tls':'p3_stage_space_cert_identity'}
         for name, (key, _) in PUBLIC.items():
-            stage = 'p3_stage_public_identity'; identities[name] = _meta(run_bytes, guard, 'secret', name)
+            stage = stages[name]
+            try: identities[name] = _meta(run_bytes, guard, 'secret', name)
+            except common.GuardLost: raise
+            except common.Hold as error:
+                if str(error)=='public_input_identity': raise common.Hold(stage) from None
+                raise
             stage = 'p3_stage_public_value'; values[name] = _value(run_bytes, guard, 'secret', name, key)
             stage = 'p3_stage_public_pem'; _public_pem(values[name])
         stage = 'p3_stage_config'

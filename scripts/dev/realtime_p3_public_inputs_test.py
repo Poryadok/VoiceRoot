@@ -239,7 +239,7 @@ class CaptureTests(unittest.TestCase):
     def test_unknown_prewrite_failures_report_only_fixed_stage(self):
         faults = [('source_contract','_source_contract','p3_stage_source'),
                   ('pod','_get','p3_stage_pod'),('mount','_mounted','p3_stage_mount'),
-                  ('identity','_meta','p3_stage_public_identity'),('value','_value','p3_stage_public_value'),
+                  ('identity','_meta','p3_stage_principal_ca_identity'),('value','_value','p3_stage_public_value'),
                   ('pem','_public_pem','p3_stage_public_pem')]
         for label, symbol, code in faults:
             with self.subTest(stage=label):
@@ -255,6 +255,21 @@ class CaptureTests(unittest.TestCase):
         with patch.object(capture,'_mounted',side_effect=capture.common.Hold('private-sentinel')):
             with self.assertRaises(capture.common.Hold) as error: self.invoke(dest)
         self.assertEqual(str(error.exception),'p3_stage_mount')
+
+    def test_signer_metadata_remains_available_when_public_identity_fails(self):
+        snap={'source_sha':'a'*40,'files':{'deploy/staging/services.yaml':self.manifest_sha}}
+        with patch.object(capture,'source_snapshot',return_value=snap),patch.object(capture,'SPACE_DOCUMENT_SHA',self.document_sha), \
+             patch.object(capture.common,'kube_workload_snapshot',return_value=lambda:dict(self.identity)):
+            result=capture.observe_signer(self.root,'a'*40,lambda _:None,'voice-space-abc','ns',lambda:None,self.runner)
+        self.assertEqual(result['scope'],'signer-metadata-only'); self.assertFalse(result['admission_qualified'])
+        self.assertEqual(result['current_signer']['secret']['state'],'present')
+        self.assertNotIn('PRIVATE KEY',repr(result))
+        dest=self.root/'missing-ca'; dest.mkdir(mode=0o700)
+        def runner(args):
+            if 'voice-media-ca' in args and any('.metadata.uid' in a for a in args): return b''
+            return self.runner(args)
+        with self.assertRaisesRegex(capture.common.Hold,'p3_stage_media_ca_identity'):
+            self.invoke(dest,runner=runner,mode='issuer-plan')
 
     def test_restart_and_source_authority_fail_closed(self):
         dest = self.root / 'private'; dest.mkdir(mode=0o700)
