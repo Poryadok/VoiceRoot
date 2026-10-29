@@ -1,4 +1,7 @@
 import copy
+import base64
+import hashlib
+import sys
 import types
 import unittest
 from unittest import mock
@@ -10,6 +13,8 @@ import full_cohort_inventory_phase
 import writer_cut_pg_probe
 import auth_live_migration_phase
 import media_operation_journal
+import realtime_db_provision
+import resource_fencing
 from pathlib import Path
 
 
@@ -260,6 +265,20 @@ class MigrationCutTest(unittest.TestCase):
             self.state['execution']['database_oid'] = 11
             with self.assertRaises(writer_cut.RecoveryRequired): self.cut._guards()
 
+    def test_history_only_new_session_after_preflight_blocks_first_cas(self):
+        self.cut.migration_history = [{'fixture': True}]
+        self.cut.resume_inventory = {'fixture': True}
+        scope = self.admission['session_scope']
+        zero = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
+        busy = {'scope': scope, 'active_sessions': 1, 'active_transactions': 1}
+        before = len(self.client.patches)
+        targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
+        with mock.patch.object(self.cut, '_guards'), mock.patch.object(self.cut, '_resume_inventory_matches', return_value=True), \
+             mock.patch.object(self.cut, '_session_observation', side_effect=[zero, busy]):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.assertEqual(len(self.client.patches), before)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
     def test_completed_auth_successor_rechecks_source_journal_and_ledger(self):
         source = media_operation_journal.Journal(Path(self.temp.name) / 'auth-successor', {
             'resource_context': self.context, 'namespace_uid': 'ns'})
@@ -293,6 +312,11 @@ class EffectiveScopeTest(unittest.TestCase):
                       'execution': {'database': 'realtime_db', 'database_oid': 13, 'role': 'realtime'}}
         self.cut.migration = {'kind': 'realtime', 'phase': phase, 'root': '.', 'finished': True,
                               'terminal': self.state['terminal']}
+        self.cut.provision_successor = {'fixture': True}
+        provisioned = scope | {'databases': ['auth_db', 'realtime_db'],
+                               'database_oids': {'auth_db': 10, 'realtime_db': 13}}
+        provision_patch = mock.patch.object(self.cut, 'current_provisioned_session_scope', return_value=provisioned)
+        provision_patch.start(); self.addCleanup(provision_patch.stop)
         self.ledger.row['realtime_migration'] = {'status': 'done'}
         patches = [mock.patch.object(migration, 'normalized', side_effect=lambda *args: (None, copy.deepcopy(self.state))),
                    mock.patch.object(migration, 'observe', side_effect=lambda *args, **kwargs: (copy.deepcopy(self.state), None)),
@@ -321,6 +345,126 @@ class EffectiveScopeTest(unittest.TestCase):
         self.state['execution']['database_oid'] = 10
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_realtime_scope()
         self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+
+class ProvisionScopeTest(unittest.TestCase):
+    def setUp(self):
+        fixture.WriterCutTest.setUp(self)
+        scope = {'engine': {'pod_uid': 'p'}, 'databases': ['auth_db'], 'database_oids': {'auth_db': 10}, 'server_start': 'start'}
+        self.admission['session_scope'] = copy.deepcopy(scope); self.cut.admission = copy.deepcopy(self.admission)
+        self.journal.intent['writer_cut'] = copy.deepcopy(self.admission); self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        self.cut.intent = copy.deepcopy(self.journal.intent); self.cut.drain()
+        password = b'fixtureCredential_123456789012345678901234'
+        secret = {'name': 'voice-realtime-db-fixture', 'uid': 'secret', 'resourceVersion': '10',
+                  'password_sha256': hashlib.sha256(password).hexdigest()}
+        source = media_operation_journal.Journal(Path(self.temp.name) / 'actual-provision', {
+            'resource_context': self.context, 'namespace_uid': 'ns', 'postgres': {'pod_uid': 'p'}, 'realtime_credential': secret})
+        self.addCleanup(source.close)
+        client = copy.copy(self.client); client.journal = source
+        original = self.client.call
+        url = 'postgres://realtime:' + password.decode() + '@voice-postgres:5432/realtime_db?sslmode=disable'
+        def call(*args):
+            if args[1] == 'secret':
+                return {'metadata': {'name': secret['name'], 'namespace': 'voice-dev', 'uid': secret['uid'],
+                    'resourceVersion': secret['resourceVersion']}, 'immutable': True, 'type': 'Opaque',
+                    'data': {'DATABASE_URL': base64.b64encode(url.encode()).decode()}}
+            return original(*args)
+        client.call = call; backing = self.ledger
+        class LedgerView:
+            def __init__(inner): inner.client = client
+            def read(inner): return backing.read()
+            def write(inner, revision, row): return backing.write(revision, row)
+        fence = resource_fencing.Fence(self.context, lambda: copy.deepcopy(self.card), LedgerView())
+        class Postgres:
+            def __init__(inner): inner.state = {'role': None, 'database': None}
+            def snapshot(inner): return {'pod_uid': 'p'}
+            def catalog(inner): return copy.deepcopy(inner.state)
+            def execute(inner, sql):
+                if sql == realtime_db_provision.database_sql(): inner.state['database'] = {'oid': 13, 'owner_oid': 12}
+                else: inner.state['role'] = {'oid': 12, 'login': True, 'superuser': False, 'createdb': False,
+                    'createrole': False, 'inherit': False, 'replication': False, 'bypassrls': False, 'memberships': 0,
+                    'connection_limit': -1, 'valid_until': None, 'config': None}
+        self.pg = Postgres()
+        self.phase = realtime_db_provision.Provision(source, fence, client, self.lock, 'ns', self.pg, password)
+        patches = [mock.patch.object(resource_fencing, 'KubeLedger', LedgerView),
+                   mock.patch.object(realtime_db_provision, 'KubePostgres', Postgres)]
+        for patcher in patches: patcher.start(); self.addCleanup(patcher.stop)
+        self.phase.run()
+        self.expanded = scope | {'databases': ['auth_db', 'realtime_db'], 'database_oids': {'auth_db': 10, 'realtime_db': 13}}
+
+    def test_actual_provision_scope_binds_before_migration_and_rechecks(self):
+        import full_cohort_affected_plan
+        result = {'scope': self.expanded, 'active_sessions': 0, 'active_transactions': 0}
+        with mock.patch.object(full_cohort_affected_plan, 'inspect_provisioned', return_value=result, create=True):
+            self.cut.bind_provision_scope(self.phase)
+            self.assertEqual(self.cut.verify_drained(), result)
+            self.assertEqual(self.cut.current_provisioned_session_scope(), self.expanded)
+            self.pg.state['database']['oid'] = 14
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_drained()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_provision_only_cannot_resume_before_completed_migration(self):
+        import full_cohort_affected_plan
+        result = {'scope': self.expanded, 'active_sessions': 0, 'active_transactions': 0}
+        with mock.patch.object(full_cohort_affected_plan, 'inspect_provisioned', return_value=result, create=True):
+            self.cut.bind_provision_scope(self.phase)
+            self.cut.resume_inventory = {'fixture': True}
+            before = len(self.client.patches)
+            targets = [copy.deepcopy(obj) for obj in self.client.workloads.values()]
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.resume(targets)
+        self.assertEqual(len(self.client.patches), before)
+
+
+class CatalogBracketTest(unittest.TestCase):
+    def test_catalog_change_during_migration_sample_holds(self):
+        scope = {'database_oids': {'auth_db': 10}}
+        cut = types.SimpleNamespace(admission={'session_scope': scope}, probe=object(), _guard=lambda: None)
+        state = {'execution': {'database': 'auth_db', 'database_oid': 10, 'role': 'voice', 'application_name': 'auth'}}
+        records = [{'scope': scope, 'catalog': {'auth_db': 10}},
+                   {'scope': scope, 'catalog': {'auth_db': 10, 'new_db': 11}}]
+        affected = types.SimpleNamespace(verify_migration_catalog=mock.Mock(side_effect=records))
+        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.dict(sys.modules, {'full_cohort_affected_plan': affected}), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+            with self.assertRaisesRegex(ValueError, 'catalog changed'):
+                migration.sessions(cut, state, None)
+            affected.verify_migration_catalog.side_effect = [records[0], records[0]]
+            self.assertEqual(migration.sessions(cut, state, None), receipt)
+        self.assertEqual(affected.verify_migration_catalog.call_count, 4)
+
+
+class RealCatalogBracketTest(unittest.TestCase):
+    def setUp(self):
+        fixture.WriterCutTest.setUp(self)
+
+    def test_actual_catalog_wrapper_rejects_new_database_during_sample(self):
+        import full_cohort_affected_plan as affected
+        scope = {'engine': {'uid': 'pg'}, 'databases': ['auth_db'], 'database_oids': {'auth_db': 10}, 'server_start': 'start'}
+        self.admission['session_scope'] = copy.deepcopy(scope)
+        self.journal.intent['writer_cut'] = copy.deepcopy(self.admission)
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        baseline = {'engine': scope['engine'], 'server_start': 'start', 'all_databases': {'auth_db': 10},
+                    'excluded': {}, 'properties': {'auth_db': {'owner': 1}}}
+        class Catalog:
+            def verify_receipt(inner, token): return copy.deepcopy(baseline)
+        catalog = Catalog()
+        with mock.patch.object(affected, 'FullCatalogPhase', Catalog):
+            probe = affected.CatalogScopedProbe(catalog, 'token')
+        cut = writer_cut.WriterCut(self.journal, self.fence, self.client, self.lock, 'ns', self.admission, probe)
+        execution = {'database': 'realtime_db', 'database_oid': 13, 'role': 'realtime', 'application_name': 'fixture'}
+        state = {'execution': execution, 'stable': {'nonce': 'a' * 32}}
+        cut.migration = {'kind': 'realtime', 'phase': object(), 'root': '.',
+                         'plan': {'execution': execution, 'stable': state['stable']}}
+        current = {'all_databases': {'auth_db': 10, 'realtime_db': 13}, 'excluded': {},
+                   'properties': {'auth_db': {'owner': 1}}, 'databases': {'realtime_db': 13}}
+        changed = copy.deepcopy(current); changed['all_databases']['foreign_db'] = 14
+        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.object(migration, 'normalized', return_value=(None, state)), \
+             mock.patch.object(affected, '_full_catalog', side_effect=[copy.deepcopy(current), copy.deepcopy(current),
+                                                                        copy.deepcopy(current), changed]), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+            self.assertEqual(migration.sessions(cut, state, None), receipt)
+            with self.assertRaises(affected.AffectedError): migration.sessions(cut, state, None)
 
 
 if __name__ == '__main__': unittest.main()

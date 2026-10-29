@@ -77,7 +77,11 @@ POST; later IP/application-name matching correlates sessions and does not prove
 cryptographic peer identity or provide atomic revocation. Unknown or ambiguous
 network attribution holds the operation.
 
-After a completed Realtime migration, `bind_realtime_scope()` binds its actual
+After create-only Realtime provisioning and before migration initialization,
+`bind_provision_scope(phase)` verifies the fixed provision source and records the
+new DB OID against the initial catalog. All later zero samples use the fixed
+full-catalog provisioned observer. Provisioning alone cannot authorize writer
+resume. After a completed Realtime migration, `bind_realtime_scope()` binds its actual
 database OID to the original pinned engine and scope. The original databases and
 OIDs remain intact; `current_effective_session_scope()` revalidates the completed
 source record and recomputes the only allowed addition. A Realtime writer without
