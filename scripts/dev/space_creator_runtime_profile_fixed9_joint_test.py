@@ -8,6 +8,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -15,6 +16,9 @@ from unittest.mock import Mock, patch
 import dev_peer_issuer_metadata as metadata
 import dev_peer_issuer_client as issuer_client
 import dev_peer_issuer_service as service
+import dev_realtime_p3_issuer_capability as p3_capability
+import dev_realtime_p3_issuer_client as p3_client
+import dev_realtime_p3_issuer_service as p3_service
 import frontend_runtime_executor as transport
 import full_cohort_package_phase as package
 import media_operation_journal as journals
@@ -115,7 +119,8 @@ class ThreeProfileTest(unittest.TestCase):
             home=Path('/home/pmd'); home.mkdir(mode=0o700); os.chown(home,1000,1000)
             self.addCleanup(shutil.rmtree,home)
             base=home/'voice-dev-peer-issuer'; operations=base/'operations'; operation=operations/('a'*32)
-            for path in (base,operations,operation):path.mkdir(mode=0o700); os.chown(path,1000,1000)
+            preflight_root=base/'preflight'; preflight_op=preflight_root/('a'*32); realtime_dir=preflight_op/'realtime'
+            for path in (base,operations,operation,preflight_root,preflight_op,realtime_dir):path.mkdir(mode=0o700); os.chown(path,1000,1000)
             socket_path=user/'service.sock'; listener=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
             listener.bind(str(socket_path)); os.chown(socket_path,1000,1000); os.chmod(socket_path,0o600); listener.listen(1); listener.settimeout(45)
             pid=os.fork()
@@ -151,10 +156,21 @@ class ThreeProfileTest(unittest.TestCase):
                         j.state['steps'][pre.step]=copy.deepcopy(pre.record)|{'receipt':copy.deepcopy(initial)}; backing.row[pre.ledger]=copy.deepcopy(pre.record)
                         return pre
                     with patch.object(delegated,'ROOT',operations),patch.object(role,'ROOT',operations),patch.object(role.canonical,'ROOT',case.root), \
+                         patch.object(p3_capability,'SOCKET_ROOT',preflight_root), \
                          patch.object(role.source,'verify'),patch.object(issuer_client,'SOCKET',str(socket_path)), \
                          patch.object(delegated.preflight.public,'_value',return_value=media), \
                          patch.object(role,'_get',side_effect=lambda name:copy.deepcopy(case.actual.get(name))), \
                          patch.object(role,'_create',side_effect=lambda obj,dry:case.create(obj,'role',dry)):
+                        cap=p3_capability.RealtimeP3Capability(case.preflight,'token'); case.addCleanup(cap.close)
+                        principal={'uid':'principal','resourceVersion':'1','der_sha256':'b'*64}
+                        seven={kind+'/'+name:{'state':'absent'} for kind,name in p3_service.metadata.MEMBERS}
+                        cap._principal=Mock(return_value=copy.deepcopy(principal)); cap._seven=Mock(return_value=copy.deepcopy(seven))
+                        cap.prepare(); handle=p3_client.new_capability_trigger(cap,'token'); result=[]
+                        def start_capability():
+                            try:handle.run(); result.append(True)
+                            except BaseException:result.append(False)
+                        trigger=threading.Thread(target=start_capability); trigger.start(); cap_receipt=cap.finish(); trigger.join(45)
+                        if trigger.is_alive() or result!=[True]:raise ValueError('capability trigger')
                         creator=case.phase; creator.run()
                         pre=fresh('space'); intent=base_intent|{'peer_receiver':{'profile':'space','source_sha':case.base.context['commit']}}
                         j,c,f=attach('space-receiver',intent)
@@ -162,6 +178,12 @@ class ThreeProfileTest(unittest.TestCase):
                         pre=fresh('role'); j,c,f=attach('role-receiver',base_intent)
                         role_phase=role.Session(j,f,c,case.base.lock,'ns',case.package,pre,case.root,'token')
                         role_phase.prepare(); role_phase.run()
+                        if p3_capability.verify_current(cap,'token')!=cap_receipt:raise ValueError('capability changed')
+                        changed=copy.deepcopy(seven); changed[next(iter(changed))]={'state':'present'}
+                        cap._seven.return_value=changed
+                        try:p3_capability.verify_current(cap,'token'); raise AssertionError('P3 drift accepted')
+                        except p3_capability.CapabilityError:pass
+                        cap._seven.return_value=copy.deepcopy(seven)
                         trust=target.TargetTrustPhase.__new__(target.TargetTrustPhase)
                         trust.package=case.package; trust.lock=case.base.lock; trust.namespace_uid='ns'; trust.fence=creator.fence
                         trust.preflight=creator.preflight; trust._guard=Mock(); trust._local=Mock(); trust._ledger=backing.read
@@ -178,9 +200,12 @@ class ThreeProfileTest(unittest.TestCase):
                     if case is not None and not case.doCleanups():ok=False
                 os._exit(0 if ok else 1)
             try:
+                def p3_observe(namespace,context,lock,media_ref,principal_ref,space_ref=None):
+                    return {kind+'/'+name:{'state':'absent'} for kind,name in p3_service.metadata.MEMBERS},{}
                 with patch.object(service,'ROOT',issue),patch.object(service,'BASE',base),patch.object(service.custody,'ARCHIVE',archive), \
+                     patch.object(p3_service.metadata,'observe',side_effect=p3_observe), \
                      patch.object(service.authority,'verify'),patch.object(service,'_guard'),patch.object(service.root_export,'_pmd_uid',return_value=1000):
-                    for _ in range(3):
+                    for _ in range(4):
                         connection,_=listener.accept()
                         with connection:service.serve(connection)
                 _,status=os.waitpid(pid,0); pid=None
