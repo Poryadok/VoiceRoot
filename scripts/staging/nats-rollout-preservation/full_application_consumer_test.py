@@ -6,12 +6,49 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import apply
+import bridge_root
 import gis_first_install
 import normalize
 from full_application_compiler_test import FullApplicationCompilerTests
 
 
 class FullApplicationConsumerTests(unittest.TestCase):
+    def test_three_selected_images_remain_selective_with_full_build_request(self):
+        fixture=FullApplicationCompilerTests('test_full23_cold_gis_defers_only_create_pair')
+        fixture.setUp();self.addCleanup(fixture.doCleanups)
+        kube,parameters=fixture.inputs(mode='images-only')
+        selected={'analytics','chat','voice'};parameters['changed_services']=sorted(selected)
+        parameters['images']={key:value for key,value in parameters['images'].items()
+                              if key.split('/',1)[0] in {'voice-'+name for name in selected}}
+        unchanged={key:copy.deepcopy(row) for key,row in kube.objects.items()
+                   if key[0]=='Deployment' and key[1] not in {'voice-'+name for name in selected}}
+        pack=fixture.compile(kube,parameters);target=pack['target']
+        self.assertNotIn('.github/ci/full-application-build-request.json',target['source_hashes'])
+        self.assertEqual(set(target['template_hashes']),{'voice-'+name for name in selected})
+        original_get=kube.get;original_run=kube.run
+        ids={identity:str(uuid.uuid4()) for identity in kube.objects}
+        def get(kind,name):
+            kind=next((value for value,_ in kube.objects if value.lower()==kind.lower()),kind)
+            value=original_get(kind,name);value['metadata']['uid']=ids[kind,name];return value
+        def run(args,body=None,timeout=30):
+            value=original_run(args,body,timeout)
+            if args[0]=='apply' and '--dry-run=server' in args:
+                value['metadata']['uid']=ids[value['kind'],value['metadata']['name']]
+            return value
+        kube.get=get;kube.run=run
+        snapshots={name:get('Deployment',name) for kind,name in kube.objects if kind=='Deployment'}
+        stage=SimpleNamespace(snapshots=snapshots,old_images={},expected={'source_claim':parameters['dataPVC']})
+        rows,target=normalize.image_only_documents(stage,pack['manifests'],target)
+        normalized=normalize.normalize_target(kube,stage,rows,target)
+        paused=apply.paused_documents(rows,{'target':normalized,'pvc':{'name':parameters['dataPVC']}})
+        self.assertEqual({row['metadata']['name'] for row in paused},{'voice-'+name for name in selected})
+        self.assertEqual(set(normalized['images']),set(parameters['images']))
+        self.assertEqual({key:kube.objects[key] for key in unchanged},unchanged)
+        actions=object.__new__(bridge_root.Actions)
+        with patch.object(bridge_root,'staging_core_release',create=True) as release:
+            actions._finish_core_proofs({'target':normalized})
+            release.assert_not_called()
+
     def test_full_gis_keeps_other_workloads_and_rejects_generic_gis_pair(self):
         fixture=FullApplicationCompilerTests('test_full23_cold_gis_defers_only_create_pair')
         fixture.setUp();self.addCleanup(fixture.doCleanups)
