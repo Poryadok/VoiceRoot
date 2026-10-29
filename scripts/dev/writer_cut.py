@@ -999,7 +999,7 @@ class WriterCut:
             module, state = migration.normalized(self, binding['kind'], binding['phase'], binding['root'])
             if not state['terminal'] or state['job']['state'] not in ('owned', 'done'):
                 raise RecoveryRequired('migration terminal receipt absent')
-            if binding['kind'] == 'auth':
+            if binding['kind'] in ('auth', 'go'):
                 terminal = module.verify_writer_terminal(binding['phase'], binding['root'])
             else:
                 terminal = binding['phase'].journal.state['steps']['job']['receipt']
@@ -1022,7 +1022,7 @@ class WriterCut:
         import writer_cut_migration as migration
         try:
             binding = self.migration
-            if binding is None or not binding['finished'] or binding['kind'] != 'auth':
+            if binding is None or not binding['finished'] or binding['kind'] not in ('auth', 'go'):
                 raise RecoveryRequired('migration cleanup unavailable')
             module, state = migration.normalized(self, binding['kind'], binding['phase'], binding['root'])
             module.verify_writer_cleanup(binding['phase'], binding['root'])

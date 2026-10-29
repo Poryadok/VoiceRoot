@@ -11,10 +11,12 @@ import re
 import frontend_runtime_executor
 import full_cohort_affected_plan
 import full_cohort_inventory_phase
+import full_cohort_namespace_census
 import full_cohort_package_phase
 import media_backup_upload_runner
 import media_operation_guard
 import media_operation_journal
+import realtime_absent_phase
 import resource_fencing
 import story_media_backup
 
@@ -42,13 +44,18 @@ class Supervisor:
         self.journal, self.fence, self.client = journal, fence, client
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.context = copy.deepcopy(fence.context)
+        self.intent = copy.deepcopy(journal.intent)
+        self._journal, self._fence, self._client = journal, fence, client
         self._check = fence.check
         self.journals = []
-        self.package = self.inventory = self.catalog = None
+        self.package = self.inventory = self.catalog = self.realtime_absent = self.census = None
         self._guard()
 
     def _guard(self):
-        if (self.journal.poisoned or self.journal.intent.get('resource_context') != self.context or
+        if (self.journal is not self._journal or self.fence is not self._fence or self.client is not self._client or
+                self.journal.poisoned or self.journal.intent != self.intent or
+                self.journal.state.get('intent') != self.intent or
+                self.journal.intent.get('resource_context') != self.context or
                 self.journal.intent.get('namespace_uid') != self.namespace_uid or
                 self.fence.context != self.context or self.client.journal is not self.journal or
                 self.fence.ledger.client is not self.client or self.fence.check is not self._check or
@@ -59,7 +66,7 @@ class Supervisor:
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
 
     def _open(self, name, extra):
-        if name not in ('package-journal', 'inventory-journal', 'catalog-journal'):
+        if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal', 'namespace-census-journal'):
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']
@@ -88,9 +95,20 @@ class Supervisor:
         self.inventory = full_cohort_inventory_phase.InventoryPhase(journal, fence, client, self.lock,
                                                                      self.namespace_uid, self.package)
         self.inventory.run(token)
+        journal, fence, client = self._open('namespace-census-journal', {})
+        self.census = full_cohort_namespace_census.NamespaceCensus(journal,fence,client,self.lock,
+                                                                    self.namespace_uid,self.package,self.inventory)
+        self.census.run(token)
         journal, fence, client = self._open('catalog-journal', {})
         self.catalog = full_cohort_affected_plan.FullCatalogPhase(journal, fence, client, self.lock,
                                                                   self.namespace_uid, self.inventory)
         self.catalog.run(token)
+        observations=self.inventory.verify_receipt(token)['database_observations']['workloads']['realtime']
+        if (observations and all(item.get('status')=='hold' and item.get('reason')=='database_configuration_missing'
+                                 for item in observations)):
+            journal,fence,client=self._open('realtime-absence-journal',{})
+            self.realtime_absent=realtime_absent_phase.RealtimeAbsentPhase(journal,fence,client,self.lock,
+                self.namespace_uid,self.inventory,self.catalog)
+            self.realtime_absent.run(token)
         self._guard()
-        return full_cohort_affected_plan.build(self.package, self.inventory, token, self.catalog)
+        return full_cohort_affected_plan.build(self.package,self.inventory,token,self.catalog,self.realtime_absent)

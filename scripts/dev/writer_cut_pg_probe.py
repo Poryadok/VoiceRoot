@@ -91,7 +91,11 @@ def inspect_migration(scope, identity, guard):
                     re.fullmatch(r'voice-realtime-migrate-[0-9a-f]{32}',item['application_name']))
         auth = (item['database']=='auth_db' and item['role']=='voice' and
                 re.fullmatch(r'voice-au-au-[0-9a-f]{28}-migrate-auth',item['application_name']))
-        if not (realtime or auth): raise ProbeError('migration identity invalid')
+        import full_cohort_go_migration_plan
+        go = (item['database'] in full_cohort_go_migration_plan.DATABASES and
+              isinstance(item['role'],str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]{0,62}',item['role']) and
+              re.fullmatch(r'voice-go-migrate-'+re.escape(item['database'][:-3])+r'-[0-9a-f]{32}',item['application_name']))
+        if not (realtime or auth or go): raise ProbeError('migration identity invalid')
         has_pod = item['pod_uid'] is not None or item['pod_ip'] is not None
         if has_pod and (not isinstance(item['pod_uid'],str) or not item['pod_uid'] or
                 not isinstance(item['pod_ip'],str) or str(ipaddress.ip_address(item['pod_ip']))!=item['pod_ip']):
