@@ -30,7 +30,7 @@ ROLLOUT+=('realtime_bootstrap.py','realtime_bootstrap_existing.py')
 ROLLOUT+=('staging_prerequisites.py','staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
     'staging_gis_material.py','staging_release_policy_prepare.py')
 ROLLOUT+=('staging_cohort_preservation.py','staging_cohort_preservation_pg.py','staging_cohort_preservation_runtime.py',
-    'staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py')
+    'staging_cohort_preservation_auxiliary.py','staging_cohort_preservation_auth.py','staging_cohort_preservation_space.py')
 
 def build(kernel,output,renewer,story_probe):
     source=Path(__file__).resolve().parents[1];kernel=Path(kernel);output=Path(output)
