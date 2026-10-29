@@ -15,7 +15,7 @@ import staging_cohort_preservation as preservation
 
 
 class CutEffectTests(unittest.TestCase):
-    def fixture(self, root, before):
+    def fixture(self, root, before,namespace_uid='namespace'):
         c=context(); current=card(c)
         journal=resource_claim.RootJournal(root)
         session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
@@ -26,7 +26,7 @@ class CutEffectTests(unittest.TestCase):
         precut={'context':{'original_snapshots':{'voice-user':before},'marker':{}}}
         plan={key:'c'*64 for key in preservation.PLAN_FIELDS}
         plan.update(schema=preservation.SCHEMA,operation=session.operation,context=c,
-            helper_sha256=session.helper,namespace_uid='namespace',actual_before=current['observed']['images'],
+            helper_sha256=session.helper,namespace_uid=namespace_uid,actual_before=current['observed']['images'],
             candidate={'commit':c['commit'],'images':c['images']},precut_capture_sha256=preservation.digest(precut))
         preservation._write(path/'precut.json',precut)
         preservation._write(path/'checkpoint.json',{'schema':'voice-staging-cohort-preservation-checkpoint-v1','plan':plan})
@@ -118,6 +118,53 @@ class CutEffectTests(unittest.TestCase):
                 self.assertEqual(result,after)
                 record=json.loads((root/'installed'/'cohort-preservation'/session.operation/'effects'/'cut-deployment-voice-user.json').read_bytes())
                 self.assertEqual(record['status'],'DONE');self.assertEqual(record['response'],after)
+
+    def test_isolated_clone_forbids_host_mount_and_lost_create_replay(self):
+        import staging_cohort_preservation_runtime as runtime
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root=Path(directory);(root/'installed').mkdir(mode=0o700)
+            with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                before={'metadata':{'name':'voice-user','namespace':'voice-staging','uid':'user','resourceVersion':'3','generation':1},'spec':{'replicas':1}}
+                session,_=self.fixture(root,before)
+                with resource_claim.command_scope(session.check):
+                    preservation._begin_restore(session,'tooling')
+                    preservation._write(preservation._base(session)/'restore-tools.json',{
+                        'images':{'postgres':'postgres@sha256:'+'a'*64,'migrate':'migrate@sha256:'+'b'*64},
+                        'ids':{'postgres':'sha256:'+'c'*64,'migrate':'sha256:'+'d'*64}})
+                    journal=preservation.restore_journal(session);name='voice-media-restore-'+'e'*32
+                    journal.begin('migrate',name,{'voice.test.owner':name})
+                    argv=runtime.DOCKER+['create','--name',name,'--network','none','--label','voice.test.owner='+name,
+                        '--entrypoint','/bin/true','sha256:'+'d'*64]
+                    with patch.object(commands,'capture') as capture:
+                        foreign=argv[:-1]+['--mount','type=bind,source=/,target=/host',argv[-1]]
+                        with self.assertRaisesRegex(Exception,'cohort_restore_create_invalid'):
+                            preservation.restore_command(session,foreign)
+                        capture.assert_not_called()
+                    calls=[]
+                    def lost(args,**kwargs):
+                        commands.authority_guard(args);calls.append(args)
+                        raise RuntimeError('created_reply_lost')
+                    with patch.object(commands,'capture',side_effect=lost):
+                        with self.assertRaisesRegex(RuntimeError,'created_reply_lost'):
+                            preservation.restore_command(session,argv)
+                        with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                            preservation.restore_command(session,argv)
+                    self.assertEqual(len(calls),1)
+
+
+class CatalogTests(unittest.TestCase):
+    def test_full_catalog_refuses_active_clients_prepared_or_unreadable_database(self):
+        import staging_cohort_preservation_pg as pg
+        engine={'pod':{'uid':'pod','container_id':'containerd://'+'a'*64,'restart_count':0},'pvc':{'uid':'pvc'},'pv':{'uid':'pv'}}
+        row={'name':'postgres','oid':5,'allowconn':True,'template':False,'encoding':'UTF8','collate':'C','ctype':'C',
+            'locale_provider':'c','icu_locale':None,'connection_limit':-1,'owner':'postgres','acl':None,'connect':True,'sessions':0,'prepared':0}
+        value={'system_identifier':'123','server_start':'2026-10-29','can_read':True,'databases':[row]}
+        self.assertEqual(pg.validate_catalog(value,engine,'namespace','a'*12,'b'*64)['databases'],{'postgres':5})
+        for field,changed in (('sessions',1),('prepared',1),('connect',False)):
+            with self.subTest(field=field):
+                bad=copy.deepcopy(value);bad['databases'][0][field]=changed
+                with self.assertRaisesRegex(Exception,'cohort_catalog_invalid'):
+                    pg.validate_catalog(bad,engine,'namespace','a'*12,'b'*64)
 
 
 if __name__=='__main__':unittest.main()

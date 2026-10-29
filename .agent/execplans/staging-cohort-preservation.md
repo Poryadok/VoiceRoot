@@ -40,3 +40,27 @@ The WT29 lease and clean published parent were verified. This branch starts at
 Stage afe56bab84ee. Interfaces agreed with WT25 include prepare_inputs,
 bind_cohort_preservation, validate_backup_binding, produce_dump, load_qualified,
 capture_stage and revalidate_paused. Implementation and tests are in progress.
+
+The producer now implements fixed cut CAS, complete PostgreSQL catalog and dump
+receipts, source-bound shared archive/restore calls, owned network-none clone
+resources, native NATS cut transport, encrypted capsule, prepare/upload and
+off-node continuation entrypoints. A finite source-plan store projection is
+captured before the cut and rechecked with physical PVC/PV identities. The
+only admitted auxiliary restart is the existing source-qualified P3 publisher,
+after off-node restore, with replica-only CAS and fresh owned Pod/TLS proof.
+
+Native Linux verification: six RootJournal/Session cut, catalog and isolated
+command negative tests plus one real PostgreSQL16 dump/full-catalog restore
+composition pass (7/7, 20.802s). The latter includes a nonempty business table,
+roles, postgres and template1, actual encrypted archive and network-none clone
+cleanup. Kubernetes transport, source admission, engine identity and paused
+view are explicit test fixtures; PostgreSQL SQL/dumps, Docker and restore are
+real. This is not live STAGING or installed helper qualification.
+
+Remaining before activation: independent producer review, actual bridge/parent
+joined prepare/upload/authorize test, native NATS/CMS execution in that joined
+fixture, protected auxiliary successor negatives, historical/paused successor
+integration, and the independently owned native Space migration qualification.
+The shared STAGING restore deliberately rejects changed Space until that native
+adapter exists. Source projection review/credential successor checks also
+remain part of the joint gate. No live claim or deployment has been performed.
