@@ -17,6 +17,7 @@ def build_git(repo,commit,output):
         "'p3-source-' + uuid.uuid4().hex":"'space-creator-source-' + uuid.uuid4().hex",
         "module = 'realtime_p3_missing_issuer'":"module = 'space_creator_runtime_profile_issuer'",
         "module, arguments = 'realtime_p3_root_export', arguments[1:]":"module, arguments = 'space_creator_runtime_profile_issuer_export', arguments[1:]",
+        'arguments = sys.argv[1:]':"arguments = sys.argv[1:]\n    if arguments.count('--source-sha') != 1 or arguments.index('--source-sha') + 1 >= len(arguments) or arguments[arguments.index('--source-sha') + 1] != "+repr(commit)+": raise ValueError()",
         "{'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root'}":"{'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'}",
     }
     for before,after in replacements.items():

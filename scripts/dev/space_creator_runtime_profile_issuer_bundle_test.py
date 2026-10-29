@@ -22,6 +22,8 @@ class BundleTest(unittest.TestCase):
             self.assertIn("module = 'space_creator_runtime_profile_issuer'",launcher)
             self.assertIn("{'PATH': '/usr/bin:/bin', 'LANG': 'C', 'LC_ALL': 'C'}",launcher)
             self.assertIn('/home/pmd/voice-space-creator/creator-source.tar',launcher)
+            self.assertIn("!= '"+'b'*40+"': raise ValueError()",launcher)
+            compile(launcher.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0],'<root-launch>','exec')
             with tarfile.open(fileobj=io.BytesIO((Path(tmp)/'out/p3-source.tar').read_bytes())) as tar:
                 self.assertEqual(set(tar.getnames()),set(contract.FILES)|{'capture-manifest.json'})
             with patch.object(contract.source,'_disk',return_value=b'tampered'):
