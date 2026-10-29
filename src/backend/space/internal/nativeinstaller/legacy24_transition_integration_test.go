@@ -3,6 +3,7 @@
 package nativeinstaller
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 	"os"
@@ -89,6 +90,18 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	require.Equal(t, preimage, origin.Rows)
 	require.Len(t, origin.PreimageSHA256, 64)
 	require.Len(t, origin.AccessSHA256, 64)
+	identity := &Legacy24Receipt{Source24: origin.Target, Clean24: true, Catalog24SHA256: origin.CatalogSHA256, PreimageSHA256: origin.PreimageSHA256, AccessSHA256: origin.AccessSHA256, SpaceCount: uint64(len(origin.Spaces))}
+	var sidecar bytes.Buffer
+	require.NoError(t, writeLegacy24Origin(&sidecar, origin, identity))
+	readOrigin, err := readLegacy24Origin(bytes.NewReader(sidecar.Bytes()), identity)
+	require.NoError(t, err)
+	require.Equal(t, origin.PreimageSHA256, readOrigin.PreimageSHA256)
+	badIdentity := *identity
+	badIdentity.PreimageSHA256 = strings.Repeat("0", 64)
+	_, err = readLegacy24Origin(bytes.NewReader(sidecar.Bytes()), &badIdentity)
+	require.Error(t, err, "sidecar must remain bound to the original receipt")
+	_, err = readLegacy24Origin(bytes.NewReader(append(sidecar.Bytes(), ' ')), identity)
+	require.Error(t, err, "noncanonical or trailing private bytes are not accepted")
 	withExtra, err := observeLegacy24Origin(ctx, conn)
 	require.NoError(t, err, "independent ordinary table should be supported")
 	_, err = conn.Exec(ctx, `UPDATE legacy_extra.note SET body='changed' WHERE id=1`)
@@ -177,7 +190,7 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	conn, err = pgx.Connect(ctx, target.String())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close(context.Background()) })
-	intermediate, err := verifyLegacy24Intermediate(ctx, conn, origin)
+	intermediate, err := verifyLegacy24Intermediate(ctx, conn, readOrigin)
 	require.NoError(t, err)
 	require.EqualValues(t, 25, intermediate.Target.Version)
 	require.Equal(t, origin.Target.DatabaseOID, intermediate.Target.DatabaseOID)

@@ -2,6 +2,7 @@ package nativeinstaller
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 
@@ -43,7 +44,9 @@ func verifyLegacy24Intermediate(ctx context.Context, conn *pgx.Conn, origin *leg
 		return nil, errors.New("HOLD: intermediate25 source data changed")
 	}
 	derived, err := captureLegacy24DerivedTx(ctx, tx)
-	if err != nil || !reflect.DeepEqual(derived, origin.Derived) {
+	currentDerived, currentErr := json.Marshal(derived)
+	priorDerived, priorErr := json.Marshal(origin.Derived)
+	if err != nil || currentErr != nil || priorErr != nil || string(currentDerived) != string(priorDerived) {
 		return nil, errors.New("HOLD: intermediate25 derived data changed")
 	}
 	extras, err := captureLegacy24ExtrasTx(ctx, tx)
