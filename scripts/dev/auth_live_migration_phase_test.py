@@ -160,7 +160,8 @@ class AuthMigrationContract(unittest.TestCase):
                 client=Client(lose); inputs={'metadata':{},'candidate':{},'credential':{'uid':'s','resourceVersion':'1'},
                     'node':{'name':'node-one','uid':'node-id'},'history':self.before}
                 p=SimpleNamespace(client=client,intent={'auth_live_tool':{}},journal=SimpleNamespace(state={'steps':{'auth-live-c1-inputs':inputs}}))
-                phase=SimpleNamespace(phases=p); cut=SimpleNamespace(verify_migration_running=lambda:None)
+                phase=SimpleNamespace(phases=p); cut=SimpleNamespace(verify_migration_running=lambda:None,
+                    verify_migration_pending=lambda:None)
                 binding={'databases':['auth_db'],'sources':{'auth_db':{'engine':{},'database_oid':42,'server_start':'x'}}}
                 transitions=[]
                 def move(phase,root,kind,state,identity=None):
