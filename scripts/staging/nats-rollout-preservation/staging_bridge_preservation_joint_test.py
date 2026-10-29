@@ -168,7 +168,7 @@ class BridgePreservationAdmission(unittest.TestCase):
             for path in workspace.rglob('*'):
                 path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
-import base64, contextlib, copy, hashlib, http.client, io, json, os, re, subprocess, sys, urllib.request, zipfile
+import atexit, base64, contextlib, copy, hashlib, http.client, io, json, os, re, subprocess, sys, time, urllib.request, zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -259,6 +259,9 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   pod['metadata'].update(pgmeta('voice-postgres-0',pg_pod),labels={'app':'voice-postgres'})
   pod['spec']['volumes'][0]['name']='pgdata'
   pod['spec']['containers']=[{'name':'postgres','volumeMounts':[{'name':'pgdata','mountPath':'/var/lib/postgresql/data'}]}]
+  pod['spec']['nodeName']='pmdebook'
+  pod['spec']['containers'][0]['env']=[{'name':'POSTGRES_USER','valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':'POSTGRES_USER'}}},
+   {'name':'POSTGRES_PASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}}]
   pod['status'].update(podIP='10.0.0.2')
   pod['status']['containerStatuses'][0].update(state={'running':{}},containerID='containerd://fixture',restartCount=0)
   pg_objects[('persistentvolumeclaim','pgdata-voice-postgres-0')]['metadata'].update(pgmeta('pgdata-voice-postgres-0',pg_claim))
@@ -360,6 +363,12 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    return cluster.run(args,**kwargs)
   def capture(argv,**kwargs):
    commands.authority_guard(argv)
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and argv[4:7]==['exec','-i','voice-postgres-0']:
+    return subprocess.check_output(['docker','exec','-i',pg_container,'psql','-X','-qAt','-v','ON_ERROR_STOP=1',
+     '-U',pg_user,'-d',argv[-1]],input=kwargs['body'],timeout=60)
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and argv[4:6]==['exec','voice-postgres-0']:
+    if argv[-1]=='printf "%s\\n" "$POSTGRES_USER"; printf %s "$POSTGRES_PASSWORD" | sha256sum':
+     return (pg_user+'\n'+hashlib.sha256(pg_password).hexdigest()+'  -\n').encode()
    if 'VOICE_TEST_SPACE_OCI' in os.environ:
     fixture=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())['identity']
     image=fixture['immutable_image']
@@ -522,6 +531,28 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def private_save(path,value):save(root/Path(path).name,value)
    bootstrap_root.enroll_current(enrollment_kube,code,actions.binding,unchanged,
     private_read,private_save,bootstrap_auth.prove)
+  if 'VOICE_TEST_SPACE_OCI' in os.environ:
+   pg_user=store_kube.get('ConfigMap','voice-app-config')['data']['POSTGRES_USER']
+   pg_password=base64.b64decode(store_kube.get('Secret','voice-app-secrets')['data']['POSTGRES_PASSWORD'],validate=True)
+   pg_container=subprocess.check_output(['docker','create','--label','voice.test.owner=wt30-joint',
+    '--network','none','--memory','512m','--pids-limit','128','-e','POSTGRES_USER='+pg_user,
+    '-e','POSTGRES_PASSWORD='+pg_password.decode(),
+    'postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6'],text=True).strip()
+   atexit.register(lambda:subprocess.run(['docker','rm','-f','-v',pg_container],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
+   subprocess.run(['docker','start',pg_container],check=True,stdout=subprocess.DEVNULL)
+   deadline=time.monotonic()+60
+   while subprocess.run(['docker','exec',pg_container,'pg_isready','-h','127.0.0.1','-U',pg_user],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode:
+    if time.monotonic()>deadline:raise AssertionError('owned Postgres not ready')
+    time.sleep(.2)
+   subprocess.run(['docker','exec','-i',pg_container,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U',pg_user],
+    input=b'CREATE DATABASE space_db;',check=True,stdout=subprocess.DEVNULL)
+   migrate=subprocess.check_output(['docker','create','--label','voice.test.owner=wt30-joint','--network','container:'+pg_container,
+    '--entrypoint','/usr/local/bin/migrate','voice-wt30-native-tool:46b6e99','-path','/migrations',
+    '-database','postgres://'+pg_user+':'+pg_password.decode()+'@127.0.0.1:5432/space_db?sslmode=disable','goto','24'],text=True).strip()
+   try:
+    subprocess.run(['docker','start',migrate],check=True,stdout=subprocess.DEVNULL)
+    assert subprocess.check_output(['docker','wait',migrate],text=True,timeout=180).strip()=='0'
+   finally:subprocess.run(['docker','rm','-f','-v',migrate],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
        patch.object(stage_runtime.Kube,'_run',side_effect=run),patch.object(commands,'capture',side_effect=capture), \
        patch.object(stage_runtime.Kube,'secret_meta',side_effect=lambda name:{k:get('secret',name)['metadata'][k] for k in ('uid','resourceVersion')}), \
