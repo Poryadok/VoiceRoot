@@ -26,7 +26,7 @@ import runtime_stage
 import stage_runtime
 
 
-def stage_cluster_fixture(session):
+def stage_cluster_fixture(session,store_kube=None):
     namespace='00000000-0000-0000-0000-000000000001'
     claim='00000000-0000-0000-0000-000000000002'
     pv='00000000-0000-0000-0000-000000000003'
@@ -39,6 +39,11 @@ def stage_cluster_fixture(session):
         spec={'containers':[{'name':container,'image':image}]}
         if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
         template={'metadata':{'labels':{'app':name}},'spec':spec}
+        if store_kube is not None and name in ('voice-user','voice-file'):
+            template=copy.deepcopy(store_kube.get('Deployment',name)['spec']['template'])
+            containers=template['spec']['containers']
+            if len(containers)!=1 or template['spec'].get('initContainers'):raise ValueError('fixture_container_shape')
+            container=containers[0]['name']
         rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
                     'spec':{'replicas':1,'template':template}}
         rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
@@ -216,14 +221,14 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    'ca_private_key_pem':key.read_text(),'trust':{name:ca for name in crypto.TRUST_KEYS},
    'space_client_certificate_pem':leaf,'space_jwks_certificate_pem':leaf,'space_server_ca_pem':ca,
    'replay_password_b64':base64.b64encode(b'synthetic-replay-password').decode()})
-  Cluster, names, claim=stage_cluster_fixture(session); cluster=Cluster()
+  Cluster, names, claim=stage_cluster_fixture(session,store_kube); cluster=Cluster()
   original_get=cluster.get
   def get(kind,name):
    if (kind,name)==('node','pmdebook'):
     if 'VOICE_TEST_OCI' not in os.environ:raise KeyError((kind,name))
     return {'metadata':{'name':name,'uid':'synthetic-node'},'status':{'nodeInfo':{'operatingSystem':'linux',
       'architecture':'amd64'},'conditions':[{'type':'Ready','status':'True'}]}}
-   if (kind,name)==('secret','voice-app-secrets'):
+   if kind.lower()=='secret' and name=='voice-app-secrets':
     row=store_kube.get('Secret',name)
     row['metadata'].update(uid='00000000-0000-4000-8000-000000000004',resourceVersion='1')
     row['data'].pop('GAME_INTEGRATION_DATABASE_URL',None);row['data'].pop('GAME_INTEGRATION_DB_PASSWORD',None)
@@ -233,7 +238,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
       'uid':'00000000-0000-4000-8000-000000000005','resourceVersion':'1'},'type':'Opaque',
       'data':{k:base64.b64encode(v.encode()).decode() for k,v in data.items()}}
-   try:return original_get(kind,name)
+   try:return original_get(kind.lower(),name)
    except KeyError:
     spelling={'secret':'Secret','configmap':'ConfigMap','statefulset':'StatefulSet',
       'deployment':'Deployment','service':'Service','persistentvolumeclaim':'PersistentVolumeClaim'}
