@@ -64,6 +64,23 @@ def verify_required(events, required, exit_code):
             or packages[key[0]] != ['pass']]
 
 
+def verify_no_skips(events, packages):
+    if (not isinstance(packages, (list, tuple)) or not packages or
+            any(not isinstance(package, str) or not package for package in packages) or
+            len(packages) != len(set(packages))):
+        raise ValueError('skip scope must contain unique package names')
+    failures = []
+    for package in packages:
+        scoped = [event for event in events if event.get('Package') == package]
+        terminal = [event.get('Action') for event in scoped if event.get('Test') is None
+                    and event.get('Action') in ('pass', 'fail', 'skip')]
+        if terminal != ['pass']:
+            failures.append(package + ': missing or failed package')
+        failures.extend(package + ': ' + str(event.get('Test') or 'package')
+                        for event in scoped if event.get('Action') == 'skip')
+    return failures
+
+
 def verify_matrix(services, inventory, receipts, identity):
     if (not isinstance(identity, dict) or set(identity) != {'candidate', 'run', 'attempt'} or
             not isinstance(identity['candidate'], str) or not re.fullmatch(r'[0-9a-f]{40}', identity['candidate']) or

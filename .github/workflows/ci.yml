@@ -2048,6 +2048,8 @@ jobs:
       - nats-hub-config-renderer-image
       - backend-go
       - backend-go-integration-pr
+      - story-lfp-integration
+      - user-association-integration
       - backend-auth
       - backend-auth-image
       - developer-portal
@@ -2158,6 +2160,110 @@ jobs:
           JOB_DEVELOPER_PORTAL: ${{ needs.developer-portal.result }}
           JOB_ADMIN: ${{ needs.admin.result }}
         run: bash .github/ci/verify-required-jobs.sh "${{ github.event_name }}" "${{ needs.changes.outputs.code }}" auto
+
+  story-lfp-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'story')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-lfp-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Story LFP proofs
+        working-directory: src/backend/story
+        env:
+          CGO_ENABLED: '0'
+          LFP_TEST_DATABASE_DSN: postgres://voice:voice-lfp-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -p 1 -timeout 10m ./internal/lfpconsentstore ./internal/lfpconsenttransport > "$RUNNER_TEMP/story-lfp-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/story_lfp_required.json --service story \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/story-lfp-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/story-lfp-receipt.json" --reject-skips
+      - name: Upload Story LFP evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: story-lfp-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/story-lfp-events.jsonl
+            ${{ runner.temp }}/story-lfp-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  user-association-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'user')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-association-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run User association proofs
+        working-directory: src/backend/user
+        env:
+          CGO_ENABLED: '0'
+          USER_ASSOCIATION_TEST_DSN: postgres://voice:voice-association-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -p 1 -timeout 10m ./internal/identityassociation > "$RUNNER_TEMP/user-association-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/user_association_required.json --service user \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/user-association-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/user-association-receipt.json" --reject-skips
+      - name: Upload User association evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-association-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/user-association-events.jsonl
+            ${{ runner.temp }}/user-association-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
 
   compose-e2e:
     needs: changes

@@ -1,8 +1,10 @@
 """Required Go integration cases must execute, not merely be selected."""
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -15,6 +17,35 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_story_lfp_inventory_covers_all_current_package_tests(self):
+        inventory = json.loads((ROOT / 'scripts/ci/story_lfp_required.json').read_text(encoding='utf-8'))
+        cases = inventory['story']
+        self.assertEqual(len(cases), len({tuple(case) for case in cases}))
+        discovered = set()
+        for name in ('lfpconsentstore', 'lfpconsenttransport'):
+            package = 'voice/backend/story/internal/' + name
+            for path in (ROOT / 'src/backend/story/internal' / name).glob('*_test.go'):
+                source = path.read_text(encoding='utf-8')
+                self.assertNotRegex(source, r'(?m)^//go:build ', 'review tagged Story LFP tests explicitly')
+                for test in re.findall(r'(?m)^func (Test\w+)\(t \*testing\.T\)', source):
+                    discovered.add((package, test))
+        self.assertTrue(discovered)
+        self.assertEqual({tuple(case) for case in cases}, discovered)
+
+    def test_user_association_inventory_covers_all_current_package_tests(self):
+        inventory = json.loads((ROOT / 'scripts/ci/user_association_required.json').read_text(encoding='utf-8'))
+        cases = inventory['user']
+        package = 'voice/backend/user/internal/identityassociation'
+        discovered = set()
+        for path in (ROOT / 'src/backend/user/internal/identityassociation').glob('*_test.go'):
+            source = path.read_text(encoding='utf-8')
+            self.assertNotRegex(source, r'(?m)^//go:build ', 'review tagged User association tests explicitly')
+            discovered.update((package, test) for test in
+                              re.findall(r'(?m)^func (Test\w+)\(t \*testing\.T\)', source))
+        self.assertTrue(discovered)
+        self.assertEqual(len(cases), len({tuple(case) for case in cases}))
+        self.assertEqual({tuple(case) for case in cases}, discovered)
+
     def test_required_case_must_run_and_pass_exactly_once(self):
         required = [('voice/backend/chat/internal/store', 'TestStoreIntegration')]
         events = [{'Package': required[0][0], 'Test': required[0][1], 'Action': action}
@@ -27,6 +58,20 @@ class GoIntegrationReceiptTests(unittest.TestCase):
             with self.subTest(events=altered):
                 self.assertTrue(receipts.verify_required(altered, required, 0))
         self.assertTrue(receipts.verify_required(events, required, 1))
+
+    def test_no_skip_scope_rejects_skipped_subtests_and_packages(self):
+        package = 'voice/backend/story/internal/lfpconsentstore'
+        events = [{'Package': package, 'Test': 'TestRequired', 'Action': 'run'},
+                  {'Package': package, 'Test': 'TestRequired', 'Action': 'pass'},
+                  {'Package': package, 'Action': 'pass'}]
+        self.assertEqual(receipts.verify_no_skips(events, [package]), [])
+        for skipped in ({'Package': package, 'Test': 'TestOther/subcase', 'Action': 'skip'},
+                        {'Package': package, 'Action': 'skip'}):
+            self.assertTrue(receipts.verify_no_skips(events + [skipped], [package]))
+        self.assertEqual(receipts.verify_no_skips(events + [
+            {'Package': 'voice/backend/other', 'Test': 'TestOptional', 'Action': 'skip'}], [package]), [])
+        with self.assertRaises(ValueError):
+            receipts.verify_no_skips(events, [])
 
     def test_package_identity_matters_and_empty_inventory_is_invalid(self):
         required = [('voice/backend/chat/internal/store', 'TestStoreIntegration')]
@@ -148,6 +193,87 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 receipts.make_receipt('chat', identity, inventory, altered, 0)
         with self.assertRaises(ValueError):
             receipts.make_receipt('chat', identity, inventory, events, 1)
+
+    def test_matrix_cli_binds_receipts_and_rejects_missing_or_skipped_cases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inventory = {'chat': [['voice/backend/chat/store', 'TestStore']],
+                         'user': [['voice/backend/user/store', 'TestStore']]}
+            inventory_file = root / 'inventory.json'
+            inventory_file.write_text(json.dumps(inventory), encoding='utf-8')
+            script = str(ROOT / 'scripts/ci/go_integration_matrix.py')
+            common = ['--inventory', str(inventory_file), '--candidate', 'a' * 40,
+                      '--run', '123', '--attempt', '1']
+            files = []
+            for service in inventory:
+                package, name = inventory[service][0]
+                events = [{'Package': package, 'Test': name, 'Action': action}
+                          for action in ('run', 'pass')]
+                events.append({'Package': package, 'Action': 'pass'})
+                path = root / (service + '.jsonl')
+                path.write_text(''.join(json.dumps(event) + '\n' for event in events), encoding='utf-8')
+                receipt = root / (service + '.json')
+                args = [sys.executable, script, 'produce', *common, '--service', service,
+                        '--events', str(path), '--exit-code', '0', '--output', str(receipt)]
+                self.assertEqual(subprocess.run(args, capture_output=True).returncode, 0)
+                files.append((receipt, path))
+            verify = [sys.executable, script, 'verify', *common, '--services', '["chat","user"]']
+            both = [arg for receipt, events in files
+                    for arg in ('--receipt', str(receipt), '--events', str(events))]
+            self.assertEqual(subprocess.run(verify + both, capture_output=True).returncode, 0)
+            strict = [sys.executable, script, 'produce', *common, '--service', 'chat',
+                      '--events', str(files[0][1]), '--exit-code', '0', '--reject-skips',
+                      '--output', str(root / 'strict.json')]
+            self.assertEqual(subprocess.run(strict, capture_output=True).returncode, 0)
+            strict_verify = [sys.executable, script, 'verify', *common, '--services', '["chat"]',
+                             '--require-no-skips', '--events', str(files[0][1]), '--receipt']
+            self.assertEqual(subprocess.run(strict_verify + [str(root / 'strict.json')],
+                                            capture_output=True).returncode, 0)
+            self.assertNotEqual(subprocess.run(strict_verify + [str(files[0][0])],
+                                               capture_output=True).returncode, 0)
+            self.assertEqual(json.loads(files[0][0].read_text(encoding='utf-8'))['schema'],
+                             'voice-go-integration-receipt-v1')
+            self.assertNotEqual(subprocess.run(verify + both[:4], capture_output=True).returncode, 0)
+            self.assertNotEqual(subprocess.run(verify + both + both[:4], capture_output=True).returncode, 0)
+            self.assertNotEqual(subprocess.run(verify + ['--receipt', str(files[0][0])],
+                                               capture_output=True).returncode, 0)
+            different_attempt = verify.copy()
+            different_attempt[different_attempt.index('--attempt') + 1] = '2'
+            self.assertNotEqual(subprocess.run(different_attempt + both, capture_output=True).returncode, 0)
+            changed = json.loads(files[0][0].read_text(encoding='utf-8'))
+            del changed['schema']
+            files[0][0].write_text(json.dumps(changed), encoding='utf-8')
+            self.assertNotEqual(subprocess.run(verify + both, capture_output=True).returncode, 0)
+            changed['schema'] = 'voice-go-integration-receipt-v1'
+            changed['identity']['candidate'] = 'b' * 40
+            files[0][0].write_text(json.dumps(changed), encoding='utf-8')
+            self.assertNotEqual(subprocess.run(verify + both, capture_output=True).returncode, 0)
+            changed['identity']['candidate'] = 'a' * 40
+            files[0][0].write_text(json.dumps(changed), encoding='utf-8')
+            original = files[0][1].read_text(encoding='utf-8')
+            files[0][1].write_text(original + '{}\n', encoding='utf-8')
+            self.assertNotEqual(subprocess.run(verify + both, capture_output=True).returncode, 0)
+            skipped = original.replace('"pass"', '"skip"', 1)
+            files[0][1].write_text(skipped, encoding='utf-8')
+            changed['event_sha256'] = hashlib.sha256(skipped.encode('utf-8')).hexdigest()
+            files[0][0].write_text(json.dumps(changed), encoding='utf-8')
+            self.assertNotEqual(subprocess.run(verify + both, capture_output=True).returncode, 0)
+            files[0][1].write_text(original, encoding='utf-8')
+            bad = root / 'chat.jsonl'
+            bad.write_text(bad.read_text(encoding='utf-8').replace('"pass"', '"skip"', 1), encoding='utf-8')
+            failed = subprocess.run([sys.executable, script, 'produce', *common, '--service', 'chat',
+                                     '--events', str(bad), '--exit-code', '0',
+                                     '--output', str(root / 'invalid.json')], capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertFalse((root / 'invalid.json').exists())
+            bad.write_text(original + json.dumps({'Package': 'voice/backend/chat/store',
+                                                  'Test': 'TestOther', 'Action': 'skip'}) + '\n',
+                           encoding='utf-8')
+            failed = subprocess.run([sys.executable, script, 'produce', *common, '--service', 'chat',
+                                     '--events', str(bad), '--exit-code', '0', '--reject-skips',
+                                     '--output', str(root / 'invalid-skip.json')], capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertFalse((root / 'invalid-skip.json').exists())
 
 
 if __name__ == '__main__':

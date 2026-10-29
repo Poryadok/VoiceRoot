@@ -135,6 +135,21 @@ consumers, and documented event subscribers. Shared package, proto, Auth and
 global wiring changes conservatively select every Go service integration. A
 successful matrix job alone is not proof that a particular opt-in or
 Docker-dependent test ran; inspect its execution evidence and skips.
+
+The affected Story PR proof runs `go test -json -count=1 -p 1` for
+`./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an
+owned PostgreSQL service. It requires the named store and protected transport
+cases in `scripts/ci/story_lfp_required.json` and rejects every skipped test
+in those packages. Locally, set `LFP_TEST_DATABASE_DSN` only to an owned,
+disposable PostgreSQL database; the fixtures create and drop schemas there.
+An exit code of zero without that DSN is not evidence for those cases.
+
+The affected User PR proof runs `./internal/identityassociation` against an
+owned PostgreSQL service using `USER_ASSOCIATION_TEST_DSN`. It requires the
+named package inventory in `scripts/ci/user_association_required.json` and
+rejects skips. Its fixtures create and drop databases; point the DSN only at an
+owned disposable PostgreSQL server. Protected capture transport cases that also
+require Redis are separate from this proof.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.

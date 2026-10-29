@@ -140,6 +140,19 @@ successful `TestClickHouseInsertBatch` execution; a skipped or missing case
 cannot satisfy the job. The full Go matrix still needs its own case inventory
 and member receipts.
 
+When Story is in the PR integration matrix, `story-lfp-integration` runs both
+Story LFP consent packages against a job-owned PostgreSQL service. The verifier
+requires the named store and protected transport inventory, successful package exits,
+and no skipped tests or subtests in those packages. Raw Go events are retained
+on failure; a successful run also retains a candidate/run/attempt-bound receipt.
+This is the Story LFP inventory, not the complete Go matrix inventory.
+
+When User is in the PR integration matrix, `user-association-integration` runs
+the native identity-association package against its own PostgreSQL service.
+All current named package tests are inventoried and skips are rejected. This
+proof does not cover separate User protected-transport fixtures that also need
+Redis, and it does not activate the source-disabled production path.
+
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
 includes named pass/skip/fail counts and skipped cases and preserves a nonzero

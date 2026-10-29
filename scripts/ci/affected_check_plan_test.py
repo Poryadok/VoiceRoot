@@ -243,6 +243,52 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('--event-base', gate['run'])
         self.assertIn('toJson(needs)', gate['env']['NEEDS_JSON'])
 
+    def test_story_lfp_proof_follows_affected_integration_and_rejects_skips(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['story-lfp-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'story')", job['if'])
+        self.assertIn('story-lfp-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Story LFP proofs')
+        self.assertIn('./internal/lfpconsentstore', test['run'])
+        self.assertIn('./internal/lfpconsenttransport', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['LFP_TEST_DATABASE_DSN'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['story'], 'docker_go_services': [],
+                  'integration_go_services': ['story'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/story/main.go']), matrix)
+        self.assertIn('story-lfp-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        self.assertEqual(planner.verify_gate(selected, needs, identity), [])
+        for result in ('skipped', 'failure', 'cancelled'):
+            needs['story-lfp-integration']['result'] = result
+            self.assertIn('story-lfp-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('story-lfp-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
+    def test_user_association_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['user-association-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'user')", job['if'])
+        self.assertIn('user-association-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run User association proofs')
+        self.assertIn('./internal/identityassociation', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['USER_ASSOCIATION_TEST_DSN'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['user'], 'docker_go_services': [],
+                  'integration_go_services': ['user'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/user/main.go']), matrix)
+        self.assertIn('user-association-integration', selected['checks'])
+        matrix['integration_go_services'] = []
+        self.assertNotIn('user-association-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_cli_uses_committed_candidate_and_actual_go_resolver(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
