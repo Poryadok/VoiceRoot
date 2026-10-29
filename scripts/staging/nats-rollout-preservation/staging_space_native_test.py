@@ -12,6 +12,20 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_pod_reread_requires_same_uid_spec_and_image_but_allows_new_rv(self):
+        status={'name':'inspect','imageID':'immutable','state':{'terminated':{'exitCode':0}}}
+        original={'metadata':{'uid':'owned'},'spec':{'nodeName':'node'},'status':{'containerStatuses':[status]}}
+        fresh=copy.deepcopy(original);fresh['metadata'].update(namespace='voice-staging',resourceVersion='new')
+        native._check_fresh_pod(original,fresh,status)
+        for mutation in ('uid','spec','image','missing_rv'):
+            changed=copy.deepcopy(fresh)
+            if mutation=='uid':changed['metadata']['uid']='foreign'
+            if mutation=='spec':changed['spec']['nodeName']='foreign'
+            if mutation=='image':changed['status']['containerStatuses'][0]['imageID']='foreign'
+            if mutation=='missing_rv':del changed['metadata']['resourceVersion']
+            with self.subTest(mutation=mutation),self.assertRaisesRegex(native.Blocked,'space_inspect_pod_changed'):
+                native._check_fresh_pod(original,changed,status)
+
     def test_historical_loader_rejects_noncanonical_operation_without_read(self):
         with patch.object(native.owner,'_read') as read:
             with self.assertRaisesRegex(native.Blocked,'space_inspect_history_invalid'):
@@ -59,7 +73,7 @@ class InspectSourceTest(unittest.TestCase):
                 pgpod={'spec':{'nodeName':'node-a','containers':[{'name':'postgres','env':env}]}}
                 job=native._job(session,tool,'node-a');uid='11111111-1111-4111-8111-111111111111'
                 job['metadata'].update(uid=uid,resourceVersion='7');complete=copy.deepcopy(job);complete['status']={'succeeded':1}
-                pod={'metadata':{'name':'inspection-pod','uid':'22222222-2222-4222-8222-222222222222',
+                pod={'metadata':{'name':'inspection-pod','namespace':'voice-staging','resourceVersion':'8','uid':'22222222-2222-4222-8222-222222222222',
                     'ownerReferences':[{'kind':'Job','uid':uid,'controller':True}]},'spec':copy.deepcopy(job['spec']['template']['spec']),
                     'status':{'containerStatuses':[{'name':'inspect','imageID':'fixture@'+tool['platform_digest'],
                     'state':{'terminated':{'exitCode':0}}}]}}
@@ -68,7 +82,7 @@ class InspectSourceTest(unittest.TestCase):
                     'migrator_sha256':'1'*64,'inventory_sha256':'2'*64,'target':{'database_name':'space_db',
                     'database_oid':123,'database_system_id':'42','database_owner':'admin','installer_role':'admin','version':24}}
                 kube=Mock();values={('configmap','voice-app-config'):config,('secret','voice-app-secrets'):secret,
-                    ('pod','voice-postgres-0'):pgpod,('job',job['metadata']['name']):complete}
+                    ('pod','voice-postgres-0'):pgpod,('pod','inspection-pod'):pod,('job',job['metadata']['name']):complete}
                 kube.get.side_effect=lambda kind,name:copy.deepcopy(values[(kind,name)])
                 kube.run.return_value=copy.deepcopy(job);deleted=[]
                 def capture(argv,**kwargs):
@@ -191,7 +205,7 @@ class InspectSourceTest(unittest.TestCase):
         pgpod={'spec':{'nodeName':'node-a','containers':[{'name':'postgres','env':env}]}}
         job=native._job(session,tool,'node-a');uid='11111111-1111-4111-8111-111111111111'
         job['metadata'].update(uid=uid,resourceVersion='7');complete=copy.deepcopy(job);complete['status']={'succeeded':1}
-        pod={'metadata':{'name':'inspection-pod','uid':'22222222-2222-4222-8222-222222222222',
+        pod={'metadata':{'name':'inspection-pod','namespace':'voice-staging','resourceVersion':'8','uid':'22222222-2222-4222-8222-222222222222',
              'ownerReferences':[{'kind':'Job','uid':uid,'controller':True}]},
              'spec':copy.deepcopy(job['spec']['template']['spec']),
              'status':{'containerStatuses':[{'name':'inspect','imageID':'fixture@'+tool['platform_digest'],'state':{'terminated':{'exitCode':0}}}]}}
@@ -199,7 +213,7 @@ class InspectSourceTest(unittest.TestCase):
             'source_revision':session.context['commit'],'build_sha256':'d'*64,'executable_sha256':'f'*64,
             'migrator_sha256':'1'*64,'inventory_sha256':'2'*64,'target':{'database_name':'space_db','database_oid':123,
                 'database_system_id':'42','database_owner':'admin','installer_role':'admin','version':24}}
-        values={('configmap','voice-app-config'):config,('secret','voice-app-secrets'):secret,('pod','voice-postgres-0'):pgpod,
+        values={('configmap','voice-app-config'):config,('secret','voice-app-secrets'):secret,('pod','voice-postgres-0'):pgpod,('pod','inspection-pod'):pod,
                 ('job',job['metadata']['name']):complete}
         kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(values[(kind,name)])
         kube.run.return_value=copy.deepcopy(job)

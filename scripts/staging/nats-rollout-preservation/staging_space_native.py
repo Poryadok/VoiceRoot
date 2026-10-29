@@ -131,6 +131,16 @@ def _check_delete_response(response,uid):
     if not (status or job):raise Blocked('space_inspect_delete_invalid')
 
 
+def _check_fresh_pod(original,fresh,status):
+    meta=fresh.get('metadata',{})
+    rows=[item for item in fresh.get('status',{}).get('containerStatuses',[]) if item.get('name')=='inspect']
+    if (meta.get('uid')!=original['metadata']['uid'] or meta.get('namespace')!='voice-staging'
+        or not meta.get('resourceVersion') or fresh.get('spec')!=original['spec']
+        or len(rows)!=1 or rows[0].get('imageID')!=status.get('imageID')
+        or rows[0].get('state',{}).get('terminated',{}).get('exitCode')!=0):
+        raise Blocked('space_inspect_pod_changed')
+
+
 def _cleanup(session,kube,name,uid):
     job=kube.get('job',name);meta=job['metadata']
     if meta.get('uid')!=uid or meta.get('deletionTimestamp'):raise Blocked('space_inspect_job_changed')
@@ -201,12 +211,14 @@ def inspect_source(session):
         if (len(owners)!=1 or owners[0].get('kind')!='Job' or owners[0].get('uid')!=uid
             or row['spec'].get('nodeName')!=node or len(statuses)!=1
             or not owner.guard.UUID.fullmatch(str(row['metadata'].get('uid','')))
+            or row['metadata'].get('namespace')!='voice-staging' or not row['metadata'].get('resourceVersion')
             or row['spec'].get('containers')!=created['spec']['template']['spec']['containers']
             or row['spec'].get('automountServiceAccountToken') is not False
             or statuses[0].get('state',{}).get('terminated',{}).get('exitCode')!=0
             or not any(statuses[0].get('imageID','').endswith(tool[key]) for key in ('platform_digest','config_digest'))):
             raise Blocked('space_inspect_pod_invalid')
         raw=owner._observation(session,'space-inspect-log',owner.PREFIX+['logs',row['metadata']['name'],'-c','inspect'],limit=1<<20)
+        fresh=kube.get('pod',row['metadata']['name']);_check_fresh_pod(row,fresh,statuses[0])
         result=owner.private._json(raw);target=result.get('target',{});content=tool['content']
         if (set(result)!={'event','schema','source_revision','build_sha256','executable_sha256','migrator_sha256','inventory_sha256','target'}
             or result['event']!='inspected-legacy24' or result['schema']!='voice.space.native-legacy24-inspection.v1'
@@ -226,6 +238,8 @@ def inspect_source(session):
     owner._guard(session)
     receipt={'schema':'voice-staging-space-inspection-v1','operation':session.operation,'plan_sha256':owner.digest(plan),
              'tool_sha256':owner.digest(tool),'identity':identity,'job_uid':uid,'result':result,'cleanup':'verified',
+             'pod_observation':{'uid':row['metadata']['uid'],'before_rv':row['metadata']['resourceVersion'],
+                 'after_rv':fresh['metadata']['resourceVersion'],'image_id':statuses[0]['imageID']},
              'credential_binding':{'config_uid':config['metadata']['uid'],'config_rv':config['metadata']['resourceVersion'],
                  'config_sha256':owner.digest(config),'secret_uid':secret['metadata']['uid'],
                  'secret_rv':secret['metadata']['resourceVersion'],'secret_sha256':owner.digest(secret)}}
@@ -235,7 +249,7 @@ def inspect_source(session):
 
 def _retained_record(base,operation,plan,tool):
     receipt=owner._read(base/'space-inspection.json')
-    fields={'schema','operation','plan_sha256','tool_sha256','identity','job_uid','result','cleanup','credential_binding'}
+    fields={'schema','operation','plan_sha256','tool_sha256','identity','job_uid','result','cleanup','credential_binding','pod_observation'}
     if (type(receipt) is not dict or set(receipt)!=fields or receipt['schema']!='voice-staging-space-inspection-v1'
         or receipt['operation']!=operation or receipt['plan_sha256']!=owner.digest(plan)
         or receipt['tool_sha256']!=owner.digest(tool) or receipt['cleanup']!='verified'):
