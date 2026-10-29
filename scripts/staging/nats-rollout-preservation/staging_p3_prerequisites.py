@@ -4,6 +4,8 @@ import copy
 import hashlib
 import ipaddress
 import json
+import os
+from pathlib import Path
 import re
 import socket
 import ssl
@@ -151,6 +153,60 @@ def private_semantic(obj):
     except Exception: raise PrerequisiteError('staging P3 object invalid') from None
 
 
+def _source_and_image(session,plan):
+    """Reload captured authority, exact source bytes and fixed auxiliary proof."""
+    import compiler
+    import encrypted_cut
+    import guard
+    import resource_claim
+    import staging_prerequisites as parent
+    authority=parent.load_authority(session)
+    if (not isinstance(authority,dict) or set(authority)!={'approved','execution','source'}
+        or authority['source']!=str(guard.ROOT/'installed'/'sources'/session.operation)): raise ValueError()
+    path=Path(authority['source'])/'deploy'/'staging'/'services.yaml'
+    fd,info=encrypted_cut.regular(path)
+    try:
+        if not 0<info.st_size<=2<<20: raise ValueError()
+        data=bytearray()
+        while len(data)<info.st_size:
+            chunk=os.read(fd,min(65536,info.st_size-len(data)))
+            if not chunk: raise ValueError()
+            data.extend(chunk)
+        after=os.fstat(fd)
+        if (os.read(fd,1) or (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)!=
+            (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns,after.st_ctime_ns)): raise ValueError()
+    finally: os.close(fd)
+    raw=bytes(data); approved=authority['approved']
+    if (approved['source_sha']!=session.context['commit']
+        or resource_claim.digest(source_contract(approved,raw))!=plan['source_contract_sha256']): raise ValueError()
+    record=parent.load_auxiliary_image(session,'p3'); aux=plan['auxiliary_image']
+    fields={'schema','operation','nonce','context','helper_sha256','source_capture_sha256','source_module_sha256',
+            'source_ref','repository','index_sha256','manifest_sha256','config_sha256','platform','node','image_ref'}
+    if (not isinstance(record,dict) or set(record)!=fields or record['schema']!='voice-staging-p3-auxiliary-image-v1'
+        or record['operation']!=session.operation or record['context']!=session.context or record['helper_sha256']!=session.helper
+        or record['source_capture_sha256']!=plan['source_capture_sha256'] or resource_claim.digest(record)!=aux['source_authority_sha256']
+        or record['source_module_sha256']!=approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']
+        or not isinstance(record['nonce'],str) or not re.fullmatch(r'[0-9a-f]{32}',record['nonce'])
+        or record['platform']!={'os':'linux','architecture':'amd64','variant':None}
+        or not isinstance(record['node'],dict) or set(record['node'])!={'name','uid','os','architecture'}
+        or record['node']['os']!='linux' or record['node']['architecture']!='amd64'
+        or not all(isinstance(record['node'][k],str) and record['node'][k] for k in ('name','uid'))
+        or record['source_ref']!=aux['source_ref'] or record['repository']!='docker.io/library/nginx'
+        or any(record[k]!=aux[k] for k in ('index_sha256','manifest_sha256','config_sha256','platform','image_ref'))): raise ValueError()
+    selected=[]
+    with resource_claim.command_scope(session.check):
+        for piece in re.split(r'^---\s*$',raw.decode('utf-8'),flags=re.M):
+            if re.search(r'^  name: (?:voice-realtime|voice-chat|voice-space|voice-p3-principal-jwks|voice-p3-principal-publisher-config)\s*$',piece,re.M):
+                selected.append(compiler.decode_yaml(piece.encode()))
+    consumers=[r for r in selected if r.get('metadata',{}).get('name') in ('voice-realtime','voice-chat','voice-space')]
+    publisher=[r for r in selected if r.get('metadata',{}).get('name') in ('voice-p3-principal-jwks','voice-p3-principal-publisher-config')]
+    source_consumers(consumers)
+    built=publisher_objects(publisher,aux['image_ref'],'sha256:'+aux['manifest_sha256'])
+    session.check()
+    if parent.load_authority(session)!=authority or parent.load_auxiliary_image(session,'p3')!=record: raise ValueError()
+    return built,record
+
+
 def mark_operation(objects,operation):
     """Build private payloads; caller must derive operation from the root session."""
     try:
@@ -167,7 +223,7 @@ def mark_operation(objects,operation):
     except Exception: raise PrerequisiteError('staging P3 operation payload invalid') from None
 
 
-def service_allocation(intended,actual):
+def service_allocation(intended,actual,*,dry_run=False):
     """Compare normalized Service intent and response; not a readback or authority."""
     try:
         wanted=gis_first_install.semantic(intended); live=gis_first_install.semantic(actual)
@@ -176,7 +232,8 @@ def service_allocation(intended,actual):
         if (wanted['kind']!='Service' or wanted['apiVersion']!='v1' or wanted['spec'].get('type')!='ClusterIP'
             or 'clusterIP' in wanted['spec'] or 'clusterIPs' in wanted['spec']): raise ValueError()
         meta=actual['metadata']
-        if not all(isinstance(meta.get(k),str) and meta[k] for k in ('uid','resourceVersion')): raise ValueError()
+        if type(dry_run) is not bool: raise ValueError()
+        if not dry_run and not all(isinstance(meta.get(k),str) and meta[k] for k in ('uid','resourceVersion')): raise ValueError()
         if (meta.get('ownerReferences') or meta.get('finalizers') or meta.get('deletionTimestamp')
             or set(actual)-{'apiVersion','kind','metadata','spec','status'}): raise ValueError()
         primary=live['spec'].pop('clusterIP'); addresses=live['spec'].pop('clusterIPs')
@@ -348,6 +405,108 @@ def execute(session):
         session.check()
 
 
+def preflight_payloads(session):
+    """Qualify all fixed private inputs before any prerequisite effect."""
+    import resource_claim
+    import staging_prerequisites as parent
+    import staging_p3_prerequisites_crypto as crypto
+    from stage_runtime import Kube
+    try:
+        if type(session) is not resource_claim.Session: raise ValueError()
+        session.check(); plan=validate_plan_shape(parent.require_child(session,'p3'))
+        if plan['operation']!=session.operation: raise ValueError()
+        publisher,record=_source_and_image(session,plan)
+        issuer=parent.load_issuer(session,'p3')
+        effects={row['id']:row for row in plan['effects']}; objects={row['id']:row for row in plan['objects']}
+        kube=Kube(); current={}; payloads={}; operations={}; provenances={}
+        with resource_claim.command_scope(session.check):
+            listings={kind:kube.run(['get',kind.lower(),'-o','json']) for kind in ('Secret','ConfigMap','Service','Deployment')}
+        for listing in listings.values():
+            if (not isinstance(listing,dict) or not isinstance(listing.get('items'),list)
+                or not isinstance(listing.get('metadata',{}).get('resourceVersion'),str)
+                or not listing['metadata']['resourceVersion']): raise ValueError()
+        for ident in inventory_intent():
+            kind,name=ident.split('/'); matches=[r for r in listings[kind]['items'] if r.get('metadata',{}).get('name')==name]
+            if ident in effects:
+                if matches: raise ValueError()
+                raw=parent.load_payload(session,'p3',ident)
+                if hashlib.sha256(raw).hexdigest()!=objects[ident]['payload_sha256']: raise ValueError()
+                row=json.loads(raw,object_pairs_hook=_unique_json)
+                if json.dumps(row,sort_keys=True,separators=(',',':'),allow_nan=False).encode()!=raw: raise ValueError()
+                if resource_claim.digest(private_semantic(row))!=objects[ident]['desired_sha256']: raise ValueError()
+                operations[ident]=session.operation; payloads[ident]=row
+            else:
+                if len(matches)!=1: raise ValueError()
+                row=matches[0]; provenance=parent.load_preserved(session,'p3',ident)
+                old=plan['preserved'][ident]; semantic=private_semantic(row); meta=row['metadata']
+                if (not isinstance(provenance,dict) or set(provenance)!={'authority','semantic','uid'}
+                    or provenance['authority']!=old['authority'] or provenance['uid']!=old['observed']['uid']
+                    or meta.get('uid')!=provenance['uid'] or semantic!=provenance['semantic']
+                    or resource_claim.digest(semantic)!=old['observed']['semantic_sha256']
+                    or meta.get('annotations',{}).get('voice.poryadok.io/prerequisites-operation')!=provenance['authority']['operation']): raise ValueError()
+                if kind=='Deployment':
+                    if meta.get('generation')!=old['observed']['generation']: raise ValueError()
+                elif meta.get('resourceVersion')!=old['observed']['resourceVersion']: raise ValueError()
+                operations[ident]=provenance['authority']['operation']; current[ident]=row; payloads[ident]=row
+                provenances[ident]=provenance
+            if (row.get('kind')!=kind or row.get('metadata',{}).get('name')!=name
+                or row['metadata'].get('namespace')!=NAMESPACE or row['metadata'].get('annotations',{}).get(
+                    'voice.poryadok.io/prerequisites-operation')!=operations[ident]): raise ValueError()
+        values={}
+        for ident in inventory_intent()[:len(ASSET_KEYS)]:
+            kind,name=ident.split('/'); row=payloads[ident]; data=row['data']
+            if not isinstance(data,dict) or set(data)!=ASSET_KEYS[name]: raise ValueError()
+            if kind=='ConfigMap':
+                if row.get('immutable') is not True: raise ValueError()
+                values[name]={k:v.encode('utf-8') for k,v in data.items()}
+            else:
+                if row.get('type')!=('kubernetes.io/tls' if name in TLS_NAMES else 'Opaque'): raise ValueError()
+                values[name]={k:base64.b64decode(v,validate=True) for k,v in data.items()}
+                if any(base64.b64encode(values[name][k]).decode()!=v for k,v in data.items()): raise ValueError()
+        crypto.validate_issuer_materials(values,issuer)
+        requested=material_objects(values)+copy.deepcopy(publisher)
+        for row in requested:
+            ident=row['kind']+'/'+row['metadata']['name']
+            if ident not in effects: continue
+            row['metadata']['annotations']={'voice.poryadok.io/prerequisites-operation':session.operation}
+            with resource_claim.command_scope(session.check):
+                normalized=kube.run(['create','--dry-run=server','-f','/dev/stdin','-o','json'],body=row)
+            observed=private_semantic(normalized); expected=private_semantic(payloads[ident])
+            if row['kind']=='Service':
+                service_allocation(payloads[ident],normalized,dry_run=True)
+                observed['spec'].pop('clusterIP'); observed['spec'].pop('clusterIPs')
+            if observed!=expected: raise ValueError()
+        session.check()
+        if parent.require_child(session,'p3')!=plan or parent.load_issuer(session,'p3')!=issuer: raise ValueError()
+        publisher2,record2=_source_and_image(session,plan)
+        if publisher2!=publisher or record2!=record: raise ValueError()
+        with resource_claim.command_scope(session.check):
+            final={kind:kube.run(['get',kind.lower(),'-o','json']) for kind in ('Secret','ConfigMap','Service','Deployment')}
+        for listing in final.values():
+            if (not isinstance(listing,dict) or not isinstance(listing.get('items'),list)
+                or not isinstance(listing.get('metadata',{}).get('resourceVersion'),str)
+                or not listing['metadata']['resourceVersion']): raise ValueError()
+        for ident in inventory_intent():
+            kind,name=ident.split('/'); matches=[r for r in final[kind]['items'] if r.get('metadata',{}).get('name')==name]
+            if ident in effects:
+                if matches: raise ValueError()
+            elif (len(matches)!=1 or matches[0].get('metadata',{}).get('uid')!=current[ident]['metadata']['uid']
+                  or private_semantic(matches[0])!=private_semantic(current[ident])
+                  or (kind!='Deployment' and matches[0]['metadata'].get('resourceVersion')!=current[ident]['metadata'].get('resourceVersion'))): raise ValueError()
+        for ident,provenance in provenances.items():
+            if parent.load_preserved(session,'p3',ident)!=provenance: raise ValueError()
+        session.check()
+        if parent.require_child(session,'p3')!=plan: raise ValueError()
+        return True
+    except Exception: raise PrerequisiteError('staging P3 preflight not qualified') from None
+
+
+def _unique_json(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result: raise ValueError()
+        result[key]=value
+    return result
 def verify_effect(session,effect_id,observation):
     """Freshly verify one parent-owned create response against private intent."""
     import resource_claim
@@ -374,6 +533,9 @@ def verify_effect(session,effect_id,observation):
             return result
         desired=json.loads(raw,object_pairs_hook=unique)
         if json.dumps(desired,sort_keys=True,separators=(',',':'),allow_nan=False).encode()!=raw: raise ValueError()
+        if (desired.get('kind')!=kind or desired.get('metadata',{}).get('name')!=name
+            or desired['metadata'].get('namespace')!=NAMESPACE or desired['metadata'].get('annotations',{}).get(
+                'voice.poryadok.io/prerequisites-operation')!=session.operation): raise ValueError()
         expected=private_semantic(desired)
         if resource_claim.digest(expected)!=effect['desired_sha256']: raise ValueError()
         session.check()
