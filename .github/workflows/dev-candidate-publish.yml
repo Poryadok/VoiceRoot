@@ -68,6 +68,12 @@ on:
       - scripts/dev/full_cohort_package_phase.py
       - scripts/dev/full_cohort_supervisor.py
       - scripts/dev/full_cohort_supervisor_test.py
+      - scripts/dev/full_cohort_image_only_baseline.py
+      - scripts/dev/full_cohort_image_only_baseline_test.py
+      - scripts/dev/full_cohort_chat_health.py
+      - scripts/dev/full_cohort_chat_health_test.py
+      - scripts/dev/realtime_jwks_publisher_oci.py
+      - scripts/dev/realtime_jwks_publisher_oci_test.py
       - scripts/dev/space_native_tool_identity.py
       - scripts/dev/space_native_tool_identity_test.py
       - scripts/dev/space_native_tool_identity_phase_test.py
@@ -206,6 +212,9 @@ jobs:
           python -B scripts/dev/full_cohort_oci_test.py
           python -B scripts/dev/full_cohort_package_phase_test.py
           python -B scripts/dev/full_cohort_supervisor_test.py
+          python -B scripts/dev/full_cohort_image_only_baseline_test.py
+          python -B scripts/dev/full_cohort_chat_health_test.py
+          python -B scripts/dev/realtime_jwks_publisher_oci_test.py
           python -B scripts/dev/space_native_tool_identity_test.py
           python -B scripts/dev/space_native_tool_identity_phase_test.py
           python -B scripts/dev/full_cohort_pg_physical_identity_test.py

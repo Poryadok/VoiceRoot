@@ -3,6 +3,8 @@ import copy
 import io
 import json
 import unittest
+import tempfile
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import resource_fencing as fencing
@@ -38,6 +40,65 @@ class FenceTests(unittest.TestCase):
         check=Mock(side_effect=lambda:copy.deepcopy(current))
         fence=fencing.Fence(context,check,store or MemoryLedger())
         return fence,current,check
+
+    def test_image_only_begin_binds_original_revision_and_lost_reply_is_uncertain(self):
+        import full_cohort_image_only_baseline as baseline
+        from types import SimpleNamespace
+        context=identity();context['operation_id']='media-c1-'+'a'*32
+        class Ledger(MemoryLedger):
+            def __init__(self):super().__init__();self.row={'status':'complete'};self.revision=('uid','old')
+            def write(self,revision,row):
+                if revision!=self.revision:raise RuntimeError('CAS conflict')
+                self.row=copy.deepcopy(row);self.revision=('uid','new')
+        ledger=Ledger();check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
+        journal=SimpleNamespace(dirfd=1,lockfd=2,state={'steps':{baseline.STEP:{'status':'captured'}}},save=lambda:None)
+        descriptor={'snapshot_sha256':'d'*64}; seen=[]; notices=[]
+        def capture(_f,_c,_l,_n,_j,previous,revision):
+            seen.append((previous,revision));return descriptor
+        with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+             patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=lambda _s,r:notices.append(r)), \
+             patch.object(baseline,'capture',side_effect=capture):
+            fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
+            fence.begin_image_only(None,None,'ns',journal)
+            self.assertEqual(seen, [({'status':'complete'},('uid','old'))])
+            self.assertEqual(ledger.row['image_only_baseline'],descriptor)
+            ledger.row={'status':'complete'};ledger.revision=('uid','old')
+            journal.state['steps'].pop('image-only-admission')
+            write=ledger.write
+            def lost(revision,row):write(revision,row);raise OSError('lost reply')
+            with patch.object(ledger,'write',side_effect=lost),self.assertRaises(OSError):
+                fence.begin_image_only(None,None,'ns',journal)
+            self.assertEqual(ledger.row['image_only_baseline'],descriptor)
+            self.assertEqual(journal.state['steps']['image-only-admission']['status'],'pending')
+            self.assertEqual(notices,['image-only begin outcome uncertain'])
+            with self.assertRaises(RuntimeError):fence.begin_image_only(None,None,'ns',journal)
+
+    def test_image_only_lost_remote_ack_stays_pending_after_reopen(self):
+        import full_cohort_image_only_baseline as baseline
+        import media_operation_journal
+        context=identity();context['operation_id']='media-c1-'+'a'*32
+        class Ledger(MemoryLedger):
+            def __init__(self):super().__init__();self.row={'status':'complete'};self.revision=('uid','old')
+            def write(self,revision,row):
+                if revision!=self.revision:raise RuntimeError('CAS conflict')
+                self.row=copy.deepcopy(row);self.revision=('uid','new');raise OSError('lost reply')
+        ledger=Ledger();check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
+        intent={'resource_context':context,'namespace_uid':'ns','cohort_route_mode':'full-cohort-v1'}
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'journal'
+            with media_operation_journal.Journal(path,intent) as journal, \
+                 patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+                 patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=OSError('unknown notice')):
+                def capture(_f,_c,_l,_n,j,_p,_r):
+                    descriptor={'snapshot_sha256':'d'*64}
+                    j.state['steps'][baseline.STEP]={'status':'captured','descriptor':descriptor};j.save()
+                    return descriptor
+                with patch.object(baseline,'capture',side_effect=capture):
+                    fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
+                    with self.assertRaises(OSError):fence.begin_image_only(None,None,'ns',journal)
+            with media_operation_journal.Journal(path,intent) as reopened:
+                self.assertEqual(reopened.state['steps']['image-only-admission']['status'],'pending')
+                self.assertEqual(ledger.row['status'],'active')
 
     def test_predecessor_begin_lost_reply_marks_uncertain(self):
         import full_cohort_predecessor_phase as predecessor
