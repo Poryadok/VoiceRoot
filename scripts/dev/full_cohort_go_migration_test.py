@@ -345,7 +345,7 @@ class SecretSnapshotTest(unittest.TestCase):
             job.input['files']['000001_init.up.sql'] = b'SELECT 2;'
             with self.assertRaises(migration.MigrationError): job._guard()
 
-    def test_job_flow_real_journal_fence_synthetic_boundaries(self):
+    def _job_flow(self, lost_reply):
         files = {'000001_init.up.sql': b'SELECT 1;', '000002_next.up.sql': b'SELECT 2;'}
         source = self.proof['source']
         secret_receipt = {'name': 'voice-go-input-chat-' + 'a' * 32, 'uid': 'secret-uid', 'resourceVersion': '7'}
@@ -364,7 +364,7 @@ class SecretSnapshotTest(unittest.TestCase):
         before = {'history': [{'version': 1, 'dirty': False}]}
         observed = {'databases': ['chat_db'], 'metadata': {'catalog': {'chat_db': before},
                     'migrations': {'chat_db': plan}}}
-        state = {'cm': None, 'job': None, 'pod': None, 'bound': False, 'finished': False}
+        state = {'cm': None, 'job': None, 'pod': None, 'bound': False, 'finished': False, 'posts': 0}
         def call(*args, body=None):
             if args[:2] in (('get', 'configmaps'), ('get', 'jobs')): return {'items': []}
             if args[:2] == ('get', 'configmap'): return state['cm']
@@ -381,12 +381,14 @@ class SecretSnapshotTest(unittest.TestCase):
                 state['cm'] = dict(body, metadata=body['metadata'] | {'uid': 'cm-uid', 'resourceVersion': '2'})
                 return state['cm']
             if args[0] == 'create' and body['kind'] == 'Job':
+                state['posts'] += 1
                 state['job'] = dict(body, metadata=body['metadata'] | {'uid': 'job-uid', 'resourceVersion': '3'},
                                     status={'conditions': [{'type': 'Complete', 'status': 'True'}]})
                 state['pod'] = {'metadata': {'uid': 'pod-uid', 'ownerReferences': [{'kind': 'Job', 'uid': 'job-uid', 'controller': True}]},
                                 'status': {'phase': 'Succeeded', 'containerStatuses': [{'containerID': 'cid',
                                 'imageID': 'containerd://' + migration.realtime_migration_job.PLATFORMS['amd64'],
                                 'state': {'terminated': {'exitCode': 0}}}]}}
+                if lost_reply: raise OSError('lost committed Job response')
                 return state['job']
             raise AssertionError(args)
         self.phase.client.call = call
@@ -411,6 +413,12 @@ class SecretSnapshotTest(unittest.TestCase):
              mock.patch.object(migration, 'verify_writer_pod', return_value={'uid': 'pod-uid', 'ip': '10.0.0.4'}), \
              mock.patch.object(migration, '_private_kube', return_value={}):
             phase = migration.Migration(self.phase)
+            if lost_reply:
+                with self.assertRaises(migration.MigrationError): phase.run()
+                self.assertEqual(self.base.ledger.row['status'], 'uncertain')
+                with self.assertRaises(migration.MigrationError): phase.run()
+                self.assertEqual(state['posts'], 1)
+                return
             result = phase.run()
             self.assertTrue(state['bound'] and state['finished'])
             self.assertEqual((result['from'], result['to'], result['dirty']), (1, 2, False))
@@ -422,3 +430,9 @@ class SecretSnapshotTest(unittest.TestCase):
             self.assertEqual(migration.verify_completed(phase), result)
             self.base.ledger.row['go_migrations']['chat_db']['steps']['job']['receipt']['to'] = 99
             with self.assertRaises(migration.MigrationError): migration.verify_completed(phase)
+
+    def test_job_flow_real_journal_fence_synthetic_boundaries(self):
+        self._job_flow(False)
+
+    def test_committed_job_reply_lost_is_uncertain_and_never_retried(self):
+        self._job_flow(True)
