@@ -297,6 +297,20 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   def run(args,**kwargs):
    session.check()
    import actor_root
+   if args==['get','pods','-l','app='+stage_runtime.HUB,'-o','json']:
+    return {'items':[{'metadata':{'name':stage_runtime.HUB+'-synthetic',
+      'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'rs-1'}]},
+      'status':{'phase':'Running','conditions':[{'type':'Ready','status':'True'}]}}]}
+   if args[:2]==['get','--raw'] and ':8222/proxy/jsz?' in args[-1]:
+    from nats_contract_plan_test import live
+    from rollout_census_test import CREATED
+    streams=live();details=[]
+    for name,info in streams.items():
+     state={**info['state'],'consumer_count':0,'bytes':100}
+     details.append({'name':name,'created':CREATED,'config':info['config'],'state':state,'consumer_detail':[]})
+    return {'streams':len(details),'consumers':0,'messages':sum(row['state']['messages'] for row in details),
+     'bytes':sum(row['state']['bytes'] for row in details),'total':1,
+     'account_details':[{'id':account,'stream_detail':details}]}
    if args==list(actor_root.STORY_SCHEMA_ARGS):
     return {'database':'story_db','username':'voice','version':4,'dirty':False}
    if args[:2]==['exec','voice-postgres-0'] and 'sha256sum' in ' '.join(args):
