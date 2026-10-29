@@ -15,6 +15,7 @@ class TrustTest(unittest.TestCase):
         self.assertEqual(result['root_count'],1)
         self.assertEqual(result['store_count'],2)
         with self.assertRaises(ValueError): trust.compare(before,after.replace(b'PKCS12',b'JKS'),'bb'*32)
+        with self.assertRaises(ValueError): trust.compare(before,b'Keystore type: JKS\n'+after,'bb'*32)
         for bad in (listing(('trustedCertEntry','BB')), listing(('PrivateKeyEntry','AA'),('trustedCertEntry','BB')),
                     listing(('trustedCertEntry','AA'))):
             with self.assertRaises(ValueError): trust.compare(before,bad,'bb'*32)
