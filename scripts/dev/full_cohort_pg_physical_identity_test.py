@@ -15,6 +15,7 @@ import media_backup_phase_test as fixture
 import media_operation_journal
 import resource_fencing
 import writer_cut
+import writer_cut_test
 
 
 class PhysicalPhaseTest(unittest.TestCase):
@@ -30,6 +31,10 @@ class PhysicalPhaseTest(unittest.TestCase):
             {'resource_context':self.context,'namespace_uid':'ns'})
         self.addCleanup(self.journal.close)
         self.client=object.__new__(runtime.KubectlTransport);self.client.journal=self.journal;self.ledger.client=self.client
+        actual_ledger=resource_fencing.KubeLedger(self.client)
+        actual_ledger.read=lambda:self.ledger.read()
+        actual_ledger.write=lambda revision,row:self.ledger.write(revision,row)
+        self.fence.ledger=actual_ledger
         self.lock={};self.catalog=object.__new__(affected.FullCatalogPhase)
         self.catalog.fence=self.fence;self.catalog.lock=self.lock;self.catalog.namespace_uid='ns'
         self.catalog.journal=self.journal;self.catalog.client=self.client
@@ -65,11 +70,11 @@ class PhysicalPhaseTest(unittest.TestCase):
             self.fail('source-owned physical identity phase is required')
         marker={'status':'done','receipt_sha256':module._digest(self.receipt)}
         self.ledger.row['full_cohort_db_catalog']=marker
-        phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
         with mock.patch.object(module.media_operation_guard,'verify'), \
              mock.patch.object(module.schema,'kube_engine_snapshot',return_value=lambda:copy.deepcopy(self.engine)), \
              mock.patch.object(module.schema,'linux_psql',side_effect=lambda _args:json.dumps(self.pg).encode()), \
              mock.patch.object(module.PhysicalPhase,'_mount_proof',return_value=None):
+            phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
             expected=phase.run('token')
             self.assertEqual(expected,{'namespace_uid':'ns','pod_uid':'pod','statefulset_uid':'sts','pvc_uid':'pvc',
                 'pv_name':'pvc-volume','pv_uid':'pv','container':'postgres','container_id':'containerd://fixture',
@@ -95,18 +100,92 @@ class PhysicalPhaseTest(unittest.TestCase):
     def test_lost_ledger_write_keeps_pending_and_prevents_observation(self):
         module=importlib.import_module('full_cohort_pg_physical_identity')
         self.ledger.row['full_cohort_db_catalog']={'status':'done','receipt_sha256':module._digest(self.receipt)}
-        phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
         original=self.ledger.write
         def lost(revision,row):
             original(revision,row)
             if row.get(module.LEDGER,{}).get('status')=='pending':raise RuntimeError('lost reply')
-        with mock.patch.object(module.media_operation_guard,'verify'),mock.patch.object(self.ledger,'write',side_effect=lost), \
-             mock.patch.object(phase,'_observe') as observe:
-            with self.assertRaisesRegex(module.PhysicalError,'reconcile'):phase.run('token')
-            observe.assert_not_called()
+        with mock.patch.object(module.media_operation_guard,'verify'),mock.patch.object(self.ledger,'write',side_effect=lost):
+            phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
+            with mock.patch.object(phase,'_observe') as observe:
+                with self.assertRaisesRegex(module.PhysicalError,'reconcile'):phase.run('token')
+                observe.assert_not_called()
         self.assertTrue(phase.poisoned)
         self.assertEqual(self.journal.state['steps'][module.STEP]['status'],'pending')
         self.assertEqual(self.ledger.row[module.LEDGER]['status'],'pending')
+
+    def test_distinct_facades_bind_same_ledger_and_reject_drift(self):
+        module=importlib.import_module('full_cohort_pg_physical_identity')
+        self.ledger.row['full_cohort_db_catalog']={'status':'done','receipt_sha256':module._digest(self.receipt)}
+        def facade(name):
+            journal=media_operation_journal.Journal(Path(self.tmp.name)/name,
+                {'resource_context':copy.deepcopy(self.context),'namespace_uid':'ns'})
+            self.addCleanup(journal.close)
+            client=object.__new__(runtime.KubectlTransport);client.journal=journal
+            ledger=resource_fencing.KubeLedger(client)
+            ledger.read=lambda:self.ledger.read()
+            ledger.write=lambda revision,row:self.ledger.write(revision,row)
+            fence=resource_fencing.Fence(copy.deepcopy(self.context),lambda:{},ledger)
+            return journal,client,fence
+        cj,cc,cf=facade('catalog-facade');wj,wc,wf=facade('cut-facade')
+        self.catalog.journal,self.catalog.client,self.catalog.fence=cj,cc,cf
+        self.cut.journal,self.cut.client,self.cut.fence=wj,wc,wf
+        observed={'expected':{'fixture':'physical'},'engine':self.engine,'server_start':'start',
+                  'database_oid':42,'system_identifier':'7','node':{'name':'node','uid':'node-uid'}}
+        with mock.patch.object(module.media_operation_guard,'verify'), \
+             mock.patch.object(module.PhysicalPhase,'_observe',return_value=observed):
+            phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
+            self.assertEqual(phase.run('token'),{'fixture':'physical'})
+            original=wf.ledger.read;wf.ledger.read=lambda:(copy.deepcopy(self.ledger.row),('other-uid','1'))
+            with self.assertRaises(module.PhysicalError):module.verify_current(phase,'token')
+            wf.ledger.read=original
+            self.cut.client=cc
+            with self.assertRaises(module.PhysicalError):module.verify_current(phase,'token')
+
+    def test_catalog_cut_and_physical_share_authority_through_distinct_facades(self):
+        module=importlib.import_module('full_cohort_pg_physical_identity')
+        base=writer_cut_test.WriterCutTest('test_drain_and_resume_use_current_template_not_old')
+        self.addCleanup(lambda:self.assertTrue(base.doCleanups()))
+        base.setUp()
+        backing=base.ledger
+        class LedgerView:
+            def __init__(inner,client): inner.client=client
+            def read(inner): return backing.read()
+            def write(inner,revision,row): return backing.write(revision,row)
+        def facade(name,extra):
+            j=media_operation_journal.Journal(Path(base.temp.name)/name,
+                {'resource_context':copy.deepcopy(base.context),'namespace_uid':'ns',**extra})
+            self.addCleanup(j.close)
+            c=writer_cut_test.Client(base.lock,j); c.workloads=base.client.workloads
+            f=resource_fencing.Fence(copy.deepcopy(base.context),lambda:copy.deepcopy(base.card),LedgerView(c))
+            return j,c,f
+        observed={'database_observations':{'workloads':{'user':[{'status':'observed','result':{'metadata':{
+            'engine':{'namespace_uid':'ns'},'session':{'server_start':'start'}}}}]}}}
+        class Inventory:
+            def __init__(inner,fence): inner.fence=fence;inner.lock=base.lock;inner.namespace_uid='ns'
+            def verify_current(inner,token): return copy.deepcopy(observed)
+            def verify_receipt(inner,token): return copy.deepcopy(observed)
+        cj,cc,cf=facade('physical-catalog',{})
+        full={'databases':{'postgres':42},'all_databases':{'postgres':42},'excluded':{},'properties':{}}
+        with mock.patch.object(resource_fencing,'KubeLedger',LedgerView), \
+             mock.patch.object(affected.inventory,'InventoryPhase',Inventory), \
+             mock.patch.object(affected,'_full_catalog',return_value=full), \
+             mock.patch.object(module.media_operation_guard,'verify'):
+            catalog=affected.FullCatalogPhase(cj,cf,cc,base.lock,'ns',Inventory(cf))
+            receipt=catalog.run('token')
+            admission=copy.deepcopy(base.admission)
+            admission['session_scope']={'engine':receipt['engine'],'server_start':'start',
+                                        'databases':['postgres'],'database_oids':{'postgres':42}}
+            wj,wc,wf=facade('physical-cut',{'writer_cut':admission})
+            cut=writer_cut.WriterCut(wj,wf,wc,base.lock,'ns',admission,
+                lambda scope:{'scope':scope,'active_sessions':0,'active_transactions':0})
+            with mock.patch.object(cut,'_patch',side_effect=wc.patch):cut.drain()
+            pj,pc,pf=facade('physical-phase',{})
+            value={'expected':{'fixture':'physical'},'engine':receipt['engine'],'server_start':'start',
+                   'database_oid':42,'system_identifier':'7','node':{'name':'node','uid':'node-uid'}}
+            with mock.patch.object(module.PhysicalPhase,'_observe',return_value=value):
+                phase=module.PhysicalPhase(pj,pf,pc,base.lock,'ns',catalog,cut)
+                self.assertEqual(phase.run('token'),{'fixture':'physical'})
+                self.assertEqual(module.verify_current(phase,'token'),{'fixture':'physical'})
 
     def test_mount_proof_uses_existing_producer_and_rejects_nested_mount(self):
         module=importlib.import_module('full_cohort_pg_physical_identity')

@@ -10,6 +10,8 @@ import frontend_runtime_executor
 import full_cohort_affected_plan as affected
 import full_cohort_schema_metadata as schema
 import media_operation_guard
+import media_operation_journal
+import resource_fencing
 import story_media_backup_capture as capture
 import writer_cut
 
@@ -43,23 +45,37 @@ class PhysicalPhase:
         self.lock,self.namespace_uid=copy.deepcopy(lock),namespace_uid
         self.intent=copy.deepcopy(journal.intent);self.poisoned=False
         self._dependencies=(journal,fence,client,catalog,cut)
-        if (type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
-            or getattr(fence.ledger,'client',None) is not client or type(catalog) is not affected.FullCatalogPhase
-            or type(cut) is not writer_cut.WriterCut or catalog.journal is not journal or cut.journal is not journal
-            or catalog.client is not client or cut.client is not client
-            or self.intent.get('resource_context')!=fence.context or self.intent.get('namespace_uid')!=namespace_uid
-            or any(other.fence is not fence or other.lock!=self.lock or other.namespace_uid!=namespace_uid
-                   for other in (catalog,cut))):
+        self._facades=tuple((other.journal,other.fence,other.client) for other in (catalog,cut))
+        if (type(journal) is not media_operation_journal.Journal or type(fence) is not resource_fencing.Fence
+            or type(fence.ledger) is not resource_fencing.KubeLedger
+            or type(client) is not frontend_runtime_executor.KubectlTransport or client.journal is not journal
+            or fence.ledger.client is not client or type(catalog) is not affected.FullCatalogPhase
+            or type(cut) is not writer_cut.WriterCut
+            or self.intent.get('resource_context')!=fence.context or self.intent.get('namespace_uid')!=namespace_uid):
             raise PhysicalError('physical identity context invalid')
+        self._authority()
+
+    def _authority(self):
+        for other,facade in zip((self.catalog,self.cut),self._facades):
+            if (type(other.journal) is not media_operation_journal.Journal or
+                type(other.fence) is not resource_fencing.Fence or type(other.fence.ledger) is not resource_fencing.KubeLedger or
+                type(other.client) is not frontend_runtime_executor.KubectlTransport or
+                other.client.journal is not other.journal or other.fence.ledger.client is not other.client or
+                other.fence.context!=self.fence.context or other.lock!=self.lock or other.namespace_uid!=self.namespace_uid or
+                other.journal.intent.get('resource_context')!=self.fence.context or
+                other.journal.intent.get('namespace_uid')!=self.namespace_uid or
+                any(actual is not original for actual,original in zip((other.journal,other.fence,other.client),facade))):
+                raise PhysicalError('physical identity context changed')
+            media_operation_guard.verify(other.fence,other.client,other.lock,other.namespace_uid)
+        self._ledger()
 
     def _guard(self):
         if (self.poisoned or self.journal.poisoned or self.journal.intent!=self.intent
             or self.journal.state.get('intent')!=self.intent
-            or any(a is not b for a,b in zip((self.journal,self.fence,self.client,self.catalog,self.cut),self._dependencies))
-            or any(other.fence is not self.fence or other.lock!=self.lock or other.namespace_uid!=self.namespace_uid
-                   for other in (self.catalog,self.cut))):
+            or any(a is not b for a,b in zip((self.journal,self.fence,self.client,self.catalog,self.cut),self._dependencies))):
             raise PhysicalError('physical identity context changed')
         media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
+        self._authority()
 
     def _ledger(self):
         row,revision=self.fence.ledger.read()
