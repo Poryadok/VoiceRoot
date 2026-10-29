@@ -94,6 +94,19 @@ original replica count. A failed or unknown effect poisons the invocation,
 marks the fence uncertain when possible, and requires operator reconciliation;
 do not replay, auto-rollback or release the lock from absence alone.
 
+When the selected writers include Space, Chat or Realtime, `resume` refuses the
+bulk path. Bind the qualified source-owned post-image plan with
+`prepare_activation(phase, token)`, inspect `verify_activation_stage()`, and call
+`activate_next()` only for a controller stage. At a health stage the named fixed
+source phase runs its own actual observation, then
+`accept_activation_health(name, phase, token)` binds its completed receipt.
+Space HTTPS must be confirmed before Realtime, publisher HTTPS before Chat, and
+Chat health before Realtime. `finish_activation()` completes only after the full
+ordered prefix and all required barriers. Source and health receipts are checked
+again before each CAS; the shared ledger and private records are checked at the
+final pre-CAS boundary. Phase tokens stay in memory. A failed or uncertain step
+holds the operation and must not be replayed.
+
 Target preflight binds UID, generation and full spec to the caller's admitted
 target; status-only resourceVersion changes are allowed. The subsequent patch
 uses the fresh observed resourceVersion as an exact CAS test. Reobservation

@@ -15,7 +15,7 @@ import cohort_readback as readback
 import story_media_backup_cohort_restore as restore
 import auth_live_migration_phase_eligibility as eligibility
 import auth_live_migration_phase_probe as probe
-from auth_flyway_upgrade_qualification import source_catalog, candidate_blob, marker_snapshot
+from auth_flyway_upgrade_qualification import source_catalog, candidate_blob, marker_snapshot, snapshot_protected
 import auth_user_adoption_runtime as runtime
 import story_media_backup_restore as media_restore
 import cohort_backup_phases
@@ -687,6 +687,7 @@ def init_c1(phase, cut, source_root, actor, token, metadata):
     """Capture and reserve an authenticated C1 plan; creates no Kubernetes objects."""
     p=phase.phases; started=False
     try:
+        metadata=snapshot_protected(metadata)
         _cut_identity(phase,cut); drain=lambda:cut.verify_drained()
         _package_authority(phase); readback._guard(phase,drain)
         binding,provenance=verified_sources(phase,metadata,26); _bind_cut_scope(cut,binding)
@@ -751,6 +752,7 @@ def no_op_c2(phase, cut, source_root, actor, token, metadata):
     """Record a fresh clean32 C2 observation. No Kubernetes objects are created."""
     p=phase.phases; started=False
     try:
+        metadata=snapshot_protected(metadata)
         _cut_identity(phase,cut); drain=lambda:cut.verify_drained()
         _package_authority(phase)
         readback._guard(phase,drain)
@@ -783,7 +785,7 @@ def no_op_c2(phase, cut, source_root, actor, token, metadata):
                 or 'auth-live-c2-private' in p.journal.state['steps']): raise ValueError()
         receipt={'status':'no-op','operation_id':binding['operation_id'],'snapshot_id':binding['snapshot_id'],
                  'source_sha':binding['source_sha'],'candidate':candidate,'provenance':provenance,
-                 'source_catalog':catalog,'history':history,'engine':scope}
+                 'source_catalog':catalog,'history':history,'engine':scope,'metadata':metadata}
         record={'status':'done','nonce':secrets.token_hex(16),'operation_id':binding['operation_id'],
                 'snapshot_id':binding['snapshot_id'],'receipt_sha256':_digest(receipt)}
         started=True
@@ -804,6 +806,88 @@ def no_op_c2(phase, cut, source_root, actor, token, metadata):
     except BaseException:
         if started: readback._poison(phase)
         raise PhaseError('C2 Auth no-op unavailable; retain fence if outcome is uncertain') from None
+
+
+def verify_completed(phase, cut, source_root):
+    """Read protected terminal evidence without requiring writers to stay drained."""
+    try:
+        _cut_identity(phase,cut); p=phase.phases
+        if phase._guard() is False or cut._guard() is False: raise ValueError()
+        _package_authority(phase)
+        context=copy.deepcopy(p.fence.context); intent=copy.deepcopy(p.intent)
+        steps=copy.deepcopy(p.journal.state['steps']); cut_steps=copy.deepcopy(cut.journal.state['steps'])
+        phase_binding=copy.deepcopy(phase.binding); row,_=p.fence.ledger.read()
+        operation=context['operation_id']; operation_name(operation)
+        bound_snapshot=None
+        if operation.startswith('media-c1-'):
+            inputs=steps['auth-live-c1-inputs']
+            metadata=snapshot_protected(inputs['metadata'])
+            verified_sources(phase,metadata,26)
+            terminal=verify_writer_terminal(phase,source_root); cleanup=verify_writer_cleanup(phase,source_root)
+            record=steps['auth-live-c1']; candidates=[b for b in cut.migration_history
+                if b.get('kind')=='auth' and b.get('phase') is phase and b.get('root')==source_root
+                and b.get('terminal')==record['terminal_sha256']]
+            if len(candidates)!=1: raise ValueError()
+            binding=candidates[0]
+            bound_snapshot=copy.deepcopy({k:v for k,v in binding.items() if k!='phase'})
+            import writer_cut_migration
+            writer_cut_migration.verify_cleaned(cut,binding)
+            step='writer-cut-migration-cleanup-'+record['nonce']
+            entry=cut.journal.state['steps'][step]
+            details={'plan_sha256':writer_cut.digest(binding['plan']),'job_uid':cleanup['job']['uid'],
+                     'config_uid':cleanup['configmap']['uid'],'terminal_sha256':record['terminal_sha256']}
+            if (entry.get('status')!='done' or entry.get('details')!=details
+                    or entry.get('receipt')!={'operation_id':operation,**details}): raise ValueError()
+            candidate=inputs['candidate']; receipt_sha=record['terminal_sha256']; snapshot=record['snapshot_id']
+            status='migrated'
+        else:
+            metadata=snapshot_protected(steps['auth-live-c2-private']['metadata'])
+            binding,provenance=c2_sources(phase,metadata); _bind_cut_scope(cut,binding)
+            record=steps['auth-live-c2']; receipt=steps['auth-live-c2-private']
+            if (not isinstance(record,dict) or set(record)!={'status','nonce','operation_id','snapshot_id','receipt_sha256'}
+                    or record!=row.get('auth_live_c2') or record['status']!='done'
+                    or record['operation_id']!=operation or record['snapshot_id']!=binding['snapshot_id']
+                    or not isinstance(record['nonce'],str) or not re.fullmatch(r'[0-9a-f]{32}',record['nonce'])
+                    or record['receipt_sha256']!=_digest(receipt) or receipt.get('status')!='no-op'
+                    or receipt.get('operation_id')!=operation or receipt.get('snapshot_id')!=binding['snapshot_id']
+                    or receipt.get('source_sha')!=context['commit'] or receipt.get('provenance')!=provenance): raise ValueError()
+            _,catalog=source_catalog(source_root,context['commit'])
+            profile=candidate_blob(source_root,context['commit'],
+                'src/backend/auth/src/main/resources/roleidentityauthority/migration-history-linked-oauth-v1.json')
+            auth=binding['sources']['auth_db']; databases=binding['databases']
+            scope={'engine':auth['engine'],'server_start':auth['server_start'],'databases':databases,
+                   'database_oids':{db:binding['sources'][db]['database_oid'] for db in databases}}
+            projected=[{k:r[k] for k in ('version','script','checksum','success')} for r in receipt['history']]
+            if (receipt.get('source_catalog')!=catalog or catalog!=metadata['migrations']['auth_db']['files']
+                    or receipt.get('engine')!=scope or projected!=metadata['catalog']['auth_db']['history']
+                    or not matches_expected_history(receipt['history'],expected_history(catalog,profile,32))): raise ValueError()
+            candidate=receipt['candidate']; receipt_sha=record['receipt_sha256']; snapshot=record['snapshot_id']
+            status='no-op'
+        plan=intent['auth_live_candidate']; target=eligibility.candidate_target(plan['deployment']['spec'],context['images']['voice-auth/auth'])
+        if (not isinstance(candidate,dict) or candidate.get('source_sha')!=context['commit']
+                or candidate.get('image')!=context['images']['voice-auth/auth']
+                or candidate.get('auth_tree')!=eligibility._source_tree(source_root,context['commit'])
+                or candidate.get('target_spec_sha256')!=_digest(target)
+                or candidate.get('platform_digest')!=plan['platform_digest']
+                or candidate.get('deployment',{}).get('uid')!=plan['deployment']['uid']
+                or candidate.get('deployment',{}).get('generation')!=plan['deployment']['generation']
+                or candidate.get('policy')!={'flyway':'disabled','persistence':'jdbc','selector':'absent'}
+                or candidate.get('route') not in ({'host':h,'database':'auth_db','role':'voice'} for h in
+                    ('voice-postgres','voice-postgres.voice-dev','voice-postgres.voice-dev.svc','voice-postgres.voice-dev.svc.cluster.local'))):
+            raise ValueError()
+        if phase._guard() is False or cut._guard() is False: raise ValueError()
+        final_row,_=p.fence.ledger.read()
+        if (final_row!=row or p.journal.state['steps']!=steps or cut.journal.state['steps']!=cut_steps
+                or p.fence.context!=context or p.intent!=intent or p.journal.intent!=intent
+                or p.journal.state.get('intent')!=intent or phase.binding!=phase_binding): raise ValueError()
+        if bound_snapshot is not None:
+            current=[b for b in cut.migration_history if b.get('phase') is phase and
+                     {k:v for k,v in b.items() if k!='phase'}==bound_snapshot]
+            if len(current)!=1: raise ValueError()
+        return {'status':status,'operation_id':operation,'snapshot_id':snapshot,'source_sha':context['commit'],
+                'receipt_sha256':receipt_sha,'candidate':{k:copy.deepcopy(candidate[k]) for k in
+                    ('image','platform_digest','target_spec_sha256','auth_tree','policy','route')}}
+    except BaseException: raise PhaseError('completed Auth authority unavailable') from None
 
 
 def operation_name(operation):
