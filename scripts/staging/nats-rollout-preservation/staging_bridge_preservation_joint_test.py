@@ -290,6 +290,15 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
       'gis_first_install':True},approved,execution,workspace)
    except KeyError as exc:
     assert 'VOICE_TEST_OCI' not in os.environ and exc.args==(('node','pmdebook'),), str(exc)
+   except parent.Blocked as exc:
+    # Current candidate source has Story migrations 1–8 while the existing
+    # predecessor witness accepts only source 1–4. Preserve this real HOLD;
+    # it does not prove compatibility or any downstream rollout phase.
+    assert 'VOICE_TEST_OCI' in os.environ and str(exc)=='existing_service_actor_authority_changed', str(exc)
+    import actor_root
+    story=workspace/'src/backend/migrations/story_db'
+    up={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in story.glob('*.up.sql')}
+    assert len(up)==8 and all(up.get(k)==v for k,v in actor_root.STORY_UP.items()) and up!=actor_root.STORY_UP
    except Exception as exc:
     raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
   assert not (root/'installed'/'cohort-preservation').exists()
