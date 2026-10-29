@@ -13,6 +13,13 @@ from full_application_compiler_test import FullApplicationCompilerTests
 
 
 class FullApplicationConsumerTests(unittest.TestCase):
+    def test_subset_in_app_mode_holds_before_prepare_effects(self):
+        actions=object.__new__(bridge_root.Actions)
+        with patch.object(bridge_root.Actions,'_idle') as idle,patch.object(bridge_root.Actions,'_dispatcher') as dispatcher:
+            with self.assertRaisesRegex(Exception,'staging_selective_full_mode_unsupported'):
+                actions._prepare({'mode':'app-only','changed_services':['analytics','chat','voice']})
+            idle.assert_not_called();dispatcher.assert_not_called()
+
     def test_three_selected_images_remain_selective_with_full_build_request(self):
         fixture=FullApplicationCompilerTests('test_full23_cold_gis_defers_only_create_pair')
         fixture.setUp();self.addCleanup(fixture.doCleanups)

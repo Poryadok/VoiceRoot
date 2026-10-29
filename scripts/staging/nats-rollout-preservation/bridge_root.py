@@ -354,6 +354,10 @@ class Actions:
 
     def _prepare(self,request,previous=None,repair=None,*,cohort_ref=None):
         import migrations
+        if request.get('mode') in ('full','app-only') and request.get('changed_services'):
+            import source_plan
+            if set(request['changed_services'])!=source_plan.FULL_APPLICATIONS:
+                raise Blocked('staging_selective_full_mode_unsupported')
         if cohort_ref is None:
             cohort_start=(request.get('mode') in ('full','app-only') and previous is None and repair is None
                           and request.get('provisional_staging') is not True)
