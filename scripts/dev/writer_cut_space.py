@@ -96,6 +96,16 @@ def _same(cut,before):
     if (cut.fence.ledger.read()!=(before[1],before[2]) or
         phase.journal.state['steps'].get(fresh.STEP)!=before[3] or
         any(cut.journal.state['steps'].get(k)!=v for k,v in cut._space_private['records'].items())):raise ValueError()
+    phase._identity();cut._identity()
+    private=cut._space_private;binding=cut.space_fresh
+    if (binding is not private['binding'] or set(binding)!={'phase','token','finished','receipt_sha256'} or
+        binding.get('phase') is not phase or
+        binding.get('token')!=private['token'] or binding.get('finished') is not private['finished'] or
+        binding.get('receipt_sha256')!=private['receipt_sha256'] or
+        any(a is not b for a,b in zip(_refs(cut,phase),private['refs'])) or
+        cut.fence.context!=private['context'] or cut.lock!=private['lock'] or cut.admission!=private['admission'] or
+        phase.journal.state['steps'].get(fresh.STEP)!=before[3] or
+        any(cut.journal.state['steps'].get(k)!=v for k,v in private['records'].items())):raise ValueError()
 
 
 def bind(cut,phase,token):
@@ -106,7 +116,7 @@ def bind(cut,phase,token):
         if details['state']!='drop_pending' or details['resources'] or details['new_oid'] is not None:raise ValueError()
         fresh.verify_catalog_successor(phase,cut,token);phase._stable(before)
         scope=cut.admission['session_scope'];original=details['catalog']
-        if (scope['engine']!=original['engine'] or scope['server_start']!=original['server_start'] or
+        if (scope!=_scope(original,original['engine'],original['server_start']) or
             scope['database_oids'].get('space_db')!=details['old_oid']):raise ValueError()
         descriptor={'operation_id':phase.context['operation_id'],'source_sha':phase.context['commit'],
             'namespace_uid':phase.namespace_uid,'invocation':cut.invocation,'old_oid':details['old_oid'],

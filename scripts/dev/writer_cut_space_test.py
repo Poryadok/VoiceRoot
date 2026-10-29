@@ -22,6 +22,8 @@ class SpaceCutTest(unittest.TestCase):
         self.addCleanup(cleanup);f.setUp()
         scope={'engine':copy.deepcopy(f.engine),'server_start':'start',
             'databases':sorted(f.original['all_databases']),'database_oids':copy.deepcopy(f.original['all_databases'])}
+        if self._testMethodName=='test_incomplete_original_scope_refuses_before_bind_and_drop':
+            scope['database_oids'].pop('voice_db');scope['databases'].remove('voice_db')
         admission={'controllers':[cut_fixture.workload('Deployment','voice-space','space-controller',1,'source-image')],
             'guards':{'jobs':[],'cronjobs':[],'hpas':[]},'linked':{'jobs':[],'cronjobs':[]},'session_scope':scope}
         f.journal.intent['writer_cut']=copy.deepcopy(admission);f.journal.state['intent']=copy.deepcopy(f.journal.intent)
@@ -77,6 +79,12 @@ class SpaceCutTest(unittest.TestCase):
         with self.assertRaises(fresh.SpaceFreshError):self.f.phase().run()
         self.assertEqual(self.f.drops,[]);self.assertEqual(self.f.backing.row['status'],'uncertain')
 
+    def test_incomplete_original_scope_refuses_before_bind_and_drop(self):
+        with self.assertRaises(fresh.SpaceFreshError):self.f.phase().run()
+        self.assertEqual(self.f.drops,[])
+        self.assertNotIn(space.BIND,self.cut.journal.state['steps'])
+        self.assertEqual(self.f.backing.row['status'],'uncertain')
+
     def test_binding_cannot_be_replaced_or_terminal_local_deleted(self):
         phase=self.f.phase();phase.run();original=self.cut.space_fresh
         self.cut.space_fresh=dict(original)
@@ -84,6 +92,22 @@ class SpaceCutTest(unittest.TestCase):
         self.cut.space_fresh=original
         self.cut.journal.state['steps'].pop(space.FINISH)
         with self.assertRaises(Exception):space.verify_binding(self.cut,True)
+
+    def test_final_ledger_read_cannot_close_journal(self):
+        self.f.phase().run()
+        ledger=self.cut.fence.ledger;read=ledger.read;calls=[]
+        def count():
+            calls.append(None);return read()
+        with mock.patch.object(ledger,'read',side_effect=count):
+            self.assertEqual(space.guard_jobs(self.cut,[]),[])
+        final=len(calls);self.assertGreater(final,0);calls.clear()
+        def close_at_final():
+            result=read();calls.append(None)
+            if len(calls)==final:self.cut.journal.close()
+            return result
+        with mock.patch.object(ledger,'read',side_effect=close_at_final):
+            with self.assertRaises(Exception):space.guard_jobs(self.cut,[])
+        self.assertEqual(len(calls),final)
 
 
 if __name__=='__main__':unittest.main()
