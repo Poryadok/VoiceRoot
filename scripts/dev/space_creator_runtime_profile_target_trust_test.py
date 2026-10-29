@@ -102,5 +102,16 @@ class TargetTrustTest(unittest.TestCase):
                     jp.journal.state['steps'][jdk.STEP]=jp.record|{'receipt':changed}
                     with self.assertRaises(target.metadata.GuardLost): target.verify_current(phase,'token')
                     jp.record=original_record; jp.journal.state['steps'][jdk.STEP]=original_entry
+                    phase.preflight=object()
+                    with self.assertRaises(target.metadata.GuardLost): target.verify_current(phase,'token')
+                    phase.preflight=pp
+                    original_ledger=phase._ledger; original_marker=copy.deepcopy(phase.record); seen=[]
+                    def last_read_tamper():
+                        answer=original_ledger(); seen.append(1)
+                        if len(seen)==2:phase.record=None
+                        return answer
+                    phase._ledger=last_read_tamper
+                    with self.assertRaises(target.metadata.GuardLost): target.verify_current(phase,'token')
+                    phase._ledger=original_ledger; phase.record=original_marker
                     values['voice-media-jvm-trust']=({'uid':'trust','resourceVersion':'2'},b'PRIVATE-SENTINEL')
                     with self.assertRaises(target.TargetTrustError): target.verify_current(phase,'token')
