@@ -7,9 +7,21 @@ from unittest.mock import patch
 import root_cli
 import staging_cohort_preservation as cohort
 import transaction
+import guard
+import resource_claim
+import resource_claim_test
 
 
 class PreservedRootCLITest(unittest.TestCase):
+    def test_authorization_rejects_cohort_hash_without_prerequisite_link(self):
+        target={'cohort_preservation_sha256':'a'*64};context=resource_claim_test.context()
+        receipt={'schema':'nats-rollout-preservation-v1','operation':'a'*12,'namespace_uid':'11111111-1111-4111-8111-111111111111',
+                 'marker':{},'pvc':{},'pv':{},'target':target,'backup':{},'expires_at':'fixture',
+                 'resource_fence':{'schema':'voice-staging-resource-fence-v1','context':context,'operation':'a'*12,
+                                   'helper_sha256':'b'*64,'target_sha256':resource_claim.digest(target)}}
+        with self.assertRaisesRegex(guard.Blocked,'cohort_preservation_target_invalid'):
+            guard.validate(receipt,'registry',context['commit'],'full',[],Path('/fixture'))
+
     def test_transaction_rejects_foreign_receipt_before_checkpoint(self):
         session=SimpleNamespace(operation='a'*12)
         with tempfile.TemporaryDirectory(dir='/root') as folder,patch.object(cohort,'load_qualified',return_value={'receipt':'actual'}):

@@ -37,6 +37,19 @@ class MemoryJournal:
 
 
 class ResourceTests(unittest.TestCase):
+    def test_cohort_target_requires_exact_root_qualified_receipt(self):
+        import sys
+        from unittest.mock import Mock
+        c=context();session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal())
+        receipt={'qualified':'fixture'};adapter=Mock();adapter.load_qualified.return_value=receipt
+        with patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
+            row={'cohort_preservation_sha256':'c'*64}
+            session._validate_cohort_target(row,{'cohort_preservation_sha256':claim.digest(receipt)})
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_target_changed'):
+                session._validate_cohort_target(row,{'cohort_preservation_sha256':'f'*64})
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_target_changed'):
+                session._validate_cohort_target({}, {'cohort_preservation_sha256':claim.digest(receipt)})
+
     def test_cohort_binding_rejects_unbound_effects_and_target_replacement(self):
         import sys
         from unittest.mock import Mock

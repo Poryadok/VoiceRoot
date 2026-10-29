@@ -327,6 +327,15 @@ class Session:
         self.journal.save(row);self.expected_target=row['target_sha256']
         return self.binding()
 
+    def _validate_cohort_target(self,row,target):
+        if row.get('cohort_preservation_sha256') is None:
+            if 'cohort_preservation_sha256' in target:raise RuntimeError('staging_cohort_target_changed')
+            return
+        import staging_cohort_preservation
+        receipt=staging_cohort_preservation.load_qualified(self)
+        if target.get('cohort_preservation_sha256')!=digest(receipt):
+            raise RuntimeError('staging_cohort_target_changed')
+
     def advance_realtime_bootstrap(self,target,actual):
         import realtime_bootstrap
         row=self.check();card=self.authority();observed=card.get('observed',{})
@@ -341,6 +350,7 @@ class Session:
             if target.get('prerequisites_sha256')!=plan['prerequisites_sha256'] or plan['prerequisites_sha256']!=digest(parent):
                 raise RuntimeError('staging_prerequisites_capture_changed')
         elif 'prerequisites_sha256' in target:raise RuntimeError('staging_prerequisites_capture_changed')
+        self._validate_cohort_target(row,target)
         if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
             or target.get('images')!=self.context['images']
             or target.get('realtime_bootstrap_sha256')!=digest(receipt)
@@ -361,6 +371,7 @@ class Session:
         if row.get('phase')!='prerequisites-captured':raise RuntimeError('staging_prerequisites_phase_invalid')
         parent=staging_prerequisites.load_capture(self,actual=actual)
         receipt=realtime_bootstrap_existing.load_existing(self,actual=actual)
+        if isinstance(target,dict):self._validate_cohort_target(row,target)
         if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
             or not isinstance(receipt,dict) or receipt.get('prerequisites_sha256')!=digest(parent)
             or target.get('images')!=self.context['images'] or target.get('prerequisites_sha256')!=digest(parent)
