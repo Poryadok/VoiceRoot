@@ -600,6 +600,234 @@ def historical_native_predecessor(session):
         'native_sha256':owner.digest(receipt)}
 
 
+def _successor_context(session):
+    """Root-derived C2 input, including the original Tool and retained PVC."""
+    predecessor=historical_native_predecessor(session)
+    if predecessor is None:raise Blocked('space_native_successor_missing')
+    old=predecessor['previous_operation'];root=owner.guard.ROOT/'installed'/'cohort-preservation'/old
+    prior=validate_historical_live_completed(old);oldplan=owner._read(root/'space-live'/'plan.json')
+    oldcatalog=owner._read(root/'catalog.json');oldmetadata=owner._read(root/'metadata.json')
+    kube=Kube();identity=_identity(session,kube);database=identity['database']
+    role=oldmetadata['source']['catalog']['space_db']['database_owner']
+    if (identity['namespace_uid']!=oldcatalog['engine']['namespace_uid']
+        or database['system_identifier']!=oldcatalog['engine']['system_identifier']
+        or database['database_oid']!=oldcatalog['databases']['space_db']
+        or database['database_owner']!=role or database['schema_owner']!=role or database['session_user']!=role):
+        raise Blocked('space_native_successor_database_changed')
+    claim=oldplan['documents']['pvc']['metadata']['name'];pvc=kube.get('persistentvolumeclaim',claim)
+    volume=prior['volume'];meta=pvc.get('metadata',{});spec=pvc.get('spec',{})
+    if (meta.get('name')!=claim or meta.get('namespace')!=owner.guard.NS or meta.get('uid')!=volume['pvc_uid']
+        or not meta.get('resourceVersion') or meta.get('deletionTimestamp') or pvc.get('status',{}).get('phase')!='Bound'
+        or spec.get('volumeName')!=volume['pv_name'] or spec.get('storageClassName')!=oldplan['documents']['pvc']['spec']['storageClassName']
+        or spec.get('accessModes')!=['ReadWriteOnce']):raise Blocked('space_native_successor_volume_changed')
+    pv=kube.get('persistentvolume',volume['pv_name']);pm=pv.get('metadata',{});ps=pv.get('spec',{});ref=ps.get('claimRef',{})
+    if (pm.get('uid')!=volume['pv_uid'] or not pm.get('resourceVersion') or pm.get('deletionTimestamp')
+        or pv.get('status',{}).get('phase')!='Bound' or ref.get('uid')!=volume['pvc_uid']
+        or ref.get('name')!=claim or ref.get('namespace')!=owner.guard.NS
+        or ps.get('storageClassName')!=spec['storageClassName']):raise Blocked('space_native_successor_volume_changed')
+    config=kube.get('configmap','voice-app-config');secret=kube.get('secret','voice-app-secrets')
+    if config.get('data',{}).get('POSTGRES_USER')!=role or not secret.get('data',{}).get('POSTGRES_PASSWORD'):
+        raise Blocked('space_native_successor_credentials_changed')
+    node=kube.get('pod','voice-postgres-0').get('spec',{}).get('nodeName')
+    if not isinstance(node,str) or not re.fullmatch('[a-z0-9][a-z0-9.-]{0,252}',node):raise Blocked('space_native_successor_node_changed')
+    wanted=copy.deepcopy(oldplan['documents']['verify']);name='voice-space-native-verify-'+session.operation
+    labels={'voice-space-native-successor':session.operation}
+    wanted['metadata'].update(name=name,labels=labels);template=wanted['spec']['template']
+    template['metadata']['labels']=labels
+    template['spec']['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms'][0]['matchFields'][0]['values']=[node]
+    if (historical_native_predecessor(session)!=predecessor or _identity(session,kube)!=identity
+        or kube.get('configmap','voice-app-config')!=config or kube.get('secret','voice-app-secrets')!=secret):
+        raise Blocked('space_native_successor_changed')
+    return {'schema':'voice-staging-space-native-successor-plan-v1','operation':session.operation,
+        'predecessor':predecessor,'prior_native_sha256':owner.digest(prior),'identity':identity,
+        'pvc_uid':volume['pvc_uid'],'pv_uid':volume['pv_uid'],'pv_name':volume['pv_name'],
+        'pvc_sha256':owner.digest(pvc),'pv_sha256':owner.digest(pv),
+        'config_sha256':owner.digest(config),'secret_sha256':owner.digest(secret),
+        'expected_hashes':prior['evidence_hashes'],'tool_platform_digest':oldplan['tool_platform_digest'],
+        'tool_config_digest':oldplan['tool_config_digest'],'node':node,'job':wanted}
+
+
+def _successor_no_sql(session,plan):
+    """Recheck physical custody without opening Space during Tool execution."""
+    owner._guard(session);kube=Kube();namespace,engine=realtime_bootstrap.engine_snapshot(kube)
+    if namespace!=plan['identity']['namespace_uid'] or engine!=plan['identity']['engine']:
+        raise Blocked('space_native_successor_database_changed')
+    claim=plan['job']['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName']
+    pvc=kube.get('persistentvolumeclaim',claim);pv=kube.get('persistentvolume',plan['pv_name'])
+    if (pvc.get('metadata',{}).get('uid')!=plan['pvc_uid'] or pvc.get('metadata',{}).get('deletionTimestamp')
+        or pvc.get('status',{}).get('phase')!='Bound' or pvc.get('spec',{}).get('volumeName')!=plan['pv_name']
+        or pv.get('metadata',{}).get('uid')!=plan['pv_uid'] or pv.get('metadata',{}).get('deletionTimestamp')
+        or pv.get('status',{}).get('phase')!='Bound' or pv.get('spec',{}).get('claimRef',{}).get('uid')!=plan['pvc_uid']
+        or owner.digest(pvc)!=plan['pvc_sha256'] or owner.digest(pv)!=plan['pv_sha256']):
+        raise Blocked('space_native_successor_volume_changed')
+    if (owner.digest(kube.get('configmap','voice-app-config'))!=plan['config_sha256']
+        or owner.digest(kube.get('secret','voice-app-secrets'))!=plan['secret_sha256']):
+        raise Blocked('space_native_successor_credentials_changed')
+    session.check()
+
+
+def _successor_effect(session,plan,kind,uid=None,resource_version=None):
+    """One fixed C2 Job create/delete; unknown replies are never adopted."""
+    if kind not in ('create','delete'):raise Blocked('space_native_successor_effect_invalid')
+    owner._guard(session);owner._no_pending(session);_successor_no_sql(session,plan)
+    base=owner._base(session);stored=owner._read(base/'space-native-successor-plan.json')
+    if stored!=plan:raise Blocked('space_native_successor_changed')
+    ident='space-native-successor-'+kind;name=plan['job']['metadata']['name']
+    if kind=='create':
+        argv=owner.PREFIX+['create','-f','/dev/stdin','-o','json'];body=owner.private._bytes(plan['job'])
+    else:
+        created=owner._read(base/'effects'/'space-native-successor-create.json')
+        if (created.get('status')!='DONE' or created.get('response',{}).get('uid')!=uid
+            or not owner.guard.UUID.fullmatch(str(uid)) or not isinstance(resource_version,str) or not resource_version):
+            raise Blocked('space_native_successor_effect_invalid')
+        argv=owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin']
+        body=owner.private._bytes({'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
+            'preconditions':{'uid':uid,'resourceVersion':resource_version}})
+    folder=base/'effects';owner.private._private_directory(folder)
+    intent={'schema':'voice-staging-cohort-effect-v1','operation':session.operation,'effect_id':ident,
+        'binding':session.binding(),'argv':argv,'body_sha256':hashlib.sha256(body).hexdigest(),'status':'PENDING'}
+    path=folder/(ident+'.json');owner._write(path,intent)
+    raw=owner._send(session,ident,argv,body,timeout=60)
+    if owner._read(path)!=intent:raise Blocked('space_native_successor_effect_changed')
+    return path,intent,owner.private._json(raw)
+
+
+def _successor_pods(session,name):
+    raw=owner._observation(session,'space-native-successor-pods',owner.PREFIX+['get','pods','-l','job-name='+name,'-o','json'])
+    row=owner.private._json(raw);meta=row.get('metadata',{})
+    if (row.get('apiVersion')!='v1' or row.get('kind')!='PodList' or not meta.get('resourceVersion')
+        or meta.get('continue') or not isinstance(row.get('items'),list)):raise Blocked('space_native_successor_inventory_invalid')
+    return row['items']
+
+
+def _successor_unmounted(plan):
+    claim=plan['job']['spec']['template']['spec']['volumes'][0]['persistentVolumeClaim']['claimName']
+    _live_unmounted({'documents':{'pvc':{'metadata':{'name':claim}}}})
+
+
+def verify_native_successor(session):
+    """Verify C1 evidence on the original Tool and retained PVC, without DDL."""
+    owner._guard(session);owner._no_pending(session)
+    plan=_successor_context(session);base=owner._base(session);name=plan['job']['metadata']['name'];kube=Kube()
+    _successor_unmounted(plan);owner._write(base/'space-native-successor-plan.json',plan)
+    dry=kube.run(['create','--dry-run=server','-f','/dev/stdin','-o','json'],body=plan['job'])
+    if (dry.get('kind')!='Job' or dry.get('metadata',{}).get('name')!=name
+        or dry.get('metadata',{}).get('namespace')!=owner.guard.NS):raise Blocked('space_native_successor_job_invalid')
+    _check_live_job_spec(dry.get('spec',{}),plan['job'])
+    if _successor_context(session)!=plan:raise Blocked('space_native_successor_changed')
+    path,intent,created=_successor_effect(session,plan,'create');meta=created.get('metadata',{});uid=meta.get('uid')
+    if (created.get('apiVersion')!='batch/v1' or created.get('kind')!='Job' or meta.get('name')!=name or meta.get('namespace')!=owner.guard.NS
+        or any(meta.get('labels',{}).get(key)!=value for key,value in plan['job']['metadata']['labels'].items())
+        or not owner.guard.UUID.fullmatch(str(uid)) or not meta.get('resourceVersion')
+        or created.get('spec',{}).get('template',{}).get('spec',{})!=dry.get('spec',{}).get('template',{}).get('spec',{})):
+        raise Blocked('space_native_successor_create_invalid')
+    _check_live_job_spec(created.get('spec',{}),plan['job'])
+    _done(path,intent,{'uid':uid,'resourceVersion':meta['resourceVersion'],'spec_sha256':owner.digest(created['spec'])})
+    deadline=time.monotonic()+310
+    while True:
+        _successor_no_sql(session,plan);job=kube.get('job',name);jm=job.get('metadata',{})
+        if (jm.get('uid')!=uid or jm.get('deletionTimestamp') or owner.digest(job.get('spec',{}))!=owner.digest(created['spec'])
+            or job.get('status',{}).get('failed',0)):raise Blocked('space_native_successor_job_changed')
+        if job.get('status',{}).get('succeeded')==1 and not job.get('status',{}).get('active',0):break
+        if time.monotonic()>=deadline:raise Blocked('space_native_successor_job_timeout')
+        time.sleep(1)
+    pods=_successor_pods(session,name)
+    if len(pods)!=1:raise Blocked('space_native_successor_pod_changed')
+    pod=pods[0];pm=pod.get('metadata',{});ps=pod.get('spec',{});owners=[x for x in pm.get('ownerReferences',[]) if x.get('controller') is True]
+    statuses=[x for x in pod.get('status',{}).get('containerStatuses',[]) if x.get('name')=='native']
+    if (len(owners)!=1 or owners[0].get('kind')!='Job' or owners[0].get('uid')!=uid
+        or pm.get('namespace')!=owner.guard.NS or not owner.guard.UUID.fullmatch(str(pm.get('uid','')))
+        or not isinstance(pm.get('name'),str) or not re.fullmatch(re.escape(name)+r'-[a-z0-9]{1,32}',pm['name'])
+        or not pm.get('resourceVersion') or pm.get('deletionTimestamp') or ps.get('nodeName')!=plan['node']
+        or ps.get('containers')!=created['spec']['template']['spec']['containers']
+        or ps.get('volumes')!=created['spec']['template']['spec']['volumes']
+        or ps.get('securityContext')!=created['spec']['template']['spec']['securityContext']
+        or ps.get('automountServiceAccountToken') is not False or ps.get('initContainers') or ps.get('ephemeralContainers')
+        or len(statuses)!=1 or len(pod.get('status',{}).get('containerStatuses',[]))!=1
+        or statuses[0].get('state',{}).get('terminated',{}).get('exitCode')!=0
+        or not any(statuses[0].get('imageID','').endswith(plan[key]) for key in ('tool_platform_digest','tool_config_digest'))):
+        raise Blocked('space_native_successor_pod_changed')
+    pod_template=copy.deepcopy(ps);pod_template.pop('nodeName',None)
+    _check_template(pod_template,created['spec']['template']['spec'])
+    raw=owner._observation(session,'space-native-successor-log',owner.PREFIX+['logs',pm['name'],'-c','native'],limit=4096)
+    hashes=_live_hashes(raw,'verify');fresh=kube.get('pod',pm['name'])
+    if (hashes!=plan['expected_hashes'] or fresh.get('metadata',{}).get('uid')!=pm['uid']
+        or not fresh.get('metadata',{}).get('resourceVersion') or fresh.get('spec')!=pod['spec']
+        or fresh.get('status',{}).get('containerStatuses')!=pod['status']['containerStatuses']):
+        raise Blocked('space_native_successor_proof_changed')
+    if _successor_context(session)!=plan:raise Blocked('space_native_successor_changed')
+    job=kube.get('job',name);jm=job.get('metadata',{})
+    if (jm.get('uid')!=uid or not jm.get('resourceVersion') or jm.get('deletionTimestamp')
+        or owner.digest(job.get('spec',{}))!=owner.digest(created['spec'])
+        or job.get('status',{}).get('succeeded')!=1 or job.get('status',{}).get('active',0)):
+        raise Blocked('space_native_successor_job_changed')
+    path,intent,response=_successor_effect(session,plan,'delete',uid,jm['resourceVersion'])
+    _check_delete_response(response,uid);_done(path,intent,{'uid':uid,'resourceVersion':jm['resourceVersion']})
+    deadline=time.monotonic()+60
+    while True:
+        rows=owner.private._json(owner._observation(session,'space-native-successor-absence',owner.PREFIX+['get','--raw',
+            '/apis/batch/v1/namespaces/voice-staging/jobs?fieldSelector=metadata.name%3D'+name+'&limit=2']))
+        rm=rows.get('metadata',{})
+        if (rows.get('apiVersion')!='batch/v1' or rows.get('kind')!='JobList' or not rm.get('resourceVersion')
+            or rm.get('continue') or not isinstance(rows.get('items'),list)):raise Blocked('space_native_successor_inventory_invalid')
+        if not rows['items'] and not _successor_pods(session,name):break
+        if rows['items'] and (len(rows['items'])!=1 or rows['items'][0].get('metadata',{}).get('uid')!=uid):
+            raise Blocked('space_native_successor_job_changed')
+        if time.monotonic()>=deadline:raise Blocked('space_native_successor_cleanup_timeout')
+        time.sleep(1)
+    if _successor_context(session)!=plan:raise Blocked('space_native_successor_changed')
+    _successor_unmounted(plan)
+    receipt={'schema':'voice-staging-space-native-successor-v1','operation':session.operation,
+        'plan_sha256':owner.digest(plan),'predecessor':plan['predecessor'],'job_uid':uid,'pod_uid':pm['uid'],
+        'pod_before_rv':pm['resourceVersion'],'pod_after_rv':fresh['metadata']['resourceVersion'],
+        'hashes':hashes,'cleanup':'verified'}
+    owner._write(base/'space-native-successor.json',receipt)
+    return load_native_successor(session)
+
+
+def load_native_successor(session):
+    """Reload the exact C2 verification while the pre-cut Session is active."""
+    owner._guard(session);owner._no_pending(session);base=owner._base(session)
+    plan=owner._read(base/'space-native-successor-plan.json')
+    receipt=owner._read(base/'space-native-successor.json')
+    create=owner._read(base/'effects'/'space-native-successor-create.json')
+    delete=owner._read(base/'effects'/'space-native-successor-delete.json')
+    name=plan['job']['metadata']['name'];binding=session.binding()
+    for kind,effect in (('create',create),('delete',delete)):
+        if (set(effect)!={'schema','operation','effect_id','binding','argv','body_sha256','status','response'}
+            or effect['schema']!='voice-staging-cohort-effect-v1' or effect['operation']!=session.operation
+            or effect['effect_id']!='space-native-successor-'+kind or effect['binding']!=binding
+            or effect['status']!='DONE'):raise Blocked('space_native_successor_changed')
+    response=create['response'];deleted=delete['response']
+    if (set(response)!={'uid','resourceVersion','spec_sha256'} or set(deleted)!={'uid','resourceVersion'}
+        or not owner.guard.UUID.fullmatch(str(response['uid'])) or not response['resourceVersion']
+        or not re.fullmatch('[a-f0-9]{64}',str(response['spec_sha256'])) or deleted['uid']!=response['uid']
+        or not deleted['resourceVersion']):raise Blocked('space_native_successor_changed')
+    options={'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
+        'preconditions':{'uid':deleted['uid'],'resourceVersion':deleted['resourceVersion']}}
+    if (create['argv']!=owner.PREFIX+['create','-f','/dev/stdin','-o','json']
+        or create['body_sha256']!=hashlib.sha256(owner.private._bytes(plan['job'])).hexdigest()
+        or delete['argv']!=owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin']
+        or delete['body_sha256']!=hashlib.sha256(owner.private._bytes(options)).hexdigest()):
+        raise Blocked('space_native_successor_changed')
+    fields={'schema','operation','plan_sha256','predecessor','job_uid','pod_uid','pod_before_rv','pod_after_rv','hashes','cleanup'}
+    if (set(receipt)!=fields or receipt['schema']!='voice-staging-space-native-successor-v1'
+        or receipt['operation']!=session.operation or receipt['plan_sha256']!=owner.digest(plan)
+        or receipt['predecessor']!=plan['predecessor'] or receipt['job_uid']!=response['uid']
+        or not owner.guard.UUID.fullmatch(str(receipt['pod_uid'])) or not receipt['pod_before_rv'] or not receipt['pod_after_rv']
+        or receipt['hashes']!=plan['expected_hashes'] or receipt['cleanup']!='verified'
+        or _successor_context(session)!=plan):raise Blocked('space_native_successor_changed')
+    _successor_unmounted(plan);owner._no_pending(session);session.check()
+    return copy.deepcopy(receipt)
+
+
+def prepare_native_transition(session):
+    """Choose legacy inspection or retained native verification from history."""
+    predecessor=historical_native_predecessor(session)
+    if predecessor is None:return inspect_source(session)
+    return verify_native_successor(session)
+
+
 def _identity(session,kube):
     namespace,before=realtime_bootstrap.engine_snapshot(kube)
     value=pg._query(session,'space_db',IDENTITY_SQL,'space-inspect-identity')

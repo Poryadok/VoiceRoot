@@ -264,4 +264,24 @@ class ConsumerTests(unittest.TestCase):
                 prepared['plan']['previous_active_sha256']=None
                 self.assertIsNone(staging_space_native.historical_native_predecessor(session))
 
+    def test_successor_lost_create_response_stays_pending_without_replay(self):
+        from staging_cohort_preservation_test import CutEffectTests
+        with tempfile.TemporaryDirectory(dir='/root') as path,patch.object(guard,'ROOT',Path(path)), \
+             patch.object(staging_cohort_preservation,'_source'):
+            root=Path(path);(root/'installed').mkdir(mode=0o700)
+            session,_=CutEffectTests().fixture(root,{'spec':{'replicas':1}})
+            plan={'job':{'metadata':{'name':'voice-space-native-verify-'+session.operation}}}
+            staging_cohort_preservation._write(staging_cohort_preservation._base(session)/'space-native-successor-plan.json',plan)
+            calls=[]
+            def lost(argv,**kwargs):
+                commands.authority_guard(argv);calls.append(argv);raise RuntimeError('lost create response')
+            with resource_claim.command_scope(session.check),patch.object(staging_space_native,'_successor_no_sql'), \
+                 patch.object(commands,'capture',side_effect=lost):
+                with self.assertRaisesRegex(RuntimeError,'lost create response'):
+                    staging_space_native._successor_effect(session,plan,'create')
+                with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
+                    staging_space_native._successor_effect(session,plan,'create')
+            self.assertEqual(len(calls),1)
+            self.assertEqual(staging_cohort_preservation._read(staging_cohort_preservation._base(session)/'effects'/'space-native-successor-create.json')['status'],'PENDING')
+
 if __name__=='__main__':unittest.main()
