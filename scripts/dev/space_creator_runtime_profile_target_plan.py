@@ -25,7 +25,7 @@ TRUST='/etc/voice/media/trust/truststore.p12'
 TRUST_OPTIONS=['-Djavax.net.ssl.trustStore='+TRUST,'-Djavax.net.ssl.trustStorePassword=changeit',
                '-Djavax.net.ssl.trustStoreType=PKCS12']
 PRIVATE_ENV={'SPRING_DATASOURCE_PASSWORD','AUTH_TOTP_ENCRYPTION_KEY','ACCOUNT_DELETE_TOKEN_SECRET','AUTH_RESEND_API_KEY',
-             'GATEWAY_REDIS_PASSWORD','GATEWAY_DATABASE_URL','GATEWAY_STATIC_TOKENS_JSON'}
+             'SPRING_DATA_REDIS_PASSWORD','GATEWAY_REDIS_PASSWORD','GATEWAY_DATABASE_URL','GATEWAY_STATIC_TOKENS_JSON'}
 
 
 def _unique(pairs):
@@ -65,6 +65,9 @@ def _check_auth_overrides(effective):
     for name in effective:
         normalized=re.sub(r'[^a-z0-9]','',name.lower())
         if normalized in ('s2ssigningkeypem','s2ssigningkid'): raise ValueError()
+        redis_allowed={'springdataredishost':'SPRING_DATA_REDIS_HOST','springdataredisport':'SPRING_DATA_REDIS_PORT',
+                       'springdataredispassword':'SPRING_DATA_REDIS_PASSWORD'}
+        if normalized.startswith(('springdataredis','springredis')) and redis_allowed.get(normalized)!=name: raise ValueError()
         if (normalized.startswith(('authsessionfloor','authgrpctls','s2sjwks'))
                 and (normalized not in canonical or name!=canonical[normalized])): raise ValueError()
 
@@ -149,7 +152,7 @@ def _check_gateway_environment(effective):
     if effective.get('GATEWAY_AUTH_MODE','').lower()=='static': raise ValueError()
     for key in ('GATEWAY_JWKS_URL','GATEWAY_JWT_ISSUER','GATEWAY_JWT_AUDIENCE'):
         if effective.get(key)!=observed_config.EXPECTED[key]: raise ValueError()
-    if not effective.get('GATEWAY_REDIS_ADDR','').strip(): raise ValueError()
+    if effective.get('GATEWAY_REDIS_ADDR')!='voice-redis:6379': raise ValueError()
     raw=effective.get('GATEWAY_STATIC_TOKENS_JSON','')
     if raw and json.loads(raw,object_pairs_hook=_unique)!={}: raise ValueError()
     if any(key.startswith('LD_') for key in effective): raise ValueError()

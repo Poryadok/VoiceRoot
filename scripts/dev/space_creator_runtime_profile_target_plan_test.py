@@ -43,10 +43,19 @@ class RenderTest(unittest.TestCase):
     def test_auth_inherited_override_and_jvm_injection_hold(self):
         for name,value in (('_JAVA_OPTIONS','-Dfoo=bar'),('SPRING_CONFIG_IMPORT','file:/tmp/x'),
                            ('JAVA_TOOL_OPTIONS','-Djavax.net.ssl.trustStore=/foreign'),
-                           ('AUTH_SESSION_FLOOR_GRPC_PORT','9999'),('PATH','/foreign'),('S2S_SIGNING_KID','foreign')):
+                           ('AUTH_SESSION_FLOOR_GRPC_PORT','9999'),('PATH','/foreign'),('S2S_SIGNING_KID','foreign'),
+                           ('SPRING_DATA_REDIS_URL','redis://foreign:6379'),('SPRING_DATA_REDIS_DATABASE','1'),
+                           ('SPRING_DATA_REDIS_SENTINEL_MASTER','foreign'),('SPRING_DATA_REDIS_PASSWORD','private-sentinel')):
             source=self.auth(); source['spec']['template']['spec']['containers'][0]['env'].append({'name':name,'value':value})
             with self.subTest(name=name),self.assertRaises((ValueError,subject.auth.EligibilityError)):
                 subject.render_auth(source,'ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64,{}, {},[])
+
+    def test_auth_redis_password_reference_is_preserved_without_disclosure(self):
+        source=self.auth(); ref={'name':'SPRING_DATA_REDIS_PASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'REDIS_PASSWORD'}}}
+        source['spec']['template']['spec']['containers'][0]['env'].append(copy.deepcopy(ref))
+        target,_=subject.render_auth(source,'ghcr.io/poryadok/voiceroot/auth@sha256:'+'a'*64,
+                                    {('secret','voice-app-secrets'):{'REDIS_PASSWORD':'private-sentinel'}},{},[])
+        self.assertIn(ref,target['template']['spec']['containers'][0]['env']); self.assertNotIn('private-sentinel',str(target))
 
     def test_existing_exact_config_refs_are_preserved_without_values(self):
         source=self.auth(); entries=source['spec']['template']['spec']['containers'][0]['env']
@@ -74,7 +83,7 @@ class RenderTest(unittest.TestCase):
     def test_gateway_source_requires_jwks_and_no_static_bypass(self):
         values={key:subject.observed_config.EXPECTED[key] for key in ('GATEWAY_JWKS_URL','GATEWAY_JWT_ISSUER','GATEWAY_JWT_AUDIENCE')}
         values['GATEWAY_REDIS_ADDR']='voice-redis:6379'; subject._check_gateway_environment(values)
-        for field,value in (('GATEWAY_AUTH_MODE','static'),('GATEWAY_STATIC_TOKENS_JSON','{"token":"user"}'),('GATEWAY_JWKS_URL','')):
+        for field,value in (('GATEWAY_AUTH_MODE','static'),('GATEWAY_STATIC_TOKENS_JSON','{"token":"user"}'),('GATEWAY_JWKS_URL',''),('GATEWAY_REDIS_ADDR','foreign:6379')):
             bad=dict(values); bad[field]=value
             with self.subTest(field=field),self.assertRaises(ValueError): subject._check_gateway_environment(bad)
 
