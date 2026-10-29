@@ -84,7 +84,7 @@ func VerifyLegacy24Upgrade(ctx context.Context, c Legacy24VerifyConfig) (err err
 	if c.Output == nil || c.OriginEvidencePath == "" || !validLegacy24Completion(prior) {
 		return errors.New("HOLD: actual completed legacy24 evidence and original sidecar required")
 	}
-	origin, err := loadLegacy24Origin(c.OriginEvidencePath, prior)
+	_, err = loadLegacy24Origin(c.OriginEvidencePath, prior)
 	if err != nil {
 		return err
 	}
@@ -101,14 +101,11 @@ func VerifyLegacy24Upgrade(ctx context.Context, c Legacy24VerifyConfig) (err err
 	if err != nil || !sameTarget(prior.Final, facts) || prior.Final.SealSHA256 != facts.SealSHA256 {
 		return errors.New("HOLD: retained legacy24 target or native51 seal changed")
 	}
-	preservation, err := verifyLegacy24Preserved(ctx, s.conn, origin)
-	if err != nil || preservation != prior.PreservationSHA256 {
-		return errors.New("HOLD: original legacy24 preservation changed")
-	}
-	initialization, err := legacy24Initialization(ctx, s.conn, origin, facts)
-	if err != nil || initialization != prior.InitializationSHA256 {
-		return errors.New("HOLD: retained legacy24 initialization changed")
-	}
+	// Preservation and initialization are historical completed-upgrade proofs.
+	// Their original sidecar remains bound above, but legitimate serving writes
+	// may change business rows, floors and guard state after that completion.
+	// Later verification authenticates the original installation and current
+	// full native51 catalog; it never reruns migration or initialization.
 	if err = s.checkWindow(ctx); err != nil {
 		return err
 	}

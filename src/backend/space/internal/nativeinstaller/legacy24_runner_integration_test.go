@@ -13,9 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
+	"voice/backend/space/internal/store"
 )
 
 // Only a fresh server explicitly supplied by the test owner is accepted.
@@ -84,6 +87,23 @@ func TestProductionLegacy24OriginalVerifyAndNoAdoption(t *testing.T) {
 	verified, err := run("verify-legacy24", "-prior-evidence", prior)
 	require.NoError(t, err)
 	require.Contains(t, string(verified), `"event":"verified-legacy24"`)
+	// Later cycles verify the original installation, not an immutable copy of
+	// business data. Exercise real production mutation/fence producers first.
+	target, err := url.Parse(adminURL)
+	require.NoError(t, err)
+	target.Path = "/space_db"
+	pool, err := pgxpool.New(ctx, target.String())
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	spaceStore := &store.SpaceStore{Pool: pool}
+	spaceID := uuid.MustParse("11111111-1111-4111-8111-111111111111")
+	newName := "legitimate later business name"
+	_, err = spaceStore.UpdateSpace(ctx, spaceID, store.UpdateSpaceInput{Name: &newName})
+	require.NoError(t, err)
+	pool.Close()
+	verified, err = run("verify-legacy24", "-prior-evidence", prior)
+	require.NoError(t, err, "original-image verification accepts legitimate later business writes")
+	require.Contains(t, string(verified), `"event":"verified-legacy24"`)
 	// The actual completed target cannot be adopted by another upgrade.
 	_, err = run("upgrade-legacy24", "-operation-id", "another", "-snapshot-id", "another")
 	require.Error(t, err)
@@ -97,6 +117,51 @@ func TestProductionLegacy24OriginalVerifyAndNoAdoption(t *testing.T) {
 	verified, err = run("verify-legacy24", "-prior-evidence", prior)
 	require.NoError(t, err)
 	require.NotContains(t, string(verified), `"event":"trusted25"`)
+	conn, err := pgx.Connect(ctx, target.String())
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, `ALTER TABLE public.space_members ADD COLUMN unexpected_verifier_column integer`)
+	require.NoError(t, err)
+	require.NoError(t, conn.Close(ctx))
+	verified, err = run("verify-legacy24", "-prior-evidence", prior)
+	require.ErrorContains(t, err, "native51")
+	require.NotContains(t, string(verified), `"event":"verified-legacy24"`)
+}
+
+func TestProductionLegacy24FixedSearchPath(t *testing.T) {
+	ctx, adminURL, _, _ := legacy24OwnedDatabase(t)
+	target, err := url.Parse(adminURL)
+	require.NoError(t, err)
+	target.Path = "/space_db"
+	conn, err := pgx.Connect(ctx, target.String())
+	require.NoError(t, err)
+	defer conn.Close(context.Background())
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	defer tx.Rollback(context.Background())
+	_, err = tx.Exec(ctx, `CREATE FUNCTION public.length(text) RETURNS integer LANGUAGE sql IMMUTABLE AS 'SELECT 999'; CREATE TEMP TABLE pg_class(fake integer)`)
+	require.NoError(t, err)
+	// Actual counterexample to the old explicit built-ins-last path.
+	_, err = tx.Exec(ctx, `SET LOCAL search_path=public,pg_catalog`)
+	require.NoError(t, err)
+	var length int
+	require.NoError(t, tx.QueryRow(ctx, `SELECT length('abc'::text)`).Scan(&length))
+	require.Equal(t, 999, length)
+	_, err = tx.Exec(ctx, `SELECT pg_catalog.set_config('search_path',$1,true)`, legacy24TargetSearchPath)
+	require.NoError(t, err)
+	var schemas []string
+	var catalogFirst bool
+	require.NoError(t, tx.QueryRow(ctx, `SELECT current_schemas(true),'pg_class'::regclass='pg_catalog.pg_class'::regclass,length('abc'::text)`).Scan(&schemas, &catalogFirst, &length))
+	require.GreaterOrEqual(t, len(schemas), 3)
+	require.Equal(t, []string{"pg_catalog", "public"}, schemas[:2])
+	require.Contains(t, schemas[2], "pg_temp_")
+	require.True(t, catalogFirst)
+	require.Equal(t, 3, length)
+	_, err = tx.Exec(ctx, `CREATE TABLE legacy24_default_namespace_probe(value text)`)
+	require.NoError(t, err)
+	var publicCreated bool
+	require.NoError(t, tx.QueryRow(ctx, `SELECT to_regclass('public.legacy24_default_namespace_probe') IS NOT NULL AND to_regclass('pg_catalog.legacy24_default_namespace_probe') IS NULL`).Scan(&publicCreated))
+	require.True(t, publicCreated)
+	require.NoError(t, tx.Rollback(ctx))
 }
 
 func TestProductionLegacy24LostEventNeverReplaysCommittedPrefix(t *testing.T) {

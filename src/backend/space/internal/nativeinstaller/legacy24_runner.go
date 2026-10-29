@@ -27,6 +27,11 @@ type Legacy24Config struct {
 	OriginEvidencePath string
 }
 
+// Omitting pg_catalog gives built-ins implicit first precedence while public
+// remains the creation namespace for unchanged historical unqualified DDL.
+// Explicit pg_temp last also prevents temporary relations preceding catalogs.
+const legacy24TargetSearchPath = "public,pg_temp"
+
 func emitLegacy24(out io.Writer, stage string, receipt *Legacy24Receipt) error {
 	raw, err := json.Marshal(legacy24Event{Event: stage, Receipt: receipt})
 	if err != nil {
@@ -142,7 +147,7 @@ func openLegacy24Session(ctx context.Context, c Config) (_ *legacy24Session, err
 	}
 	target := cfg.Copy()
 	target.Database = "space_db"
-	target.RuntimeParams["search_path"] = "public,pg_catalog"
+	target.RuntimeParams["search_path"] = legacy24TargetSearchPath
 	s.conn, err = pgx.ConnectConfig(ctx, target)
 	if err != nil {
 		return nil, errors.New("existing target unavailable")
@@ -160,7 +165,7 @@ func openLegacy24Session(ctx context.Context, c Config) (_ *legacy24Session, err
 	s.store = &store.SpaceStore{Pool: s.pool}
 	q := childURL.Query()
 	q.Set("application_name", application)
-	q.Set("search_path", "public,pg_catalog")
+	q.Set("search_path", legacy24TargetSearchPath)
 	childURL.RawQuery = q.Encode()
 	s.migrate = func(migrationCtx context.Context, version int) error {
 		if version != 25 && version != 44 && version != 45 && version != 50 {
@@ -183,7 +188,7 @@ func openLegacy24Session(ctx context.Context, c Config) (_ *legacy24Session, err
 				cmd.Env = append(cmd.Env, entry)
 			}
 		}
-		cmd.Env = append(cmd.Env, "PGOPTIONS=-c search_path=public,pg_catalog")
+		cmd.Env = append(cmd.Env, "PGOPTIONS=-c search_path="+legacy24TargetSearchPath)
 		if err := runMigration(migrationCtx, cmd, version); err != nil {
 			return err
 		}
