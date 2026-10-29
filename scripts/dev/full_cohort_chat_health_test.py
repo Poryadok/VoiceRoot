@@ -23,9 +23,12 @@ class ResponseTests(unittest.TestCase):
         values = (b'client-certificate', b'private-secret', b'public-ca')
         raw = b'client-uid\n17\n' + base64.b64encode(values[0]) + b'\n' + base64.b64encode(values[1])
         ca = b'ca-uid\n23\n' + base64.b64encode(values[2])
-        with patch.object(transport, '_run', return_value=raw), patch.object(transport, 'public_certificate', return_value=ca):
+        with patch.object(transport, '_run', return_value=raw) as read, patch.object(transport, 'public_certificate', return_value=ca):
             self.assertEqual(health._private_material({'uid':'client-uid','resourceVersion':'17'},
                 {'uid':'ca-uid','resourceVersion':'23'}, lambda:None), values)
+            arguments = read.call_args.args[0]
+            self.assertEqual(arguments[:3], ['get', 'secret', 'voice-realtime-p3-tls'])
+            self.assertNotIn('private-secret', repr(arguments))
             with self.assertRaises(health.HealthError) as error:
                 health._private_material({'uid':'other','resourceVersion':'17'}, {'uid':'ca-uid','resourceVersion':'23'}, lambda:None)
             self.assertNotIn('private-secret', str(error.exception))
