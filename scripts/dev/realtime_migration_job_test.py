@@ -159,7 +159,7 @@ class PhaseTest(unittest.TestCase):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack','successor-drift'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','owned-ack','pod-image','job-label','dryrun','dryrun-pod','invocation-ack','successor-drift','successor-unpaired'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -221,6 +221,9 @@ class PhaseTest(unittest.TestCase):
                 lost_ack.append(True)
                 raise TimeoutError('acknowledgement lost')
         def reserve(name, details):
+            if name=='job' and fault=='successor-unpaired':
+                worker.journal.state['steps']['job']={'status':'pending'}
+                job.verify_writer_successor(worker,renderer.root)
             if name=='job' and fault=='successor-drift':
                 original_guard = worker._guard; calls = 0
                 def drift_guard():

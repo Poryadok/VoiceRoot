@@ -187,6 +187,8 @@ def verify_writer_successor(phase, source_root):
         job_record = snapshot_steps.get('job')
         state = 'absent' if job_record is None else job_record.get('status')
         if state not in ('absent','pending','owned','done'): raise RecoveryRequired('migration Job state invalid')
+        if state == 'absent' and 'job' in snapshot_local:
+            raise RecoveryRequired('unpaired local Job record')
         uid = rv = terminal = job_nonce = None
         if job_record is not None:
             local = snapshot_local.get('job')
@@ -195,6 +197,7 @@ def verify_writer_successor(phase, source_root):
             if state == 'done': expected_keys.add('receipt_sha256')
             if (set(job_record)!=expected_keys or not isinstance(local,dict) or
                     {k:v for k,v in local.items() if k!='receipt'}!=job_record or
+                    (state!='done' and local!=job_record) or
                     job_record.get('details_sha256')!=_hash(planned) or
                     not isinstance(job_record.get('nonce'),str) or not re.fullmatch(r'[0-9a-f]{32}',job_record['nonce'])):
                 raise RecoveryRequired('migration Job record changed')
