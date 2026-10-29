@@ -177,6 +177,24 @@ def _parse_url(database, value):
         raise MigrationError('migration credential route unavailable') from None
 
 
+def _check_order(cut, observed, database):
+    """Require the same Go order used by the single qualified clone restore."""
+    plans = observed['metadata']['migrations']
+    ordered = [db for db in observed['databases'] if db in source_plan.DATABASES and plans[db]['from'] < plans[db]['to']]
+    if database not in ordered or not isinstance(cut.migration_history, list):
+        raise MigrationError('migration order unavailable')
+    prior = [entry for entry in cut.migration_history if isinstance(entry, dict) and entry.get('kind') == 'go']
+    required = ordered[:ordered.index(database)]
+    if len(prior) != len(required):
+        raise MigrationError('migration order changed')
+    for entry, name in zip(prior, required):
+        phase = entry.get('phase')
+        if (type(phase) is not Migration or phase.cut is not cut or phase.database != name or
+                entry.get('finished') is not True):
+            raise MigrationError('prior migration authority unavailable')
+        verify_completed(phase)
+
+
 def qualified_plan(metadata_phase, cohort_phase, cut, token, database):
     """Check actual backup/readback/isolated-restore authority for one target."""
     try:
@@ -194,6 +212,7 @@ def qualified_plan(metadata_phase, cohort_phase, cut, token, database):
         observed = metadata.verify_completed(metadata_phase, token)
         plans = observed['metadata']['migrations']
         if database not in plans: raise ValueError()
+        _check_order(cut, observed, database)
         row, revision = p.fence.ledger.read()
         binding, _, marker, _ = readback._snapshot(cohort_phase, row)
         clone = cohort_restore_journal.verify_go_role(cohort_phase, metadata_phase, token, database)
@@ -601,7 +620,10 @@ class Migration:
                 self.secret.database != self.database or self.secret.lock != self.lock or
                 self.secret.namespace_uid != self.namespace_uid or self.metadata_phase.source_root != self.root):
             raise MigrationError('migration phase identity changed')
-        self.secret.verify()
+        if self.secret._bound is None:
+            verify_completed(self)
+        else:
+            self.secret.verify()
         if self.marker is not None:
             row, _ = self.fence.ledger.read()
             if (not self.fence.owned(row) or row.get('status') != 'active' or

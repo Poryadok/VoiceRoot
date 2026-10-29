@@ -26,7 +26,7 @@ class JointTest(unittest.TestCase):
         cut = object.__new__(metadata.writer_cut.WriterCut)
         for obj in (package, inventory, cut):
             obj.fence = base.fence; obj.lock = {}; obj.namespace_uid = 'ns'
-        inventory.package = package; cut.verify_drained = lambda: None
+        inventory.package = package; cut.verify_drained = lambda: None; cut.migration_history = []
         package.verify_current = lambda token: {'package_sha256': 'f' * 64}
         engine = {'namespace_uid': 'ns', 'service_ip': '10.0.0.1'}
         report = {'database_observations': {'workloads': {'chat': [{'status': 'observed', 'result': {

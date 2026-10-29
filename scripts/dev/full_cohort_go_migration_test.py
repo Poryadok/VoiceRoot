@@ -191,7 +191,7 @@ class RenderTest(unittest.TestCase):
         common = {'fence': fence, 'lock': {}, 'namespace_uid': 'ns'}
         for obj in (metadata_phase, cut): obj.__dict__.update(common)
         metadata_phase.source_root = '/fixture'
-        cut.verify_drained = lambda: None
+        cut.verify_drained = lambda: None; cut.migration_history = []
         cohort._guard = lambda: None
         target = {'engine': 'golang-migrate', 'from': 1, 'to': 3, 'files': {'000001_up.up.sql': 'a' * 64}}
         observed = {'metadata': {'migrations': {'auth_db': {'from': 26}, 'chat_db': target}},
@@ -215,6 +215,20 @@ class RenderTest(unittest.TestCase):
             receipt['databases']['chat_db']['to'] = 4
             with self.assertRaises(migration.MigrationError):
                 migration.qualified_plan(metadata_phase, cohort, cut, 'token', 'chat_db')
+
+    def test_live_go_order_matches_single_clone_order(self):
+        observed = {'databases': ['chat_db', 'user_db'], 'metadata': {'migrations': {
+            'chat_db': {'from': 1, 'to': 2}, 'user_db': {'from': 19, 'to': 22}}}}
+        cut = SimpleNamespace(migration_history=[])
+        migration._check_order(cut, observed, 'chat_db')
+        with self.assertRaises(migration.MigrationError): migration._check_order(cut, observed, 'user_db')
+        prior = object.__new__(migration.Migration); prior.cut = cut; prior.database = 'chat_db'
+        cut.migration_history.append({'kind': 'go', 'phase': prior, 'finished': True})
+        with mock.patch.object(migration, 'verify_completed') as verified:
+            migration._check_order(cut, observed, 'user_db')
+            verified.assert_called_once_with(prior)
+        cut.migration_history[0]['finished'] = False
+        with self.assertRaises(migration.MigrationError): migration._check_order(cut, observed, 'user_db')
 
 
 @unittest.skipUnless(os.environ.get('COHORT_METADATA_PG_TEST') == '1', 'disposable PostgreSQL fixture')
@@ -366,6 +380,7 @@ class SecretSnapshotTest(unittest.TestCase):
 
     def test_job_journal_rejects_changed_input_after_reservation(self):
         with mock.patch.object(self.phase, 'verify', return_value={'uid': 'fixture'}):
+            self.phase._bound = ({}, {}, {})
             job = migration.Migration(self.phase)
             job.input = {'files': {'000001_init.up.sql': b'SELECT 1;'}, 'node': {'name': 'node'}}
             marker = {'status': 'active', 'operation_id': self.base.context['operation_id'],
@@ -459,6 +474,8 @@ class SecretSnapshotTest(unittest.TestCase):
             self.assertEqual(self.base.ledger.row['go_migrations']['chat_db']['steps']['job']['status'], 'removed')
             self.assertEqual(self.base.ledger.row['go_migration_secrets']['chat_db']['status'], 'removed')
             self.assertEqual(migration.verify_completed(phase), result)
+            historic = migration.verify_writer_successor(phase, phase.root)
+            self.assertEqual((historic['job']['state'], historic['configmap']['state']), ('removed', 'removed'))
             self.base.ledger.row['go_migrations']['chat_db']['steps']['job']['receipt']['to'] = 99
             with self.assertRaises(migration.MigrationError): migration.verify_completed(phase)
 
