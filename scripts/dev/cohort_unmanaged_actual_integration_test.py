@@ -26,12 +26,24 @@ from story_media_backup_restore_integration_test import Journal, POSTGRES, MIGRA
 
 
 class UnmanagedIntegrationTest(unittest.TestCase):
+    def test_restore_queries_ignore_shadowed_migration_ledger(self):
+        fixture=fixtures.PopulatedRestoreTest();self.addCleanup(cleanup_fixture,fixture);fixture.setUp()
+        fixture.sql(fixture.target,'target_admin','postgres',
+            'CREATE SCHEMA shadow; CREATE TABLE public.schema_migrations(version bigint,dirty boolean); '
+            'CREATE TABLE shadow.schema_migrations(version bigint,dirty boolean); '
+            'INSERT INTO public.schema_migrations VALUES (25,false); INSERT INTO shadow.schema_migrations VALUES (99,true); '
+            'ALTER ROLE target_admin SET search_path=shadow,public,pg_catalog')
+        result=json.loads(media._psql(fixture.target,'target_admin','postgres',media.CATALOG))
+        self.assertEqual(result['history'],[{'version':25,'dirty':False}])
+
     def test_synthetic_receipt_full_encrypted_cohort_uses_real_restore(self):
         """Actual dump/crypto/restore; receipt verifier is explicitly synthetic."""
         fixture=fixtures.PopulatedRestoreTest();self.addCleanup(cleanup_fixture,fixture);fixture.setUp()
         fixture.sql(fixture.source,'source_admin','postgres','CREATE ROLE app_writer LOGIN')
         fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE extra_db')
         fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE gateway_db')
+        fixture.sql(fixture.source,'source_admin','postgres','ALTER DATABASE gateway_db CONNECTION LIMIT 7')
+        fixture.sql(fixture.source,'source_admin','postgres','REVOKE CONNECT ON DATABASE gateway_db FROM PUBLIC')
         gateway_folder=Path('/work/src/backend/migrations/gateway_db')
         for migration in sorted(gateway_folder.glob('*.up.sql')):
             fixture.sql(fixture.source,'source_admin','gateway_db',migration.read_text())
@@ -93,9 +105,13 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             observed=[];events=[];original=media._psql
             def psql(cid,admin,db,sql,timeout=120):
                 result=original(cid,admin,db,sql,timeout=timeout)
-                if sql.startswith('CREATE DATABASE gateway_db '):events.append('gateway')
+                if sql==restore.GATEWAY_CATALOG:
+                    value=json.loads(original(cid,admin,db,unmanaged.CATALOG_SQL))['database_properties']
+                    self.assertEqual(value['connection_limit'],7)
+                    self.assertEqual(value['acl'],json.loads(fixture.sql(fixture.source,'source_admin',db,unmanaged.CATALOG_SQL))['database_properties']['acl'])
+                    events.append('gateway')
                 if sql=='ALTER DATABASE template0 WITH ALLOW_CONNECTIONS true':events.append('template')
-                if sql==unmanaged.CATALOG_SQL:
+                if sql==unmanaged.CATALOG_SQL and db!='gateway_db':
                     self.assertEqual(original(cid,admin,db,'SELECT id,value FROM tenant.events').strip(),b'7|kept')
                     self.assertEqual(original(cid,admin,db,'SELECT version,dirty FROM public.schema_migrations').strip(),b'991|t')
                     observed.append(db)

@@ -12,13 +12,27 @@ class UnmanagedError(ValueError):
     pass
 
 
-def verify_catalog_phase(phase, token, binding):
+def verify_catalog_phase(phase, token, binding, cut=None):
     """Bind the full scope to the real guarded, current two-journal receipt."""
     try:
         import full_cohort_affected_plan as affected
         if type(phase) is not affected.FullCatalogPhase or not isinstance(token,str) or not token:
             raise UnmanagedError('full catalog phase unavailable')
-        receipt=phase.verify_current(token)
+        if cut is None:
+            receipt=phase.verify_current(token)
+        else:
+            if (type(cut) is not affected.writer_cut.WriterCut or type(cut.probe) is not affected.CatalogScopedProbe or
+                    cut.probe.catalog is not phase or cut.probe._bound_catalog is not phase or
+                    cut.probe.token!=token or cut.probe._bound_token!=token):
+                raise UnmanagedError('catalog cut identity differs')
+            receipt=phase.verify_receipt(token)
+            if cut.provision_successor is None:
+                if phase.verify_current(token)!=receipt: raise UnmanagedError('original catalog changed')
+            elif cut.effective_session is not None:
+                affected.verify_effective_catalog(cut.probe,cut)
+            else:
+                affected.verify_provisioned_catalog(cut.probe,cut)
+            if phase.verify_receipt(token)!=receipt: raise UnmanagedError('catalog receipt changed')
         full=binding['full_catalog']; databases=receipt['databases']; properties=receipt['properties']
         digest=hashlib.sha256(json.dumps(receipt,sort_keys=True,separators=(',',':'),
                                          ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
@@ -153,6 +167,29 @@ def validate_source_catalog(source, bound):
             raise UnmanagedError('source database properties differ')
     except (KeyError,TypeError):
         raise UnmanagedError('source database properties missing') from None
+
+
+def verify_restored_properties(psql, database, bound):
+    """Verify protected database-level attributes in the disposable restore."""
+    try:
+        actual=json.loads(psql(database,CATALOG_SQL))
+        value=actual['database_properties']
+        expected={key:value[key] for key in ('template','allowconn','encoding','collate','ctype',
+                    'locale_provider','icu_locale','connection_limit')}
+        expected['owner']=actual['database_owner']
+        source_acl=bound['acl']
+        if source_acl is None:
+            acl=None
+        else:
+            if not isinstance(source_acl,str):raise ValueError()
+            literal="'"+source_acl.replace("'","''")+"'"
+            sql=("SELECT coalesce(json_agg(entry ORDER BY entry),'[]'::json) FROM "
+                 "(SELECT item::text AS entry FROM unnest("+literal+"::pg_catalog.aclitem[]) AS item) AS source_acl")
+            acl=json.loads(psql(database,sql))
+        if value['acl']!=acl or any(bound.get(key)!=value for key,value in expected.items()) or set(bound)!=set(expected)|{'acl'}:
+            raise ValueError()
+    except Exception:
+        raise UnmanagedError('restored database properties differ') from None
 
 
 def prepare_disposable_template(psql, source, maintenance_db='postgres'):
