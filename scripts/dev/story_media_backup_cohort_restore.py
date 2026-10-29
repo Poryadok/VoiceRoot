@@ -20,6 +20,8 @@ MAX_TOTAL = 64 * 1024 * 1024
 GO_HISTORY = "(SELECT json_agg(json_build_object('version',version,'dirty',dirty) ORDER BY version)\n FROM schema_migrations)"
 AUTH_HISTORY = "(SELECT coalesce(json_agg(json_build_object('version',version,'script',script,'checksum',checksum,'success',success) ORDER BY installed_rank),'[]'::json) FROM flyway_schema_history)"
 AUTH_CATALOG = media_restore.CATALOG.replace(GO_HISTORY, AUTH_HISTORY)
+GATEWAY_HISTORY = "json_build_object('schema_migrations',to_regclass('public.schema_migrations') IS NOT NULL,'flyway_schema_history',to_regclass('public.flyway_schema_history') IS NOT NULL)"
+GATEWAY_CATALOG = media_restore.CATALOG.replace(GO_HISTORY, GATEWAY_HISTORY)
 
 
 class CohortRestoreError(Exception):
@@ -27,6 +29,12 @@ class CohortRestoreError(Exception):
 
 
 def classify_plan(database, plan):
+    if database == 'gateway_db':
+        if (isinstance(plan, dict) and set(plan) == {'engine', 'from', 'to', 'files'}
+                and plan['engine'] == 'unmanaged' and plan['from'] is None and plan['to'] is None
+                and isinstance(plan['files'], dict) and plan['files']):
+            return 'restore-only'
+        raise CohortRestoreError('gateway migration plan not qualified')
     if (database not in cohort.ALLOWED_DATABASES or not isinstance(plan, dict)
             or set(plan) != {'engine', 'from', 'to', 'files'}
             or plan['engine'] != ('flyway' if database == 'auth_db' else 'golang-migrate')
@@ -76,7 +84,7 @@ def migration_inventory(root, databases, plans):
                     if db == 'auth_db':
                         if (current, 'flyway') not in versions or (target, 'flyway') not in versions:
                             raise CohortRestoreError('Flyway baseline missing')
-                    elif ((current, 'up') not in versions or (target, 'up') not in versions
+                    elif db != 'gateway_db' and ((current, 'up') not in versions or (target, 'up') not in versions
                           or (mode == 'migrate' and (current, 'down') not in versions)):
                         raise CohortRestoreError('migration baseline missing')
                     result[db] = {}
@@ -127,8 +135,8 @@ def _source(binding, databases, metadata, postgres_image, migrate_image):
                          allow_nan=False).encode('ascii')
         if not isinstance(inputs[field], str) or hashlib.sha256(raw).hexdigest() != inputs[field]:
             raise CohortRestoreError('cohort metadata mismatch')
-    if AUTH_CATALOG == media_restore.CATALOG:
-        raise CohortRestoreError('auth catalog query unavailable')
+    if AUTH_CATALOG == media_restore.CATALOG or GATEWAY_CATALOG == media_restore.CATALOG:
+        raise CohortRestoreError('cohort catalog query unavailable')
     for db in databases:
         mode = classify_plan(db, metadata['migrations'][db])
         catalog = metadata['catalog'][db]
@@ -138,7 +146,11 @@ def _source(binding, databases, metadata, postgres_image, migrate_image):
         media_restore._quote_identifier(catalog['database_owner'])
         version = metadata['migrations'][db]['from']
         history = catalog['history']
-        if db != 'auth_db':
+        if db == 'gateway_db':
+            if (not isinstance(history, dict) or set(history) != {'schema_migrations', 'flyway_schema_history'}
+                    or any(history[key] is not False for key in history)):
+                raise CohortRestoreError('gateway ledger observation differs')
+        elif db != 'auth_db':
             if (not isinstance(history, list) or len(history) != 1 or not isinstance(history[0], dict)
                     or set(history[0]) != {'version', 'dirty'} or type(history[0]['version']) is not int
                     or history[0]['version'] != version or history[0]['dirty'] is not False):
@@ -234,7 +246,7 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
             media_restore._psql(postgres, admin, 'postgres', 'CREATE DATABASE ' + db + ' OWNER ' + owner)
             _decrypt_command(root, key, binding, databases, manifest, db,
                              [postgres, 'pg_restore', '-U', admin, '--exit-on-error', '-d', db])
-            query = AUTH_CATALOG if db == 'auth_db' else media_restore.CATALOG
+            query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             if json.loads(media_restore._psql(postgres, admin, db, query)) != source_metadata['catalog'][db]:
                 raise CohortRestoreError('restored database catalog differs')
         if changed:
@@ -249,7 +261,7 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
                 url = 'postgres://' + admin + ':' + password + '@127.0.0.1:5432/' + db + '?sslmode=disable'
                 command = 'exec /tmp/voice-migrate -path /tmp/voice-cohort-migrations/' + db + ' -database "$VOICE_RESTORE_URL" up'
                 media_restore._docker('exec', '-e', 'VOICE_RESTORE_URL=' + url, postgres, 'sh', '-ec', command)
-            query = AUTH_CATALOG if db == 'auth_db' else media_restore.CATALOG
+            query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             actual = json.loads(media_restore._psql(postgres, admin, db, query))
             if mode == 'restore-only':
                 if actual != source_metadata['catalog'][db]:

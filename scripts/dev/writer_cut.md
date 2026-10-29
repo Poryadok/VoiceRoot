@@ -24,6 +24,17 @@ Put `writer_cut` in the immutable private journal intent before constructing
   `active_transactions`, with both counts integer zero. Synthetic callbacks are
   test fixtures, not runtime evidence.
 
+For the established DEV PostgreSQL engine, the central caller can bind
+`writer_cut_pg_probe.inspect(scope, cut._guard)` to `probe`. Its immutable scope
+is `{engine, databases, database_oids, server_start}`: the engine is the exact
+guarded Kubernetes snapshot, databases are the qualified sorted affected set,
+and every name is bound to its observed PostgreSQL OID. The observer counts all
+remaining sessions on those databases, including idle sessions, and adds prepared
+transactions to the transaction count. It rejects missing DB/OID associations,
+engine restart, insufficient `pg_read_all_stats` access or guard loss. This is
+one sampled observation; selection completeness, held writer fencing and any
+applicable unsettled external I/O remain the central caller's responsibility.
+
 Call `drain()` once. It durably reserves each effect before a UID/RV/full-spec
 CAS that changes only `spec.replicas`, then reobserves the result. A terminal
 drain requires controller generation/status, selected owner-chain Pod retirement,

@@ -16,6 +16,7 @@ class RunTest(unittest.TestCase):
              patch.object(phase.custody, 'verify_bundle', return_value={'bytes':123,'sha256':'d'*64}):
             self.plan = phase.prepare(self.base.base.phase,b'x'*32,self.base.path)
         self.p = self.base.base.media
+        self.base.base.base.ledger.row['cohort_dispatch'] = run.dispatch_marker(self.plan)
         self.env = {'GITHUB_REPOSITORY':'Poryadok/VoiceRoot','GITHUB_EVENT_NAME':'workflow_dispatch',
             'GITHUB_REF':'refs/heads/master','GITHUB_WORKFLOW_REF':run.WORKFLOW_REF,
             'GITHUB_SHA':self.p.fence.context['commit'],'GITHUB_WORKFLOW_SHA':self.p.fence.context['commit'],
@@ -26,6 +27,27 @@ class RunTest(unittest.TestCase):
         self.assertEqual(actual['run_id'],'123')
         with self.assertRaises(run.CohortRunError):
             run.claim(self.p.fence,self.p.client,self.p.lock,self.p.namespace_uid,self.env,self.plan['challenge'],['roles','voice_db'])
+
+    def test_missing_dispatch_is_refused(self):
+        del self.base.base.base.ledger.row['cohort_dispatch']
+        with self.assertRaises(run.CohortRunError):
+            run.claim(self.p.fence,self.p.client,self.p.lock,self.p.namespace_uid,self.env,self.plan['challenge'],['roles','voice_db'])
+        self.assertEqual(self.base.base.base.ledger.row['cohort_upload']['status'], 'dispatch-pending')
+
+    def test_dispatch_drift_after_claim_is_uncertain(self):
+        original = run.media_operation_guard.verify
+        calls = 0
+        def guard(*args):
+            nonlocal calls
+            original(*args); calls += 1
+            if calls == 2:
+                row, rev = self.base.base.base.ledger.read()
+                row['cohort_dispatch']['challenge'] = '0'*32
+                self.base.base.base.ledger.write(rev, row)
+        with patch.object(run.media_operation_guard, 'verify', side_effect=guard):
+            with self.assertRaises(run.CohortRunError):
+                run.claim(self.p.fence,self.p.client,self.p.lock,self.p.namespace_uid,self.env,self.plan['challenge'],['roles','voice_db'])
+        self.assertEqual(self.base.base.base.ledger.row['status'], 'uncertain')
 
     def test_wrong_source_or_attempt_never_binds(self):
         for field,value in [('GITHUB_SHA','f'*40),('GITHUB_RUN_ATTEMPT','2'),('GITHUB_WORKFLOW_REF','wrong')]:

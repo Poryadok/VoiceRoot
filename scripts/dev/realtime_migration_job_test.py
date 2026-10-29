@@ -25,10 +25,11 @@ class RendererTest(unittest.TestCase):
         self.operation = 'media-c1-'+'b'*32
         self.secret = {'name':'voice-realtime-db-'+'b'*32,'uid':'secret','resourceVersion':'3'}
         self.migrate = job.MIGRATE_IMAGE
+        self.node = {'name':'fixture-node','uid':'node-uid','hostname':'fixture-node','architecture':'amd64'}
 
     def test_exact_source_immutable_plan(self):
         with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':self.source,'files':self.files}):
-            config, planned = job.render(self.root,self.source,self.operation,self.secret,self.migrate)
+            config, planned = job.render(self.root,self.source,self.operation,self.secret,self.migrate,self.node)
         self.assertTrue(config['immutable'])
         self.assertEqual(set(config['data']),{'000001_admission.up.sql','000001_admission.down.sql'})
         spec = planned['spec']
@@ -48,7 +49,22 @@ class RendererTest(unittest.TestCase):
             if mutation=='extra': files['src/backend/migrations/realtime_db/000002_extra.up.sql']='f'*64
             with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':self.source,'files':files}):
                 with self.assertRaises(job.RecoveryRequired):
-                    job.render(self.root,self.source,self.operation,secret,image)
+                    job.render(self.root,self.source,self.operation,secret,image,self.node)
+
+    def test_only_uid_bound_generated_metadata_labels_are_allowed(self):
+        with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':self.source,'files':self.files}):
+            _, intended = job.render(self.root,self.source,self.operation,self.secret,self.migrate,self.node)
+        actual = copy.deepcopy(intended); meta = actual['metadata']; meta.update(uid='uid',resourceVersion='1')
+        name = meta['name']; meta['labels']={'app':name,'batch.kubernetes.io/controller-uid':'uid',
+            'controller-uid':'uid','batch.kubernetes.io/job-name':name,'job-name':name}
+        actual['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':'uid'}}
+        actual['spec']['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']='uid'
+        job.admitted_job(intended,actual)
+        for mutation in ('foreign-uid','extra'):
+            bad = copy.deepcopy(actual)
+            if mutation=='foreign-uid': bad['metadata']['labels']['controller-uid']='foreign'
+            else: bad['metadata']['labels']['extra']='untrusted'
+            with self.assertRaises(job.RecoveryRequired): job.admitted_job(intended,bad)
 
 
 class PhaseTest(unittest.TestCase):
@@ -64,8 +80,8 @@ class PhaseTest(unittest.TestCase):
         renderer = RendererTest(); renderer.setUp(); self.addCleanup(renderer.doCleanups)
         source = base.context['commit']; operation = base.context['operation_id']
         public = {k:receipt[k] for k in ('name','uid','resourceVersion')}
-        spec = {'source_sha':source,'image':renderer.migrate,'platform_digest':'sha256:'+'c'*64,
-                'engine':fixture.pg.snapshot(),'database_oid':13,'credential':public}
+        spec = {'source_sha':source,'image':renderer.migrate,'platform_digest':job.PLATFORMS['amd64'],
+                'engine':fixture.pg.snapshot(),'database_oid':13,'credential':public,'node':renderer.node}
         operation_journal = journal.Journal(Path(base.temp.name)/'migration',
             {'resource_context':base.context,'namespace_uid':'ns','realtime_migration':spec})
         self.addCleanup(operation_journal.close)
@@ -77,6 +93,8 @@ class PhaseTest(unittest.TestCase):
         base,client,secret,provision,pg,renderer,j,files,password = self.setup_operation()
         original = client.call
         def lost(*args,body=None):
+            if args[:2]==('get','nodes'):
+                return {'items':[self.node_object(renderer.node)]}
             if args[:2]==('create','-f'): raise TimeoutError('lost')
             return original(*args,body=body)
         client.call = lost
@@ -88,11 +106,28 @@ class PhaseTest(unittest.TestCase):
         self.assertEqual(base.ledger.row['status'],'uncertain')
         self.assertEqual(j.state['steps']['config']['status'],'pending')
 
+    def test_wrong_node_uid_refused_before_any_create(self):
+        base,client,secret,provision,pg,renderer,j,files,password = self.setup_operation()
+        original = client.call; creates = []
+        def api(*args,body=None):
+            if args[:2]==('get','nodes'):
+                node = self.node_object(renderer.node); node['metadata']['uid']='foreign'
+                return {'items':[node]}
+            if args[:2]==('create','-f'): creates.append(True)
+            return original(*args,body=body)
+        client.call = api
+        worker = job.Migration(secret,provision,j,renderer.root,password)
+        with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':base.context['commit'],'files':files}), \
+             patch.object(job.realtime_db_provision,'KubePostgres',return_value=pg):
+            with self.assertRaises(job.RecoveryRequired): worker.run()
+        self.assertEqual(creates,[])
+        self.assertNotIn('realtime_migration',base.ledger.row)
+
     def test_terminal_job_and_schema_bind_to_owned_config_and_pod(self):
         self.lifecycle(None)
 
     def test_step_drift_never_submits_or_returns_success(self):
-        for fault in ('config','job','terminal','config-drift','lost-job','pod-image','dryrun','invocation-ack'):
+        for fault in ('config','job','terminal','config-drift','local-role','lost-job','pod-image','job-label','dryrun','dryrun-pod','invocation-ack'):
             with self.subTest(fault=fault): self.lifecycle(fault)
 
     def lifecycle(self, fault):
@@ -100,15 +135,21 @@ class PhaseTest(unittest.TestCase):
         original = client.call
         objects = {}
         def api(*args,body=None):
+            if args[:2]==('get','nodes'): return {'items':[self.node_object(renderer.node)]}
             if args[:2]==('create','-f') or args[:2]==('create','--dry-run=server'):
                 obj = copy.deepcopy(body)
                 meta = obj['metadata']; meta.update(uid='uid-'+obj['kind'],resourceVersion='5')
                 if obj['kind']=='Job':
+                    meta['labels']={'app':meta['name'],'batch.kubernetes.io/controller-uid':meta['uid'],
+                                    'controller-uid':meta['uid'],'batch.kubernetes.io/job-name':meta['name'],
+                                    'job-name':meta['name']}
                     spec = obj['spec']; spec['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':meta['uid']}}
                     spec['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']=meta['uid']
                     obj['status']={'conditions':[{'type':'Complete','status':'True'}]}
                     if fault=='dryrun' and args[:2]==('create','--dry-run=server'):
                         spec['backoffLimit']=1
+                if obj['kind']=='Pod' and fault=='dryrun-pod':
+                    obj['spec']['containers'][0]['image']='untrusted'
                 if args[:2]!=('create','--dry-run=server'):
                     objects[obj['kind']] = copy.deepcopy(obj)
                     if fault=='lost-job' and obj['kind']=='Job': raise TimeoutError('lost response')
@@ -117,7 +158,10 @@ class PhaseTest(unittest.TestCase):
                 result = copy.deepcopy(objects['ConfigMap'])
                 if fault=='config-drift': result['metadata']['uid']='foreign'
                 return result
-            if args[:2]==('get','job'): return copy.deepcopy(objects['Job'])
+            if args[:2]==('get','job'):
+                result = copy.deepcopy(objects['Job'])
+                if fault=='job-label': result['metadata']['labels']['controller-uid']='foreign'
+                return result
             if args[:2]==('get','pods'):
                 owned = objects['Job']; pod_spec = copy.deepcopy(owned['spec']['template']['spec'])
                 pod_spec['nodeName']='fixture-node'
@@ -125,7 +169,7 @@ class PhaseTest(unittest.TestCase):
                         'uid':owned['metadata']['uid']}]},'spec':pod_spec,'status':{'phase':'Succeeded',
                         'containerStatuses':[{'name':'migrate','containerID':'containerd://fixture',
                         'restartCount':0,
-                        'imageID':'containerd://sha256:'+'c'*64,'state':{'terminated':{'exitCode':0}}}]}}
+                        'imageID':'containerd://'+job.PLATFORMS['amd64'],'state':{'terminated':{'exitCode':0}}}]}}
                 if fault=='pod-image': pod['status']['containerStatuses'][0]['imageID']='containerd://sha256:'+'f'*64
                 return {'items':[pod]}
             return original(*args,body=body)
@@ -145,6 +189,8 @@ class PhaseTest(unittest.TestCase):
             return record
         def finish(name, record, receipt):
             original_finish(name,record,receipt)
+            if fault=='local-role' and name=='config':
+                provision.state['steps']['realtime-db-role']['nonce']='foreign'
             if fault=='terminal' and name=='job':
                 base.ledger.row['realtime_migration']['steps'][name]['receipt_sha256']='f'*64
         schema = {'database_oid':13,'version':1,'dirty':False,'scope':'realtime-login-schema-readiness'}
@@ -158,7 +204,7 @@ class PhaseTest(unittest.TestCase):
                 self.assertEqual(base.ledger.row['status'],'uncertain')
                 if fault=='config': self.assertNotIn('ConfigMap',objects)
                 if fault=='job': self.assertNotIn('Job',objects)
-                if fault in ('config-drift','dryrun'): self.assertNotIn('Job',objects)
+                if fault in ('config-drift','local-role','dryrun','dryrun-pod'): self.assertNotIn('Job',objects)
                 return
             receipt = worker.run()
         self.assertEqual(receipt['schema'],schema)
@@ -166,6 +212,13 @@ class PhaseTest(unittest.TestCase):
         self.assertEqual(j.state['steps']['realtime-migration']['status'],'done')
         self.assertEqual(base.ledger.row['realtime_migration']['status'],'done')
         self.assertEqual(base.ledger.row['realtime_migration']['steps']['job']['status'],'done')
+
+    @staticmethod
+    def node_object(node):
+        return {'metadata':{'name':node['name'],'uid':node['uid'],'labels':{'kubernetes.io/hostname':node['hostname'],
+            'kubernetes.io/arch':node['architecture'],'kubernetes.io/os':'linux'}},'spec':{},
+            'status':{'nodeInfo':{'architecture':node['architecture'],'operatingSystem':'linux'},
+                      'conditions':[{'type':'Ready','status':'True'}]}}
 
 
 if __name__ == '__main__': unittest.main()
