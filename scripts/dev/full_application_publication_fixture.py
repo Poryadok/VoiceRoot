@@ -196,9 +196,15 @@ class PublicationFixture:
             self.requests.append(url); raw,headers=self._raw(url); return _Response(raw,headers)
         def opener(_opener,request,timeout=None):
             self.requests.append(request.full_url); raw,headers=self._raw(request.full_url); return _Response(raw,headers)
-        self._patches=[patch.object(authority.transport,'_request',side_effect=request),
-                       patch.object(urllib.request.OpenerDirector,'open',new=opener)]
-        for item in self._patches: item.start()
+        candidates=[patch.object(authority.transport,'_request',side_effect=request),
+                    patch.object(urllib.request.OpenerDirector,'open',new=opener)]
+        if self._patches: raise FixtureError('fixture context already active')
+        try:
+            for item in candidates:
+                item.start(); self._patches.append(item)
+        except BaseException:
+            for item in reversed(self._patches): item.stop()
+            self._patches=[]; raise
         return self
 
     def __exit__(self,*args):
