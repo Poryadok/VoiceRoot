@@ -156,6 +156,8 @@ class BridgePreservationAdmission(unittest.TestCase):
                     else root_composition_fixture.SYNTHETIC_PINS)
             with patch.object(staging_prerequisites, 'BINARY_PINS', pins):
                 binding = root_composition_fixture.helper_binding(source, code)
+            for name in pins:
+                (code/name).chmod(0o550)
             workspace = installed / 'sources' / ('a' * 12)
             workspace.mkdir(parents=True, mode=0o700)
             # Copy the entire immutable Git archive: source plans and helper
