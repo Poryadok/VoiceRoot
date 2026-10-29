@@ -238,7 +238,7 @@ def _source_binding(binding, metadata, postgres_image, migrate_image):
     inputs = binding.get('restore_inputs', {}) if isinstance(binding, dict) else {}
     image_pattern = r'(?:sha256:[0-9a-f]{64}|[a-z0-9][a-z0-9._/:\-]*@sha256:[0-9a-f]{64})'
     if (not isinstance(binding, dict) or not re.fullmatch(r'[0-9a-f]{40}', str(binding.get('source_sha', '')))
-            or not re.fullmatch(r'media-c1-[0-9a-f]{32}', str(binding.get('operation_id', '')))
+            or not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', str(binding.get('operation_id', '')))
             or not re.fullmatch(r'capture-[0-9a-f]{32}', str(binding.get('snapshot_id', '')))
             or not re.fullmatch(image_pattern, str(postgres_image)) or not re.fullmatch(image_pattern, str(migrate_image))
             or not isinstance(inputs, dict) or set(inputs) != {'catalog_sha256', 'roles_catalog_sha256',
