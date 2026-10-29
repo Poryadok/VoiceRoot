@@ -39,9 +39,11 @@ class RealHistoryTest(unittest.TestCase):
                    '-X','-qAt','-v','ON_ERROR_STOP=1','-c','SELECT pg_reload_conf()')
             self.assertEqual(docker('exec','-e','PGPASSWORD=wrong',pg,'psql','-h','127.0.0.1','-U','voice',
                 '-d','auth_db','-X','-qAt','-c','SELECT 1',check=False).returncode,0)
+            self.assertEqual(docker('exec','-e','PGPASSWORD=wrong','-e','PGHOSTADDR=127.0.0.1',pg,'psql',
+                '-h','voice-postgres','-U','voice','-d','auth_db','-X','-qAt','-c','SELECT 1',check=False).returncode,0)
             original=subprocess.run
             def local_exec(args,**kwargs):
-                if args[0]=='kubectl': return original(['docker','exec','-i',pg,'sh','-ec',args[-1]],**kwargs)
+                if args[0]=='kubectl': return original(['docker','exec','-i','-e','PGHOSTADDR=127.0.0.1',pg,*args[args.index('--')+1:]],**kwargs)
                 return original(args,**kwargs)
             with patch.object(live.probe.subprocess,'run',side_effect=local_exec):
                 with self.assertRaises(subprocess.CalledProcessError): live.probe._login(b'wrong')
