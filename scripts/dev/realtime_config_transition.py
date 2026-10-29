@@ -10,6 +10,16 @@ def verify_chat_service(cut,config_journal):
     return verify(cut,config_journal)
 
 
+def verify_deployment_successor(cut,config_journal,service):
+    from realtime_config_transition_deployment import verify_deployment_successor as verify
+    return verify(cut,config_journal,service)
+
+
+def read_realtime_route(cut,config_journal):
+    from realtime_config_transition_deployment import read_realtime_route as read
+    return read(cut,config_journal)
+
+
 def _base(source, service):
     meta = source.get('metadata', {})
     if ((source.get('apiVersion'),source.get('kind'),meta.get('name'),meta.get('namespace'))
