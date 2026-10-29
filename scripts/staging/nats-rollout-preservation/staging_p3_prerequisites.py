@@ -20,8 +20,8 @@ ASSET_KEYS={
     'voice-p3-principal-public':frozenset(('realtime.json',)),
 }
 TLS_NAMES=frozenset(('voice-realtime-p3-tls','voice-chat-realtime-p3-tls','voice-p3-principal-jwks-tls'))
-PUBLISHER=('ConfigMap/voice-p3-principal-publisher-config','Deployment/voice-p3-principal-jwks',
-           'Service/voice-p3-principal-jwks')
+PUBLISHER=('ConfigMap/voice-p3-principal-publisher-config','Service/voice-p3-principal-jwks',
+           'Deployment/voice-p3-principal-jwks')
 
 
 def publisher_objects(source_rows,image,platform_digest):
@@ -33,6 +33,7 @@ def publisher_objects(source_rows,image,platform_digest):
         if not isinstance(platform_digest,str) or not re.fullmatch(r'sha256:[0-9a-f]{64}',platform_digest): raise ValueError()
         source_plan.principal_publisher_image(image)
         deployment=next(row for row in rows if row['kind']=='Deployment')
+        if deployment['spec'].get('replicas') != 1: raise ValueError()
         container=deployment['spec']['template']['spec']['containers'][0]
         if container['image']!='nginx:stable-alpine': raise ValueError()
         container['image']=image

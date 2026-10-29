@@ -33,6 +33,8 @@ class StagingP3Contract(unittest.TestCase):
             with self.assertRaises(p3.PrerequisiteError): p3.publisher_objects(rows,bad,'sha256:'+'b'*64)
         wrong=copy.deepcopy(rows); wrong[0]['data']['default.conf']=config.replace('root /srv/jwks;','root /etc/voice/tls;')
         with self.assertRaises(p3.PrerequisiteError): p3.publisher_objects(wrong,image,'sha256:'+'b'*64)
+        wrong=copy.deepcopy(rows); wrong[1]['spec']['replicas']=2
+        with self.assertRaises(p3.PrerequisiteError): p3.publisher_objects(wrong,image,'sha256:'+'b'*64)
     def test_material_has_exact_staging_objects_and_keys(self):
         values={name:{key:b'value' for key in keys} for name,keys in p3.ASSET_KEYS.items()}
         objects=p3.material_objects(values)
@@ -47,6 +49,7 @@ class StagingP3Contract(unittest.TestCase):
     def test_c1_is_missing_only_and_c2_is_exact_receipt_revalidation(self):
         intent=p3.inventory_intent()
         self.assertEqual(len(intent),10)
+        self.assertLess(intent.index('Service/voice-p3-principal-jwks'),intent.index('Deployment/voice-p3-principal-jwks'))
         absent={item:None for item in intent}
         self.assertEqual(p3.classify_inventory('c1',absent,None),'create')
         current={item:{'uid':'uid-'+str(i),'resourceVersion':'1','content_sha256':f'{i+1:064x}'}
