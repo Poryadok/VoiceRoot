@@ -112,6 +112,24 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	conn, err = pgx.Connect(ctx, target.String())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close(context.Background()) })
+	intermediate, err := verifyLegacy24Intermediate(ctx, conn, origin)
+	require.NoError(t, err)
+	require.EqualValues(t, 25, intermediate.Target.Version)
+	require.Equal(t, origin.Target.DatabaseOID, intermediate.Target.DatabaseOID)
+	wrongOrigin := *origin
+	wrongTarget := *origin.Target
+	wrongTarget.DatabaseOID++
+	wrongOrigin.Target = &wrongTarget
+	_, err = verifyLegacy24Intermediate(ctx, conn, &wrongOrigin)
+	require.Error(t, err, "a different original database cannot qualify")
+	wrongOrigin = *origin
+	wrongOrigin.Rows = make(map[string]legacy25TableDigest, len(origin.Rows))
+	for name, value := range origin.Rows {
+		wrongOrigin.Rows[name] = value
+	}
+	wrongOrigin.Rows["spaces"] = legacy25TableDigest{}
+	_, err = verifyLegacy24Intermediate(ctx, conn, &wrongOrigin)
+	require.Error(t, err, "source row drift cannot qualify")
 	require.NoError(t, conn.QueryRow(ctx, `SELECT version,dirty FROM public.schema_migrations`).Scan(&version, &dirty))
 	require.Equal(t, 25, version)
 	require.False(t, dirty)
