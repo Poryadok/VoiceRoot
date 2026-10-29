@@ -1068,13 +1068,14 @@ class WriterCut:
         except BaseException:
             self._uncertain()
 
-    @staticmethod
-    def _health_matches(row, health):
+    def _health_matches(self, row, health):
         phase = health['phase']
         return (not phase.journal.poisoned and phase.journal.dirfd is not None and phase.journal.lockfd is not None
                 and phase.journal.state['steps'].get(health['step']) == health['local']
                 and row.get(health['ledger']) == health['marker']
-                and digest(health['local']['receipt']) == health['receipt_sha256'])
+                and digest(health['local']['receipt']) == health['receipt_sha256'] and
+                ('cut_step' not in health or (self.journal.state['steps'].get(health['cut_step']) == health['cut_local']
+                 and row.get('writer_cut_effects', {}).get(health['cut_step']) == health['cut_effect'])))
 
     def _activation_matches(self, row):
         if self.activation is None:
@@ -1086,6 +1087,8 @@ class WriterCut:
                 and phase.journal.state['steps'].get('full-cohort-activation-plan') == binding['local']
                 and row.get('full_cohort_activation_plan') == binding['marker']
                 and digest(binding['local']['receipt']) == binding['plan_sha256']
+                and self.journal.state['steps'].get('writer-cut-activation-plan') == binding['cut_local']
+                and row.get('writer_cut_effects', {}).get('writer-cut-activation-plan') == binding['cut_effect']
                 and all(self._health_matches(row, health) for health in binding['health'].values()))
 
     def _activation_stage(self):
@@ -1175,8 +1178,11 @@ class WriterCut:
                        'plan_sha256': digest(plan)}
             record = self._reserve('writer-cut-activation-plan', details)
             self._complete('writer-cut-activation-plan', record, details)
+            row, _ = self.fence.ledger.read()
             self.activation = {'phase': phase, 'token': token, 'plan': copy.deepcopy(plan), 'plan_sha256': digest(plan),
-                               'local': local, 'marker': marker, 'health': {}, 'stage': None}
+                               'local': local, 'marker': marker, 'health': {}, 'stage': None,
+                               'cut_local': copy.deepcopy(self.journal.state['steps']['writer-cut-activation-plan']),
+                               'cut_effect': copy.deepcopy(row['writer_cut_effects']['writer-cut-activation-plan'])}
             self.activation['stage'] = self._activation_stage()
             return self.verify_activation_stage()
         except BaseException:
@@ -1234,6 +1240,9 @@ class WriterCut:
             self.pending_activation_health = health
             self._complete(step, record, details)
             self.pending_activation_health = None
+            row, _ = self.fence.ledger.read()
+            health.update(cut_step=step, cut_local=copy.deepcopy(self.journal.state['steps'][step]),
+                          cut_effect=copy.deepcopy(row['writer_cut_effects'][step]))
             self.activation['health'][name] = health
             self.activation['stage'] = self._activation_stage()
             return self.verify_activation_stage()
