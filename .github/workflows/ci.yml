@@ -1275,15 +1275,6 @@ jobs:
           needs.changes.outputs.run_auth == 'true'
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-      - name: Build auth image (PR verify)
-        if: github.event_name == 'pull_request'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./src/backend/auth/Dockerfile
-          push: false
-          cache-from: type=gha,scope=backend-auth
-          cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
       - name: Build auth image (load)
         if: >-
           github.event_name == 'push' && github.ref == 'refs/heads/master' &&
@@ -1311,6 +1302,32 @@ jobs:
         run: |
           docker tag voice-auth:ci "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
           docker push "${{ steps.image.outputs.base }}/auth:${{ github.sha }}"
+
+  backend-auth-image:
+    needs: changes
+    if: >-
+      !cancelled() && github.event_name == 'pull_request' &&
+      needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.run_auth == 'true' ||
+       needs.changes.outputs.auth == 'true' ||
+       needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - name: Build auth image (PR verify)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./src/backend/auth/Dockerfile
+          push: false
+          cache-from: type=gha,scope=backend-auth
+          cache-to: type=gha,scope=backend-auth,mode=max,ignore-error=true
 
   developer-portal:
     needs: changes
@@ -1892,6 +1909,7 @@ jobs:
       - backend-go
       - backend-go-integration-pr
       - backend-auth
+      - backend-auth-image
       - developer-portal
       - admin
       - flutter-key-backup-goldens
@@ -1981,6 +1999,7 @@ jobs:
           JOB_BACKEND_GO: ${{ needs.backend-go.result }}
           JOB_BACKEND_GO_INTEGRATION_PR: ${{ needs.backend-go-integration-pr.result }}
           JOB_BACKEND_AUTH: ${{ needs.backend-auth.result }}
+          JOB_BACKEND_AUTH_IMAGE: ${{ needs.backend-auth-image.result }}
           JOB_DEVELOPER_PORTAL: ${{ needs.developer-portal.result }}
           JOB_ADMIN: ${{ needs.admin.result }}
         run: bash .github/ci/verify-required-jobs.sh "${{ github.event_name }}" "${{ needs.changes.outputs.code }}" auto
