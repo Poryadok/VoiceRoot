@@ -1,4 +1,5 @@
 """Bounded isolated restore for a caller-verified PostgreSQL cohort."""
+import copy
 import hashlib
 import io
 import json
@@ -329,7 +330,10 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             cohort.verify_staging(session,binding,databases,manifest,catalog_ref,metadata_ref)
         sources = migration_inventory(source_root, databases, source_metadata['migrations'],full_catalog)
         changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
-        if _staging is not None and 'space_db' in changed:
+        generic_changed=[db for db in changed if not (_staging is not None and db=='space_db')]
+        native_space=None
+        if (_staging is not None and 'space_db' in changed
+            and any(not callable(getattr(staging,name,None)) for name in ('native_space_rehearsal','load_native_space_rehearsal'))):
             raise CohortRestoreError('staging Space native migration qualification required')
         if media_restore._docker('info', '--format', '{{.OSType}}').strip() != b'linux':
             raise CohortRestoreError('Linux Docker required')
@@ -339,7 +343,7 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
                                             source_metadata, changed)) if full_catalog and changed else {})
         if _staging is None and not (full_catalog and changed) and (metadata_phase is not None or metadata_token is not None):
             raise CohortRestoreError('unexpected migration authority')
-        migrate_id = media_restore._check_image(migrate_image) if changed else None
+        migrate_id = media_restore._check_image(migrate_image) if generic_changed else None
         admin = 'voice_cohort_' + secrets.token_hex(12); password = secrets.token_hex(24)
         password_name = 'voice-cohort-password-' + secrets.token_hex(16)
         postgres = media_restore._create(journal, resources, 'postgres', postgres_id,
@@ -349,7 +353,7 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             entry=tarfile.TarInfo(password_name);entry.mode=0o600;entry.size=len(password)
             archive.addfile(entry,io.BytesIO(password.encode('ascii')))
         media_restore._docker('cp','-',postgres+':/tmp/',input=payload.getvalue())
-        if changed:
+        if generic_changed:
             tool_container = media_restore._create(journal, resources, 'migrate', migrate_id, ['--entrypoint', '/bin/true'])
             tool = media_restore._tool_bytes(tool_container, binding['restore_inputs']['migrate_binary_sha256'])
         media_restore._docker('start', postgres)
@@ -392,10 +396,10 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             query = AUTH_CATALOG if db == 'auth_db' else GATEWAY_CATALOG if db == 'gateway_db' else media_restore.CATALOG
             if json.loads(media_restore._psql(postgres, admin, db, query)) != source_metadata['catalog'][db]:
                 raise CohortRestoreError('restored database catalog differs')
-        if changed:
+        if generic_changed:
             media_restore._docker('exec', '-i', postgres, 'sh', '-ec',
                                   'cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate', input=tool)
-            _install_go(postgres, sources, source_metadata['migrations'], changed)
+            _install_go(postgres, sources, source_metadata['migrations'], generic_changed)
         results = {}
         for db in databases:
             plan = source_metadata['migrations'][db]
@@ -406,7 +410,12 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
                 results[db]={'mode':'restore-only','from':None,'to':None}
                 continue
             if mode == 'migrate':
-                if full_catalog:
+                if _staging is not None and db=='space_db':
+                    native_space=staging.native_space_rehearsal(session)
+                    if (type(native_space) is not dict or native_space.get('status')!='COMPLETE'
+                        or staging.load_native_space_rehearsal(session)!=native_space):
+                        raise CohortRestoreError('staging Space native rehearsal incomplete')
+                elif full_catalog:
                     _run_go_as_role(postgres, admin, db, migration_roles[db]['role'])
                 else:
                     _run_go_as_role(postgres, admin, db, admin)
@@ -438,6 +447,7 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
         if migration_roles:
             receipt['migration_logins'] = {db: {'role': migration_roles[db]['role'], 'from': results[db]['from'],
                                                 'to': results[db]['to']} for db in changed}
+        if native_space is not None:receipt['native_space']=copy.deepcopy(native_space)
     except media_restore.RestoreUncertain:
         raise CohortRestoreError('cohort resources uncertain; retain operation') from None
     except Exception:

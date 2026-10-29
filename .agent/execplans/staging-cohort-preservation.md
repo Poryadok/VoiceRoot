@@ -111,3 +111,30 @@ bridge continuation composition, and the separately owned native Space24
 adapter/tool publication. No native Space rehearsal or live rollout readiness
 is asserted by these tests. Manual AST refresh remains deferred to the root
 owner's already-running repository graph process.
+
+Native Space integration checkpoint: the producer captures the authenticated
+STAGING Tool publication before binding/cutting, and executes the original
+upgrade and verify modes on its current owned clone. Fixed protected records
+bind the attempt, original archive, Tool, clone identity, terminal commands,
+sidecar and cleanup. This new path is NOT qualified yet: an actual migration-
+built Space24 source has the pinned 9152b7fb catalog, while logical PG16 restore
+produces 292be867. The exact retained pair differs in four fast-default physical
+column attributes and four CHECK expression deparses. The Go owner is resolving
+this independently; neither profile nor owner/ACL checks were weakened here.
+The owned Tool image b2a8e538 (source 43f943) remains a test artifact, not a
+publication. The opt-in native fixture currently fails closed at that gate.
+
+The real generic restore fixture exposed the 2 MiB command-input cap when
+copying the pinned migrate executable (actual size 53,170,328 bytes). A fixed
+sealed-fd transport now admits only that root-image-bound binary, exact owned
+clone and destination, capped at 64 MiB with a wall deadline and one-use permit.
+Actual Bot1-to9 migration, full PG catalog dump/restore, CMS and a second restore
+pass together (45.903s). Source/Kube/remote admission remain explicit fixtures.
+Changed body/argv and lost terminal reply tests reject without replay.
+
+Pre-cut store rendering now uses policy_successor from the protected prepared
+child descriptor, preserving the old installed policy bytes. This fixes the
+old-policy/candidate-source circular dependency found by the WT30 joint test.
+Prepared/source/policy drift negatives and the focused suite pass (13/13,
+1.551s). Native inspect-before-cut, logical restore profile resolution and the
+unified actual bridge fixture remain outstanding; live deployment stays HOLD.

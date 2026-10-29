@@ -36,6 +36,7 @@ from auth_user_adoption_runtime import QUALIFIED_TOOLS
 class RestoreTransportTests(unittest.TestCase):
     def test_actual_pg_dump_and_isolated_restore_with_root_session(self):
         run=subprocess.run;original_popen=subprocess.Popen
+        generic=os.environ.get('VOICE_COHORT_GENERIC_DB')=='1'
         def docker(*args,body=None):
             result=run(DOCKER+list(args),input=body,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=120)
             if result.returncode:raise AssertionError('isolated fixture command failed: '+str(args[:2]))
@@ -58,7 +59,16 @@ class RestoreTransportTests(unittest.TestCase):
             spoofed=docker('exec',cid,'psql','-X','-qAt','-U','postgres','-d','postgres','-c',
                 "SELECT extract(year from pg_postmaster_start_time())::int")
             self.assertEqual(spoofed.strip(),b'2000')
-            with tempfile.TemporaryDirectory(dir='/root') as directory:
+            source=Path(__file__).resolve().parents[3]
+            if generic:
+                docker('exec','-i',cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','postgres','-d','postgres',
+                    body=b"CREATE ROLE bot_owner LOGIN; CREATE DATABASE bot_db OWNER bot_owner;")
+                docker('exec','-i',cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','postgres','-d','bot_db',
+                    body=b'ALTER SCHEMA public OWNER TO bot_owner;')
+                docker('exec','-i',cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','bot_owner','-d','bot_db',
+                    body=(source/'src/backend/migrations/bot_db/000001_init.up.sql').read_bytes()+
+                    b'\nCREATE TABLE public.schema_migrations(version bigint NOT NULL PRIMARY KEY,dirty boolean NOT NULL); INSERT INTO public.schema_migrations VALUES(1,false);')
+            with tempfile.TemporaryDirectory(dir='/root',delete=not generic) as directory:
                 root=Path(directory);(root/'installed').mkdir(mode=0o700)
                 before={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user','namespace':'voice-staging',
                     'uid':'user','resourceVersion':'3','generation':1},'spec':{'replicas':1}}
@@ -88,16 +98,32 @@ class RestoreTransportTests(unittest.TestCase):
                     session,_=cut_tests.CutEffectTests().fixture(root,before,namespace,preflight=preflight)
                     owner.private._private_directory(root/'installed'/'sources')
                     owner.private._private_directory(root/'installed'/'sources'/session.operation)
+                    if generic:
+                        import shutil
+                        shutil.copytree(source/'src/backend/migrations',root/'installed'/'sources'/session.operation/'src/backend/migrations')
                     with resource_claim.command_scope(session.check):
                         checked=pg._query(session,'postgres',"SELECT json_build_object('year',extract(year from pg_postmaster_start_time())::int);",'catalog-shadow-test')
                         self.assertNotEqual(checked['year'],2000)
                         archive=owner._capture_archive(session)
-                        self.assertEqual(set(archive['databases']),{'postgres','template1'})
-                        self.assertEqual(set(owner.dump_receipts(session)),{'roles','postgres','template1'})
-                        receipt=owner._qualify_restore(session,'local')
+                        databases={'postgres','template1'}|({'bot_db'} if generic else set())
+                        self.assertEqual(set(archive['databases']),databases)
+                        self.assertEqual(set(owner.dump_receipts(session)),{'roles'}|databases)
+                        failures=[]
+                        def trace(frame,event,arg):
+                            if event=='exception' and ('cohort' in frame.f_code.co_filename or 'commands.py' in frame.f_code.co_filename):
+                                failures.append((Path(frame.f_code.co_filename).name,frame.f_lineno,type(arg[1]).__name__,str(arg[1])[:160]))
+                            return trace
+                        if generic:sys.settrace(trace)
+                        try:receipt=owner._qualify_restore(session,'local')
+                        except Exception:
+                            if generic:print('Owned root:',root,'failures:',failures[-20:],file=sys.stderr)
+                            raise
+                        finally:
+                            if generic:sys.settrace(None)
                         self.assertEqual(receipt['status'],'COMPLETE')
                         self.assertEqual(receipt['proof']['cleanup'],'verified')
-                        self.assertEqual(set(receipt['proof']['databases']),{'postgres','template1'})
+                        self.assertEqual(set(receipt['proof']['databases']),databases)
+                        if generic:self.assertEqual(receipt['proof']['databases']['bot_db'],{'mode':'migrate','from':1,'to':9})
                         # Actual CMS encrypt/decrypt and a second PG restore of
                         # the extracted capsule. Native NATS bytes/readback and
                         # GitHub custody are explicit external fixtures here.

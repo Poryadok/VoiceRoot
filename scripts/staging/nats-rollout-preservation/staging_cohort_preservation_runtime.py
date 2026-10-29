@@ -271,6 +271,58 @@ def restore_command(session,argv,*,body=b'',timeout=120):
     return result
 
 
+def capture_migrate_binary(session,argv,body,*,timeout):
+    """Only the pinned clone migration executable may exceed command stdin cap.
+
+    The source-owned copy uses a sealed anonymous fd, bounded stdout and a wall
+    deadline. The root PENDING record and exact one-use permit remain in _send.
+    """
+    import fcntl
+    import os
+    import selectors
+    import signal
+    import subprocess
+    import commands
+    actual,path,state,resource,_=_command(session,argv,body)
+    tools=owner._read(owner._base(session)/'restore-tools.json')
+    expected=DOCKER+['exec','-i',resource['cid'],'sh','-ec','cat > /tmp/voice-migrate && chmod 0555 /tmp/voice-migrate'] if resource else None
+    if (actual!=argv or argv!=expected or resource['kind']!='postgres' or resource['status']!='ACTIVE'
+        or not 2<<20<len(body)<=64<<20 or hashlib.sha256(body).hexdigest()!=tools.get('migrate_binary_sha256')
+        or not 0<timeout<=120):raise Blocked('cohort_restore_binary_copy_invalid')
+    fd=os.memfd_create('voice-cohort-migrate',os.MFD_CLOEXEC|os.MFD_ALLOW_SEALING)
+    child=None;selector=selectors.DefaultSelector();output=bytearray();deadline=time.monotonic()+timeout
+    try:
+        pending=memoryview(body)
+        while pending:
+            count=os.write(fd,pending[:1<<20]);pending=pending[count:]
+        os.lseek(fd,0,os.SEEK_SET)
+        fcntl.fcntl(fd,fcntl.F_ADD_SEALS,fcntl.F_SEAL_WRITE|fcntl.F_SEAL_GROW|fcntl.F_SEAL_SHRINK|fcntl.F_SEAL_SEAL)
+        commands.authority_guard(argv)
+        if session._cohort_permit is not None:raise Blocked('cohort_permit_not_consumed')
+        child=subprocess.Popen(argv,stdin=fd,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
+            env={'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/root'},start_new_session=True)
+        os.set_blocking(child.stdout.fileno(),False);selector.register(child.stdout,selectors.EVENT_READ)
+        while selector.get_map():
+            if time.monotonic()>=deadline:raise Blocked('cohort_restore_binary_timeout')
+            session.check()
+            for key,_ in selector.select(.1):
+                raw=os.read(key.fd,4097-len(output))
+                if not raw:selector.unregister(key.fileobj)
+                else:
+                    output.extend(raw)
+                    if len(output)>4096:raise Blocked('cohort_restore_binary_output_invalid')
+        if child.wait(timeout=max(.01,deadline-time.monotonic()))!=0 or output:
+            raise Blocked('cohort_restore_binary_copy_failed')
+        if owner._read(path)!=state or owner._read(owner._base(session)/'restore-tools.json')!=tools:
+            raise Blocked('cohort_restore_binary_changed')
+        session.check();return b''
+    finally:
+        selector.close();os.close(fd)
+        if child is not None:
+            if child.poll() is None:os.killpg(child.pid,signal.SIGKILL);child.wait(timeout=2)
+            child.stdout.close()
+
+
 class NativeRuntime(DockerRuntime):
     """Only private restored NATS copies, never mounting the live selected store."""
     def __init__(self,session):
