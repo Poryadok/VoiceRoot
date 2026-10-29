@@ -1,6 +1,7 @@
 """Reconstruct P3 configuration inputs from concrete fenced phase objects."""
 import base64
 import copy
+from dataclasses import dataclass
 import hashlib
 import json
 import re
@@ -16,10 +17,61 @@ import writer_cut
 class AuthorityError(RuntimeError): pass
 
 
+@dataclass(frozen=True,eq=False)
+class BoundFixed9SpaceAuthority:
+    cut: object
+    trust: object
+    creator: object
+    space: object
+    role: object
+    token: str
+
+
+def bind_delegated_space(cut,trust,creator,space,role,token):
+    """Bind the exact completed fixed-nine chain to its Space receiver."""
+    import space_creator_runtime_profile_delegated as delegated
+    import space_creator_runtime_profile_target_trust as target
+    import space_role_peer_create as role_module
+    if (type(cut) is not writer_cut.WriterCut or type(trust) is not target.TargetTrustPhase or
+            type(creator) is not delegated.CreatorReceiver or type(space) is not delegated.SpaceReceiver or
+            type(role) is not role_module.Session or space.cut is not cut or creator.cut is not cut or
+            role.preflight.cut is not cut): raise AuthorityError('Space authority unavailable')
+    try:
+        target.verify_fixed9_successor(trust,token,creator,space,role)
+        binding=BoundFixed9SpaceAuthority(cut,trust,creator,space,role,token)
+        target.verify_fixed9_successor(trust,token,creator,space,role)
+        return binding
+    except BaseException: raise AuthorityError('Space authority unavailable') from None
+
+
+def _delegated_space(cut,binding,token):
+    import realtime_p3_create_only_crypto as crypto
+    import space_creator_runtime_profile_target_trust as target
+    if type(binding) is not BoundFixed9SpaceAuthority or binding.cut is not cut or token!=binding.token: raise ValueError()
+    phase=binding.space
+    refs=(binding.cut,binding.trust,binding.creator,binding.space,binding.role); bound_token=binding.token
+    target.verify_fixed9_successor(refs[1],token,refs[2],phase,refs[4])
+    original=copy.deepcopy(phase.proof); name='voice-space-media-server-tls'
+    identity=original['objects'][name]; jwks=original['public_jwks']['voice-space-principal-signing']
+    raw=transport.public_certificate(name,'tls.crt').split(b'\n',2)
+    if (len(raw)!=3 or raw[0].decode()!=identity['uid'] or raw[1].decode()!=identity['resourceVersion']): raise ValueError()
+    der=hashlib.sha256(crypto.der(base64.b64decode(raw[2],validate=True))).hexdigest()
+    result={'schema':'voice-dev-space-delegated-v1','operation_id':cut.fence.context['operation_id'],
+            'source_sha':cut.fence.context['commit'],'namespace_uid':cut.namespace_uid,
+            'tls':identity|{'certificate_sha256':der},'media_ca':copy.deepcopy(original['ca']),
+            'public_jwks':copy.deepcopy(jwks),'scope':'fixed-peer-space-material-no-runtime-readiness'}
+    target.verify_fixed9_successor(refs[1],token,refs[2],phase,refs[4])
+    if (phase.proof!=original or binding.token!=bound_token or
+            any(a is not b for a,b in zip((binding.cut,binding.trust,binding.creator,binding.space,binding.role),refs))): raise ValueError()
+    return result,json.dumps(jwks,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+
+
 def _space(cut,phase,token):
     if type(phase) is space_plan.SpacePlanPhase:
         proof=space_plan.verify(phase,cut,token)
         return proof,base64.b64decode(proof['observation']['jwks_bytes'],validate=True)
+    if type(phase) is BoundFixed9SpaceAuthority:
+        return _delegated_space(cut,phase,token)
     import space_p3_issuer_create as issuer
     if type(phase) is not issuer.Session or phase.fence.context!=cut.fence.context or phase.lock!=cut.lock or phase.namespace_uid!=cut.namespace_uid: raise ValueError()
     proof=issuer.verify_completed(phase); row,rev=cut.fence.ledger.read()
@@ -61,7 +113,7 @@ def collect(cut,journal,session,migration,space_phase,publisher_phase,source_roo
         cut._guard(); before,revision=cut.fence.ledger.read()
         p3=inputs.observe(cut,session,migration,source_root)
         public_plan,space_jwks=_space(cut,space_phase,token)
-        if public_plan.get('schema')=='voice-dev-space-p3-issuer-v1':
+        if public_plan.get('schema') in ('voice-dev-space-p3-issuer-v1','voice-dev-space-delegated-v1'):
             tls=p3['public_sources']['voice-space-media-server-tls']
             ca=p3['public_sources']['voice-media-ca']
             if (any(public_plan['tls'][k]!=tls[k] for k in ('uid','resourceVersion'))
