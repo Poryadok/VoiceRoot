@@ -128,6 +128,7 @@ system font и inline critical CSS; 90s — только recovery UI deadline, �
 - Фреймворк: стандартный пакет **`testing`**, табличные тесты где уместно.
 - Утверждения: **`github.com/stretchr/testify`** (`require` / `assert`) — единый стиль по репозиторию для читаемости.
 - PostgreSQL/Redis integration tests use **testcontainers-go** (helpers in [`src/backend/pkg/integrationtest/`](../src/backend/pkg/integrationtest/postgres.go)). Run `go test` on a host with a reachable Docker daemon. Ryuk is disabled on Windows by `integrationtest.ConfigureDockerTesting()`. Global Testcontainers pruning is unsafe on shared hosts and is disabled; run-owned cleanup and isolation are still being implemented.
+- `scripts/ci/local_heavy_slots.py` is a two-slot locking primitive under development. It retains an abandoned slot after a crash or exception. It is not connected to test execution or resource recovery and does not make parallel Docker runs safe by itself.
 - **`-short` vs полный прогон:** в PR/push CI job **`backend-go`** запускает `go test -short ./...` — тесты с `testing.Short()` (testcontainers, долгие HTTP/webhook) пропускаются. Полный `go test ./...` по матрице сервисов — nightly job **`backend-go-integration`** (cron + `workflow_dispatch`) и локально при необходимости: `make backend-test-ci` или `cd src/backend/<service> && go test ./...`. Паритет с PR CI на хосте: **`make backend-test-ci-short`**.
 
 PR integration routing includes affected services, existing RPC and build-source
