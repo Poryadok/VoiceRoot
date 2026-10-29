@@ -144,6 +144,8 @@ class BridgePreservationAdmission(unittest.TestCase):
             # Copy the entire immutable Git archive: source plans and helper
             # custody must see the same tree, including NATS known-baseline.
             shutil.copytree(source, workspace, dirs_exist_ok=True)
+            for path in workspace.rglob('*'):
+                path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
 import copy, hashlib, json, sys
 from pathlib import Path
