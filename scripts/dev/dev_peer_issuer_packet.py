@@ -1,7 +1,6 @@
 """Closed nine-name peer material packet, independent of operation authority."""
 import base64
 import copy
-import datetime
 import hashlib
 import json
 import re
@@ -15,7 +14,7 @@ TLS={
     'voice-auth-media-server-tls':('voice-auth','serverAuth'),
     'voice-role-media-server-tls':('voice-role','serverAuth'),
     'voice-role-media-client-tls':('voice-role','clientAuth'),
-    'voice-space-media-server-tls':('voice-space.voice-dev.svc','serverAuth'),
+    'voice-space-media-server-tls':('voice-space','serverAuth'),
 }
 
 class PacketError(RuntimeError): pass
@@ -52,24 +51,6 @@ def validate(envelope,profile,operation_id,source_sha,namespace_uid,preflight_sh
             if name.endswith('-principal-signing'):
                 if values['active-kid']!=b'current': raise ValueError()
                 jwks[name]=crypto._jwks(values)
-            elif name=='voice-space-media-server-tls':
-                # Existing Space issuer has exactly the service FQDN SAN.
-                crypto._openssl(['verify','-trusted','{1}','-purpose','sslserver','-verify_hostname',TLS[name][0],'{0}'],[values['tls.crt'],media])
-                sans=crypto._openssl(['x509','-in','{0}','-noout','-ext','subjectAltName'],[values['tls.crt']]).decode('ascii').splitlines()
-                if len(sans)!=2 or sans[1].strip()!='DNS:'+TLS[name][0]: raise ValueError()
-                subject=crypto._openssl(['x509','-in','{0}','-noout','-subject','-nameopt','RFC2253'],[values['tls.crt']]).strip()
-                if subject!=('subject=CN='+TLS[name][0]).encode(): raise ValueError()
-                eku=crypto._openssl(['x509','-in','{0}','-noout','-ext','extendedKeyUsage'],[values['tls.crt']])
-                if b'TLS Web Server Authentication' not in eku or b'TLS Web Client Authentication' in eku: raise ValueError()
-                constraints=crypto._openssl(['x509','-in','{0}','-noout','-ext','basicConstraints'],[values['tls.crt']])
-                if b'CA:FALSE' not in constraints or b'CA:TRUE' in constraints: raise ValueError()
-                if crypto._openssl(['x509','-in','{0}','-pubkey','-noout'],[values['tls.crt']])!=crypto._openssl(['pkey','-in','{0}','-pubout'],[values['tls.key']]): raise ValueError()
-                crypto._openssl(['x509','-in','{0}','-noout','-checkend','86400'],[values['tls.crt']])
-                def expiry(value):
-                    text=crypto._openssl(['x509','-in','{0}','-noout','-enddate'],[value]).decode('ascii').strip()
-                    if not text.startswith('notAfter='): raise ValueError()
-                    return datetime.datetime.strptime(text.removeprefix('notAfter='),'%b %d %H:%M:%S %Y GMT')
-                if expiry(values['tls.crt'])>expiry(media): raise ValueError()
             else: crypto._certificate(values,media,*TLS[name])
             found[name]=obj
         if set(found)!=set(missing) or jwks!=receipt['public_jwks']: raise ValueError()
