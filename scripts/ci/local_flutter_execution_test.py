@@ -49,6 +49,7 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertEqual(result['tests']['passed'], 1)
         self.assertEqual(result['tests']['skipped'], [])
         self.assertEqual(len(result['commands']), 4)
+        self.assertIn('--no-pub', result['commands'][2]['argv'])
         self.assertEqual(result['status'], 'incomplete')
         self.assertTrue(result['unbound_inputs'])
 
@@ -73,6 +74,17 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'failed')
         self.assertIn('snapshot changed', result['error'])
 
+    def test_dependency_cache_change_during_command_is_rejected(self):
+        def mutate(command, **kwargs):
+            result = self.fake_flutter(command, **kwargs)
+            if 'analyze' in command:
+                (Path(kwargs['env']['PUB_CACHE']) / 'injected.dart').write_text('changed')
+            return result
+        with mock.patch.object(execution, '_invoke', side_effect=mutate):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('dependency cache changed', result['error'])
+
     def test_skipped_case_is_recorded_and_fails(self):
         self.skipped = True
         with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
@@ -88,6 +100,19 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertNotIn('VOICE_UI_CAPTURE_DIR', self.test_env)
         self.assertNotIn('UIV3_CAPTURE_DIR', self.test_env)
         self.assertEqual(self.test_env['VOICE_MUSIC_CAPTURE_DIR'], str(self.output / 'music-captures'))
+
+    def test_dependency_directory_digest_changes_for_bytes_and_inventory(self):
+        cache = Path(self.tmp.name) / 'cache'
+        cache.mkdir()
+        (cache / 'package').mkdir()
+        item = cache / 'package' / 'source.dart'
+        item.write_bytes(b'one')
+        first = execution.directory_digest(cache)
+        item.write_bytes(b'two')
+        self.assertNotEqual(first, execution.directory_digest(cache))
+        item.write_bytes(b'one')
+        (cache / 'package' / 'another.dart').write_bytes(b'new')
+        self.assertNotEqual(first, execution.directory_digest(cache))
 
 
 if __name__ == '__main__':

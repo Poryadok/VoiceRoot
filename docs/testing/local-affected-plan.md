@@ -35,7 +35,8 @@ By default it discovers the full `test/` inventory; repeat `--suite` with a path
 relative to `test/` to diagnose a smaller selection. It copies Git-visible
 source bytes into the new directory, uses a private pub cache and temporary
 directory, runs locked dependency resolution, the repository SQLite prefetch,
-analysis and JSON-reported tests, and rechecks captured files after commands.
+analysis and JSON-reported tests, rechecks captured files after commands, and
+rejects package-cache changes after dependency preparation.
 Logs and `diagnostic.json` are retained there. The command reports `incomplete`
 and exits nonzero even when those checks pass: SDK, package, generated and
 ambient inputs are not fully bound, opt-in live skips need classification, and

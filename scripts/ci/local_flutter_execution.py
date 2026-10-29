@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import subprocess
 
 import flutter_test_events
@@ -17,6 +18,39 @@ import local_source_snapshot
 
 def _invoke(command, **kwargs):
     return subprocess.run(command, **kwargs)
+
+
+def directory_digest(root):
+    """Hash all regular files in a private dependency cache, refusing links."""
+    root = Path(root)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError('dependency cache must be a real directory')
+    digest = hashlib.sha256()
+    def walk(directory):
+        with os.scandir(directory) as entries:
+            children = sorted(entries, key=lambda entry: entry.name.encode('utf-8'))
+        for entry in children:
+            path = Path(entry.path)
+            info = path.lstat()
+            raw_name = path.relative_to(root).as_posix().encode('utf-8')
+            digest.update(len(raw_name).to_bytes(8, 'big'))
+            digest.update(raw_name)
+            digest.update(stat.S_IMODE(info.st_mode).to_bytes(4, 'big'))
+            if stat.S_ISDIR(info.st_mode):
+                digest.update(b'D')
+                walk(path)
+            elif stat.S_ISREG(info.st_mode):
+                digest.update(b'F' + info.st_size.to_bytes(8, 'big'))
+                with path.open('rb') as stream:
+                    for block in iter(lambda: stream.read(1024 * 1024), b''):
+                        digest.update(block)
+                after = path.stat()
+                if (info.st_size, info.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                    raise ValueError('dependency cache changed during hashing')
+            else:
+                raise ValueError('dependency cache contains a link or unsupported file')
+    walk(root)
+    return digest.hexdigest()
 
 
 def run(root, head, output, flutter, selected=None):
@@ -39,12 +73,13 @@ def run(root, head, output, flutter, selected=None):
     result = {'schema': 'voice-local-flutter-diagnostic-v1', 'source': source,
               'status': 'incomplete', 'commands': [], 'tests': None,
               'full_inventory': selected == inventory,
-              'unbound_inputs': ['Flutter SDK and external packages', 'generated and ambient inputs']}
+              'unbound_inputs': ['Flutter SDK and external package provenance', 'generated and ambient inputs']}
     test_args = [] if result['full_inventory'] else ['test/' + name for name in selected]
     # Captures and live-test switches are caller data, not this run's outputs.
     env = {key: value for key, value in os.environ.items()
            if not key.upper().startswith('VOICE_') and not key.upper().endswith('_CAPTURE_DIR')}
     env['PUB_CACHE'] = str(output / 'pub-cache')
+    Path(env['PUB_CACHE']).mkdir()
     private_temp = output / 'temp'
     private_temp.mkdir()
     env.update(TEMP=str(private_temp), TMP=str(private_temp), TMPDIR=str(private_temp))
@@ -66,7 +101,7 @@ def run(root, head, output, flutter, selected=None):
                     if os.name == 'nt' else ['bash', str(checkout / 'scripts/ci/flutter-linux-prefetch-sqlite3.sh')])
         for label, command in [('pub-get', [flutter, 'pub', 'get', '--enforce-lockfile']),
                                ('sqlite-prefetch', prefetch),
-                               ('analyze', [flutter, 'analyze', '--no-fatal-infos']),
+                               ('analyze', [flutter, 'analyze', '--no-fatal-infos', '--no-pub']),
                                ('test', [flutter, 'test', '--no-pub', '--reporter', 'json',
                                          '--concurrency=1', *test_args])]:
             out = output / (label + '.stdout')
@@ -79,6 +114,10 @@ def run(root, head, output, flutter, selected=None):
             if completed.returncode != 0:
                 raise ValueError(label + ' failed')
             local_source_snapshot.verify_materialized(root, source, checkout)
+            if label == 'sqlite-prefetch':
+                result['pub_cache_sha256'] = directory_digest(env['PUB_CACHE'])
+            elif label in ('analyze', 'test') and directory_digest(env['PUB_CACHE']) != result['pub_cache_sha256']:
+                raise ValueError('dependency cache changed during execution')
             if label == 'test':
                 raw = out.read_bytes()
                 result['tests'] = flutter_test_events.summarize(
