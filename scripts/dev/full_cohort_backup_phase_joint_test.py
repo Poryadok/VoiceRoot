@@ -56,6 +56,7 @@ class RealPreflightTest(unittest.TestCase):
         root=Path(base.temp.name)/'operations';root.mkdir(mode=0o700)
         op=root/base.context['operation_id'];op.mkdir(mode=0o700)
         admission=copy.deepcopy(base.admission);namespace_uid='00000000-0000-0000-0000-000000000001'
+        external={'namespace_uid':namespace_uid}
         shared_workloads=base.client.workloads
         class Client(writer_cut_test.Client):
             def __init__(self,journal):
@@ -67,7 +68,7 @@ class RealPreflightTest(unittest.TestCase):
                         'status':{'nodeInfo':{'architecture':'amd64','operatingSystem':'linux'},
                                   'conditions':[{'type':'Ready','status':'True'}]}}
                 value=super().call(*args)
-                if args[1]=='namespace':value['metadata']['uid']=namespace_uid
+                if args[1]=='namespace':value['metadata']['uid']=external['namespace_uid']
                 return value
         class Ledger:
             def __init__(self,client):self.client=client
@@ -88,8 +89,7 @@ class RealPreflightTest(unittest.TestCase):
              mock.patch.object(resource_fencing,'KubeLedger',Ledger),mock.patch.object(resource_fencing,'ResourceCheck',Check), \
              mock.patch.object(supervisor.media_backup_upload_runner,'ROOT',root), \
              mock.patch.object(supervisor.media_backup_upload_runner,'TT','http://fixture'), \
-             mock.patch.object(backup.cohort_backup_operation,'ROOT',root), \
-             mock.patch.object(supervisor.media_operation_guard,'verify'):
+             mock.patch.object(backup.cohort_backup_operation,'ROOT',root):
             j,c,f=facade('journal',{'cohort_route_mode':'full-cohort-v1','kube_lock':base.lock})
             owner=supervisor.Supervisor(j,f,c,base.lock,namespace_uid)
             pj,pc,pf=facade('package-journal',{'full_cohort_package':{'run_id':123,'run_attempt':1,
@@ -112,7 +112,7 @@ class RealPreflightTest(unittest.TestCase):
             source=metadata.BackupMetadataPhase(mj,mf,mc,base.lock,namespace_uid,owner.package,owner.inventory,owner.catalog,cut,metadata.canonical.ROOT)
             if after_cut is not None:after_cut(owner,cut,storage,source,namespace_uid)
             phase=backup.BackupPhase(owner,cut,storage,source)
-            yield SimpleNamespace(base=base,root=root,operation=op,owner=owner,cut=cut,storage=storage,source=source,phase=phase)
+            yield SimpleNamespace(base=base,root=root,operation=op,owner=owner,cut=cut,storage=storage,source=source,phase=phase,external=external)
 
     def test_missing_census_refuses_before_backup_journal_or_key(self):
         with self.phases() as work:
@@ -122,6 +122,19 @@ class RealPreflightTest(unittest.TestCase):
             self.assertFalse((op/'backup.key').exists())
             self.assertNotIn('full_cohort_backup_route',base.ledger.row)
             self.assertEqual(base.ledger.row['status'],'active')
+
+    def test_actual_guard_refuses_namespace_lock_and_tt_drift_before_effects(self):
+        for fault in ('namespace','lock','tt'):
+            with self.subTest(fault=fault),self.phases() as work:
+                work.phase._guard()
+                if fault=='namespace':work.external['namespace_uid']='foreign'
+                elif fault=='lock':work.base.lock['metadata']['resourceVersion']='999'
+                else:work.base.card['generation']+=1
+                with self.assertRaises(Exception):work.phase._guard()
+                with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
+                self.assertFalse((work.operation/'backup-journal').exists())
+                self.assertFalse((work.operation/'backup.key').exists())
+                self.assertNotIn('full_cohort_backup_route',work.base.ledger.row)
 
     def test_synthetic_observations_reach_one_shot_dispatch_and_reconcile(self):
         """Real journals/capture/encryption; synthetic source, Kube, PG and failed GH."""
