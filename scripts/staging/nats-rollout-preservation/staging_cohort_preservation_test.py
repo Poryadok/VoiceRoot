@@ -191,6 +191,36 @@ class CutEffectTests(unittest.TestCase):
                                 with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):auxiliary.resume(session)
                             self.assertEqual(len(calls),1)
 
+    def test_native_readiness_is_one_owned_bounded_operation(self):
+        import staging_cohort_preservation_runtime as runtime
+        for lost in (False,True):
+            with self.subTest(lost=lost),tempfile.TemporaryDirectory(dir='/root') as directory:
+                root=Path(directory);(root/'installed').mkdir(mode=0o700)
+                with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
+                    before={'metadata':{'name':'voice-user','namespace':'voice-staging','uid':'user',
+                        'resourceVersion':'3','generation':1},'spec':{'replicas':1}}
+                    session,_=self.fixture(root,before)
+                    preservation._runtime_base(session).mkdir(mode=0o700)
+                    native=runtime.NativeRuntime(session);name='voice-known-'+session.operation+'-copy'
+                    native.captured[name]={'name':name,'id':'d'*64};calls=[]
+                    argv=['exec',name,'/bin/busybox','wget','-q','-O','-','http://127.0.0.1:8222/healthz']
+                    def terminal(args,**kwargs):
+                        commands.authority_guard(args);calls.append(args)
+                        self.assertEqual(args[:7],runtime.DOCKER+['exec',name,'/bin/busybox','sh','-ec'])
+                        self.assertIn('"$i" -lt 120',args[-1]);self.assertEqual(kwargs['timeout'],160)
+                        if lost:raise RuntimeError('terminal_reply_lost')
+                        return b'{"status":"ok"}'
+                    with resource_claim.command_scope(session.check),patch.object(preservation,'revalidate_paused'),\
+                        patch.object(commands,'capture',side_effect=terminal):
+                        foreign=argv.copy();foreign[1]='unowned'
+                        with self.assertRaisesRegex(Exception,'cohort_native_command_invalid'):native._run(foreign)
+                        self.assertEqual(calls,[])
+                        if lost:
+                            with self.assertRaisesRegex(RuntimeError,'terminal_reply_lost'):native._run(argv)
+                            with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):native._run(argv)
+                        else:self.assertEqual(native._run(argv),'{"status":"ok"}')
+                        self.assertEqual(len(calls),1)
+
 
 class CatalogTests(unittest.TestCase):
     def test_full_catalog_refuses_active_clients_prepared_or_unreadable_database(self):

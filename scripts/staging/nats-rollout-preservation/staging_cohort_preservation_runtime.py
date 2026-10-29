@@ -289,8 +289,18 @@ class NativeRuntime(DockerRuntime):
         elif len(args)==4 and args[:3]==['stop','--time','10'] and args[3] in known:pass
         elif len(args)==3 and args[:2]==['rm','-f'] and args[2] in known:pass
         elif len(args)==6 and args[:3]==['ps','-a','--filter'] and args[3].startswith('id=') and args[3][3:] in known and args[4:]==['--format','{{.ID}}']:pass
-        elif (len(args)==8 and args[0]=='exec' and args[1] in known and args[2:]==['/bin/busybox','wget','-q','-O','-',
-            'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048']):pass
+        elif (len(args)==8 and args[0]=='exec' and args[1] in known and args[2:7]==['/bin/busybox','wget','-q','-O','-']
+            and args[7] in ('http://127.0.0.1:8222/healthz',
+                'http://127.0.0.1:8222/jsz?accounts=true&streams=true&consumers=true&config=true&limit=2048')):
+            if args[7]=='http://127.0.0.1:8222/healthz':
+                # The shared ready() caller retries failed commands. Keep those
+                # probes inside one bounded, owned-copy operation instead: a
+                # failed/lost terminal response must never replay a PENDING
+                # operation through the root transport.
+                script=('i=0; while [ "$i" -lt 120 ]; do '
+                    'if v=$(/bin/busybox wget -T 1 -q -O - http://127.0.0.1:8222/healthz 2>/dev/null); '
+                    'then printf "%s" "$v"; exit 0; fi; i=$((i+1)); /bin/busybox sleep 0.25; done; exit 1')
+                args=['exec',args[1],'/bin/busybox','sh','-ec',script];timeout=160
         elif args[:1]==['create']:
             if len(args)<31 or not re.fullmatch('voice-known-'+self.operation+'-[a-z0-9-]{1,32}',args[2]):raise Blocked('cohort_native_command_invalid')
             creating=args[2]

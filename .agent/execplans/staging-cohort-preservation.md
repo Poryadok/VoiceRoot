@@ -74,3 +74,4 @@ GitHub remain explicitly synthetic boundaries in this test. Seven focused unit
 tests pass, including missing off-node proof, lost auxiliary CAS reply, altered
 image and exact replica-only response. Off-node receipt/cleanup records are
 independently root-rechecked before auxiliary resume and qualification loading.
+The fixed NativeRuntime now accepts the shared exact healthz readiness command as one bounded owned-copy operation; lost terminal replies remain PENDING without replay. Eight actual RootSession unit checks pass. The native NATS transport fixture is being joined separately from the completed actual PG/CMS proof.
