@@ -410,7 +410,11 @@ class RootCompositionContract(unittest.TestCase):
                     stack.enter_context(patch.object(stage_runtime, 'Kube', return_value=kube))
                 with resource_claim.command_scope(session.check):
                     if ordinary_fault in ('source_tamper','helper_tamper','binary_tamper','binary_missing'):
-                        with self.assertRaises(bridge_root.Blocked):actions._prepare(request)
+                        reason={'source_tamper':'staging_prerequisites_source_changed',
+                                'helper_tamper':'rollout_captured_code_changed',
+                                'binary_tamper':'rollout_captured_code_changed',
+                                'binary_missing':'rollout_code_custody_invalid'}[ordinary_fault]
+                        with self.assertRaisesRegex(bridge_root.Blocked,reason):actions._prepare(request)
                         c1.assert_not_called();gis_execute.assert_not_called();captures.assert_not_called()
                         self.assertEqual(session.check()['phase'],'prepare')
                         return
