@@ -50,9 +50,21 @@ under root's shared-resource instruction until the named main refresh finishes.
   candidate image admission, registry content, Kubernetes and HTTPS transport
   are explicitly controlled fixtures, not live authority. Ten native Linux tests
   pass, including missing issuer before effects and committed/lost app CAS reply.
-- Current existing-object path remains HOLD. Protected history and typed capture
-  loaders are implemented but historical/C2 qualification is still incomplete;
-  no C2 or live readiness claim is made. Independent parent review is pending.
+- Protected C2 and C3 now follow the exact previous active PASS to original
+  successful effect receipts. The joined fixture exercises real historical
+  binding, preserved-only plans and zero writes, and rejects ROLLED_BACK,
+  altered intent, foreign UID and active-pointer drift. PASS creation itself is
+  modeled; this does not qualify the full transaction or live runtime.
+- Independent C1 review found that additional P3 trust roots were not tied to
+  current anchors. The complete five-entry trust map now equals the actual
+  live CA inputs; an appended unrelated CA fails before effects. Approved OCI
+  collector source is compiled from the exact checked bytes, bypassing Python's
+  timestamp-based bytecode cache; a forged same-size cache regression first
+  failed and then passed.
+- The native Linux coordinator, Session, policy and P3 suites pass 67 tests.
+  Parent-to-Realtime Secret extension and the full caller/candidate/renderer
+  qualification remain separate outstanding integration evidence. Independent
+  review of this successor, including C2, remains required; no live claim.
 
 ## Risks
 
