@@ -41,7 +41,9 @@ def run(root, head, output, flutter, selected=None):
               'full_inventory': selected == inventory,
               'unbound_inputs': ['Flutter SDK and external packages', 'generated and ambient inputs']}
     test_args = [] if result['full_inventory'] else ['test/' + name for name in selected]
-    env = os.environ.copy()
+    # Captures and live-test switches are caller data, not this run's outputs.
+    env = {key: value for key, value in os.environ.items()
+           if not key.upper().startswith('VOICE_') and not key.upper().endswith('_CAPTURE_DIR')}
     env['PUB_CACHE'] = str(output / 'pub-cache')
     private_temp = output / 'temp'
     private_temp.mkdir()

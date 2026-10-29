@@ -1,5 +1,6 @@
 """A Flutter execution must account for its command results and source drift."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -32,6 +33,7 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         if '--version' in command:
             return subprocess.CompletedProcess(command, 0, stdout=b'{"frameworkRevision":"test"}')
         if 'test' in command:
+            self.test_env = kwargs.get('env', {})
             path = str(Path(cwd) / 'test/example_test.dart')
             rows = [{'type':'start'}, {'type':'suite','suite':{'id':1,'path':path}},
                     {'type':'allSuites','count':1},
@@ -77,6 +79,15 @@ class LocalFlutterExecutionTests(unittest.TestCase):
             result = execution.run(self.root, self.head, self.output, 'flutter')
         self.assertEqual(result['status'], 'failed')
         self.assertEqual(result['tests']['skipped'][0]['name'], 'example')
+
+    def test_foreign_capture_and_voice_environment_are_not_inherited(self):
+        with mock.patch.dict(os.environ, {'VOICE_UI_CAPTURE_DIR': 'foreign',
+                                         'UIV3_CAPTURE_DIR': 'foreign'}):
+            with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+                execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertNotIn('VOICE_UI_CAPTURE_DIR', self.test_env)
+        self.assertNotIn('UIV3_CAPTURE_DIR', self.test_env)
+        self.assertEqual(self.test_env['VOICE_MUSIC_CAPTURE_DIR'], str(self.output / 'music-captures'))
 
 
 if __name__ == '__main__':
