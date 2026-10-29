@@ -46,7 +46,8 @@ class ResourceTests(unittest.TestCase):
         plan={'actual_before':copy.deepcopy(authority['observed']['images']),
               'candidate':{'commit':c['commit'],'images':copy.deepcopy(c['images'])}}
         adapter=Mock()
-        with patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
+        identity=Mock();identity.IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','fixed-identity']
+        with patch.dict(sys.modules,{'staging_cohort_preservation':adapter,'staging_cohort_preservation_pg':identity}):
             bad=copy.deepcopy(plan);bad['candidate']['commit']='d'*40
             before=copy.deepcopy(journal.row)
             with self.assertRaisesRegex(RuntimeError,'staging_cohort_baseline_changed'):
@@ -82,6 +83,9 @@ class ResourceTests(unittest.TestCase):
             session.check(pg)
             for bad in (pg[:-1]+['DROP DATABASE voice'],pg[:5]+['other-pod']+pg[6:],pg+['--context=other']):
                 with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            fixed=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+identity.IDENTITY_ARGS
+            session.check(fixed)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(fixed+['altered'])
             with self.assertRaisesRegex(RuntimeError,'advance_required'):
                 session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
