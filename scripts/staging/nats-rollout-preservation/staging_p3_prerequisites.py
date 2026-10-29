@@ -65,6 +65,79 @@ def source_contract(approved,raw):
     except Exception: raise PrerequisiteError('staging P3 source contract invalid') from None
 
 
+def source_consumers(rows):
+    """Check source P3 listener/issuer wiring; Space lifecycle remains dormant."""
+    try:
+        names=('voice-realtime','voice-chat','voice-space')
+        if not isinstance(rows,list) or len(rows)!=6: raise ValueError()
+        keyed={(r['kind'],r['metadata']['name']):r for r in rows}
+        if len(keyed)!=6 or set(keyed)!={(kind,name) for kind in ('Deployment','Service') for name in names}: raise ValueError()
+        envs={
+          'voice-realtime':{'REALTIME_PRINCIPAL_SIGNING_KEYS_DIR':'/etc/voice/p3/keys','REALTIME_PRINCIPAL_ACTIVE_KID':'current',
+           'REALTIME_PRINCIPAL_JWKS_FILE':'/etc/voice/p3/public/realtime.json','REALTIME_CHAT_LIFECYCLE_ADDR':'voice-chat:9099',
+           'REALTIME_CHAT_LIFECYCLE_SERVER_NAME':'voice-chat.voice-staging.svc','REALTIME_CHAT_LIFECYCLE_CA_FILE':'/etc/voice/p3/trust/chat-server-ca.crt',
+           'REALTIME_CHAT_LIFECYCLE_CERT_FILE':'/etc/voice/p3/tls/tls.crt','REALTIME_CHAT_LIFECYCLE_KEY_FILE':'/etc/voice/p3/tls/tls.key',
+           'REALTIME_SPACE_LIFECYCLE_GRPC_LISTEN':':9091','REALTIME_SPACE_LIFECYCLE_TLS_CERT_FILE':'/etc/voice/p3/tls/tls.crt',
+           'REALTIME_SPACE_LIFECYCLE_TLS_KEY_FILE':'/etc/voice/p3/tls/tls.key','REALTIME_SPACE_LIFECYCLE_CLIENT_CA_FILE':'/etc/voice/p3/trust/space-client-ca.crt',
+           'REALTIME_SPACE_PRINCIPAL_JWKS_URL':'https://voice-space.voice-staging.svc:8443/.well-known/jwks.json',
+           'REALTIME_SPACE_PRINCIPAL_JWKS_CA_FILE':'/etc/voice/p3/trust/space-jwks-ca.crt'},
+          'voice-chat':{'CHAT_REALTIME_LIFECYCLE_GRPC_LISTEN':':9099','CHAT_REALTIME_LIFECYCLE_TLS_CERT_FILE':'/etc/voice/realtime-p3/tls/tls.crt',
+           'CHAT_REALTIME_LIFECYCLE_TLS_KEY_FILE':'/etc/voice/realtime-p3/tls/tls.key','CHAT_REALTIME_LIFECYCLE_CLIENT_CA_FILE':'/etc/voice/realtime-p3/trust/realtime-client-ca.crt',
+           'CHAT_REALTIME_PRINCIPAL_JWKS_URL':'https://voice-p3-principal-jwks.voice-staging.svc:8443/realtime.json',
+           'CHAT_REALTIME_PRINCIPAL_JWKS_CA_FILE':'/etc/voice/realtime-p3/trust/realtime-jwks-ca.crt'},
+          'voice-space':{'SPACE_PRINCIPAL_JWKS_TLS_KEY_FILE':'/etc/voice/media/server/tls.key',
+           'SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE':'/etc/voice/media/server/tls.crt','SPACE_PRINCIPAL_JWKS_HTTPS_LISTEN':':8443',
+           'SPACE_PRINCIPAL_SIGNING_KEYS_DIR':'/etc/voice/media/signing','S2S_JWKS_CLIENT_KEY_FILE':'/etc/voice/media/client/tls.key',
+           'S2S_JWKS_CLIENT_CERT_FILE':'/etc/voice/media/client/tls.crt'}}
+        mounts={'voice-realtime':{'p3-signing':'/etc/voice/p3/keys','p3-public':'/etc/voice/p3/public','p3-server':'/etc/voice/p3/tls','p3-trust':'/etc/voice/p3/trust'},
+                'voice-chat':{'realtime-p3-server':'/etc/voice/realtime-p3/tls','realtime-p3-trust':'/etc/voice/realtime-p3/trust'},
+                'voice-space':{'media-signing':'/etc/voice/media/signing','media-server':'/etc/voice/media/server','media-client':'/etc/voice/media/client'}}
+        refs={'voice-realtime':{'p3-signing':('secret','voice-realtime-principal-signing'),'p3-public':('configMap','voice-p3-principal-public'),
+                                'p3-server':('secret','voice-realtime-p3-tls'),'p3-trust':('secret','voice-p3-principal-trust')},
+              'voice-chat':{'realtime-p3-server':('secret','voice-chat-realtime-p3-tls'),'realtime-p3-trust':('secret','voice-p3-principal-trust')},
+              'voice-space':{'media-signing':('secret','voice-space-principal-signing'),'media-server':('secret','voice-space-media-server-tls'),
+                             'media-client':('secret','voice-space-media-client-tls')}}
+        for name in names:
+            deployment=keyed['Deployment',name]; service=keyed['Service',name]
+            if deployment['metadata'].get('namespace')!=NAMESPACE or service['metadata'].get('namespace')!=NAMESPACE: raise ValueError()
+            spec=deployment['spec']['template']['spec']; containers=[c for c in spec['containers'] if c.get('name')==name.removeprefix('voice-')]
+            if len(containers)!=1: raise ValueError()
+            container=containers[0]; entries=container['env']; env={e['name']:e for e in entries}
+            if len(entries)!=len(env): raise ValueError()
+            for key,value in envs[name].items():
+                if env.get(key)!={'name':key,'value':value}: raise ValueError()
+            if name!='voice-space':
+                prefix='REALTIME_SPACE' if name=='voice-realtime' else 'CHAT_REALTIME'
+                key=prefix+'_PRINCIPAL_REPLAY_REDIS_PASSWORD'
+                if env.get(key)!={'name':key,'valueFrom':{'secretKeyRef':{'name':'voice-p3-principal-replay','key':'password'}}}: raise ValueError()
+                key=prefix+'_PRINCIPAL_REPLAY_REDIS_ADDR'
+                if env.get(key)!={'name':key,'valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':'REDIS_ADDR'}}}: raise ValueError()
+            elif env.get('SPACE_PRINCIPAL_ACTIVE_KID')!={'name':'SPACE_PRINCIPAL_ACTIVE_KID','valueFrom':{'secretKeyRef':{'name':'voice-space-principal-signing','key':'active-kid'}}}: raise ValueError()
+            entries=container['volumeMounts']; by_name={m['name']:m for m in entries}
+            volumes={v['name']:v for v in spec['volumes']}
+            if len(entries)!=len(by_name) or len(spec['volumes'])!=len(volumes): raise ValueError()
+            for mount,path in mounts[name].items():
+                if by_name.get(mount)!={'name':mount,'mountPath':path,'readOnly':True}: raise ValueError()
+                for other in entries:
+                    op=other.get('mountPath','')
+                    if other['name']!=mount and (op==path or op.startswith(path+'/') or path.startswith(op+'/')): raise ValueError()
+                typ,ref=refs[name][mount]; source=volumes[mount][typ]
+                keys={('voice-realtime','p3-signing'):('current.pem','next.pem'),('voice-realtime','p3-public'):('realtime.json',),
+                      ('voice-realtime','p3-trust'):('chat-server-ca.crt','space-client-ca.crt','space-jwks-ca.crt'),
+                      ('voice-chat','realtime-p3-trust'):('realtime-client-ca.crt','realtime-jwks-ca.crt'),
+                      ('voice-space','media-signing'):('current.pem','next.pem'),('voice-space','media-server'):('tls.crt','tls.key'),
+                      ('voice-space','media-client'):('tls.crt','tls.key')}.get((name,mount))
+                want={'secretName' if typ=='secret' else 'name':ref}
+                if typ=='secret': want['defaultMode']=288
+                if keys is not None: want['items']=[{'key':key,'path':key} for key in keys]
+                if source!=want or set(volumes[mount])!={'name',typ}: raise ValueError()
+            if service['spec'].get('selector')!={'app':name}: raise ValueError()
+            port={'voice-realtime':('realtime-lifecycle',9091),'voice-chat':('realtime-lifecycle',9099),'voice-space':('principal-jwks',8443)}[name]
+            if sum(p.get('name')==port[0] and p.get('port')==port[1] for p in service['spec']['ports'])!=1: raise ValueError()
+        return True
+    except Exception: raise PrerequisiteError('staging P3 source consumers invalid') from None
+
+
 def private_semantic(obj):
     """Retain full private object semantics while removing only server identity."""
     try:
@@ -224,7 +297,7 @@ def validate_plan_shape(plan):
             or any(not sha(aux[k]) for k in ('manifest_sha256','config_sha256','source_authority_sha256'))
             or (aux['index_sha256'] is not None and not sha(aux['index_sha256']))): raise ValueError()
         source_plan.principal_publisher_image(aux['image_ref'])
-        if aux['image_ref']!='docker.io/library/nginx@sha256:'+(aux['index_sha256'] or aux['manifest_sha256']): raise ValueError()
+        if aux['image_ref']!='docker.io/library/nginx@sha256:'+aux['manifest_sha256']: raise ValueError()
         platform=aux['platform']
         if (not isinstance(platform,dict) or set(platform)!={'os','architecture','variant'} or platform['os']!='linux'
             or not nonempty(platform['architecture']) or (platform['variant'] is not None and not nonempty(platform['variant']))): raise ValueError()

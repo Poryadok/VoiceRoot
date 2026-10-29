@@ -9,6 +9,23 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_source_consumers_check_actual_p3_paths_and_ports(self):
+        rows=json.loads((Path(__file__).with_name('staging_p3_prerequisites_source_fixture.json')).read_text())
+        self.assertTrue(p3.source_consumers(rows))
+        for kind,name in [('Deployment','voice-realtime'),('Deployment','voice-chat'),('Deployment','voice-space'),('Service','voice-realtime')]:
+            bad=copy.deepcopy(rows); row=next(x for x in bad if x['kind']==kind and x['metadata']['name']==name)
+            if kind=='Service': row['spec']['ports'][0]['port']=9999
+            else:
+                container=next(c for c in row['spec']['template']['spec']['containers'] if c['name']==name.removeprefix('voice-'))
+                target={'voice-realtime':'REALTIME_PRINCIPAL_JWKS_FILE','voice-chat':'CHAT_REALTIME_PRINCIPAL_JWKS_URL',
+                        'voice-space':'SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE'}[name]
+                next(x for x in container['env'] if x['name']==target)['value']='wrong'
+            with self.subTest(name=name),self.assertRaises(p3.PrerequisiteError): p3.source_consumers(bad)
+        bad=copy.deepcopy(rows); realtime=next(x for x in bad if x['kind']=='Deployment' and x['metadata']['name']=='voice-realtime')
+        trust=next(v for v in realtime['spec']['template']['spec']['volumes'] if v['name']=='p3-trust')
+        trust['secret']['items'][0]['key']='wrong'
+        with self.assertRaises(p3.PrerequisiteError): p3.source_consumers(bad)
+
     def test_private_semantic_retains_payload_and_ownership_controls(self):
         obj={'apiVersion':'v1','kind':'Secret','metadata':{'name':'voice-realtime-principal-signing',
               'namespace':'voice-staging','uid':'first','resourceVersion':'1','creationTimestamp':'now',
@@ -125,6 +142,8 @@ class StagingP3Contract(unittest.TestCase):
                'platform':{'os':'linux','architecture':'amd64','variant':None},
                'manifest_sha256':digest,'config_sha256':digest,'index_sha256':None,'source_authority_sha256':digest}}
         self.assertEqual(p3.validate_plan_shape(plan),plan)
+        indexed=copy.deepcopy(plan); indexed['auxiliary_image']['index_sha256']='b'*64
+        self.assertEqual(p3.validate_plan_shape(indexed),indexed)
         import staging_prerequisites as parent
         import resource_claim
         import resource_claim_test
