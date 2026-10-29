@@ -31,7 +31,10 @@ EXEC=owner.PREFIX+['exec','-i','voice-postgres-0','-c','postgres','--']
 
 def _query(session,database,query,label):
     if not isinstance(database,str) or not SAFE.fullmatch(database):raise Blocked('cohort_database_invalid')
-    body=('BEGIN READ ONLY;\n'+query+'\nCOMMIT;\n').encode()
+    # These are observation queries, never migration DDL. Pin catalog lookup
+    # ahead of inherited role/database paths so public overloads cannot replace
+    # engine, role or catalog identities in the preservation proof.
+    body=('BEGIN READ ONLY;\nSET LOCAL search_path=pg_catalog,public,pg_temp;\n'+query+'\nCOMMIT;\n').encode()
     return owner.private._json(owner._observation(session,label,EXEC+['sh','-ceu',PSQL,'--',database],body,limit=16<<20,timeout=60))
 
 

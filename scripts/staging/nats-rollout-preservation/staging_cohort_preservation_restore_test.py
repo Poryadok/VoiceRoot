@@ -53,6 +53,11 @@ class RestoreTransportTests(unittest.TestCase):
                 time.sleep(.2)
             docker('exec','-i',cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','postgres','-d','postgres',
                 body=b'CREATE TABLE public.preservation_fixture(id integer PRIMARY KEY, value text); INSERT INTO public.preservation_fixture VALUES(1,\'kept\');')
+            docker('exec','-i',cid,'psql','-X','-q','-v','ON_ERROR_STOP=1','-U','postgres','-d','postgres',
+                body=b"CREATE FUNCTION public.pg_postmaster_start_time() RETURNS timestamptz LANGUAGE sql IMMUTABLE AS 'SELECT timestamptz ''2000-01-01 00:00:00+00'''; ALTER ROLE postgres SET search_path=public,pg_catalog;")
+            spoofed=docker('exec',cid,'psql','-X','-qAt','-U','postgres','-d','postgres','-c',
+                "SELECT extract(year from pg_postmaster_start_time())::int")
+            self.assertEqual(spoofed.strip(),b'2000')
             with tempfile.TemporaryDirectory(dir='/root') as directory:
                 root=Path(directory);(root/'installed').mkdir(mode=0o700)
                 before={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user','namespace':'voice-staging',
@@ -82,6 +87,8 @@ class RestoreTransportTests(unittest.TestCase):
                     owner.private._private_directory(root/'installed'/'sources')
                     owner.private._private_directory(root/'installed'/'sources'/session.operation)
                     with resource_claim.command_scope(session.check):
+                        checked=pg._query(session,'postgres',"SELECT json_build_object('year',extract(year from pg_postmaster_start_time())::int);",'catalog-shadow-test')
+                        self.assertNotEqual(checked['year'],2000)
                         archive=owner._capture_archive(session)
                         self.assertEqual(set(archive['databases']),{'postgres','template1'})
                         self.assertEqual(set(owner.dump_receipts(session)),{'roles','postgres','template1'})
