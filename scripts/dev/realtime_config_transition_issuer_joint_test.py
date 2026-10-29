@@ -39,7 +39,7 @@ class IssuerConsumersTest(unittest.TestCase):
             source,keys=authority._space(fixture.cut,created.phase,'token')
             self.assertEqual(source,proof); self.assertEqual(keys,expected)
             phase=health.SpaceHealthPhase(fixture.journal,fence,fixture.client,created.base.lock,
-                                          'ns',fixture.package,fixture.cut,created.phase,fixture.image)
+                                          'ns',fixture.package,fixture.cut,created.phase,fixture.image,fixture.config)
             result=phase.run('token')
             self.assertEqual(health.verify_completed(phase,fixture.cut,'token'),result)
             created.actual['voice-space-principal-signing']['metadata']['uid']='foreign'
