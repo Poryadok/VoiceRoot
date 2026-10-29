@@ -6,6 +6,8 @@ import cohort_upload_phase_test as fixture
 import cohort_upload_phase as upload
 import cohort_dispatch as dispatch
 import cohort_upload_run as run
+import cohort_upload_runner as runner
+import media_operation_journal as journal
 
 
 class DispatchTest(unittest.TestCase):
@@ -17,6 +19,18 @@ class DispatchTest(unittest.TestCase):
             self.plan = upload.prepare(self.base.base.phase, b'x'*32, self.base.path)
         self.phase = self.base.base.phase
         self.calls = []
+        p = self.phase.phases
+        root = Path(self.base.base.base.temp.name) / 'operations'
+        root.mkdir(mode=0o700)
+        operation = root / p.fence.context['operation_id']
+        operation.mkdir(mode=0o700)
+        self.root_journal = journal.Journal(operation / 'journal', {
+            'resource_context': p.fence.context, 'kube_lock': p.lock,
+            'namespace_uid': p.namespace_uid,
+        })
+        self.addCleanup(self.root_journal.close)
+        route_root = patch.object(runner, 'ROOT', root)
+        route_root.start(); self.addCleanup(route_root.stop)
 
     def transport(self, command, payload):
         self.calls.append((command, payload))
