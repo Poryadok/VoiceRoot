@@ -311,8 +311,9 @@ class HostedTransportTests(unittest.TestCase):
             self.assertLess(entry.index('root_cli.code_binding(code)'),
                             entry.index('from nats_contract_integration import inner'))
 
-    @unittest.skipUnless(sys.platform == 'linux' and hasattr(os, 'chown'),
-                         'captured-code custody requires Linux ownership semantics')
+    @unittest.skipUnless(sys.platform == 'linux' and hasattr(os, 'chown') and
+                         hasattr(os, 'geteuid') and os.geteuid() == 0,
+                         'captured-code custody integration requires Linux root')
     def test_contract_entry_materializes_exact_capture_before_fixture_import(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
