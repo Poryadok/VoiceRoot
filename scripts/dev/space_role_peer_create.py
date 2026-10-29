@@ -16,6 +16,7 @@ import threading
 
 import canonical_application_package as canonical
 import frontend_runtime_executor as transport
+import full_cohort_package_phase
 import full_cohort_schema_metadata as schema
 import media_operation_guard
 import media_operation_journal
@@ -146,7 +147,6 @@ def _closed(actual,desired,require_identity=True):
 
 class Session:
     def __init__(self,journal,fence,client,lock,namespace_uid,package,issuer_preflight,source_root,token):
-        import full_cohort_package_phase
         if (type(journal) is not media_operation_journal.Journal or type(fence) is not resource_fencing.Fence or
                 type(client) is not transport.KubectlTransport or client.journal is not journal or fence.ledger.client is not client or
                 type(package) is not full_cohort_package_phase.PackagePhase or type(issuer_preflight) is not preflight.PeerIssuerPreflightPhase or
@@ -181,13 +181,18 @@ class Session:
     def _guard(self):
         try:
             self._local(); media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
-            self.preflight._authority(); source.verify(self.source_root,self.fence.context['commit'])
+            self.preflight._authority()
+            package_local=copy.deepcopy(self.package.journal.state['steps'].get(full_cohort_package_phase.STEP))
+            if not isinstance(package_local,dict) or package_local.get('status')!='done' or not isinstance(package_local.get('receipt'),dict): raise ValueError()
+            source.verify(self.source_root,self.fence.context['commit'])
             row,rev=self.fence.ledger.read()
             if (not self.fence.owned(row) or row.get('status')!='active' or self.preflight.fence.ledger.read()!=(row,rev) or
                     (self.record is not None and row.get(LEDGER)!=self.record) or row.get(EFFECTS,{})!=self.effects or
                     (self.initial is not None and (row.get(self.preflight.ledger)!=self.preflight.record or
                      self.preflight.record.get('receipt_sha256')!=writer_cut.digest(self.initial)))): raise ValueError()
-            self._local(); return row,rev
+            self._local()
+            if self.package.journal.state['steps'].get(full_cohort_package_phase.STEP)!=package_local: raise ValueError()
+            return row,rev
         except BaseException: raise schema.GuardLost('Role peer guard unavailable') from None
 
     def _check_current(self):

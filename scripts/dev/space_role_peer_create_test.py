@@ -63,6 +63,7 @@ class RoleCreateTest(unittest.TestCase):
             backing=fixture.Ledger(context); client=transport.KubectlTransport(journal); ledger=resource_fencing.KubeLedger(client)
             ledger.read=backing.read; ledger.write=backing.write; fence=resource_fencing.Fence(context,lambda:{},ledger)
             pkg=package.PackagePhase.__new__(package.PackagePhase); pre=create.preflight.PeerIssuerPreflightPhase.__new__(create.preflight.PeerIssuerPreflightPhase)
+            pkg.journal=SimpleNamespace(state={'steps':{package.STEP:{'status':'done','receipt':{'source':'synthetic'}}}})
             lock={'metadata':{'uid':'lock'}}
             for obj in (pkg,pre):obj.fence=fence; obj.lock=lock; obj.namespace_uid='ns'
             pre.package=pkg; pre.profile='role'; pre._local=mock.Mock(); pre._authority=mock.Mock()
@@ -71,6 +72,14 @@ class RoleCreateTest(unittest.TestCase):
                 phase.missing=['voice-role-media-client-tls']
                 marker={'status':'pending','missing':phase.missing,'issuer_source_sha':create.source.REVIEWED_SOURCE}
                 phase._write(record=marker); phase._write(effects={'voice-role-media-client-tls':{'status':'pending'}})
+                reads=[]
+                def drop_package_on_last_read():
+                    reads.append(True); result=backing.read()
+                    if len(reads)==2:pkg.journal.state['steps'].pop(package.STEP)
+                    return result
+                with mock.patch.object(ledger,'read',side_effect=drop_package_on_last_read):
+                    with self.assertRaises(create.schema.GuardLost):phase._guard()
+                pkg.journal.state['steps'][package.STEP]={'status':'done','receipt':{'source':'synthetic'}}
                 backing.row[create.EFFECTS]={}
                 with self.assertRaises(create.schema.GuardLost): phase._guard()
 
