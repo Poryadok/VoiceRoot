@@ -47,7 +47,7 @@ def stage_cluster_fixture(session,store_kube=None):
         rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
                     'spec':{'replicas':1,'template':template}}
         rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
-            'ownerReferences':[{'kind':'Deployment','uid':uid}]},'spec':{'template':copy.deepcopy(template)}}
+            'ownerReferences':[{'kind':'Deployment','uid':uid,'controller':True}]},'spec':{'template':copy.deepcopy(template)}}
         replicasets[rs['metadata']['name']]=rs;images.append(copy.deepcopy(rs))
         def statuses(containers):return [{'name':c['name'],'ready':True,
             'imageID':('ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f'
@@ -65,6 +65,13 @@ def stage_cluster_fixture(session,store_kube=None):
                 'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname',
                     'operator':'In','values':['pmdebook']}]}]}}}},
            ('service','voice-nats'):{'metadata':{'uid':'service','resourceVersion':'1'}}}
+    fixed[('pod','voice-fixture-hub')]={'metadata':{'name':'voice-fixture-hub','namespace':'voice-staging',
+        'uid':'00000000-0000-4000-8000-000000000201','resourceVersion':'1',
+        'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'00000000-0000-4000-8000-000000000101','controller':True}]},
+        'spec':{'nodeName':'pmdebook','containers':[{'name':'nats','image':stage_runtime.NATS_IMAGE}],
+            'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]},
+        'status':{'phase':'Running','containerStatuses':[{'name':'nats','ready':True,'imageID':stage_runtime.NATS_IMAGE,
+            'containerID':'containerd://'+'a'*64,'restartCount':0,'state':{'running':{'startedAt':'2025-01-01T00:00:00Z'}}}]}}
     class Cluster:
         objects=fixed
         deployments=rows
@@ -91,8 +98,7 @@ def stage_cluster_fixture(session,store_kube=None):
                 return {'items':result}
             if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
             if args==['get','pods','-o','json']:
-                return {'items':[{'metadata':{'name':'fixture-hub','uid':'fixture-hub-uid'},
-                    'spec':{'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]}}]}
+                return {'items':[copy.deepcopy(fixed[('pod','voice-fixture-hub')])] if ('pod','voice-fixture-hub') in fixed else []}
             if args==['create','--dry-run=server','-f','/dev/stdin','-o','json']:
                 result=copy.deepcopy(kwargs['body'])
                 if result['kind']=='Service':result['spec'].update(type='ClusterIP',clusterIP='10.2.0.1',
@@ -400,6 +406,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
     return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail==['version','-o','json']:
+    return b'{"serverVersion":{"major":"1","minor":"32"}}'
    if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:1]==['patch']:
     kind,name=tail[1:3]
     obj=cluster.deployments[name] if kind=='deployment' else cluster.objects[(kind,name)]
