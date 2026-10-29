@@ -424,16 +424,16 @@ def inspect_existing(phase,token):
             obj=_get(name); values=_values(obj,name)
             if any(obj['metadata'].get(k)!=identity[k] for k in ('uid','resourceVersion')): raise ValueError()
             public=role_material.qualify(name,obj,media)
-            present[name]={k:identity[k] for k in ('uid','resourceVersion')}
+            present[name]=copy.deepcopy(identity)
             if public is not None:jwks[name]=public
             for key in (('current.pem','next.pem') if name=='voice-role-principal-signing' else ('tls.key',)):
                 keys.append(hashlib.sha256(role_material.crypto._openssl(['pkey','-in','{0}','-pubout'],[values[key]])).digest())
         if len(keys)!=len(set(keys)) or preflight.verify_current(phase.preflight,token)!=initial: raise ValueError()
         phase._guard()
-        return {'schema':'voice-dev-peer-inspection-v1','profile':'role','operation_id':phase.fence.context['operation_id'],
+        return {'schema':'voice-dev-peer-existing-v1','profile':'role','operation_id':phase.fence.context['operation_id'],
                 'source_sha':phase.fence.context['commit'],'namespace_uid':phase.namespace_uid,
                 'preflight_sha256':writer_cut.digest(initial),'ca':copy.deepcopy(initial['ca']),
-                'present':present,'missing':missing,'public_jwks':jwks,'scope':'existing-material-only-no-runtime-readiness'}
+                'present':present,'missing':missing,'public_jwks':jwks,'scope':'predrain-peer-material-observation-not-runtime-readiness'}
     except schema.GuardLost: raise
     except BaseException: raise CreateError('Role peer inspection unavailable') from None
 

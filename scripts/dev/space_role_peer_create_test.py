@@ -157,7 +157,7 @@ class RoleCreateTest(unittest.TestCase):
         phase.preflight=SimpleNamespace(); phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.namespace_uid='ns'
         phase._guard=mock.Mock(); tls='voice-role-media-client-tls'; signer='voice-role-principal-signing'
         initial={'profile':'role','ca':{'der_sha256':hashlib.sha256(b'der').hexdigest()},
-                 'creator_secrets':{tls:{'state':'present','uid':'uid','resourceVersion':'1'},signer:{'state':'absent'}}}
+                 'creator_secrets':{tls:{'state':'present','uid':'uid','resourceVersion':'1','keys':['tls.crt','tls.key']},signer:{'state':'absent'}}}
         obj=desired(); obj['metadata'].update(uid='uid',resourceVersion='1')
         with mock.patch.object(create.preflight,'verify_current',side_effect=[initial,initial]), \
              mock.patch.object(create.preflight.public,'_value',return_value=b'ca'), mock.patch.object(create.preflight.crypto,'der',return_value=b'der'), \
@@ -165,7 +165,7 @@ class RoleCreateTest(unittest.TestCase):
              mock.patch.object(create.role_material,'qualify',return_value=None), mock.patch.object(create.role_material.crypto,'_openssl',return_value=b'pub'), \
              mock.patch.object(create,'_create') as write:
             result=create.inspect_existing(phase,'token')
-            self.assertEqual(result['missing'],[signer]); self.assertEqual(set(result['present']),{tls}); write.assert_not_called()
+            self.assertEqual(result['schema'],'voice-dev-peer-existing-v1'); self.assertEqual(result['missing'],[signer]); self.assertEqual(set(result['present']),{tls}); write.assert_not_called()
         changed=copy.deepcopy(initial); changed['creator_secrets'][signer]={'state':'present','uid':'other','resourceVersion':'2'}
         with mock.patch.object(create.preflight,'verify_current',side_effect=[initial,changed]), \
              mock.patch.object(create.preflight.public,'_value',return_value=b'ca'), mock.patch.object(create.preflight.crypto,'der',return_value=b'der'), \
