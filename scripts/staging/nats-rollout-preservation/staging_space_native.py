@@ -233,20 +233,65 @@ def inspect_source(session):
     return copy.deepcopy(receipt)
 
 
-def load_inspection(session):
-    """Reload the protected completed inspection and recheck its original inputs."""
-    plan=owner._guard(session);owner._no_pending(session);tool=space.load_tool(session)
-    receipt=owner._read(owner._base(session)/'space-inspection.json');kube=Kube()
+def _retained_record(base,operation,plan,tool):
+    receipt=owner._read(base/'space-inspection.json')
     fields={'schema','operation','plan_sha256','tool_sha256','identity','job_uid','result','cleanup','credential_binding'}
     if (type(receipt) is not dict or set(receipt)!=fields or receipt['schema']!='voice-staging-space-inspection-v1'
-        or receipt['operation']!=session.operation or receipt['plan_sha256']!=owner.digest(plan)
+        or receipt['operation']!=operation or receipt['plan_sha256']!=owner.digest(plan)
         or receipt['tool_sha256']!=owner.digest(tool) or receipt['cleanup']!='verified'):
         raise Blocked('space_inspect_receipt_changed')
-    created=owner._read(owner._base(session)/'effects'/'space-inspect-create.json')
-    deleted=owner._read(owner._base(session)/'effects'/'space-inspect-delete.json')
-    if (created.get('status')!='DONE' or deleted.get('status')!='DONE'
+    created=owner._read(base/'effects'/'space-inspect-create.json')
+    deleted=owner._read(base/'effects'/'space-inspect-delete.json')
+    name='voice-space-inspect-'+operation
+    if (created.get('schema')!='voice-staging-cohort-effect-v1' or deleted.get('schema')!='voice-staging-cohort-effect-v1'
+        or created.get('operation')!=operation or deleted.get('operation')!=operation
+        or created.get('effect_id')!='space-inspect-create' or deleted.get('effect_id')!='space-inspect-delete'
+        or created.get('argv')!=owner.PREFIX+['create','-f','/dev/stdin','-o','json']
+        or deleted.get('argv')!=owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin']
+        or created.get('binding')!=deleted.get('binding') or not isinstance(created.get('binding'),dict)
+        or created.get('status')!='DONE' or deleted.get('status')!='DONE'
         or created.get('response',{}).get('uid')!=receipt['job_uid']
         or deleted.get('response',{}).get('uid')!=receipt['job_uid']):raise Blocked('space_inspect_receipt_changed')
+    return receipt
+
+
+def load_retained_inspection(session):
+    """Reload original evidence through the current protected successor lineage."""
+    plan=owner.load_plan(session);owner._phase_continuity(session,plan);owner._no_pending(session)
+    receipt=_retained_record(owner._base(session),session.operation,plan,space.load_tool(session))
+    owner._phase_continuity(session,owner.load_plan(session))
+    return copy.deepcopy(receipt)
+
+
+def validate_historical_inspection(operation):
+    """Read only root-owned inspection linked to an already released rollout."""
+    if not isinstance(operation,str) or not re.fullmatch(r'[a-f0-9]{12}',operation):
+        raise Blocked('space_inspect_history_invalid')
+    base=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
+    checkpoint=owner._read(base/'checkpoint.json');plan=checkpoint['plan']
+    qualified=owner._read(base/'qualified.json');tool_record=owner._read(base/'space-tool.json')
+    rollout=owner._read(owner.guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20)
+    binding=owner.resource_claim.historical_binding(rollout)
+    source=owner._read(owner.guard.ROOT/'installed'/'source-authority'/(operation+'.json'))
+    if (rollout.get('status')!='PASS' or rollout.get('phase')!='POST_RESTART'
+        or rollout.get('fence_status')!='RELEASED' or rollout.get('operation')!=operation
+        or checkpoint.get('status')!='QUALIFIED' or plan.get('operation')!=operation
+        or plan.get('context')!=binding['context'] or plan.get('helper_sha256')!=binding['helper_sha256']
+        or plan.get('source_capture_sha256')!=owner.digest(source)
+        or plan.get('space_tool_sha256')!=owner.digest(tool_record)
+        or tool_record.get('operation')!=operation or tool_record.get('selected') is not True
+        or rollout.get('target',{}).get('cohort_preservation_sha256')!=owner.digest(qualified)
+        or qualified.get('operation')!=operation or qualified.get('plan_sha256')!=owner.digest(plan)):
+        raise Blocked('space_inspect_history_invalid')
+    tool=tool_record['authenticated_publication']['publication']
+    receipt=_retained_record(base,operation,plan,tool)
+    if qualified.get('space_inspection_sha256')!=owner.digest(receipt):raise Blocked('space_inspect_history_invalid')
+    return copy.deepcopy(receipt)
+
+
+def load_inspection(session):
+    """Reload the protected completed inspection and recheck its original inputs."""
+    owner._guard(session);receipt=load_retained_inspection(session);kube=Kube()
     if _identity(session,kube)!=receipt['identity']:raise Blocked('space_inspect_postgres_changed')
     config=kube.get('configmap','voice-app-config');secret=kube.get('secret','voice-app-secrets')
     actual={'config_uid':config['metadata']['uid'],'config_rv':config['metadata']['resourceVersion'],

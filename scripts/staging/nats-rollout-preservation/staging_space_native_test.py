@@ -12,6 +12,33 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_historical_loader_rejects_noncanonical_operation_without_read(self):
+        with patch.object(native.owner,'_read') as read:
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_history_invalid'):
+                native.validate_historical_inspection('../foreign')
+            read.assert_not_called()
+
+    def test_historical_inspection_requires_released_rollout_and_receipt_link(self):
+        operation='a'*12;source={'source':'fixture'};tool={'authenticated_publication':{'publication':{'tool':'fixture'}},
+            'operation':operation,'selected':True};context={'commit':'b'*40}
+        plan={'operation':operation,'context':context,'helper_sha256':'c'*64,
+            'source_capture_sha256':native.owner.digest(source),'space_tool_sha256':native.owner.digest(tool)}
+        receipt={'inspection':'fixture'}
+        qualified={'operation':operation,'plan_sha256':native.owner.digest(plan),'space_inspection_sha256':native.owner.digest(receipt)}
+        rollout={'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED','operation':operation,
+            'target':{'cohort_preservation_sha256':native.owner.digest(qualified)}}
+        values={'checkpoint.json':{'status':'QUALIFIED','plan':plan},'qualified.json':qualified,'space-tool.json':tool,
+            operation+'.json':source}
+        def read(path,**kwargs):
+            return copy.deepcopy(rollout if path.parent.name=='rollout-'+operation else values[path.name])
+        with patch.object(native.owner,'_read',side_effect=read), \
+             patch.object(native.owner.resource_claim,'historical_binding',return_value={'context':context,'helper_sha256':'c'*64}), \
+             patch.object(native,'_retained_record',return_value=receipt):
+            self.assertEqual(native.validate_historical_inspection(operation),receipt)
+            rollout['fence_status']='ACTIVE'
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_history_invalid'):
+                native.validate_historical_inspection(operation)
+
     def test_owned_job_and_cleanup_with_real_session_and_journal(self):
         import commands, guard, resource_claim
         from staging_cohort_preservation_test import CutEffectTests
@@ -61,6 +88,11 @@ class InspectSourceTest(unittest.TestCase):
                      patch.object(native,'_identity',return_value=identity):
                     receipt=native.inspect_source(session)
                     self.assertEqual(native.load_inspection(session),receipt)
+                    values[('secret','voice-app-secrets')]=copy.deepcopy(secret)
+                    values[('secret','voice-app-secrets')]['metadata']['resourceVersion']='3'
+                    self.assertEqual(native.load_retained_inspection(session),receipt)
+                    with self.assertRaisesRegex(native.Blocked,'space_inspect_credentials_changed'):
+                        native.load_inspection(session)
                 self.assertEqual(len(deleted),1)
                 for name in ('space-inspect-create','space-inspect-delete'):
                     self.assertEqual(native.owner._read(native.owner._base(session)/'effects'/(name+'.json'))['status'],'DONE')
