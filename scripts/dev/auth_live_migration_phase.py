@@ -708,7 +708,7 @@ def init_c1(phase, cut, source_root, actor, token, metadata):
         node=observe_node(p.client,auth['engine'],tool,lambda:readback._guard(phase,drain))
         credential=probe.verify_login(p.client,{'engine':auth['engine'],'database_oid':auth['database_oid'],
             'server_start':auth['server_start']},lambda:readback._guard(phase,drain))
-        if (verified_sources(phase,metadata)!=(binding,provenance)
+        if (verified_sources(phase,metadata,26)!=(binding,provenance)
                 or probe.inspect(scope,lambda:readback._guard(phase,drain))!=observed): raise ValueError()
         candidate_again=eligibility.observe_candidate(phase,drain,source_root,actor,token)
         if not _same_candidate(candidate,candidate_again): raise ValueError()
