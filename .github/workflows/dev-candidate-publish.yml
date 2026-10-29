@@ -55,6 +55,9 @@ on:
       - scripts/dev/writer_cut.py
       - scripts/dev/writer_cut_test.py
       - scripts/dev/writer_cut_successor_test.py
+      - scripts/dev/writer_cut_migration.py
+      - scripts/dev/writer_cut_migration_test.py
+      - scripts/dev/writer_cut_migration_inventory_test.py
       - scripts/dev/backend_config_transition*.py
       - scripts/dev/full_cohort_image_apply.py
       - scripts/dev/full_cohort_image_apply_test.py
@@ -67,6 +70,8 @@ on:
       - scripts/dev/full_cohort_inventory_phase_test.py
       - scripts/dev/full_cohort_activation_plan.py
       - scripts/dev/full_cohort_activation_plan_test.py
+      - scripts/dev/full_cohort_affected_plan.py
+      - scripts/dev/full_cohort_affected_plan_test.py
       - scripts/dev/full_cohort_predecessor_phase.py
       - scripts/dev/full_cohort_predecessor_phase_test.py
       - scripts/dev/realtime_secret_phase.py
@@ -157,6 +162,8 @@ jobs:
           python -B scripts/dev/cohort_restore_journal_test.py
           python -B scripts/dev/writer_cut_test.py
           python -B scripts/dev/writer_cut_successor_test.py
+          python -B scripts/dev/writer_cut_migration_test.py
+          python -B scripts/dev/writer_cut_migration_inventory_test.py
           python -B scripts/dev/backend_config_transition_test.py
           python -B scripts/dev/backend_config_transition_probe_test.py
           python -B scripts/dev/backend_config_transition_observation_test.py
@@ -168,6 +175,7 @@ jobs:
           python -B scripts/dev/full_cohort_package_phase_test.py
           python -B scripts/dev/full_cohort_inventory_phase_test.py
           python -B scripts/dev/full_cohort_activation_plan_test.py
+          python -B scripts/dev/full_cohort_affected_plan_test.py
           python -B scripts/dev/full_cohort_predecessor_phase_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
           python -B scripts/dev/realtime_secret_provision_test.py

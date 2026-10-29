@@ -41,9 +41,10 @@ class TestResume(unittest.TestCase):
             def __init__(inner):
                 ledger=type('Ledger',(),{'read':lambda inner:({'status':'active'},('uid','rv'))})()
                 inner.admission={'session_scope':self.scope}; inner.fence=type('Fence',(),{'context':{'commit':'a'*40},'ledger':ledger})()
-                inner.lock={'uid':'lock'}; inner.namespace_uid='ns'; inner.client=Client()
+                inner.lock={'uid':'lock'}; inner.namespace_uid='ns'; inner.client=Client(); inner.probe=None
             def _guard(inner): pass
             def current_resumed_proof(inner): return copy.deepcopy(self.proof)
+            def current_effective_session_scope(inner): return copy.deepcopy(self.scope)
         class Phase:
             def __init__(inner):
                 inner.fence=self.cut.fence; inner.lock=self.cut.lock; inner.namespace_uid='ns'
@@ -102,6 +103,17 @@ class TestResume(unittest.TestCase):
                 self.cut.client.fault=fault; self.cut.client.calls=0
                 with self.subTest(fault=fault), self.assertRaises(probe.pg.ProbeError):
                     probe.inspect_resumed(self.cut,self.phase,'token')
+
+    def test_empty_resumed_set_rechecks_catalog_after_pg_sample(self):
+        self.proof['controllers']=[]
+        class CatalogProbe: pass
+        self.cut.probe=CatalogProbe()
+        initial={'all_databases':{'postgres':1}}
+        changed={'all_databases':{'postgres':1,'new_db':2}}
+        with patch.object(probe.affected,'CatalogScopedProbe',CatalogProbe), \
+             patch.object(probe.affected,'verify_effective_catalog',side_effect=[initial,changed]), \
+             patch.object(probe.pg,'inspect',return_value={'scope':self.scope,'active_sessions':0,'active_transactions':0}):
+            with self.assertRaises(probe.pg.ProbeError): probe.inspect_resumed(self.cut,self.phase,'token')
 
     def test_known_nats_leaf_only(self):
         leaf={'name':'nats-leaf','image':probe.NATS_IMAGE,'args':['-c','/etc/nats/leaf.conf','-a','127.0.0.1','-m','8222'],
