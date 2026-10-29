@@ -61,6 +61,7 @@ on:
       - scripts/dev/writer_cut_migration_inventory_test.py
       - scripts/dev/writer_cut_space.py
       - scripts/dev/writer_cut_space_test.py
+      - scripts/dev/space_fresh_install_phase*.py
       - scripts/dev/backend_config_transition*.py
       - scripts/dev/full_cohort_image_apply.py
       - scripts/dev/full_cohort_image_apply_test.py
@@ -80,6 +81,9 @@ on:
       - scripts/dev/space_native_tool_identity_test.py
       - scripts/dev/space_native_tool_identity_phase_test.py
       - scripts/dev/space_native_tool_identity_integration_test.py
+      - scripts/dev/space_native_tool_identity_closure_test.py
+      - scripts/dev/space_native_tool_identity_custody.py
+      - scripts/dev/space_native_tool_identity_custody_test.py
       - scripts/dev/full_cohort_pg_physical_identity.py
       - scripts/dev/full_cohort_pg_physical_identity_test.py
       - scripts/dev/full_cohort_backup_metadata.py
@@ -205,6 +209,7 @@ jobs:
           python -B scripts/dev/writer_cut_migration_test.py
           python -B scripts/dev/writer_cut_migration_inventory_test.py
           python -B scripts/dev/writer_cut_space_test.py
+          python -B scripts/dev/space_fresh_install_phase_runtime_joint_test.py
           python -B scripts/dev/backend_config_transition_test.py
           python -B scripts/dev/backend_config_transition_probe_test.py
           python -B scripts/dev/backend_config_transition_observation_test.py
@@ -220,6 +225,8 @@ jobs:
           python -B scripts/dev/realtime_jwks_publisher_oci_test.py
           python -B scripts/dev/space_native_tool_identity_test.py
           python -B scripts/dev/space_native_tool_identity_phase_test.py
+          python -B scripts/dev/space_native_tool_identity_closure_test.py
+          python -B scripts/dev/space_native_tool_identity_custody_test.py
           python -B scripts/dev/full_cohort_pg_physical_identity_test.py
           python -B scripts/dev/full_cohort_backup_metadata_test.py
           python -B scripts/dev/full_cohort_go_migration_plan_test.py

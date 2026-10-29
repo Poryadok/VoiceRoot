@@ -1,12 +1,16 @@
-"""Actual phase/helper/CUT journal effects; controller and PG observers synthetic.
+"""Actual phase/helper/CUT with separate Journal/Fence facades; observers synthetic.
 
 This fixture exercises the actual WriterCut dispatch and effect map, but does
 not qualify actual writer drain or SQL session attribution.
 """
 import copy
 import unittest
+from pathlib import Path
 from unittest import mock
 
+import frontend_runtime_executor as transport
+import media_operation_journal as journals
+import resource_fencing
 import space_fresh_install_phase as fresh
 import space_fresh_install_phase_test as fixture
 import writer_cut
@@ -26,8 +30,14 @@ class SpaceCutTest(unittest.TestCase):
             scope['database_oids'].pop('voice_db');scope['databases'].remove('voice_db')
         admission={'controllers':[cut_fixture.workload('Deployment','voice-space','space-controller',1,'source-image')],
             'guards':{'jobs':[],'cronjobs':[],'hpas':[]},'linked':{'jobs':[],'cronjobs':[]},'session_scope':scope}
-        f.journal.intent['writer_cut']=copy.deepcopy(admission);f.journal.state['intent']=copy.deepcopy(f.journal.intent)
-        cut=writer_cut.WriterCut(f.journal,f.fence,f.client,f.lock,'ns',admission,
+        cut_journal=journals.Journal(Path(f.temp.name)/'cut-journal',{
+            'resource_context':copy.deepcopy(f.context),'namespace_uid':'ns','writer_cut':copy.deepcopy(admission)})
+        self.addCleanup(cut_journal.close)
+        cut_client=transport.KubectlTransport(cut_journal);cut_client.call=f.call
+        cut_ledger=resource_fencing.KubeLedger(cut_client)
+        cut_ledger.read=f.backing.read;cut_ledger.write=f.backing.write
+        cut_fence=resource_fencing.Fence(copy.deepcopy(f.context),lambda:copy.deepcopy(f.card),cut_ledger)
+        cut=writer_cut.WriterCut(cut_journal,cut_fence,cut_client,f.lock,'ns',admission,
             lambda scope:{'scope':scope,'active_sessions':0,'active_transactions':0})
         f.cut=self.cut=cut
         cut._start();cut.drained=True
@@ -47,6 +57,9 @@ class SpaceCutTest(unittest.TestCase):
 
     def test_two_jobs_and_durable_finished_binding(self):
         phase=self.f.phase();receipt=phase.run()
+        self.assertIsNot(phase.journal,self.cut.journal)
+        self.assertIsNot(phase.fence,self.cut.fence)
+        self.assertIsNot(phase.client,self.cut.client)
         binding=space.verify_binding(self.cut,require_finished=True)
         self.assertIs(binding,self.cut.space_fresh);self.assertIs(binding['phase'],phase)
         self.assertEqual(binding['receipt_sha256'],receipt['receipt_sha256'])

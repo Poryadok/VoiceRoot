@@ -12,6 +12,7 @@ import space_fresh_install_phase as fresh
 import space_fresh_install_phase_runtime as runtime
 import space_fresh_install_phase_runtime_test as route_fixture
 import space_fresh_install_phase_test as phase_fixture
+import writer_cut_space_test as cut_fixture
 
 
 def _cleanup_fixture(fixture):
@@ -19,12 +20,28 @@ def _cleanup_fixture(fixture):
 
 
 class RuntimeJointTest(unittest.TestCase):
-    def exercise(self, fault):
-        f=phase_fixture.PhaseTest('test_one_shot_success_retains_original_and_checked_cleanup')
-        self.addCleanup(_cleanup_fixture,f); f.setUp()
+    def exercise(self, fault, with_real_cut=False):
+        if with_real_cut:
+            wrapper=cut_fixture.SpaceCutTest('test_two_jobs_and_durable_finished_binding')
+            self.addCleanup(_cleanup_fixture,wrapper);wrapper.setUp();f=wrapper.f
+        else:
+            f=phase_fixture.PhaseTest('test_one_shot_success_retains_original_and_checked_cleanup')
+            self.addCleanup(_cleanup_fixture,f); f.setUp()
         f.patches[0].stop()  # restore the actual runtime producer, not the main fixture's synthetic one
         routes=route_fixture.RouteTest(); routes.setUp(); observed=routes.observed
-        f.cut.admission={'controllers':routes.controllers}; f.cut._guard=mock.Mock()
+        if with_real_cut:
+            controllers=[]
+            for source in routes.controllers:
+                name=source['metadata']['name'];uid=source['metadata']['uid']
+                obj=cut_fixture.cut_fixture.workload('Deployment',name,uid,1,'source-image')
+                container=copy.deepcopy(source['spec']['template']['spec']['containers'][0]);container['image']='source-image'
+                obj['spec']['template']['spec']['containers']=[container];controllers.append(obj)
+            f.cut.admission['controllers']=controllers
+            f.cut.intent['writer_cut']=copy.deepcopy(f.cut.admission)
+            f.cut.journal.intent=copy.deepcopy(f.cut.intent)
+            f.cut.journal.state['intent']=copy.deepcopy(f.cut.intent)
+        else:
+            f.cut.admission={'controllers':routes.controllers}; f.cut._guard=mock.Mock()
         inv=SimpleNamespace(verify_current=mock.Mock(return_value={'database_observations':observed}),
                             verify_receipt=mock.Mock(return_value={'database_observations':observed}),_admin_role=lambda:'voice')
         f.catalog.inventory=inv
@@ -83,6 +100,7 @@ class RuntimeJointTest(unittest.TestCase):
             historical.assert_called_once_with(phase.runtime,'token')
 
     def test_native_to_runtime_secret_cas_and_terminal_receipt(self): self.exercise(None)
+    def test_native_runtime_with_real_cut_separate_facades(self): self.exercise(None,with_real_cut=True)
     def test_admission_injection_fails_before_drop(self): self.exercise('admission')
     def test_lost_secret_patch_is_uncertain_without_replay(self): self.exercise('lost')
     def test_database_password_drift_blocks_terminal_receipt(self): self.exercise('login_drift')
