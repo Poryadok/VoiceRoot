@@ -12,6 +12,13 @@ import staging_space_native as native
 
 
 class InspectSourceTest(unittest.TestCase):
+    def test_pod_list_requires_complete_versioned_observation(self):
+        for value in ({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8','continue':'next'},'items':[]},
+                      {'apiVersion':'v1','kind':'PodList','metadata':{},'items':[]}):
+            with patch.object(native.owner,'_observation',return_value=json.dumps(value).encode()):
+                with self.assertRaisesRegex(native.Blocked,'space_inspect_absence_invalid'):
+                    native._pod_list(SimpleNamespace(),'voice-space-inspect-aaaaaaaaaaaa')
+
     def test_cleanup_rejects_foreign_job_before_delete(self):
         kube=Mock();kube.get.return_value={'metadata':{'uid':'foreign','resourceVersion':'9'}}
         with patch.object(native,'_mutate') as mutate:
@@ -103,7 +110,8 @@ class InspectSourceTest(unittest.TestCase):
                 ('job',job['metadata']['name']):complete}
         kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(values[(kind,name)])
         kube.run.return_value=copy.deepcopy(job)
-        observe=[('admin\n'+hashlib.sha256(b'private').hexdigest()+'  -\n').encode(),json.dumps({'items':[pod]}).encode(),json.dumps(result).encode()]
+        observe=[('admin\n'+hashlib.sha256(b'private').hexdigest()+'  -\n').encode(),
+                 json.dumps({'apiVersion':'v1','kind':'PodList','metadata':{'resourceVersion':'8'},'items':[pod]}).encode(),json.dumps(result).encode()]
         with patch.object(native,'Kube',return_value=kube),patch.object(native.owner,'_guard',return_value={'fixture':'plan'}), \
              patch.object(native.owner,'_no_pending'),patch.object(native.space,'load_tool',return_value=tool), \
              patch.object(native,'_identity',return_value=identity),patch.object(native,'_mutate',return_value=('path',{},json.dumps(job).encode())), \

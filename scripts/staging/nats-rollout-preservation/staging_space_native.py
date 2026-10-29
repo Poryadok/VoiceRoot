@@ -112,6 +112,17 @@ def _job_list(session,name):
     return result['items']
 
 
+def _pod_list(session,name):
+    raw=owner._observation(session,'space-inspect-pod-absence',owner.PREFIX+['get','pods','-l','job-name='+name,'-o','json'])
+    result=owner.private._json(raw)
+    if (result.get('apiVersion')!='v1' or result.get('kind')!='PodList'
+        or not isinstance(result.get('metadata',{}).get('resourceVersion'),str)
+        or not result['metadata']['resourceVersion'] or result['metadata'].get('continue')
+        or not isinstance(result.get('items'),list)):
+        raise Blocked('space_inspect_absence_invalid')
+    return result['items']
+
+
 def _cleanup(session,kube,name,uid):
     job=kube.get('job',name);meta=job['metadata']
     if meta.get('uid')!=uid or meta.get('deletionTimestamp'):raise Blocked('space_inspect_job_changed')
@@ -124,8 +135,8 @@ def _cleanup(session,kube,name,uid):
     deadline=time.monotonic()+60
     while True:
         items=_job_list(session,name)
-        if not items:return
-        if (len(items)!=1 or items[0].get('metadata',{}).get('uid')!=uid
+        if not items and not _pod_list(session,name):return
+        if items and (len(items)!=1 or items[0].get('metadata',{}).get('uid')!=uid
             or items[0]['metadata'].get('name')!=name or items[0]['metadata'].get('namespace')!='voice-staging'):
             raise Blocked('space_inspect_job_changed')
         if time.monotonic()>=deadline:raise Blocked('space_inspect_cleanup_timeout')
@@ -175,8 +186,7 @@ def inspect_source(session):
             if job.get('status',{}).get('succeeded')==1 and not job.get('status',{}).get('active',0):break
             if job.get('status',{}).get('failed',0)>0 or time.monotonic()>=deadline:raise Blocked('space_inspect_job_failed')
             time.sleep(1)
-        pods=owner.private._json(owner._observation(session,'space-inspect-pods',owner.PREFIX+['get','pods','-l','job-name='+name,'-o','json']))
-        rows=pods.get('items',[])
+        rows=_pod_list(session,name)
         if len(rows)!=1:raise Blocked('space_inspect_pod_invalid')
         row=rows[0];owners=[item for item in row['metadata'].get('ownerReferences',[]) if item.get('controller') is True]
         statuses=[item for item in row.get('status',{}).get('containerStatuses',[]) if item.get('name')=='inspect']
@@ -235,6 +245,7 @@ def load_inspection(session):
         'config_sha256':owner.digest(config),'secret_uid':secret['metadata']['uid'],
         'secret_rv':secret['metadata']['resourceVersion'],'secret_sha256':owner.digest(secret)}
     if actual!=receipt['credential_binding']:raise Blocked('space_inspect_credentials_changed')
-    if _job_list(session,'voice-space-inspect-'+session.operation):raise Blocked('space_inspect_cleanup_changed')
+    name='voice-space-inspect-'+session.operation
+    if _job_list(session,name) or _pod_list(session,name):raise Blocked('space_inspect_cleanup_changed')
     owner._guard(session)
     return copy.deepcopy(receipt)
