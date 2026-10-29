@@ -593,13 +593,16 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('-mode provision', test['run'])
         self.assertIn('-tags=spacebanintegration', test['run'])
         self.assertIn('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture', test['run'])
+        self.assertIn('TestNative51CreatorBornCurrentSchema', test['run'])
         self.assertIn('space_account_ban_guard_required.json', test['run'])
         self.assertIn('--reject-skips', test['run'])
         self.assertIn('SPACE_NATIVE_ADMIN_URL', test['env'])
         self.assertIn('SPACE_BAN_TEST_DATABASE_URL', test['env'])
         inventory = json.loads((ROOT / 'scripts/ci/space_account_ban_guard_required.json').read_text(encoding='utf-8'))
         self.assertEqual(inventory['space'], [['voice/backend/space/internal/store',
-                                               'TestAccountBanCannotSucceedWithoutCompleteOwnerCapture']])
+                                               'TestAccountBanCannotSucceedWithoutCompleteOwnerCapture'],
+                                              ['voice/backend/space/internal/store',
+                                               'TestNative51CreatorBornCurrentSchema']])
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['space'], 'docker_go_services': [],
                   'integration_go_services': ['space'], 'run_go': True, 'run_pkg': True}

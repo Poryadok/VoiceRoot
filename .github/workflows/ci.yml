@@ -2734,7 +2734,7 @@ jobs:
             > "$RUNNER_TEMP/space-account-ban-provision.jsonl"
           set +e
           go test -json -count=1 -timeout 5m -tags=spacebanintegration \
-            -run '^TestAccountBanCannotSucceedWithoutCompleteOwnerCapture$' ./internal/store \
+            -run '^(TestAccountBanCannotSucceedWithoutCompleteOwnerCapture|TestNative51CreatorBornCurrentSchema)$' ./internal/store \
             > "$RUNNER_TEMP/space-account-ban-events.jsonl"
           result=$?
           set -e
