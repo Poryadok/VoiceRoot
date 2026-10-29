@@ -32,6 +32,20 @@ the unchanged guard inventory and the real probe receipt. Call
 the central operation must separately establish any applicable external-I/O
 invariant. None of these sampled checks revokes a request already submitted.
 
+Before the first planned backend Deployment configuration change, open the
+separate producer Journal and call `bind_config_plan(config_journal)`. The plan
+must bind the same operation, namespace, candidate source and cut invocation;
+its ordered User/Notification/Realtime services must all be selected writers.
+The producer owns the fixed configuration policy and calls
+`accept_config_successor(config_journal, service)` immediately after each
+completed effect in that order. WriterCut reconstructs the complete original
+cut-to-successor link using the fixed producer verifier, exact private
+source/target/patch/receipt and shared ledger records. It rechecks the accepted
+prefix, live zero-replica specs, pods and sessions around subsequent work.
+Resume holds until every service in the bound plan is accepted. The separate
+config Journal must remain open and unchanged for the previously accepted
+entries through resume; unaccepted pending/changed effects are not proof.
+
 After migrations, call `resume(targets)` with the separately admitted current
 target objects, not the old objects. The target UID/generation/full spec must match,
 targets and predecessor Pods must be retired, and the CAS restores only each
