@@ -4,6 +4,7 @@ The root invocation must itself be delivered as a reviewed inline bootstrap
 which pins the exact bundle digest. This module never installs on import.
 """
 import hashlib
+import base64
 import io
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import re
 import stat
 import subprocess
 import tarfile
+import zlib
 
 import dev_peer_issuer_authority as authority
 import dev_peer_issuer_source as reviewed
@@ -128,7 +130,9 @@ with tempfile.TemporaryDirectory(prefix='voice-dev-peer-bootstrap-') as temp:
     import dev_peer_issuer_installer
     dev_peer_issuer_installer.install(raw, EXPECTED)
 '''
-    return "sudo /usr/bin/env -i PATH=/usr/bin:/bin LANG=C LC_ALL=C /usr/bin/python3 -I -S - <<'VOICE_PEER_BOOTSTRAP'\n" + prefix + program + "VOICE_PEER_BOOTSTRAP\n"
+    encoded = base64.b64encode(zlib.compress((prefix + program).encode('utf-8'), 9)).decode('ascii')
+    return ("sudo /usr/bin/env -i PATH=/usr/bin:/bin LANG=C LC_ALL=C /usr/bin/python3 -I -S -c "
+            + "'import base64,zlib;exec(zlib.decompress(base64.b64decode(\"" + encoded + "\")))'\n")
 
 
 def install(raw, expected_sha256):

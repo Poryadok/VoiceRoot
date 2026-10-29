@@ -1,7 +1,10 @@
 import hashlib
+import base64
 import io
 import os
 import tarfile
+import zlib
+import re
 import unittest
 from unittest.mock import patch
 
@@ -36,9 +39,9 @@ class InstallerTests(unittest.TestCase):
 
     def test_inline_bootstrap_binds_exact_digest_and_fixed_archive(self):
         script = installer.bootstrap('a' * 64)
-        lines = script.splitlines()
-        self.assertEqual(lines[-1], 'VOICE_PEER_BOOTSTRAP')
-        program = '\n'.join(lines[1:-1])
+        self.assertEqual(len(script.splitlines()), 1)
+        encoded = re.search(r'b64decode\("([A-Za-z0-9+/=]+)"\)', script).group(1)
+        program = zlib.decompress(base64.b64decode(encoded, validate=True)).decode()
         compile(program, '<bootstrap>', 'exec')
         self.assertIn("EXPECTED = '" + 'a' * 64 + "'", program)
         self.assertIn(installer.BOOTSTRAP_ARCHIVE, program)
