@@ -41,6 +41,9 @@ def stage_cluster_fixture(session,store_kube=None):
         template={'metadata':{'labels':{'app':name}},'spec':spec}
         if store_kube is not None and ('Deployment',name) in store_kube.objects:
             template=copy.deepcopy(store_kube.get('Deployment',name)['spec']['template'])
+            for volume in template['spec'].get('volumes',[]):
+                if volume.get('name')=='nats-service-creds' and 'secret' in volume:
+                    volume['secret']['secretName']='voice-nats-service-credentials-r20260930a4'
         rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
                     'spec':{'replicas':1,'template':template}}
         rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
@@ -144,7 +147,7 @@ class BridgePreservationAdmission(unittest.TestCase):
 
     def test_captured_helpers_check_protected_source_receipt(self):
         source = Path(__file__).resolve().parents[3]
-        with tempfile.TemporaryDirectory(dir='/root') as directory:
+        with tempfile.TemporaryDirectory(dir=os.environ.get('VOICE_COHORT_NATIVE_ROOT','/root')) as directory:
             root = Path(directory)
             installed = root / 'installed'
             installed.mkdir(mode=0o700)
@@ -161,7 +164,7 @@ class BridgePreservationAdmission(unittest.TestCase):
             for path in workspace.rglob('*'):
                 path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
-import base64, copy, hashlib, http.client, json, os, subprocess, sys
+import base64, copy, hashlib, http.client, json, os, re, subprocess, sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -244,8 +247,30 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     'spec':{'volumeName':'fixture-postgres-pv'},'status':{'phase':'Bound'}},
    ('persistentvolume','fixture-postgres-pv'):{'metadata':{'uid':pg_volume,'resourceVersion':'1'},
     'spec':{'claimRef':{'uid':pg_claim,'name':'pgdata-voice-postgres-0','namespace':'voice-staging'}}}}
+  nats_secrets={}
+  if 'VOICE_TEST_NATS_INPUTS' in os.environ:
+   import actor_root, bootstrap_auth, bootstrap_selection
+   nats=Path(os.environ['VOICE_TEST_NATS_INPUTS']);config=(nats/'server.conf').read_text()
+   value=lambda name:json.loads(re.search(r'^'+name+r': (.+)$',config,re.M)[1])
+   operator=value('operator');system=value('system_account');resolver=value('resolver_preload')
+   account=next(name for name in resolver if name!=system)
+   def secret(name,data):
+    return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
+      'uid':name,'resourceVersion':'1'},'type':'Opaque','data':{k:base64.b64encode(v).decode() for k,v in data.items()}}
+   name='voice-nats-operator-r20260930a4'
+   nats_secrets[name]=secret(name,{k:v.encode() for k,v in {'operator.jwt':operator,'account.jwt':resolver[account],
+    'system-account.jwt':resolver[system],'account.public':account,'system-account.public':system}.items()})
+   name='voice-nats-service-credentials-r20260930a4'
+   nats_secrets[name]=secret(name,{role+'.creds':(nats/'inputs'/(role+'.creds')).read_bytes()
+    for role in ('social','realtime','space','messaging','story')})
+   synthetic_account_sha=hashlib.sha256(account.encode()).hexdigest()
+   # Explicit external synthetic identity seam; actual JWT/ACL/auth checks run.
+   actor_root.ACCOUNT_SHA=synthetic_account_sha
+   bootstrap_auth.ACCOUNT_SHA=synthetic_account_sha
+   bootstrap_selection.ACCOUNT_SHA=synthetic_account_sha
   def get(kind,name):
    session.check()
+   if kind.lower()=='secret' and name in nats_secrets:return copy.deepcopy(nats_secrets[name])
    if (kind.lower(),name) in pg_objects:return copy.deepcopy(pg_objects[(kind.lower(),name)])
    if (kind,name)==('node','pmdebook'):
     if 'VOICE_TEST_OCI' not in os.environ:raise KeyError((kind,name))
