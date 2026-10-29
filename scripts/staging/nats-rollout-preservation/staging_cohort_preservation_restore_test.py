@@ -140,6 +140,14 @@ class RestoreTransportTests(unittest.TestCase):
                             self.assertEqual(owner.qualify_offnode(actions,request),qualified)
                             self.assertEqual(remote.call_count,1)
                         self.assertEqual(owner.load_qualified(session),qualified)
+                        parent=root/'installed'/'prerequisites'/session.operation
+                        owner.private._private_directory(parent.parent);owner.private._private_directory(parent)
+                        capture={'controlled_prerequisite_capture':True}
+                        owner._write(parent/'capture.json',capture)
+                        target={'prerequisites_sha256':owner.digest(capture),'cohort_preservation_sha256':owner.digest(qualified)}
+                        self.assertEqual(owner.load_qualified(session,rollout_target=target),qualified)
+                        with self.assertRaisesRegex(Exception,'cohort_target_changed'):
+                            owner.load_qualified(session,rollout_target={**target,'cohort_preservation_sha256':'e'*64})
                         # NATS bytes are explicitly synthetic here; PG/CMS,
                         # Session and qualified continuation records are real.
                         with patch('native_store.verify_archive',return_value=True):
