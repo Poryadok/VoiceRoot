@@ -40,3 +40,22 @@ automatic resume. Do not change the mode, delete history, or broaden the guard
 to manufacture eligibility; use a separately reviewed recovery procedure.
 This source route does not prove actual host idle state, authorize a particular
 binary build, establish root access, or install the later GIS successor.
+
+## Direct GIS successor
+
+The separately reviewed direct route targets the same observed 81-member
+predecessor and skips the intermediate TT successor. Its provisional source
+snapshot is `e2b5e42abedaaaf50e9007c435e9c88cd4f48420`, including the GIS
+update and ZIP64 custody code. The exact 87-member successor consists of the
+TT member names plus `nats-rollout-preservation/gis_existing_update.py`, the
+same three observed binary bytes, and the reviewed running installer. Its
+86-member projection excluding installer has SHA-256
+`d64f32b7383e06cd454d2f302ebce656ef7dfcb8b97b3012f20824f2b74615ef`.
+The root entry is `--install --upgrade-idle-gis-installed-cohort-v1`. This
+source snapshot is a candidate, not by itself final source or CI authority;
+if any source byte changes, reconstruct the projection and repeat review.
+
+The same independently fixed wrapper-to-launcher-to-full-bundle authority,
+live idle checks, TT journal and inventory guards, history retention, and
+inbox `0700` reconciliation boundary apply. The direct route does not accept
+another installed predecessor or authorize arbitrary 87-member bundles.
