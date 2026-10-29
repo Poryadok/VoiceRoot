@@ -12,9 +12,11 @@ def _contains_requested(requested,actual):
     return type(requested) is type(actual) and requested==actual
 
 def normalize_first_install(kube,stage,documents,target,plan,renderer_authority=None):
-    """Normalize the isolated create-only GIS pair without generic apply."""
+    """Normalize the create-only GIS pair and any source-qualified full target."""
     import gis_first_install as gis
-    if (documents!=[] or target.get('manifest_sha256')!=digest([])
+    import compiler
+    full=compiler.full_application_target(target)
+    if ((documents and not full) or target.get('manifest_sha256')!=digest(documents)
         or plan.get('operation')!=stage.operation
         or target.get('gis_first_install_sha256')!=plan.get('source_plan_sha256')):
         raise Blocked('gis_first_install_normalization_binding_invalid')
@@ -32,10 +34,20 @@ def normalize_first_install(kube,stage,documents,target,plan,renderer_authority=
     if renderer_authority is not None:
         import renderer_root
         renderer_images=renderer_root.validate_target(target,renderer_authority,stage)
-    if expected_images|renderer_images!=target.get('images'):
+    generic_images={}
+    for row in documents:
+        if row.get('kind')!='Deployment':continue
+        name=row.get('metadata',{}).get('name');spec=row['spec']['template']['spec']
+        for container in spec.get('initContainers',[])+spec['containers']:
+            key=name+'/'+container['name']
+            if key in generic_images:raise Blocked('gis_first_install_image_changed')
+            generic_images[key]=container['image']
+    if expected_images|renderer_images|generic_images!=target.get('images'):
         raise Blocked('gis_first_install_image_changed')
-    expected_names={'voice-gameintegration'}|({renderer_root.HUB} if renderer_authority is not None else set())
+    expected_names={'voice-gameintegration'}|({renderer_root.HUB} if renderer_authority is not None else set())|{
+        row['metadata']['name'] for row in documents if row.get('kind')=='Deployment'}
     if set(target['template_hashes'])!=expected_names:raise Blocked('gis_first_install_template_inventory_invalid')
+    generic_target=normalize_target(kube,stage,documents,target,renderer_authority=renderer_authority) if full else None
     gis.preflight(kube,plan)
     normalized=[]
     for obj in objects:
@@ -61,7 +73,8 @@ def normalize_first_install(kube,stage,documents,target,plan,renderer_authority=
     if 'clusterIP' not in requested_service['spec'] and 'clusterIPs' not in requested_service['spec']:
         updated_plan['service_allocation']='server'
     updated_plan['spec_sha256']={f'{k}/{n}':digest(gis.semantic(o)) for o in normalized for k,n in [gis._identity(o)]}
-    wanted=copy.deepcopy(target);wanted['input_template_hashes']=dict(target['template_hashes'])
+    wanted=generic_target if full else copy.deepcopy(target)
+    wanted['input_template_hashes']=dict(target['template_hashes'])
     wanted['template_hashes']['voice-gameintegration']=digest(new_deployment['spec']['template'])
     wanted['gis_first_install_normalized_sha256']=gis.normalized_binding(updated_plan)
     return wanted,updated_plan
@@ -152,6 +165,10 @@ def normalize_target(kube,stage,documents,target,renderer_authority=None,*,gis_t
         import renderer_root
         renderer_root.validate_target(target,renderer_authority,stage)
         templates[renderer_root.HUB]=target['template_hashes'][renderer_root.HUB]
+    if target.get('gis_first_install_sha256') is not None:
+        import compiler
+        if not compiler.full_application_target(target):raise Blocked('gis_first_install_normalization_binding_invalid')
+        templates['voice-gameintegration']=target['template_hashes']['voice-gameintegration']
     if identities or set(templates)!=set(target['template_hashes']):raise Blocked('rollout_target_normalization_inventory_changed')
     wanted['template_hashes']=templates
     if gis_target_sink is not None:

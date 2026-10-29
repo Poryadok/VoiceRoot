@@ -18,7 +18,12 @@ def paused_documents(documents,receipt):
     result=copy.deepcopy(documents)
     gis_install=bool(receipt.get('target',{}).get('gis_first_install_sha256'))
     if gis_install and result:
-        raise Blocked('gis_first_install_manifest_forbidden')
+        import compiler
+        if not compiler.full_application_target(receipt['target']):
+            raise Blocked('gis_first_install_manifest_forbidden')
+        if any((row.get('kind'),row.get('metadata',{}).get('name')) in
+               {('Deployment','voice-gameintegration'),('Service','voice-gameintegration')} for row in result):
+            raise Blocked('gis_first_install_manifest_forbidden')
     for row in result:
         kind=row.get('kind');meta=row.get('metadata',{});name=meta.get('name','')
         if meta.get('namespace')!=guard.NS or kind not in ('Deployment','ConfigMap','Service','NetworkPolicy','Ingress'):

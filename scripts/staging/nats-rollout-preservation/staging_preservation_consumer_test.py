@@ -12,9 +12,11 @@ import bridge_root
 import migrations
 import operator_retirement
 import resource_claim
+import root_main
 from resource_claim_test import context,card
 import staging_cohort_preservation
 import staging_space_native
+import staging_core_release
 import transaction
 import guard
 
@@ -123,6 +125,33 @@ class ConsumerTests(unittest.TestCase):
                 with self.assertRaisesRegex(Exception,'operator_retirement_binding_invalid'):
                     operator_retirement.verify_terminal(Path('/unused'),{'operation':'a'*12})
                 read.assert_not_called()
+
+    def test_finish_core_proofs_hold_actual_lock_and_never_replay_existing_smoke(self):
+        with tempfile.TemporaryDirectory(dir='/root') as path,patch.object(root_main,'ROOT',Path(path)),patch.object(guard,'ROOT',Path(path)):
+            root=Path(path);session,state=self.session(root,[])
+            state.update(status='PASS',phase='POST_RESTART');state['target']['cohort_preservation_sha256']='c'*64
+            row=session.journal.read();row['target_sha256']=transaction.canonical(state['target']);session.journal.save(row)
+            session.expected_target=row['target_sha256'];state['resource_fence']=session.binding()
+            base=root/('rollout-'+session.operation);base.mkdir(mode=0o700)
+            release=Mock();smoke_phase=Mock();smoke_phase.journal=Mock();smoke=Mock()
+            smoke.StagingCoreSmoke.return_value=smoke_phase;smoke_phase.run.return_value={'status':'done'}
+            smoke.verify_completed.return_value={'status':'done'};smoke.recover_completed.return_value=(smoke_phase,{'status':'done'})
+            actions=object.__new__(bridge_root.Actions);actions.tt_session=session
+            with root_main.operation_lock() as lock,resource_claim.command_scope(session.check), \
+                 patch.object(staging_core_release,'CoreReleasePhase',return_value=release), \
+                 patch.object(staging_core_release,'verify_completed'), \
+                 patch.object(staging_cohort_preservation,'shared_module',return_value=smoke):
+                session.operation_lock=lock;actions._finish_core_proofs(state)
+                smoke_phase.run.assert_called_once();smoke_phase.journal.close.assert_called_once()
+                (base/'core-smoke').mkdir();smoke_phase.run.reset_mock();actions._finish_core_proofs(state)
+                smoke.recover_completed.assert_called_once_with(session,release);smoke_phase.run.assert_not_called()
+                with self.assertRaisesRegex(Exception,'staging_core_finish_reconciliation_required'):
+                    actions._finish_core_proofs(state,recover_only=True)
+                smoke_phase.run.assert_not_called()
+                (base/'core-release.json').write_text('{}');actions._finish_core_proofs(state,recover_only=True)
+                self.assertEqual(smoke.recover_completed.call_count,2);smoke_phase.run.assert_not_called()
+            with resource_claim.command_scope(session.check):
+                with self.assertRaisesRegex(Exception,'operation_lock_proof_invalid'):actions._finish_core_proofs(state)
 
     def test_historical_native_receipt_rejects_tampered_effect_and_rollout_event(self):
         operation='a'*12;ctx={'operation_id':'stg-run-17','commit':'c'*40};binding={'context':ctx,'operation':operation}

@@ -146,6 +146,35 @@ class Actions:
     def __init__(self,code):
         self.code=Path(code);self.binding=root_cli.code_binding(self.code)
 
+    def _finish_core_proofs(self,state,*,recover_only=False):
+        """Verify the complete release and smoke before closing its root fence."""
+        if state.get('target',{}).get('cohort_preservation_sha256') is None:return
+        import commands,resource_claim,root_main,staging_core_release,staging_cohort_preservation
+        session=getattr(self,'tt_session',None)
+        proof=getattr(session,'operation_lock',None)
+        if (type(session) is not resource_claim.Session or commands.authority_guard!=session.check
+            or type(proof) is not root_main.OperationLockProof or state.get('operation')!=session.operation
+            or state.get('status')!='PASS' or state.get('phase')!='POST_RESTART'):
+            raise Blocked('staging_core_finish_authority_invalid')
+        proof.check();session.require_binding(state.get('resource_fence'))
+        base=guard.ROOT/('rollout-'+session.operation)
+        if recover_only and not os.path.lexists(base/'core-release.json'):
+            raise Blocked('staging_core_finish_reconciliation_required')
+        release=staging_core_release.CoreReleasePhase(session)
+        release.produce();staging_core_release.verify_completed(release,session)
+        smoke=staging_cohort_preservation.shared_module(session,'staging_core_smoke')
+        path=base/'core-smoke'
+        phase=None
+        try:
+            if recover_only or os.path.lexists(path):
+                phase,result=smoke.recover_completed(session,release)
+            else:
+                phase=smoke.StagingCoreSmoke(session,release);result=phase.run()
+            if result!=smoke.verify_completed(phase):raise Blocked('staging_core_smoke_changed')
+            proof.check();session.check();staging_core_release.verify_completed(release,session)
+        finally:
+            if phase is not None and phase.journal is not None:phase.journal.close()
+
     def _report(self,name,status):
         observer=getattr(self,'_observer',None)
         if observer is not None:observer(name,status)
@@ -197,7 +226,9 @@ class Actions:
         if request['action']=='finish' and state.get('status') in ('PASS','PROVISIONAL_READY'):
             if state.get('status')=='PROVISIONAL_READY' and (base/'provisional-child.json').exists():
                 raise Blocked('provisional_child_already_bound')
-            self._active_release(state)
+            if state.get('status')=='PASS' and state.get('target',{}).get('cohort_preservation_sha256') is not None:
+                self._finish_core_proofs(state,recover_only=True)
+            else:self._active_release(state)
             return summary(state)
         if request['action']=='accept-provisional' and state.get('status')=='PASS' and state.get('ci_acceptance',{}).get('verified') is True:
             return summary(state)
@@ -525,8 +556,15 @@ class Actions:
             import realtime_bootstrap
             if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
             first_install=request.get('gis_first_install') is True
-            ordinary_target=None if first_install else compiler.prebootstrap_image_inventory(workspace,parameters,kube)
-            verify_bootstrap_candidate_images(self.tt_session,images,renderer_authority,first_install,ordinary_target)
+            full_scope=compiler.full_application_scope(workspace,parameters)
+            if full_scope:
+                import hashlib,source_plan
+                path=workspace/source_plan.FULL_APPLICATION_REQUEST
+                if hashlib.sha256(path.read_bytes()).hexdigest()!=approved['source_files'].get(source_plan.FULL_APPLICATION_REQUEST):
+                    raise Blocked('canonical_full_application_request_changed')
+            ordinary_target=(None if first_install and not full_scope else
+                             compiler.prebootstrap_image_inventory(workspace,parameters,kube))
+            verify_bootstrap_candidate_images(self.tt_session,images,renderer_authority,first_install and not full_scope,ordinary_target)
             realtime_receipt=realtime_bootstrap.run_prepare(self,request,approved,execution,workspace,stage)
             if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
             if realtime_receipt is not None:
@@ -817,6 +855,7 @@ class Actions:
             receipt=guard.protected_receipt(base/'apply-authorization.json')
             result=transaction.finish(Kube(),base,state,receipt,request['claim_rv'],state['contract'])
             self._active_release(result)
+            if result.get('status')=='PASS':self._finish_core_proofs(result)
             return summary(result)
         raise Blocked('bridge_action_invalid')
 
