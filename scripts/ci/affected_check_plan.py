@@ -252,6 +252,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('backend-go-integration-pr', enabled=bool(integration))
         selected('story-lfp-integration', enabled='story' in integration)
         selected('user-association-integration', enabled='user' in integration)
+        selected('notification-quota-integration', enabled='notification' in integration)
         selected('backend-auth', broad + ('auth', 'auth_test_impact'))
         selected('backend-auth-image', broad + ('auth',))
         selected('admin', broad + ('admin',))

@@ -46,6 +46,20 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         self.assertEqual(len(cases), len({tuple(case) for case in cases}))
         self.assertEqual({tuple(case) for case in cases}, discovered)
 
+    def test_notification_quota_inventory_covers_all_current_package_tests(self):
+        inventory = json.loads((ROOT / 'scripts/ci/notification_quota_required.json').read_text(encoding='utf-8'))
+        cases = inventory['notification']
+        package = 'voice/backend/notification/internal/chatquota'
+        discovered = set()
+        for path in (ROOT / 'src/backend/notification/internal/chatquota').glob('*_test.go'):
+            source = path.read_text(encoding='utf-8')
+            self.assertNotRegex(source, r'(?m)^//go:build ', 'review tagged quota tests explicitly')
+            discovered.update((package, test) for test in
+                              re.findall(r'(?m)^func (Test\w+)\(t \*testing\.T\)', source))
+        self.assertTrue(discovered)
+        self.assertEqual(len(cases), len({tuple(case) for case in cases}))
+        self.assertEqual({tuple(case) for case in cases}, discovered)
+
     def test_required_case_must_run_and_pass_exactly_once(self):
         required = [('voice/backend/chat/internal/store', 'TestStoreIntegration')]
         events = [{'Package': required[0][0], 'Test': required[0][1], 'Action': action}

@@ -153,6 +153,12 @@ All current named package tests are inventoried and skips are rejected. This
 proof does not cover separate User protected-transport fixtures that also need
 Redis, and it does not activate the source-disabled production path.
 
+When Notification is in the PR integration matrix,
+`notification-quota-integration` runs the complete `chatquota` package against
+a job-owned Redis service. The named package inventory must pass without skips,
+including the real-Redis concurrent quota test; its raw events and receipt are
+retained under the same evidence rules.
+
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
 includes named pass/skip/fail counts and skipped cases and preserves a nonzero

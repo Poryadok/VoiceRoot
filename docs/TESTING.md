@@ -150,6 +150,11 @@ named package inventory in `scripts/ci/user_association_required.json` and
 rejects skips. Its fixtures create and drop databases; point the DSN only at an
 owned disposable PostgreSQL server. Protected capture transport cases that also
 require Redis are separate from this proof.
+
+The affected Notification PR proof runs `./internal/chatquota` with
+`BE195_REDIS_ADDR` pointing to an owned Redis service, requires the named cases
+in `scripts/ci/notification_quota_required.json`, and rejects skips. Use only a
+disposable Redis server for the local real-Redis concurrency test.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.

@@ -289,6 +289,25 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('user-association-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_notification_quota_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['notification-quota-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'notification')", job['if'])
+        self.assertIn('notification-quota-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Notification quota proofs')
+        self.assertIn('./internal/chatquota', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.redis.ports', test['env']['BE195_REDIS_ADDR'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['notification'], 'docker_go_services': [],
+                  'integration_go_services': ['notification'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/notification/main.go']), matrix)
+        self.assertIn('notification-quota-integration', selected['checks'])
+        matrix['integration_go_services'] = []
+        self.assertNotIn('notification-quota-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_cli_uses_committed_candidate_and_actual_go_resolver(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
