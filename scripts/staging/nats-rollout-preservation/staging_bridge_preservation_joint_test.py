@@ -356,7 +356,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def getheader(self,name):return None
    def read(self,size):chunk=self.body[:size];self.body=self.body[size:];return chunk
   class Https:
-   sock=None
+   sock=None;debuglevel=0
    def __init__(self,host,**kwargs):self.host=host
    def request(self,method,path,headers):self.path=path
    def getresponse(self):
