@@ -4,6 +4,13 @@ The HTTP health and mTLS/h2 transport checks do not invoke the lifecycle RPC
 or establish business authorization. Private client keys never enter receipts.
 Requires the source-owned Realtime configuration and Chat Service successor
 verifiers; missing dependencies fail closed and are not deployment admission.
+
+Call ChatHealthPhase.run(token, cut) after the admitted Chat resume and before
+the Realtime resume. WriterCut accepts the completed phase through
+verify_completed(phase, cut, token), which repeats both observations and checks
+the private receipt against the same active permanent ledger. The phase must
+run on the main thread without an existing ITIMER_REAL timer. C1 uses the
+actual P3 creation and migration phases; C2 uses its predecessor journal.
 """
 import base64
 import copy
