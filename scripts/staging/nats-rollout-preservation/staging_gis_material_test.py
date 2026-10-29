@@ -414,6 +414,26 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 kube.run.return_value = changed_rv
                 preflight(object())
                 kube.run.return_value = valid_listing
+                workload = json.loads(payloads['gis-workload'])
+                workload['metadata']['annotations']['voice.poryadok.io/prerequisites-operation'] = 'abcdef123456'
+                workload_live = copy.deepcopy(workload)
+                workload_live['metadata'].update(uid='00000000-0000-0000-0000-000000000202', resourceVersion='15')
+                digest = hashlib.sha256(json.dumps(workload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                observed = {'kind': 'Secret', 'name': 'voice-gameintegration-workload-credentials', 'namespace': 'voice-staging',
+                    'uid': workload_live['metadata']['uid'], 'resourceVersion': '15', 'semantic_sha256': digest}
+                authority = {'operation': 'abcdef123456', 'receipt_sha256': 'f' * 64}
+                retained = {'gis-workload': {'authority': authority, 'observed': observed}}
+                remaining = {k: v for k, v in payloads.items() if k != 'gis-workload'}
+                mixed_before = {k: v for k, v in before_map.items() if k != 'gis-workload'}
+                mixed, _ = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
+                                             base['source_contract_sha256'], base['issuer'], mixed_before, retained, remaining)
+                parent.require_child.return_value = mixed
+                parent.load_preserved = Mock(return_value={'authority': authority, 'semantic': workload, 'uid': observed['uid']})
+                kube.get.side_effect = lambda _kind, name: (before if name == 'voice-app-secrets' else
+                    namespace if name == 'voice-staging' else workload_live if name == observed['name'] else issuer_ca)
+                preflight(object())
+                parent.load_preserved.assert_called_once()
+                parent.require_child.return_value = plan
                 paths = {'/api/v1/namespaces/voice-staging/secrets?fieldSelector=metadata.name%3D' +
                          effect['name'] + '&limit=2' for effect in plan['effects'][:-1]}
                 self.assertTrue(all(call.args[0][0:2] == ['get', '--raw'] and call.args[0][2] in paths
