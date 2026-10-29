@@ -277,3 +277,15 @@ CI publication, target authority or live admission. The new test is
 staging_cohort_preservation_live_script_test.py. Final retained log
 tmp/preservation-native/live-script-final.log SHA256
 6f0b0cbd80281a22f54555b9473a018c654814621f111dfda0e1ea1e03b89cd2.
+
+Independent review found a fixture cleanup gap: rm -f removed containers but
+left the PostgreSQL image's anonymous data volumes. The fixture now captures
+each exact owned container's anonymous PGDATA volume identity, removes it with
+that container using rm -f -v, and verifies the exact volume is absent. It also
+removes the unnecessary Tool /tmp tmpfs to match the Stage read-only filesystem
+profile. The corrected actual run passes 1/1 in 15.420s, including two verified
+volume removals, repeated native verification and unchanged source24. Earlier
+cleanup claims covered containers only; prior anonymous volumes whose identity
+was not retained are not guessed or deleted. The final proof is retained in
+tmp/preservation-native/live-script-cleanup.log, superseding the earlier cleanup
+claim without changing production code or the stated Kubernetes exclusions.

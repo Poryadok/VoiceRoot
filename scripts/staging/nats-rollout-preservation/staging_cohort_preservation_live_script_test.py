@@ -29,7 +29,7 @@ from staging_space_native import LIVE_UPGRADE_SCRIPT,LIVE_VERIFY_SCRIPT
 class LiveScriptTests(unittest.TestCase):
     def test_actual_scripts_preserve_private_origin_and_verify_same_clone(self):
         image=os.environ['VOICE_COHORT_NATIVE_IMAGE'];revision=os.environ['VOICE_COHORT_NATIVE_SOURCE']
-        operation='live-script-'+secrets.token_hex(8);owned=[]
+        operation='live-script-'+secrets.token_hex(8);owned=[];removed_volumes=[]
         def docker(*args,body=None,timeout=120):
             result=subprocess.run(DOCKER+list(args),input=body,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=timeout)
             if result.returncode:
@@ -83,7 +83,7 @@ class LiveScriptTests(unittest.TestCase):
                 def run_script(kind,script,readonly):
                     cid=create('--name',operation+'-'+kind,'--network','container:'+clone,
                         '--user','65532:65532','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges:true',
-                        '--memory','512m','--pids-limit','128','--tmpfs','/tmp:rw,noexec,nosuid,size=16m',
+                        '--memory','512m','--pids-limit','128',
                         '--mount','type=bind,source='+str(evidence)+',target=/evidence'+(',readonly' if readonly else ''),
                         '-e','PGHOST=127.0.0.1','-e','PGPORT=5432','-e','PGUSER=postgres','-e','PGPASSWORD=fixture-only',
                         '-e','PGSSLMODE=disable','-e','SPACE_NATIVE_REQUIRED_SOURCE_SHA256='+build,
@@ -129,8 +129,19 @@ class LiveScriptTests(unittest.TestCase):
             for cid in reversed(owned):
                 row=json.loads(docker('inspect',cid))[0]
                 self.assertEqual(row['Config']['Labels']['voice.test.owner'],operation)
-                docker('rm','-f',cid)
+                volumes=[mount for mount in row.get('Mounts',[]) if mount.get('Type')=='volume']
+                for mount in volumes:
+                    self.assertEqual(row['Config']['Image'],QUALIFIED_TOOLS['postgres'])
+                    self.assertEqual(mount['Destination'],'/var/lib/postgresql/data')
+                    self.assertRegex(mount['Name'],r'^[a-f0-9]{64}$')
+                    self.assertNotIn(mount['Name'],removed_volumes)
+                docker('rm','-f','-v',cid)
                 self.assertFalse(docker('ps','-a','--filter','id='+cid,'--format','{{.ID}}').strip())
+                for mount in volumes:
+                    self.assertFalse(docker('volume','ls','--filter','name=^'+mount['Name']+'$','--format','{{.Name}}').strip())
+                    removed_volumes.append(mount['Name'])
+        self.assertEqual(len(removed_volumes),2)
+        result['anonymous_pg_volumes_removed']=len(removed_volumes)
         result['cleanup_verified']=True
         print(json.dumps(result,sort_keys=True),flush=True)
 
