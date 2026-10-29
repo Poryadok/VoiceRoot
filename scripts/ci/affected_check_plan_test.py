@@ -536,6 +536,32 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('space-native-installer-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_local_docker_lifecycle_proof_is_selected_and_gated(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['local-docker-isolation']
+        self.assertIn('local_docker_isolation', job['if'])
+        self.assertIn('local-docker-isolation', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Exercise owned Docker lifecycle')
+        self.assertEqual(test['env']['VOICE_LOCAL_DOCKER_TEST'], '1')
+        self.assertIn('local_docker_scheduled_integration_test.py', test['run'])
+        self.assertIn('local_docker_owned_cancel_test.py', test['run'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [],
+                  'integration_go_services': [], 'run_go': False, 'run_pkg': False}
+        matched = planner.match_filters(rules, ['scripts/ci/local_docker_scheduled.py'])
+        self.assertEqual(matched['local_docker_isolation'], ['scripts/ci/local_docker_scheduled.py'])
+        selected = planner.make_plan(matched, matrix)
+        self.assertIn('local-docker-isolation', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            needs['local-docker-isolation']['result'] = outcome
+            self.assertIn('local-docker-isolation', planner.verify_gate(selected, needs, identity))
+        unknown = planner.match_filters(rules, ['scripts/ci/local_docker_unknown.py'])
+        self.assertTrue(planner.effective_filters(unknown)['ci_global'])
+
     def test_messaging_threadlist_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
@@ -752,6 +778,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                     expected_extra.add('space-native-installer-integration')
                 if 't31-critical' in proposed:
                     expected_extra.add('t31-critical')
+                if 'local-docker-isolation' in proposed:
+                    expected_extra.add('local-docker-isolation')
                 self.assertEqual(proposed - required, expected_extra)
 
     def test_git_diff_includes_both_rename_paths_and_deletions(self):

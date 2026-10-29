@@ -50,6 +50,7 @@ jobs:
       global: ${{ steps.filter.outputs.global == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       ci_global: ${{ steps.scope.outputs.ci_global }}
       ci_scripts: ${{ steps.filter.outputs.ci_scripts }}
+      local_docker_isolation: ${{ steps.filter.outputs.local_docker_isolation }}
       t31: ${{ steps.filter.outputs.t31 }}
       nats_renderer: ${{ steps.filter.outputs.nats_renderer }}
       a1_attachment_restart: ${{ steps.filter.outputs.a1_attachment_restart }}
@@ -2117,6 +2118,7 @@ jobs:
       - protobuf
       - compose-config
       - ci-script-tests
+      - local-docker-isolation
       - current-diff-contract
       - voice-history-audit
       - match-squad-overlay
@@ -2618,6 +2620,34 @@ jobs:
             ${{ runner.temp }}/chat-lifecycle-receipt.json
           if-no-files-found: warn
           retention-days: 14
+
+  local-docker-isolation:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (needs.changes.outputs.local_docker_isolation == 'true' ||
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Test Go session identity
+        working-directory: src/backend/pkg
+        run: go test -count=1 ./cmd/ci-go-session
+      - name: Exercise owned Docker lifecycle
+        env:
+          VOICE_LOCAL_DOCKER_TEST: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='redis@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f'
+          docker pull "$image"
+          docker tag "$image" redis:7-alpine
+          python3 scripts/ci/local_docker_scheduled_integration_test.py
+          python3 scripts/ci/local_docker_owned_cancel_test.py
 
   space-native-installer-integration:
     needs: changes

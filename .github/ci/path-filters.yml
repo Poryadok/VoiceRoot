@@ -56,6 +56,25 @@ ci_scripts:
   - .github/workflows/**
   - .github/ci/**
 
+# Explicit inputs to the local Docker ownership and bounded-slot proofs.
+local_docker_isolation:
+  - scripts/ci/local_docker_owned.py
+  - scripts/ci/local_docker_owned_test.py
+  - scripts/ci/local_docker_owned_integration_test.py
+  - scripts/ci/local_docker_owned_cancel_test.py
+  - scripts/ci/local_docker_scheduled.py
+  - scripts/ci/local_docker_scheduled_test.py
+  - scripts/ci/local_docker_scheduled_integration_test.py
+  - scripts/ci/local_heavy_slots.py
+  - scripts/ci/local_heavy_slots_test.py
+  - scripts/ci/local_compose_audit.py
+  - scripts/ci/local_compose_audit_test.py
+  - scripts/ci/testcontainers-prune.sh
+  - scripts/ci/testcontainers-prune_test.sh
+  - src/backend/pkg/cmd/ci-go-session/**
+  - src/backend/pkg/go.mod
+  - src/backend/pkg/go.sum
+
 # Every image can consume generated peer modules and shared context rules.
 go_build_shared:
   - src/backend/**/pb/**

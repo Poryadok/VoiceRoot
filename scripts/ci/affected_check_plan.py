@@ -11,7 +11,7 @@ import re
 import subprocess
 import tempfile
 
-KNOWN_FILTERS = frozenset('''global ci_global ci_scripts go_build_shared nats_renderer t31
+KNOWN_FILTERS = frozenset('''global ci_global ci_scripts local_docker_isolation go_build_shared nats_renderer t31
     history_audit match_squad_overlay a1_t106_live a1_e2e a1_attachment_restart
     staging_infra analytics_integration_inputs protos pkg frontend dev_web_publish windows_desktop auth auth_test_impact
     developer-portal admin compose full_application_request'''.split()) | frozenset(
@@ -231,6 +231,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
 
     broad = ('global', 'ci_global')
     selected('ci-script-tests', ('global', 'ci_global', 'ci_scripts'))
+    selected('local-docker-isolation', ('global', 'ci_global', 'local_docker_isolation'))
     selected('voice-history-audit', ('history_audit',),
              head_ref.startswith('codex/voice-master-release-') or
              head_ref == 'codex/game-sdk-federation-docs', ['release branch'])

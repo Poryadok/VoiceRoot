@@ -18,3 +18,9 @@ processes may still be active.
 The opt-in real-Docker check is
 `VOICE_LOCAL_DOCKER_TEST=1 python scripts/ci/local_docker_scheduled_integration_test.py`.
 It creates explicitly owned disposable Redis fixtures and a separate sentinel.
+For pull requests, the shared affected plan selects the gated
+`local-docker-isolation` job for the explicit ownership, scheduler, audit and
+session-helper inputs listed in `.github/ci/path-filters.yml`, as well as broad
+global changes. The job checks the Go session helper and exercises scheduled
+fixture cleanup and owned-fixture failure and termination on a Linux runner.
+It does not establish isolation for arbitrary Testcontainers or Compose runs.
