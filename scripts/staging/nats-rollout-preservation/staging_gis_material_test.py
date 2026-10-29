@@ -285,6 +285,42 @@ class ClosedPlanTest(unittest.TestCase):
             'resourceVersion': '8', 'semantic_sha256': '9' * 64}}
         self.assertTrue(validate(preserved))
 
+    def test_plan_builder_hashes_actual_fixed_payloads_and_keeps_preserved_refs(self):
+        module = importlib.import_module('staging_gis_material')
+        base = self.plan()
+        prior = base['effects'].pop(0)
+        preserved = {prior['id']: {'authority': {'operation': 'abcdef123456', 'receipt_sha256': 'f' * 64},
+            'observed': {'kind': 'Secret', 'name': prior['name'], 'namespace': 'voice-staging',
+                'uid': '00000000-0000-0000-0000-000000000202', 'resourceVersion': '5', 'semantic_sha256': '9' * 64}}}
+        before = AppSecretObservationTest().secret()
+        added = {'GAME_INTEGRATION_DB_PASSWORD': base64.b64encode(b'password').decode(),
+            'GAME_INTEGRATION_DATABASE_URL': base64.b64encode(
+                b'postgres://gameintegration_runtime:password@voice-postgres:5432/game_integration_db?sslmode=disable').decode()}
+        payloads = {}
+        for effect in base['effects'][:-1]:
+            row = {'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': effect['name'],
+                'namespace': 'voice-staging', 'annotations': {'voice.poryadok.io/prerequisites-operation': base['operation']}},
+                'type': 'kubernetes.io/tls' if effect['id'] == 'gis-tls' else 'Opaque', 'data': {'fixture': 'YQ=='}}
+            payloads[effect['id']] = json.dumps(row, sort_keys=True, separators=(',', ':')).encode()
+        payloads['gis-app-credentials'] = json.dumps({'before': before, 'after_data': {**before['data'], **added}},
+                                                      sort_keys=True, separators=(',', ':')).encode()
+        before_map = {item['id']: item['before'] for item in base['effects']}
+        before_map['gis-app-credentials'] = {key: module.inspect_app_secret(before)[key]
+                                              for key in ('uid', 'resourceVersion', 'data_sha256')}
+        builder = getattr(module, 'build_plan', None)
+        self.assertTrue(callable(builder), 'closed private GIS plan builder is required')
+        plan, retained = builder(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
+                                 base['source_contract_sha256'], base['issuer'], before_map, preserved, payloads)
+        self.assertEqual(retained, payloads)
+        self.assertTrue(module.validate_plan(plan))
+        self.assertEqual(plan['preserved'], preserved)
+        for effect in plan['effects']:
+            self.assertEqual(effect['payload_sha256'], hashlib.sha256(payloads[effect['id']]).hexdigest())
+        bad = dict(before_map); bad['foreign'] = {'absent': True, 'list_rv': '3'}
+        with self.assertRaises(module.MaterialError):
+            builder(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
+                    base['source_contract_sha256'], base['issuer'], bad, preserved, payloads)
+
     def test_unknown_missing_duplicate_or_unbound_effects_are_rejected(self):
         module = importlib.import_module('staging_gis_material')
         validate = getattr(module, 'validate_plan', lambda _value: None)

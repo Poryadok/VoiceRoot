@@ -2,6 +2,7 @@
 import base64
 import binascii
 import contextlib
+import copy
 import datetime
 import hashlib
 import json
@@ -476,3 +477,55 @@ def build_create_payloads(operation, app_before, ca_certificate, ca_key, jwks_bu
             'gis-workload': secret('gis-workload', materials[_EFFECTS['gis-workload']], 'Opaque'),
             'gis-tls': secret('gis-tls', tls, 'kubernetes.io/tls'),
             'gis-app-credentials': _canonical({'before': app_before, 'after_data': after})}
+
+
+def build_plan(operation, namespace_uid, source_capture_sha256, source_contract_sha256,
+               issuer, before, preserved, payloads):
+    """Build closed private descriptors; the coordinator qualifies every input."""
+    try:
+        if type(before) is not dict or type(preserved) is not dict or type(payloads) is not dict:
+            raise ValueError()
+        if set(before) != set(payloads) or set(payloads) & set(preserved) or set(payloads) | set(preserved) != set(_EFFECTS):
+            raise ValueError()
+        def pairs(items):
+            result = {}
+            for key, value in items:
+                if key in result: raise ValueError()
+                result[key] = value
+            return result
+        effects = []
+        for effect_id, name in _EFFECTS.items():
+            if effect_id not in payloads: continue
+            raw = payloads[effect_id]
+            if type(raw) is not bytes or len(raw) > 2 * 1024 * 1024: raise ValueError()
+            obj = json.loads(raw, object_pairs_hook=pairs)
+            if effect_id == 'gis-app-credentials':
+                if type(obj) is not dict or set(obj) != {'before', 'after_data'}: raise ValueError()
+                previous = inspect_app_secret(obj['before'])
+                if (previous['credentials'] != 'absent' or
+                    {key: previous[key] for key in ('uid', 'resourceVersion', 'data_sha256')} != before[effect_id]):
+                    raise ValueError()
+                keys = {'GAME_INTEGRATION_DB_PASSWORD', 'GAME_INTEGRATION_DATABASE_URL'}
+                after = obj['after_data']
+                if (type(after) is not dict or set(after) != set(obj['before']['data']) | keys
+                    or any(after[key] != value for key, value in obj['before']['data'].items())):
+                    raise ValueError()
+                desired = _secret_semantic(obj['before']); desired['data'] = after
+            else:
+                desired = _secret_semantic(obj)
+                if (desired != obj or desired['metadata'].get('name') != name
+                    or desired['metadata'].get('namespace') != 'voice-staging'
+                    or desired['metadata'].get('annotations', {}).get('voice.poryadok.io/prerequisites-operation') != operation
+                    or desired['type'] != ('kubernetes.io/tls' if effect_id == 'gis-tls' else 'Opaque')):
+                    raise ValueError()
+            effects.append({'id': effect_id, 'kind': 'Secret', 'name': name, 'namespace': 'voice-staging',
+                'before': copy.deepcopy(before[effect_id]), 'desired_sha256': hashlib.sha256(_canonical(desired)).hexdigest(),
+                'payload_sha256': hashlib.sha256(raw).hexdigest()})
+        plan = {'schema': 'voice-staging-gis-material-plan-v1', 'operation': operation,
+            'namespace_uid': namespace_uid, 'source_capture_sha256': source_capture_sha256,
+            'source_contract_sha256': source_contract_sha256, 'issuer': copy.deepcopy(issuer),
+            'effects': effects, 'preserved': copy.deepcopy(preserved)}
+        validate_plan(plan)
+        return plan, dict(payloads)
+    except (KeyError, TypeError, ValueError, UnicodeError, MaterialError):
+        raise MaterialError('staging_gis_plan_build_failed') from None
