@@ -100,6 +100,44 @@ def capture(root, head):
             'changed_paths': changed_paths(root, head, first[0])}
 
 
+def _snapshot_entries(root, source):
+    entries = _git(root, 'ls-tree', '-r', '-z', '--full-tree', source['tree'])
+    for entry in sorted((e for e in entries.split(b'\0') if e), key=lambda e: e.split(b'\t', 1)[1]):
+        metadata, raw_name = entry.split(b'\t', 1)
+        mode, kind, _ = metadata.decode('ascii').split()
+        name = raw_name.decode('utf-8')
+        parts = name.split('/')
+        if (mode not in ('100644', '100755') or kind != 'blob' or
+                any(part in ('', '.', '..', '.git') or '\\' in part or ':' in part
+                    for part in parts)):
+            raise ValueError('unsupported snapshot path or file type: ' + name)
+        yield raw_name, parts
+
+
+def verify_materialized(root, source, destination):
+    """Check captured files after execution; generated inputs remain unaccounted for."""
+    root = Path(root).resolve()
+    destination = Path(destination).resolve()
+    digest = hashlib.sha256()
+    for raw_name, parts in _snapshot_entries(root, source):
+        path = destination.joinpath(*parts)
+        try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or destination not in path.resolve().parents:
+                raise ValueError('snapshot changed: invalid file')
+            digest.update(len(raw_name).to_bytes(8, 'big'))
+            digest.update(raw_name)
+            digest.update(stat.S_IMODE(info.st_mode).to_bytes(4, 'big'))
+            digest.update(b'F' + info.st_size.to_bytes(8, 'big'))
+            with path.open('rb') as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b''):
+                    digest.update(block)
+        except OSError as error:
+            raise ValueError('snapshot changed: missing file') from error
+    if digest.hexdigest() != source['worktree_sha256']:
+        raise ValueError('snapshot changed: captured bytes or mode differ')
+
+
 def materialize(root, source, destination):
     """Copy the exact Git-visible working-tree bytes to a new private directory.
 
@@ -114,20 +152,9 @@ def materialize(root, source, destination):
         raise ValueError('snapshot destination already exists')
     if capture(root, source['head']) != source:
         raise ValueError('source changed before materialization')
-    entries = _git(root, 'ls-tree', '-r', '-z', '--full-tree', source['tree'])
     destination.mkdir(parents=True, exist_ok=False)
-    digest = hashlib.sha256()
-    for entry in sorted((e for e in entries.split(b'\0') if e), key=lambda e: e.split(b'\t', 1)[1]):
-        if not entry:
-            continue
-        metadata, raw_name = entry.split(b'\t', 1)
-        mode, kind, _ = metadata.decode('ascii').split()
+    for raw_name, parts in _snapshot_entries(root, source):
         name = raw_name.decode('utf-8')
-        parts = name.split('/')
-        if (mode not in ('100644', '100755') or kind != 'blob' or
-                any(part in ('', '.', '..', '.git') or '\\' in part or ':' in part
-                    for part in parts)):
-            raise ValueError('unsupported snapshot path or file type: ' + name)
         original = root.joinpath(*parts)
         if not original.is_file() or original.is_symlink() or root not in original.resolve().parents:
             raise ValueError('unsupported or changed source path: ' + name)
@@ -135,15 +162,11 @@ def materialize(root, source, destination):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(original, target)
         shutil.copymode(original, target)
-        info = target.stat()
-        digest.update(len(raw_name).to_bytes(8, 'big'))
-        digest.update(raw_name)
-        digest.update(stat.S_IMODE(info.st_mode).to_bytes(4, 'big'))
-        digest.update(b'F' + info.st_size.to_bytes(8, 'big'))
-        with target.open('rb') as stream:
-            for block in iter(lambda: stream.read(1024 * 1024), b''):
-                digest.update(block)
-    if digest.hexdigest() != source['worktree_sha256'] or capture(root, source['head']) != source:
+    try:
+        verify_materialized(root, source, destination)
+    except ValueError as error:
+        raise ValueError('source changed during materialization') from error
+    if capture(root, source['head']) != source:
         raise ValueError('source changed during materialization')
     return destination
 

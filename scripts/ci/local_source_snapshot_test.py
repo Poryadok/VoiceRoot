@@ -91,6 +91,16 @@ class LocalSourceSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'outside'):
             snapshot.materialize(self.root, source, self.root / 'snapshot')
 
+    def test_materialized_source_can_be_rechecked_after_a_command(self):
+        source = snapshot.capture(self.root, self.head)
+        with tempfile.TemporaryDirectory() as external:
+            destination = Path(external) / 'source'
+            snapshot.materialize(self.root, source, destination)
+            snapshot.verify_materialized(self.root, source, destination)
+            (destination / 'old.txt').write_bytes(b'changed by command\n')
+            with self.assertRaisesRegex(ValueError, 'snapshot changed'):
+                snapshot.verify_materialized(self.root, source, destination)
+
     def test_tracked_gitlinks_are_rejected(self):
         self.git('update-index', '--add', '--cacheinfo', '160000,' + self.head + ',submodule')
         with self.assertRaisesRegex(ValueError, 'gitlink'):
