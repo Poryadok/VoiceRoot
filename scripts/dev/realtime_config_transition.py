@@ -77,6 +77,17 @@ def render_space_service(source,expected_pod_labels):
     return _patch(source,target),target
 
 
+def render_space_creator_service(source,expected_pod_labels):
+    """Plan the single Space Service target for JWKS and Creator traffic."""
+    _,target=render_space_service(source,expected_pod_labels)
+    desired={'name':'gateway-lc','port':9096,'targetPort':9096,'protocol':'TCP'}
+    matches=[p for p in target['ports'] if p.get('name')=='gateway-lc' or
+             p.get('port')==9096 or p.get('targetPort') in (9096,'gateway-lc')]
+    if matches and matches!=[desired]: raise ValueError('Space Service Creator port conflict')
+    if not matches:target['ports'].append(desired)
+    return _patch(source,target),target
+
+
 def render_realtime(source,receipts,operation_id):
     """Render only; all receipt identity and authority checks belong to the phase."""
     _base(source,'realtime')
