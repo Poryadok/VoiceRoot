@@ -59,3 +59,35 @@ The same independently fixed wrapper-to-launcher-to-full-bundle authority,
 live idle checks, TT journal and inventory guards, history retention, and
 inbox `0700` reconciliation boundary apply. The direct route does not accept
 another installed predecessor or authorize arbitrary 87-member bundles.
+
+## Full 23 prerequisite successor preparation
+
+The earlier 87-member GIS successor is an intermediate source checkpoint; it
+must not be installed solely to reach the later full 23 prerequisite helper.
+The future direct transition is tied to the observed 81-member predecessor,
+not to an assumed intermediate installation. Its final source and member
+inventory must be frozen and independently reviewed before its entry is used.
+The current candidate is based on `e49806531d5b05b6a521b249a9eed46e520699ab`
+and contains 89 members, including both Realtime bootstrap modules and the
+observed binary pins. Its 88-member projection excluding its independently
+authorized running installer is
+`8f5e1095a702b4bcde11ae5be2111457cf61a05010da1b2bfd95200ed8180dae`.
+The fixed entry is `--install --upgrade-idle-full23-installed-cohort-v1`;
+any change to its source members requires a new projection, exact bundle and
+independent review. This candidate does not establish eligible source or CI.
+
+For this exact legacy predecessor, new private history paths
+`installed/source-authority` and `installed/realtime-bootstrap` must both be
+absent under the existing operation lock before closing ingress, immediately
+before the code swap, and immediately after it. Any existing file, directory,
+or symbolic link at either path requires reconciliation; nothing is deleted
+or adopted. Established checks continue to protect reviewed source workspaces
+and rollout history. The old helper can have `installed/source-archives`; the
+transition neither requires that cache to be absent nor replaces it.
+
+If a new history path appears after the swap, the command reports a blocking
+failure but code may already have changed and ingress is restored to `01730`.
+This is not rollback or evidence of completion. Restrict external access and
+reconcile the actual code, receipt, preserved predecessor and private history
+before any continuation. The operation lock is cooperative and does not stop
+an unrelated root writer.
