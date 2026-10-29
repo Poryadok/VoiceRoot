@@ -217,8 +217,9 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
             import json
             env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(code / 'nats-rollout-preservation'),
                                                                str(code / 'nats-known-baseline'))))
-            subprocess.run([sys.executable, '-c', script, str(root), json.dumps(pins),str(Path(__file__).parent)], cwd=directory,
-                           env=env, check=True, capture_output=True, text=True)
+            result=subprocess.run([sys.executable, '-c', script, str(root), json.dumps(pins),str(Path(__file__).parent)], cwd=directory,
+                                  env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
 
     def test_missing_preservation_holds_before_parent_or_cluster(self):
         for mode in ('full', 'app-only'):
