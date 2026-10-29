@@ -101,6 +101,15 @@ class ConsumerTests(unittest.TestCase):
                 self.assertEqual(state['native_space_migration'],receipt)
                 journal.assert_called_once_with({'kind':'native_space_migration_complete','receipt_sha256':transaction.canonical(receipt)})
 
+    def test_partial_preserved_authorization_never_enters_legacy_custody(self):
+        actions=object.__new__(bridge_root.Actions)
+        state={'operation':'a'*12,'target':{'mode':'full','cohort_preservation_sha256':'c'*64},'migrations':[]}
+        actions.state=Mock(return_value=(Path('/unused'),state))
+        with patch.object(bridge_root.github_custody,'verify_artifact') as custody,patch.object(bridge_root,'save') as save:
+            with self.assertRaisesRegex(Exception,'cohort_preserved_authorization_already_started'):
+                actions.execute({'action':'authorize','operation':'a'*12})
+            custody.assert_not_called();save.assert_not_called()
+
     def test_historical_native_receipt_rejects_tampered_effect_and_rollout_event(self):
         operation='a'*12;ctx={'operation_id':'stg-run-17','commit':'c'*40};binding={'context':ctx,'operation':operation}
         session=SimpleNamespace(operation=operation,context=ctx)

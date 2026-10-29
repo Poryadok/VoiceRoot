@@ -772,6 +772,8 @@ class Actions:
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
+            if state.get('target',{}).get('cohort_preservation_sha256') is not None:
+                raise Blocked('cohort_preserved_authorization_already_started')
             import migrations
             migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'),state=state)
             if state.get('provisional') is not None:
