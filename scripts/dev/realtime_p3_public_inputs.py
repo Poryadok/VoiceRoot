@@ -127,6 +127,8 @@ def _mounted(pod):
 def _service(service, pod):
     meta, spec = service['metadata'], service['spec']
     if meta.get('name') != 'voice-space' or meta.get('namespace') != 'voice-dev': raise common.Hold('space_service_invalid')
+    if not all(isinstance(meta.get(key), str) and meta[key] for key in ('uid', 'resourceVersion')):
+        raise common.Hold('space_service_invalid')
     selector = spec.get('selector')
     if (spec.get('type', 'ClusterIP') != 'ClusterIP' or not spec.get('clusterIP') or spec.get('clusterIP') == 'None'
             or not isinstance(selector, dict) or not selector or

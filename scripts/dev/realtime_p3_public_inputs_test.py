@@ -80,6 +80,17 @@ class CaptureTests(unittest.TestCase):
         with self.assertRaises(capture.common.Hold): self.invoke(dest)
         self.assertEqual(list(dest.iterdir()), [])
 
+    def test_service_missing_identity_fails(self):
+        dest = self.root / 'private'; dest.mkdir(mode=0o700)
+        def runner(args):
+            result = self.runner(args)
+            if 'service' in args:
+                value = json.loads(result); value['metadata']['uid'] = ''
+                return json.dumps(value).encode()
+            return result
+        with self.assertRaisesRegex(capture.common.Hold, 'space_service_invalid'): self.invoke(dest, runner=runner)
+        self.assertEqual(list(dest.iterdir()), [])
+
     def test_source_comments_and_sidecar_cannot_claim_space_contract(self):
         manifest = self.root / 'deploy/staging/services.yaml'
         original = manifest.read_bytes()
