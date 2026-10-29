@@ -12,6 +12,7 @@ import ssl
 import threading
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 import staging_p3_prerequisites_crypto as crypto
 import staging_p3_prerequisites as p3
@@ -60,6 +61,49 @@ class CryptoFixture(unittest.TestCase):
             payloads={row['kind']+'/'+row['metadata']['name']:json.dumps(row,sort_keys=True,separators=(',',':')).encode() for row in rows}
             restored=p3.decode_material_payloads(payloads,{ident:'fixture' for ident in payloads})
             self.assertEqual(crypto.validate_issuer_materials(restored,issuer)['scope'],'offline-material-only')
+            import resource_claim, resource_claim_test, staging_prerequisites as parent, stage_runtime
+            context_data=resource_claim_test.context(); card=resource_claim_test.card(context_data)
+            session=resource_claim.Session(context_data,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal()); session.admit(start=True)
+            source_rows=json.loads(Path(__file__).with_name('staging_p3_prerequisites_source_fixture.json').read_text())
+            source_rows=[r for r in source_rows if r['metadata']['name'] in ('voice-p3-principal-jwks','voice-p3-principal-publisher-config')]
+            image='docker.io/library/nginx@sha256:'+'d'*64
+            publisher=p3.publisher_objects(source_rows,image,'sha256:'+'d'*64)
+            all_rows=p3.mark_operation(p3.material_objects(generated)+publisher,session.operation)
+            for row in all_rows:
+                if row['kind']=='Service': row['spec']['type']='ClusterIP'
+            rawmap={row['kind']+'/'+row['metadata']['name']:json.dumps(row,sort_keys=True,separators=(',',':')).encode() for row in all_rows}
+            descriptors=[{'id':i,'kind':i.split('/')[0],'name':i.split('/')[1],'namespace':'voice-staging',
+                          'payload_sha256':hashlib.sha256(rawmap[i]).hexdigest(),
+                          'desired_sha256':resource_claim.digest(p3.private_semantic(json.loads(rawmap[i])))} for i in p3.inventory_intent()]
+            aux={'workload':'voice-p3-principal-jwks','container':'jwks','source_ref':'nginx:stable-alpine','image_ref':image,
+                 'platform':{'os':'linux','architecture':'amd64','variant':None},'index_sha256':'e'*64,
+                 'manifest_sha256':'d'*64,'config_sha256':'f'*64,'source_authority_sha256':'1'*64}
+            plan={'schema':'voice-staging-p3-prerequisites-plan-v1','operation':session.operation,'namespace_uid':'ns',
+                  'source_capture_sha256':'2'*64,'source_contract_sha256':'3'*64,'issuer_authority_sha256':'4'*64,
+                  'issuer_input_sha256':'5'*64,'auxiliary_image':aux,'objects':descriptors,'preserved':{},
+                  'effects':[{**r,'before':{'absent':True,'list_rv':'10'}} for r in descriptors]}
+            def kube_run(_self,args,body=None,timeout=30):
+                if args[0]=='get': return {'metadata':{'resourceVersion':'11'},'items':[]}
+                self.assertEqual(args,['create','--dry-run=server','-f','/dev/stdin','-o','json'])
+                result=copy.deepcopy(body)
+                if result['kind']=='Service': result['spec'].update(type='ClusterIP',clusterIP='10.2.0.1',clusterIPs=['10.2.0.1'])
+                return result
+            with mock.patch.object(parent,'require_child',return_value=plan),mock.patch.object(parent,'load_payload',side_effect=lambda s,slot,i:rawmap[i]), \
+                 mock.patch.object(parent,'load_issuer',return_value=issuer,create=True),mock.patch.object(p3,'_source_and_image',return_value=(publisher,{'fixture':'not-authority'})), \
+                 mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=lambda args,body=None,timeout=30:kube_run(None,args,body,timeout))):
+                self.assertTrue(p3.preflight_payloads(session))
+                bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
+                with mock.patch.object(parent,'load_issuer',return_value=bad),self.assertRaises(p3.PrerequisiteError): p3.preflight_payloads(session)
+                with mock.patch.object(parent,'load_issuer',side_effect=[issuer,bad]),self.assertRaises(p3.PrerequisiteError): p3.preflight_payloads(session)
+                calls={'lists':0}
+                def late(args,body=None,timeout=30):
+                    result=kube_run(None,args,body,timeout)
+                    if args[0]=='get':
+                        calls['lists']+=1
+                        if calls['lists']==5: result['items']=[{'metadata':{'name':'voice-realtime-principal-signing'}}]
+                    return result
+                with mock.patch.object(stage_runtime,'Kube',return_value=SimpleNamespace(run=late)),self.assertRaises(p3.PrerequisiteError):
+                    p3.preflight_payloads(session)
             bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
             with self.assertRaises(crypto.CryptoError): crypto.validate_issuer_materials(generated,bad)
             proof=crypto.validate_values(values,trust,peer_cert,peer_cert,ca)

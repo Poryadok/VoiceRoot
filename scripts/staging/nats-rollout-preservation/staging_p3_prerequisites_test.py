@@ -1,6 +1,8 @@
 import copy
 import hashlib
 import json
+import re
+import tempfile
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -9,6 +11,59 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_source_image_reloads_real_session_capture_and_refuses_record_drift(self):
+        import compiler, guard, resource_claim, resource_claim_test, staging_prerequisites as parent
+        rows=json.loads(Path(__file__).with_name('staging_p3_prerequisites_source_fixture.json').read_text())
+        raw=(Path(__file__).resolve().parents[3]/'deploy/staging/services.yaml').read_bytes()
+        context=resource_claim_test.context(); card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal()); session.admit(start=True)
+        with tempfile.TemporaryDirectory(dir='/root') as tmp:
+            root=Path(tmp); source=root/'installed'/'sources'/session.operation
+            path=source/'deploy'/'staging'/'services.yaml'; path.parent.mkdir(parents=True,mode=0o700)
+            path.write_bytes(raw); path.chmod(0o600)
+            approved={'source_sha':context['commit'],'source_files':{'deploy/staging/services.yaml':hashlib.sha256(raw).hexdigest(),
+                       'scripts/deploy/staging_p3_auxiliary_image.py':'f'*64}}
+            authority={'approved':approved,'execution':{},'source':str(source)}
+            record={'schema':'voice-staging-p3-auxiliary-image-v1','operation':session.operation,'nonce':'a'*32,'context':context,
+                    'helper_sha256':session.helper,'source_capture_sha256':'c'*64,'source_module_sha256':'f'*64,
+                    'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx','index_sha256':'d'*64,
+                    'manifest_sha256':'e'*64,'config_sha256':'9'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},
+                    'node':{'name':'node','uid':'uid','os':'linux','architecture':'amd64'},'image_ref':'docker.io/library/nginx@sha256:'+'e'*64}
+            aux={k:record[k] for k in ('source_ref','index_sha256','manifest_sha256','config_sha256','platform','image_ref')}
+            aux.update(workload='voice-p3-principal-jwks',container='jwks',source_authority_sha256=resource_claim.digest(record))
+            plan={'source_capture_sha256':'c'*64,'source_contract_sha256':resource_claim.digest(p3.source_contract(approved,raw)),
+                  'auxiliary_image':aux}
+            def decode(piece):
+                text=piece.decode(); name=re.search(r'^  name: ([^\s]+)',text,re.M).group(1); kind=re.search(r'^kind: ([^\s]+)',text,re.M).group(1)
+                return copy.deepcopy(next(row for row in rows if row['kind']==kind and row['metadata']['name']==name))
+            with patch.object(guard,'ROOT',root),patch.object(parent,'load_authority',return_value=authority), \
+                 patch.object(parent,'load_auxiliary_image',return_value=record,create=True),patch.object(compiler,'decode_yaml',side_effect=decode):
+                built,verified=p3._source_and_image(session,plan)
+                self.assertEqual(verified,record); self.assertEqual(len(built),3)
+                altered=copy.deepcopy(record); altered['manifest_sha256']='0'*64
+                with patch.object(parent,'load_auxiliary_image',return_value=altered),self.assertRaises(ValueError):
+                    p3._source_and_image(session,plan)
+                path.write_bytes(raw+b' ')
+                with self.assertRaises(p3.PrerequisiteError): p3._source_and_image(session,plan)
+
+    def test_source_consumers_check_actual_p3_paths_and_ports(self):
+        rows=json.loads((Path(__file__).with_name('staging_p3_prerequisites_source_fixture.json')).read_text())
+        rows=[r for r in rows if r['metadata']['name'] in ('voice-realtime','voice-chat','voice-space')]
+        self.assertTrue(p3.source_consumers(rows))
+        for kind,name in [('Deployment','voice-realtime'),('Deployment','voice-chat'),('Deployment','voice-space'),('Service','voice-realtime')]:
+            bad=copy.deepcopy(rows); row=next(x for x in bad if x['kind']==kind and x['metadata']['name']==name)
+            if kind=='Service': row['spec']['ports'][0]['port']=9999
+            else:
+                container=next(c for c in row['spec']['template']['spec']['containers'] if c['name']==name.removeprefix('voice-'))
+                target={'voice-realtime':'REALTIME_PRINCIPAL_JWKS_FILE','voice-chat':'CHAT_REALTIME_PRINCIPAL_JWKS_URL',
+                        'voice-space':'SPACE_PRINCIPAL_JWKS_TLS_CERT_FILE'}[name]
+                next(x for x in container['env'] if x['name']==target)['value']='wrong'
+            with self.subTest(name=name),self.assertRaises(p3.PrerequisiteError): p3.source_consumers(bad)
+        bad=copy.deepcopy(rows); realtime=next(x for x in bad if x['kind']=='Deployment' and x['metadata']['name']=='voice-realtime')
+        trust=next(v for v in realtime['spec']['template']['spec']['volumes'] if v['name']=='p3-trust')
+        trust['secret']['items'][0]['key']='wrong'
+        with self.assertRaises(p3.PrerequisiteError): p3.source_consumers(bad)
+
     def test_private_semantic_retains_payload_and_ownership_controls(self):
         obj={'apiVersion':'v1','kind':'Secret','metadata':{'name':'voice-realtime-principal-signing',
               'namespace':'voice-staging','uid':'first','resourceVersion':'1','creationTimestamp':'now',
@@ -125,6 +180,8 @@ class StagingP3Contract(unittest.TestCase):
                'platform':{'os':'linux','architecture':'amd64','variant':None},
                'manifest_sha256':digest,'config_sha256':digest,'index_sha256':None,'source_authority_sha256':digest}}
         self.assertEqual(p3.validate_plan_shape(plan),plan)
+        indexed=copy.deepcopy(plan); indexed['auxiliary_image']['index_sha256']='b'*64
+        self.assertEqual(p3.validate_plan_shape(indexed),indexed)
         import staging_prerequisites as parent
         import resource_claim
         import resource_claim_test
@@ -154,6 +211,13 @@ class StagingP3Contract(unittest.TestCase):
             self.assertEqual(p3.verify_effect(session,ids[0],observation),observation)
             wrong=copy.deepcopy(current); wrong['data']['current.pem']='eg=='
             with patch.object(stage_runtime.Kube,'get',return_value=wrong),self.assertRaises(p3.PrerequisiteError):
+                p3.verify_effect(session,ids[0],observation)
+            wrong_payload=copy.deepcopy(payload); wrong_payload['metadata']['annotations']['voice.poryadok.io/prerequisites-operation']='foreign'
+            wrong_raw=json.dumps(wrong_payload,sort_keys=True,separators=(',',':')).encode()
+            wrong_plan=copy.deepcopy(plan); wrong_plan['objects'][0]['payload_sha256']=hashlib.sha256(wrong_raw).hexdigest()
+            wrong_plan['objects'][0]['desired_sha256']=resource_claim.digest(p3.private_semantic(wrong_payload))
+            wrong_plan['effects'][0].update(wrong_plan['objects'][0])
+            with patch.object(parent,'require_child',return_value=wrong_plan),patch.object(parent,'load_payload',return_value=wrong_raw),self.assertRaises(p3.PrerequisiteError):
                 p3.verify_effect(session,ids[0],observation)
         preserved=copy.deepcopy(plan); preserved['effects']=[]
         for obj in objects:
