@@ -92,6 +92,18 @@ def fixture():
         's3_signing_endpoint': endpoint, 'gateway_host': '', 'livekit_host': '', 'storage_host': '', 'web_host': 'app.example.invalid'}
 
 class SourceTests(unittest.TestCase):
+    def test_cohort_postgres_catalog_read_refuses_changed_engine(self):
+        import commands,resource_claim,resource_claim_test,staging_cohort_preservation
+        from unittest.mock import patch
+        kube,params=self.canonical_fixture('full');plan=source_plan.compile_plan(SOURCE,params,decoder,kube)
+        context=resource_claim_test.context();card=resource_claim_test.card(context);journal=resource_claim_test.MemoryJournal()
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),journal)
+        session.admit(start=True);journal.row.update(phase='cohort-preservation',target_sha256='c'*64,cohort_preservation_sha256='c'*64)
+        with patch.object(commands,'authority_guard',session.check), \
+             patch.object(staging_cohort_preservation,'guard_postgres',side_effect=[{'engine':'before'},{'engine':'after'}]):
+            with self.assertRaisesRegex(nonnats_plan.PlanError,'cohort_postgres_changed'):
+                source_plan.verify_db_init(kube,plan)
+
     def test_store_projection_rejects_source_selected_store_drift_before_writes(self):
         for mode in ('full','app-only'):
             with self.subTest(mode=mode):
