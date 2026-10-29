@@ -45,6 +45,12 @@ prefix, live zero-replica specs, pods and sessions around subsequent work.
 Resume holds until every service in the bound plan is accepted. The separate
 config Journal must remain open and unchanged for the previously accepted
 entries through resume; unaccepted pending/changed effects are not proof.
+`current_cut_proof()` revalidates the complete plan and returns full current
+zero-replica specs with UID, generation and cut/successor journal references.
+It is private input to the image phase before its first mutation. Once an image
+effect changes a spec, the image phase must retain that bound input and verify
+its own per-workload successor plus the unchanged cut/config journal and ledger;
+the pre-image live check no longer describes that changed workload.
 
 After migrations, call `resume(targets)` with the separately admitted current
 target objects, not the old objects. The target UID/generation/full spec must match,

@@ -11,6 +11,39 @@ import writer_cut
 import writer_cut_test as fixture
 
 
+class BindRaceTest(unittest.TestCase):
+    def setUp(self):
+        fixture.WriterCutTest.setUp(self)
+        source = self.sources[0]
+        self.client.workloads.pop(('Deployment', 'voice-a'))
+        source['metadata']['name'] = 'voice-user'
+        self.client.workloads[('Deployment', 'voice-user')] = copy.deepcopy(source)
+        self.admission['controllers'] = copy.deepcopy(self.sources)
+        self.cut.admission = copy.deepcopy(self.admission)
+        self.journal.intent['writer_cut'] = copy.deepcopy(self.admission)
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        self.cut.intent = copy.deepcopy(self.journal.intent)
+        self.cut.drain()
+        intent = {'resource_context': copy.deepcopy(self.context), 'namespace_uid': 'ns',
+                  'backend_config_deployments': {'source_sha': self.context['commit'],
+                       'cut_invocation': self.cut.invocation, 'services': ['user']}}
+        self.config = journal.Journal(Path(self.temp.name) / 'config-journal', intent)
+        self.addCleanup(self.config.close)
+
+    def test_config_effect_inserted_during_plan_binding_holds(self):
+        reserve = self.cut._reserve
+        def concurrent(name, details):
+            record = reserve(name, details)
+            if name == 'writer-cut-config-plan':
+                self.ledger.row['backend_config_effects'] = {
+                    'backend-config-deployment-voice-user': {'status': 'pending'}}
+                self.ledger.version += 1
+            return record
+        with mock.patch.object(self.cut, '_reserve', side_effect=concurrent):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.bind_config_plan(self.config)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+
 class SuccessorTest(unittest.TestCase):
     def setUp(self):
         fixture.WriterCutTest.setUp(self)
