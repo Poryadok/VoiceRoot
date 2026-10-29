@@ -169,7 +169,9 @@ class Supervisor:
                         'creator-delegated-receiver-journal', 'creator-trust-effect-journal',
                         'creator-target-plan-journal', 'creator-target-trust-journal',
                         'space-delegated-preflight-journal', 'space-delegated-receiver-journal',
-                        'role-delegated-preflight-journal', 'role-delegated-receiver-journal') and name not in go_names:
+                        'role-delegated-preflight-journal', 'role-delegated-receiver-journal',
+                        'realtime-p3-journal', 'release-journal', 'core-smoke-journal',
+                        'realtime-secret-journal', 'realtime-provision-journal', 'realtime-migration-journal') and name not in go_names:
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']
