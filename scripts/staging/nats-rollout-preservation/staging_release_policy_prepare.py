@@ -127,10 +127,56 @@ def plan(approved, source, old_policy_bytes, value, *, operation, namespace_uid,
             'policy_after_sha256':hashes['commit-root-policy'],'effects':effects}
     return record,payloads
 
+def build_preserved_plan(approved, source, old_policy_bytes, value, *, operation, namespace_uid, source_capture_sha256, preserved):
+    """Describe an exact prior release for parent-authenticated no-write reuse."""
+    try:
+        if (not isinstance(operation,str) or not re.fullmatch(r'[a-f0-9]{12}',operation)
+            or not isinstance(source_capture_sha256,str) or not re.fullmatch(r'[a-f0-9]{64}',source_capture_sha256)
+            or str(uuid.UUID(namespace_uid))!=namespace_uid or not isinstance(old_policy_bytes,bytes)
+            or not 1<=len(old_policy_bytes)<=2<<20 or type(preserved) is not dict
+            or set(preserved)!={'create-policy-configmap','commit-root-policy'}):
+            raise ValueError('shape')
+        existing=json.loads(old_policy_bytes,object_pairs_hook=wiring.pairs)
+        validate_source(approved,source,value)
+        if policy_successor(existing,value,approved['source_sha'])!=existing:
+            raise ValueError('policy differs')
+        before=hashlib.sha256(old_policy_bytes).hexdigest()
+        authorities=[]
+        for name in ('create-policy-configmap','commit-root-policy'):
+            row=preserved[name]
+            if type(row) is not dict or set(row)!={'authority','observed'}:raise ValueError('preserved')
+            authority=row['authority'];observed=row['observed']
+            if (type(authority) is not dict or set(authority)!={'operation','receipt_sha256'}
+                or not isinstance(authority['operation'],str) or not re.fullmatch(r'[a-f0-9]{12}',authority['operation'])
+                or authority['operation']==operation or not isinstance(authority['receipt_sha256'],str)
+                or not re.fullmatch(r'[a-f0-9]{64}',authority['receipt_sha256'])):raise ValueError('authority')
+            authorities.append(authority)
+            if name=='create-policy-configmap':
+                if (type(observed) is not dict or set(observed)!={'kind','name','namespace','uid','resourceVersion','semantic_sha256'}
+                    or observed['kind']!='ConfigMap' or observed['name']!=value['policy_object']['metadata']['name']
+                    or observed['namespace']!='voice-staging' or str(uuid.UUID(observed['uid']))!=observed['uid']
+                    or not isinstance(observed['resourceVersion'],str) or not re.fullmatch(r'[0-9]{1,20}',observed['resourceVersion'])
+                    or observed['semantic_sha256']!=hashlib.sha256(_canonical(value['policy_object'])).hexdigest()):raise ValueError('cm')
+            elif observed!={'kind':'RootPolicy','name':'installed-policy','sha256':before}:raise ValueError('root')
+        if authorities[0]!=authorities[1]:raise ValueError('unrelated origins')
+        record={'schema':'voice-staging-release-policy-plan-v1','operation':operation,'namespace_uid':namespace_uid,
+            'source_capture_sha256':source_capture_sha256,'source_sha':approved['source_sha'],
+            'descriptor':copy.deepcopy(value),'policy_before_sha256':before,'policy_after_sha256':before,
+            'effects':[],'preserved':copy.deepcopy(preserved)}
+        return record,{}
+    except (KeyError,TypeError,ValueError,AttributeError,UnicodeDecodeError) as exc:
+        raise ValueError('release_policy_preserved_plan_invalid') from exc
+
 def validate_plan(record,payloads,approved,source,old_policy_bytes):
     """Rebuild the closed child plan from protected parent-provided inputs."""
     try:
         if not isinstance(record,dict) or not isinstance(payloads,dict):raise ValueError('shape')
+        if 'preserved' in record:
+            rebuilt,expected=build_preserved_plan(approved,source,old_policy_bytes,record['descriptor'],
+                operation=record['operation'],namespace_uid=record['namespace_uid'],
+                source_capture_sha256=record['source_capture_sha256'],preserved=record['preserved'])
+            if record!=rebuilt or payloads!=expected:raise ValueError('mismatch')
+            return True
         first=record['effects'][0]
         rebuilt,expected=plan(approved,source,old_policy_bytes,record['descriptor'],
             operation=record['operation'],namespace_uid=record['namespace_uid'],
@@ -153,8 +199,9 @@ def preflight_payloads(session):
         or not isinstance(authority,dict) or set(authority)!={'approved','execution','source'}
         or authority['source']!=str(guard.ROOT/'installed'/'sources'/operation)):
         raise ValueError('release_policy_source_authority_invalid')
-    payloads={effect:parent.load_payload(session,'release_policy',effect)
-              for effect in ('create-policy-configmap','commit-root-policy')}
+    payloads=({} if 'preserved' in current else
+              {effect:parent.load_payload(session,'release_policy',effect)
+               for effect in ('create-policy-configmap','commit-root-policy')})
     policy_path=guard.ROOT/'installed'/'policy.json'
     before_info=os.lstat(policy_path)
     before_identity=(before_info.st_dev,before_info.st_ino,before_info.st_mode,before_info.st_uid,before_info.st_nlink)
@@ -164,14 +211,18 @@ def preflight_payloads(session):
     if (metadata.get('name')!='voice-staging' or metadata.get('uid')!=current['namespace_uid']
         or metadata.get('deletionTimestamp')):
         raise ValueError('release_policy_namespace_changed')
-    name=current['effects'][0]['name']
-    path='/api/v1/namespaces/voice-staging/configmaps?fieldSelector=metadata.name%3D'+name+'&limit=2'
-    listing=kube.run(['get','--raw',path]);metadata=listing.get('metadata',{})
-    if (listing.get('apiVersion')!='v1' or listing.get('kind')!='ConfigMapList'
-        or listing.get('items')!=[] or metadata.get('continue')
-        or not isinstance(metadata.get('resourceVersion'),str)
-        or not re.fullmatch(r'[0-9]{1,20}',metadata['resourceVersion'])):
-        raise ValueError('release_policy_configmap_absence_changed')
+    if 'preserved' in current:
+        for effect in ('create-policy-configmap','commit-root-policy'):
+            verify_effect(session,effect,current['preserved'][effect]['observed'])
+    else:
+        name=current['effects'][0]['name']
+        path='/api/v1/namespaces/voice-staging/configmaps?fieldSelector=metadata.name%3D'+name+'&limit=2'
+        listing=kube.run(['get','--raw',path]);metadata=listing.get('metadata',{})
+        if (listing.get('apiVersion')!='v1' or listing.get('kind')!='ConfigMapList'
+            or listing.get('items')!=[] or metadata.get('continue')
+            or not isinstance(metadata.get('resourceVersion'),str)
+            or not re.fullmatch(r'[0-9]{1,20}',metadata['resourceVersion'])):
+            raise ValueError('release_policy_configmap_absence_changed')
     final=operator_retirement.private_bytes(policy_path,2<<20)
     after_info=os.lstat(policy_path)
     after_identity=(after_info.st_dev,after_info.st_ino,after_info.st_mode,after_info.st_uid,after_info.st_nlink)
@@ -185,7 +236,10 @@ def preflight_payloads(session):
 def execute(session):
     """Ask the fixed coordinator to run only the two planned effects."""
     import staging_prerequisites as parent
-    parent.require_child(session,'release_policy')
+    current=parent.require_child(session,'release_policy')
+    if isinstance(current,dict) and 'preserved' in current:
+        if current.get('effects')!=[]:raise ValueError('release_policy_preserved_plan_invalid')
+        return
     for effect in ('create-policy-configmap','commit-root-policy'):
         parent.record_pending(session,'release_policy',effect)
         observation=parent.submit_effect(session,'release_policy',effect)
@@ -195,6 +249,60 @@ def verify_effect(session,effect_id,observation):
     """Re-read the fixed target before the coordinator records completion."""
     import staging_prerequisites as parent
     current=parent.require_child(session,'release_policy')
+    if isinstance(current,dict) and 'preserved' in current:
+        import guard
+        import operator_retirement
+        if (set(current)!={'schema','operation','namespace_uid','source_capture_sha256','source_sha','descriptor',
+                'policy_before_sha256','policy_after_sha256','effects','preserved'}
+            or current['schema']!='voice-staging-release-policy-plan-v1' or current['effects']!=[]
+            or type(current['preserved']) is not dict
+            or set(current['preserved'])!={'create-policy-configmap','commit-root-policy'}
+            or current.get('operation')!=getattr(session,'operation',None)
+            or effect_id not in current['preserved']):raise ValueError('release_policy_preserved_plan_invalid')
+        item=current['preserved'][effect_id]
+        if type(item) is not dict or set(item)!={'authority','observed'} or observation!=item['observed']:
+            raise ValueError('release_policy_preserved_receipt_invalid')
+        authority=item['authority'];other=current['preserved'][
+            'commit-root-policy' if effect_id=='create-policy-configmap' else 'create-policy-configmap']
+        if (type(authority) is not dict or set(authority)!={'operation','receipt_sha256'}
+            or type(other) is not dict or set(other)!={'authority','observed'} or other['authority']!=authority
+            or not isinstance(authority['operation'],str) or not re.fullmatch(r'[a-f0-9]{12}',authority['operation'])
+            or authority['operation']==current['operation'] or not isinstance(authority['receipt_sha256'],str)
+            or not re.fullmatch(r'[a-f0-9]{64}',authority['receipt_sha256'])):
+            raise ValueError('release_policy_preserved_authority_invalid')
+        qualified=parent.load_preserved(session,'release_policy',effect_id)
+        if type(qualified) is not dict or qualified.get('authority')!=item['authority']:
+            raise ValueError('release_policy_preserved_authority_invalid')
+        value=current['descriptor'];wiring.validate(value,current['source_sha'],'voice-staging');_check_owner_paths(value)
+        kube=Kube();namespace=kube.get('namespace','voice-staging');namespace_meta=namespace.get('metadata',{})
+        if (namespace_meta.get('name')!='voice-staging' or namespace_meta.get('uid')!=current['namespace_uid']
+            or namespace_meta.get('deletionTimestamp')):raise ValueError('release_policy_namespace_changed')
+        if effect_id=='create-policy-configmap':
+            if set(qualified)!={'authority','semantic','uid'}:raise ValueError('release_policy_preserved_authority_invalid')
+            expected=value['policy_object'];live=kube.get('configmap',expected['metadata']['name']);meta=live.get('metadata',{})
+            semantic={'apiVersion':live.get('apiVersion'),'kind':live.get('kind'),
+                'metadata':{'name':meta.get('name'),'namespace':meta.get('namespace')},
+                'immutable':live.get('immutable'),'data':live.get('data')}
+            if (set(live)-{'apiVersion','kind','metadata','immutable','data'} or meta.get('deletionTimestamp')
+                or meta.get('labels') or meta.get('annotations') or meta.get('ownerReferences') or meta.get('finalizers')
+                or not isinstance(meta.get('uid'),str) or str(uuid.UUID(meta['uid']))!=meta['uid']
+                or not isinstance(meta.get('resourceVersion'),str) or not re.fullmatch(r'[0-9]{1,20}',meta['resourceVersion'])
+                or semantic!=expected or qualified['semantic']!=expected or qualified['uid']!=meta.get('uid')
+                or observation!={'kind':'ConfigMap','name':expected['metadata']['name'],'namespace':'voice-staging',
+                    'uid':meta.get('uid'),'resourceVersion':meta.get('resourceVersion'),
+                    'semantic_sha256':hashlib.sha256(_canonical(semantic)).hexdigest()}):
+                raise ValueError('release_policy_configmap_readback_changed')
+        else:
+            if set(qualified)!={'authority','semantic','sha256'}:raise ValueError('release_policy_preserved_authority_invalid')
+            raw=operator_retirement.private_bytes(guard.ROOT/'installed'/'policy.json',2<<20)
+            digest=hashlib.sha256(raw).hexdigest();decoded=json.loads(raw,object_pairs_hook=wiring.pairs)
+            if (qualified['sha256']!=digest or qualified['semantic']!=decoded or decoded.get('release_policy')!=value
+                or digest!=current['policy_before_sha256'] or digest!=current['policy_after_sha256']
+                or observation!={'kind':'RootPolicy','name':'installed-policy','sha256':digest}):
+                raise ValueError('release_policy_root_readback_changed')
+        if parent.require_child(session,'release_policy')!=current:
+            raise ValueError('release_policy_child_plan_changed')
+        return copy.deepcopy(observation)
     if (not isinstance(current,dict) or set(current)!={'schema','operation','namespace_uid','source_capture_sha256',
             'source_sha','descriptor','policy_before_sha256','policy_after_sha256','effects'}
         or current.get('schema')!='voice-staging-release-policy-plan-v1'
