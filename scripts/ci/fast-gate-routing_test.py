@@ -180,8 +180,8 @@ class FastGateRoutingTests(unittest.TestCase):
 
     def test_flutter_shards_preserve_serial_isolation_and_required_coverage(self):
         block = policy.block('flutter-unit-tests')
-        self.assertIn('shard: [0, 1, 2, 3]', block)
-        self.assertIn('--total-shards=4 --shard-index=${{ matrix.shard }}', block)
+        self.assertIn('shard: [0, 1, 2, 3, 4, 5, 6, 7]', block)
+        self.assertIn('--total-shards=8 --shard-index=${{ matrix.shard }}', block)
         self.assertIn('--concurrency=1', block)
         self.assertNotIn('flutter test --reporter expanded --concurrency=1', policy.block('flutter'))
         values = policy.context('pull_request', code='true', frontend='true')
