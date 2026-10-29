@@ -1,6 +1,8 @@
 import json
+import os
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,6 +11,19 @@ import realtime_p3_missing_issuer as issuer
 
 
 class IssuerTests(unittest.TestCase):
+    def test_public_input_rejects_fifo_symlink_and_oversize(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(issuer.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid())):
+                good = root / 'good'; good.write_bytes(b'public'); good.chmod(0o600)
+                self.assertEqual(issuer._public_input(good), b'public')
+                link = root / 'link'; link.symlink_to(good)
+                with self.assertRaises(OSError): issuer._public_input(link)
+                fifo = root / 'fifo'; os.mkfifo(fifo, 0o600)
+                with self.assertRaises(ValueError): issuer._public_input(fifo)
+                good.write_bytes(b'x' * 65537)
+                with self.assertRaises(ValueError): issuer._public_input(good)
+
     def test_existing_destination_fails_before_key_generation(self):
         with tempfile.TemporaryDirectory() as parent:
             destination = Path(parent) / ('p3-' + '1' * 32)

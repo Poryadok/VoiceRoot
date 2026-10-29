@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import pwd
 import stat
 import sys
 import tempfile
@@ -55,6 +56,29 @@ def _sync_file(path):
         if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o077:
             raise ValueError()
         os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _public_input(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != pwd.getpwnam('pmd').pw_uid
+                or before.st_nlink != 1 or before.st_mode & 0o077 or not 0 < before.st_size <= 65536):
+            raise ValueError()
+        chunks, remaining = [], before.st_size + 1
+        while remaining:
+            chunk = os.read(fd, min(8192, remaining))
+            if not chunk: break
+            chunks.append(chunk); remaining -= len(chunk)
+        after = os.fstat(fd)
+        if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise ValueError()
+        raw = b''.join(chunks)
+        if len(raw) != before.st_size: raise ValueError()
+        return raw
     finally:
         os.close(fd)
 
@@ -205,8 +229,8 @@ def main():
     if not re.fullmatch('[a-f0-9]{32}', args.operation_id):
         raise IssueError('invalid operation id')
     destination = PARENT / ('p3-' + args.operation_id)
-    result = stage(destination, args.principal_public.read_bytes(), args.media_public.read_bytes(),
-                   args.space_jwks_cert.read_bytes())
+    result = stage(destination, _public_input(args.principal_public), _public_input(args.media_public),
+                   _public_input(args.space_jwks_cert))
     print(json.dumps(result, sort_keys=True))
 
 
