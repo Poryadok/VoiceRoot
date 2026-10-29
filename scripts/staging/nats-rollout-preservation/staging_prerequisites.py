@@ -5,6 +5,7 @@ import importlib
 import json
 import os
 import re
+import stat
 from pathlib import Path
 
 from controller import Blocked
@@ -24,6 +25,12 @@ EFFECT_IDS={'release_policy':('create-policy-configmap','commit-root-policy'),
           'ConfigMap/voice-p3-principal-public','ConfigMap/voice-p3-principal-publisher-config',
           'Service/voice-p3-principal-jwks','Deployment/voice-p3-principal-jwks'),
     'gis_material':('gis-signer','gis-workload','gis-tls','gis-app-credentials')}
+BINARY_PINS={'nats-known-baseline/kernel':'9fced2b6eb7ca33d744ceceb1550774ee7a3a6f423c1a3561ab2d3afba107548',
+    'nats-rollout-preservation/bootstrap-renewer':'618f1f78e650d19c4948c1d08741ed625c6f9aa706159219dbf11c785a56237c',
+    'nats-rollout-preservation/story-current4-probe':'88b6c89b9e57d028c5371db3faaea9eec4624223f54204b59056525f6971f53a'}
+REQUIRED_HELPERS=frozenset('nats-rollout-preservation/'+name+'.py' for name in
+    ('staging_prerequisites','staging_release_policy_prepare','staging_p3_prerequisites',
+     'staging_gis_material','gis_first_install'))
 PLAN_FIELDS={'schema','operation','context','helper_sha256','source_capture_sha256','approved_sha256',
     'execution_sha256','namespace_uid','marker_sha256','baseline_sha256','actual_before',
     'policy_before_sha256','children','auxiliary_images','renderer_authority_sha256'}
@@ -202,5 +209,41 @@ def load_authority(session):
         or not isinstance(approved.get('source_files'),dict) or digest(approved)!=plan['approved_sha256']
         or not isinstance(execution,dict) or digest(execution)!=plan['execution_sha256']):
         raise Blocked('staging_prerequisites_source_changed')
+    _verify_helper_source(session,approved,source)
     if _checkpoint(session)!=state:raise Blocked('staging_prerequisites_checkpoint_changed')
     return {'approved':copy.deepcopy(approved),'execution':copy.deepcopy(execution),'source':str(source)}
+
+
+def _verify_helper_source(session,approved,source):
+    """Revalidate the actual captured helper and each source-backed member."""
+    import root_cli
+    record=json.loads(_read_private(_base(session)/'code-custody.json'),object_pairs_hook=guard.object_pairs)
+    if (type(record) is not dict or set(record)!={'root','manifest','directory'}
+        or type(record['root']) is not str or type(record['manifest']) is not dict
+        or type(record['directory']) is not dict or set(record['directory'])!={'dev','ino'}):
+        raise Blocked('staging_prerequisites_helper_changed')
+    code=Path(record['root']); installed=guard.ROOT/'installed'/'code'
+    if code!=installed:
+        if code.parent!=guard.ROOT or not re.fullmatch(r'rollout-code-[a-f0-9]{32}',code.name):
+            raise Blocked('staging_prerequisites_helper_changed')
+        if root_cli.rollout_directory_kind(code)!='capture':raise Blocked('staging_prerequisites_helper_changed')
+    info=code.lstat()
+    if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022
+        or {'dev':info.st_dev,'ino':info.st_ino}!=record['directory']
+        or root_cli.code_binding(code)!=record['manifest'] or digest(record['manifest'])!=session.helper
+        or not REQUIRED_HELPERS.issubset(record['manifest'])):
+        raise Blocked('staging_prerequisites_helper_changed')
+    for relative,wanted in record['manifest'].items():
+        if relative in BINARY_PINS:
+            if wanted!=BINARY_PINS[relative]:raise Blocked('staging_prerequisites_helper_changed')
+            continue
+        name='scripts/staging/'+relative
+        if approved['source_files'].get(name)!=wanted:raise Blocked('staging_prerequisites_source_changed')
+        path=source/name
+        for parent in path.parents:
+            if parent==source:break
+            row=parent.lstat()
+            if not stat.S_ISDIR(row.st_mode) or row.st_uid!=0 or row.st_mode&0o022:
+                raise Blocked('staging_prerequisites_source_changed')
+        if root_cli.public_code_sha(path)!=wanted:raise Blocked('staging_prerequisites_source_changed')
+    if set(BINARY_PINS)-set(record['manifest']):raise Blocked('staging_prerequisites_helper_changed')

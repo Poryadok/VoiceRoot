@@ -64,9 +64,18 @@ class PrivateCustodyTests(unittest.TestCase):
             root=Path(folder);installed=root/'installed';(installed/'source-authority').mkdir(parents=True,mode=0o700)
             base=installed/'prerequisites'/('a'*12);base.mkdir(parents=True,mode=0o700)
             workspace=installed/'sources'/('a'*12);workspace.mkdir(parents=True,mode=0o700)
+            code=installed/'code';(code/'nats-rollout-preservation').mkdir(parents=True,mode=0o700)
+            source_file=workspace/'scripts'/'staging'/'nats-rollout-preservation'/'fixture.py'
+            source_file.parent.mkdir(parents=True,mode=0o700)
+            source_file.write_bytes(b'fixture');source_file.chmod(0o600)
+            helper=code/'nats-rollout-preservation'/'fixture.py';helper.write_bytes(b'fixture');helper.chmod(0o600)
+            name='nats-rollout-preservation/fixture.py';manifest={name:hashlib.sha256(b'fixture').hexdigest()}
+            save(code/'capture-manifest.json',manifest)
+            code_stat=code.stat();save(base/'code-custody.json',{'root':str(code),'manifest':manifest,
+                'directory':{'dev':code_stat.st_dev,'ino':code_stat.st_ino}})
             context=resource_claim_test.context();card=resource_claim_test.card(context)
-            session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
-            approved={'source_sha':context['commit'],'source_files':{'fixture':'f'*64},'images':{'fixture':'g'}}
+            session=resource_claim.Session(context,'a'*12,prereq.digest(manifest),lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
+            approved={'source_sha':context['commit'],'source_files':{'scripts/staging/'+name:manifest[name]},'images':{'fixture':'g'}}
             execution={'fixture':'execution'}
             source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
                     'helper_sha256':session.helper,'approved_sha256':prereq.digest(approved),'execution_sha256':prereq.digest(execution)}
@@ -76,12 +85,18 @@ class PrivateCustodyTests(unittest.TestCase):
                 'namespace_uid':'namespace','marker_sha256':'e'*64,'baseline_sha256':'f'*64,'actual_before':card['observed']['images'],
                 'policy_before_sha256':'1'*64,'children':{slot:{'effects':[{'id':slot.replace('_','-')+'-effect'}]} for slot in prereq.SLOTS},
                 'auxiliary_images':{},'renderer_authority_sha256':None}
-            with patch.object(guard,'ROOT',root):
+            with patch.object(guard,'ROOT',root),patch.object(prereq,'REQUIRED_HELPERS',frozenset((name,))),patch.object(prereq,'BINARY_PINS',{}):
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
                 save(base/'checkpoint.json',{'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
                     'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':None})
                 value=prereq.load_authority(session)
                 self.assertEqual(value,{'approved':approved,'execution':execution,'source':str(workspace)})
+                source_file.write_bytes(b'drift')
+                with self.assertRaises(prereq.Blocked):prereq.load_authority(session)
+                source_file.write_bytes(b'fixture')
+                helper.write_bytes(b'drift')
+                with self.assertRaises(prereq.Blocked):prereq.load_authority(session)
+                helper.write_bytes(b'fixture')
                 approved['source_sha']='0'*40;save(base/'approved.json',approved)
                 with self.assertRaises(prereq.Blocked):prereq.load_authority(session)
 
