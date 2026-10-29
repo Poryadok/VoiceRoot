@@ -67,3 +67,11 @@ class JdkTest(unittest.TestCase):
                 self.assertEqual(len(commands),before)
                 phase.journal.state['steps'][jdk.STEP]['receipt']['root_fingerprints']=['bb'*32]
                 with self.assertRaises(jdk.JdkError): jdk.verify_completed(phase,'token')
+                phase.journal.state['steps'][jdk.STEP]['receipt']=copy.deepcopy(receipt)
+                original=phase._ledger; calls=[]
+                def late_close():
+                    result=original(); calls.append(1)
+                    if len(calls)==2: inv.journal.close()
+                    return result
+                phase._ledger=late_close
+                with self.assertRaises(jdk.metadata.GuardLost): jdk.verify_completed(phase,'token')

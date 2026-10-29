@@ -97,6 +97,7 @@ class TargetJdkPhase(auth.AuthTrustPhase):
             current[LEDGER]=copy.deepcopy(done); current['step']=STEP+'-done'; self.fence.ledger.write(version,current)
             self.record=copy.deepcopy(done); self._guard()
             if self._ledger()[0].get(LEDGER)!=done: raise ValueError()
+            self._local()
             return copy.deepcopy(receipt)
         except BaseException as error:
             if pending:
@@ -120,6 +121,7 @@ def verify_completed(phase,token):
                 receipt['root_fingerprints']!=sorted(set(receipt['root_fingerprints']))): raise ValueError()
         phase._guard(); after,end=phase._ledger()
         if after!=row or end!=rev or phase.journal.state['steps'].get(STEP)!=local: raise ValueError()
+        phase._local()
         return copy.deepcopy(receipt)
     except metadata.GuardLost: raise
     except BaseException: raise JdkError('target Auth JDK receipt unavailable') from None
