@@ -46,6 +46,20 @@ def inspect(workload, pod_name, run_bytes, guard):
         reason = 'workload-before'
         snap = metadata.kube_workload_snapshot(workload,pod_name,run_bytes,guard,namespace='voice-dev')
         metadata._fence(guard); before = snap()
+        reason = 'deployment-template'
+        metadata._fence(guard)
+        raw_deployment = metadata._external(run_bytes, BASE+['get','deployment','voice-'+workload,'-o','json'])
+        metadata._fence(guard)
+        if not isinstance(raw_deployment,bytes) or len(raw_deployment) > 65536: raise ValueError()
+        deployment = json.loads(raw_deployment)
+        dm = deployment['metadata']
+        containers = [c for c in deployment['spec']['template']['spec']['containers'] if c.get('name') == workload]
+        canonical = lambda value: json.dumps(value,sort_keys=True,separators=(',', ':'),allow_nan=False)
+        if (deployment.get('apiVersion') != 'apps/v1' or deployment.get('kind') != 'Deployment'
+                or dm.get('name') != 'voice-'+workload or dm.get('namespace') != 'voice-dev'
+                or dm.get('uid') != before['deployment_uid'] or dm.get('resourceVersion') != before['deployment_rv']
+                or len(containers) != 1 or canonical(containers[0].get('env',[])) != canonical(before['env'])
+                or canonical(containers[0].get('envFrom',[])) != canonical(before['envFrom'])): raise ValueError()
         fields = FIELDS[workload]; objects = {}
         def reference(kind,name):
             if (kind not in ('secret','configmap') or not isinstance(name,str)
@@ -135,6 +149,7 @@ def inspect(workload, pod_name, run_bytes, guard):
         identity = {k:before[k] for k in ('namespace','namespace_uid','deployment','deployment_uid','deployment_rv',
                     'pod_name','pod_uid','pod_rv','container_name','container_id','restart_count')}
         return {'status':'observed','identity':identity,'fields':observed,'env_sources':env_sources,
+                'template_binding':'pod-env-and-deployment-template-v1',
                 'scope':'runtime-config-metadata-only-no-provider-validation'}
     except BaseException:
         raise ProbeError('runtime configuration observation unavailable: '+reason) from None

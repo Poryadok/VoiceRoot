@@ -31,8 +31,15 @@ class ProbeTest(unittest.TestCase):
     def run_bytes(self,args):
         self.calls.append(args)
         if 'get' in args:
+            if args[args.index('get')+1] == 'deployment':
+                env = copy.deepcopy(self.snapshot['env'])
+                if self.fault == 'deployment_env': env.append({'name':'FCM_PROJECT_ID','value':'changed'})
+                return json.dumps({'apiVersion':'apps/v1','kind':'Deployment',
+                    'metadata':{'name':'voice-notification','namespace':'voice-dev','uid':'deploy','resourceVersion':'2'},
+                    'spec':{'template':{'spec':{'containers':[{'name':'notification',
+                        'env':env,'envFrom':self.snapshot['envFrom']}]}}}}).encode()
             name = args[args.index('get')+2]; rv = '9'
-            if self.fault == 'ref_drift' and sum('get' in call for call in self.calls) > 2: rv = '10'
+            if self.fault == 'ref_drift' and sum('get' in call and 'deployment' not in call for call in self.calls) > 2: rv = '10'
             return ('uid-'+name+'\n'+rv+'\n'+'\n'.join(self.keys[name])+'\n').encode()
         field = args[-1]
         result = {'VOICE_RELEASE_PROFILE':'development','FCM_CREDENTIALS_JSON':'present',
@@ -63,7 +70,7 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual(value['env_sources'][0]['resource_version'],'9')
 
     def test_identity_ref_and_runtime_drift_hold_without_private_diagnostics(self):
-        for fault in ('container_drift','ref_drift','secret_return','unexpected_env'):
+        for fault in ('container_drift','ref_drift','secret_return','unexpected_env','deployment_env'):
             with self.subTest(fault=fault):
                 self.setUp(); self.fault = fault
                 with self.assertRaises(probe.ProbeError) as error: self.inspect()
@@ -71,6 +78,7 @@ class ProbeTest(unittest.TestCase):
                 if fault == 'secret_return': self.assertIn('runtime-FCM_CREDENTIALS_JSON',str(error.exception))
                 if fault == 'unexpected_env': self.assertIn('origin-DATABASE_URL',str(error.exception))
                 if fault in ('container_drift','ref_drift'): self.assertIn('identity-drift',str(error.exception))
+                if fault == 'deployment_env': self.assertIn('deployment-template',str(error.exception))
 
     def test_duplicate_and_optional_sources_hold(self):
         self.snapshot['env'].append(copy.deepcopy(self.snapshot['env'][0]))

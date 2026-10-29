@@ -23,6 +23,9 @@ sources. Duplicate explicit variables, unsupported or optional sources, unknown
 runtime origins, guard loss, container drift and resource identity drift hold.
 The current program checks `/proc/1/exe` and examines `/proc/1/environ` inside
 the container, emitting only the bounded category, never the variable value.
+It compares the complete selected container env and envFrom in the running Pod
+with the guarded Deployment template at the recorded UID and resourceVersion;
+the receipt marks this specific check with `template_binding`.
 Failures expose only a fixed stage and, for runtime/origin failures, an
 allowlisted field name; transport errors and values are never included.
 For toggles, non-ASCII bytes are unsupported and cause HOLD rather than an

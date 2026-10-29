@@ -76,8 +76,15 @@ class ObservationTest(unittest.TestCase):
                 'pod_rv':'3','container_name':workload,'container_id':item['container_id'],
                 'restart_count':0,'env':[],'envFrom':[]}
             return lambda: copy.deepcopy(value)
+        def run_bytes(args):
+            if 'get' in args and 'deployment' in args:
+                name = args[args.index('get')+2]; workload = name.removeprefix('voice-')
+                return __import__('json').dumps({'apiVersion':'apps/v1','kind':'Deployment',
+                    'metadata':{'name':name,'namespace':'voice-dev','uid':workload+'-dep','resourceVersion':'2'},
+                    'spec':{'template':{'spec':{'containers':[{'name':workload,'env':[],'envFrom':[]}]}}}}).encode()
+            return b'absent'
         with patch.object(observation.metadata,'kube_workload_snapshot',side_effect=snapshot), \
-             patch.object(observation.metadata,'linux_private_bytes',return_value=b'absent'):
+             patch.object(observation.metadata,'linux_private_bytes',side_effect=run_bytes):
             result = self.consumer.run()
         self.assertEqual(result['observations']['user']['fields']['VOICE_RELEASE_PROFILE']['state'],'absent')
         self.assertEqual(result['observations']['notification']['fields']['FCM_CREDENTIALS_JSON']['state'],'absent')

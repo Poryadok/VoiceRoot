@@ -12,6 +12,11 @@ STEP = 'backend-config-service-voice-realtime'
 class ConfigError(RuntimeError): pass
 
 
+def verify_deployment_successor(cut, config_journal, service):
+    from backend_config_transition_deployment import verify_deployment_successor as verify
+    return verify(cut, config_journal, service)
+
+
 class ServiceTransition:
     def __init__(self, journal, fence, client, lock, namespace_uid, cut):
         self.journal, self.fence, self.client, self.cut = journal, fence, client, cut
