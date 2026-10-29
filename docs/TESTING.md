@@ -238,6 +238,14 @@ that the actual worker remains present while the maintenance window is valid.
   must HOLD; restored state verifies without migration or resealing. The test
   drops only the exact database it created; discard the private server afterward.
   This bounded source regression does not prove full Compose/Gateway startup.
+  The separate `TestCommittedPhaseFailureNeverAutoResumes` also requires
+  `NATIVE_INSTALLER_TEST_FAILURE_HELPER`: build
+  `./internal/nativeinstaller/testdata/evidencefailure` with the same source
+  revision, backend Go source digest and migrate executable digest as the
+  production binary. The [CI job](../.github/workflows/ci.yml) shows the exact
+  build flags. Run it only against a fresh owned private server; its nine
+  subtests deliberately interrupt evidence writes and verify that the production
+  installer refuses to resume each retained database.
 - Space maintenance-window regression: on an owned disposable PostgreSQL server
   with absent `space_db`, configure `autovacuum_naptime=1s`,
   `autovacuum_vacuum_cost_delay=20ms` and `autovacuum_vacuum_cost_limit=1`.
