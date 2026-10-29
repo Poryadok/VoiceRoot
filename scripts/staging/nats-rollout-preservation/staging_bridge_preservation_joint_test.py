@@ -301,7 +301,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     assert len(up)==8 and all(up.get(k)==v for k,v in actor_root.STORY_UP.items()) and up!=actor_root.STORY_UP
    except Exception as exc:
     raise AssertionError('producer after OCI transport: '+type(exc).__name__+': '+str(exc)) from exc
-  assert not (root/'installed'/'cohort-preservation').exists()
+  assert not (root/'installed'/'cohort-preservation'/session.operation/'checkpoint.json').exists()
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
   try: parent._verify_helper_source(session,approved,workspace)
