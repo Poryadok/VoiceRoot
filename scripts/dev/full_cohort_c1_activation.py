@@ -425,3 +425,46 @@ def _creator_and_space(driver,token):
         return trust,space_receiver,role_receiver,space_authority
     except BaseException:
         raise ActivationError('Creator and Space outcome unavailable; reconcile') from None
+
+
+def _realtime_p3(driver,token):
+    """Run the fixed delegated seven-object handoff after Space is installed."""
+    import full_cohort_c1_driver as driver_module
+    import dev_realtime_p3_issuer_capability as capability_module
+    import realtime_p3_create_only as creation
+    import realtime_p3_create_only_source as source
+    if type(driver) is not driver_module.C1Driver or not _dev(driver.supervisor):
+        raise ActivationError('Realtime P3 authority unavailable')
+    s=driver.supervisor; capability=driver.p3_capability
+    if (type(capability) is not capability_module.RealtimeP3Capability or
+            capability.creator_preflight is not driver.preflight or capability.token!=token or
+            driver.preflight.cut is not s.cut or driver.preflight.package is not s.package):
+        raise ActivationError('Realtime P3 authority unavailable')
+    phase=None; attempted=False
+    try:
+        s._guard(); s.cut.verify_drained()
+        directory=driver_module.verify_p3_directory(driver,token)
+        if directory!={'operation_id':s.context['operation_id'],'scope':'owned-p3-socket-directory'}:raise ValueError()
+        capability_module.verify_current(capability,token)
+        match=re.fullmatch(r'media-c1-([0-9a-f]{32})',s.context['operation_id'])
+        if match is None:raise ValueError()
+        plan={'issuer_source_sha':source.REVIEWED_ISSUER_SHA,'source_repo':str(canonical.ROOT),'issuer_suffix':match[1]}
+        j,f,c=s._open('realtime-p3-journal',{'realtime_p3_create':plan})
+        phase=creation.Session(j,f,c,s.lock,s.namespace_uid)
+        if (phase.fence.context!=s.context or phase.lock!=s.lock or phase.namespace_uid!=s.namespace_uid or
+                phase.fence.check is not s.fence.check or phase.fence.ledger.read()!=s.fence.ledger.read()):raise ValueError()
+        s.cut.verify_drained(); driver_module.verify_p3_directory(driver,token)
+        attempted=True; phase.prepare(); s.cut.verify_drained(); driver_module.verify_p3_directory(driver,token)
+        receipt=phase.finish_delegated(capability,token)
+        if (not phase.completed or phase.handoff.get('status')!='done' or phase.handoff.get('receipt')!=receipt or
+                phase.journal.state['steps'].get('realtime-p3-handoff')!=phase.handoff):raise ValueError()
+        phase._guard(); s._guard()
+        return phase
+    except BaseException:
+        if attempted:
+            try:s.fence.uncertain('Realtime P3 handoff outcome uncertain')
+            except BaseException:pass
+        if phase is not None:
+            try:phase.close()
+            except BaseException:pass
+        raise ActivationError('Realtime P3 handoff unavailable; reconcile if attempted') from None
