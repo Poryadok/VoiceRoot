@@ -365,7 +365,8 @@ class FullCohortImageApply:
             if not (step.startswith('writer-drain-') or step.startswith('writer-resume-')
                     or step.startswith('writer-cut-config-successor-')
                     or re.fullmatch(r'writer-cut-migration-(?:plan|finish|cleanup)-[0-9a-f]{32}', step)
-                    or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory')):
+                    or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory',
+                                'writer-cut-auth-successor')):
                 continue
             if (not isinstance(item, dict) or item.get('status') != 'done'
                     or not isinstance(item.get('nonce'), str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
@@ -376,6 +377,16 @@ class FullCohortImageApply:
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
         cut = self.admission.cut
+        auth = getattr(cut, 'auth_successor', None)
+        auth_step = steps.get('writer-cut-auth-successor')
+        if (auth is None) != (auth_step is None):
+            raise RecoveryRequired('Auth successor custody changed')
+        if auth is not None:
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                       'receipt_sha256': auth['receipt_sha256']}
+            if (auth_step['details'] != details or auth_step['receipt'] != details or
+                    not cut._auth_successor_matches(row)):
+                raise RecoveryRequired('Auth successor receipt changed')
         inventory = getattr(cut, 'resume_inventory', None)
         inventory_step = steps.get('writer-cut-resume-inventory')
         if (inventory is None) != (inventory_step is None):

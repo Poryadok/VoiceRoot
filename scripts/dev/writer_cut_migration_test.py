@@ -8,6 +8,9 @@ import writer_cut_migration as migration
 import writer_cut_test as fixture
 import full_cohort_inventory_phase
 import writer_cut_pg_probe
+import auth_live_migration_phase
+import media_operation_journal
+from pathlib import Path
 
 
 class MigrationCutTest(unittest.TestCase):
@@ -253,6 +256,19 @@ class MigrationCutTest(unittest.TestCase):
             self.cut._guards()
             self.assertEqual(observer.call_count, 1)
             self.state['execution']['database_oid'] = 11
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut._guards()
+
+    def test_completed_auth_successor_rechecks_source_journal_and_ledger(self):
+        source = media_operation_journal.Journal(Path(self.temp.name) / 'auth-successor', {
+            'resource_context': self.context, 'namespace_uid': 'ns'})
+        self.addCleanup(source.close)
+        phase = types.SimpleNamespace(phases=types.SimpleNamespace(journal=source))
+        self.ledger.row['auth_live_c2'] = {'status': 'done', 'nonce': 'a' * 32}
+        with mock.patch.object(auth_live_migration_phase, 'verify_completed', return_value={'status': 'no-op'}):
+            bound = self.cut.bind_auth_successor(phase, '.')
+            self.assertEqual(bound['receipt_sha256'], writer_cut.digest({'status': 'no-op'}))
+            self.cut._guards()
+            self.ledger.row['auth_live_c2']['nonce'] = 'b' * 32
             with self.assertRaises(writer_cut.RecoveryRequired): self.cut._guards()
 
 
