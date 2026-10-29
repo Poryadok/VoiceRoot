@@ -33,6 +33,17 @@ SOURCE_LINES = (
     b'secret: {secretName: voice-space-media-server-tls, defaultMode: 0440, items: [{key: tls.crt, path: tls.crt}, {key: tls.key, path: tls.key}]}',
 )
 
+# Only these fixed codes may leave capture; never include exception text.
+KNOWN_HOLDS = frozenset({'source_identity_invalid','source_authority_failed','space_source_contract_unknown',
+    'space_identity_invalid','space_identity_changed','space_mount_invalid','space_configuration_unknown',
+    'space_service_invalid','public_input_identity','public_input_missing','public_input_changed',
+    'public_certificate_invalid','public_crypto_invalid','public_ca_invalid','space_certificate_invalid',
+    'source_snapshot_changed','destination_invalid','destination_changed','public_write_failed'})
+STAGE_HOLDS = frozenset({'p3_stage_source','p3_stage_workload','p3_stage_pod','p3_stage_mount',
+    'p3_stage_service','p3_stage_public_identity','p3_stage_public_value','p3_stage_public_pem',
+    'p3_stage_config','p3_stage_recheck','p3_stage_destination','p3_stage_write','p3_stage_crypto',
+    'p3_stage_postcheck'})
+
 
 def _source_contract(root, snapshot):
     path = Path(root) / 'deploy/staging/services.yaml'
@@ -176,6 +187,7 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
             run_bytes=common.linux_private_bytes):
     """One prepare-only capture. The caller owns claim and source authority."""
     paths, filefds, dirfd = {}, {}, None
+    stage = 'p3_stage_source'
     try:
         if not re.fullmatch(r'[a-f0-9]{40}', source_sha) or not namespace_uid: raise common.Hold('source_identity_invalid')
         def guard():
@@ -193,19 +205,21 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
         common._fence(guard); authorize()
         snapshot = source_snapshot(Path(source_root), source_sha)
         manifest_digest = _source_contract(source_root, snapshot)
+        stage = 'p3_stage_workload'
         workload = common.kube_workload_snapshot('space', space_pod, run_bytes, guard)
         before = workload()
         if before['namespace_uid'] != namespace_uid: raise common.Hold('space_identity_invalid')
-        pod = _get(run_bytes, guard, 'pod', space_pod)
+        stage = 'p3_stage_pod'; pod = _get(run_bytes, guard, 'pod', space_pod)
         if pod['metadata'].get('uid') != before['pod_uid'] or pod['metadata'].get('resourceVersion') != before['pod_rv']:
             raise common.Hold('space_identity_changed')
-        _mounted(pod)
-        service = _service(_get(run_bytes, guard, 'service', 'voice-space'), pod)
+        stage = 'p3_stage_mount'; _mounted(pod)
+        stage = 'p3_stage_service'; service = _service(_get(run_bytes, guard, 'service', 'voice-space'), pod)
         identities, values = {}, {}
         for name, (key, _) in PUBLIC.items():
-            identities[name] = _meta(run_bytes, guard, 'secret', name)
-            values[name] = _value(run_bytes, guard, 'secret', name, key)
-            _public_pem(values[name])
+            stage = 'p3_stage_public_identity'; identities[name] = _meta(run_bytes, guard, 'secret', name)
+            stage = 'p3_stage_public_value'; values[name] = _value(run_bytes, guard, 'secret', name, key)
+            stage = 'p3_stage_public_pem'; _public_pem(values[name])
+        stage = 'p3_stage_config'
         identities['voice-app-config'] = _meta(run_bytes, guard, 'configmap', 'voice-app-config')
         redis = _value(run_bytes, guard, 'configmap', 'voice-app-config', 'REDIS_ADDR')
         def recheck():
@@ -218,13 +232,15 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
             authorize()
             if source_snapshot(Path(source_root), source_sha) != snapshot: raise common.Hold('source_snapshot_changed')
             common._fence(guard)
-        recheck()
+        stage = 'p3_stage_recheck'; recheck()
+        stage = 'p3_stage_destination'
         directory = Path(destination)
         if not directory.is_absolute() or directory.resolve() != directory: raise common.Hold('destination_invalid')
         dirfd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         info = os.fstat(dirfd)
         if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700 or os.listdir(dirfd):
             raise common.Hold('destination_invalid')
+        stage = 'p3_stage_write'
         for name, (_, filename) in PUBLIC.items():
             fd = os.open(filename, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=dirfd)
             filefds[filename] = fd
@@ -236,9 +252,9 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
                 remaining = remaining[count:]
             os.fsync(fd)
         procpaths = {name: Path('/proc') / str(os.getpid()) / 'fd' / str(fd) for name, fd in filefds.items()}
-        hashes = _verify(procpaths)
+        stage = 'p3_stage_crypto'; hashes = _verify(procpaths)
         os.fsync(dirfd)
-        recheck()
+        stage = 'p3_stage_postcheck'; recheck()
         current_dir = os.stat(directory, follow_symlinks=False)
         if (current_dir.st_dev, current_dir.st_ino) != (info.st_dev, info.st_ino): raise common.Hold('destination_changed')
         for filename, fd in filefds.items():
@@ -257,10 +273,11 @@ def capture(source_root, source_sha, source_authority, space_pod, namespace_uid,
                 'unobserved': ['projected_mount_sync', 'service_endpoint_routing', 'runtime_peer_transport', 'redis_auth', 'schema_job', 'rollout']}
     except common.GuardLost:
         raise
-    except common.Hold:
-        raise
+    except common.Hold as error:
+        if str(error) in KNOWN_HOLDS: raise
+        raise common.Hold(stage) from None
     except Exception:
-        raise common.Hold('public_observation_failed') from None
+        raise common.Hold(stage) from None
     finally:
         if dirfd is not None:
             os.close(dirfd)
