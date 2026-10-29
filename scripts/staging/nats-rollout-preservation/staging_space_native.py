@@ -803,6 +803,8 @@ def verify_native_successor(session):
 
 
 def _successor_snapshot(operation):
+    if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
+        raise Blocked('space_native_successor_changed')
     base=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
     return tuple(owner._read(base/path) for path in ('space-native-successor-plan.json',
         'space-native-successor.json','effects/space-native-successor-create.json',
