@@ -67,8 +67,9 @@ def _trigger(value, token, action, session=None, control=None):
         with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as channel:
             if control is not None: control._register(channel)
             try:
-                channel.settimeout(300)
+                channel.settimeout(5)
                 channel.connect(peer_client.SOCKET)
+                channel.settimeout(300)
                 if control is not None: control._check()
                 _, uid, _ = struct.unpack('3i', channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                 if uid != 0:
@@ -83,12 +84,8 @@ def _trigger(value, token, action, session=None, control=None):
     finally:
         os.close(fd)
     if control is not None: control._check()
-    if action == 'p3-issue':
-        capability.verify_current(value, token)
-        session._guard()
-    else:
-        value._guard()
-    if control is not None: control._check()
+    # The typed receiver completes and rechecks its durable transition after
+    # joining this worker; reading its Journal here races that transition.
 
 
 def trigger_capability(value, token):
