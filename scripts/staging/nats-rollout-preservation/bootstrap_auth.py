@@ -31,7 +31,8 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
         store=base/'auth-store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
         import commands,resource_claim
         session=getattr(commands.authority_guard,'__self__',None)
-        if isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None:
+        cohort_runtime=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+        if cohort_runtime:
             import staging_cohort_preservation
             runtime=staging_cohort_preservation.auth_runtime(session,base,'bootstrap')
         else:runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
@@ -84,6 +85,9 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
             if get_proof is not None:result['get_permissions']=get_proof
             return result
         finally:
-            for name in reversed(list(runtime.owned)):
-                row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
-                if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
+            try:
+                for name in reversed(list(runtime.owned)):
+                    row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
+                    if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
+            finally:
+                if cohort_runtime:runtime.finish_auth()
