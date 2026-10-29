@@ -324,6 +324,54 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('notification-quota-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_messaging_threadlist_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['messaging-threadlist-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'messaging')", job['if'])
+        self.assertIn('messaging-threadlist-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Messaging thread-list proof')
+        self.assertIn('messaging_threadlist_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['THREADLIST_TEST_DATABASE_URL'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['messaging'], 'docker_go_services': [],
+                  'integration_go_services': ['messaging'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/messaging/main.go']), matrix)
+        self.assertIn('messaging-threadlist-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        needs['messaging-threadlist-integration']['result'] = 'skipped'
+        self.assertIn('messaging-threadlist-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('messaging-threadlist-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
+    def test_voice_ledger_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['voice-ledger-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'voice')", job['if'])
+        self.assertIn('voice-ledger-integration', workflow['jobs']['ci-gate']['needs'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Voice Redis ledger proof')
+        self.assertIn('voice_ledger_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.redis.ports', test['env']['VOICE_R18_REDIS_TEST_ADDR'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['voice'], 'docker_go_services': [],
+                  'integration_go_services': ['voice'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/voice/main.go']), matrix)
+        self.assertIn('voice-ledger-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        needs['voice-ledger-integration']['result'] = 'skipped'
+        self.assertIn('voice-ledger-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('voice-ledger-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_bot_membership_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))

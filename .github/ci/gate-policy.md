@@ -177,6 +177,13 @@ When Bot is in the PR integration matrix, `bot-membership-integration` requires
 both native membership transition and protected cleanup cases against owned
 PostgreSQL, with no skips in the focused runs.
 
+When Voice is in the PR integration matrix, `voice-ledger-integration` requires
+the real Redis ledger atomicity case against owned Redis. Source-disabled later
+slice crash harness seams are not represented by this focused proof.
+
+When Messaging is in the PR integration matrix, `messaging-threadlist-integration`
+requires its PostgreSQL immutable-node and rollback test without skips.
+
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
 includes named pass/skip/fail counts and skipped cases and preserves a nonzero

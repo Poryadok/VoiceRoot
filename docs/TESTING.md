@@ -172,6 +172,13 @@ that historical-catalog proof does not replace current-schema migration checks.
 The affected Bot PR proof uses an owned PostgreSQL server through
 `BOT_MEMBERSHIP_TEST_DATABASE_URL` and requires both native membership cases in
 `scripts/ci/bot_membership_required.json` without skips.
+The affected Voice PR proof runs the real Redis ledger atomicity case with an
+owned Redis server via `VOICE_R18_REDIS_TEST_ADDR` and rejects skips. The
+source-disabled later-slice crash harness seams remain separate and are not
+claimed as passing by this proof.
+The affected Messaging PR proof runs the immutable thread-list node and
+rollback test against owned PostgreSQL via `THREADLIST_TEST_DATABASE_URL` and
+rejects skips.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.

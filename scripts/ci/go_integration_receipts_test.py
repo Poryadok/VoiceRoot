@@ -17,6 +17,18 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_messaging_threadlist_inventory_requires_postgres_case(self):
+        inventory = json.loads((ROOT / 'scripts/ci/messaging_threadlist_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['messaging'], [['voice/backend/messaging/internal/threadlist', 'TestPostgresImmutableNodesAndRollback']])
+        source = (ROOT / 'src/backend/messaging/internal/threadlist/postgres_test.go').read_text(encoding='utf-8')
+        self.assertRegex(source, r'(?m)^func TestPostgresImmutableNodesAndRollback\(t \*testing\.T\)')
+
+    def test_voice_ledger_inventory_requires_real_redis_case(self):
+        inventory = json.loads((ROOT / 'scripts/ci/voice_ledger_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['voice'], [['voice/backend/voice/internal/roomlifecycle', 'TestRedisLedger_RealServerAtomicity']])
+        source = (ROOT / 'src/backend/voice/internal/roomlifecycle/redis_ledger_test.go').read_text(encoding='utf-8')
+        self.assertRegex(source, r'(?m)^func TestRedisLedger_RealServerAtomicity\(t \*testing\.T\)')
+
     def test_role_bootstrap_inventory_requires_actual_postgres_case(self):
         inventory = json.loads((ROOT / 'scripts/ci/role_bootstrap_required.json').read_text(encoding='utf-8'))
         self.assertEqual(inventory['role'], [['voice/backend/role', 'TestBootstrapActualRole20PG']])

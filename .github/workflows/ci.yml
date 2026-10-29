@@ -2053,6 +2053,8 @@ jobs:
       - notification-quota-integration
       - role-migration-integration
       - bot-membership-integration
+      - voice-ledger-integration
+      - messaging-threadlist-integration
       - backend-auth
       - backend-auth-image
       - developer-portal
@@ -2379,6 +2381,106 @@ jobs:
           path: |
             ${{ runner.temp }}/notification-quota-events.jsonl
             ${{ runner.temp }}/notification-quota-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  messaging-threadlist-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'messaging')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-threadlist-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Messaging thread-list proof
+        working-directory: src/backend/messaging
+        env:
+          CGO_ENABLED: '0'
+          THREADLIST_TEST_DATABASE_URL: postgres://voice:voice-threadlist-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -run '^TestPostgresImmutableNodesAndRollback$' ./internal/threadlist > "$RUNNER_TEMP/messaging-threadlist-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/messaging_threadlist_required.json --service messaging \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/messaging-threadlist-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/messaging-threadlist-receipt.json" --reject-skips
+      - name: Upload Messaging thread-list evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: messaging-threadlist-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/messaging-threadlist-events.jsonl
+            ${{ runner.temp }}/messaging-threadlist-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  voice-ledger-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'voice')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run Voice Redis ledger proof
+        working-directory: src/backend/voice
+        env:
+          CGO_ENABLED: '0'
+          VOICE_R18_REDIS_TEST_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -run '^TestRedisLedger_RealServerAtomicity$' ./internal/roomlifecycle > "$RUNNER_TEMP/voice-ledger-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/voice_ledger_required.json --service voice \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/voice-ledger-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/voice-ledger-receipt.json" --reject-skips
+      - name: Upload Voice ledger evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: voice-ledger-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/voice-ledger-events.jsonl
+            ${{ runner.temp }}/voice-ledger-receipt.json
           if-no-files-found: warn
           retention-days: 14
 
