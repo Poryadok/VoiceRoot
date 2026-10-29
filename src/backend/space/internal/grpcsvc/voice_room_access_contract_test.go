@@ -65,9 +65,14 @@ func startVoiceResolverGRPCTestServer(t *testing.T, pool *pgxpool.Pool) (spacev1
 	lis := bufconn.Listen(1 << 20)
 	creationFixture := newInviteIngressFixture(t)
 	service := &SpaceGRPC{Store: &store.SpaceStore{Pool: pool}}
+	bootstrapRoles, bootstrapIssuer := newBootstrapLedgerFixture(t, nil)
+	bootstrapService := &SpaceGRPC{Store: service.Store, OwnershipRoles: bootstrapRoles, PrincipalIssuer: bootstrapIssuer}
 	// Storage-only fixture. Real signed/mTLS/JWKS/replay enforcement is checked
 	// through socialprincipal's production communication runtime tests.
 	srv := grpc.NewServer(grpc.UnaryInterceptor(func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		if info.FullMethod == spacev1.SpaceService_CreateSpace_FullMethodName {
+			return bootstrapService.CreateSpace(ctx, req.(*spacev1.CreateSpaceRequest))
+		}
 		if info.FullMethod == spacev1.SpaceService_CreateVoiceRoom_FullMethodName {
 			// Only explicit fixture identity can sign this migrated setup call;
 			// raw transport identity cannot create an admission proof.
