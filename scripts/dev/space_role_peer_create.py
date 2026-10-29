@@ -408,12 +408,12 @@ class Session:
             finally:os.close(self.dirfd); self.dirfd=None
 
 
-def inspect_existing(phase,token):
-    """Read-only qualification of the Role subset before the writer drain."""
-    try:
-        if type(phase) is not Session or token!=phase.token or phase.record is not None or phase.pending: raise ValueError()
-        phase._guard(); initial=preflight.verify_current(phase.preflight,token)
-        if initial.get('profile')!='role': raise ValueError()
+def _inspect_existing(phase,token,profile):
+        row,rev=phase._guard()
+        package_local=copy.deepcopy(phase.package.journal.state['steps'].get(full_cohort_package_phase.STEP))
+        if not isinstance(package_local,dict) or package_local.get('status')!='done' or not isinstance(package_local.get('receipt'),dict): raise ValueError()
+        initial=preflight.verify_current(phase.preflight,token)
+        if initial.get('profile')!=profile: raise ValueError()
         media=preflight.public._value(preflight.public.common.linux_private_bytes,phase._guard,'secret','voice-media-ca','ca.crt')
         if hashlib.sha256(preflight.crypto.der(media)).hexdigest()!=initial['ca']['der_sha256']: raise ValueError()
         present={}; missing=[]; jwks={}; keys=[]
@@ -429,12 +429,32 @@ def inspect_existing(phase,token):
             for key in (('current.pem','next.pem') if name=='voice-role-principal-signing' else ('tls.key',)):
                 keys.append(hashlib.sha256(role_material.crypto._openssl(['pkey','-in','{0}','-pubout'],[values[key]])).digest())
         if len(keys)!=len(set(keys)) or preflight.verify_current(phase.preflight,token)!=initial: raise ValueError()
-        phase._guard(); phase._local()
-        if phase.record is not None or phase.pending: raise ValueError()
+        if phase._guard()!=(row,rev): raise ValueError()
+        phase._local()
+        if (phase.record is not None or phase.pending or
+                phase.package.journal.state['steps'].get(full_cohort_package_phase.STEP)!=package_local): raise ValueError()
         return {'schema':'voice-dev-peer-existing-v1','profile':'role','operation_id':phase.fence.context['operation_id'],
                 'source_sha':phase.fence.context['commit'],'namespace_uid':phase.namespace_uid,
                 'preflight_sha256':writer_cut.digest(initial),'ca':copy.deepcopy(initial['ca']),
                 'present':present,'missing':missing,'public_jwks':jwks,'scope':'predrain-peer-material-observation-not-runtime-readiness'}
+
+
+def inspect_existing(phase,token):
+    """Read-only qualification using the fresh Role preflight."""
+    try:
+        if type(phase) is not Session or token!=phase.token or phase.record is not None or phase.pending: raise ValueError()
+        return _inspect_existing(phase,token,'role')
+    except schema.GuardLost: raise
+    except BaseException: raise CreateError('Role peer inspection unavailable') from None
+
+
+def inspect_role_from_creator(phase,token):
+    """Qualify Role's current materials using the single guarded Creator preflight."""
+    import space_creator_runtime_profile_delegated as delegated
+    try:
+        if (type(phase) is not delegated.CreatorReceiver or token!=phase.token or phase.preflight.profile!='creator' or
+                phase.record is not None or phase.pending): raise ValueError()
+        return _inspect_existing(phase,token,'creator')
     except schema.GuardLost: raise
     except BaseException: raise CreateError('Role peer inspection unavailable') from None
 
