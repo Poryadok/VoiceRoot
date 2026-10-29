@@ -422,7 +422,7 @@ class WriterCut:
             ledger = snapshot['effects'].get(step)
             if service in ('notification', 'user'):
                 proof = backend_config_transition.verify_deployment_successor(self, config_journal, service)
-            elif service in ('chat', 'realtime'):
+            elif service in ('chat', 'realtime', 'space'):
                 import realtime_config_transition
                 proof = realtime_config_transition.verify_deployment_successor(self, config_journal, service)
             else:
@@ -525,7 +525,7 @@ class WriterCut:
                     not isinstance(plan, dict) or plan.get('source_sha') != self.fence.context['commit'] or
                     plan.get('cut_invocation') != self.invocation or not isinstance(plan.get('services'), list) or
                     not plan['services'] or len(plan['services']) != len(set(plan['services'])) or
-                    set(plan['services']) - {'user', 'notification', 'realtime', 'chat'}):
+                    set(plan['services']) - {'user', 'notification', 'realtime', 'chat', 'space'}):
                 raise RecoveryRequired('config source or cut identity changed')
             selected = {o['metadata']['name'] for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
             if any('voice-' + s not in selected for s in plan['services']):
@@ -994,7 +994,7 @@ class WriterCut:
                     not isinstance(plan, dict) or plan.get('source_sha') != self.fence.context['commit'] or
                     plan.get('cut_invocation') != self.invocation or not isinstance(plan.get('services'), list) or
                     not plan['services'] or len(plan['services']) != len(set(plan['services'])) or
-                    set(plan['services']) - {'user', 'notification', 'realtime', 'chat'}):
+                    set(plan['services']) - {'user', 'notification', 'realtime', 'chat', 'space'}):
                 raise RecoveryRequired('config source or cut identity changed')
             selected = {o['metadata']['name']: o for o in self.admission['controllers'] if o['kind'] == 'Deployment'}
             if any('voice-' + s not in selected for s in plan['services']):
