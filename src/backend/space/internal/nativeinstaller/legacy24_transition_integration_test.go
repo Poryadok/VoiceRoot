@@ -285,6 +285,8 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		trusted44, err := s.InspectNativeInstallerSource(ctx, 44)
 		require.NoError(t, err, "the real populated migration must qualify as native44")
 		require.Equal(t, origin.Target.DatabaseOID, trusted44.DatabaseOID)
+		preserved44, err := verifyLegacy24Preserved(ctx, conn, readOrigin)
+		require.NoError(t, err)
 		migrate("45")
 		transition45, err := s.TransitionNativeMembershipCatalog45(ctx)
 		require.NoError(t, err)
@@ -324,5 +326,6 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 		preserved, err := verifyLegacy24Preserved(ctx, conn, readOrigin)
 		require.NoError(t, err)
 		require.Len(t, preserved, 64)
+		require.Equal(t, preserved44, preserved)
 	})
 }
