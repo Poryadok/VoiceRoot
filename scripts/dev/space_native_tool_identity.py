@@ -5,14 +5,17 @@ Production admission must obtain source from the protected canonical package.
 """
 import argparse
 import base64
+import copy
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import stat
 import tempfile
 import time
+import zipfile
 
 import migrations
 
@@ -80,6 +83,49 @@ def oci_identity(source,index_digest,index_raw,manifest_raw,config_raw):
     except Exception: raise ToolIdentityError('Space native OCI identity invalid') from None
 
 
+def validate_publication(receipt,identity,inventory):
+    """Validate the fixed CI receipt; authenticated run/artifact is external."""
+    try:
+        fields={'schema','source_sha','run_id','run_attempt','tag','index_digest','platform_digest','config_digest',
+                'immutable_image','source_inventory','request','content','runtime_qualified','deployment_performed'}
+        if (not isinstance(receipt,dict) or set(receipt)!=fields or receipt['schema']!='voice-space-native-tool-publication-v1'
+            or any(receipt[k]!=identity[k] for k in ('source_sha','run_id','run_attempt','tag'))
+            or receipt['source_inventory']!=inventory or receipt['runtime_qualified'] is not False
+            or receipt['deployment_performed'] is not False): raise ValueError()
+        if any(not isinstance(receipt[k],str) or not re.fullmatch(r'sha256:[0-9a-f]{64}',receipt[k])
+               for k in ('index_digest','platform_digest','config_digest')): raise ValueError()
+        if receipt['immutable_image']!='ghcr.io/poryadok/voiceroot/space-native-installer@'+receipt['platform_digest']: raise ValueError()
+        request=receipt['request']
+        if (not isinstance(request,dict) or set(request)!={'schema','cycle','request_id'}
+            or request['schema']!='voice-full-application-build-request-v1' or type(request['cycle']) is not int
+            or request['cycle'] not in (1,2) or not isinstance(request['request_id'],str)
+            or not re.fullmatch(r'[a-f0-9]{32}',request['request_id'])): raise ValueError()
+        content=receipt['content']
+        if (not isinstance(content,dict) or set(content)!={'executable_sha256','migrator_sha256','sql_inventory_sha256',
+                                                           'embedded_values_observed','runtime_receipt_verified','help_exit_code'}
+            or any(not isinstance(content[k],str) or not re.fullmatch(r'[a-f0-9]{64}',content[k])
+                   for k in ('executable_sha256','migrator_sha256','sql_inventory_sha256'))
+            or content['sql_inventory_sha256']!=inventory['sql_inventory_sha256']
+            or content['embedded_values_observed'] is not True or content['runtime_receipt_verified'] is not False
+            or type(content['help_exit_code']) is not int or content['help_exit_code']!=0): raise ValueError()
+        return copy.deepcopy(receipt)
+    except Exception: raise ToolIdentityError('Space native publication receipt invalid') from None
+
+
+def tool_job(jobs,source,run_id,attempt):
+    try:
+        rows=[job for job in jobs if job.get('name')=='Space native tool image']
+        if len(rows)!=1: raise ValueError()
+        job=rows[0]
+        if (job.get('run_id')!=run_id or job.get('run_attempt')!=attempt or job.get('head_sha')!=source
+            or type(job.get('id')) is not int or job.get('status')!='completed' or job.get('conclusion')!='success'): raise ValueError()
+        for name in ('Verify Space native tool source','Capture Space native tool identity'):
+            steps=[step for step in job.get('steps',[]) if step.get('name')==name]
+            if len(steps)!=1 or steps[0].get('conclusion')!='success': raise ValueError()
+        return copy.deepcopy(job)
+    except Exception: raise ToolIdentityError('Space native canonical CI job invalid') from None
+
+
 def _ci_context():
     """Authenticate this exact full-request master push and its checkout."""
     import canonical_application_package as canonical
@@ -116,6 +162,20 @@ def ci_preflight():
     return True
 
 
+def _run_help(reference):
+    """Run the fixed no-network probe and remove its exact owned container."""
+    import publish_candidate as common
+    container=common.command(['docker','create','--network','none','--read-only','--cap-drop','ALL',
+        '--security-opt','no-new-privileges','--pids-limit','64','--memory','128m','--cpus','1',reference,'--help']).decode().strip()
+    if not re.fullmatch(r'[a-f0-9]{64}',container): raise ToolIdentityError('Space native help container invalid')
+    try:
+        result=subprocess.run(['docker','start','-a',container],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL,timeout=30)
+        if result.returncode!=0: raise ToolIdentityError('Space native executable help failed')
+    finally:
+        common.command(['docker','rm','--force',container])
+
+
 def _extract_image(reference,config_digest,inventory,root):
     import publish_candidate as common
     common.command(['docker','pull','--platform','linux/amd64',reference])
@@ -141,10 +201,7 @@ def _extract_image(reference,config_digest,inventory,root):
             proof=content_identity(inventory,binary,driver,sql)
     finally:
         common.command(['docker','rm',container])
-    result=subprocess.run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL',
-        '--security-opt','no-new-privileges','--pids-limit','64','--memory','128m','--cpus','1',reference,'--help'],
-        stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
-    if result.returncode!=0: raise ToolIdentityError('Space native executable help failed')
+    _run_help(reference)
     proof['help_exit_code']=0
     return proof
 
@@ -176,6 +233,73 @@ def capture_ci(index_digest,output):
     return receipt
 
 
+def authenticated_publication(token,actor,package_receipt,root):
+    """Read the exact successful canonical CI tool artifact and live OCI metadata."""
+    import canonical_application_package as canonical
+    import publish_candidate as common
+    import source_authority as authority
+    try:
+        if (not isinstance(token,str) or not token or not isinstance(actor,str) or not actor
+            or Path(root).resolve()!=canonical.ROOT.resolve()): raise ValueError()
+        source=package_receipt['source_sha']; run_id=package_receipt['run_id']; attempt=package_receipt['run_attempt']
+        if (not re.fullmatch(r'[a-f0-9]{40}',source) or type(run_id) is not int or run_id<=0
+            or type(attempt) is not int or attempt<=0): raise ValueError()
+        snapshot=common.source_snapshot(Path(root),source); inventory=source_inventory(root,snapshot)
+        headers=authority._headers(token); deadline=time.monotonic()+120
+        repo=authority._head(headers,source,deadline)
+        run=authority._get(authority.API+'/actions/runs/'+str(run_id),headers,deadline)
+        canonical.validate_run(run,source,run_id,attempt)
+        jobs=authority._pages(authority.API+'/actions/runs/'+str(run_id)+'/attempts/'+str(attempt)+'/jobs','jobs',headers,deadline)
+        canonical.validate_jobs(jobs,source,run_id,attempt); job=tool_job(jobs,source,run_id,attempt)
+        name='space-native-tool-'+str(run_id)+'-'+str(attempt)
+        artifacts=authority._pages(authority.API+'/actions/runs/'+str(run_id)+'/artifacts','artifacts',headers,deadline)
+        candidates=[row for row in artifacts if row.get('name')==name]
+        if len(candidates)!=1 or type(candidates[0].get('id')) is not int: raise ValueError()
+        artifact_id=candidates[0]['id']; artifact=authority._get(authority.API+'/actions/artifacts/'+str(artifact_id),headers,deadline)
+        workflow=artifact['workflow_run']; t=authority.transport
+        if (artifact.get('id')!=artifact_id or artifact.get('name')!=name or artifact.get('expired') is not False
+            or workflow.get('id')!=run_id or workflow.get('head_sha')!=source or workflow.get('repository_id')!=repo['id']
+            or workflow.get('head_repository_id')!=repo['id']
+            or not t._timestamp(job['started_at'])<=t._timestamp(artifact['created_at'])<=t._timestamp(job['completed_at'])
+            or t._timestamp(artifact['expires_at'])<=t.datetime.now(t.timezone.utc)): raise ValueError()
+        with tempfile.TemporaryFile() as archive:
+            count,_=authority._fetch(authority.API+'/actions/artifacts/'+str(artifact_id)+'/zip',headers,4<<20,deadline,target=archive)
+            if type(artifact.get('size_in_bytes')) is not int or count!=artifact['size_in_bytes']: raise ValueError()
+            archive.seek(0)
+            with zipfile.ZipFile(archive) as zipped:
+                members=zipped.infolist()
+                if (len(members)!=1 or members[0].filename!='space-native-tool.json' or members[0].is_dir()
+                    or members[0].file_size>1<<20 or stat.S_IFMT(members[0].external_attr>>16) not in (0,stat.S_IFREG)
+                    or members[0].flag_bits&1): raise ValueError()
+                raw=zipped.read(members[0])
+        def unique(pairs):
+            result={}
+            for key,value in pairs:
+                if key in result: raise ValueError()
+                result[key]=value
+            return result
+        publication=json.loads(raw,object_pairs_hook=unique)
+        identity={'source_sha':source,'run_id':run_id,'run_attempt':attempt,
+                  'tag':'ghcr.io/poryadok/voiceroot/space-native-installer:source-'+source+'-'+str(run_id)+'-'+str(attempt)}
+        validate_publication(publication,identity,inventory)
+        request=canonical.parse_request((Path(root)/canonical.REQUEST).read_bytes())
+        if publication['request']!=request: raise ValueError()
+        registry=common.Registry(actor,token); repository='poryadok/voiceroot/space-native-installer'
+        index=registry.get(repository,'manifests/'+publication['index_digest'])
+        manifest=registry.get(repository,'manifests/'+publication['platform_digest'])
+        config=registry.get(repository,'blobs/'+publication['config_digest'])
+        if registry.get(repository,'manifests/'+identity['tag'].rsplit(':',1)[1])!=index: raise ValueError()
+        oci=oci_identity(source,publication['index_digest'],index,manifest,config)
+        if any(publication[k]!=oci[k] for k in ('index_digest','platform_digest','config_digest','immutable_image')): raise ValueError()
+        authority._head(headers,source,deadline)
+        again=authority._get(authority.API+'/actions/runs/'+str(run_id),headers,deadline)
+        canonical.validate_run(again,source,run_id,attempt)
+        if common.source_snapshot(Path(root),source)!=snapshot: raise ValueError()
+        return {'artifact_id':artifact_id,'artifact_sha256':hashlib.sha256(raw).hexdigest(),
+                'publication':copy.deepcopy(publication)}
+    except Exception: raise ToolIdentityError('Space native authenticated publication unavailable') from None
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__); sub=parser.add_subparsers(dest='command',required=True)
     sub.add_parser('ci-preflight')
@@ -189,9 +313,6 @@ def main():
         return 1
     print('Space native tool CI evidence captured; runtime qualification remains separate')
     return 0
-
-
-if __name__=='__main__': raise SystemExit(main())
 
 
 def source_inventory(root,snapshot):
@@ -227,3 +348,6 @@ def source_inventory(root,snapshot):
                 'sql_inventory_sha256':inventory[0],'dockerfile_sha256':files[dockerfile],
                 'source_manifest_sha256':files[manifest_path],'sql_files':dict(sorted(sql.items()))}
     except Exception: raise ToolIdentityError('Space native source inventory not qualified') from None
+
+
+if __name__=='__main__': raise SystemExit(main())
