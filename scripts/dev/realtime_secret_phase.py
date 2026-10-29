@@ -28,6 +28,35 @@ class SecretPhase:
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.intent = copy.deepcopy(journal.intent)
         self.poisoned = False
+        self.cut = None
+        self._cut_refs = None
+
+    def bind_cut(self, cut):
+        """Bind the exact drained writer cut before a C1 Secret attempt."""
+        import writer_cut
+        if (self.cut is not None or type(cut) is not writer_cut.WriterCut or cut.fence.context!=self.fence.context or
+                cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid):
+            raise RecoveryRequired('writer cut identity invalid')
+        self._guard(); cut.verify_drained()
+        if cut.fence.ledger.read()!=self.fence.ledger.read():raise RecoveryRequired('writer cut ledger differs')
+        self.cut=cut; self._cut_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+        self._before_effect()
+
+    def _before_effect(self):
+        import writer_cut
+        if self.fence.context['operation_id'].startswith('media-c1-') or self.cut is not None:
+            cut=self.cut
+            if (type(cut) is not writer_cut.WriterCut or self._cut_refs is None or
+                    any(a is not b for a,b in zip(self._cut_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger))) or
+                    cut.fence.context!=self.fence.context or cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid):
+                raise RecoveryRequired('writer cut unavailable')
+            own=copy.deepcopy(self.journal.state)
+            self._guard(); cut.verify_drained(); cut_state=copy.deepcopy(cut.journal.state)
+            if cut.fence.ledger.read()!=self.fence.ledger.read():raise RecoveryRequired('writer cut ledger differs')
+            self._guard()
+            if (self.cut is not cut or any(a is not b for a,b in zip(self._cut_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger))) or
+                    self.journal.state!=own or cut.journal.state!=cut_state):
+                raise RecoveryRequired('writer cut evidence changed')
 
     def _guard(self):
         if (self.poisoned or self.journal.poisoned or self.journal.intent != self.intent or
@@ -50,7 +79,7 @@ class SecretPhase:
             password_sha256 = hashlib.sha256(password).hexdigest()
             nonce = secrets.token_hex(16)
             record = {'status':'pending','operation_id':operation,'nonce':nonce,'name':name}
-            self._guard()
+            self._guard(); self._before_effect()
             if 'realtime-secret' in self.journal.state['steps']:
                 raise RecoveryRequired('attempt already recorded')
             pending = True
@@ -69,6 +98,7 @@ class SecretPhase:
             url = b'postgres://realtime:' + password + b'@voice-postgres:5432/realtime_db?sslmode=disable'
             obj = {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-dev'},
                    'immutable':True,'type':'Opaque','data':{'DATABASE_URL':base64.b64encode(url).decode('ascii')}}
+            self._before_effect()
             created = self.client.call('create','-f','-','-o','json',body=obj)
             self._guard()
             current = self.client.call('get','secret',name,'-o','json')

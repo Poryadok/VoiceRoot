@@ -39,6 +39,7 @@ class RealtimeFactoryJointTest(unittest.TestCase):
                         obj['status']={'conditions':[{'type':'Complete','status':'True'}]}
                     if not dry:
                         objects[kind]=copy.deepcopy(obj)
+                        if kind=='Secret':events.append('secret-post')
                         if kind=='Job':
                             events.append('job-post')
                             if fault=='lost':raise TimeoutError('synthetic lost response')
@@ -96,6 +97,7 @@ class RealtimeFactoryJointTest(unittest.TestCase):
             def snapshot(inner):return copy.deepcopy(engine)
             def catalog(inner):return copy.deepcopy(inner.state)
             def execute(inner,sql):
+                events.append('database-sql' if sql==provision.database_sql() else 'role-sql')
                 if sql==provision.database_sql():inner.state['database']={'oid':13,'owner_oid':12}
                 else:inner.state['role']={'oid':12,'login':True,'superuser':False,'createdb':False,'createrole':False,'inherit':False,
                     'replication':False,'bypassrls':False,'memberships':0,'connection_limit':-1,'valid_until':None,'config':None}
@@ -107,6 +109,17 @@ class RealtimeFactoryJointTest(unittest.TestCase):
         self.enterContext(mock.patch.object(affected,'_full_catalog',side_effect=full_catalog))
         self.enterContext(mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:{'scope':copy.deepcopy(scope),'active_sessions':0,'active_transactions':0}))
         cut.drain()
+        original_verify=cut.verify_drained
+        def checked_cut():
+            row,_=backing.read()
+            secret=row.get('realtime_secret',{})
+            steps=row.get('realtime_db_provision',{}).get('steps',{})
+            if ((fault=='secret-guard' and secret.get('status')=='pending') or
+                    (fault=='role-guard' and steps.get('role',{}).get('status')=='pending') or
+                    (fault=='database-guard' and steps.get('database',{}).get('status')=='pending')):
+                raise ValueError('synthetic lost writer cut')
+            return original_verify()
+        self.enterContext(mock.patch.object(cut,'verify_drained',side_effect=checked_cut))
         supervisor=activation.supervisor_module.Supervisor.__new__(activation.supervisor_module.Supervisor)
         supervisor.context=base.context; supervisor.lock=base.lock; supervisor.namespace_uid='ns'; supervisor.cut=cut; supervisor.physical=object()
         supervisor.fence=cut_f; supervisor.client=cut_c; supervisor._guard=mock.Mock(); supervisor._open=make_journal
@@ -122,16 +135,22 @@ class RealtimeFactoryJointTest(unittest.TestCase):
         self.enterContext(mock.patch.object(writer_cut_migration.writer_cut_pg_probe,'inspect_migration',side_effect=lambda scope,identity,guard:{'scope':copy.deepcopy(scope),'active_sessions':0,'active_transactions':0,'attributed_sessions':[]}))
         if fault:
             with self.assertRaises(activation.ActivationError):activation._realtime_database(driver,prepared,'token')
-            self.assertEqual(events,['job-post']); self.assertEqual(backing.row['status'],'uncertain')
+            expected={'lost':['secret-post','role-sql','database-sql','job-post'],
+                      'secret-guard':[],'role-guard':['secret-post'],
+                      'database-guard':['secret-post','role-sql']}[fault]
+            self.assertEqual(events,expected); self.assertEqual(backing.row['status'],'uncertain')
             with self.assertRaises(activation.ActivationError):activation._realtime_database(driver,prepared,'token')
-            self.assertEqual(events,['job-post']); return
+            self.assertEqual(events,expected); return
         credential,secret,worker,phase=activation._realtime_database(driver,prepared,'token'); self.addCleanup(credential.close)
-        self.assertEqual(events,['job-post']); self.assertEqual(pg.state['database']['oid'],13)
+        self.assertEqual(events,['secret-post','role-sql','database-sql','job-post']); self.assertEqual(pg.state['database']['oid'],13)
         self.assertEqual(phase.journal.state['steps']['job']['status'],'done'); self.assertTrue(cut.migration['finished'])
         self.assertEqual(cut.current_effective_session_scope()['database_oids']['realtime_db'],13)
 
     def test_actual_factory_with_guarded_secret_provision_and_migration(self):self.exercise(None)
     def test_lost_migration_reply_is_uncertain_and_never_replayed(self):self.exercise('lost')
+    def test_cut_loss_after_secret_pending_never_posts(self):self.exercise('secret-guard')
+    def test_cut_loss_after_role_pending_never_executes_role(self):self.exercise('role-guard')
+    def test_cut_loss_after_database_pending_never_executes_database(self):self.exercise('database-guard')
 
     @staticmethod
     def _cleanup(case):

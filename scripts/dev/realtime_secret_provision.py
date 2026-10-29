@@ -19,7 +19,7 @@ class RecoveryRequired(RuntimeError):
     pass
 
 
-def run_owned(secret, journal, client, fence, lock, namespace_uid, password):
+def run_owned(secret, journal, client, fence, lock, namespace_uid, password, cut=None):
     """Provision with a separately journal-bound worker retained for the cut."""
     attempted = False
     try:
@@ -57,6 +57,10 @@ def run_owned(secret, journal, client, fence, lock, namespace_uid, password):
         credential_guard()
         pg=provision.KubePostgres(credential_guard)
         worker=provision.Provision(journal,fence,client,lock,namespace_uid,pg,password)
+        if cut is not None:
+            if secret.cut is not cut:
+                raise RecoveryRequired('credential writer cut differs')
+            worker.bind_cut(cut)
         worker._guard(); worker._secret(); credential_guard()
         attempted = True
         receipt = worker.run()

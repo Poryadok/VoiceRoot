@@ -303,10 +303,10 @@ def _realtime_database(driver,preparation,token):
         if pg.snapshot()!=engine or pg.catalog()!={'role':None,'database':None} or pg.snapshot()!=engine:raise ValueError()
         credential=_RealtimeCredential(); password=credential.read(); attempted=True
         j,f,c=s._open('realtime-secret-journal',{})
-        secret=realtime_secret_phase.SecretPhase(j,f,c,s.lock,s.namespace_uid); secret_receipt=secret.run(password)
+        secret=realtime_secret_phase.SecretPhase(j,f,c,s.lock,s.namespace_uid); secret.bind_cut(s.cut); secret_receipt=secret.run(password)
         if credential.read()!=password:raise ValueError()
         j,f,c=s._open('realtime-provision-journal',{'postgres':copy.deepcopy(engine),'realtime_credential':copy.deepcopy(secret_receipt)})
-        provision,provision_receipt=realtime_secret_provision.run_owned(secret,j,c,f,s.lock,s.namespace_uid,password)
+        provision,provision_receipt=realtime_secret_provision.run_owned(secret,j,c,f,s.lock,s.namespace_uid,password,cut=s.cut)
         s.cut.bind_provision_scope(provision); _recheck_realtime_node(s,plan['node'])
         public={key:secret_receipt[key] for key in ('name','uid','resourceVersion')}
         spec={'source_sha':s.context['commit'],'image':plan['image'],'platform_digest':plan['platform_digest'],
