@@ -30,6 +30,28 @@ def save(path,row):root_save(path,row,limit=128<<20)
 def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
 
+def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
+    """Allow only the bootstrap's proved app-secret RV change in actor proof."""
+    if before is None or before.get('story_schema') is None:
+        if before==after:return after
+        raise Blocked('realtime_bootstrap_actor_changed')
+    try:
+        expected=copy.deepcopy(before)
+        schema=expected['story_schema']
+        first=schema['database_secret'];second=schema['authority']['secret']
+        if (first['name']!='voice-app-secrets' or first['uid']!=old_secret['uid']
+            or second['uid']!=old_secret['uid'] or new_secret['uid']!=old_secret['uid']
+            or first['resourceVersion']!=old_secret['resourceVersion']
+            or second['resourceVersion']!=old_secret['resourceVersion']
+            or not isinstance(new_secret['resourceVersion'],str) or not new_secret['resourceVersion']):
+            raise ValueError()
+        first['resourceVersion']=second['resourceVersion']=new_secret['resourceVersion']
+        candidate=expected.get('compatible_story_candidate')
+        if candidate is not None:candidate['schema_sha256']=transaction.canonical(schema)
+        if expected!=after:raise ValueError()
+        return after
+    except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_actor_changed') from None
+
 class Actions:
     def resource_scope(self,request):
         import resource_claim
@@ -342,6 +364,26 @@ class Actions:
                 nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         self._report('nats-preflight','COMPLETE')
+        realtime_receipt=None
+        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
+            import realtime_bootstrap
+            if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
+            realtime_receipt=realtime_bootstrap.run_prepare(self,request,approved,execution,workspace,stage)
+            if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
+            if realtime_receipt is not None:
+                schema=realtime_receipt.get('schema') if isinstance(realtime_receipt,dict) else None
+                if schema=='voice-staging-realtime-bootstrap-receipt-v1':
+                    if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
+                    bootstrap_plan=realtime_bootstrap.load_plan(self.tt_session)
+                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+                    if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
+                    actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,bootstrap_plan['secret'],realtime_receipt['secret'])
+                elif schema=='voice-staging-realtime-bootstrap-existing-v1':
+                    if realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
+                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+                    if refreshed!=actor_authority or realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:
+                        raise Blocked('realtime_bootstrap_actor_changed')
+                else:raise Blocked('realtime_bootstrap_receipt_invalid')
         self._report('target-build','STARTED')
         build=workspace.parent/(operation+'-build');build.mkdir(mode=0o700)
         parameter_path=build/'parameters.json';save(parameter_path,parameters)
@@ -349,6 +391,8 @@ class Actions:
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
+        if realtime_receipt is not None:
+            value['target']['realtime_bootstrap_sha256']=transaction.canonical(realtime_receipt)
         if lifecycle is not None and (value['migrations'] or value['nonnats']['actions']
             or nats_authority is not None and nats_authority['plan']['actions']):
             raise Blocked('provisional_migration_forbidden')
@@ -370,6 +414,7 @@ class Actions:
                 provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         if getattr(self,'tt_session',None) is not None:lifecycle_args['resource_session']=self.tt_session
+        if realtime_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_receipt
         state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True or gis_binding is not None else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,gis_binding=gis_binding,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority

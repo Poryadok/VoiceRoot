@@ -56,6 +56,9 @@ def isolate_gis_first_install(rows, plan, producer):
     for check in plan['checks']:
         if not isinstance(check,dict) or not isinstance(check.get('objects'),list):
             raise Blocked('gis_first_install_plan_scope_invalid')
+        # These objects are created only by a later ordinary rollout, never by
+        # the add-only GIS transition.
+        check['objects']=[o for o in check['objects'] if o.get('disposition')!='create']
         disposition=check.get('disposition')
         for descriptor in check['objects']:
             effective=descriptor.get('disposition',disposition)
@@ -67,7 +70,6 @@ def isolate_gis_first_install(rows, plan, producer):
             identity=(descriptor.get('kind'),descriptor.get('name'))
             if (not isinstance(manifest,dict)
                 or identity!=(manifest.get('kind'),manifest.get('metadata',{}).get('name'))
-                or action.get('row')!=check.get('id')
                 or descriptor.get('desired')!=nonnats_plan.semantic(manifest)
                 or identity in expected):
                 raise Blocked('gis_first_install_deferred_action_invalid')

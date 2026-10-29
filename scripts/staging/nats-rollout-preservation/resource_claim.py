@@ -166,12 +166,50 @@ class Session:
 
     def bind_target(self,commit,images,actual,target_sha256):
         row=self.check();card=self.authority();observed=card.get('observed',{})
+        if row.get('phase')=='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if (commit!=self.context['commit'] or images!=self.context['images']
             or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
             or observed.get('window')!=self.context['window'] or observed.get('operation')!=card.get('operation',0)-1
             or observed.get('images')!=actual or not re.fullmatch('[a-f0-9]{64}',target_sha256)):
             raise RuntimeError('staging_actual_baseline_or_candidate_changed')
+        if row.get('target_sha256') is not None:
+            if row['target_sha256']!=target_sha256:raise RuntimeError('staging_resource_target_changed')
+            self.expected_target=target_sha256
+            return
         row['target_sha256']=target_sha256;self.journal.save(row);self.expected_target=target_sha256
+
+    def bind_realtime_bootstrap(self,plan,actual):
+        import realtime_bootstrap
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        realtime_bootstrap.validate_plan(plan,self)
+        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+            or plan.get('actual_images')!=actual or observed.get('state')!='known'
+            or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual):
+            raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
+        if self.check()!=row or self.authority()!=card:
+            raise RuntimeError('staging_realtime_bootstrap_baseline_changed')
+        row.update(phase='realtime-bootstrap',target_sha256=digest(plan))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
+    def advance_realtime_bootstrap(self,target,actual):
+        import realtime_bootstrap
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        if row.get('phase')!='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_phase_invalid')
+        receipt=realtime_bootstrap.load_completed(self,actual=actual)
+        if (not isinstance(target,dict) or target.get('tag')!=self.context['commit']
+            or target.get('images')!=self.context['images']
+            or target.get('realtime_bootstrap_sha256')!=digest(receipt)
+            or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
+            or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual):
+            raise RuntimeError('staging_realtime_bootstrap_target_changed')
+        if self.check()!=row or self.authority()!=card:
+            raise RuntimeError('staging_realtime_bootstrap_target_changed')
+        row.update(phase='prepare',target_sha256=digest(target))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
 
     def binding(self):
         self.authority();row=self.journal.read()
@@ -189,6 +227,7 @@ class Session:
         # it must neither reopen apply nor create uncertainty in a safe window.
         if self.owned(previous) and (previous.get('status')=='complete' or previous.get('phase')=='awaiting-ci'):return
         row=self.check()
+        if row.get('phase')=='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if not row.get('target_sha256'):raise RuntimeError('staging_resource_target_unbound')
         row['phase']='apply-ready';self.journal.save(row)
 

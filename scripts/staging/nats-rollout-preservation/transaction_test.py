@@ -1,5 +1,8 @@
 import copy
 import datetime as dt
+import json
+import sys
+import tempfile
 from pathlib import Path
 import unittest
 from unittest.mock import Mock, patch
@@ -7,6 +10,30 @@ import transaction
 
 
 class TransactionFailureTest(unittest.TestCase):
+    def test_bootstrap_receipt_failure_is_not_retired_as_readonly(self):
+        receipt={'schema':'voice-staging-realtime-bootstrap-receipt-v1','proof':'fixture'};target={'realtime_bootstrap_sha256':transaction.canonical(receipt)}
+        module=Mock();module.load_completed.side_effect=transaction.Blocked('bootstrap_changed')
+        with tempfile.TemporaryDirectory() as temp, patch.dict(sys.modules,{'realtime_bootstrap':module}), \
+                patch('operator_retirement.record_readonly_failure') as retired:
+            with self.assertRaisesRegex(transaction.Blocked,'bootstrap_changed'):
+                transaction.prepare(None,Path(temp),Path(temp),target,{},'a'*12,{},[],{},
+                    resource_session=Mock(),realtime_bootstrap_receipt=receipt)
+            state=json.loads((Path(temp)/'checkpoint.json').read_text())
+            self.assertEqual((state['status'],state['fence_status']),('BLOCKED','UNKNOWN'))
+            self.assertEqual(state['realtime_bootstrap'],receipt)
+            retired.assert_not_called()
+
+    def test_existing_bootstrap_admission_uses_root_loader_and_rejects_other_schema(self):
+        for schema in ('voice-staging-realtime-bootstrap-existing-v1','untrusted'):
+            receipt={'schema':schema};target={'realtime_bootstrap_sha256':transaction.canonical(receipt)}
+            module=Mock();module.load_existing.side_effect=transaction.Blocked('existing_changed')
+            with self.subTest(schema=schema),tempfile.TemporaryDirectory() as temp, patch.dict(sys.modules,{'realtime_bootstrap':module}):
+                with self.assertRaises(transaction.Blocked):
+                    transaction.prepare(None,Path(temp),Path(temp),target,{},'a'*12,{},[],{},
+                        resource_session=Mock(),realtime_bootstrap_receipt=receipt)
+                state=json.loads((Path(temp)/'checkpoint.json').read_text())
+                self.assertEqual((state['status'],state['fence_status']),('BLOCKED','UNKNOWN'))
+                self.assertEqual(module.load_existing.call_count,1 if schema.endswith('existing-v1') else 0)
     def test_only_reviewed_story_pair_is_admitted_for_changed_backend_rollback(self):
         import actor_root
         image=next(iter(actor_root.STORY_IMAGES));child,config,source=actor_root.STORY_IMAGES[image]

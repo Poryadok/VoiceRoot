@@ -42,6 +42,17 @@ class GISBoundTargetTest(unittest.TestCase):
             changed['resource_fence']['target_sha256'] = resource_claim.digest(changed['target'])
             with self.assertRaises(guard.Blocked): check(changed)
 
+            bootstrap=copy.deepcopy(receipt)
+            bootstrap['target']['mode']='app-only';bootstrap['target']['changed_services']=[]
+            bootstrap['target']['realtime_bootstrap_sha256']='1'*64
+            bootstrap['resource_fence']['target_sha256']=resource_claim.digest(bootstrap['target'])
+            self.assertEqual(guard.validate(bootstrap,'example.invalid','a'*40,'app-only',[],source),bootstrap)
+            changed=copy.deepcopy(bootstrap);changed['target']['realtime_bootstrap_sha256']='2'*64
+            with self.assertRaises(guard.Blocked):guard.validate(changed,'example.invalid','a'*40,'app-only',[],source)
+            changed['target']['realtime_bootstrap_sha256']='invalid'
+            changed['resource_fence']['target_sha256']=resource_claim.digest(changed['target'])
+            with self.assertRaises(guard.Blocked):guard.validate(changed,'example.invalid','a'*40,'app-only',[],source)
+
 
 if __name__ == '__main__':
     unittest.main()
