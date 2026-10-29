@@ -119,7 +119,7 @@ def capture(source_root,source_sha,source_authority,space_pod,namespace_uid,clai
                     or sum(p.get('port')==8443 and p.get('protocol','TCP')=='TCP' for p in subsets[0].get('ports',[]))!=1): raise ValueError()
             for name in public.PUBLIC:
                 if public._meta(run_bytes,guard,'secret',name)!=observed['objects'][name]: raise ValueError()
-            return {'workload':before,'service':observed['space_service_spec'],
+            return {'workload':{k:before[k] for k in observed['space_identity']},'service':observed['space_service_spec'],
                     'endpoints':{'uid':meta['uid'],'resourceVersion':meta['resourceVersion']}}
         first=snapshot()
         ca=public._value(run_bytes,guard,'secret','voice-media-ca','ca.crt')

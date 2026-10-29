@@ -88,7 +88,7 @@ class TunnelTest(unittest.TestCase):
         def get(run,guard,kind,name): return copy.deepcopy(pod if kind=='pod' else endpoints if kind=='endpoints' else {})
         runner=lambda args:json.dumps({'metadata':{'uid':'ns'}}).encode()
         with patch.object(space.public,'capture',return_value=result), \
-             patch.object(space.common,'kube_workload_snapshot',return_value=lambda:copy.deepcopy(identity)), \
+             patch.object(space.common,'kube_workload_snapshot',return_value=lambda:{**copy.deepcopy(identity),'env':[{'value':'private-sentinel'}]}), \
              patch.object(space.public,'_get',side_effect=get),patch.object(space.public,'_mounted'), \
              patch.object(space.public,'_service',return_value=result['space_service_spec']), \
              patch.object(space.public,'_meta',side_effect=lambda run,guard,kind,name:refs[name]), \
@@ -103,6 +103,7 @@ class TunnelTest(unittest.TestCase):
                                                      jwk('next',b'\x80'+b'\x02'*255)]}).encode()
             good=space.capture('/source','a'*40,lambda _:None,'space-0','ns',lambda:None,'/dest',runner)
             self.assertEqual(good['scope'],'space-pod-https-through-kubernetes-tunnel')
+            self.assertNotIn('private-sentinel',repr(good))
         self.assertNotIn('private-sentinel',str(error.exception))
 
 
