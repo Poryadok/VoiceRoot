@@ -23,6 +23,21 @@ func qualifyLegacy24InstallerTx(ctx context.Context, tx pgx.Tx) error {
 	return nil
 }
 
+// Reject source states known to make the existing native initializer refuse a
+// present Space. This is a bounded preflight, not a substitute for the actual
+// initializer or the controller's separate Role authority qualification.
+func qualifyLegacy24LifecycleTx(ctx context.Context, tx pgx.Tx) error {
+	var ok bool
+	query := `SELECT NOT EXISTS(SELECT 1 FROM public.spaces s LEFT JOIN public.space_lifecycle_aggregates a ON a.space_id=s.id WHERE
+	 (a.space_id IS NOT NULL AND (a.generation<=0 OR a.phase NOT IN ('LIVE','SCHEDULE_PENDING','FREEZE_PENDING','SCHEDULED','RESTORE_DECIDED','PURGE_DECIDED','PURGING'))) OR
+	 (a.space_id IS NULL AND (EXISTS(SELECT 1 FROM public.space_lifecycle_operations x WHERE x.space_id=s.id) OR EXISTS(SELECT 1 FROM public.space_lifecycle_participants x WHERE x.space_id=s.id) OR EXISTS(SELECT 1 FROM public.space_lifecycle_completions x WHERE x.space_id=s.id) OR EXISTS(SELECT 1 FROM public.space_lifecycle_outbox x WHERE x.space_id=s.id) OR EXISTS(SELECT 1 FROM public.space_deletion_tombstones x WHERE x.space_id=s.id))) OR
+	 EXISTS(SELECT 1 FROM public.community_owner_authority x WHERE x.space_id=s.id AND x.status='active' AND x.owner_profile_id IS DISTINCT FROM s.owner_profile_id))`
+	if err := tx.QueryRow(ctx, query).Scan(&ok); err != nil || !ok {
+		return errors.New("HOLD: legacy24 existing Space lifecycle or ownership unavailable")
+	}
+	return nil
+}
+
 // Source qualification is not maintenance, backup, or product-rights authority.
 func admitLegacy24Source(ctx context.Context, conn *pgx.Conn) (*legacy24OriginObservation, error) {
 	return observeLegacy24Origin(ctx, conn)
