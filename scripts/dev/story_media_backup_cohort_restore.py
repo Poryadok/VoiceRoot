@@ -1,4 +1,5 @@
 """Bounded isolated restore for a caller-verified PostgreSQL cohort."""
+import copy
 import hashlib
 import io
 import json
