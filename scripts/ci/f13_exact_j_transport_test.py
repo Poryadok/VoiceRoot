@@ -1600,5 +1600,151 @@ class HistoricalJTransport(unittest.TestCase):
             self.assertEqual(target.read_bytes(), b'prior target must stay byte-exact')
 
 
+class PhaseOutputContract(unittest.TestCase):
+    def test_child_phase_namespace_is_sanitized_before_forwarding(self):
+        guard = b'{"kind":"FAITHFUL_HISTORICAL_SHARED_GUARD","guard_observed":1,"contract_expected":0}\n'
+        raw = (guard + b'F13_PHASE_v1 validator_j 123\n'
+               b'F13_PHASE_v1 private/secret 9\nF13_PHASE_future private-data\n')
+        with mock.patch.object(harness.sys, 'platform', 'linux'), \
+             mock.patch.object(harness.os, 'geteuid', return_value=1000, create=True), \
+             mock.patch.object(harness.os, 'getuid', return_value=1000, create=True), \
+             mock.patch.object(harness.os, 'getgid', return_value=1000, create=True):
+            status, _, _, outputs = SameFinalViewContract().capture_namespace(
+                subprocess.CompletedProcess([], 1, raw, b''))
+        self.assertEqual(status, 1)
+        self.assertEqual(outputs[0].getvalue(), guard)
+        self.assertNotIn(b'private', outputs[1].getvalue())
+        self.assertIn(b'F13_PHASE_v1 validator_j 123\n', outputs[1].getvalue())
+
+
+class PhaseDurationContract(unittest.TestCase):
+    def test_success_failure_clock_and_sink_preserve_original_outcome(self):
+        error = ValueError('private-body')
+        for clocks in ([10, 30], [RuntimeError('private-clock')],
+                       [10, RuntimeError('private-clock')], [30, 10],
+                       [10, 10 + harness.PHASE_MAX_NS + 1], [True, 30]):
+            for fail_body in (False, True):
+                stream = io.StringIO()
+                with self.subTest(clocks=clocks, fail_body=fail_body), \
+                     mock.patch.object(harness.time, 'monotonic_ns', side_effect=clocks), \
+                     mock.patch.object(harness.sys, 'stderr', stream):
+                    def body():
+                        with harness.phase_duration('validator_j'):
+                            if fail_body:
+                                raise error
+                            return object_result
+                    object_result = object()
+                    if fail_body:
+                        with self.assertRaises(ValueError) as caught:
+                            body()
+                        self.assertIs(caught.exception, error)
+                    else:
+                        self.assertIs(body(), object_result)
+                expected = 'F13_PHASE_v1 validator_j 20\n' if clocks == [10, 30] else ''
+                self.assertEqual(stream.getvalue(), expected)
+        sink = mock.Mock()
+        sink.write.side_effect = OSError('private-sink')
+        with mock.patch.object(harness.sys, 'stderr', sink), \
+             mock.patch.object(harness.time, 'monotonic_ns', side_effect=[1, 2, 3, 4]):
+            with harness.phase_duration('guard'):
+                pass
+            with self.assertRaises(ValueError) as caught, harness.phase_duration('guard'):
+                raise error
+            self.assertIs(caught.exception, error)
+
+    def test_cleanup_runs_after_return_evaluation_and_preserves_exit_behavior(self):
+        events = []
+        def cleanup_exit(directory, *args):
+            events.append('cleanup')
+            directory.cleanup()
+            return sentinel
+        def result():
+            events.append('return')
+            return 17
+        def call():
+            with harness.PhaseTemporaryDirectory():
+                return result()
+        sentinel = object()
+        with mock.patch.object(tempfile.TemporaryDirectory, '__exit__', cleanup_exit), \
+             mock.patch.object(harness.sys, 'stderr', io.StringIO()):
+            self.assertEqual(call(), 17)
+            self.assertEqual(events, ['return', 'cleanup'])
+            directory = harness.PhaseTemporaryDirectory()
+            self.assertIs(directory.__exit__(None, None, None), sentinel)
+            directory.cleanup()
+        error = OSError('original cleanup failure')
+        with mock.patch.object(tempfile.TemporaryDirectory, '__exit__', side_effect=error), \
+             mock.patch.object(harness.time, 'monotonic_ns', side_effect=ValueError('clock')):
+            directory = harness.PhaseTemporaryDirectory()
+            try:
+                with self.assertRaises(OSError) as caught:
+                    directory.__exit__(None, None, None)
+                self.assertIs(caught.exception, error)
+            finally:
+                directory.cleanup()
+
+    def test_closed_canonical_schema_and_cross_stream_duplicates(self):
+        good = b'F13_PHASE_v1 validator_j 123\n'
+        ordinary = b'ordinary\x00bytes\nlast-without-newline'
+        malformed = (b'F13_PHASE_v1 private/path 3\nF13_PHASE_v1 guard -1\n'
+                     b'F13_PHASE_v1 clone true\nF13_PHASE_v1 prepare 01\n'
+                     b'F13_PHASE_v1 pinned_git 9999999999999999999999999\n'
+                     b'F13_PHASE_v1 validator_pending 604800000000001\n'
+                     b'F13_PHASE_future {"kind":"FAITHFUL_HISTORICAL_SHARED_GUARD"}\n'
+                     b'F13_PHASE_v1 validator_terminal 9')
+        stdout, stderr, records = harness.extract_phase_output(good + ordinary, malformed)
+        self.assertEqual((stdout, stderr, records), (ordinary, b'', good))
+        for duplicate in (good, b'F13_PHASE_v1 validator_j secret\n'):
+            self.assertEqual(harness.extract_phase_output(good, duplicate), (b'', b'', b''))
+        for value in (True, -1, 1.5, '3', harness.PHASE_MAX_NS + 1):
+            self.assertEqual(harness.phase_record('guard', value), '')
+        self.assertEqual(harness.phase_record('private/path', 3), '')
+
+    def test_existing_filters_and_guard_receipt_rejections_remain_in_force(self):
+        guard = b'{"kind":"FAITHFUL_HISTORICAL_SHARED_GUARD","guard_observed":1,"contract_expected":0}\n'
+        phases = b'F13_PHASE_v1 validator_j 123\n'
+        opaque = b'F13_OPAQUE_UTILITY_unknown private\n'
+        paired = b'F13_PAIRED_UTILITY_unknown private\n'
+        with mock.patch.object(harness.sys, 'platform', 'linux'), \
+             mock.patch.object(harness.os, 'geteuid', return_value=1000, create=True), \
+             mock.patch.object(harness.os, 'getuid', return_value=1000, create=True), \
+             mock.patch.object(harness.os, 'getgid', return_value=1000, create=True):
+            status, _, _, outputs = SameFinalViewContract().capture_namespace(
+                subprocess.CompletedProcess([], 1, phases + guard + opaque, paired))
+            self.assertEqual(status, 1)
+            self.assertEqual(outputs[0].getvalue(), guard)
+            self.assertNotIn(b'private', outputs[1].getvalue())
+            for status, output in ((1, phases), (1, guard + guard + phases), (0, guard + phases), (2, guard + phases)):
+                with self.subTest(status=status, output=output), self.assertRaisesRegex(
+                        harness.SetupFailure, 'namespace_must_return_actual_guard_receipt_not_setup_exit'):
+                    SameFinalViewContract().capture_namespace(subprocess.CompletedProcess([], status, output, b''))
+
+    @unittest.skipUnless(harness.sys.platform == 'linux', 'Linux shell source-runner check')
+    def test_setup_shell_keeps_errexit_and_continues_after_telemetry_failure(self):
+        for executable in (harness.sys.executable, '/missing/private-clock'):
+            with mock.patch.object(harness.sys, 'executable', executable):
+                for body, suffix, expected in [('exit 37\n', '', 37), ('false\n', '', 1),
+                                               ('printf BODY\n', 'exit 23\n', 23)]:
+                    script = harness.namespace_setup_script(body) + suffix
+                    result = subprocess.run(['bash', '-c', script], capture_output=True)
+                    self.assertEqual(result.returncode, expected)
+                    self.assertEqual(result.stderr, b'')
+                    self.assertNotIn(b'private', result.stdout)
+        with tempfile.TemporaryDirectory() as folder:
+            helper = Path(folder) / 'clock'
+            helper.write_text('#!/bin/sh\ncase "$2" in\n'
+                              ' "import time; print(time.monotonic_ns())") echo 1 ;;\n'
+                              ' *) echo PRIVATE_FINISH_ERROR >&2; exit 19 ;;\nesac\n')
+            helper.chmod(0o755)
+            with mock.patch.object(harness.sys, 'executable', str(helper)):
+                result = subprocess.run(['bash', '-c', harness.namespace_setup_script('exit 43\n')], capture_output=True)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (43, b'', b''))
+        # A failed print/finish clock must not replace setup failure either.
+        script = 'exec 1>&-\n' + harness.namespace_setup_script('exit 41\n')
+        result = subprocess.run(['bash', '-c', script], capture_output=True)
+        self.assertEqual(result.returncode, 41)
+        self.assertEqual(result.stderr, b'')
+
+
 if __name__ == '__main__':
     unittest.main()
