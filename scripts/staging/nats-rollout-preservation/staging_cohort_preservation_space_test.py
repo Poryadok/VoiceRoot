@@ -36,6 +36,110 @@ from auth_user_adoption_runtime import QUALIFIED_TOOLS
 
 
 class NativeAuthorityTests(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get('VOICE_COHORT_KERNEL'),'retained pinned native kernel required')
+    def test_actual_pinned_kernel_exceeds_default_but_fixed_read_is_bounded(self):
+        import root_main
+        raw=Path(os.environ['VOICE_COHORT_KERNEL']).read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),owner.private.BINARY_PINS['nats-known-baseline/kernel'])
+        self.assertGreater(len(raw),256<<10)
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            code=Path(directory);folder=code/'nats-known-baseline';folder.mkdir(mode=0o700)
+            path=folder/'kernel';path.write_bytes(raw);path.chmod(0o550)
+            with self.assertRaisesRegex(Exception,'captured_input_invalid'):root_main.public_read(path)
+            self.assertEqual(owner._captured_native_kernel(code),raw)
+            path.write_bytes(raw[:-1]+bytes([raw[-1]^1]))
+            with self.assertRaisesRegex(Exception,'cohort_native_kernel_changed'):owner._captured_native_kernel(code)
+            with path.open('wb') as output:output.truncate((32<<20)+1)
+            with self.assertRaisesRegex(Exception,'captured_input_invalid'):owner._captured_native_kernel(code)
+
+    def test_running_jobs_use_only_postgres_and_require_response_owned_done(self):
+        """Real Session/private reads; prior qualification and Kube are fixtures."""
+        import realtime_bootstrap
+        from resource_claim_test import context,card
+        from stage_runtime import Kube
+        for kind in ('upgrade','verify'):
+            with self.subTest(kind=kind),tempfile.TemporaryDirectory(dir='/root') as directory:
+                root=Path(directory);(root/'installed').mkdir(mode=0o700)
+                current=context();external=card(current)
+                session=resource_claim.Session(current,'a'*12,'b'*64,lambda:copy.deepcopy(external),resource_claim.RootJournal(root))
+                session.admit(start=True);session.bind_target(current['commit'],current['images'],external['observed']['images'],'d'*64)
+                with patch.object(guard,'ROOT',root),resource_claim.command_scope(session.check):
+                    base=owner._base(session);owner.private._private_directory(base.parent);owner.private._private_directory(base)
+                    cohort_plan={'namespace_uid':'namespace','operation':session.operation}
+                    engine={'pod':{'uid':'pod','container_id':'container','restart_count':0},'pvc':{'uid':'pg-pvc'},'pv':{'uid':'pg-pv'}}
+                    catalog={'schema':'voice-staging-cohort-catalog-v1','operation':session.operation,
+                        'plan_sha256':owner.digest(cohort_plan),'engine':{'namespace_uid':'namespace','pod_uid':'pod',
+                            'pvc_uid':'pg-pvc','pv_uid':'pg-pv','container_id':'container','restart_count':0,'system_identifier':'123'},
+                        'server_start':'start','databases':{'space_db':42},'properties':{'space_db':{'owner':'original_owner'}}}
+                    metadata={'schema':'voice-staging-cohort-metadata-v1','operation':session.operation,
+                        'plan_sha256':owner.digest(cohort_plan),'catalog_sha256':owner.digest(catalog),
+                        'source':{'catalog':{'space_db':{'database_owner':'original_owner','schema_owner':'original_owner'}}}}
+                    for name,value in (('catalog.json',catalog),('metadata.json',metadata)):owner._write(base/name,value)
+                    archive={'binding':{'snapshot_id':'original'},'catalog_ref':owner._reference(session,catalog),
+                             'metadata_ref':owner._reference(session,metadata)}
+                    tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'2'*64,
+                        'platform_digest':'sha256:'+'2'*64,'config_digest':'sha256:'+'3'*64,
+                        'source_inventory':{'build_source_sha256':'4'*64}}
+                    rehearsal={'status':'COMPLETE','attempt':'c'*32}
+                    offnode={'operation':session.operation,'plan_sha256':owner.digest(cohort_plan),'nonce':'c'*32,
+                        'phase':'offnode','status':'COMPLETE','proof':{'native_space':rehearsal,'space_native_rehearsal_sha256':owner.digest(rehearsal)}}
+                    qualified={'archive_sha256':owner.digest(archive),'offnode_restore_sha256':owner.digest(offnode)}
+                    for name,value in (('archive-record.json',archive),('offnode-restore.json',offnode),('restore-attempt.json',offnode)):
+                        owner._write(base/name,value)
+                    original={'engine':catalog['engine'],'server_start':'start','database_name':'space_db','database_oid':42,
+                              'database_owner':'original_owner','schema_owner':'original_owner','installer_role':'original_owner'}
+                    authority={'schema':'voice-staging-space-native-authority-v1','operation':session.operation,
+                        'preservation_sha256':owner.digest(qualified),'tool':tool,'original':original,'rehearsal':rehearsal}
+                    docs=inspector._live_documents(session,tool,'node','local-path','original')
+                    plan={'schema':'voice-staging-space-live-plan-v1','operation':session.operation,'binding':session.binding(),
+                        'authority_sha256':owner.digest(authority),'archive_sha256':owner.digest(archive),'namespace_uid':'namespace',
+                        'postgres_pvc_uid':'pg-pvc','postgres_pv_uid':'pg-pv','tool_platform_digest':tool['platform_digest'],
+                        'tool_config_digest':tool['config_digest'],'config_sha256':'5'*64,'secret_sha256':'6'*64,
+                        'node':'node','storage_class_uid':'storage','storage_class_sha256':'7'*64,'storage_provisioner':'rancher.io/local-path',
+                        'documents':docs}
+                    live=base/'space-live';owner.private._private_directory(live);owner.private._private_directory(live/'effects')
+                    owner._write(live/'plan.json',plan)
+                    uid='11111111-1111-4111-8111-111111111111'
+                    for predecessor in (('bind','upgrade') if kind=='verify' else ('bind',)):
+                        closed={'schema':'voice-staging-space-live-job-closed-v1','status':'DONE','operation':session.operation,
+                            'kind':predecessor,'plan_sha256':owner.digest(plan),'job_uid':uid,'pod_uid':uid,'volume':{}}
+                        owner._write(live/(predecessor+'-closed.json'),closed)
+                        for verb in ('create','delete'):
+                            owner._write(live/'effects'/(predecessor+'-'+verb+'.json'),{'status':'DONE','response':{'uid':uid}})
+                    job=copy.deepcopy(docs[kind]);job['metadata'].update(uid=uid,resourceVersion='2',creationTimestamp='2026-10-29T00:00:00Z')
+                    effect={'schema':'voice-staging-space-live-effect-v1','operation':session.operation,'effect':kind+'-create',
+                        'plan_sha256':owner.digest(plan),'binding':session.binding(),'argv':owner.PREFIX+['create','-f','/dev/stdin','-o','json'],
+                        'body_sha256':hashlib.sha256(owner.private._bytes(docs[kind])).hexdigest(),'status':'DONE',
+                        'response':{'uid':uid,'resourceVersion':'1','creationTimestamp':job['metadata']['creationTimestamp'],
+                                    'spec_sha256':owner.digest(job['spec'])}}
+                    effect_path=live/'effects'/(kind+'-create.json');owner._write(effect_path,effect)
+                    def get(resource,name):
+                        session.check()
+                        if (resource,name)==('pod','voice-postgres-0'):return {'spec':{'nodeName':'node'}}
+                        self.assertEqual((resource,name),('job',docs[kind]['metadata']['name']));return copy.deepcopy(job)
+                    queries=[]
+                    def sql(argv,*args,**kwargs):
+                        session.check();queries.append(argv)
+                        self.assertEqual(argv,pg.IDENTITY_ARGS)  # Never connects space_db.
+                        return {'system_identifier':'123','server_start':'start'}
+                    with patch.object(owner,'load_plan',return_value=cohort_plan),patch.object(owner,'_phase_continuity'),\
+                        patch.object(owner,'load_qualified',return_value=qualified),patch.object(native,'load_tool',return_value=tool),\
+                        patch.object(native,'_retained_rehearsal',return_value=rehearsal),\
+                        patch.object(realtime_bootstrap,'engine_snapshot',return_value=('namespace',engine)),\
+                        patch.object(Kube,'get',side_effect=get),patch.object(Kube,'_run',side_effect=sql):
+                        self.assertEqual(native.load_native_authority_during_job(session),authority)
+                        self.assertEqual(len(queries),4)
+                        for change in ({'status':'PENDING'},{'body_sha256':'0'*64},{'binding':{}},
+                                       {'response':{**effect['response'],'uid':'22222222-2222-4222-8222-222222222222'}}):
+                            owner.save(effect_path,{**effect,**change})
+                            with self.assertRaises(Exception):native.load_native_authority_during_job(session)
+                        owner.save(effect_path,effect)
+                        job['spec']['template']['spec']['containers'][0]['image']='foreign'
+                        with self.assertRaises(Exception):native.load_native_authority_during_job(session)
+                        job['spec']=copy.deepcopy(docs[kind]['spec'])
+                        owner._write(live/'effects'/(kind+'-delete.json'),{'status':'PENDING'})
+                        with self.assertRaises(Exception):native.load_native_authority_during_job(session)
+
     def test_precut_tool_pull_is_fixed_private_and_never_replays_uncertain_response(self):
         for fault in ('none','config','lost'):
             with self.subTest(fault=fault),tempfile.TemporaryDirectory(dir='/root') as directory:
