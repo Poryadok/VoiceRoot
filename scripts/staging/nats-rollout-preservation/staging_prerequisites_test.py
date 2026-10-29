@@ -16,6 +16,23 @@ from root_main import save
 
 
 class PrivateCustodyTests(unittest.TestCase):
+    def test_preserved_publisher_accepts_only_bound_auxiliary_metadata(self):
+        import staging_cohort_preservation as cohort
+        response={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging',
+                  'uid':'publisher-uid','resourceVersion':'7','generation':3},'spec':{'replicas':1,'template':{'spec':{'containers':[]}}}}
+        observed={'uid':'publisher-uid','resourceVersion':'2','generation':1,'semantic_sha256':prereq.digest(prereq._semantic(response))}
+        plan={'children':{'p3':{'preserved':{'Deployment/voice-p3-principal-jwks':{'observed':observed}}}}}
+        with patch.object(cohort,'load_auxiliary_successor',return_value={'response':response}):
+            prereq._bind_auxiliary_successor(object(),plan)
+        self.assertEqual((observed['generation'],observed['resourceVersion']),(3,'7'))
+        changed=copy.deepcopy(response);changed['spec']['replicas']=2
+        with patch.object(cohort,'load_auxiliary_successor',return_value={'response':changed}):
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_auxiliary_changed'):
+                prereq._bind_auxiliary_successor(object(),plan)
+        with patch.object(cohort,'load_auxiliary_successor',return_value=None):
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_auxiliary_missing'):
+                prereq._bind_auxiliary_successor(object(),plan)
+
     def test_auxiliary_module_executes_exact_source_not_timestamp_cached_bytecode(self):
         import os, py_compile
         with tempfile.TemporaryDirectory(dir='/root') as folder:
