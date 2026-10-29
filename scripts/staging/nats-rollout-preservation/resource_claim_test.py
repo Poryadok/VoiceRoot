@@ -121,6 +121,15 @@ class ResourceTests(unittest.TestCase):
         current['claim']=context()['claim'];journal.row['status']='uncertain'
         with self.assertRaises(RuntimeError):session.check(['kubectl','delete','pod'])
 
+    def test_unbound_target_allows_only_exact_client_source_decode(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        exact=['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']
+        session.check(exact)
+        for changed in (exact+['--save-config'],exact[:-1],['kubectl','create','-f','/dev/stdin'],
+                        ['kubectl','create','--dry-run=client','-f','/dev/stdin','-o','json']):
+            with self.subTest(changed=changed),self.assertRaisesRegex(RuntimeError,'target_unbound'):
+                session.check(changed)
+
     def test_legacy_or_changed_helper_binding_and_baseline_are_rejected(self):
         session,current,journal=self.fixture()
         with self.assertRaises(RuntimeError):session.admit(start=False)

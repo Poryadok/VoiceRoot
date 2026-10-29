@@ -160,7 +160,8 @@ class Session:
         # run until its fresh actual baseline and complete target are bound.
         if argv and row.get('target_sha256') is None and Path(str(argv[0])).name=='kubectl':
             verbs={'patch','scale','apply','create','delete','replace','run','set'}
-            if any(str(v) in verbs for v in argv[1:]) and '--dry-run=server' not in argv:
+            source_decode=list(argv[1:])==['create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']
+            if any(str(v) in verbs for v in argv[1:]) and '--dry-run=server' not in argv and not source_decode:
                 raise RuntimeError('staging_resource_target_unbound')
         return row
 
