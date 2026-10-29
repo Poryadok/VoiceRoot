@@ -53,7 +53,31 @@ Candidate C2 requires read-only verification using the original immutable tool
 and a separately source-owned compatibility result for the new candidate;
 it must not claim the new image performed the original creation.
 
-The current implementation and tests are not yet complete. In particular,
-source-bound tool artifact evidence, the typed replacement-catalog/Job guard,
-the one-shot phase, real PostgreSQL/Kubernetes composition, runtime grants and
-C2 continuity remain required before live use.
+`SpaceFreshInstallPhase(...).prepare()` captures the typed runtime consumer
+preflight before draining the original Pods. The same instance's `run()` is
+invoked after the cut and physical identity capture. It requires immutable
+intent `space_fresh_install={mode: dev-reset-native51, database: space_db}`;
+the Supervisor factory supplies this before constructing its Journal.
+
+The phase records each transition in its private Journal and shared ledger.
+Original provision and subsequent read-only verify Jobs have separate owned
+UIDs, Pod identities and nonces. After runtime grants, the same original tool
+executes verify using the immutable original-evidence ConfigMap. Its `verified`
+output preserves the original receipt/run ID; the new verifier process's session
+UUID is not inferred from that receipt. The CUT correlates that bounded window
+with the independently owned verifier Pod, administrative role and canonical
+installer application name. This remains operational correlation within the
+trusted maintenance boundary.
+
+Only recorded provision/verify Jobs and the operation SQL ConfigMap are deleted
+with UID/RV preconditions and confirmed absence. Original native evidence stays
+in the immutable evidence ConfigMap and protected private journal for retained
+verification. A missing response at any effect remains uncertain, even if a
+matching object or a database is subsequently observed.
+
+The lifecycle tests execute real Journal/Fence persistence with synthetic
+Kubernetes, PostgreSQL, tool admission, runtime-role and CUT boundaries. They do
+not establish live provenance or real composed native execution. Actual typed
+CUT/runtime composition, independent source review, real PostgreSQL/Kubernetes
+qualification and C2 continuity remain required before live use. The existing
+primitive PostgreSQL and tool fixtures are separate evidence.
