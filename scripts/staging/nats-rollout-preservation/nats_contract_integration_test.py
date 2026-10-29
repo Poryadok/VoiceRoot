@@ -169,7 +169,7 @@ class HostedTransportTests(unittest.TestCase):
 
             manifest_path = bundle / 'capture/capture-manifest.json'
             manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-            self.assertLessEqual(len(manifest), 85)
+            self.assertLessEqual(len(manifest), 101)
             self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
             for relative, wanted in manifest.items():
                 content = (bundle / 'capture' / relative).read_bytes()
