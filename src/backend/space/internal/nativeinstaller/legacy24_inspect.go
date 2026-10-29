@@ -70,6 +70,7 @@ func InspectLegacy24(ctx context.Context, c Config) (err error) {
 			DatabaseName     string `json:"database_name"`
 			DatabaseOID      uint32 `json:"database_oid"`
 			DatabaseSystemID string `json:"database_system_id"`
+			DatabaseOwner    string `json:"database_owner"`
 			InstallerRole    string `json:"installer_role"`
 			Version          int64  `json:"version"`
 		} `json:"target"`
@@ -77,6 +78,7 @@ func InspectLegacy24(ctx context.Context, c Config) (err error) {
 	evidence.Target.DatabaseName = origin.Target.DatabaseName
 	evidence.Target.DatabaseOID = origin.Target.DatabaseOID
 	evidence.Target.DatabaseSystemID = origin.Target.DatabaseSystemID
+	evidence.Target.DatabaseOwner = origin.DatabaseOwner
 	evidence.Target.InstallerRole = origin.Target.InstallerRole
 	evidence.Target.Version = origin.Target.Version
 	raw, err := json.Marshal(evidence)

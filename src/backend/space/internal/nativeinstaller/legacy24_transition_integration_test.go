@@ -90,6 +90,7 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 			DatabaseName     string `json:"database_name"`
 			DatabaseOID      uint32 `json:"database_oid"`
 			DatabaseSystemID string `json:"database_system_id"`
+			DatabaseOwner    string `json:"database_owner"`
 			InstallerRole    string `json:"installer_role"`
 			Version          int64  `json:"version"`
 		} `json:"target"`
@@ -104,6 +105,9 @@ func TestLegacy24Exact25TransitionPreservesSourceRows(t *testing.T) {
 	require.Equal(t, oid, inspection.Target.DatabaseOID)
 	require.EqualValues(t, 24, inspection.Target.Version)
 	require.NotEmpty(t, inspection.Target.DatabaseSystemID)
+	var actualOwner string
+	require.NoError(t, conn.QueryRow(ctx, `SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database()`).Scan(&actualOwner))
+	require.Equal(t, actualOwner, inspection.Target.DatabaseOwner)
 	require.NotEmpty(t, inspection.Target.InstallerRole)
 	var stillVersion int
 	var stillDirty bool
