@@ -160,14 +160,24 @@ def _check_gateway_environment(effective):
 
 def _gateway_image(registry,image,platform):
     repository='poryadok/voiceroot/gateway'; index=image.rsplit('@',1)[1]
-    manifest=publish_candidate.decode_manifest(registry.get(repository,'manifests/'+index),index)
-    if publish_candidate.platform_manifest(manifest)!=platform: raise ValueError()
-    matches=[x for x in manifest['manifests'] if x.get('digest')==platform and x.get('platform',{}).get('os')=='linux'
-             and x.get('platform',{}).get('architecture')=='amd64' and not x.get('platform',{}).get('variant')]
-    if len(matches)!=1 or type(matches[0].get('size')) is not int: raise ValueError()
-    raw=registry.get(repository,'manifests/'+platform)
-    if len(raw)!=matches[0]['size']: raise ValueError()
-    child=publish_candidate.decode_manifest(raw,platform)
+    raw=registry.get(repository,'manifests/'+index)
+    manifest=publish_candidate.decode_manifest(raw,index)
+    if index==platform:
+        import full_cohort_oci as oci
+        child=manifest
+        if (child.get('mediaType') not in oci.MANIFEST_TYPES | {None} or 'manifests' in child
+                or not isinstance(child.get('layers'),list)
+                or child.get('config',{}).get('mediaType') not in oci.CONFIG_TYPES): raise ValueError()
+        oci._descriptor(child['config'],oci.CONFIG_TYPES)
+        for layer in child['layers']:oci._descriptor(layer,oci.LAYER_TYPES)
+    else:
+        if publish_candidate.platform_manifest(manifest)!=platform: raise ValueError()
+        matches=[x for x in manifest['manifests'] if x.get('digest')==platform and x.get('platform',{}).get('os')=='linux'
+                 and x.get('platform',{}).get('architecture')=='amd64' and not x.get('platform',{}).get('variant')]
+        if len(matches)!=1 or type(matches[0].get('size')) is not int: raise ValueError()
+        raw=registry.get(repository,'manifests/'+platform)
+        if len(raw)!=matches[0]['size']: raise ValueError()
+        child=publish_candidate.decode_manifest(raw,platform)
     if child.get('schemaVersion')!=2: raise ValueError()
     desc=child['config']; digest=desc['digest']
     if not re.fullmatch(r'sha256:[a-f0-9]{64}',digest): raise ValueError()

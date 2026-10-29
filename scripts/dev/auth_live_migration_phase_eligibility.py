@@ -164,15 +164,25 @@ def read_image_config(registry, index_digest, platform_digest):
         if any(not isinstance(value,str) or not re.fullmatch(r'sha256:[0-9a-f]{64}',value)
                for value in (index_digest,platform_digest)): raise ValueError()
         repository='poryadok/voiceroot/auth'
-        index=publish_candidate.decode_manifest(registry.get(repository,'manifests/'+index_digest),index_digest)
-        if publish_candidate.platform_manifest(index)!=platform_digest: raise ValueError()
-        matches=[x for x in index['manifests'] if x.get('digest')==platform_digest
-                 and x.get('platform',{}).get('os')=='linux' and x.get('platform',{}).get('architecture')=='amd64'
-                 and not x.get('platform',{}).get('variant')]
-        if len(matches)!=1 or type(matches[0].get('size')) is not int: raise ValueError()
-        raw=registry.get(repository,'manifests/'+platform_digest)
-        if len(raw)!=matches[0]['size']: raise ValueError()
-        manifest=publish_candidate.decode_manifest(raw,platform_digest)
+        raw=registry.get(repository,'manifests/'+index_digest)
+        requested=publish_candidate.decode_manifest(raw,index_digest)
+        if index_digest==platform_digest:
+            import full_cohort_oci as oci
+            manifest=requested
+            if (manifest.get('mediaType') not in oci.MANIFEST_TYPES | {None}
+                    or 'manifests' in manifest or not isinstance(manifest.get('layers'),list)
+                    or manifest.get('config',{}).get('mediaType') not in oci.CONFIG_TYPES): raise ValueError()
+            oci._descriptor(manifest['config'],oci.CONFIG_TYPES)
+            for layer in manifest['layers']:oci._descriptor(layer,oci.LAYER_TYPES)
+        else:
+            if publish_candidate.platform_manifest(requested)!=platform_digest: raise ValueError()
+            matches=[x for x in requested['manifests'] if x.get('digest')==platform_digest
+                     and x.get('platform',{}).get('os')=='linux' and x.get('platform',{}).get('architecture')=='amd64'
+                     and not x.get('platform',{}).get('variant')]
+            if len(matches)!=1 or type(matches[0].get('size')) is not int: raise ValueError()
+            raw=registry.get(repository,'manifests/'+platform_digest)
+            if len(raw)!=matches[0]['size']: raise ValueError()
+            manifest=publish_candidate.decode_manifest(raw,platform_digest)
         descriptor=manifest['config']
         if not isinstance(descriptor,dict) or not re.fullmatch(r'sha256:[0-9a-f]{64}',descriptor.get('digest','')):
             raise ValueError()
