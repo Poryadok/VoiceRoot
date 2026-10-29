@@ -57,7 +57,7 @@ def stage_cluster_fixture(session,store_kube=None):
             'status':{'phase':'Running','containerStatuses':statuses(template['spec']['containers']),
                       'initContainerStatuses':statuses(template['spec'].get('initContainers',[]))}})
     fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace,'resourceVersion':'1'}},
-           ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
+           ('configmap','voice-nats-generation'):{'metadata':{'uid':'cbafb90c-6974-4642-86d6-09b2eef1c843','resourceVersion':'1'},
                  'data':{'phase':'active','generation':'r20260930a4','dataPVC':'fixture'}},
            ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
            ('pv','pv'):{'metadata':{'uid':pv},'spec':{'claimRef':{'uid':claim},
@@ -344,6 +344,55 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    records=json.loads((Path(os.environ['VOICE_TEST_STORY_OCI'])/'records.json').read_bytes())
    record=records[url];raw=(Path(os.environ['VOICE_TEST_STORY_OCI'])/(record['sha256']+'.json')).read_bytes()
    return RegistryResponse(raw,record['headers'])
+  if 'VOICE_TEST_NATS_INPUTS' in os.environ:
+   import bootstrap_enrollment, bootstrap_root
+   bootstrap=(nats/'inputs'/'bootstrap.creds').read_bytes()
+   actor_sha=hashlib.sha256(actor_root.public_user(bootstrap,'bootstrap').encode()).hexdigest()
+   bootstrap_root.ACCOUNT_SHA=synthetic_account_sha;bootstrap_root.ACTOR_SHA=actor_sha
+   bootstrap_selection.ACTOR_SHA=actor_sha
+   old_name='voice-nats-bootstrap-credentials-r20260930a4'
+   old=secret(old_name,{'bootstrap.creds':bootstrap});old['immutable']=True
+   old['metadata'].update(uid='cd1f24fe-cbf1-40f2-9043-f8affd24127d',resourceVersion='2864382')
+   nats_secrets[old_name]=old
+   marker=original_get('configmap','voice-nats-generation')
+   operator_row=nats_secrets['voice-nats-operator-r20260930a4']
+   ident=lambda row:{k:row['metadata'][k] for k in ('name','uid','resourceVersion')}
+   binding={'generation':'r20260930a4','marker_uid':marker['metadata']['uid'],
+    'marker_rv':marker['metadata']['resourceVersion'],'account_sha256':synthetic_account_sha,'actor_sha256':actor_sha,
+    'old_secret':ident(old)|{'credential_sha256':bootstrap_enrollment.credential_hash(old)},'operator_secret':ident(operator_row)}
+   class EnrollmentCluster:
+    def get(self,kind,name):
+     session.check()
+     return copy.deepcopy(marker if kind=='configmap' else nats_secrets[name])
+    def run(self,args,body=None):
+     session.check()
+     if args[:2]==['get','secrets']:
+      name=args[2].split('metadata.name=',1)[1];return {'items':[copy.deepcopy(nats_secrets[name])] if name in nats_secrets else []}
+     if args==['create','-f','/dev/stdin','-o','json']:
+      value=copy.deepcopy(body);name=value['metadata']['name'];assert name not in nats_secrets
+      value['metadata'].update(uid='synthetic-'+name,resourceVersion='1');nats_secrets[name]=value;return copy.deepcopy(value)
+     raise AssertionError('unexpected enrollment cluster call')
+   enrollment_kube=EnrollmentCluster()
+   def unchanged():
+    session.check();assert enrollment_kube.get('configmap','voice-nats-generation')==marker
+    assert enrollment_kube.get('secret',old_name)==old and enrollment_kube.get('secret',operator_row['metadata']['name'])==operator_row
+   prior_proof={}
+   def v1_auth(credentials):
+    prior_proof.update(bootstrap_auth.prove(credentials,operator_row,unchanged));return prior_proof['verified'] is True
+   def v1_commit(receipt):
+    # Exact legacy projection of a real scratch proof, not an invented PASS.
+    fields=('verified','server_image','account_sha256','reply_prefix','normalized_consumer','normalized_consumer_sha256')
+    save(root/'bootstrap-enrollment.json',{**receipt,'auth_proof':{k:prior_proof[k] for k in fields}})
+   bootstrap_enrollment.enroll(bootstrap_enrollment.EnrollmentKube(enrollment_kube),binding,bootstrap,
+     unchanged,v1_auth,v1_commit)
+   seed_dir=bootstrap_root.SEED.parent;seed_dir.mkdir(mode=0o700,parents=True,exist_ok=True)
+   bootstrap_root.SEED.write_bytes((nats/'signer.seed').read_bytes()+b'\n');bootstrap_root.SEED.chmod(0o600)
+   def private_read(path):
+    from root_main import private_json
+    return private_json(root/Path(path).name)
+   def private_save(path,value):save(root/Path(path).name,value)
+   bootstrap_root.enroll_current(enrollment_kube,code,actions.binding,unchanged,
+    private_read,private_save,bootstrap_auth.prove)
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
        patch.object(stage_runtime.Kube,'_run',side_effect=run),patch.object(commands,'capture',side_effect=capture), \
        patch.object(stage_runtime.Kube,'secret_meta',side_effect=lambda name:{k:get('secret',name)['metadata'][k] for k in ('uid','resourceVersion')}), \
