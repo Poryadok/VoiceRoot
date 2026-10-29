@@ -53,12 +53,17 @@ class Tests(unittest.TestCase):
                 'desired':nonnats_plan.semantic(manifest),'action_id':action_id,'disposition':'action'})
         plan={'schema':'voice-nonnats-plan-v1','mode':'app-only','actions':actions,
             'checks':[{'id':'app-config','disposition':'action','objects':objects}]}
+        plan['checks'].append({'id':'frontends','disposition':'preserve','objects':[
+            {'kind':'ConfigMap','name':'voice-web-runtime-config','namespace':'voice-staging',
+             'desired':{'kind':'ConfigMap'},'disposition':'create'},
+            {'kind':'ConfigMap','name':'existing','namespace':'voice-staging','desired':{'kind':'ConfigMap'}}]})
         producer=Producer(current)
         target,isolated=compiler.isolate_gis_first_install([service,deployment,
             *[action['manifest'] for action in actions]],plan,producer)
         self.assertEqual({(row['kind'],row['metadata']['name']) for row in target},
             {('Service','voice-gameintegration'),('Deployment','voice-gameintegration')})
         self.assertEqual(isolated['actions'],[])
+        self.assertEqual([o['name'] for o in isolated['checks'][1]['objects']],['existing'])
         self.assertEqual(producer.reads,[('Deployment',name) for name in names])
         self.assertTrue(all(item['disposition']=='preserve' and 'action_id' not in item
             for item in isolated['checks'][0]['objects']))
