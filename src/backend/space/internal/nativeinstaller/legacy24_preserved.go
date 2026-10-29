@@ -37,6 +37,9 @@ func verifyLegacy24Preserved(ctx context.Context, conn *pgx.Conn, origin *legacy
 	if err = verifyLegacy24DerivedTx(ctx, tx, origin.Rows, origin.Derived); err != nil {
 		return "", err
 	}
+	if _, err = captureLegacy24FunctionsTx(ctx, tx, origin.Functions); err != nil {
+		return "", err
+	}
 	extras, err := captureLegacy24ExtrasTx(ctx, tx)
 	if err != nil || !reflect.DeepEqual(extras, origin.Extras) {
 		return "", errors.New("HOLD: independent Space data changed")

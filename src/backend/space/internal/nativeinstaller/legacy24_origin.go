@@ -25,6 +25,7 @@ type legacy24OriginObservation struct {
 	Derived            *legacy24Derived                  `json:"derived"`
 	Spaces             []string                          `json:"spaces"`
 	Extras             []legacy24Extra                   `json:"extras"`
+	Functions          []legacy24FunctionAccess          `json:"functions"`
 }
 
 // The complete source-owned public object set was fixed by the catalog
@@ -51,6 +52,9 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 		return nil, err
 	}
 	defer tx.Rollback(context.Background())
+	if err = qualifyLegacy24InstallerTx(ctx, tx); err != nil {
+		return nil, err
+	}
 	catalog, err := inspectLegacyCatalogTx(ctx, tx, 24, legacy24CatalogPG16SHA256)
 	if err != nil {
 		return nil, err
@@ -74,6 +78,10 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 		return nil, err
 	}
 	stableAccess, err := captureLegacy24StableAccessTx(ctx, tx, rows)
+	if err != nil {
+		return nil, err
+	}
+	functions, err := captureLegacy24FunctionsTx(ctx, tx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +125,8 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 		Spaces             []string                       `json:"spaces"`
 		Extras             []legacy24Extra                `json:"extras"`
 		StableAccessSHA256 string                         `json:"stable_access_sha256"`
-	}{rows, derived, spaces, extras, stableAccess})
+		Functions          []legacy24FunctionAccess       `json:"functions"`
+	}{rows, derived, spaces, extras, stableAccess, functions})
 	if err != nil || len(encoded) > 1<<20 {
 		return nil, errors.New("legacy24 preimage unavailable")
 	}
@@ -127,7 +136,7 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	}
 	return &legacy24OriginObservation{Target: &store.NativeInstallerSourceFacts{Version: 24, DatabaseSystemID: system,
 		DatabaseName: name, DatabaseOID: oid, InstallerRole: role}, CatalogSHA256: catalog,
-		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, StableAccessSHA256: stableAccess, Rows: rows, Derived: derived, Spaces: spaces, Extras: extras}, nil
+		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, StableAccessSHA256: stableAccess, Rows: rows, Derived: derived, Spaces: spaces, Extras: extras, Functions: functions}, nil
 }
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {

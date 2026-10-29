@@ -49,7 +49,7 @@ func readLegacy24Origin(in io.Reader, receipt *Legacy24Receipt) (*legacy24Origin
 }
 
 func validLegacy24OriginBinding(origin *legacy24OriginObservation, receipt *Legacy24Receipt) bool {
-	if origin == nil || receipt == nil || origin.Target == nil || receipt.Source24 == nil || origin.Derived == nil || origin.Rows == nil || origin.Spaces == nil || origin.Extras == nil ||
+	if origin == nil || receipt == nil || origin.Target == nil || receipt.Source24 == nil || origin.Derived == nil || origin.Rows == nil || origin.Spaces == nil || origin.Extras == nil || origin.Functions == nil ||
 		!reflect.DeepEqual(origin.Target, receipt.Source24) || origin.Target.Version != 24 || !receipt.Clean24 || origin.CatalogSHA256 != legacy24CatalogPG16SHA256 ||
 		origin.CatalogSHA256 != receipt.Catalog24SHA256 || origin.PreimageSHA256 != receipt.PreimageSHA256 || origin.AccessSHA256 != receipt.AccessSHA256 || uint64(len(origin.Spaces)) != receipt.SpaceCount {
 		return false
@@ -60,7 +60,8 @@ func validLegacy24OriginBinding(origin *legacy24OriginObservation, receipt *Lega
 		Spaces             []string                       `json:"spaces"`
 		Extras             []legacy24Extra                `json:"extras"`
 		StableAccessSHA256 string                         `json:"stable_access_sha256"`
-	}{origin.Rows, origin.Derived, origin.Spaces, origin.Extras, origin.StableAccessSHA256})
+		Functions          []legacy24FunctionAccess       `json:"functions"`
+	}{origin.Rows, origin.Derived, origin.Spaces, origin.Extras, origin.StableAccessSHA256, origin.Functions})
 	if err != nil || len(encoded) > 1<<20 {
 		return false
 	}
