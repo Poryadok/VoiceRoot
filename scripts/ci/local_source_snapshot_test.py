@@ -52,6 +52,45 @@ class LocalSourceSnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             snapshot.capture(self.root, '0' * 40)
 
+    def test_materialized_source_preserves_dirty_raw_bytes_and_real_index(self):
+        (self.root / 'old.txt').write_bytes(b'changed\r\n')
+        (self.root / 'untracked.txt').write_bytes(b'new\n')
+        before = self.git('status', '--porcelain=v1', '-z', '--untracked-files=all')
+        source = snapshot.capture(self.root, self.head)
+        with tempfile.TemporaryDirectory() as external:
+            destination = Path(external) / 'source'
+            snapshot.materialize(self.root, source, destination)
+            self.assertEqual((destination / 'old.txt').read_bytes(), b'changed\r\n')
+            self.assertEqual((destination / 'untracked.txt').read_bytes(), b'new\n')
+            self.assertFalse((destination / '.git').exists())
+            with self.assertRaises(ValueError):
+                snapshot.materialize(self.root, source, destination)
+        self.assertEqual(before, self.git('status', '--porcelain=v1', '-z', '--untracked-files=all'))
+
+    def test_materialization_rejects_changed_source(self):
+        source = snapshot.capture(self.root, self.head)
+        (self.root / 'old.txt').write_bytes(b'changed after snapshot\n')
+        with tempfile.TemporaryDirectory() as external:
+            with self.assertRaisesRegex(ValueError, 'source changed'):
+                snapshot.materialize(self.root, source, Path(external) / 'source')
+
+    def test_materialization_rejects_corrupt_copy_even_if_source_is_unchanged(self):
+        source = snapshot.capture(self.root, self.head)
+        copy = snapshot.shutil.copyfile
+        def corrupt(original, target):
+            copy(original, target)
+            if original.name == 'old.txt':
+                target.write_bytes(b'corrupt\n')
+        with tempfile.TemporaryDirectory() as external:
+            with mock.patch.object(snapshot.shutil, 'copyfile', side_effect=corrupt):
+                with self.assertRaisesRegex(ValueError, 'source changed'):
+                    snapshot.materialize(self.root, source, Path(external) / 'source')
+
+    def test_materialization_refuses_destination_in_source_tree(self):
+        source = snapshot.capture(self.root, self.head)
+        with self.assertRaisesRegex(ValueError, 'outside'):
+            snapshot.materialize(self.root, source, self.root / 'snapshot')
+
     def test_tracked_gitlinks_are_rejected(self):
         self.git('update-index', '--add', '--cacheinfo', '160000,' + self.head + ',submodule')
         with self.assertRaisesRegex(ValueError, 'gitlink'):

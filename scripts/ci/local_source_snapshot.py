@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -97,6 +98,54 @@ def capture(root, head):
             'tree': first[0], 'worktree_sha256': first[1],
             'raw_mismatch_paths': first[2],
             'changed_paths': changed_paths(root, head, first[0])}
+
+
+def materialize(root, source, destination):
+    """Copy the exact Git-visible working-tree bytes to a new private directory.
+
+    This does not capture ignored inputs or prove that a command ran. A failed
+    copy is retained for inspection and must never be used as evidence.
+    """
+    root = Path(root).resolve()
+    destination = Path(destination).resolve()
+    if destination == root or root in destination.parents:
+        raise ValueError('snapshot destination must be outside the source tree')
+    if destination.exists():
+        raise ValueError('snapshot destination already exists')
+    if capture(root, source['head']) != source:
+        raise ValueError('source changed before materialization')
+    entries = _git(root, 'ls-tree', '-r', '-z', '--full-tree', source['tree'])
+    destination.mkdir(parents=True, exist_ok=False)
+    digest = hashlib.sha256()
+    for entry in sorted((e for e in entries.split(b'\0') if e), key=lambda e: e.split(b'\t', 1)[1]):
+        if not entry:
+            continue
+        metadata, raw_name = entry.split(b'\t', 1)
+        mode, kind, _ = metadata.decode('ascii').split()
+        name = raw_name.decode('utf-8')
+        parts = name.split('/')
+        if (mode not in ('100644', '100755') or kind != 'blob' or
+                any(part in ('', '.', '..', '.git') or '\\' in part or ':' in part
+                    for part in parts)):
+            raise ValueError('unsupported snapshot path or file type: ' + name)
+        original = root.joinpath(*parts)
+        if not original.is_file() or original.is_symlink() or root not in original.resolve().parents:
+            raise ValueError('unsupported or changed source path: ' + name)
+        target = destination.joinpath(*parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(original, target)
+        shutil.copymode(original, target)
+        info = target.stat()
+        digest.update(len(raw_name).to_bytes(8, 'big'))
+        digest.update(raw_name)
+        digest.update(stat.S_IMODE(info.st_mode).to_bytes(4, 'big'))
+        digest.update(b'F' + info.st_size.to_bytes(8, 'big'))
+        with target.open('rb') as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                digest.update(block)
+    if digest.hexdigest() != source['worktree_sha256'] or capture(root, source['head']) != source:
+        raise ValueError('source changed during materialization')
+    return destination
 
 
 def main():
