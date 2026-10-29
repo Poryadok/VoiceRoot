@@ -97,6 +97,7 @@ class AuthorityTest(unittest.TestCase):
         phase=SimpleNamespace(proof={'objects':{'voice-space-media-server-tls':{'uid':'space-cert','resourceVersion':'7'}},
             'public_jwks':{'voice-space-principal-signing':{'keys':[]}},'ca':{'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}})
         binding=authority.BoundFixed9SpaceAuthority(self.cut,object(),object(),phase,object(),'token')
+        self.assertNotIn('token',repr(binding))
         self.patches[2].stop()
         with patch.object(target,'verify_fixed9_successor') as verify, patch.object(crypto,'der',return_value=b'der'):
             proof,jwks=authority._space(self.cut,binding,'token')
@@ -105,6 +106,10 @@ class AuthorityTest(unittest.TestCase):
             with self.assertRaises(ValueError):authority._space(self.cut,binding,'wrong')
             with patch.object(authority.transport,'public_certificate',return_value=b'foreign\n7\ncHVibGlj'):
                 with self.assertRaises(ValueError):authority._space(self.cut,binding,'token')
+
+    def test_fixed9_binding_rejects_untyped_inputs(self):
+        with self.assertRaises(authority.AuthorityError):
+            authority.bind_delegated_space(self.cut,object(),object(),object(),object(),'token')
 
     def test_delegated_proof_must_match_p3_certificate_and_ca(self):
         ca={'uid':'ca','resourceVersion':'8','der_sha256':'a'*64}; self.p3['public_sources']['voice-media-ca']=ca

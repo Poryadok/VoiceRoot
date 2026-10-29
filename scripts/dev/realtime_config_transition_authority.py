@@ -17,7 +17,7 @@ import writer_cut
 class AuthorityError(RuntimeError): pass
 
 
-@dataclass(frozen=True,eq=False)
+@dataclass(frozen=True,eq=False,repr=False)
 class BoundFixed9SpaceAuthority:
     cut: object
     trust: object
@@ -32,11 +32,11 @@ def bind_delegated_space(cut,trust,creator,space,role,token):
     import space_creator_runtime_profile_delegated as delegated
     import space_creator_runtime_profile_target_trust as target
     import space_role_peer_create as role_module
-    if (type(cut) is not writer_cut.WriterCut or type(trust) is not target.TargetTrustPhase or
-            type(creator) is not delegated.CreatorReceiver or type(space) is not delegated.SpaceReceiver or
-            type(role) is not role_module.Session or space.cut is not cut or creator.cut is not cut or
-            role.preflight.cut is not cut): raise AuthorityError('Space authority unavailable')
     try:
+        if (type(cut) is not writer_cut.WriterCut or type(trust) is not target.TargetTrustPhase or
+                type(creator) is not delegated.CreatorReceiver or type(space) is not delegated.SpaceReceiver or
+                type(role) is not role_module.Session or space.cut is not cut or creator.cut is not cut or
+                role.preflight.cut is not cut): raise ValueError()
         target.verify_fixed9_successor(trust,token,creator,space,role)
         binding=BoundFixed9SpaceAuthority(cut,trust,creator,space,role,token)
         target.verify_fixed9_successor(trust,token,creator,space,role)
