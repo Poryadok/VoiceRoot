@@ -5,6 +5,7 @@ These tests establish a hold boundary, not a successful preservation or rollout.
 """
 import copy
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,65 @@ class BridgePreservationAdmission(unittest.TestCase):
             import json
             self.assertEqual(json.loads(result.stdout),
                              [str(code / 'nats-rollout-preservation' / (name + '.py')) for name in modules])
+
+    def test_captured_helpers_check_protected_source_receipt(self):
+        source = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(dir='/root') as directory:
+            root = Path(directory)
+            installed = root / 'installed'
+            installed.mkdir(mode=0o700)
+            code = installed / 'code'
+            pins = (staging_prerequisites.BINARY_PINS if os.environ.get('VOICE_TEST_PINNED_ARCHIVE')
+                    else root_composition_fixture.SYNTHETIC_PINS)
+            with patch.object(staging_prerequisites, 'BINARY_PINS', pins):
+                binding = root_composition_fixture.helper_binding(source, code)
+            workspace = installed / 'sources' / ('a' * 12)
+            workspace.mkdir(parents=True, mode=0o700)
+            for relative in binding:
+                if relative in pins:
+                    continue
+                dest = workspace / 'scripts' / 'staging' / relative
+                dest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                shutil.copyfile(source / 'scripts' / 'staging' / relative, dest)
+                dest.chmod(0o600)
+            script = r'''
+import copy, json, sys
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+import bridge_root, commands, guard, resource_claim, staging_prerequisites as parent
+root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
+binding=json.loads((code/'capture-manifest.json').read_bytes()); pins=json.loads(sys.argv[2])
+c=dict(project='voice',resource='STAGING',actor='operator',claim='11111111-1111-4111-8111-111111111111',generation=7,
+ window='22222222-2222-4222-8222-222222222222',revision=12,operation_id='stg-run-17',commit='c'*40,
+ images={'voice-user/user':'registry/user@sha256:'+'c'*64})
+card=dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['actor'],claim=c['claim'],
+ generation=c['generation'],window=c['window'],revision=c['revision'],operation=2,
+ candidate=dict(state='known',commit=c['commit'],images=copy.deepcopy(c['images'])),
+ observed=dict(state='known',claim=c['claim'],window=c['window'],operation=1,
+ images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
+approved={'source_sha':c['commit'],'source_files':{'scripts/staging/'+k:v for k,v in binding.items() if k not in pins}}
+execution={'head_sha':c['commit']}; session=resource_claim.Session(c,'a'*12,resource_claim.digest(binding),
+ lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
+actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding=binding;actions.tt_session=session
+with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'installed'), \
+ patch.object(parent,'BINARY_PINS',pins),patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)):
+ session.admit(start=True)
+ with resource_claim.command_scope(session.check):
+  bridge_root.record_source_authority(session,approved,execution)
+  parent._capture_authority(actions,session,approved,execution)
+  p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
+  p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
+  try: parent._verify_helper_source(session,approved,workspace)
+  except Exception: pass
+  else: raise AssertionError('changed source accepted')
+  assert session.check()['phase']=='prepare'
+'''
+            import json
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(code / 'nats-rollout-preservation'),
+                                                               str(code / 'nats-known-baseline'))))
+            subprocess.run([sys.executable, '-c', script, str(root), json.dumps(pins)], cwd=directory,
+                           env=env, check=True, capture_output=True, text=True)
 
     def test_missing_preservation_holds_before_parent_or_cluster(self):
         for mode in ('full', 'app-only'):
