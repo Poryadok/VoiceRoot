@@ -44,6 +44,21 @@ class FinalizeTest(unittest.TestCase):
         path = custody.build_bundle(self.root, self.key, binding, manifest)
         self.assertEqual(custody.verify_bundle(path, self.key, binding)['bytes'], path.stat().st_size)
 
+    def test_second_cycle_is_distinct_and_third_cycle_refused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binding = copy.deepcopy(self.binding)
+            binding['operation_id'] = 'media-c2-' + 'a'*32
+            receipts = copy.deepcopy(self.receipts)
+            for receipt in receipts.values(): receipt['operation_id'] = binding['operation_id']
+            manifest = backup.export(root, self.key, binding, lambda member, output: output.write(member.encode()))
+            final, signed = finalize.finalize(root, self.key, binding, manifest, receipts)
+            self.assertEqual(final['operation_id'], binding['operation_id'])
+            backup.verify(root, self.key, final, signed)
+            binding['operation_id'] = 'media-c3-' + 'a'*32
+            with self.assertRaises(finalize.FinalizeError):
+                finalize.finalize(root, self.key, binding, manifest, receipts)
+
     def test_stale_foreign_partial_or_duplicated_receipts_fail(self):
         for fault in ('missing', 'extra', 'member', 'operation', 'snapshot', 'pod', 'nonce', 'exit', 'bool_exit', 'unknown_key', 'scope'):
             with self.subTest(fault=fault):

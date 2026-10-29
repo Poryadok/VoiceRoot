@@ -45,7 +45,7 @@ class Journal:
                 os.close(parentfd)
             self.dirfd = os.open(self.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             self._private(os.fstat(self.dirfd), 0o700, directory=True)
-            self.lockfd = os.open('lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=self.dirfd)
+            self.lockfd = os.open('lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600, dir_fd=self.dirfd)
             self._private(os.fstat(self.lockfd), 0o600)
             fcntl.flock(self.lockfd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             inventory = set(os.listdir(self.dirfd))
@@ -54,7 +54,7 @@ class Journal:
                 raise RecoveryRequired('journal inventory requires reconciliation')
             os.fsync(self.dirfd)
             try:
-                fd = os.open('state.json', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self.dirfd)
+                fd = os.open('state.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.dirfd)
             except FileNotFoundError:
                 self.state = {'format': 1, 'intent': copy.deepcopy(intent), 'steps': {}}
                 self.save()
