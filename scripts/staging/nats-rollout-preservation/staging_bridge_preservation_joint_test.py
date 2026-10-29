@@ -100,7 +100,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
   try: parent._verify_helper_source(session,approved,workspace)
-  except Exception: pass
+  except parent.Blocked as exc:
+   assert str(exc)=='staging_prerequisites_source_changed', str(exc)
   else: raise AssertionError('changed source accepted')
   assert session.check()['phase']=='prepare'
 '''
