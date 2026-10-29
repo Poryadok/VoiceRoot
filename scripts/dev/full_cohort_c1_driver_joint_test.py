@@ -9,6 +9,7 @@ import full_cohort_c1_driver as driver
 import full_cohort_supervisor as supervisor
 import full_cohort_inventory_phase as inventory
 import full_cohort_inventory_phase_test as inventory_fixture
+import full_cohort_affected_plan as affected
 import full_cohort_schema_metadata as schema
 
 
@@ -59,6 +60,25 @@ class ExternalKube:
         return json.dumps(self.objects[args[9],args[10]]).encode()
 
 
+class ExternalPostgres:
+    """Bounded synthetic process output; production catalog parser remains active."""
+    def __init__(self,kube):
+        self.kube=kube; self.oid=42; self.reads=0; self.drift=False
+
+    def process(self,args,limit):
+        if args[8]!='exec':return self.kube.process(args)
+        def database(name,oid,allow,template):
+            return {'name':name,'oid':oid,'connect':allow,'allowconn':allow,'template':template,'sessions':0,'prepared':0,
+                    'encoding':'UTF8','collate':'C','ctype':'C','locale_provider':'c','icu_locale':None,
+                    'connection_limit':-1,'owner':'voice','acl':None}
+        self.reads+=1; oid=self.oid+int(self.drift and self.reads>1)
+        value={'server_start':'fixture-start','can_read':True,'databases':[
+            database('postgres',1,True,False),database('user_db',oid,True,False),database('template0',2,False,True)]}
+        raw=json.dumps(value).encode()
+        if len(raw)>limit:raise ValueError('fixture response too large')
+        return raw
+
+
 class DriverJointTest(unittest.TestCase):
     def test_external_kube_fixture_authenticates_inventory_and_engine(self):
         kube=ExternalKube(); pods,controllers,_=inventory.inventory(kube)
@@ -67,6 +87,22 @@ class DriverJointTest(unittest.TestCase):
         self.assertEqual(observe()['pvc_uid'],'pvc')
         kube.objects['endpoints','voice-postgres']['subsets'][0]['addresses'][0]['targetRef']['uid']='foreign'
         with self.assertRaises(schema.Hold):observe()
+
+    def test_external_postgres_catalog_runs_real_fenced_parser(self):
+        case=fixture.RealPreflightTest('test_pre_supervisor_hook_uses_the_real_root_facade')
+        created=[]; self.addCleanup(checked_nested,case,created); original=fixture.writer_cut_test.WriterCutTest
+        def make(*args):
+            base=checked_base(original(*args)); created.append(base); return base
+        with patch.object(fixture.writer_cut_test,'WriterCutTest',side_effect=make):
+            with case.phases() as work:
+                kube=ExternalKube(); kube.objects['namespace','voice-dev']['metadata']['uid']=work.owner.namespace_uid
+                database=ExternalPostgres(kube); engine=schema.kube_engine_snapshot(kube.process,work.owner.catalog._guard)()
+                with patch.object(schema,'_bounded_process',side_effect=database.process):
+                    result=affected._full_catalog(work.owner.catalog,engine,'fixture-start')
+                    database.reads=0; database.drift=True
+                    with self.assertRaises(ValueError):affected._full_catalog(work.owner.catalog,engine,'fixture-start')
+                self.assertEqual(result['all_databases']['user_db'],42)
+                self.assertEqual(result['excluded']['template0']['reason'],'connections_disabled_zero_activity')
 
     def test_changed_tt_generation_refuses_before_package_effect(self):
         """Exercise the real driver, supervisor, journals and fence without a live claim."""
