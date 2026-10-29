@@ -1,4 +1,5 @@
 import unittest
+import copy
 from unittest import mock
 from types import SimpleNamespace
 import json
@@ -9,6 +10,9 @@ import secrets
 import subprocess
 import tempfile
 import time
+import media_backup_phase_test as fixture
+import media_operation_journal
+import resource_fencing
 
 import full_cohort_go_migration as migration
 
@@ -22,6 +26,19 @@ class RenderTest(unittest.TestCase):
         self.assertEqual(base64.b64decode(obj['data']['PGPASSWORD']), b'fixture-password')
         with self.assertRaises(migration.MigrationError):
             migration._secret('media-c1-' + 'a' * 32, 'chat_db', credential | {'sslmode': 'verify-full'}, '10.0.0.1')
+
+    def test_secret_readback_checks_uid_rv_type_immutable_and_exact_private_bytes(self):
+        credential = {'role': 'voice', 'sslmode': 'disable', 'password': 'fixture-password'}
+        intended = migration._secret('media-c1-' + 'a' * 32, 'chat_db', credential, '10.0.0.1')
+        actual = dict(intended, metadata=intended['metadata'] | {'uid': 'uid', 'resourceVersion': '7'})
+        self.assertEqual(migration._check_secret(intended, actual), {'name': intended['metadata']['name'],
+                         'uid': 'uid', 'resourceVersion': '7'})
+        for bad in (actual | {'immutable': False}, actual | {'data': {'PGPASSWORD': 'd3Jvbmc='}},
+                    actual | {'type': 'kubernetes.io/tls'}, actual | {'metadata': actual['metadata'] | {'deletionTimestamp': 'now'}},
+                    actual | {'metadata': actual['metadata'] | {'ownerReferences': [{'uid': 'foreign'}]}},
+                    actual | {'metadata': actual['metadata'] | {'finalizers': ['foreign']}},
+                    actual | {'metadata': actual['metadata'] | {'annotations': {'foreign': 'value'}}}):
+            with self.subTest(), self.assertRaises(migration.MigrationError): migration._check_secret(intended, bad)
 
     def test_job_uses_fixed_url_key_and_single_use_job(self):
         config, job = migration.render('media-c1-' + 'a' * 32, 'b' * 40, 'chat_db',
@@ -97,6 +114,31 @@ class RenderTest(unittest.TestCase):
             with self.assertRaises(migration.MigrationError): migration._credential('chat_db', lambda: None)
         with mock.patch.object(migration.schema, 'kube_key_reader', return_value=stable):
             with self.assertRaises(migration.schema.GuardLost): migration._credential('chat_db', lambda: False)
+
+    def test_job_owned_pod_identity_and_platform_are_required(self):
+        _, authored = migration.render('media-c1-' + 'a' * 32, 'b' * 40, 'chat_db',
+                                       {'000001_init.up.sql': b'SELECT 1;'},
+                                       {'name': 'node', 'uid': 'node-uid', 'hostname': 'node', 'architecture': 'amd64'},
+                                       {'host': 'voice-postgres', 'service_ip': '10.0.0.1', 'role': 'voice', 'sslmode': 'disable'})
+        job = {'metadata': {'uid': 'job-uid'}}
+        pod = {'apiVersion': 'v1', 'kind': 'Pod', 'metadata': {'namespace': 'voice-dev', 'uid': 'pod-uid',
+               'resourceVersion': '4', 'labels': authored['spec']['template']['metadata']['labels'],
+               'ownerReferences': [{'kind': 'Job', 'uid': 'job-uid', 'controller': True}]},
+               'spec': copy.deepcopy(authored['spec']['template']['spec']) | {'nodeName': 'node'},
+               'status': {'phase': 'Running', 'podIP': '10.0.0.4', 'containerStatuses': [{'name': 'migrate',
+               'containerID': 'containerd://cid', 'restartCount': 0,
+               'imageID': 'containerd://' + migration.realtime_migration_job.PLATFORMS['amd64']}]}}
+        execution = {'database': 'chat_db', 'database_oid': 4, 'role': 'voice',
+                     'application_name': authored['metadata']['name'], 'container_name': 'migrate',
+                     'node_name': 'node', 'node_uid': 'node-uid',
+                     'platform_digest': migration.realtime_migration_job.PLATFORMS['amd64']}
+        with mock.patch.object(migration, 'verify_writer_job', return_value=authored['spec']), \
+             mock.patch.object(migration.auth_user_candidate_probe, 'admitted_pod'):
+            self.assertEqual(migration.verify_writer_pod(authored, job, pod, execution), {'uid': 'pod-uid', 'ip': '10.0.0.4'})
+            bad = copy.deepcopy(pod); bad['metadata']['ownerReferences'][0]['uid'] = 'foreign'
+            with self.assertRaises(migration.MigrationError): migration.verify_writer_pod(authored, job, bad, execution)
+            bad = copy.deepcopy(pod); bad['status']['containerStatuses'][0]['imageID'] = 'sha256:' + 'f' * 64
+            with self.assertRaises(migration.MigrationError): migration.verify_writer_pod(authored, job, bad, execution)
 
     def test_metadata_role_is_source_login_and_secret_drift_is_rejected(self):
         plans = {'chat_db': {'from': 1, 'to': 2}, 'space_db': {'from': 25, 'to': 25}}
@@ -195,3 +237,67 @@ class LoginTest(unittest.TestCase):
         bad = list(args); bad[6] = 'PGPASSWORD=incorrect'
         refused = subprocess.run(bad, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertNotEqual(refused.returncode, 0)
+
+
+class SecretSnapshotTest(unittest.TestCase):
+    def setUp(self):
+        self.base = fixture.PhaseTest('test_exact_terminal_receipt_and_no_replay')
+        self.base.setUp(); self.addCleanup(self.base.doCleanups)
+        self.journal = media_operation_journal.Journal(Path(self.base.temp.name) / 'go-secret',
+                            {'resource_context': self.base.context, 'namespace_uid': 'ns'})
+        self.addCleanup(self.journal.close)
+        client = object.__new__(migration.frontend_runtime_executor.KubectlTransport)
+        client.journal = self.journal; self.base.ledger.client = client
+        self.cut = SimpleNamespace(verify_drained=lambda: None)
+        self.phase = migration.SecretSnapshot(self.journal, self.base.fence, client, self.base.lock, 'ns',
+                                              object(), object(), self.cut, 'token', 'chat_db')
+        self.credential = {'role': 'voice', 'sslmode': 'disable', 'host': 'voice-postgres',
+                           'password': 'fixture-secret', 'references': {'url': {'uid': 's', 'resource_version': '1'}}}
+        self.safe = {k:v for k,v in self.credential.items() if k != 'password'}
+        self.proof = {'source': {'engine': {'service_ip': '10.0.0.1'}, 'database_oid': 1, 'server_start': 'start'},
+                      'credential': self.safe, 'metadata_receipt_sha256': 'd' * 64}
+        self.created = None
+        self.patches = [mock.patch.object(migration.media_operation_guard, 'verify'),
+                        mock.patch.object(migration, 'qualified_plan', return_value=self.proof),
+                        mock.patch.object(migration, '_credential', return_value=self.credential),
+                        mock.patch.object(migration, '_login', return_value=self.safe)]
+        for patch in self.patches: patch.start(); self.addCleanup(patch.stop)
+
+    def transport(self, args, body=None):
+        if '--dry-run=server' in args:
+            return body
+        if args[0] == 'create':
+            self.created = dict(body, metadata=body['metadata'] | {'uid': 'secret-uid', 'resourceVersion': '7'})
+        return self.created
+
+    def test_create_readback_exact_and_no_secret_in_journal_or_ledger(self):
+        with mock.patch.object(migration, '_private_kube', side_effect=self.transport), \
+             mock.patch.object(migration.schema, 'kube_engine_snapshot', return_value=lambda:self.proof['source']['engine']):
+            receipt = self.phase.create()
+            self.assertEqual(receipt['uid'], 'secret-uid')
+            self.assertEqual(self.phase.verify(), receipt)
+            self.assertNotIn('fixture-secret', str(self.journal.state) + str(self.base.ledger.row))
+            self.assertNotIn(base64.b64encode(b'fixture-secret').decode(), str(self.journal.state) + str(self.base.ledger.row))
+            self.created['metadata']['uid'] = 'recreated'
+            with self.assertRaises(migration.MigrationError): self.phase.verify()
+            with self.assertRaises(migration.MigrationError): self.phase.create()
+
+    def test_lost_create_reply_marks_fence_uncertain_and_never_retries(self):
+        def lost(args, body=None):
+            if args[0] == 'create' and '--dry-run=server' not in args:
+                self.transport(args, body)
+                raise OSError('response lost')
+            return self.transport(args, body)
+        with mock.patch.object(migration, '_private_kube', side_effect=lost):
+            with self.assertRaises(migration.MigrationError): self.phase.create()
+            self.assertEqual(self.base.ledger.row['status'], 'uncertain')
+            with self.assertRaises(migration.MigrationError): self.phase.create()
+
+    def test_admission_injected_owner_refused_before_create(self):
+        def injected(args, body=None):
+            if '--dry-run=server' in args:
+                return dict(body, metadata=body['metadata'] | {'ownerReferences': [{'uid': 'foreign'}]})
+            self.fail('create must not occur')
+        with mock.patch.object(migration, '_private_kube', side_effect=injected):
+            with self.assertRaises(migration.MigrationError): self.phase.create()
+        self.assertNotIn('go_migration_secrets', self.base.ledger.row)
