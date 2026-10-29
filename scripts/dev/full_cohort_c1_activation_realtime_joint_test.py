@@ -63,8 +63,9 @@ class RealtimeFactoryJointTest(unittest.TestCase):
             def __init__(inner,client):inner.client=client
             def read(inner):return backing.read()
             def write(inner,revision,row):return backing.write(revision,row)
+        check=lambda:copy.deepcopy(base.card)
         def facade(journal):
-            client=Client(base.lock,journal); return client,resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),LedgerView(client))
+            client=Client(base.lock,journal); return client,resource_fencing.Fence(base.context,check,LedgerView(client))
         def make_journal(name,extra):
             value=journals.Journal(Path(base.temp.name)/name,{'resource_context':base.context,'namespace_uid':'ns',**extra})
             self.addCleanup(value.close); client,fence=facade(value); return value,fence,client
@@ -118,7 +119,10 @@ class RealtimeFactoryJointTest(unittest.TestCase):
                     (fault=='role-guard' and steps.get('role',{}).get('status')=='pending') or
                     (fault=='database-guard' and steps.get('database',{}).get('status')=='pending')):
                 raise ValueError('synthetic lost writer cut')
-            return original_verify()
+            result=original_verify()
+            if fault=='secret-check-drift' and secret.get('status')=='pending':
+                cut.fence.check=lambda:copy.deepcopy(base.card)
+            return result
         self.enterContext(mock.patch.object(cut,'verify_drained',side_effect=checked_cut))
         supervisor=activation.supervisor_module.Supervisor.__new__(activation.supervisor_module.Supervisor)
         supervisor.context=base.context; supervisor.lock=base.lock; supervisor.namespace_uid='ns'; supervisor.cut=cut; supervisor.physical=object()
@@ -136,7 +140,7 @@ class RealtimeFactoryJointTest(unittest.TestCase):
         if fault:
             with self.assertRaises(activation.ActivationError):activation._realtime_database(driver,prepared,'token')
             expected={'lost':['secret-post','role-sql','database-sql','job-post'],
-                      'secret-guard':[],'role-guard':['secret-post'],
+                      'secret-guard':[],'secret-check-drift':[],'role-guard':['secret-post'],
                       'database-guard':['secret-post','role-sql']}[fault]
             self.assertEqual(events,expected); self.assertEqual(backing.row['status'],'uncertain')
             with self.assertRaises(activation.ActivationError):activation._realtime_database(driver,prepared,'token')
@@ -149,6 +153,7 @@ class RealtimeFactoryJointTest(unittest.TestCase):
     def test_actual_factory_with_guarded_secret_provision_and_migration(self):self.exercise(None)
     def test_lost_migration_reply_is_uncertain_and_never_replayed(self):self.exercise('lost')
     def test_cut_loss_after_secret_pending_never_posts(self):self.exercise('secret-guard')
+    def test_cut_check_identity_drift_after_pending_never_posts(self):self.exercise('secret-check-drift')
     def test_cut_loss_after_role_pending_never_executes_role(self):self.exercise('role-guard')
     def test_cut_loss_after_database_pending_never_executes_database(self):self.exercise('database-guard')
 

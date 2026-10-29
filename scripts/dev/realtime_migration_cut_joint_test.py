@@ -74,9 +74,10 @@ class JointTest(unittest.TestCase):
             def __init__(inner, client): inner.client=client
             def read(inner): return backing.read()
             def write(inner, revision, row): return backing.write(revision,row)
+        check=lambda:copy.deepcopy(base.card)
         def facade(journal):
             client=Client(base.lock,journal)
-            return client,resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),LedgerView(client))
+            return client,resource_fencing.Fence(base.context,check,LedgerView(client))
         def journal(name, extra):
             value=journals.Journal(Path(base.temp.name)/name,{'resource_context':base.context,'namespace_uid':'ns',**extra})
             self.addCleanup(value.close); return value
