@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run && node --test browser/runtime-config-startup.node.mjs",
     "test:browser": "node --test browser/text-readiness.node.mjs browser/staff-flows.node.mjs && node browser/staff-flows.mjs"
   },
   "dependencies": {
