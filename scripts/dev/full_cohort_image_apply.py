@@ -3,16 +3,18 @@
 Construct a separate private image Journal after WriterCut.drain using actual
 CUT-state observations. Intent `full_cohort` has `images`, `platform_digests`,
 `workloads` (UID, resourceVersion, generation, full spec, resume_replicas),
-`cut` and `service_accounts`. Supply the still-owned original `cut_journal`,
-same fence/ledger/lock and fixed KubectlTransport bound to the image Journal.
+`cut`, `service_accounts` and `cut_proof`. Call `prepare_cut(actual_cut)` once
+before creating the image Journal; copy the complete private `admission.proof`
+into its intent, and pass the admission handle to FullCohortImageApply. Supply
+separate fixed per-journal clients and fences on the same physical ledger/lock.
 The exact 23 refs and platform digests must already be authenticated by the
 central operator. `apply()` returns private post-patch UID/RV/generation/spec;
 the caller restores replicas through WriterCut using those current targets,
 then calls `verify_after_resume()`. It verifies only Kubernetes workload
 readiness and writer receipts. Business smoke remains the caller's obligation.
 An uncertain outcome retains the lock; never replay an invocation.
-Changed post-cut templates are refused until a source-owned authenticated
-configuration-transition validator is supplied by the central operator.
+Only successors already validated by the source-owned WriterCut are admitted;
+the backend producer remains responsible for its own admission and evidence.
 """
 import copy
 import hashlib
@@ -24,6 +26,7 @@ import secrets
 from frontend_runtime_executor import KubectlTransport
 import media_operation_guard
 import update_images
+from writer_cut import WriterCut
 
 
 class RecoveryRequired(RuntimeError):
@@ -37,15 +40,69 @@ def digest(value):
 CATALOG = {'voice-' + name: container for name, container in update_images.SERVICES.items()}
 
 
+class CutAdmission:
+    """Private in-process capture; not reconstructible from caller-supplied hashes."""
+    def __init__(self, cut):
+        if type(cut) is not WriterCut:
+            raise RecoveryRequired('actual writer cut required')
+        self.cut = cut
+        self.proof = copy.deepcopy(cut.current_cut_proof())
+        cut._guard()
+        cut._recheck_config_successors()
+        row, revision = cut.fence.ledger.read()
+        if not cut.fence.owned(row) or row.get('status') != 'active' or not isinstance(revision, tuple) or len(revision) != 2:
+            raise RecoveryRequired('writer ledger unavailable')
+        self.ledger_uid = revision[0]
+        self.cut_intent = copy.deepcopy(cut.journal.intent)
+        self.cut_object_intent = copy.deepcopy(cut.intent)
+        self.cut_object_admission = copy.deepcopy(cut.admission)
+        self.cut_invocation = cut.invocation
+        self.retired_rs = copy.deepcopy(cut.retired_rs)
+        self.probe = cut.probe
+        self.cut_steps = copy.deepcopy(cut.journal.state['steps'])
+        self.writer_effects = copy.deepcopy(row.get('writer_cut_effects', {}))
+        self.writer_invocation = copy.deepcopy(row.get('writer_cut_invocation'))
+        self.config_journal = cut.config_journal
+        self.config_snapshot = copy.deepcopy(cut.config_snapshot)
+        self.successors = copy.deepcopy(cut.successors)
+        self.config_intent = copy.deepcopy(cut.config_journal.intent) if cut.config_journal is not None else None
+        self.config_steps = copy.deepcopy(cut.config_journal.state['steps']) if cut.config_journal is not None else None
+        self.config_effects = copy.deepcopy(row.get('backend_config_effects', {}))
+        cut._guard()
+        cut._recheck_config_successors()
+        final, final_revision = cut.fence.ledger.read()
+        if final != row or final_revision != revision:
+            raise RecoveryRequired('writer proof changed during capture')
+
+
+def prepare_cut(cut):
+    return CutAdmission(cut)
+
+
+def admission_changed(admission, snapshot, cut, config_journal):
+    return (admission.cut is not cut or admission.config_journal is not config_journal
+            or any(getattr(admission, key, None) != value for key, value in snapshot.items()))
+
+
 class FullCohortImageApply:
-    def __init__(self, journal, fence, client, lock, namespace_uid, cut_journal=None):
+    def __init__(self, journal, fence, client, lock, namespace_uid, admission=None):
         self.journal, self.fence, self.client = journal, fence, client
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.intent = copy.deepcopy(journal.intent)
-        self.cut_journal = cut_journal
-        self.cut_intent = copy.deepcopy(cut_journal.intent) if cut_journal is not None else None
+        if type(admission) is not CutAdmission:
+            raise RecoveryRequired('source-owned cut admission required')
+        self.admission = admission
+        self.capture_values = copy.deepcopy({k: getattr(admission, k) for k in (
+            'proof', 'ledger_uid', 'cut_intent', 'cut_steps', 'writer_effects', 'writer_invocation',
+            'cut_object_intent', 'cut_object_admission', 'cut_invocation', 'retired_rs',
+            'config_snapshot', 'successors', 'config_intent', 'config_steps', 'config_effects')})
+        self.capture_cut = admission.cut
+        self.capture_config_journal = admission.config_journal
+        self.capture_probe = admission.probe
+        self.cut_journal = admission.cut.journal
+        self.cut_intent = copy.deepcopy(admission.cut_intent)
         self.invocation = secrets.token_hex(16)
-        self.started = self.poisoned = False
+        self.started = self.poisoned = self.verifying = False
         if (type(client) is not KubectlTransport or client.journal is not journal
                 or getattr(fence.ledger, 'client', None) is not client):
             raise RecoveryRequired('single fixed Kubernetes client required')
@@ -61,13 +118,16 @@ class FullCohortImageApply:
             if (len(CATALOG) != 23 or self.poisoned or self.journal.poisoned
                     or type(self.client) is not KubectlTransport or self.client.journal is not self.journal
                     or getattr(self.fence.ledger, 'client', None) is not self.client
+                    or self.admission.probe is not self.capture_probe
+                    or admission_changed(self.admission, self.capture_values, self.capture_cut, self.capture_config_journal)
                     or catalog.get('version') != 1 or len(catalog['images']) != 23 or canonical != CATALOG
                     or self.journal.intent != self.intent or self.journal.state['intent'] != self.intent
                     or (self.started and self.journal.state['steps'].get('full-cohort-invocation') !=
                         {'status': 'owned', 'nonce': self.invocation})
                     or self.intent['resource_context'] != self.fence.context
                     or self.intent['namespace_uid'] != self.namespace_uid
-                    or set(plan) != {'images', 'platform_digests', 'workloads', 'cut', 'service_accounts'}
+                    or set(plan) != {'images', 'platform_digests', 'workloads', 'cut', 'service_accounts', 'cut_proof'}
+                    or plan['cut_proof'] != self.admission.proof
                     or set(images) != keys or images != self.fence.context['images']
                     or set(platforms) != keys or set(workloads) != set(CATALOG)
                     or not isinstance(cut, list) or len(cut) != len(set(cut)) or not set(cut) <= set(CATALOG)):
@@ -121,12 +181,71 @@ class FullCohortImageApply:
                     if (item['metadata'].get('namespace') != 'voice-dev' or item['metadata'].get('uid') != workloads[name]['uid']
                             or item['spec'].get('replicas') != workloads[name]['resume_replicas']):
                         raise RecoveryRequired('writer cut original identity differs')
+            proof = self.admission.proof
+            writers = [w for w in proof['writers'] if w['kind'] == 'Deployment' and w['name'] in CATALOG]
+            if (proof['operation_id'] != self.fence.context['operation_id'] or proof['namespace_uid'] != self.namespace_uid
+                    or len(writers) != len(cut) or {w['name'] for w in writers} != set(cut)):
+                raise RecoveryRequired('cut proof scope differs')
+            for writer in writers:
+                snap = workloads[writer['name']]
+                if (writer['uid'] != snap['uid'] or writer['generation'] != snap['generation']
+                        or writer['spec'] != snap['spec'] or writer['spec'].get('replicas') != 0):
+                    raise RecoveryRequired('cut proof and image admission differ')
+                if writer['successor'] is not None:
+                    successor = self.admission.successors.get(writer['name'], {})
+                    accepted = self.cut_journal.state['steps'].get(writer['successor'].get('step'), {})
+                    if (successor.get('target_spec') != snap['spec'] or successor.get('receipt', {}).get('uid') != snap['uid']
+                            or successor.get('receipt', {}).get('generation') != snap['generation']
+                            or accepted.get('status') != 'done' or accepted.get('nonce') != writer['successor'].get('nonce')
+                            or digest(accepted.get('receipt')) != writer['successor'].get('receipt_sha256')):
+                        raise RecoveryRequired('config successor and cut proof differ')
         except (KeyError, TypeError, AttributeError, ValueError) as exc:
             raise RecoveryRequired('cohort identity invalid') from exc
 
     def _guard(self):
         self._identity()
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+        self._lineage()
+
+    def _lineage(self):
+        capture, cut = self.admission, self.admission.cut
+        if (type(cut) is not WriterCut or cut.journal is not self.cut_journal
+                or cut.poisoned or cut.intent != capture.cut_object_intent or cut.admission != capture.cut_object_admission
+                or cut.invocation != capture.cut_invocation or cut.retired_rs != capture.retired_rs or cut.probe is not capture.probe
+                or cut.journal.poisoned or cut.journal.dirfd is None or cut.journal.lockfd is None
+                or cut.journal.intent != capture.cut_intent or cut.journal.state.get('intent') != capture.cut_intent
+                or cut.fence.context != self.fence.context or cut.namespace_uid != self.namespace_uid or cut.lock != self.lock
+                or type(cut.client) is not KubectlTransport or cut.client.journal is not cut.journal
+                or getattr(cut.fence.ledger, 'client', None) is not cut.client):
+            raise RecoveryRequired('cut custody changed')
+        cut._guard()
+        cut._recheck_config_successors()
+        for key, value in capture.cut_steps.items():
+            if cut.journal.state['steps'].get(key) != value:
+                raise RecoveryRequired('cut journal lineage changed')
+        for key in cut.journal.state['steps']:
+            if key not in capture.cut_steps and (not self.verifying or not key.startswith('writer-resume-')):
+                raise RecoveryRequired('unexpected cut journal step')
+        config = capture.config_journal
+        if (config is not cut.config_journal or cut.config_snapshot != capture.config_snapshot
+                or cut.successors != capture.successors):
+            raise RecoveryRequired('config custody changed')
+        if config is not None and (config.poisoned or config.dirfd is None or config.lockfd is None
+                or config.intent != capture.config_intent or config.state.get('intent') != capture.config_intent
+                or config.state['steps'] != capture.config_steps):
+            raise RecoveryRequired('config journal lineage changed')
+        first, first_rev = self.fence.ledger.read()
+        second, second_rev = cut.fence.ledger.read()
+        if (first != second or first_rev != second_rev or not isinstance(first_rev, tuple)
+                or len(first_rev) != 2 or first_rev[0] != capture.ledger_uid or not self.fence.owned(first)
+                or first.get('status') != 'active' or first.get('writer_cut_invocation') != capture.writer_invocation
+                or first.get('backend_config_effects', {}) != capture.config_effects):
+            raise RecoveryRequired('shared ledger lineage changed')
+        effects = first.get('writer_cut_effects', {})
+        if not isinstance(effects, dict) or any(effects.get(k) != v for k, v in capture.writer_effects.items()):
+            raise RecoveryRequired('writer ledger lineage changed')
+        if not self.verifying and effects != capture.writer_effects:
+            raise RecoveryRequired('writer effects changed during image apply')
 
     def _uncertain(self):
         self.poisoned = True
@@ -243,7 +362,9 @@ class FullCohortImageApply:
             raise RecoveryRequired('writer invocation unavailable')
         expected = {}
         for step, item in steps.items():
-            if not (step.startswith('writer-drain-') or step.startswith('writer-resume-') or step == 'writer-cut-drained'):
+            if not (step.startswith('writer-drain-') or step.startswith('writer-resume-')
+                    or step.startswith('writer-cut-config-successor-')
+                    or step in ('writer-cut-drained', 'writer-cut-config-plan')):
                 continue
             if (not isinstance(item, dict) or item.get('status') != 'done'
                     or not isinstance(item.get('nonce'), str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
@@ -281,12 +402,15 @@ class FullCohortImageApply:
             target['replicas'] = 0
             generation = original['metadata']['generation'] + (original['spec'].get('replicas') != 0)
             snap = self.intent['full_cohort']['workloads'][name]
+            writer = next(w for w in self.admission.proof['writers'] if w['kind'] == 'Deployment' and w['name'] == name)
             if (step not in effects or not self._match(name, source, original['metadata']['uid'], original['spec'],
                                                        generation=original['metadata']['generation'])
                     or details.get('target_spec') != target or receipt.get('uid') != original['metadata']['uid']
                     or receipt.get('spec_sha256') != digest(target) or receipt.get('generation') != generation
                     or not receipt.get('responseResourceVersion') or not receipt.get('resourceVersion')
-                    or snap['generation'] != generation or snap['spec'] != target):
+                    or writer['drain_step'] != step or writer['drain_nonce'] != item.get('nonce')
+                    or writer['drain_receipt_sha256'] != digest(receipt)
+                    or (writer['successor'] is None and (snap['generation'] != generation or snap['spec'] != target))):
                 raise RecoveryRequired('writer drain evidence invalid')
 
     def _target(self, name):
@@ -295,6 +419,38 @@ class FullCohortImageApply:
         container = next(c for c in target['template']['spec']['containers'] if c['name'] == CATALOG[name])
         container['image'] = plan['images'][name + '/' + CATALOG[name]]
         return target
+
+    def _partial(self, completed):
+        """Recheck exact per-image predecessor/successor without reusing old cut spec."""
+        self._guard()
+        for name, snap in self.intent['full_cohort']['workloads'].items():
+            receipt = completed.get(name)
+            spec = receipt['spec'] if receipt else snap['spec']
+            generation = receipt['generation'] if receipt else snap['generation']
+            if not self._match(name, self._get('deployment', name), snap['uid'], spec, generation=generation):
+                raise RecoveryRequired('partial cohort workload changed')
+        cut = self.admission.cut
+        cut._guards()
+        if not cut._pods_drained():
+            raise RecoveryRequired('writer pods remain')
+        scope = self.cut_intent['writer_cut']['session_scope']
+        observed = cut.probe(copy.deepcopy(scope))
+        if (not isinstance(observed, dict)
+                or observed != {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
+                or type(observed.get('active_sessions')) is not int or type(observed.get('active_transactions')) is not int):
+            raise RecoveryRequired('writer sessions remain')
+        for writer in self.admission.proof['writers']:
+            if writer['kind'] == 'Deployment' and writer['name'] in CATALOG:
+                continue
+            obj = self._get(writer['kind'].lower(), writer['name'])
+            meta, status = obj.get('metadata', {}), obj.get('status', {})
+            if (obj.get('kind') != writer['kind'] or meta.get('name') != writer['name']
+                    or meta.get('namespace') != 'voice-dev' or meta.get('uid') != writer['uid']
+                    or meta.get('generation') != writer['generation'] or meta.get('deletionTimestamp')
+                    or obj.get('spec') != writer['spec'] or status.get('replicas', 0) != 0
+                    or status.get('readyReplicas', 0) != 0):
+                raise RecoveryRequired('other writer changed')
+        self._guard()
 
     @staticmethod
     def _match(name, obj, uid, spec, rv=None, generation=None):
@@ -314,6 +470,7 @@ class FullCohortImageApply:
             self._accounts()
             row, _ = self.fence.ledger.read()
             self._drained(row)
+            self._partial(receipts)
             for name in sorted(CATALOG):
                 snap = self.intent['full_cohort']['workloads'][name]
                 if not self._match(name, self._get('deployment', name), snap['uid'], snap['spec'], generation=snap['generation']):
@@ -341,6 +498,7 @@ class FullCohortImageApply:
                     raise RecoveryRequired('cohort reservation changed before patch')
                 self._records(row)
                 self._drained(row)
+                self._partial(receipts)
                 response = self.client.patch(name, patch)
                 if not self._match(name, response, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch response differs')
@@ -351,6 +509,7 @@ class FullCohortImageApply:
                            'generation': target_generation, 'spec': target}
                 self._complete(step, record, receipt)
                 receipts[name] = receipt
+                self._partial(receipts)
             self._guard()
             self._accounts()
             for name, receipt in receipts.items():
@@ -405,6 +564,7 @@ class FullCohortImageApply:
 
     def verify_after_resume(self):
         try:
+            self.verifying = True
             self._guard()
             if not self.started:
                 raise RecoveryRequired('invocation not owned')

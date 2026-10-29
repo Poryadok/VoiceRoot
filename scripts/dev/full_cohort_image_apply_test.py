@@ -81,6 +81,53 @@ class Cluster:
         journal.save()
 
 
+class FakeWriterCut:
+    def __init__(self, journal, fence, client, lock):
+        self.journal, self.fence, self.client, self.lock = journal, fence, client, lock
+        self.namespace_uid = 'ns'
+        self.intent = copy.deepcopy(journal.intent)
+        self.admission = copy.deepcopy(journal.intent['writer_cut'])
+        self.invocation = 'd' * 32
+        self.retired_rs = set()
+        self.poisoned = False
+        self.config_journal = None
+        self.config_snapshot = None
+        self.successors = {}
+        self.proof_calls = 0
+        self.probe = lambda scope: {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
+
+    def _guards(self):
+        pass
+
+    def _guard(self):
+        pass
+
+    def _recheck_config_successors(self):
+        pass
+
+    def _pods_drained(self):
+        return True
+
+    def current_cut_proof(self):
+        self.proof_calls += 1
+        writers = []
+        for original in self.journal.intent['writer_cut']['controllers']:
+            name = original['metadata']['name']
+            step = 'writer-drain-deployment-' + name
+            item = self.journal.state['steps'][step]
+            successor = self.successors.get(name)
+            accepted = self.journal.state['steps'].get('writer-cut-config-successor-' + name.removeprefix('voice-')) if successor else None
+            writers.append({'kind': 'Deployment', 'name': name, 'uid': item['receipt']['uid'],
+                'generation': successor['receipt']['generation'] if successor else item['receipt']['generation'],
+                'spec': copy.deepcopy(successor['target_spec'] if successor else item['details']['target_spec']),
+                'drain_step': step, 'drain_nonce': item['nonce'],
+                'drain_receipt_sha256': cohort.digest(item['receipt']), 'successor':
+                    {'step': 'writer-cut-config-successor-' + name.removeprefix('voice-'), 'nonce': accepted['nonce'],
+                     'receipt_sha256': cohort.digest(accepted['receipt'])} if successor else None})
+        return {'operation_id': self.fence.context['operation_id'], 'namespace_uid': 'ns', 'invocation_nonce': 'd' * 32,
+                'writers': writers, 'session': self.probe(self.journal.intent['writer_cut']['session_scope'])}
+
+
 class FullCohortTest(unittest.TestCase):
     def setUp(self):
         self.context = {'project': 'voice', 'resource': 'DEV', 'actor': 'scheduled_devops',
@@ -144,12 +191,41 @@ class FullCohortTest(unittest.TestCase):
         self.client_patch = mock.patch.object(cohort, 'KubectlTransport', Cluster)
         self.client_patch.start()
         self.addCleanup(self.client_patch.stop)
+        self.cut_patch = mock.patch.object(cohort, 'WriterCut', FakeWriterCut)
+        self.cut_patch.start()
+        self.addCleanup(self.cut_patch.stop)
+        self.image_number = 0
+        self.fake_config = None
+        self.fake_successors = {}
 
     def new(self):
-        return cohort.FullCohortImageApply(self.journal, self.fence, self.client, self.lock, 'ns', self.cut_journal)
+        cut_client = copy.copy(self.client)
+        cut_client.journal = self.cut_journal
+        backing = self.ledger
+        class LedgerView:
+            client = cut_client
+            def read(_): return backing.read()
+            def write(_, revision, row): return backing.write(revision, row)
+        cut_fence = resource_fencing.Fence(self.context, lambda: copy.deepcopy(self.card), LedgerView())
+        cut = FakeWriterCut(self.cut_journal, cut_fence, cut_client, self.lock)
+        if self.fake_config is not None:
+            cut.config_journal = self.fake_config
+            cut.config_snapshot = {'fixture': True}
+            cut.successors = copy.deepcopy(self.fake_successors)
+        capture = cohort.prepare_cut(cut)
+        intent = copy.deepcopy(self.journal.intent)
+        intent['full_cohort']['cut_proof'] = copy.deepcopy(capture.proof)
+        self.journal.close()
+        self.image_number += 1
+        self.journal = journal.Journal(Path(self.temp.name) / ('image-' + str(self.image_number)), intent)
+        self.addCleanup(self.journal.close)
+        self.client.journal = self.journal
+        return cohort.FullCohortImageApply(self.journal, self.fence, self.client, self.lock, 'ns', capture)
 
     def test_all_23_apply_preserves_cut_and_full_spec(self):
-        result = self.new().apply()
+        phase = self.new()
+        result = phase.apply()
+        self.assertEqual(phase.admission.cut.proof_calls, 1)
         self.assertEqual(len(result), 23)
         self.assertEqual(self.client.patches, 23)
         for name, snap in self.intent['full_cohort']['workloads'].items():
@@ -159,6 +235,55 @@ class FullCohortTest(unittest.TestCase):
             self.assertEqual(self.client.deployments[name]['spec'], expected)
             self.assertEqual(result[name]['spec'], expected)
             self.assertEqual(result[name]['resourceVersion'], '2')
+
+    def test_source_owned_cut_capture_cannot_be_a_caller_dictionary(self):
+        with self.assertRaises(cohort.RecoveryRequired):
+            cohort.prepare_cut({'writers': []})
+
+    def test_two_ledger_clients_must_observe_same_physical_ledger(self):
+        phase = self.new()
+        read = phase.admission.cut.fence.ledger.read
+        def foreign():
+            row, revision = read()
+            return row, ('foreign-ledger', revision[1])
+        with mock.patch.object(phase.admission.cut.fence.ledger, 'read', side_effect=foreign):
+            with self.assertRaises(cohort.RecoveryRequired): phase.apply()
+        self.assertEqual(self.client.patches, 0)
+
+    def test_successor_proof_is_pinned_and_config_drift_stops_apply(self):
+        name = 'voice-user'
+        snap = self.journal.intent['full_cohort']['workloads'][name]
+        target = copy.deepcopy(snap['spec'])
+        target['template']['spec']['containers'][0]['env'].append({'name': 'ADMITTED', 'value': 'fixture'})
+        snap.update(spec=target, generation=snap['generation'] + 1)
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        self.client.deployments[name]['spec'] = copy.deepcopy(target)
+        self.client.deployments[name]['metadata']['generation'] = snap['generation']
+        config_intent = {'resource_context': self.context, 'namespace_uid': 'ns', 'fixture': 'producer'}
+        self.fake_config = journal.Journal(Path(self.temp.name) / 'config-journal', config_intent)
+        self.addCleanup(self.fake_config.close)
+        self.fake_config.state['steps']['backend-config-deployment-voice-user'] = {'status': 'done'}
+        self.fake_config.save()
+        self.ledger.row['backend_config_effects'] = {'backend-config-deployment-voice-user': {'status': 'done'}}
+        self.fake_successors[name] = {'target_spec': target, 'receipt': {'uid': snap['uid'], 'generation': snap['generation']}}
+        step = 'writer-cut-config-successor-user'
+        details, receipt = {'fixture': 'producer'}, {'uid': snap['uid']}
+        item = {'status': 'done', 'nonce': 'f' * 32, 'details': details,
+                'details_sha256': cohort.digest(details), 'receipt': receipt}
+        self.cut_journal.state['steps'][step] = item
+        self.cut_journal.save()
+        self.ledger.row['writer_cut_effects'][step] = {'status': 'done', 'nonce': item['nonce'],
+            'details_sha256': item['details_sha256'], 'receipt_sha256': cohort.digest(receipt)}
+        phase = self.new()
+        original = self.client.patch
+        def drift(deployment, patch):
+            result = original(deployment, patch)
+            self.fake_config.state['steps']['backend-config-deployment-voice-user']['status'] = 'foreign'
+            return result
+        self.client.patch = drift
+        with self.assertRaises(cohort.RecoveryRequired): phase.apply()
+        self.assertEqual(self.client.patches, 1)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
 
     def test_incomplete_or_foreign_catalog_never_patches(self):
         for alteration in ('missing', 'foreign'):
@@ -235,7 +360,7 @@ class FullCohortTest(unittest.TestCase):
                 self.client.patch = patch
                 with self.assertRaises(cohort.RecoveryRequired): phase.apply()
                 self.assertEqual(self.ledger.row['status'], 'uncertain')
-                self.assertEqual(self.client.patches, 1 if fault == 'response' else 23)
+                self.assertEqual(self.client.patches, 1 if fault == 'response' else 2)
 
     def test_resume_wrong_target_and_generation_even_when_resealed(self):
         for fault in ('target', 'generation'):
@@ -367,6 +492,18 @@ class FullCohortTest(unittest.TestCase):
                 self.assertEqual(self.client.patches, 1)
                 self.assertEqual(self.ledger.row['status'], 'uncertain')
 
+    def test_unrecorded_cut_pending_step_stops_before_next_patch(self):
+        phase = self.new()
+        original = self.client.patch
+        def patch(name, body):
+            response = original(name, body)
+            self.cut_journal.state['steps']['writer-cut-config-successor-foreign'] = {'status': 'pending'}
+            return response
+        self.client.patch = patch
+        with self.assertRaises(cohort.RecoveryRequired): phase.apply()
+        self.assertEqual(self.client.patches, 1)
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
     def test_client_custody_drift_stops_before_second_patch(self):
         phase = self.new()
         write = self.ledger.write
@@ -383,6 +520,25 @@ class FullCohortTest(unittest.TestCase):
         self.assertTrue(changed)
         self.assertEqual(self.client.patches, 1)
         self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_cut_mutation_or_poison_stops_before_second_patch(self):
+        for fault in ('admission', 'poison', 'retired', 'probe'):
+            with self.subTest(fault=fault):
+                if fault != 'admission': self.setUp()
+                phase = self.new()
+                cut = phase.admission.cut
+                original = self.client.patch
+                def patch(name, body):
+                    result = original(name, body)
+                    if fault == 'admission': cut.admission['controllers'].clear()
+                    if fault == 'poison': cut.poisoned = True
+                    if fault == 'retired': cut.retired_rs.clear() if cut.retired_rs else cut.retired_rs.add('foreign')
+                    if fault == 'probe': cut.probe = lambda scope: {'scope': scope, 'active_sessions': 0, 'active_transactions': 0}
+                    return result
+                self.client.patch = patch
+                with self.assertRaises(cohort.RecoveryRequired): phase.apply()
+                self.assertEqual(self.client.patches, 1)
+                self.assertEqual(self.ledger.row['status'], 'uncertain')
 
     def test_verify_after_resume_checks_pods_and_does_not_claim_smoke(self):
         phase = self.new()
