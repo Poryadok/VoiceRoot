@@ -8,17 +8,22 @@ from unittest import mock
 import full_cohort_go_migration as go
 import full_cohort_schema_metadata as schema
 import space_fresh_install_phase_pg as pgmodule
+import space_fresh_install_phase as fresh
 import space_fresh_install_phase_runtime as runtime
-from space_fresh_install_phase_roles_test import FactsTest
-from space_fresh_install_phase_runtime_test import RouteTest
-from space_fresh_install_phase_test import PhaseTest
+import space_fresh_install_phase_runtime_test as route_fixture
+import space_fresh_install_phase_test as phase_fixture
+
+
+def _cleanup_fixture(fixture):
+    if not fixture.doCleanups(): raise AssertionError('nested fixture cleanup failed')
 
 
 class RuntimeJointTest(unittest.TestCase):
     def exercise(self, fault):
-        f=PhaseTest('test_one_shot_success_retains_original_and_checked_cleanup'); f.setUp(); self.addCleanup(f.doCleanups)
+        f=phase_fixture.PhaseTest('test_one_shot_success_retains_original_and_checked_cleanup')
+        self.addCleanup(_cleanup_fixture,f); f.setUp()
         f.patches[0].stop()  # restore the actual runtime producer, not the main fixture's synthetic one
-        routes=RouteTest(); routes.setUp(); observed=routes.observed
+        routes=route_fixture.RouteTest(); routes.setUp(); observed=routes.observed
         f.cut.admission={'controllers':routes.controllers}; f.cut._guard=mock.Mock()
         inv=SimpleNamespace(verify_current=mock.Mock(return_value={'database_observations':observed}),
                             verify_receipt=mock.Mock(return_value={'database_observations':observed}),_admin_role=lambda:'voice')
@@ -73,11 +78,17 @@ class RuntimeJointTest(unittest.TestCase):
         self.assertEqual(receipt['new_oid'],42); self.assertEqual(receipt['runtime']['role'],'space_runtime')
         self.assertEqual(state['patches'],1); self.assertEqual(state['secret']['data']['OTHER'],'c2VudGluZWw=')
         self.assertNotIn('postgres://',str(receipt)); self.assertEqual(runtime.verify_secret_successor(phase.runtime,'token')['new_rv'],'2')
+        with mock.patch.object(runtime,'verify_receipt',wraps=runtime.verify_receipt) as historical:
+            self.assertEqual(fresh.verify_historical(phase,'token')['new_oid'],receipt['new_oid'])
+            historical.assert_called_once_with(phase.runtime,'token')
 
     def test_native_to_runtime_secret_cas_and_terminal_receipt(self): self.exercise(None)
     def test_admission_injection_fails_before_drop(self): self.exercise('admission')
     def test_lost_secret_patch_is_uncertain_without_replay(self): self.exercise('lost')
     def test_database_password_drift_blocks_terminal_receipt(self): self.exercise('login_drift')
+
+    def test_nested_cleanup_failure_is_not_silently_accepted(self):
+        with self.assertRaises(AssertionError): _cleanup_fixture(SimpleNamespace(doCleanups=lambda:False))
 
 
 if __name__ == '__main__': unittest.main()
