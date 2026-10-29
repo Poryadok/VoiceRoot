@@ -164,6 +164,7 @@ import staging_cohort_preservation as producer
 import compiler, source_authority, yaml
 sys.path.append(sys.argv[3])
 from staging_bridge_preservation_joint_test import stage_cluster_fixture
+import source_plan_test
 root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
 binding=json.loads((code/'capture-manifest.json').read_bytes()); pins=json.loads(sys.argv[2])
 c=dict(project='voice',resource='STAGING',actor='operator',claim='11111111-1111-4111-8111-111111111111',generation=7,
@@ -192,7 +193,11 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   else: raise AssertionError('counterfeit source receipt accepted')
   assert not (root/'installed'/'prerequisites').exists()
   from root_main import save
-  save(root/'installed'/'policy.json',{'unrelated':'preserve'})
+  store_kube,store_parameters=source_plan_test.SourceTests().canonical_fixture('app-only')
+  policy_fields=('s3_signing_endpoint','gateway_host','storage_host','livekit_host','web_host','admin_host',
+   'developer_portal_host','gateway_tls_secret','storage_tls_secret','minio_image','minio_mc_image',
+   'minio_storage_class','minio_storage_size','web_origin')
+  save(root/'installed'/'policy.json',{key:store_parameters[key] for key in policy_fields if key in store_parameters})
   inputs=root/'installed'/'prerequisite-inputs';inputs.mkdir(mode=0o700)
   def openssl(*args):
    subprocess.run(['/usr/bin/openssl',*map(str,args)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -219,15 +224,23 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     return {'metadata':{'name':name,'uid':'synthetic-node'},'status':{'nodeInfo':{'operatingSystem':'linux',
       'architecture':'amd64'},'conditions':[{'type':'Ready','status':'True'}]}}
    if (kind,name)==('secret','voice-app-secrets'):
-    return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
-      'uid':'00000000-0000-4000-8000-000000000004','resourceVersion':'1'},'type':'Opaque',
-      'data':{'POSTGRES_PASSWORD':'Zml4dHVyZQ=='}}
+    row=store_kube.get('Secret',name)
+    row['metadata'].update(uid='00000000-0000-4000-8000-000000000004',resourceVersion='1')
+    row['data'].pop('GAME_INTEGRATION_DATABASE_URL',None);row['data'].pop('GAME_INTEGRATION_DB_PASSWORD',None)
+    return row
    if kind=='secret' and name in ('voice-media-ca','voice-space-media-client-tls','voice-space-media-server-tls'):
     data=({'ca.crt':ca,'jwks-ca.crt':ca} if name=='voice-media-ca' else {'tls.crt':leaf,'tls.key':peerkey.read_text()})
     return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
       'uid':'00000000-0000-4000-8000-000000000005','resourceVersion':'1'},'type':'Opaque',
       'data':{k:base64.b64encode(v.encode()).decode() for k,v in data.items()}}
-   return original_get(kind,name)
+   try:return original_get(kind,name)
+   except KeyError:
+    spelling={'secret':'Secret','configmap':'ConfigMap','statefulset':'StatefulSet',
+      'deployment':'Deployment','service':'Service','persistentvolumeclaim':'PersistentVolumeClaim'}
+    return store_kube.get(spelling.get(kind,kind),name)
+  def run(args,**kwargs):
+   if args[:2]==['apply','--dry-run=server']:return store_kube.run(args,**kwargs)
+   return cluster.run(args,**kwargs)
   def capture(argv,**kwargs):
    commands.authority_guard(argv)
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
@@ -259,7 +272,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     return Response((Path(os.environ['VOICE_TEST_OCI'])/(name+'.json')).read_bytes())
    def close(self):pass
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
-       patch.object(stage_runtime.Kube,'_run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture), \
+       patch.object(stage_runtime.Kube,'_run',side_effect=run),patch.object(commands,'capture',side_effect=capture), \
        patch.object(compiler,'capture',side_effect=capture), \
        patch.object(http.client,'HTTPSConnection',Https):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
