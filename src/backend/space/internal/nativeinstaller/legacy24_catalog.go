@@ -7,8 +7,9 @@ import (
 )
 
 // Derived independently from the pinned migrations 1 through 24 on private
-// PostgreSQL 16. A structural match is not by itself upgrade admission.
-const legacy24CatalogPG16SHA256 = "9152b7fb2f8e3d1f836832760d11059c528296688f79022dc6d19c282c16e650"
+// PostgreSQL 16, after the bounded logical-restore normalization. A structural
+// match is not by itself upgrade admission or a substitute for original rows.
+const legacy24CatalogPG16SHA256 = "b6b2a0c72816bd21604e7488ac334ada49347bc5b4197e6b5912b6bfb760a43d"
 
 func captureLegacy24Snapshot(ctx context.Context, conn *pgx.Conn) (string, map[string]legacy25TableDigest, error) {
 	return captureLegacySourceSnapshot(ctx, conn, 24)
