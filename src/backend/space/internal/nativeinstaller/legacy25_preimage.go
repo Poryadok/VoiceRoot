@@ -30,37 +30,6 @@ type legacy25TableDigest struct {
 	SHA256  string   `json:"sha256"`
 }
 
-// Capture is a private, bounded source snapshot; it is not an admission or a
-// comparison against post-upgrade data. The enclosing producer must bind the
-// schema, target identity and maintenance custody in the same observation.
-func captureLegacy25Rows(ctx context.Context, conn *pgx.Conn) (map[string]legacy25TableDigest, error) {
-	return captureLegacy25Projection(ctx, conn, nil)
-}
-
-// The original projection must come only from the immutable, qualified
-// preimage retained by the owning producer. This helper does not authenticate it.
-func captureLegacy25Projection(ctx context.Context, conn *pgx.Conn, original map[string]legacy25TableDigest) (map[string]legacy25TableDigest, error) {
-	if ctx == nil || conn == nil {
-		return nil, errors.New("legacy25 preimage unavailable")
-	}
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
-	if err != nil {
-		return nil, errors.New("legacy25 preimage unavailable")
-	}
-	defer tx.Rollback(context.Background())
-	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`); err != nil {
-		return nil, errors.New("legacy25 preimage unavailable")
-	}
-	result, err := captureLegacy25ProjectionTx(ctx, tx, original)
-	if err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return nil, errors.New("legacy25 preimage unavailable")
-	}
-	return result, nil
-}
-
 func captureLegacy25ProjectionTx(ctx context.Context, tx pgx.Tx, original map[string]legacy25TableDigest) (map[string]legacy25TableDigest, error) {
 	const maxRows = 1_000_000
 	const maxRowBytes = 8 << 20
@@ -144,42 +113,6 @@ func captureLegacy25ProjectionTx(ctx context.Context, tx pgx.Tx, original map[st
 	return result, nil
 }
 
-// The source shape and every original row are read in one database snapshot.
-// This is still not admission: the caller must qualify identity, permissions,
-// dependencies, state and maintenance authority before any effect.
-func captureLegacy25Snapshot(ctx context.Context, conn *pgx.Conn) (string, map[string]legacy25TableDigest, error) {
-	return captureLegacySourceSnapshot(ctx, conn, 25)
-}
-
-func captureLegacySourceSnapshot(ctx context.Context, conn *pgx.Conn, version int) (string, map[string]legacy25TableDigest, error) {
-	var expected string
-	switch version {
-	case 24:
-		expected = legacy24CatalogPG16SHA256
-	case 25:
-		expected = legacy25CatalogPG16SHA256
-	default:
-		return "", nil, errors.New("legacy source unavailable")
-	}
-	tx, err := beginLegacySourceRead(ctx, conn)
-	if err != nil {
-		return "", nil, err
-	}
-	defer tx.Rollback(context.Background())
-	digest, err := inspectLegacyCatalogTx(ctx, tx, version, expected)
-	if err != nil {
-		return "", nil, err
-	}
-	rows, err := captureLegacy25ProjectionTx(ctx, tx, nil)
-	if err != nil {
-		return "", nil, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return "", nil, errors.New("legacy25 source unavailable")
-	}
-	return digest, rows, nil
-}
-
 func beginLegacySourceRead(ctx context.Context, conn *pgx.Conn) (pgx.Tx, error) {
 	if ctx == nil || conn == nil {
 		return nil, errors.New("legacy source unavailable")
@@ -189,8 +122,9 @@ func beginLegacySourceRead(ctx context.Context, conn *pgx.Conn) (pgx.Tx, error) 
 		return nil, errors.New("legacy source unavailable")
 	}
 	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`); err != nil {
-		_ = tx.Rollback(context.Background())
-		return nil, errors.New("legacy source unavailable")
+		failure := errors.New("legacy source unavailable")
+		finishLegacy24Read(tx, &failure)
+		return nil, failure
 	}
 	locked := make([]string, 0, len(legacy25DataTables)+1)
 	for _, table := range legacy25DataTables {
@@ -198,8 +132,9 @@ func beginLegacySourceRead(ctx context.Context, conn *pgx.Conn) (pgx.Tx, error) 
 	}
 	locked = append(locked, pgx.Identifier{"public", "schema_migrations"}.Sanitize())
 	if _, err = tx.Exec(ctx, `LOCK TABLE `+strings.Join(locked, ",")+` IN ACCESS SHARE MODE`); err != nil {
-		_ = tx.Rollback(context.Background())
-		return nil, errors.New("legacy source unavailable")
+		failure := errors.New("legacy source unavailable")
+		finishLegacy24Read(tx, &failure)
+		return nil, failure
 	}
 	return tx, nil
 }

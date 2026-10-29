@@ -15,7 +15,7 @@ import (
 // Verify original data, permitted M39 effects, independent tables and the
 // original table/column rights projection in one read-only snapshot. Native51
 // source/seal and controller custody are verified separately by the runner.
-func verifyLegacy24Preserved(ctx context.Context, conn *pgx.Conn, origin *legacy24OriginObservation) (string, error) {
+func verifyLegacy24Preserved(ctx context.Context, conn *pgx.Conn, origin *legacy24OriginObservation) (_ string, err error) {
 	if origin == nil || origin.Target == nil || origin.Derived == nil {
 		return "", errors.New("HOLD: legacy24 origin unavailable")
 	}
@@ -23,7 +23,7 @@ func verifyLegacy24Preserved(ctx context.Context, conn *pgx.Conn, origin *legacy
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(context.Background())
+	defer finishLegacy24Read(tx, &err)
 	var name, role, current, system string
 	var oid uint32
 	var clean bool

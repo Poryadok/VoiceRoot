@@ -18,7 +18,8 @@ import (
 	"voice/backend/space/internal/store"
 )
 
-// The controller owns backup, Job and maintenance custody. These correlation
+// Legacy24Config carries the original-24 upgrade inputs. The controller owns
+// backup, Job and maintenance custody. These correlation
 // strings do not replace actual source admission or the owning database window.
 type Legacy24Config struct {
 	Config
