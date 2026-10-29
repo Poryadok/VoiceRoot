@@ -85,6 +85,7 @@ class Session:
         self.expected_target=None
         self.admitted=False
         self.repair_guard=None
+        self._prerequisite_permit=None
 
     def authority(self):
         row=self.check_card();c=self.context
@@ -155,6 +156,32 @@ class Session:
             raise RuntimeError('staging_executor_target_changed')
         if getattr(self,'expected_phase',None) is not None and row.get('phase')!=self.expected_phase:
             raise RuntimeError('staging_executor_phase_changed')
+        if argv and row.get('phase') in ('prerequisites','prerequisites-captured'):
+            args=list(argv);permit=self._prerequisite_permit
+            if (row['phase']=='prerequisites' and permit is not None and args==permit):
+                self._prerequisite_permit=None
+                return row
+            decode=['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']
+            prefixes=[['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'],
+                ['kubectl','--namespace','voice-staging']]
+            is_dryrun=any(args==prefix+[verb,'--dry-run=server','-f','/dev/stdin','-o','json']
+                for prefix in prefixes for verb in ('apply','create'))
+            def safe_get(prefix):
+                if args[:len(prefix)+1]!=prefix+['get']:return False
+                tail=args[len(prefix)+1:]
+                if len(tail)==2 and tail[0]=='--raw':
+                    return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1]))
+                if len(tail) not in (3,4) or tail[-2]!='-o':return False
+                if not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
+                if len(tail)==4 and not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',tail[1]):return False
+                output=tail[-1]
+                if output in ('json',"jsonpath-as-json={.metadata['uid','resourceVersion']}"):return True
+                from runtime_stage import IMAGE_TEMPLATE
+                from stage_runtime import FENCE_TEMPLATE
+                return output in ('go-template='+IMAGE_TEMPLATE,'go-template='+FENCE_TEMPLATE)
+            is_get=any(safe_get(prefix) for prefix in prefixes)
+            if args!=decode and not is_dryrun and not is_get:
+                raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
         # stage guards own those queries. No workload fence/apply/cleanup may
         # run until its fresh actual baseline and complete target are bound.
@@ -167,7 +194,7 @@ class Session:
 
     def bind_target(self,commit,images,actual,target_sha256):
         row=self.check();card=self.authority();observed=card.get('observed',{})
-        if row.get('phase')=='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_advance_required')
+        if row.get('phase') in ('realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if (commit!=self.context['commit'] or images!=self.context['images']
             or observed.get('state')!='known' or observed.get('claim')!=self.context['claim']
             or observed.get('window')!=self.context['window'] or observed.get('operation')!=card.get('operation',0)-1
@@ -178,6 +205,32 @@ class Session:
             self.expected_target=target_sha256
             return
         row['target_sha256']=target_sha256;self.journal.save(row);self.expected_target=target_sha256
+
+    def bind_prerequisites(self,plan,actual_before):
+        import staging_prerequisites
+        row=self.check();card=self.authority();observed=card.get('observed',{})
+        staging_prerequisites.validate_plan(plan,self)
+        if (row.get('phase')!='prepare' or row.get('target_sha256') is not None
+            or plan.get('actual_before')!=actual_before or observed.get('state')!='known'
+            or observed.get('claim')!=self.context['claim'] or observed.get('window')!=self.context['window']
+            or observed.get('operation')!=card.get('operation',0)-1 or observed.get('images')!=actual_before):
+            raise RuntimeError('staging_prerequisites_baseline_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_prerequisites_baseline_changed')
+        row.update(phase='prerequisites',target_sha256=digest(plan))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
+
+    def capture_prerequisites(self,stage):
+        import staging_prerequisites
+        row=self.check();card=self.authority()
+        if row.get('phase')!='prerequisites':raise RuntimeError('staging_prerequisites_phase_invalid')
+        captured=staging_prerequisites.capture(self,stage)
+        if not isinstance(captured,dict) or staging_prerequisites.load_capture(self)!=captured:
+            raise RuntimeError('staging_prerequisites_capture_changed')
+        if self.check()!=row or self.authority()!=card:raise RuntimeError('staging_prerequisites_capture_changed')
+        row.update(phase='prerequisites-captured',target_sha256=digest(captured))
+        self.journal.save(row);self.expected_target=row['target_sha256']
+        return self.binding()
 
     def bind_realtime_bootstrap(self,plan,actual):
         import realtime_bootstrap
@@ -228,7 +281,7 @@ class Session:
         # it must neither reopen apply nor create uncertainty in a safe window.
         if self.owned(previous) and (previous.get('status')=='complete' or previous.get('phase')=='awaiting-ci'):return
         row=self.check()
-        if row.get('phase')=='realtime-bootstrap':raise RuntimeError('staging_realtime_bootstrap_advance_required')
+        if row.get('phase') in ('realtime-bootstrap','prerequisites','prerequisites-captured'):raise RuntimeError('staging_realtime_bootstrap_advance_required')
         if not row.get('target_sha256'):raise RuntimeError('staging_resource_target_unbound')
         row['phase']='apply-ready';self.journal.save(row)
 

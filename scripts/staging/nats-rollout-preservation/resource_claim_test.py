@@ -42,6 +42,50 @@ class ResourceTests(unittest.TestCase):
         session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)
         return session,current,journal
 
+    def test_prerequisite_phase_denies_untyped_commands_and_consumes_one_permit(self):
+        for phase in ('prerequisites','prerequisites-captured'):
+            session,current,journal=self.fixture();session.admit(start=True)
+            journal.row.update(phase=phase,target_sha256='d'*64);session.expected_target='d'*64
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','get','deployment','voice-web','-o','json'])
+            session.check(['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json'])
+            session.check(['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','create','--dry-run=server','-f','/dev/stdin','-o','json'])
+            for args in (['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','scale','deployment','voice-web'],
+                         ['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','voice-pod','--','sh'],
+                         ['docker','run','anything'],['sh','-c','anything'],
+                         ['kubectl','--namespace','voice-staging','get','secret','voice-app-secrets','-o','json','--namespace','voice-dev'],
+                         ['kubectl','--namespace','voice-staging','get','pods','-o','json','--kubeconfig','/tmp/other'],
+                         ['kubectl','--namespace','voice-staging','get','pods','-o','json','-A'],
+                         ['kubectl','--namespace','voice-staging','get','--raw','/api/v1/namespaces/other/secrets'],
+                         ['kubectl','--namespace','voice-staging','apply','--dry-run=server','--force','-f','/dev/stdin','-o','json']):
+                with self.subTest(phase=phase,args=args),self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):
+                    session.check(args)
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+            if phase=='prerequisites':
+                effect=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','create','-f','/dev/stdin','-o','json']
+                session._prerequisite_permit=effect.copy();session.check(effect)
+                self.assertIsNone(session._prerequisite_permit)
+                with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(effect)
+
+    def test_prerequisite_binding_requires_baseline_and_durable_capture(self):
+        session,current,journal=self.fixture();session.admit(start=True)
+        actual=current['observed']['images'];plan={'actual_before':copy.deepcopy(actual)}
+        record={'schema':'fixture-capture','actual_after':copy.deepcopy(actual)}
+        module=Mock();module.capture.return_value=record;module.load_capture.return_value=record
+        with patch.dict(sys.modules,{'staging_prerequisites':module}):
+            binding=session.bind_prerequisites(plan,actual)
+            self.assertEqual(binding['target_sha256'],claim.digest(plan))
+            self.assertEqual(journal.row['phase'],'prerequisites')
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):
+                session.bind_target(context()['commit'],context()['images'],actual,'d'*64)
+            module.load_capture.return_value={'different':True}
+            with self.assertRaisesRegex(RuntimeError,'capture_changed'):session.capture_prerequisites(object())
+            self.assertEqual(journal.row['phase'],'prerequisites')
+            module.load_capture.return_value=record
+            binding=session.capture_prerequisites(object())
+            self.assertEqual(binding['target_sha256'],claim.digest(record))
+            self.assertEqual(journal.row['phase'],'prerequisites-captured')
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+
     def test_realtime_bootstrap_requires_typed_transition_and_exact_receipt(self):
         session,current,journal=self.fixture();session.admit(start=True)
         actual=current['observed']['images'];plan={'actual_images':actual,'fixture':'validated separately'}
