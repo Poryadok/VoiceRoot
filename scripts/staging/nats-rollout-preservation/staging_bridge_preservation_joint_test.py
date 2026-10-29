@@ -688,6 +688,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     '--network','none','--memory','512m','--pids-limit','128','-e','POSTGRES_USER='+pg_user,
     '-e','POSTGRES_PASSWORD='+pg_password.decode(),
     'postgres@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6'],text=True).strip()
+   assert re.fullmatch('[a-f0-9]{64}',pg_container)
+   pod['status']['containerStatuses'][0]['containerID']='containerd://'+pg_container
    atexit.register(lambda:subprocess.run(['docker','rm','-f','-v',pg_container],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL))
    # The production dumper starts the fixed kubectl command as a process.
    # This isolated runner maps only its two exact dump forms to owned PG.
@@ -735,7 +737,9 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     card['observed']['images']=copy.deepcopy(preview.old_images)
    trace_errors=[]
    def trace(frame,event,arg):
-    if event=='exception' and frame.f_code.co_filename.endswith(('space_native_tool_identity_staging.py','source_authority.py','github_custody.py','story_media_backup_cohort.py','staging_cohort_preservation_pg.py')):
+    tracked=frame.f_code.co_filename.endswith(('space_native_tool_identity_staging.py','source_authority.py','github_custody.py','story_media_backup_cohort.py','story_media_backup_cohort_finalize.py','staging_cohort_preservation_pg.py'))
+    if not tracked:return None
+    if event=='exception':
      trace_errors.append((frame.f_code.co_name,frame.f_lineno,arg[0].__name__,str(arg[1])))
     return trace
    if 'VOICE_TEST_SPACE_OCI' in os.environ:sys.settrace(trace)
