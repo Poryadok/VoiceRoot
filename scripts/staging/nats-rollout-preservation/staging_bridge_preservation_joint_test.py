@@ -406,6 +406,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    if argv==['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']:
     return json.dumps(yaml.safe_load(kwargs['body'])).encode()
    tail=argv[4:]
+   if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:4]==['exec','voice-fixture-hub','-c','nats']:
+    return json.dumps(run(['get','--raw','http://fixture:8222/proxy/jsz?accounts=true'])).encode()
    if 'VOICE_TEST_SPACE_OCI' in os.environ and tail==['version','-o','json']:
     return b'{"serverVersion":{"major":"1","minor":"32"}}'
    if 'VOICE_TEST_SPACE_OCI' in os.environ and tail[:1]==['patch']:
@@ -418,10 +420,19 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
      for part in parts[:-1]:parent=parent[part]
      if op['op']=='test':assert parent[parts[-1]]==op['value']
      elif op['op'] in ('add','replace'):parent[parts[-1]]=copy.deepcopy(op['value'])
+     elif op['op']=='remove' and isinstance(parent,list):parent.pop(int(parts[-1]))
      else:raise AssertionError('unsupported synthetic CAS')
     obj['metadata']['resourceVersion']=str(int(obj['metadata']['resourceVersion'])+1)
-    if kind=='deployment':obj['metadata']['generation']+=1
-    return json.dumps(obj).encode()
+    if kind=='deployment':
+     obj['metadata']['generation']+=1
+     if name==stage_runtime.HUB and obj['spec']['replicas']==0:
+      hub=cluster.objects[('pod','voice-fixture-hub')]
+      hub['metadata']['deletionTimestamp']='2025-01-01T00:00:01Z'
+      state=hub['status']['containerStatuses'][0]
+      state['state']={'terminated':{'exitCode':0,'startedAt':'2025-01-01T00:00:00Z','finishedAt':'2025-01-01T00:00:01Z'}}
+    result=json.dumps(obj).encode()
+    if kind=='pod' and not obj['metadata'].get('finalizers'):del cluster.objects[(kind,name)]
+    return result
    if 'VOICE_TEST_SPACE_OCI' in os.environ and tail==['create','-f','/dev/stdin','-o','json']:
     value=json.loads(kwargs['body']);assert value['kind']=='Job' and value['metadata']['name']=='voice-space-inspect-'+session.operation
     image=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())
