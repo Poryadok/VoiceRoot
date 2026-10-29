@@ -145,7 +145,7 @@ def tt_resource_journal_snapshot(installed):
 
 def require_future_history_absent(installed):
     """The exact legacy-cohort transition cannot adopt new private history."""
-    for name in ('source-authority','realtime-bootstrap'):
+    for name in ('source-authority','realtime-bootstrap','prerequisites'):
         try:(Path(installed)/name).lstat()
         except FileNotFoundError:continue
         raise Blocked('bridge_full23_future_history_present')
