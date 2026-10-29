@@ -14,19 +14,24 @@ import realtime_migration_verify
 import realtime_secret_phase
 
 MIGRATE_IMAGE = 'migrate/migrate@sha256:f21c436af23c282f4516b00ba3e93bccf5c5fe5cd52530fd5c319a936998f539'
+PLATFORMS = {'amd64':'sha256:a7a70ebfa0be59cc9b80e405f08c25e8ab746b1c9555c58fc2369abc2c84acab',
+             'arm64':'sha256:88330a26116ba4bfa4855901b5d0920112e60fa2242ec8aabba5af995ed47d8f'}
 
 class RecoveryRequired(RuntimeError):
     pass
 
 
-def render(source_root, source_sha, operation, secret, migrate_image):
+def render(source_root, source_sha, operation, secret, migrate_image, node):
     try:
         match = re.fullmatch(r'media-c[12]-([0-9a-f]{32})',operation) if isinstance(operation,str) else None
         if (not match or not isinstance(source_sha,str) or not re.fullmatch(r'[0-9a-f]{40}',source_sha) or
                 not isinstance(secret,dict) or set(secret)!={'name','uid','resourceVersion'} or
                 secret['name']!='voice-realtime-db-'+match.group(1) or
                 any(not isinstance(secret[k],str) or not secret[k] for k in ('uid','resourceVersion')) or
-                migrate_image!=MIGRATE_IMAGE):
+                migrate_image!=MIGRATE_IMAGE or not isinstance(node,dict) or
+                set(node)!={'name','uid','hostname','architecture'} or node.get('architecture') not in PLATFORMS or
+                any(not isinstance(node.get(k),str) or not re.fullmatch(r'[a-z0-9](?:[-a-z0-9.]*[a-z0-9])?',node[k])
+                    for k in ('name','hostname')) or not isinstance(node.get('uid'),str) or not node['uid']):
             raise RecoveryRequired('migration identity invalid')
         snapshot = publish_candidate.source_snapshot(Path(source_root),source_sha)
         prefix = 'src/backend/migrations/realtime_db/'
@@ -50,6 +55,8 @@ def render(source_root, source_sha, operation, secret, migrate_image):
                    'annotations':{'voice.io/source-sha':source_sha}},'spec':{
             'backoffLimit':0,'parallelism':1,'completions':1,'activeDeadlineSeconds':600,'template':{'metadata':{'labels':{'app':name}},'spec':{
                 'restartPolicy':'Never','automountServiceAccountToken':False,'terminationGracePeriodSeconds':30,
+                'nodeSelector':{'kubernetes.io/os':'linux','kubernetes.io/arch':node['architecture'],
+                                'kubernetes.io/hostname':node['hostname']},
                 'enableServiceLinks':True,'securityContext':{},'containers':[{'name':'migrate',
                 'image':migrate_image,'imagePullPolicy':'IfNotPresent','command':['/bin/sh','-ec','exec migrate -path=/migrations -database "$DATABASE_URL" up'],
                 'env':[{'name':'DATABASE_URL','valueFrom':{'secretKeyRef':{'name':secret['name'],'key':'DATABASE_URL'}}}],
@@ -194,10 +201,10 @@ class Migration:
             self._guard()
             operation = self.fence.context['operation_id']
             spec = self.intent['realtime_migration']
-            if (set(spec)!={'source_sha','image','platform_digest','engine','database_oid','credential'} or
+            if (set(spec)!={'source_sha','image','platform_digest','engine','database_oid','credential','node'} or
                     spec['source_sha']!=self.fence.context['commit'] or
                     type(spec['database_oid']) is not int or spec['database_oid']<=0 or
-                    not re.fullmatch(r'sha256:[0-9a-f]{64}',spec['platform_digest']) or
+                    not isinstance(spec['node'],dict) or spec['platform_digest']!=PLATFORMS.get(spec['node'].get('architecture')) or
                     self.provision_journal.intent.get('resource_context')!=self.fence.context or
                     self.provision_journal.intent.get('postgres')!=spec['engine'] or
                     {k:self.provision_journal.intent['realtime_credential'][k] for k in ('name','uid','resourceVersion')}!=spec['credential']):
@@ -232,7 +239,21 @@ class Migration:
             worker._secret()
             if pg.snapshot()!=spec['engine']:
                 raise RecoveryRequired('engine changed')
-            config, planned = render(self.root,spec['source_sha'],operation,spec['credential'],spec['image'])
+            config, planned = render(self.root,spec['source_sha'],operation,spec['credential'],spec['image'],spec['node'])
+            def node_check():
+                nodes = self.client.call('get','nodes','-o','json')['items']
+                node = spec['node']
+                matching = [n for n in nodes if n.get('metadata',{}).get('labels',{}).get('kubernetes.io/hostname')==node['hostname']]
+                if len(matching)!=1: raise RecoveryRequired('node selection ambiguous')
+                actual = matching[0]; meta = actual.get('metadata',{}); info = actual.get('status',{}).get('nodeInfo',{})
+                if (meta.get('name')!=node['name'] or meta.get('uid')!=node['uid'] or meta.get('deletionTimestamp') or
+                        meta.get('labels',{}).get('kubernetes.io/arch')!=node['architecture'] or
+                        meta.get('labels',{}).get('kubernetes.io/os')!='linux' or
+                        info.get('architecture')!=node['architecture'] or info.get('operatingSystem')!='linux' or
+                        actual.get('spec',{}).get('unschedulable',False) is not False or
+                        not any(c.get('type')=='Ready' and c.get('status')=='True' for c in actual.get('status',{}).get('conditions',[]))):
+                    raise RecoveryRequired('node identity or readiness changed')
+            self._guard(); node_check(); self._guard()
             snapshot = publish_candidate.source_snapshot(self.root,spec['source_sha'])
             if snapshot['files'].get('src/backend/realtime/internal/lifecycle/store.go') != \
                     '1e34ba05a4831031409bb90e37b541b8adfbe233cb307618cbb6ba471fb5fdc9':
@@ -257,7 +278,7 @@ class Migration:
                               'data_sha256':_hash(config['data'])}
             self._finish('config',record,config_receipt)
             def inputs():
-                self._guard(); worker._secret()
+                self._guard(); worker._secret(); node_check()
                 actual = self.client.call('get','configmap',cm['name'],'-o','json')
                 if (actual.get('apiVersion')!='v1' or actual.get('kind')!='ConfigMap' or
                         actual.get('metadata',{}).get('name')!=cm['name'] or
@@ -309,7 +330,8 @@ class Migration:
                             pod.get('metadata',{}).get('namespace')!='voice-dev' or pod.get('metadata',{}).get('deletionTimestamp')):
                         raise RecoveryRequired('migration Pod ownership changed')
                     observed_pod = copy.deepcopy(pod['spec'])
-                    if not observed_pod.pop('nodeName',None): raise RecoveryRequired('migration Pod node absent')
+                    if observed_pod.pop('nodeName',None)!=spec['node']['name']:
+                        raise RecoveryRequired('migration Pod node changed')
                     template = planned['spec']['template']
                     intended_pod = {'apiVersion':'v1','kind':'Pod','metadata':{'name':'template','namespace':'voice-dev',
                                     'labels':template['metadata']['labels']},'spec':template['spec']}
