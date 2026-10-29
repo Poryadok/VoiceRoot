@@ -1,0 +1,53 @@
+name: DEV media encrypted backup upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Exact operation already reserved under the DEV claim
+        required: true
+        type: string
+      challenge:
+        description: Exact one-shot upload challenge from the operation ledger
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: voice-dev-media-backup-upload
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    if: github.repository == 'Poryadok/VoiceRoot' && github.ref == 'refs/heads/master'
+    runs-on: ${{ fromJSON('["self-hosted","Linux","X64","voice-staging"]') }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Bind run and stage verified ciphertext
+        id: stage
+        env:
+          DEV_BACKUP_OPERATION: ${{ inputs.operation }}
+          DEV_BACKUP_CHALLENGE: ${{ inputs.challenge }}
+        run: python3 -B scripts/dev/media_backup_upload_runner.py
+      - name: Upload ciphertext only
+        id: upload
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ${{ steps.stage.outputs.name }}
+          path: ${{ steps.stage.outputs.path }}
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
+      - name: Mark failed upload uncertain
+        if: ${{ failure() && steps.stage.outcome == 'success' }}
+        env:
+          DEV_BACKUP_OPERATION: ${{ inputs.operation }}
+          DEV_BACKUP_CHALLENGE: ${{ inputs.challenge }}
+        run: python3 -B scripts/dev/media_backup_upload_runner.py --mark-failed

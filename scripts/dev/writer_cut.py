@@ -199,6 +199,10 @@ class WriterCut:
                 not self._config_effects_match(row) or
                 row.get('writer_cut_effects', {}).get(name) != record):
             raise RecoveryRequired('writer reservation changed')
+        if (name == 'writer-cut-config-plan' and
+                (any(k.startswith('backend-config-deployment-') for k in row.get('backend_config_effects', {})) or
+                 any(k.startswith('backend-config-deployment-') for k in self.config_journal.state['steps']))):
+            raise RecoveryRequired('config deployment preceded bound plan')
         self.journal.state['steps'][name].update(status='done', receipt=copy.deepcopy(receipt))
         self.journal.save()
         row['writer_cut_effects'][name] = record | {'status': 'done', 'receipt_sha256': digest(receipt)}

@@ -28,7 +28,7 @@ def finalize(root, key, binding, manifest, receipts):
         binding, manifest, receipts = snapshot['binding'], snapshot['manifest'], snapshot['receipts']
         if not isinstance(binding, dict) or set(binding) != BINDING_KEYS:
             raise FinalizeError('binding invalid')
-        if (not re.fullmatch(r'media-c1-[0-9a-f]{32}', binding['operation_id'])
+        if (not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', binding['operation_id'])
                 or not re.fullmatch(r'capture-[0-9a-f]{32}', binding['snapshot_id'])
                 or not re.fullmatch(r'[0-9a-f]{40}', binding['source_sha'])
                 or (binding['project'], binding['resource'], binding['actor']) != ('voice', 'DEV', 'scheduled_devops')
