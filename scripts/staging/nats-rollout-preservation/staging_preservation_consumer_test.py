@@ -130,6 +130,9 @@ class ConsumerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir='/root') as path,patch.object(root_main,'ROOT',Path(path)),patch.object(guard,'ROOT',Path(path)):
             root=Path(path);session,state=self.session(root,[])
             state.update(status='PASS',phase='POST_RESTART');state['target']['cohort_preservation_sha256']='c'*64
+            import source_plan
+            state['target'].update(changed_services=[],source_hashes={source_plan.FULL_APPLICATION_REQUEST:'a'*64},
+                images={name:'registry/image@sha256:'+'b'*64 for name in source_plan.FULL_APPLICATION_KEYS.values()})
             row=session.journal.read();row['target_sha256']=transaction.canonical(state['target']);session.journal.save(row)
             session.expected_target=row['target_sha256'];state['resource_fence']=session.binding()
             base=root/('rollout-'+session.operation);base.mkdir(mode=0o700)
@@ -152,6 +155,19 @@ class ConsumerTests(unittest.TestCase):
                 self.assertEqual(smoke.recover_completed.call_count,2);smoke_phase.run.assert_not_called()
             with resource_claim.command_scope(session.check):
                 with self.assertRaisesRegex(Exception,'operation_lock_proof_invalid'):actions._finish_core_proofs(state)
+
+    def test_legacy_cohort_finish_does_not_start_full23_smoke(self):
+        with tempfile.TemporaryDirectory(dir='/root') as path,patch.object(root_main,'ROOT',Path(path)),patch.object(guard,'ROOT',Path(path)):
+            session,state=self.session(Path(path),[]);state.update(status='PASS',phase='POST_RESTART')
+            state['target']['cohort_preservation_sha256']='c'*64
+            row=session.journal.read();row['target_sha256']=transaction.canonical(state['target']);session.journal.save(row)
+            session.expected_target=row['target_sha256'];state['resource_fence']=session.binding()
+            actions=object.__new__(bridge_root.Actions);actions.tt_session=session
+            with root_main.operation_lock() as lock,resource_claim.command_scope(session.check), \
+                 patch.object(staging_core_release,'CoreReleasePhase') as release, \
+                 patch.object(staging_cohort_preservation,'shared_module') as smoke:
+                session.operation_lock=lock;actions._finish_core_proofs(state)
+                release.assert_not_called();smoke.assert_not_called()
 
     def test_historical_native_receipt_rejects_tampered_effect_and_rollout_event(self):
         operation='a'*12;ctx={'operation_id':'stg-run-17','commit':'c'*40};binding={'context':ctx,'operation':operation}
