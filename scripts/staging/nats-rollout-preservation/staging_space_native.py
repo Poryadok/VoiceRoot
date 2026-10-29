@@ -1,5 +1,6 @@
 """Fixed pre-cut Space24 inspection under the claimed root operation."""
 import base64
+import contextvars
 import copy
 import hashlib
 import re
@@ -19,6 +20,7 @@ IDENTITY_SQL="""SELECT json_build_object('system_identifier',(pg_control_system(
  'schema_owner',pg_get_userbyid(n.nspowner)) FROM pg_database d CROSS JOIN pg_namespace n
  WHERE d.datname=current_database() AND d.datname='space_db' AND n.nspname='public';"""
 PG_CREDENTIAL_SCRIPT='printf "%s\\n" "$POSTGRES_USER"; printf %s "$POSTGRES_PASSWORD" | sha256sum'
+_HISTORY_STACK=contextvars.ContextVar('space_native_history_stack',default=())
 LIVE_UPGRADE_SCRIPT='''umask 077
 set -C
 /usr/local/bin/native-migrate -mode upgrade-legacy24 -migrations-dir /migrations -migrate /usr/local/bin/migrate -operation-id "$1" -snapshot-id "$2" -origin-evidence /evidence/origin.json > /evidence/completed.jsonl
@@ -470,10 +472,18 @@ def validate_historical_live_completed(operation):
     import resource_claim
     if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
         raise Blocked('space_live_history_invalid')
-    qualified=owner.validate_historical_capture(operation)
-    rollout=owner._read(owner.guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20)
-    binding=resource_claim.historical_binding(rollout)
-    return _validate_historical_live_completed(operation,qualified,rollout,binding)
+    stack=_HISTORY_STACK.get()
+    if operation in stack or len(stack)>=32:raise Blocked('space_live_history_cycle')
+    token=_HISTORY_STACK.set((*stack,operation))
+    try:
+        qualified=owner.validate_historical_capture(operation)
+        rollout=owner._read(owner.guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20)
+        binding=resource_claim.historical_binding(rollout)
+        native_receipt=rollout.get('native_space_migration')
+        if type(native_receipt) is dict and native_receipt.get('schema')=='voice-staging-space-native-successor-v1':
+            return _validate_historical_native_successor(operation,qualified,rollout,binding)
+        return _validate_historical_live_completed(operation,qualified,rollout,binding)
+    finally:_HISTORY_STACK.reset(token)
 
 
 def _validate_historical_live_completed(operation,qualified,rollout,binding):
@@ -600,6 +610,17 @@ def historical_native_predecessor(session):
         'native_sha256':owner.digest(receipt)}
 
 
+def _successor_job(operation,oldplan,node):
+    if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):raise Blocked('space_native_successor_changed')
+    if not isinstance(node,str) or not re.fullmatch('[a-z0-9][a-z0-9.-]{0,252}',node):raise Blocked('space_native_successor_node_changed')
+    wanted=copy.deepcopy(oldplan['documents']['verify']);name='voice-space-native-verify-'+operation
+    labels={'voice-space-native-successor':operation}
+    wanted['metadata'].update(name=name,labels=labels);template=wanted['spec']['template']
+    template['metadata']['labels']=labels
+    template['spec']['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms'][0]['matchFields'][0]['values']=[node]
+    return wanted
+
+
 def _successor_context(session):
     """Root-derived C2 input, including the original Tool and retained PVC."""
     predecessor=historical_native_predecessor(session)
@@ -630,11 +651,7 @@ def _successor_context(session):
         raise Blocked('space_native_successor_credentials_changed')
     node=kube.get('pod','voice-postgres-0').get('spec',{}).get('nodeName')
     if not isinstance(node,str) or not re.fullmatch('[a-z0-9][a-z0-9.-]{0,252}',node):raise Blocked('space_native_successor_node_changed')
-    wanted=copy.deepcopy(oldplan['documents']['verify']);name='voice-space-native-verify-'+session.operation
-    labels={'voice-space-native-successor':session.operation}
-    wanted['metadata'].update(name=name,labels=labels);template=wanted['spec']['template']
-    template['metadata']['labels']=labels
-    template['spec']['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms'][0]['matchFields'][0]['values']=[node]
+    wanted=_successor_job(session.operation,oldplan,node)
     if (historical_native_predecessor(session)!=predecessor or _identity(session,kube)!=identity
         or kube.get('configmap','voice-app-config')!=config or kube.get('secret','voice-app-secrets')!=secret):
         raise Blocked('space_native_successor_changed')
@@ -785,17 +802,19 @@ def verify_native_successor(session):
     return load_native_successor(session)
 
 
-def load_native_successor(session):
-    """Reload the exact C2 verification while the pre-cut Session is active."""
-    owner._guard(session);owner._no_pending(session);base=owner._base(session)
+def _successor_records(operation,binding):
+    """Verify durable C2 records using an already authenticated operation binding."""
+    if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
+        raise Blocked('space_native_successor_changed')
+    base=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
     plan=owner._read(base/'space-native-successor-plan.json')
     receipt=owner._read(base/'space-native-successor.json')
     create=owner._read(base/'effects'/'space-native-successor-create.json')
     delete=owner._read(base/'effects'/'space-native-successor-delete.json')
-    name=plan['job']['metadata']['name'];binding=session.binding()
+    name=plan['job']['metadata']['name']
     for kind,effect in (('create',create),('delete',delete)):
         if (set(effect)!={'schema','operation','effect_id','binding','argv','body_sha256','status','response'}
-            or effect['schema']!='voice-staging-cohort-effect-v1' or effect['operation']!=session.operation
+            or effect['schema']!='voice-staging-cohort-effect-v1' or effect['operation']!=operation
             or effect['effect_id']!='space-native-successor-'+kind or effect['binding']!=binding
             or effect['status']!='DONE'):raise Blocked('space_native_successor_changed')
     response=create['response'];deleted=delete['response']
@@ -812,13 +831,87 @@ def load_native_successor(session):
         raise Blocked('space_native_successor_changed')
     fields={'schema','operation','plan_sha256','predecessor','job_uid','pod_uid','pod_before_rv','pod_after_rv','hashes','cleanup'}
     if (set(receipt)!=fields or receipt['schema']!='voice-staging-space-native-successor-v1'
-        or receipt['operation']!=session.operation or receipt['plan_sha256']!=owner.digest(plan)
+        or receipt['operation']!=operation or receipt['plan_sha256']!=owner.digest(plan)
         or receipt['predecessor']!=plan['predecessor'] or receipt['job_uid']!=response['uid']
         or not owner.guard.UUID.fullmatch(str(receipt['pod_uid'])) or not receipt['pod_before_rv'] or not receipt['pod_after_rv']
-        or receipt['hashes']!=plan['expected_hashes'] or receipt['cleanup']!='verified'
-        or _successor_context(session)!=plan):raise Blocked('space_native_successor_changed')
+        or receipt['hashes']!=plan['expected_hashes'] or receipt['cleanup']!='verified'):
+        raise Blocked('space_native_successor_changed')
+    return plan,receipt
+
+
+def load_native_successor(session):
+    """Reload the exact C2 verification while the pre-cut Session is active."""
+    owner._guard(session);owner._no_pending(session)
+    plan,receipt=_successor_records(session.operation,session.binding())
+    if _successor_context(session)!=plan:raise Blocked('space_native_successor_changed')
     _successor_unmounted(plan);owner._no_pending(session);session.check()
     return copy.deepcopy(receipt)
+
+
+def _successor_history(operation,cohort_plan,prepared,binding):
+    """Validate protected C2 proof without opening the current database."""
+    plan,receipt=_successor_records(operation,binding)
+    fields={'schema','operation','predecessor','prior_native_sha256','identity','pvc_uid','pv_uid','pv_name',
+        'pvc_sha256','pv_sha256','config_sha256','secret_sha256','expected_hashes','tool_platform_digest',
+        'tool_config_digest','node','job'}
+    predecessor=plan.get('predecessor',{});old=predecessor.get('previous_operation')
+    prior_active=owner._read(owner.guard.ROOT/'installed'/'prerequisites'/operation/'previous-active.json')
+    if (set(plan)!=fields or plan.get('schema')!='voice-staging-space-native-successor-plan-v1'
+        or plan.get('operation')!=operation or type(predecessor) is not dict
+        or set(predecessor)!={'schema','operation','plan_sha256','previous_operation','active_sha256','native_sha256'}
+        or predecessor.get('schema')!='voice-staging-space-native-predecessor-v1'
+        or predecessor.get('operation')!=operation or predecessor.get('plan_sha256')!=owner.digest(cohort_plan)
+        or not isinstance(old,str) or not re.fullmatch('[a-f0-9]{12}',old) or old==operation
+        or predecessor.get('active_sha256')!=owner.digest(prior_active)
+        or prepared['plan'].get('previous_active_sha256')!=owner.digest(prior_active)
+        or prior_active.get('operation')!=old or prior_active.get('namespace_uid')!=cohort_plan['namespace_uid']):
+        raise Blocked('space_native_successor_changed')
+    previous=validate_historical_live_completed(old)
+    root=owner.guard.ROOT/'installed'/'cohort-preservation'/old
+    oldplan=owner._read(root/'space-live'/'plan.json');catalog=owner._read(root/'catalog.json');metadata=owner._read(root/'metadata.json')
+    role=metadata['source']['catalog']['space_db']['database_owner'];database=plan['identity']['database']
+    if (predecessor['native_sha256']!=owner.digest(previous) or plan['prior_native_sha256']!=owner.digest(previous)
+        or plan['identity']['namespace_uid']!=catalog['engine']['namespace_uid']
+        or database['system_identifier']!=catalog['engine']['system_identifier']
+        or database['database_oid']!=catalog['databases']['space_db'] or database['database_owner']!=role
+        or database['schema_owner']!=role or database['session_user']!=role
+        or any(plan[key]!=previous['volume'][key] for key in ('pvc_uid','pv_uid','pv_name'))
+        or plan['expected_hashes']!=previous['evidence_hashes']
+        or plan['tool_platform_digest']!=oldplan['tool_platform_digest']
+        or plan['tool_config_digest']!=oldplan['tool_config_digest']
+        or plan['job']!=_successor_job(operation,oldplan,plan['node'])
+        or any(not isinstance(plan[key],str) or not re.fullmatch('[a-f0-9]{64}',plan[key])
+               for key in ('pvc_sha256','pv_sha256','config_sha256','secret_sha256'))):
+        raise Blocked('space_native_successor_changed')
+    return copy.deepcopy(receipt)
+
+
+def load_retained_native_successor(session):
+    """Revalidate the pre-cut C2 proof across typed successor phases, without SQL."""
+    cohort_plan=owner.load_plan(session);owner._phase_continuity(session,cohort_plan);owner._no_pending(session)
+    _,_,prepared=owner._source(session,cohort_plan)
+    binding={'schema':'voice-staging-resource-fence-v1','context':session.context,'operation':session.operation,
+        'helper_sha256':session.helper,'target_sha256':owner.digest(cohort_plan)}
+    receipt=_successor_history(session.operation,cohort_plan,prepared,binding)
+    owner._phase_continuity(session,cohort_plan);owner._no_pending(session);session.check()
+    return receipt
+
+
+def _validate_historical_native_successor(operation,qualified,rollout,binding):
+    """Internal C2 history check after the caller authenticates PASS ancestry."""
+    root=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
+    cohort=owner._read(root/'checkpoint.json')['plan']
+    prepared=owner._read(owner.guard.ROOT/'installed'/'prerequisites'/operation/'prepared.json')
+    initial={'schema':'voice-staging-resource-fence-v1','context':binding['context'],'operation':operation,
+        'helper_sha256':binding['helper_sha256'],'target_sha256':owner.digest(cohort)}
+    receipt=_successor_history(operation,cohort,prepared,initial)
+    if (qualified.get('space_native_successor_sha256')!=owner.digest(receipt)
+        or rollout.get('native_space_migration')!=receipt
+        or rollout.get('target',{}).get('cohort_preservation_sha256')!=owner.digest(qualified)
+        or [event for event in rollout.get('events',[]) if event.get('kind')=='native_space_migration_complete']
+            !=[{'kind':'native_space_migration_complete','receipt_sha256':owner.digest(receipt)}]):
+        raise Blocked('space_native_successor_changed')
+    return receipt
 
 
 def prepare_native_transition(session):

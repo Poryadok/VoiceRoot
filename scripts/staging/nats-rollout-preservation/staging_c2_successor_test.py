@@ -30,6 +30,58 @@ class SuccessorTests(unittest.TestCase):
             self.assertEqual(native.prepare_native_transition(session),{'successor':'fixture'})
             successor.assert_called_once_with(session);legacy.assert_not_called()
 
+    def test_retained_history_binds_original_tool_and_predecessor(self):
+        operation='a'*12;old='b'*12;cohort={'namespace_uid':'ns'}
+        session=SimpleNamespace(operation=old,context={'operation_id':'prior'})
+        tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+              'source_inventory':{'build_source_sha256':'d'*64}}
+        oldplan={'documents':native._live_documents(session,tool,'node-a','local-path','snapshot'),
+                 'tool_platform_digest':'sha256:'+'c'*64,'tool_config_digest':'sha256:'+'e'*64}
+        active={'operation':old,'namespace_uid':'ns'};prepared={'plan':{'previous_active_sha256':owner.digest(active)}}
+        previous={'volume':{'pvc_uid':'pvc','pv_uid':'pv','pv_name':'name'},'evidence_hashes':{'origin':'fixture'}}
+        predecessor={'schema':'voice-staging-space-native-predecessor-v1','operation':operation,'plan_sha256':owner.digest(cohort),
+                     'previous_operation':old,'active_sha256':owner.digest(active),'native_sha256':owner.digest(previous)}
+        identity={'namespace_uid':'ns','database':{'system_identifier':'42','database_oid':9,
+                  'database_owner':'admin','schema_owner':'admin','session_user':'admin'}}
+        plan={'schema':'voice-staging-space-native-successor-plan-v1','operation':operation,'predecessor':predecessor,
+              'prior_native_sha256':owner.digest(previous),'identity':identity,'pvc_uid':'pvc','pv_uid':'pv','pv_name':'name',
+              'pvc_sha256':'a'*64,'pv_sha256':'b'*64,'config_sha256':'c'*64,'secret_sha256':'d'*64,
+              'expected_hashes':previous['evidence_hashes'],'tool_platform_digest':oldplan['tool_platform_digest'],
+              'tool_config_digest':oldplan['tool_config_digest'],'node':'node-a','job':native._successor_job(operation,oldplan,'node-a')}
+        catalog={'engine':{'namespace_uid':'ns','system_identifier':'42'},'databases':{'space_db':9}}
+        metadata={'source':{'catalog':{'space_db':{'database_owner':'admin'}}}}
+        with tempfile.TemporaryDirectory(dir='/root') as directory,patch.object(guard,'ROOT',Path(directory)):
+            root=Path(directory);prior=root/'installed'/'cohort-preservation'/old
+            (prior/'space-live').mkdir(parents=True,mode=0o700)
+            parent=root/'installed'/'prerequisites'/operation;parent.mkdir(parents=True,mode=0o700)
+            owner._write(prior/'space-live'/'plan.json',oldplan);owner._write(prior/'catalog.json',catalog)
+            owner._write(prior/'metadata.json',metadata);owner._write(parent/'previous-active.json',active)
+            with patch.object(native,'_successor_records',return_value=(plan,{'receipt':'fixture'})), \
+                 patch.object(native,'validate_historical_live_completed',return_value=previous):
+                self.assertEqual(native._successor_history(operation,cohort,prepared,{}),{'receipt':'fixture'})
+                plan['job']['spec']['template']['spec']['containers'][0]['image']='foreign'
+                with self.assertRaisesRegex(Exception,'space_native_successor_changed'):
+                    native._successor_history(operation,cohort,prepared,{})
+
+    def test_historical_successor_requires_qualified_hash_and_rejects_cycles(self):
+        operation='a'*12;receipt={'schema':'voice-staging-space-native-successor-v1','operation':operation}
+        qualified={'space_native_successor_sha256':owner.digest(receipt)}
+        rollout={'target':{'cohort_preservation_sha256':owner.digest(qualified)},'native_space_migration':receipt,
+                 'events':[{'kind':'native_space_migration_complete','receipt_sha256':owner.digest(receipt)}]}
+        binding={'context':{},'helper_sha256':'a'*64}
+        with tempfile.TemporaryDirectory(dir='/root') as directory,patch.object(guard,'ROOT',Path(directory)):
+            root=Path(directory);base=root/'installed'/'cohort-preservation'/operation
+            parent=root/'installed'/'prerequisites'/operation;base.mkdir(parents=True,mode=0o700);parent.mkdir(parents=True,mode=0o700)
+            owner._write(base/'checkpoint.json',{'plan':{'fixture':'cohort'}});owner._write(parent/'prepared.json',{'fixture':'prepared'})
+            with patch.object(native,'_successor_history',return_value=receipt):
+                self.assertEqual(native._validate_historical_native_successor(operation,qualified,rollout,binding),receipt)
+                changed=copy.deepcopy(rollout);changed['events'][0]['receipt_sha256']='f'*64
+                with self.assertRaisesRegex(Exception,'space_native_successor_changed'):
+                    native._validate_historical_native_successor(operation,qualified,changed,binding)
+            with patch.object(owner,'validate_historical_capture',side_effect=lambda value:native.validate_historical_live_completed(value)):
+                with self.assertRaisesRegex(Exception,'space_live_history_cycle'):
+                    native.validate_historical_live_completed(operation)
+
     def test_fixed_verify_job_and_lost_create_no_replay(self):
         for lost in (False,True):
             with self.subTest(lost=lost),tempfile.TemporaryDirectory(dir='/root') as directory:
