@@ -12,6 +12,7 @@ import full_cohort_inventory_phase_test as inventory_fixture
 import full_cohort_affected_plan as affected
 import full_cohort_schema_metadata as schema
 import full_cohort_schema_metadata_test as schema_fixture
+import media_live_baseline as live_baseline
 
 
 def checked_nested(case,created):
@@ -92,6 +93,45 @@ class ExternalKube:
             return b'M' if value is None else b'P'+value.encode()
         return json.dumps(self.objects[args[9],args[10]]).encode()
 
+    def enable_census(self):
+        """Reuse canonical infra shapes, joined to the same 23 application Pods."""
+        import full_cohort_namespace_census as census
+        import full_cohort_namespace_census_test as census_fixture
+        root,docs=census_fixture.SnapshotTest().fixture()
+        docs['namespace']['metadata']['uid']='namespace'
+        model={row['metadata']['name']:row for row in self.apps.deployments}
+        old_pods={row['metadata']['name']:row for row in self.apps.pods}
+        for deployment in docs['deployments']['items']:
+            name=deployment['metadata']['name']
+            if name not in model:continue
+            source=model[name]; spec=deployment['spec']; app=source['spec']['template']['spec']['containers'][0]
+            sidecars=spec['template']['spec']['containers'][1:]
+            spec['selector']=copy.deepcopy(source['spec']['selector']); spec['replicas']=1
+            spec['template']['spec']['containers']=[copy.deepcopy(app),*sidecars]
+            deployment['status']={'observedGeneration':1,'replicas':1,'updatedReplicas':1,'readyReplicas':1}
+            pod=next(row for row in docs['pods']['items'] if row['metadata']['name']==name+'-pod')
+            pod['metadata']['labels']=copy.deepcopy(spec['selector']['matchLabels'])
+            pod['spec']['containers']=copy.deepcopy(spec['template']['spec']['containers'])
+            old=old_pods[name+'-pod']['status']['containerStatuses'][0]
+            statuses=pod['status']['containerStatuses']; statuses[0]=copy.deepcopy(old)
+        apps=set('voice-'+name for name in census.APP_NAMES)
+        self.apps.deployments=[row for row in docs['deployments']['items'] if row['metadata']['name'] in apps]
+        self.apps.replicasets=[row for row in docs['replicasets']['items'] if row['metadata']['name'].removesuffix('-rs') in apps]
+        self.apps.pods=[row for row in docs['pods']['items'] if row['metadata']['name'].removesuffix('-pod') in apps]
+        for kind,objects in (('deployment',self.apps.deployments),('replicaset',self.apps.replicasets),('pod',self.apps.pods)):
+            for obj in objects:self.objects[kind,obj['metadata']['name']]=obj
+        postgres=next(row for row in docs['statefulsets']['items'] if row['metadata']['name']=='voice-postgres')
+        pgpod=next(row for row in docs['pods']['items'] if row['metadata']['name']=='voice-postgres-pod')
+        pgpod['metadata']['name']='voice-postgres-0'; pgpod['metadata']['labels']={'app':'voice-postgres'}
+        pgpod['status']['podIP']='10.0.0.1'; self.objects['statefulset','voice-postgres']=postgres; self.objects['pod','voice-postgres-0']=pgpod
+        pvc=next(row for row in docs['pvcs']['items'] if row['metadata']['name']=='pgdata-voice-postgres-0')
+        pvc['spec']={'volumeName':'pv-one'}; self.objects['persistentvolumeclaim','pgdata-voice-postgres-0']=pvc
+        self.objects['persistentvolume','pv-one']['spec']['claimRef']['uid']=pvc['metadata']['uid']
+        self.objects['endpoints','voice-postgres']['subsets'][0]['addresses'][0]['targetRef']['uid']=pgpod['metadata']['uid']
+        self.objects['endpointslices','-l']['items'][0]['endpoints'][0]['targetRef']['uid']=pgpod['metadata']['uid']
+        self.docs=docs
+        return root
+
 
 class ExternalPostgres:
     """Bounded synthetic process output; production catalog parser remains active."""
@@ -131,6 +171,28 @@ class DriverJointTest(unittest.TestCase):
         self.assertEqual(observe()['pvc_uid'],'pvc')
         kube.objects['endpoints','voice-postgres']['subsets'][0]['addresses'][0]['targetRef']['uid']='foreign'
         with self.assertRaises(schema.Hold):observe()
+
+    def test_same_raw_kube_fixture_supports_inventory_census_and_engine(self):
+        import full_cohort_namespace_census as census
+        kube=ExternalKube(); source_root=kube.enable_census()
+        result=live_baseline.collect('default','voice-dev',reader=lambda _context,_namespace,name:copy.deepcopy(kube.docs[name]))
+        pods,controllers,_=inventory.inventory(kube)
+        self.assertEqual((len(result['workload_uids']),len(result['images'])),(31,49))
+        self.assertEqual((len(pods),len(controllers)),(23,23))
+        self.assertEqual(schema.kube_engine_snapshot(kube.process,lambda:None)()['pod_uid'],kube.objects['pod','voice-postgres-0']['metadata']['uid'])
+        database=ExternalPostgres(kube); catalog=schema.catalog(schema_fixture.CatalogTest().snapshot())
+        with patch.object(schema,'_bounded_process',side_effect=database.process):
+            observed=schema.inspect(catalog,'user',pods['user'][0],'voice',lambda:None)
+        self.assertEqual(observed['metadata']['session']['database_oid'],42)
+        mail=(source_root/'docker/verification-stub/server.mjs').read_text(encoding='utf8')
+        for kind,name in census.INFRA_NAMES:
+            listing='deployments' if kind=='Deployment' else 'statefulsets'
+            obj=next(row for row in kube.docs[listing]['items'] if row['metadata']['name']==name)
+            census.validate_infra(name,obj['spec']['template']['spec'],{'server.mjs':mail} if name=='voice-dev-mail' else None,
+                                  mail if name=='voice-dev-mail' else None)
+        redis=next(row for row in kube.docs['deployments']['items'] if row['metadata']['name']=='voice-redis')
+        foreign=copy.deepcopy(redis['spec']['template']['spec']); foreign['containers'][0].setdefault('env',[]).append({'name':'DATABASE_URL','value':'foreign'})
+        with self.assertRaises(census.CensusError):census.validate_infra('voice-redis',foreign)
 
     def test_external_kube_fixture_resolves_actual_pod_database_binding(self):
         kube=ExternalKube(); snap=schema.kube_workload_snapshot('user','voice-user-pod',kube.process,lambda:None)
