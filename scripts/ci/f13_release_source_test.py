@@ -23,7 +23,7 @@ class EventBoundaryTest(unittest.TestCase):
         self.git('config', 'user.email', 'fixture@example.invalid')
         self.git('config', 'core.autocrlf', 'false')
         (self.repo / 'source').write_text('source\n')
-        for name in ('docs/context.md','src/backend/pkg/dep.go','src/backend/voice/main.go',
+        for name in ('docs/context.md','src/backend/pkg/dep.go','src/backend/role/dep.go','src/backend/voice/main.go',
                      'scripts/ci/testdata/f13-exact-j-547/historical-inputs.zip'):
             path=self.repo/name
             path.parent.mkdir(parents=True,exist_ok=True)
@@ -254,7 +254,7 @@ class EventBoundaryTest(unittest.TestCase):
         fake_record = dict(base=self.h,projection=[])
         with patch.multiple(release,FOUNDATION_BASE=self.h,RECORD_COMMIT=self.r,ROOT=self.repo), \
              patch.object(release,'production_record',return_value={}), \
-             patch.object(release,'load_native',return_value=fake_record), patch.object(release,'_carrier'), \
+             patch.object(release,'load_native',return_value=fake_record), patch.object(release,'load_role'), patch.object(release,'_carrier'), \
              patch.object(release,'check_continuation'):
             args = (self.repo,self.h,self.k,self.t,'push','refs/heads/master',self.t,self.h,'')
             with self.assertRaises(release.Rejected): release.native_qualify(*args)
@@ -302,6 +302,68 @@ class EventBoundaryTest(unittest.TestCase):
         self.assertNotEqual(baseline_entry,release.legacy.entry(self.repo,changed_mode,paths[-1]))
         with self.assertRaises(release.Rejected):
             release.preserve_predecessor(self.repo,original,changed_mode,paths[-1])
+
+
+    def test_role_unit_drift_and_restoration_is_rejected_at_each_commit(self):
+        role_path = 'src/backend/role/dep.go'
+        role = dict(required_current_source=[dict(path=role_path)], context=[],
+                    closure={'directory_inventories': [dict(directory='src/backend/role', entries={})]})
+        native = dict(projection=[dict(path='source')], context=[], compiled_closure=[],
+            release_record={'closure': {'directory_inventories': []}})
+        self.git('checkout', '--detach', '-q', self.t)
+        (self.repo / role_path).write_text('changed\n')
+        self.git('add', role_path)
+        self.git('commit', '-qm', 'role drift')
+        self.git('checkout', self.t, '--', role_path)
+        self.git('commit', '-qm', 'role restore')
+        source = self.git('rev-parse', 'HEAD')
+        self.git('checkout', '--detach', '-q', self.t)
+        (self.repo/'unrelated').write_text('outside role unit\n')
+        self.git('add','unrelated'); self.git('commit','-qm','unrelated')
+        main = self.git('rev-parse','HEAD')
+        side_merge = self.git('commit-tree',self.git('rev-parse',main+'^{tree}'),
+            '-p',main,'-p',source,input='merge restored role branch\n')
+        with patch.multiple(release, FOUNDATION_BASE=self.h, RECORD_COMMIT=self.r,
+                CARRIER_PATHS=frozenset({'carrier', 'scripts/ci/f13_release_source.py'})):
+            for candidate in (source,side_merge):
+                with self.subTest(candidate=candidate), self.assertRaisesRegex(release.Rejected, 'release_continuation_entry_drift'):
+                    release.check_continuation(self.repo, dict(base=self.h, source=self.k, target=self.t),
+                                               candidate, native, role)
+
+
+class RoleEvidenceTest(unittest.TestCase):
+    def test_review_requires_unique_named_narrow_decision(self):
+        kind='ROLE-V3-INDEPENDENT-SOURCE-REVIEW-v1'
+        decision=dict(type=kind,reviewer='independent reviewer',runtime_pass=False,activation_authority=False,
+            current_or_future_path_authority=False,generic_duplicate_authority=False)
+        block=lambda value: ('```json\n'+json.dumps(value)+'\n```\n').encode()
+        self.assertEqual(release.role_review_block(block(decision),kind),decision)
+        with self.assertRaises(release.Rejected): release.role_review_block(block(decision)*2,kind)
+        for invalid in (dict(decision,reviewer=''),dict(decision,runtime_pass=True),
+                        dict(decision,current_or_future_path_authority=True)):
+            with self.assertRaises(release.Rejected): release.role_review_block(block(invalid),kind)
+
+    def test_raw_go_stream_derives_tests_embeds_modules_and_local_directories(self):
+        objects = [dict(Dir='/work/src/backend/role/pkg', GoFiles=['main.go','/root/.cache/go-build/generated'],
+            TestGoFiles=['main_test.go'], EmbedFiles=['data/policy.json'],
+            Module=dict(Dir='/work/src/backend/role',Replace=dict(Dir='/work/src/backend/shared'))),
+            dict(Dir='/usr/local/go/src/fmt',GoFiles=['print.go'])]
+        tree = {p: 'entry' for p in ('src/backend/role/pkg/main.go','src/backend/role/pkg/main_test.go',
+            'src/backend/role/pkg/data/policy.json','src/backend/role/go.mod','src/backend/shared/go.mod',
+            'src/backend/shared/go.sum')}
+        raw = '\n'.join(json.dumps(o,indent=2) for o in objects).encode()
+        paths,dirs,manifests = release.role_evidence_paths(raw,tree)
+        self.assertEqual(paths,sorted(p for p in tree if '/pkg/' in p))
+        self.assertEqual(dirs,['src/backend/role/pkg'])
+        self.assertEqual(manifests,sorted(p for p in tree if '/pkg/' not in p))
+        forged = json.dumps(dict(Dir='/work/src/backend/role/pkg',GoFiles=['../../escape.go'])).encode()
+        with self.assertRaises(release.Rejected): release.role_evidence_paths(forged,tree)
+        missing = json.dumps(dict(Dir='/work/src/backend/role/pkg',GoFiles=['missing.go'])).encode()
+        with self.assertRaisesRegex(release.Rejected,'release_role_missing_go_input'):
+            release.role_evidence_paths(missing,tree)
+        absolute = json.dumps(dict(Dir='/work/src/backend/role/pkg',GoFiles=['/work/src/backend/role/pkg/main.go'])).encode()
+        with self.assertRaisesRegex(release.Rejected,'release_role_absolute_go_path'):
+            release.role_evidence_paths(absolute,tree)
 
 
 class NativeRecordTest(unittest.TestCase):
@@ -434,11 +496,14 @@ class NativeRecordTest(unittest.TestCase):
                 foundation_base=source,reuse_policy=('UNREVIEWED' if variant=='production_policy' else release.REUSE_POLICY),
                 collection_base=source,current_inputs=inputs,
                 native_record=dict(version=release.NATIVE_VERSION,source=source,path=release.RECORD_PATH,
-                    sha256=hashlib.sha256(raw).hexdigest()),evidence=[production_review],
+                    sha256=hashlib.sha256(raw).hexdigest()),
+                role_record=dict(version=release.ROLE_VERSION,source=source,path=release.ROLE_RECORD_PATH,
+                    sha256=release.ROLE_SHA256),evidence=[production_review],
                 review=[production_review['path']],runtime_pass=False,activation_authority=False,
                 current_or_future_path_authority=False)
             production_raw = (json.dumps(production_record,sort_keys=True)+'\n').encode()
             (repo/release.PRODUCTION_RECORD_PATH).write_bytes(production_raw)
+            (repo/release.ROLE_RECORD_PATH).write_text('mocked role record\n')
             production_digest = hashlib.sha256(production_raw).hexdigest()
         record_commit = commit('record')
         self.fixture_info = dict(source=source, record=record_commit, production_digest=production_digest)
@@ -447,6 +512,10 @@ class NativeRecordTest(unittest.TestCase):
                    patch.multiple(release.documentation,CONTEXT_VERSION='fixture-v4',CONTEXT_SOURCE=predecessor,
                     CONTEXT_RECORD_COMMIT=predecessor,CONTEXT_RECORD_PATH='docs/testing/old.json',CONTEXT_RECORD_SHA256='0'*64),
                    patch.object(release.documentation,'load_context_record',return_value=old)]
+        if integrated:
+            patches.append(patch.object(release,'load_role',return_value=dict(
+                required_current_source=[],context=[],closure={'directory_inventories':[]},
+                release_record={'closure':delta_proof,'evidence':[]})))
         for item in patches:
             item.start()
             self.addCleanup(item.stop)

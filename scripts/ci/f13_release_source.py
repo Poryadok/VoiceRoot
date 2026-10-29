@@ -8,7 +8,9 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
+import io
+import zipfile
+from pathlib import Path, PurePosixPath
 
 Rejected = legacy.Rejected
 require, git = legacy.require, legacy.git
@@ -19,15 +21,20 @@ COLLECTION_BASE = '2c8bdf9e2f420b724575096beb4fcf5cb4ea00be'
 RECORD_COMMIT = None  # Set only after the independently reviewed record is committed.
 NATIVE_SHA256 = None
 PRODUCTION_SHA256 = None
+ROLE_SHA256 = None
 NATIVE_VERSION = 'NATIVE-P3-SOURCE-v5'
 PRODUCTION_VERSION = 'F13-PRODUCTION-SOURCE-v11'
 REUSE_POLICY = 'UNCHANGED-NATIVE-UNIT-AFTER-FOUNDATION-v1'
 RECORD_PATH = 'docs/testing/native-p3-source-v5.json'
 PRODUCTION_RECORD_PATH = 'docs/testing/f13-production-source-v11.json'
+ROLE_RECORD_PATH = 'docs/testing/role-checkpermission-historical-source-v3.json'
+ROLE_CLOSURE_PATH = 'docs/testing/role-checkpermission-source-v3-closure.json'
+ROLE_VERSION = 'MASTER-ROLE-CHECKPERMISSION-HISTORICAL-CONSUMPTION-v3'
+ROLE_EVIDENCE_SOURCE = '70a3ca533e23d7454782428304c180e76fad74e1'
 CARRIER_PATHS = frozenset(('scripts/ci/f13_release_source.py',
     'scripts/ci/f13_release_source_test.py', 'scripts/ci/f13_native_p3_authority.py',
     'scripts/ci/f13_native_p3_successor_integration_test.py',
-    'scripts/ci/f13_role_conditional_successor_test.py', 'scripts/ci/f13_production_source_test.py',
+    'scripts/ci/f13_role_conditional_successor.py', 'scripts/ci/f13_role_conditional_successor_test.py', 'scripts/ci/f13_production_source_test.py',
     'scripts/ci/f13_production_source.py', 'scripts/ci/f13_f54_history.py',
     'scripts/ci/f13_f54_history_test.py', 'scripts/ci/voice-db-runtime-provisioning-contract_test.sh',
     '.agent/execplans/current-release-history-source.md'))
@@ -80,12 +87,14 @@ def _proofs(repo, proofs):
     return names
 
 
-def _record_delta(repo, native, production):
+def _record_delta(repo, native, production, role=None):
     before = documentation.tree_entries(repo, FOUNDATION_BASE)
     after = documentation.tree_entries(repo, RECORD_COMMIT)
     additions = {RECORD_PATH, PRODUCTION_RECORD_PATH, native['delta_review']['path'],
                  production['current_inputs']['path'], *[p['path'] for p in native['evidence']],
                  *[p['path'] for p in production['evidence']]}
+    if role is not None:
+        additions |= {ROLE_RECORD_PATH, role['closure']['path'], *[p['path'] for p in role['evidence']]}
     plan = '.agent/execplans/current-release-history-source.md'
     if plan in after and plan not in before:
         additions.add(plan)
@@ -97,7 +106,8 @@ def preserve_predecessor(repo, predecessor, source, archive_path):
     before = documentation.tree_entries(repo, predecessor)
     after = documentation.tree_entries(repo, source)
     protected = {p for p in before if p.startswith(('docs/testing/native-p3-source',
-        'docs/testing/f13-production'))} | {archive_path}
+        'docs/testing/f13-production', 'docs/testing/role-checkpermission',
+        'docs/testing/role-source-v1-evidence/', 'docs/testing/role-source-v2-evidence/'))} | {archive_path}
     require(archive_path in before and all(before.get(p) == after.get(p) for p in protected),
             'release_historical_artifact_drift')
 
@@ -188,6 +198,182 @@ def load_native(repo):
     return effective
 
 
+def role_evidence_paths(raw, tree):
+    """Derive local inputs from the original concatenated Go JSON stream."""
+    fields = ('GoFiles','CgoFiles','CFiles','CXXFiles','MFiles','HFiles','FFiles','SFiles',
+              'SwigFiles','SwigCXXFiles','SysoFiles','TestGoFiles','XTestGoFiles',
+              'EmbedFiles','TestEmbedFiles','XTestEmbedFiles')
+    text = raw.decode('utf-8')
+    decoder = json.JSONDecoder(object_pairs_hook=legacy.unique_pairs)
+    pos = 0
+    paths, directories, modules = set(), set(), set()
+    def local(value):
+        if not isinstance(value, str) or not value.startswith('/work/'):
+            return None
+        part = value[len('/work/'):]
+        require(part and '..' not in part.split('/') and '\\' not in part, 'release_role_go_path')
+        return part
+    while pos < len(text):
+        while pos < len(text) and text[pos].isspace(): pos += 1
+        if pos == len(text): break
+        obj, pos = decoder.raw_decode(text, pos)
+        require(isinstance(obj, dict), 'release_role_go_object')
+        directory = local(obj.get('Dir'))
+        if directory is not None:
+            directories.add(directory)
+            for field in fields:
+                values = obj.get(field, [])
+                require(isinstance(values, list) and all(isinstance(v, str) for v in values), 'release_role_go_files')
+                for name in values:
+                    if name.startswith('/'):
+                        require(name.startswith('/root/.cache/go-build/') and
+                            '..' not in name.split('/') and '\\' not in name, 'release_role_absolute_go_path')
+                        continue  # Generated build-cache input is outside the source tree.
+                    require('..' not in name.split('/') and '\\' not in name,
+                            'release_role_go_path')
+                    path = str(PurePosixPath(directory) / name)
+                    require(path in tree, 'release_role_missing_go_input')
+                    paths.add(path)
+        module = obj.get('Module') or {}
+        require(isinstance(module, dict), 'release_role_go_module')
+        replace = module.get('Replace') or {}
+        require(isinstance(replace, dict), 'release_role_go_module')
+        for mod in (module, replace):
+            directory = local(mod.get('Dir'))
+            if directory is not None: modules.add(directory)
+    manifests = {p for d in modules for p in (d+'/go.mod', d+'/go.sum') if p in tree}
+    return sorted(paths), sorted(directories), sorted(manifests)
+
+
+def role_review_block(raw, kind):
+    blocks = re.findall(r'```json\s*\n(.*?)\n```',raw.decode('utf-8'),re.S)
+    values = [read_json(block) for block in blocks]
+    matches = [value for value in values if isinstance(value,dict) and value.get('type') == kind]
+    require(len(matches) == 1, 'release_role_review_block')
+    value = matches[0]
+    require(isinstance(value.get('reviewer'),str) and value['reviewer'].strip() and all(
+        value.get(flag) is False for flag in ('runtime_pass','activation_authority',
+        'current_or_future_path_authority','generic_duplicate_authority')), 'release_role_review_authority')
+    return value
+
+
+def load_role(repo):
+    import f13_role_conditional_successor as role
+    try:
+        old = role.load_record(repo)
+    except role.legacy.Rejected as error:
+        raise Rejected('release_role_predecessor: '+str(error)) from error
+    r = pinned(repo, ROLE_RECORD_PATH, ROLE_SHA256)
+    require(set(r) == {'version','status','source','source_tree','predecessor','original_correction',
+        'required_current_source','context','closure','compiled_evidence','evidence_source',
+        'extension_evidence','evidence','review','historical_runtime_gap',*role.FALSE_FLAGS}, 'release_role_shape')
+    require(r['version'] == ROLE_VERSION and r['status'] == 'SOURCE_CONSUMPTION_CONTRACT_CLEAR' and
+        r['source'] == FOUNDATION_BASE and r['original_correction'] == role.ORIGINAL_CORRECTION and
+        r['historical_runtime_gap'] == old['historical_runtime_gap'] and
+        all(r[k] is False for k in role.FALSE_FLAGS), 'release_role_status')
+    require(r['predecessor'] == dict(version=role.VERSION, source=old['source'],
+        record=role.PINNED_RECORD_COMMIT, path=role.RECORD_PATH, sha256=role.PINNED_RECORD_SHA256),
+        'release_role_predecessor')
+    for older in (role.PINNED_RECORD_COMMIT, role.ORIGINAL_CORRECTION, role.HISTORICAL_CARRIER,
+                  ROLE_EVIDENCE_SOURCE): legacy.ancestor(repo, older, FOUNDATION_BASE)
+    require(r['source_tree'] == git(repo,'rev-parse',FOUNDATION_BASE+'^{tree}').decode().strip(),
+        'release_role_tree')
+    before = documentation.tree_entries(repo, role.PINNED_RECORD_COMMIT)
+    current = documentation.tree_entries(repo, FOUNDATION_BASE)
+    evidence_tree = documentation.tree_entries(repo, ROLE_EVIDENCE_SOURCE)
+    protected = {p for p in before if p.startswith(('docs/testing/role-checkpermission',
+        'docs/testing/role-source-v1-evidence/', 'docs/testing/role-source-v2-evidence/'))}
+    require(all(before[p] == current.get(p) for p in protected), 'release_role_historical_artifact_drift')
+    names = _proofs(repo, r['evidence'])
+    prefix = 'docs/testing/role-source-v3-evidence/'
+    require(set(names) == {prefix+p for p in ('source-review.md','source-inventory.json',
+        'runtime-evidence.zip','extension-review.md','extension-inventory.json')} and
+        r['compiled_evidence']['path'] == prefix+'source-inventory.json' and
+        r['extension_evidence']['path'] == prefix+'extension-inventory.json' and
+        r['review'] == [prefix+'source-review.md',prefix+'extension-review.md'] and
+        r['evidence_source'] == ROLE_EVIDENCE_SOURCE, 'release_role_evidence')
+    proofs = {p['path']:p for p in r['evidence']}
+    require(r['compiled_evidence'] == proofs[r['compiled_evidence']['path']] and
+        r['extension_evidence'] == proofs[r['extension_evidence']['path']], 'release_role_evidence_binding')
+    inv = read_json(artifact(repo, r['compiled_evidence']))
+    require(set(inv) == {'source','tree','command','image','raw_go_list_member','raw_go_list_sha256',
+        'compiled_paths','directories','module_manifests','entries','directory_inventories'} and inv['source'] == ROLE_EVIDENCE_SOURCE and
+        inv['tree'] == git(repo,'rev-parse',ROLE_EVIDENCE_SOURCE+'^{tree}').decode().strip() and
+        inv['command'] == 'go list -mod=readonly -deps -test -json ./internal/principalruntime ./internal/principalgrpc ./internal/grpcsvc' and
+        inv['image'] == 'golang:1.26.5-bookworm' and inv['raw_go_list_member'] == 'closure.jsonl',
+        'release_role_inventory')
+    source_review = role_review_block(artifact(repo,proofs[prefix+'source-review.md']),
+        'ROLE-V3-INDEPENDENT-SOURCE-REVIEW-v1')
+    native = pinned(repo,RECORD_PATH,NATIVE_SHA256)
+    wire = [p for p in native['evidence'] if p['path'] == 'docs/testing/native-p3-source-v5-evidence.zip']
+    require(len(wire) == 1, 'release_role_wire_archive')
+    try:
+        with zipfile.ZipFile(io.BytesIO(artifact(repo,wire[0]))) as archive:
+            require(all(archive.namelist().count(name)==1 for name in
+                ('review/wire-audit.json','review/current-descriptors.json')), 'release_role_wire_members')
+            audit_hash = sha(archive.read('review/wire-audit.json'))
+            descriptor_hash = sha(archive.read('review/current-descriptors.json'))
+    except zipfile.BadZipFile as error:
+        raise Rejected('release_role_wire_archive') from error
+    require(source_review.get('status') == 'SOURCE_CONSUMPTION_CONTRACT_CLEAR' and
+        source_review.get('source') == ROLE_EVIDENCE_SOURCE and source_review.get('source_tree') == inv['tree'] and
+        source_review.get('predecessor_source') == old['source'] and
+        source_review.get('predecessor_record') == role.PINNED_RECORD_COMMIT and
+        source_review.get('inventory_sha256') == r['compiled_evidence']['sha256'] and
+        source_review.get('runtime_evidence_sha256') == proofs[prefix+'runtime-evidence.zip']['sha256'] and
+        source_review.get('raw_go_list_sha256') == inv['raw_go_list_sha256'] and
+        source_review.get('native_wire_archive_sha256') == wire[0]['sha256'] and
+        source_review.get('native_wire_audit_sha256') == audit_hash and
+        source_review.get('native_wire_descriptors_sha256') == descriptor_hash, 'release_role_source_review')
+    try:
+        with zipfile.ZipFile(io.BytesIO(artifact(repo, proofs[prefix+'runtime-evidence.zip']))) as archive:
+            require(archive.namelist().count('closure.jsonl') == 1, 'release_role_raw_member')
+            raw = archive.read('closure.jsonl')
+    except zipfile.BadZipFile as error:
+        raise Rejected('release_role_raw_archive') from error
+    require(sha(raw) == inv['raw_go_list_sha256'], 'release_role_raw_hash')
+    compiled, directories, manifests = role_evidence_paths(raw, evidence_tree)
+    old_closure = read_json(role.artifact(repo,old['closure_manifest']['path'],old['closure_manifest']['sha256']))
+    directories = sorted(set(directories) | {x['directory'] for x in old_closure['package_inventories']})
+    require((compiled,directories,manifests) == (inv['compiled_paths'],inv['directories'],inv['module_manifests'])
+        and compiled and directories, 'release_role_derived_inputs')
+    evidence_dirs = documentation.immediate_directory_entries(evidence_tree)
+    current_dirs = documentation.immediate_directory_entries(current)
+    inventory = [dict(directory=d, entries=current_dirs.get(d,{})) for d in directories]
+    require(all(current_dirs.get(d,{}) == evidence_dirs.get(d,{}) for d in directories), 'release_role_package_drift')
+    required = old['required_current_source']
+    require(len(required) == 11 and r['required_current_source'] == required, 'release_role_all_eleven')
+    required_names = {x['path'] for x in required}
+    contexts = sorted(({x['path'] for x in old['context']} | set(compiled) | set(manifests) |
+        {p for d in directories for p in current_dirs.get(d,{})}) - required_names)
+    def row(path):
+        meta = _meta(current,path)
+        require(meta is not None and meta['mode']=='100644' and meta['type']=='blob', 'release_role_entry')
+        return dict(path=path,entry=meta,sha256=sha(git(repo,'cat-file','blob',meta['oid'])))
+    require(r['context'] == [row(p) for p in contexts] and required == [row(x['path']) for x in required] and
+        all(current.get(p) == evidence_tree.get(p) for p in required_names | set(contexts)), 'release_role_complete_unit')
+    require(inv['entries'] == [row(p) for p in sorted(required_names | set(contexts))] and
+        inv['directory_inventories'] == inventory, 'release_role_reviewed_inventory')
+    require(r['closure']['path'] == ROLE_CLOSURE_PATH, 'release_role_closure_path')
+    closure = read_json(artifact(repo,r['closure']))
+    require(closure == dict(source=FOUNDATION_BASE,compiled_paths=compiled,directory_inventories=inventory),
+        'release_role_closure')
+    extension = read_json(artifact(repo,r['extension_evidence']))
+    require(extension == dict(source=FOUNDATION_BASE,evidence_source=ROLE_EVIDENCE_SOURCE,status='ACCEPTED',
+        delta_sha256=sha(git(repo,'diff','--raw','--no-abbrev','--no-renames',ROLE_EVIDENCE_SOURCE,FOUNDATION_BASE)),
+        review=[prefix+'extension-review.md']), 'release_role_extension')
+    ext_review = role_review_block(artifact(repo,proofs[prefix+'extension-review.md']),
+        'ROLE-V3-INDEPENDENT-EXTENSION-REVIEW-v1')
+    require(ext_review.get('status') == 'ACCEPT' and ext_review.get('source') == FOUNDATION_BASE and
+        ext_review.get('source_tree') == r['source_tree'] and ext_review.get('evidence_source') == ROLE_EVIDENCE_SOURCE and
+        ext_review.get('evidence_tree') == inv['tree'] and ext_review.get('delta_sha256') == extension['delta_sha256'] and
+        ext_review.get('inventory_sha256') == r['compiled_evidence']['sha256'] and
+        ext_review.get('extension_evidence_sha256') == r['extension_evidence']['sha256'] and
+        ext_review.get('source_review_sha256') == proofs[prefix+'source-review.md']['sha256'],
+        'release_role_extension_review')
+    return dict(r, closure=closure, release_record=r)
+
+
 def production_record(repo):
     import f13_production_source as production
     production.load_bootstrap_fix(repo)  # Recursively revalidate v1-v10.
@@ -195,7 +381,7 @@ def production_record(repo):
     native = load_native(repo)
     r = pinned(repo, PRODUCTION_RECORD_PATH, PRODUCTION_SHA256)
     require(set(r) == {'version','status','source','source_tree','predecessor','foundation_base','reuse_policy',
-        'collection_base','current_inputs','native_record','evidence','review','runtime_pass',
+        'collection_base','current_inputs','native_record','role_record','evidence','review','runtime_pass',
         'activation_authority','current_or_future_path_authority'}, 'release_production_shape')
     require(r['version'] == PRODUCTION_VERSION and r['status'] == 'SOURCE_CONSUMPTION_CONTRACT_CLEAR'
         and r['source'] == FOUNDATION_BASE and r['foundation_base'] == FOUNDATION_BASE and r['reuse_policy'] == REUSE_POLICY and
@@ -209,6 +395,8 @@ def production_record(repo):
         'release_production_tree')
     require(r['native_record'] == dict(version=NATIVE_VERSION, source=FOUNDATION_BASE,
         path=RECORD_PATH, sha256=NATIVE_SHA256), 'release_production_native')
+    require(r['role_record'] == dict(version=ROLE_VERSION, source=FOUNDATION_BASE,
+        path=ROLE_RECORD_PATH, sha256=ROLE_SHA256), 'release_production_role')
     reference = {p:v.rstrip('\0') for p,v in production.entries(repo, production.REFERENCE).items()}
     current = {p:v.rstrip('\0') for p,v in production.entries(repo, FOUNDATION_BASE).items()}
     inventory = read_json(artifact(repo, r['current_inputs']))
@@ -221,7 +409,8 @@ def production_record(repo):
     names = _proofs(repo, r['evidence'])
     require(isinstance(r['review'], list) and r['review'] and
         all(p in names for p in r['review']), 'release_production_review')
-    _record_delta(repo, native['release_record'], r)
+    role = load_role(repo)
+    _record_delta(repo, native['release_record'], r, role['release_record'])
     return r
 
 
@@ -242,7 +431,7 @@ def _carrier(repo, source):
             legacy.entry(repo, source, 'scripts/ci/f13_release_source.py'), 'release_later_carrier_bytes')
 
 
-def check_continuation(repo, foundation, source, record):
+def check_continuation(repo, foundation, source, record, role=None):
     """Compare the whole reviewed unit at every newly introduced DAG commit."""
     import f13_production_source as production
     h, carrier, first = (foundation[k] for k in ('base','source','target'))
@@ -256,13 +445,18 @@ def check_continuation(repo, foundation, source, record):
     carrier_tree=documentation.tree_entries(repo,carrier)
     protected=(set(recorded)-set(baseline))-CARRIER_PATHS
     protected |= {p for p in baseline if p.startswith(('docs/testing/native-p3-source',
-        'docs/testing/f13-production'))}
+        'docs/testing/f13-production', 'docs/testing/role-checkpermission',
+        'docs/testing/role-source-v1-evidence/', 'docs/testing/role-source-v2-evidence/'))}
     protected.add(production.ARCHIVE_PATH)
     require(production.ARCHIVE_PATH in baseline, 'release_missing_historical_archive')
-    names=projection | contexts | compiled | protected | set(CARRIER_PATHS)
+    role = role or {'required_current_source': [], 'context': [], 'closure': {'directory_inventories': []}}
+    role_paths = {row['path'] for group in ('required_current_source', 'context') for row in role[group]}
+    require(not CARRIER_PATHS & role_paths, 'release_carrier_role_overlap')
+    names=projection | contexts | compiled | role_paths | protected | set(CARRIER_PATHS)
     expected={p:(carrier_tree.get(p) if p in CARRIER_PATHS else
                  recorded.get(p) if p in protected and p not in baseline else baseline.get(p)) for p in names}
-    directories=[x['directory'] for x in record['release_record']['closure']['directory_inventories']]
+    directories=sorted({x['directory'] for x in record['release_record']['closure']['directory_inventories'] +
+                        role['closure']['directory_inventories']})
     base_dirs=documentation.immediate_directory_entries(baseline)
     carrier_dirs=documentation.immediate_directory_entries(carrier_tree)
     expected_dirs={d:dict(base_dirs.get(d,{})) for d in directories}
@@ -294,7 +488,7 @@ def native_qualify(repo, base, source, target, event, ref, event_sha, before, ba
     foundation=check_event(repo, base, source, target, event, ref, event_sha, before, base_ref, FOUNDATION_BASE, RECORD_COMMIT)
     _carrier(repo, foundation['source'])
     record = load_native(repo)
-    check_continuation(repo, foundation, source, record)
+    check_continuation(repo, foundation, source, record, load_role(repo))
     return dict(version=NATIVE_VERSION, consumer='MASTER-SOURCE-v1', base=base, source=source,
         target=target, content_base=record['base'], snapshot=FOUNDATION_BASE, record=RECORD_COMMIT,
         record_sha256=NATIVE_SHA256, paths=[x['path'] for x in record['projection']],

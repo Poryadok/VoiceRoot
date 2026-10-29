@@ -1,6 +1,7 @@
 """Real Git fixtures for one historical Role condition; never producer admission."""
 import json
 import hashlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -9,6 +10,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+from contextlib import redirect_stderr
 
 import f13_role_conditional as legacy
 import f13_role_conditional_successor as successor
@@ -81,6 +83,64 @@ class ReviewedCurrentCompiledFixtureTest(unittest.TestCase):
                         reviewed_current_compiled_entry(h,path)
                 with patch.object(release,'production_record',side_effect=legacy.Rejected('unreviewed')):
                     with self.assertRaisesRegex(legacy.Rejected,'unreviewed'):reviewed_current_compiled_entry(h,path)
+
+
+class ReleaseRoleFixtureTest(unittest.TestCase):
+    """Production boundary is mocked; target tree and raw rows use real Git."""
+    def test_current_v3_rejection_does_not_fall_back_to_successful_v1(self):
+        import f13_release_source as release
+        target='a'*40
+        args=['role','--repo',str(ROOT),'--target',target,'--prior-row','prior','--incoming-row','incoming']
+        with patch.object(sys,'argv',args),patch.multiple(release,ROOT=ROOT,FOUNDATION_BASE='b'*40), \
+             patch.object(legacy,'git',return_value=(target+'\n').encode()), \
+             patch.object(successor.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
+             patch.object(legacy,'qualify',return_value={'legacy_success':True}) as old, \
+             patch.object(successor,'qualify_release',side_effect=release.Rejected('wrong_event')) as current, \
+             redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(successor.main(),1)
+            self.assertIn('wrong_event',stderr.getvalue())
+            current.assert_called_once()
+            old.assert_not_called()
+
+    def test_current_target_entries_and_both_runtime_flags_are_retained(self):
+        import f13_release_source as release
+        with tempfile.TemporaryDirectory() as folder:
+            repo=Path(folder)
+            def g(*args):
+                return subprocess.check_output(['git','-C',str(repo),*args]).decode().strip()
+            g('init','-q');g('config','user.name','fixture');g('config','user.email','fixture@example.invalid')
+            unit='src/backend/role/dep.go'
+            paths=(unit,successor.VERIFIER_PATH,legacy.VERIFIER_PATH,'scripts/ci/f13_release_source.py',
+                   release.ROLE_RECORD_PATH,release.ROLE_CLOSURE_PATH)
+            for path in paths:
+                f=repo/path;f.parent.mkdir(parents=True,exist_ok=True);f.write_text(path+'\n')
+            g('add','.');g('commit','-qm','foundation');base=g('rev-parse','HEAD')
+            (repo/'later').write_text('later\n');g('add','later');g('commit','-qm','target');target=g('rev-parse','HEAD')
+            tree=release.documentation.tree_entries(repo,base)
+            inventories=release.documentation.immediate_directory_entries(tree)
+            entry=legacy.entry(repo,base,unit)
+            record=dict(source=base,evidence_source=base,required_current_source=[dict(path=unit,entry=entry)],
+                context=[],closure={'directory_inventories':[dict(directory='src/backend/role',
+                    entries=inventories['src/backend/role'])]},evidence=[],historical_runtime_gap='HOLD')
+            raw=lambda flag:'\t'.join([legacy.ROLE_PATH,flag]+['1'*40]*6)
+            with patch.multiple(release,ROOT=repo,FOUNDATION_BASE=base,RECORD_COMMIT=base,ROLE_SHA256='a'*64), \
+                 patch.multiple(successor,ORIGINAL_CORRECTION=base,HISTORICAL_CARRIER=base), \
+                 patch.object(release,'production_qualify'),patch.object(release,'load_role',return_value=record), \
+                 patch.object(legacy,'qualify',return_value={'historical':True}):
+                for flag in ('false','true'):
+                    receipt=successor.qualify_release(repo,target,raw('false'),raw(flag))
+                    self.assertEqual(receipt['incoming_row'][1],flag)
+                    self.assertTrue(receipt['retain_runtime_and_content_taint'])
+                    self.assertEqual(receipt['historical_runtime_gap'],'HOLD')
+                    self.assertFalse(receipt['runtime_pass'])
+                with self.assertRaisesRegex(legacy.Rejected,'role_release_actual_head'):
+                    successor.qualify_release(repo,base,raw('false'),raw('true'))
+                with patch.object(release,'production_qualify',side_effect=release.Rejected('wrong_event')):
+                    with self.assertRaisesRegex(release.Rejected,'wrong_event'):
+                        successor.qualify_release(repo,target,raw('false'),raw('true'))
+                (repo/unit).write_text('drift\n');g('add',unit);g('commit','-qm','drift')
+                with self.assertRaises(legacy.Rejected):
+                    successor.qualify_release(repo,g('rev-parse','HEAD'),raw('false'),raw('true'))
 
 
 class RoleSuccessorTest(unittest.TestCase):

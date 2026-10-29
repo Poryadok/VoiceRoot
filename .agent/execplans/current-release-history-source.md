@@ -221,6 +221,19 @@ on the actual event base. Synthetic real-Git transport/fold tests do not qualify
 the source. Exact pinned-source review, complete child/map/taint tests, full
 script checks and a new actual producer replay remain pending; no PASS is claimed.
 
+The next genuine producer trace reached the historical Role duplicate at
+9dc/e963/477 and rejected the current target against the older v2 context.
+All eleven corrected entries remained unchanged, but five context entries
+changed, five member-name inventories grew and six complete directory-entry
+maps changed (the sixth contained a changed existing integrationtest blob).
+A proposed Role v3 record binds the complete
+reviewed Role unit and unchanged historical correction to final H, using the
+70a Go evidence only if the whole unit remains unchanged through H. Actual
+event qualification and every continuation DAG commit must preserve that unit;
+the record grants no Native path or runtime authority. The independent review,
+real pinned-source qualification and unchanged producer replay remain pending.
+The Role verifier joins the carrier set; no final source or record is pinned yet.
+
 ## Decisions and risks
 
 Preserve all old contracts and failed diagnostics. New typed authority must
