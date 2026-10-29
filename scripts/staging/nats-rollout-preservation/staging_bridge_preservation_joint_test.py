@@ -26,6 +26,50 @@ import runtime_stage
 import stage_runtime
 
 
+def stage_cluster_fixture(session):
+    namespace='00000000-0000-0000-0000-000000000001'
+    claim='00000000-0000-0000-0000-000000000002'
+    pv='00000000-0000-0000-0000-000000000003'
+    names=[stage_runtime.HUB,'voice-gateway',*('voice-'+name for name in stage_runtime.LEAVES),
+           'voice-web','voice-admin','voice-developer-portal']
+    rows={}; images=[]; replicasets={}
+    for index,name in enumerate(names,1):
+        uid='deployment-'+str(index);rsuid='rs-'+str(index);container=name.removeprefix('voice-')
+        image=(stage_runtime.NATS_IMAGE if name==stage_runtime.HUB else 'fixture.invalid/'+container+':old')
+        spec={'containers':[{'name':container,'image':image}]}
+        if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
+        template={'metadata':{'labels':{'app':name}},'spec':spec}
+        rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
+                    'spec':{'replicas':1,'template':template}}
+        rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
+            'ownerReferences':[{'kind':'Deployment','uid':uid}]},'spec':{'template':copy.deepcopy(template)}}
+        replicasets[rs['metadata']['name']]=rs;images.append(copy.deepcopy(rs))
+        images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
+            'status':{'phase':'Running','containerStatuses':[{'name':container,'ready':True,
+                'imageID':'fixture.invalid/'+container+'@sha256:'+'a'*64}]}})
+    fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace}},
+           ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
+                'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}},
+           ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
+           ('pv','pv'):{'metadata':{'uid':pv},'spec':{'claimRef':{'uid':claim},
+                'local':{'path':'/var/lib/rancher/k3s/storage/pvc-'+claim+'_voice-staging_fixture'},
+                'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname',
+                    'operator':'In','values':['pmdebook']}]}]}}}},
+           ('service','voice-nats'):{'metadata':{'uid':'service','resourceVersion':'1'}}}
+    class Cluster:
+        def get(self,kind,name):
+            session.check()
+            if kind=='deployment':return copy.deepcopy(rows[name])
+            if kind=='replicaset':return copy.deepcopy(replicasets[name])
+            return copy.deepcopy(fixed[(kind,name)])
+        def run(self,args,**kwargs):
+            session.check()
+            if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
+            if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
+            raise AssertionError('unexpected external cluster request')
+    return Cluster, names, claim
+
+
 @unittest.skipUnless(os.name == 'posix' and getattr(os, 'geteuid', lambda: -1)() == 0, 'root Linux fixture required')
 class BridgePreservationAdmission(unittest.TestCase):
     def test_actual_stage_capture_with_owned_synthetic_cluster(self):
@@ -37,46 +81,7 @@ class BridgePreservationAdmission(unittest.TestCase):
                                        resource_claim.RootJournal(root))
         self.enterContext(patch('grp.getgrnam',return_value=SimpleNamespace(gr_gid=0)))
         session.admit(start=True)
-        namespace='00000000-0000-0000-0000-000000000001'
-        claim='00000000-0000-0000-0000-000000000002'
-        pv='00000000-0000-0000-0000-000000000003'
-        names=[stage_runtime.HUB,'voice-gateway',*('voice-'+name for name in stage_runtime.LEAVES),
-               'voice-web','voice-admin','voice-developer-portal']
-        rows={}; images=[]; replicasets={}
-        for index,name in enumerate(names,1):
-            uid='deployment-'+str(index);rsuid='rs-'+str(index);container=name.removeprefix('voice-')
-            image=(stage_runtime.NATS_IMAGE if name==stage_runtime.HUB else 'fixture.invalid/'+container+':old')
-            spec={'containers':[{'name':container,'image':image}]}
-            if name==stage_runtime.HUB:spec['volumes']=[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]
-            template={'metadata':{'labels':{'app':name}},'spec':spec}
-            rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
-                        'spec':{'replicas':1,'template':template}}
-            rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
-                'ownerReferences':[{'kind':'Deployment','uid':uid}]},'spec':{'template':copy.deepcopy(template)}}
-            replicasets[rs['metadata']['name']]=rs;images.append(copy.deepcopy(rs))
-            images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
-                'status':{'phase':'Running','containerStatuses':[{'name':container,'ready':True,
-                    'imageID':'fixture.invalid/'+container+'@sha256:'+'a'*64}]}})
-        fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace}},
-               ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
-                    'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}},
-               ('pvc','fixture'):{'metadata':{'name':'fixture','uid':claim},'spec':{'volumeName':'pv'}},
-               ('pv','pv'):{'metadata':{'uid':pv},'spec':{'claimRef':{'uid':claim},
-                    'local':{'path':'/var/lib/rancher/k3s/storage/pvc-'+claim+'_voice-staging_fixture'},
-                    'nodeAffinity':{'required':{'nodeSelectorTerms':[{'matchExpressions':[{'key':'kubernetes.io/hostname',
-                        'operator':'In','values':['pmdebook']}]}]}}}},
-               ('service','voice-nats'):{'metadata':{'uid':'service','resourceVersion':'1'}}}
-        class Cluster:
-            def get(self,kind,name):
-                session.check()
-                if kind=='deployment':return copy.deepcopy(rows[name])
-                if kind=='replicaset':return copy.deepcopy(replicasets[name])
-                return copy.deepcopy(fixed[(kind,name)])
-            def run(self,args,**kwargs):
-                session.check()
-                if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
-                if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
-                raise AssertionError('unexpected external cluster request')
+        Cluster, names, claim=stage_cluster_fixture(session)
         events=[]
         result=runtime_stage.RolloutStage.capture(Cluster(),'a'*12,events.append,
             ['voice-web','voice-admin','voice-developer-portal'])
@@ -136,20 +141,18 @@ class BridgePreservationAdmission(unittest.TestCase):
                 binding = root_composition_fixture.helper_binding(source, code)
             workspace = installed / 'sources' / ('a' * 12)
             workspace.mkdir(parents=True, mode=0o700)
-            for relative in binding:
-                if relative in pins:
-                    continue
-                dest = workspace / 'scripts' / 'staging' / relative
-                dest.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-                shutil.copyfile(source / 'scripts' / 'staging' / relative, dest)
-                dest.chmod(0o600)
+            # Copy the entire immutable Git archive: source plans and helper
+            # custody must see the same tree, including NATS known-baseline.
+            shutil.copytree(source, workspace, dirs_exist_ok=True)
             script = r'''
-import copy, json, sys
+import copy, hashlib, json, sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 import bridge_root, commands, guard, resource_claim, stage_runtime, staging_prerequisites as parent
-import staging_cohort_preservation as producer, staging_gis_material as gis
+import staging_cohort_preservation as producer
+sys.path.append(sys.argv[3])
+from staging_bridge_preservation_joint_test import stage_cluster_fixture
 root=Path(sys.argv[1]); code=root/'installed'/'code'; workspace=root/'installed'/'sources'/('a'*12)
 binding=json.loads((code/'capture-manifest.json').read_bytes()); pins=json.loads(sys.argv[2])
 c=dict(project='voice',resource='STAGING',actor='operator',claim='11111111-1111-4111-8111-111111111111',generation=7,
@@ -160,7 +163,8 @@ card=dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['
  candidate=dict(state='known',commit=c['commit'],images=copy.deepcopy(c['images'])),
  observed=dict(state='known',claim=c['claim'],window=c['window'],operation=1,
  images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
-approved={'source_sha':c['commit'],'source_files':{'scripts/staging/'+k:v for k,v in binding.items() if k not in pins}}
+approved={'source_sha':c['commit'],'source_files':{p.relative_to(workspace).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+ for p in workspace.rglob('*') if p.is_file()}}
 execution={'head_sha':c['commit']}; session=resource_claim.Session(c,'a'*12,resource_claim.digest(binding),
  lambda:copy.deepcopy(card),resource_claim.RootJournal(root))
 actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding=binding;actions.tt_session=session
@@ -175,14 +179,32 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    assert str(exc)=='staging_prerequisites_source_changed', str(exc)
   else: raise AssertionError('counterfeit source receipt accepted')
   assert not (root/'installed'/'prerequisites').exists()
-  # The external namespace is synthetic. The actual producer must perform
-  # source custody first, then reject this deliberately incomplete source
-  # inventory before it can bind or cut writers.
-  with patch.object(stage_runtime.Kube,'get',return_value={'metadata':{'uid':'fixture-namespace'}}):
-   try: producer.prepare(actions,{'mode':'app-only'},approved,execution,workspace)
-   except gis.MaterialError as exc:
-    assert str(exc)=='staging_gis_source_contract_invalid', str(exc)
-   else: raise AssertionError('incomplete source admitted')
+  from root_main import save
+  save(root/'installed'/'policy.json',{'unrelated':'preserve'})
+  Cluster, names, claim=stage_cluster_fixture(session); cluster=Cluster()
+  original_get=cluster.get
+  def get(kind,name):
+   if (kind,name)==('secret','voice-app-secrets'):
+    return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
+      'uid':'app-secret','resourceVersion':'1'},'type':'Opaque','data':{}}
+   return original_get(kind,name)
+  def capture(argv,**kwargs):
+   commands.authority_guard(argv)
+   tail=argv[4:]
+   if tail[:2]==['get','--raw']:
+    plural=tail[2].split('/')[5].split('?')[0]
+    kind={'secrets':'Secret','configmaps':'ConfigMap','services':'Service'}[plural]
+    return json.dumps({'apiVersion':'v1','kind':kind+'List','metadata':{'resourceVersion':'1'},'items':[]}).encode()
+   if tail[:2]==['get','deployments']:
+    return json.dumps({'apiVersion':'apps/v1','kind':'DeploymentList','metadata':{'resourceVersion':'1'},'items':[]}).encode()
+   raise AssertionError('unexpected external command '+repr(tail))
+  with patch.object(stage_runtime.Kube,'get',side_effect=get), \
+       patch.object(stage_runtime.Kube,'run',side_effect=cluster.run),patch.object(commands,'capture',side_effect=capture):
+   try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
+      'gis_first_install':True},approved,execution,workspace)
+   except FileNotFoundError as exc:
+    assert str(exc.filename).endswith('/installed/prerequisite-inputs/gis-issuer.json'), str(exc)
+   else: raise AssertionError('missing issuer input admitted')
   assert not (root/'installed'/'cohort-preservation').exists()
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
@@ -195,7 +217,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
             import json
             env = dict(os.environ, PYTHONPATH=os.pathsep.join((str(code / 'nats-rollout-preservation'),
                                                                str(code / 'nats-known-baseline'))))
-            subprocess.run([sys.executable, '-c', script, str(root), json.dumps(pins)], cwd=directory,
+            subprocess.run([sys.executable, '-c', script, str(root), json.dumps(pins),str(Path(__file__).parent)], cwd=directory,
                            env=env, check=True, capture_output=True, text=True)
 
     def test_missing_preservation_holds_before_parent_or_cluster(self):
