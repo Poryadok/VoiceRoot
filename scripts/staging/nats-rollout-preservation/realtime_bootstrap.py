@@ -208,9 +208,41 @@ _CATALOG = b"""SELECT json_build_object(
 """
 
 
+def _capture_readonly(kind, credential=None):
+    """Issue only the fixed read-only SQL/identity observations."""
+    if kind=='catalog' and credential is None:
+        command=_COMMAND;body=_CATALOG;limit=65536
+    elif kind=='system_identifier' and credential is None:
+        command=_COMMAND;body=b'SELECT system_identifier FROM pg_control_system();\n';limit=256
+    elif kind=='admin_identity' and credential is None:
+        command=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec',
+            'voice-postgres-0','-c','postgres','--','sh','-ceu',_ADMIN_IDENTITY];body=b'';limit=256
+    elif kind=='runtime_auth' and isinstance(credential,bytes) and re.fullmatch(rb'[A-Za-z0-9_-]{32,128}',credential):
+        script=('IFS= read -r PGPASSWORD; export PGPASSWORD; '
+            'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
+            'exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
+        command=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','-i',
+            'voice-postgres-0','-c','postgres','--','sh','-ceu',script]
+        body=credential+b'\nSELECT current_user,current_database();\n';limit=256
+    else:raise Blocked('realtime_bootstrap_readonly_kind_invalid')
+    import resource_claim
+    session=getattr(commands.authority_guard,'__self__',None)
+    if isinstance(session,resource_claim.Session) and session.check().get('phase')=='prerequisites-captured':
+        import staging_prerequisites
+        staging_prerequisites.load_capture(session)
+        if session._prerequisite_readonly_permit is not None:raise Blocked('realtime_bootstrap_readonly_permit_busy')
+        session._prerequisite_readonly_permit=list(command)
+        try:
+            result=commands.capture(command,body=body,timeout=25,limit=limit,env=_ENV)
+            staging_prerequisites.load_capture(session)
+            return result
+        finally:session._prerequisite_readonly_permit=None
+    return commands.capture(command,body=body,timeout=25,limit=limit,env=_ENV)
+
+
 def _catalog():
     try:
-        return json.loads(commands.capture(_COMMAND, body=_CATALOG, timeout=25, limit=65536, env=_ENV))
+        return json.loads(_capture_readonly('catalog'))
     except (ValueError, TypeError):
         raise Blocked('realtime_bootstrap_catalog_invalid') from None
 
@@ -218,9 +250,7 @@ def _catalog():
 def _verify_admin(secret):
     try:
         password = base64.b64decode(secret['data']['POSTGRES_PASSWORD'], validate=True)
-        command = ['/usr/local/bin/k3s', 'kubectl', '--namespace', 'voice-staging', 'exec',
-                   'voice-postgres-0', '-c', 'postgres', '--', 'sh', '-ceu', _ADMIN_IDENTITY]
-        result = commands.capture(command, timeout=25, limit=256, env=_ENV).splitlines()
+        result = _capture_readonly('admin_identity').splitlines()
         if result != [b'voice', hashlib.sha256(password).hexdigest().encode()]: raise ValueError()
     except (KeyError, ValueError, TypeError):
         raise Blocked('realtime_bootstrap_admin_identity_invalid') from None
@@ -228,8 +258,7 @@ def _verify_admin(secret):
 
 def _system_identifier():
     try:
-        value = commands.capture(_COMMAND, body=b'SELECT system_identifier FROM pg_control_system();\n',
-                                 timeout=25, limit=256, env=_ENV).decode('ascii').strip()
+        value = _capture_readonly('system_identifier').decode('ascii').strip()
         if not re.fullmatch(r'[0-9]{1,20}', value): raise ValueError()
         return value
     except (UnicodeError, ValueError):
@@ -279,13 +308,7 @@ def _create_database(system_identifier, role_oid):
 def _verify_runtime_auth(password):
     if not isinstance(password, bytes) or not re.fullmatch(rb'[A-Za-z0-9_-]{32,128}', password):
         raise Blocked('realtime_bootstrap_credential_invalid')
-    script = ('IFS= read -r PGPASSWORD; export PGPASSWORD; '
-              'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000"; '
-              'exec psql -h voice-postgres -X -qAt -v ON_ERROR_STOP=1 -U realtime -d realtime_db -f -')
-    command = ['/usr/local/bin/k3s', 'kubectl', '--namespace', 'voice-staging', 'exec', '-i',
-               'voice-postgres-0', '-c', 'postgres', '--', 'sh', '-ceu', script]
-    result = commands.capture(command, body=password + b'\nSELECT current_user,current_database();\n',
-                              timeout=25, limit=256, env=_ENV)
+    result = _capture_readonly('runtime_auth',password)
     if result.strip() != b'realtime|realtime_db':
         raise Blocked('realtime_bootstrap_runtime_auth_invalid')
 

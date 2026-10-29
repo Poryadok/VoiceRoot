@@ -86,6 +86,7 @@ class Session:
         self.admitted=False
         self.repair_guard=None
         self._prerequisite_permit=None
+        self._prerequisite_readonly_permit=None
 
     def authority(self):
         row=self.check_card();c=self.context
@@ -160,6 +161,10 @@ class Session:
             args=list(argv);permit=self._prerequisite_permit
             if (row['phase']=='prerequisites' and permit is not None and args==permit):
                 self._prerequisite_permit=None
+                return row
+            readonly=self._prerequisite_readonly_permit
+            if row['phase']=='prerequisites-captured' and readonly is not None and args==readonly:
+                self._prerequisite_readonly_permit=None
                 return row
             decode=['kubectl','create','--dry-run=client','--validate=false','-f','/dev/stdin','-o','json']
             prefixes=[['/usr/local/bin/k3s','kubectl','--namespace','voice-staging'],

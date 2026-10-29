@@ -65,6 +65,11 @@ class ResourceTests(unittest.TestCase):
                 session._prerequisite_permit=effect.copy();session.check(effect)
                 self.assertIsNone(session._prerequisite_permit)
                 with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(effect)
+            else:
+                readonly=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','exec','-i','voice-postgres-0']
+                session._prerequisite_readonly_permit=readonly.copy();session.check(readonly)
+                self.assertIsNone(session._prerequisite_readonly_permit)
+                with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(readonly)
 
     def test_prerequisite_binding_requires_baseline_and_durable_capture(self):
         session,current,journal=self.fixture();session.admit(start=True)

@@ -10,6 +10,29 @@ import realtime_bootstrap as bootstrap
 
 
 class CatalogTests(unittest.TestCase):
+    def test_captured_parent_readonly_transport_is_fixed_and_one_use(self):
+        import commands, resource_claim, resource_claim_test, sys
+        from unittest.mock import Mock
+        context=resource_claim_test.context();card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        session.admit(start=True);session.journal.row.update(phase='prerequisites-captured',target_sha256='d'*64)
+        session.expected_target='d'*64
+        calls=[]
+        def capture(argv,*,body,**kwargs):
+            session.check(argv);calls.append((argv,body));return b'42\n'
+        module=Mock();module.load_capture.return_value={'protected':'fixture'}
+        with patch.dict(sys.modules,{'staging_prerequisites':module}),patch.object(commands,'authority_guard',session.check), \
+             patch.object(commands,'capture',side_effect=capture):
+            self.assertEqual(bootstrap._capture_readonly('system_identifier'),b'42\n')
+            self.assertEqual(calls[0][1],b'SELECT system_identifier FROM pg_control_system();\n')
+            self.assertIsNone(session._prerequisite_readonly_permit)
+            with self.assertRaisesRegex(RuntimeError,'prerequisite_command_forbidden'):session.check(bootstrap._COMMAND)
+            with self.assertRaises(bootstrap.Blocked):bootstrap._capture_readonly('CREATE ROLE realtime')
+            with self.assertRaises(bootstrap.Blocked):bootstrap._capture_readonly('runtime_auth',b'x'*32+b'\n')
+            commands.capture.side_effect=RuntimeError('lost')
+            with self.assertRaisesRegex(RuntimeError,'lost'):bootstrap._capture_readonly('catalog')
+            self.assertIsNone(session._prerequisite_readonly_permit)
+            self.assertEqual(module.load_capture.call_count,3)
     def test_existing_database_or_role_is_never_adopted(self):
         for catalog in ({'role': None, 'database': {'oid': 42}},
                         {'role': {'oid': 41}, 'database': None},
