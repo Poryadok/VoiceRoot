@@ -31,6 +31,7 @@ set -C
 /usr/local/bin/native-migrate -mode verify-legacy24 -migrations-dir /migrations -migrate /usr/local/bin/migrate -prior-evidence /evidence/completed.jsonl -origin-evidence /evidence/origin.json > /tmp/verified.json
 sha256sum /evidence/origin.json /evidence/completed.jsonl /tmp/verified.json
 '''
+LIVE_BIND_SCRIPT='test -w /evidence; exec sleep 300'
 
 
 def _live_documents(session,tool,node,storage_class,snapshot):
@@ -52,7 +53,7 @@ def _live_documents(session,tool,node,storage_class,snapshot):
         {'name':'PGPASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}},
         {'name':'PGSSLMODE','value':'disable'},{'name':'SPACE_NATIVE_REQUIRED_SOURCE_SHA256','value':build}]
     def job(mode):
-        verify=mode=='verify';name=claim+'-'+mode
+        verify=mode=='verify';probe=mode=='bind';name=claim+'-'+mode
         return {'apiVersion':'batch/v1','kind':'Job','metadata':{'name':name,'namespace':'voice-staging','labels':labels},
             'spec':{'backoffLimit':0,'activeDeadlineSeconds':360,'template':{'metadata':{'labels':labels},'spec':{
                 'nodeName':node,'restartPolicy':'Never','automountServiceAccountToken':False,
@@ -60,11 +61,47 @@ def _live_documents(session,tool,node,storage_class,snapshot):
                 'volumes':[{'name':'evidence','persistentVolumeClaim':{'claimName':claim,'readOnly':verify}},
                            {'name':'tmp','emptyDir':{}}],
                 'containers':[{'name':'native','image':image,'imagePullPolicy':'IfNotPresent',
-                    'command':['/bin/sh','-ceu',LIVE_VERIFY_SCRIPT if verify else LIVE_UPGRADE_SCRIPT,'native-space',owner_id,snapshot],
-                    'env':copy.deepcopy(env),'volumeMounts':[{'name':'evidence','mountPath':'/evidence','readOnly':verify},
+                    'command':['/bin/sh','-ceu',LIVE_BIND_SCRIPT if probe else LIVE_VERIFY_SCRIPT if verify else LIVE_UPGRADE_SCRIPT,'native-space',owner_id,snapshot],
+                    'env':[] if probe else copy.deepcopy(env),'volumeMounts':[{'name':'evidence','mountPath':'/evidence','readOnly':verify},
                         {'name':'tmp','mountPath':'/tmp'}],
                     'securityContext':{'allowPrivilegeEscalation':False,'readOnlyRootFilesystem':True,'capabilities':{'drop':['ALL']}}}]}}}}
-    return {'pvc':pvc,'upgrade':job('upgrade'),'verify':job('verify')}
+    return {'pvc':pvc,'bind':job('bind'),'upgrade':job('upgrade'),'verify':job('verify')}
+
+
+def _live_context(session):
+    """Revalidate protected live authority and derive all execution inputs."""
+    row=session.check()
+    if row.get('phase')!='prepare' or not row.get('target_sha256'):raise Blocked('space_live_phase_invalid')
+    authority=space.load_native_authority(session);qualified=owner.load_qualified(session)
+    archive=owner._read(owner._base(session)/'archive-record.json')
+    if owner.digest(archive)!=qualified.get('archive_sha256'):raise Blocked('space_live_source_changed')
+    owner.revalidate_paused(session);kube=Kube()
+    namespace,engine=realtime_bootstrap.engine_snapshot(kube)
+    original=authority['original'];pod=kube.get('pod','voice-postgres-0')
+    pvc=kube.get('persistentvolumeclaim','pgdata-voice-postgres-0')
+    config=kube.get('configmap','voice-app-config');secret=kube.get('secret','voice-app-secrets')
+    node=pod.get('spec',{}).get('nodeName');storage_class=pvc.get('spec',{}).get('storageClassName')
+    if (namespace!=original['engine']['namespace_uid'] or engine['pod']['uid']!=original['engine']['pod_uid']
+        or engine['pvc']['uid']!=original['engine']['pvc_uid'] or engine['pv']['uid']!=original['engine']['pv_uid']
+        or pvc.get('metadata',{}).get('uid')!=original['engine']['pvc_uid']
+        or config.get('data',{}).get('POSTGRES_USER')!=original['installer_role']
+        or not secret.get('data',{}).get('POSTGRES_PASSWORD')):
+        raise Blocked('space_live_source_changed')
+    containers=[item for item in pod.get('spec',{}).get('containers',[]) if item.get('name')=='postgres']
+    if len(containers)!=1:raise Blocked('space_live_source_changed')
+    for name,ref in (('POSTGRES_USER',{'configMapKeyRef':{'name':'voice-app-config','key':'POSTGRES_USER'}}),
+                     ('POSTGRES_PASSWORD',{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}})):
+        if [item for item in containers[0].get('env',[]) if item.get('name')==name]!=[{'name':name,'valueFrom':ref}]:
+            raise Blocked('space_live_source_changed')
+    docs=_live_documents(session,authority['tool'],node,storage_class,archive['binding']['snapshot_id'])
+    if realtime_bootstrap.engine_snapshot(kube)!=(namespace,engine):raise Blocked('space_live_source_changed')
+    if (space.load_native_authority(session)!=authority or owner.load_qualified(session)!=qualified
+        or owner._read(owner._base(session)/'archive-record.json')!=archive):raise Blocked('space_live_source_changed')
+    session.check()
+    return {'schema':'voice-staging-space-live-plan-v1','operation':session.operation,'binding':session.binding(),
+        'authority_sha256':owner.digest(authority),'archive_sha256':owner.digest(archive),
+        'namespace_uid':namespace,'postgres_pvc_uid':engine['pvc']['uid'],'postgres_pv_uid':engine['pv']['uid'],
+        'config_sha256':owner.digest(config),'secret_sha256':owner.digest(secret),'documents':docs}
 
 
 def _identity(session,kube):

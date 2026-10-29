@@ -20,7 +20,7 @@ class InspectSourceTest(unittest.TestCase):
         pvc=docs['pvc'];self.assertEqual(pvc['spec']['storageClassName'],'local-path')
         self.assertEqual(pvc['spec']['accessModes'],['ReadWriteOnce'])
         self.assertNotIn('volumeName',pvc['spec']);self.assertNotIn('dataSource',pvc['spec'])
-        for mode in ('upgrade','verify'):
+        for mode in ('bind','upgrade','verify'):
             spec=docs[mode]['spec']['template']['spec'];container=spec['containers'][0]
             self.assertEqual(spec['nodeName'],'node-a');self.assertFalse(spec['automountServiceAccountToken'])
             self.assertEqual(spec['securityContext']['runAsUser'],65532)
@@ -28,12 +28,38 @@ class InspectSourceTest(unittest.TestCase):
             self.assertEqual(spec['volumes'][0]['persistentVolumeClaim']['readOnly'],mode=='verify')
             self.assertEqual(container['image'],tool['immutable_image']);self.assertTrue(container['securityContext']['readOnlyRootFilesystem'])
             self.assertFalse(any('hostPath' in row for row in spec['volumes']))
+        self.assertEqual(docs['bind']['spec']['template']['spec']['containers'][0]['env'],[])
         self.assertIn('set -C',native.LIVE_UPGRADE_SCRIPT)
         self.assertIn('> /evidence/completed.jsonl',native.LIVE_UPGRADE_SCRIPT)
         self.assertIn('sync -f /evidence/completed.jsonl',native.LIVE_UPGRADE_SCRIPT)
         self.assertNotIn('cat ',native.LIVE_VERIFY_SCRIPT)
         with self.assertRaisesRegex(native.Blocked,'space_live_binding_invalid'):
             native._live_documents(session,tool,'node-a','local-path','$(foreign)')
+
+    def test_live_context_derives_pvc_from_current_protected_database(self):
+        session=Mock();session.operation='a'*12;session.context={'operation_id':'stg-run-17'}
+        session.check.return_value={'phase':'prepare','target_sha256':'b'*64};session.binding.return_value={'target':'b'*64}
+        tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+              'source_inventory':{'build_source_sha256':'d'*64}}
+        original={'engine':{'namespace_uid':'ns','pod_uid':'pgpod','pvc_uid':'pgpvc','pv_uid':'pgpv'},'installer_role':'voice'}
+        authority={'original':original,'tool':tool};archive={'binding':{'snapshot_id':'snapshot-1'}}
+        qualified={'archive_sha256':native.owner.digest(archive)}
+        engine={'pod':{'uid':'pgpod'},'pvc':{'uid':'pgpvc'},'pv':{'uid':'pgpv'}}
+        env=[{'name':'POSTGRES_USER','valueFrom':{'configMapKeyRef':{'name':'voice-app-config','key':'POSTGRES_USER'}}},
+             {'name':'POSTGRES_PASSWORD','valueFrom':{'secretKeyRef':{'name':'voice-app-secrets','key':'POSTGRES_PASSWORD'}}}]
+        objects={('pod','voice-postgres-0'):{'spec':{'nodeName':'node-a','containers':[{'name':'postgres','env':env}]}},
+            ('persistentvolumeclaim','pgdata-voice-postgres-0'):{'metadata':{'uid':'pgpvc'},'spec':{'storageClassName':'local-path'}},
+            ('configmap','voice-app-config'):{'data':{'POSTGRES_USER':'voice'}},
+            ('secret','voice-app-secrets'):{'data':{'POSTGRES_PASSWORD':'private'}}}
+        kube=Mock();kube.get.side_effect=lambda kind,name:copy.deepcopy(objects[(kind,name)])
+        with patch.object(native.space,'load_native_authority',return_value=authority), \
+             patch.object(native.owner,'load_qualified',return_value=qualified),patch.object(native.owner,'_base',return_value=Path('/unused')), \
+             patch.object(native.owner,'_read',return_value=archive),patch.object(native.owner,'revalidate_paused'), \
+             patch.object(native,'Kube',return_value=kube),patch.object(native.realtime_bootstrap,'engine_snapshot',return_value=('ns',engine)):
+            result=native._live_context(session)
+            self.assertEqual(result['documents']['pvc']['spec']['storageClassName'],'local-path')
+            objects[('persistentvolumeclaim','pgdata-voice-postgres-0')]['metadata']['uid']='foreign'
+            with self.assertRaisesRegex(native.Blocked,'space_live_source_changed'):native._live_context(session)
 
     def test_changed_namespace_blocks_before_job_effect(self):
         kube=Mock();kube.get.return_value={}
