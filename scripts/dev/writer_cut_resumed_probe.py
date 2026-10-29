@@ -10,6 +10,7 @@ import re
 
 import canonical_application_package as canonical
 import full_cohort_inventory_phase as inventory
+import full_cohort_affected_plan as affected
 import full_cohort_schema_metadata as metadata
 import writer_cut
 import writer_cut_pg_probe as pg
@@ -95,13 +96,19 @@ def inspect_resumed(cut, phase, token):
     try:
         if type(cut) is not writer_cut.WriterCut or type(phase) is not inventory.InventoryPhase:
             raise pg.ProbeError('writer authority invalid')
-        scope=pg._validate_scope(cut.admission['session_scope'],cut._guard)
+        scope=pg._validate_scope(cut.current_effective_session_scope(),cut._guard)
+        catalog_snapshot=(affected.verify_effective_catalog(cut.probe,cut)
+                          if type(cut.probe) is affected.CatalogScopedProbe else None)
         if (phase.fence.context!=cut.fence.context or phase.lock!=cut.lock or
                 phase.namespace_uid!=cut.namespace_uid): raise pg.ProbeError('writer authority changed')
         if cut.fence.ledger.read()!=phase.fence.ledger.read(): raise pg.ProbeError('physical ledger differs')
         receipt=phase.verify_receipt(token); package=phase.package.verify_current(token); proof=cut.current_resumed_proof()
         if not proof['controllers']:
             result=pg.inspect(scope,cut._guard)
+            if (cut.current_resumed_proof()!=proof or cut.current_effective_session_scope()!=scope or
+                    phase.verify_receipt(token)!=receipt or phase.package.verify_current(token)!=package or
+                    (catalog_snapshot is not None and affected.verify_effective_catalog(cut.probe,cut)!=catalog_snapshot) or
+                    cut.fence.ledger.read()!=phase.fence.ledger.read()): raise pg.ProbeError('observation changed')
             return result | {'attributed_sessions':[]}
         def authority(sha):
             return sha==cut.fence.context['commit'] and phase.verify_receipt(token)==receipt
@@ -220,7 +227,9 @@ def inspect_resumed(cut, phase, token):
             if (s['database'],s['role'],s['client_addr']) in allowed: matched.append(s)
             else: other+=1; transactions+=int(s['transaction'])
         if (sample()!=before or snapshot()!=scope['engine'] or cut.current_resumed_proof()!=proof or
+                cut.current_effective_session_scope()!=scope or
                 phase.verify_receipt(token)!=receipt or phase.package.verify_current(token)!=package or
+                (catalog_snapshot is not None and affected.verify_effective_catalog(cut.probe,cut)!=catalog_snapshot) or
                 cut.fence.ledger.read()!=phase.fence.ledger.read()):
             raise pg.ProbeError('observation changed')
         return {'scope':copy.deepcopy(scope),'active_sessions':other,'active_transactions':transactions,'attributed_sessions':matched}
