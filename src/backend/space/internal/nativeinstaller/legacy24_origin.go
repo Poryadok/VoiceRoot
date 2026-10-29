@@ -55,6 +55,9 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	if err = qualifyLegacy24InstallerTx(ctx, tx); err != nil {
 		return nil, err
 	}
+	if err = qualifyLegacy24LifecycleTx(ctx, tx); err != nil {
+		return nil, err
+	}
 	catalog, err := inspectLegacyCatalogTx(ctx, tx, 24, legacy24CatalogPG16SHA256)
 	if err != nil {
 		return nil, err
