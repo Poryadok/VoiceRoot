@@ -41,7 +41,12 @@ class AuthTest(unittest.TestCase):
             ledger=resource_fencing.KubeLedger(client); ledger.read=backing.read; ledger.write=backing.write
             fence=resource_fencing.Fence(context,lambda:{},ledger); lock={'metadata':{'uid':'lock'}}
             pkg=package.PackagePhase.__new__(package.PackagePhase); inv=inventory.InventoryPhase.__new__(inventory.InventoryPhase)
-            for obj in (pkg,inv): obj.fence=fence; obj.client=client; obj.journal=j; obj.lock=lock; obj.namespace_uid='ns'
+            for name,obj in (('package',pkg),('inventory',inv)):
+                other=journals.Journal(Path(root)/name,{'resource_context':context,'namespace_uid':'ns'})
+                self.addCleanup(other.close); other_client=transport.KubectlTransport(other)
+                other_ledger=resource_fencing.KubeLedger(other_client); other_ledger.read=backing.read; other_ledger.write=backing.write
+                obj.fence=resource_fencing.Fence(context,lambda:{},other_ledger)
+                obj.client=other_client; obj.journal=other; obj.lock=lock; obj.namespace_uid='ns'
             inv.package=pkg; inv.verify_current=mock.Mock(return_value={})
             phase=auth.AuthTrustPhase(j,fence,client,lock,'ns',pkg,inv)
             observation={'scope':'synthetic'}; phase._observe=mock.Mock(return_value=observation)
@@ -51,7 +56,7 @@ class AuthTest(unittest.TestCase):
                 phase._observe.return_value={'scope':'drift'}
                 with self.assertRaises(auth.AuthTrustError): auth.verify_completed(phase,'token')
                 with self.assertRaises(auth.AuthTrustError): phase.run('token')
-                j.close()
+                inv.journal.close()
                 with self.assertRaises(auth.metadata.GuardLost): phase._guard()
 
     def test_observation_binds_mounted_bytes_and_pod_restarts(self):
