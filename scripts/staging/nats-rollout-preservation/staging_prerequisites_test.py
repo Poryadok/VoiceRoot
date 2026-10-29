@@ -16,6 +16,26 @@ from root_main import save
 
 
 class PrivateCustodyTests(unittest.TestCase):
+    def test_paused_gis_authority_requires_protected_prepared_hash_and_active_anchor(self):
+        import staging_cohort_preservation as cohort
+        import gis_existing_update
+        from stage_runtime import Kube
+        binding={'operation':'d'*12,'anchor_sha256':'e'*64}
+        active={'gis_first_install_transition':{'operation':binding['operation'],'receipt_sha256':binding['anchor_sha256']}}
+        record={'binding':binding,'active':active}
+        prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':{},'request':{},'gis_authority_sha256':prereq.digest(record)}
+        receipt={'prerequisite_inputs_sha256':prereq.digest(prepared)};session=SimpleNamespace(check=lambda:None)
+        def read(path,**kwargs):
+            values={'prepared.json':prepared,'gis-authority.json':record,'active-release.json':active}
+            return json.dumps(values[path.name]).encode()
+        with patch.object(cohort,'load_qualified',return_value=receipt),patch.object(prereq,'_base',return_value=Path('/fixture')), \
+             patch.object(prereq,'_read_private',side_effect=read),patch.object(gis_existing_update,'verify_phase') as verify,patch.object(Kube,'__init__',return_value=None):
+            self.assertEqual(prereq.load_gis_authority(session),binding)
+            self.assertEqual(verify.call_args.args[2],'paused-old')
+            record['binding']['operation']='f'*12
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_gis_authority_changed'):
+                prereq.load_gis_authority(session)
+
     def test_v2_capture_binds_producer_paused_stage_and_rejects_drift(self):
         import realtime_bootstrap
         import staging_cohort_preservation as cohort
