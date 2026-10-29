@@ -16,6 +16,17 @@ from root_main import save
 
 
 class PrivateCustodyTests(unittest.TestCase):
+    def test_auxiliary_module_executes_exact_source_not_timestamp_cached_bytecode(self):
+        import os, py_compile
+        with tempfile.TemporaryDirectory(dir='/root') as folder:
+            source=Path(folder);path=source/'scripts/deploy/staging_p3_auxiliary_image.py';path.parent.mkdir(parents=True,mode=0o700)
+            good=b"VALUE = 'approved'\n";bad=b"VALUE = 'injected'\n"
+            path.write_bytes(bad);path.chmod(0o600);timestamp=int(path.stat().st_mtime);os.utime(path,(timestamp,timestamp))
+            py_compile.compile(str(path),doraise=True,invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+            path.write_bytes(good);os.utime(path,(timestamp,timestamp))
+            approved={'source_files':{'scripts/deploy/staging_p3_auxiliary_image.py':hashlib.sha256(good).hexdigest()}}
+            self.assertEqual(prereq._source_module(approved,source).VALUE,'approved')
+
     def test_crypto_helper_is_required(self):
         self.assertIn('nats-rollout-preservation/staging_p3_prerequisites_crypto.py',prereq.REQUIRED_HELPERS)
         for name in ('gis_prerequisite','source_plan','compiler'):
@@ -81,6 +92,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 'auxiliary_images':{},'renderer_authority_sha256':None}
             with patch.object(guard,'ROOT',root):
 
+                plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
@@ -123,6 +135,7 @@ class PrivateCustodyTests(unittest.TestCase):
                 'auxiliary_images':{},'renderer_authority_sha256':None}
             with patch.object(guard,'ROOT',root),patch.object(prereq,'REQUIRED_HELPERS',frozenset((name,))),patch.object(prereq,'BINARY_PINS',{}):
 
+                plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
@@ -163,6 +176,7 @@ class PrivateCustodyTests(unittest.TestCase):
             modules={name:child(slot) for slot,name in prereq.CHILD_MODULES.items()}
             with patch.object(guard,'ROOT',root),patch.dict(sys.modules,modules):
 
+                plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
@@ -216,6 +230,7 @@ class SubmitTests(unittest.TestCase):
                     'auxiliary_images':{},'renderer_authority_sha256':None}
                 stack.enter_context(patch.object(guard,'ROOT',root))
 
+                plan.setdefault('previous_active_sha256',None)
                 for item in plan['children'].values():
                     for key in ('operation','namespace_uid','source_capture_sha256'):item.setdefault(key,plan[key])
                 binding=session.bind_prerequisites(plan,plan['actual_before'])
@@ -275,6 +290,12 @@ class PrepareCompositionTests(unittest.TestCase):
     def test_missing_operator_input_prevents_every_effect(self):
         self._cold_prepare('missing-issuer')
 
+    def test_existing_inventory_requires_protected_pass_and_runs_without_writes(self):
+        self._cold_prepare('c2')
+
+    def test_operator_trust_expansion_is_rejected_before_effects(self):
+        self._cold_prepare('expanded-trust')
+
     def _cold_prepare(self,fault=None):
         import os, shutil, subprocess, base64, yaml, uuid
         from contextlib import ExitStack
@@ -299,12 +320,16 @@ class PrepareCompositionTests(unittest.TestCase):
             helper='fixture/identity.py';helper_raw=b'# fixture installed helper boundary\n'
             for path in (code/helper,workspace/'scripts/staging'/helper):
                 path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
-            manifest={helper:hashlib.sha256(helper_raw).hexdigest()};save(code/'capture-manifest.json',manifest)
+            resource_helper='nats-rollout-preservation/resource_claim.py'
+            for path in (code/resource_helper,workspace/'scripts/staging'/resource_helper):
+                path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(helper_raw);path.chmod(0o600)
+            manifest={name:hashlib.sha256(helper_raw).hexdigest() for name in (helper,resource_helper)};save(code/'capture-manifest.json',manifest)
             context=resource_claim_test.context();card=resource_claim_test.card(context)
             journal=resource_claim_test.MemoryJournal();session=resource_claim.Session(context,operation,prereq.digest(manifest),lambda:copy.deepcopy(card),journal)
             session.admit(start=True)
             approved={'source_sha':context['commit'],'source_files':{name:hashlib.sha256((workspace/name).read_bytes()).hexdigest() for name in relative},'images':{}}
             approved['source_files']['scripts/staging/'+helper]=manifest[helper]
+            approved['source_files']['scripts/staging/'+resource_helper]=manifest[resource_helper]
             approved['source_files']['scripts/deploy/staging_p3_auxiliary_image.py']='e'*64
             execution={'fixture':'source selected by real bridge capture, modeled here'}
             source={'schema':'voice-staging-source-capture-v1','operation':operation,'context':context,'helper_sha256':session.helper,
@@ -333,6 +358,10 @@ class PrepareCompositionTests(unittest.TestCase):
                 'space_server_ca_pem':ca.decode(),'replay_password_b64':b64(b'synthetic-replay-password')}
             save(operator/'gis-issuer.json',gis_issuer);save(operator/'p3-issuer.json',p3_issuer)
             if fault=='missing-issuer':(operator/'p3-issuer.json').unlink()
+            if fault=='expanded-trust':
+                extra=root/'extra.crt';extra_key=root/'extra.key'
+                openssl('req','-x509','-newkey','rsa:2048','-nodes','-keyout',extra_key,'-out',extra,'-days','180','-subj','/CN=unrelated-root','-addext','basicConstraints=critical,CA:TRUE')
+                p3_issuer['trust']['space-client-ca.crt']+=extra.read_text();save(operator/'p3-issuer.json',p3_issuer)
             marker={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'voice-nats-generation','namespace':'voice-staging','uid':'marker','resourceVersion':'1'},'data':{'phase':'active','generation':'fixture','dataPVC':'fixture'}}
             deployment={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-user','namespace':'voice-staging','uid':'user','resourceVersion':'1','generation':1},
                 'spec':{'replicas':1,'template':{'metadata':{'labels':{'app':'voice-user'}},'spec':{'containers':[{'name':'user','image':card['observed']['images']['voice-user/user']}]}}}}
@@ -410,7 +439,7 @@ class PrepareCompositionTests(unittest.TestCase):
             stage.final_claim=copy.deepcopy(claim);stage.final_pv=copy.deepcopy(pv);stage.final_path=Path(storage_path)
             collector=SimpleNamespace(collect=lambda:{k:b'{}' for k in ('index','manifest','config')},validate=lambda *a:{'source_ref':'nginx:stable-alpine','repository':'docker.io/library/nginx',
                 'index_sha256':'e'*64,'manifest_sha256':'d'*64,'config_sha256':'f'*64,'platform':{'os':'linux','architecture':'amd64','variant':None},'image_ref':'docker.io/library/nginx@sha256:'+'d'*64})
-            stack.enter_context(patch.object(guard,'ROOT',root));stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset((helper,))))
+            stack.enter_context(patch.object(guard,'ROOT',root));stack.enter_context(patch.object(prereq,'REQUIRED_HELPERS',frozenset(manifest)))
             stack.enter_context(patch.object(prereq,'BINARY_PINS',{}));stack.enter_context(patch.object(prereq,'_source_module',return_value=collector))
             stack.enter_context(patch.object(runtime_stage.RolloutStage,'capture',return_value=stage))
             stack.enter_context(patch.object(prereq,'_candidate_images',side_effect=lambda *a:events.append('candidate')))
@@ -426,6 +455,9 @@ class PrepareCompositionTests(unittest.TestCase):
             request={'mode':'app-only','changed_services':['gameintegration'],'gis_first_install':True}
             if fault=='missing-issuer':
                 with self.assertRaises(FileNotFoundError):prereq.run_prepare(actions,request,approved,execution,workspace)
+                self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
+            if fault=='expanded-trust':
+                with self.assertRaisesRegex(prereq.Blocked,'issuer_trust_changed'):prereq.run_prepare(actions,request,approved,execution,workspace)
                 self.assertEqual(writes,[]);self.assertEqual(session.check()['phase'],'prepare');return
             if fault=='lost-app-reply':
                 with self.assertRaisesRegex(RuntimeError,'synthetic_lost_app_response'):prereq.run_prepare(actions,request,approved,execution,workspace)
@@ -449,6 +481,68 @@ class PrepareCompositionTests(unittest.TestCase):
             self.assertEqual(binding['target_sha256'],prereq.digest(captured))
             with self.assertRaises(Exception):prereq.submit_effect(session,'gis_material','gis-app-credentials')
             self.assertEqual(len(writes),15)
+            if fault=='c2':
+                # A durable rollout PASS is modeled here; this is not a claim
+                # that the transaction/runtime boundary ran in this fixture.
+                target={'tag':context['commit'],'images':context['images'],'manifest_sha256':'1'*64,
+                    'prerequisites_sha256':prereq.digest(captured),'template_hashes':{}}
+                saved={'operation':operation,'status':'PASS','phase':'POST_RESTART','fence_status':'RELEASED',
+                    'code_capture':manifest,'target':target,'prerequisites':captured,
+                    'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target)},
+                    'context':{'expected':stage.expected,'snapshots':stage.snapshots}}
+                rollout=root/('rollout-'+operation);rollout.mkdir(mode=0o700);save(rollout/'checkpoint.json',saved)
+                active={'operation':operation,'namespace_uid':ns,'pvc_uid':claim_uid,'target_sha256':'1'*64}
+                save(installed/'active-release.json',active)
+                self.assertEqual(prereq.validate_historical_capture(operation),captured)
+                attempt=prereq._base(session)/'attempts'/(hashlib.sha256(b'gis_material/gis-app-credentials').hexdigest()+'.json')
+                original_attempt=json.loads(attempt.read_bytes());save(attempt,{**original_attempt,'body_sha256':'0'*64})
+                with self.assertRaisesRegex(prereq.Blocked,'history_effect_changed'):prereq.validate_historical_capture(operation)
+                save(attempt,original_attempt)
+                saved['status']='ROLLED_BACK';save(rollout/'checkpoint.json',saved)
+                with self.assertRaisesRegex(prereq.Blocked,'history_not_pass'):prereq.validate_historical_capture(operation)
+                saved['status']='PASS';save(rollout/'checkpoint.json',saved)
+                operation='b'*12;workspace2=installed/'sources'/operation;shutil.copytree(workspace,workspace2)
+                context2=copy.deepcopy(context);context2['operation_id']='stg-run-18'
+                card2=resource_claim_test.card(context2);card2['observed']['images']=copy.deepcopy(stage.old_images)
+                session=resource_claim.Session(context2,operation,prereq.digest(manifest),lambda:copy.deepcopy(card2),resource_claim_test.MemoryJournal())
+                session.admit(start=True);actions.tt_session=session;stage.operation=operation
+                save(installed/'source-authority'/(operation+'.json'),{**source,'operation':operation,'context':context2})
+                writes.clear();events.clear()
+                # GIS workload admission belongs to the normal Stage caller;
+                # this external baseline seam remains explicit in the fixture.
+                stack.enter_context(patch('gis_existing_update.load_authority',return_value={'fixture':'qualified baseline'}))
+                with resource_claim.command_scope(session.check):
+                    receipt2=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved,execution,workspace2)
+                    self.assertEqual(writes,[])
+                    self.assertEqual(receipt2['actual_before'],receipt2['actual_after'])
+                    binding2=session.capture_prerequisites(stage)
+                    captured2=prereq.load_capture(session)
+                    self.assertEqual(binding2['target_sha256'],prereq.digest(captured2))
+                    live[('deployment','voice-p3-principal-jwks')]['metadata']['resourceVersion']='900'
+                    self.assertEqual(prereq.load_capture(session),captured2)
+                    old=live[('secret','voice-gameintegration-workload-credentials')]['metadata']['uid']
+                    live[('secret','voice-gameintegration-workload-credentials')]['metadata']['uid']='foreign'
+                    with self.assertRaises(Exception):prereq.load_capture(session)
+                    live[('secret','voice-gameintegration-workload-credentials')]['metadata']['uid']=old
+                    save(installed/'active-release.json',{**active,'target_sha256':'2'*64})
+                    with self.assertRaisesRegex(prereq.Blocked,'active_changed'):prereq.load_preserved(session,'p3','Secret/voice-realtime-principal-signing')
+                    save(installed/'active-release.json',active)
+                target2={**target,'prerequisites_sha256':prereq.digest(captured2)}
+                saved2={**saved,'operation':operation,'target':target2,'prerequisites':captured2,
+                    'resource_fence':{**session.binding(),'target_sha256':prereq.digest(target2)}}
+                rollout2=root/('rollout-'+operation);rollout2.mkdir(mode=0o700);save(rollout2/'checkpoint.json',saved2)
+                active2={**active,'operation':operation};save(installed/'active-release.json',active2)
+                self.assertEqual(prereq.validate_historical_capture(operation),captured2)
+                operation='d'*12;workspace3=installed/'sources'/operation;shutil.copytree(workspace,workspace3)
+                context3={**context,'operation_id':'stg-run-19'};card3=resource_claim_test.card(context3);card3['observed']['images']=copy.deepcopy(stage.old_images)
+                session=resource_claim.Session(context3,operation,prereq.digest(manifest),lambda:copy.deepcopy(card3),resource_claim_test.MemoryJournal())
+                session.admit(start=True);actions.tt_session=session;stage.operation=operation
+                save(installed/'source-authority'/(operation+'.json'),{**source,'operation':operation,'context':context3})
+                with resource_claim.command_scope(session.check):
+                    receipt3=prereq.run_prepare(actions,{'mode':'app-only','changed_services':['gameintegration']},approved,execution,workspace3)
+                    self.assertEqual(writes,[]);self.assertEqual(receipt3['actual_before'],receipt3['actual_after'])
+                    self.assertEqual(prereq.require_child(session,'p3')['preserved']['Secret/voice-realtime-principal-signing']['authority']['operation'],'a'*12)
+                    self.assertEqual(prereq._checkpoint(session)['plan']['previous_active_sha256'],prereq.digest(active2))
 
 
 if __name__=='__main__':unittest.main()
