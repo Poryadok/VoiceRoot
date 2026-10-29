@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import staging_p3_prerequisites as p3
@@ -113,6 +114,20 @@ class StagingP3Contract(unittest.TestCase):
                'platform':{'os':'linux','architecture':'amd64','variant':None},
                'manifest_sha256':digest,'config_sha256':digest,'index_sha256':None,'source_authority_sha256':digest}}
         self.assertEqual(p3.validate_plan_shape(plan),plan)
+        import staging_prerequisites as parent
+        import resource_claim
+        import resource_claim_test
+        context=resource_claim_test.context(); card=resource_claim_test.card(context)
+        session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+        session.admit(start=True); plan['operation']=session.operation
+        events=[]
+        def pending(s,slot,ident): events.append(('pending',slot,ident))
+        def submit(s,slot,ident): events.append(('submit',slot,ident)); return {'fixture':ident}
+        def done(s,slot,ident,observation): events.append(('done',slot,ident)); self.assertEqual(observation,{'fixture':ident})
+        with patch.object(parent,'require_child',return_value=plan),patch.object(parent,'record_pending',side_effect=pending), \
+             patch.object(parent,'submit_effect',side_effect=submit,create=True),patch.object(parent,'record_done',side_effect=done):
+            p3.execute(session)
+        self.assertEqual(events,[(action,'p3',ident) for ident in ids for action in ('pending','submit','done')])
         preserved=copy.deepcopy(plan); preserved['effects']=[]
         for obj in objects:
             observed={'kind':obj['kind'],'name':obj['name'],'namespace':obj['namespace'],

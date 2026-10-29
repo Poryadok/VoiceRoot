@@ -246,6 +246,22 @@ def validate_plan_shape(plan):
     except Exception: raise PrerequisiteError('staging P3 private plan malformed') from None
 
 
+def execute(session):
+    """Execute only the parent-owned fixed effects after its complete preflight."""
+    import resource_claim
+    import staging_prerequisites as parent
+    if type(session) is not resource_claim.Session: raise PrerequisiteError('staging P3 session invalid')
+    plan=validate_plan_shape(parent.require_child(session,'p3'))
+    if plan['operation']!=session.operation: raise PrerequisiteError('staging P3 operation changed')
+    for effect in plan['effects']:
+        ident=effect['id']
+        session.check()
+        parent.record_pending(session,'p3',ident)
+        observation=parent.submit_effect(session,'p3',ident)
+        parent.record_done(session,'p3',ident,observation)
+        session.check()
+
+
 def material_objects(values):
     """Convert private bytes to exact staging API objects; caller must validate crypto."""
     try:
