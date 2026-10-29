@@ -10,6 +10,9 @@ dependency; this module fails closed until it is present and qualified.
 
 The fixed public DEV API and recipient-scoped DEV mail fixture create two new
 regular users, one new Space, its invite and the second user's membership. The
+registration's initial verification message is read through the fixed,
+no-proxy DEV mail service; the joiner's Space list is checked for the exact
+new Space without retaining other list entries. The
 private Journal records credentials and actual responses; the shared ledger
 contains only nonces and hashes. Each remote effect has a durable pending
 record; unknown or failed outcomes mark the owning fence uncertain and are not
