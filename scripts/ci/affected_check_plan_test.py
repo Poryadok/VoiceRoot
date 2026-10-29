@@ -382,6 +382,14 @@ class AffectedCheckPlanTests(unittest.TestCase):
         selected = planner.make_plan(planner.match_filters(rules, ['docs/TESTING.md']), matrix)
         self.assertNotIn('t31-critical', selected['checks'])
 
+    def test_t31_backend_catchall_does_not_hide_unknown_executable(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        path = 'src/backend/new-global-tool.py'
+        matched = planner.match_filters(rules, [path])
+        self.assertIn(path, matched['t31'])
+        self.assertIn(path, planner.unclassified_paths(matched))
+        self.assertTrue(planner.effective_filters(matched)['ci_global'])
+
     def test_realtime_lifecycle_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))

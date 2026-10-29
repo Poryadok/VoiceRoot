@@ -139,7 +139,10 @@ def match_filters(filters, paths):
 
 
 def unclassified_paths(matched):
-    classified = {path for name, paths in matched.items() if name in KNOWN_FILTERS for path in paths}
+    # T31 is an additional proof, not a complete impact classification. Its
+    # conservative backend catchall must not hide unknown executable inputs.
+    classified = {path for name, paths in matched.items()
+                  if name in KNOWN_FILTERS and name != 't31' for path in paths}
     unknown_rules = {path for name, paths in matched.items()
                      if name != 'code' and name not in KNOWN_FILTERS for path in paths}
     code = set(matched.get('code', ()))
