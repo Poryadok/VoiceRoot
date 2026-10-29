@@ -49,6 +49,25 @@ def inventory(items):
     return sorted(out, key=lambda x: x['metadata']['uid'])
 
 
+def migration_job_inventory(initial, actual, owned_uid):
+    """Extract a receipt-bound Job while requiring all prior Jobs unchanged.
+
+    This is only an inventory comparison: the caller must independently verify
+    the source-owned plan, receipt, Job specification and owner Pod.
+    """
+    rows = inventory(actual)
+    ids = [item['metadata']['uid'] for item in rows]
+    if len(ids) != len(set(ids)) or (owned_uid is not None and
+            (not isinstance(owned_uid, str) or not owned_uid or owned_uid in
+             {item['metadata']['uid'] for item in initial})):
+        raise RecoveryRequired('migration Job inventory identity invalid')
+    owned = [item for item in rows if item['metadata']['uid'] == owned_uid] if owned_uid else []
+    remaining = [item for item in rows if item['metadata']['uid'] != owned_uid]
+    if remaining != initial or (owned_uid is not None and len(owned) != 1):
+        raise RecoveryRequired('migration Job inventory changed')
+    return copy.deepcopy(owned[0]) if owned else None
+
+
 class WriterCut:
     def __init__(self, journal, fence, client, lock, namespace_uid, admission, probe):
         self.journal, self.fence, self.client = journal, fence, client
