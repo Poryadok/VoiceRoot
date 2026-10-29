@@ -165,14 +165,91 @@ class PrivateCustodyTests(unittest.TestCase):
                 with self.assertRaises(prereq.Blocked):prereq.record_pending(session,'p3','Secret/voice-realtime-principal-signing')
                 prereq.record_pending(session,'release_policy','create-policy-configmap')
                 with self.assertRaises(prereq.Blocked):prereq.record_pending(session,'release_policy','create-policy-configmap')
-                observed={'uid':'fixture'};prereq.record_done(session,'release_policy','create-policy-configmap',observed)
+                observed={'uid':'fixture'}
+                with self.assertRaisesRegex(prereq.Blocked,'submit_response_required'):
+                    prereq.record_done(session,'release_policy','create-policy-configmap',observed)
                 state=json.loads((base/'checkpoint.json').read_bytes())
-                self.assertEqual(state['steps']['release_policy']['create-policy-configmap'],{'status':'DONE','observation':observed})
-                self.assertEqual(calls[-1],('verify','release_policy','create-policy-configmap'))
-                modules['staging_release_policy_prepare'].verify_effect=lambda *_: (_ for _ in ()).throw(ValueError('fixture-drift'))
-                with self.assertRaisesRegex(ValueError,'fixture-drift'):prereq.record_pending(session,'p3','Secret/voice-realtime-principal-signing')
-                modules['staging_release_policy_prepare'].verify_effect=lambda session,effect,obs:copy.deepcopy(obs)
-                prereq.record_pending(session,'p3','Secret/voice-realtime-principal-signing')
+                self.assertEqual(state['steps']['release_policy']['create-policy-configmap'],{'status':'PENDING'})
+                with self.assertRaises(prereq.Blocked):prereq.record_pending(session,'p3','Secret/voice-realtime-principal-signing')
+
+
+class SubmitTests(unittest.TestCase):
+    def test_only_fixed_successful_submit_can_complete_and_lost_reply_is_not_replayed(self):
+        import commands
+        import staging_release_policy_prepare as policy
+        from contextlib import ExitStack
+        for fault in ('none','lost_reply','changed_response','lost_claim'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/root') as folder, ExitStack() as stack:
+                root=Path(folder);installed=root/'installed'
+                (installed/'source-authority').mkdir(parents=True,mode=0o700)
+                base=installed/'prerequisites'/('a'*12)
+                (base/'payloads'/'release_policy').mkdir(parents=True,mode=0o700)
+                context=resource_claim_test.context();card=resource_claim_test.card(context)
+                session=resource_claim.Session(context,'a'*12,'b'*64,lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal())
+                session.admit(start=True)
+                source={'schema':'voice-staging-source-capture-v1','operation':session.operation,'context':context,
+                    'helper_sha256':session.helper,'approved_sha256':'c'*64,'execution_sha256':'d'*64}
+                save(installed/'source-authority'/('a'*12+'.json'),source)
+                value=policy.staging_descriptor(context['commit']);obj=value['policy_object']
+                raw=policy._canonical(obj);sha=hashlib.sha256(raw).hexdigest()
+                effect={'id':'create-policy-configmap','kind':'ConfigMap','name':obj['metadata']['name'],
+                    'namespace':'voice-staging','before':{'absent':True,'list_rv':'1'},'desired_sha256':sha,'payload_sha256':sha}
+                child={'schema':'voice-staging-release-policy-plan-v1','operation':session.operation,'namespace_uid':'ns',
+                    'source_capture_sha256':prereq.digest(source),'source_sha':context['commit'],'descriptor':value,
+                    'policy_before_sha256':'1'*64,'policy_after_sha256':'2'*64,'effects':[effect,
+                    {'id':'commit-root-policy','kind':'RootPolicy','name':'installed-policy','namespace':'voice-staging',
+                     'before':{'sha256':'1'*64},'desired_sha256':'2'*64,'payload_sha256':'2'*64}]}
+                plan={'schema':'voice-staging-prerequisites-plan-v1','operation':session.operation,'context':context,
+                    'helper_sha256':session.helper,'source_capture_sha256':prereq.digest(source),'approved_sha256':'c'*64,
+                    'execution_sha256':'d'*64,'namespace_uid':'ns','marker_sha256':'e'*64,'baseline_sha256':'f'*64,
+                    'actual_before':card['observed']['images'],'policy_before_sha256':'1'*64,
+                    'children':{'release_policy':child,'p3':{'effects':[]},'gis_material':{'effects':[]}},
+                    'auxiliary_images':{},'renderer_authority_sha256':None}
+                stack.enter_context(patch.object(guard,'ROOT',root))
+                binding=session.bind_prerequisites(plan,plan['actual_before'])
+                state={'schema':'voice-staging-prerequisites-checkpoint-v1','plan':plan,'initial_resource_fence':binding,
+                    'status':'RUNNING','steps':{},'receipt':None,'preflight_sha256':prereq.digest(plan)}
+                save(base/'checkpoint.json',state)
+                path=base/'payloads'/'release_policy'/(hashlib.sha256(effect['id'].encode()).hexdigest()+'.json')
+                path.write_bytes(raw);path.chmod(0o600)
+                live={};writes=[]
+                def get(kind,name):
+                    if kind=='namespace':return {'metadata':{'name':'voice-staging','uid':'ns'}}
+                    return copy.deepcopy(live[name])
+                def capture(argv,*,body=b'',**kwargs):
+                    commands.authority_guard(argv)
+                    if '--raw' in argv:return b'{"apiVersion":"v1","kind":"ConfigMapList","metadata":{"resourceVersion":"2"},"items":[]}'
+                    self.assertEqual(argv,['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','create','-f','/dev/stdin','-o','json'])
+                    self.assertEqual(body,raw)
+                    self.assertEqual(json.loads((base/'checkpoint.json').read_bytes())['steps']['release_policy'][effect['id']],{'status':'PENDING'})
+                    writes.append(body);row=json.loads(body);row['metadata'].update(uid='uid',resourceVersion='3')
+                    live[effect['name']]=copy.deepcopy(row)
+                    if fault=='lost_reply':raise RuntimeError('lost reply')
+                    if fault=='lost_claim':card['claim']='foreign'
+                    if fault=='changed_response':row['data']={'foreign':'data'}
+                    return json.dumps(row).encode()
+                stack.enter_context(patch.object(commands,'capture',capture))
+                stack.enter_context(patch('stage_runtime.Kube.get',side_effect=get))
+                stack.enter_context(patch.object(prereq,'load_authority',return_value={'fixture':'external-source-boundary'}))
+                stack.enter_context(patch.object(prereq,'_recheck_baseline',return_value=None,create=True))
+                stack.enter_context(resource_claim.command_scope(session.check))
+                prereq.record_pending(session,'release_policy',effect['id'])
+                observation={'kind':'ConfigMap','name':effect['name'],'namespace':'voice-staging','uid':'uid','resourceVersion':'3','semantic_sha256':sha}
+                forged_live=copy.deepcopy(obj);forged_live['metadata'].update(uid='uid',resourceVersion='3')
+                live[effect['name']]=forged_live
+                with self.assertRaises(prereq.Blocked):prereq.record_done(session,'release_policy',effect['id'],observation)
+                live.clear()
+                if fault=='none':
+                    result=prereq.submit_effect(session,'release_policy',effect['id'])
+                    self.assertEqual(result,observation)
+                    prereq.record_done(session,'release_policy',effect['id'],result)
+                    self.assertEqual(json.loads((base/'checkpoint.json').read_bytes())['steps']['release_policy'][effect['id']]['status'],'DONE')
+                else:
+                    with self.assertRaises(Exception):prereq.submit_effect(session,'release_policy',effect['id'])
+                    self.assertEqual(json.loads((base/'checkpoint.json').read_bytes())['steps']['release_policy'][effect['id']],{'status':'PENDING'})
+                    with self.assertRaises(Exception):prereq.submit_effect(session,'release_policy',effect['id'])
+                self.assertEqual(len(writes),1)
+                self.assertIsNone(session._prerequisite_permit)
 
 
 if __name__=='__main__':unittest.main()
