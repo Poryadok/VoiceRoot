@@ -76,6 +76,7 @@ class CompositionTests(unittest.TestCase):
                     patch.object(actions,'_dispatcher',return_value=(123,{'head_sha':'d'*40})),\
                     patch.object(bridge_root.source_authority,'capture_source',return_value=approved),\
                     patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':'g','dataPVC':'pvc'}})),\
+                    patch('gis_existing_update.load_authority',return_value=None),\
                     patch.object(bridge_root.RolloutStage,'capture',return_value=stage),\
                     patch.object(bridge_root.source_authority,'same_image_content',return_value=matches) as identity,\
                     patch.object(bridge_root,'public_read',side_effect=ReachedContract) as contract:
@@ -158,6 +159,9 @@ class CompositionTests(unittest.TestCase):
                     patches.enter_context(patch.object(actions,'_dispatcher',return_value=(123,execution)))
                     patches.enter_context(patch.object(bridge_root.source_authority,'capture_source',capture_source))
                     patches.enter_context(patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})))
+                    # This compiler fixture has no real Kubernetes GIS API; GIS
+                    # authority and actual capture are exercised separately.
+                    patches.enter_context(patch('gis_existing_update.load_authority',return_value=None))
                     patches.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
                     patches.enter_context(patch('commands.capture',side_effect=capture))
                     patches.enter_context(patch.object(compiler,'capture',side_effect=capture))

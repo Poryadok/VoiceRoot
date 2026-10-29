@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 
 import cohort_upload_phase as upload
+import cohort_upload_run as upload_run
 import media_backup_readback as media_readback
 import story_media_backup as backup
 import story_media_backup_cohort as cohort
@@ -87,6 +88,9 @@ def _snapshot(phase, row):
             or any(marker[k] != planned[k] for k in ('operation_id','snapshot_id','invocation_nonce','bundle_bytes','bundle_sha256','manifest_sha256','receipt_sha256'))): raise ValueError()
     local = p.journal.state['steps'].get('cohort-upload')
     if local != {k: ('dispatch-pending' if k == 'status' else v) for k,v in planned.items() if k not in ('run_id','run_attempt')}: raise ValueError()
+    dispatch = upload_run.dispatch_marker(planned)
+    if row.get('cohort_dispatch') != dispatch or p.journal.state['steps'].get('cohort-dispatch') != dispatch:
+        raise ValueError()
     return binding | {'dump_receipts':receipts}, copy.deepcopy(planned), copy.deepcopy(marker), copy.deepcopy(row['cohort_members'])
 
 

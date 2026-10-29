@@ -9,6 +9,7 @@ import json
 import zipfile
 import cohort_readback as readback
 import cohort_upload_phase as upload
+import cohort_upload_run as upload_run
 import cohort_backup_phases as phases
 import media_backup_phase as media
 import media_backup_phase_test as phase_fixture
@@ -83,7 +84,10 @@ class ReadbackTest(unittest.TestCase):
         self.base.ledger.row['cohort_bundle'] = copy.deepcopy(marker)
         self.journal.state['steps']['cohort-bundle'] = {'status':'done','marker':copy.deepcopy(marker)}; self.journal.save()
         with patch.object(upload,'ROOT',self.root): self.plan = upload.prepare(self.phase,self.key,self.bundle)
-        row, rev = self.base.ledger.read(); row['cohort_upload'] = self.plan | {'status':'upload-running','run_id':'123','run_attempt':1}
+        dispatch = upload_run.dispatch_marker(self.plan)
+        self.journal.state['steps']['cohort-dispatch'] = copy.deepcopy(dispatch); self.journal.save()
+        row, rev = self.base.ledger.read(); row['cohort_dispatch'] = dispatch
+        row['cohort_upload'] = self.plan | {'status':'upload-running','run_id':'123','run_attempt':1}
         self.base.ledger.write(rev,row)
         self.destination = op/('cohort-readback-123-'+self.plan['challenge'])
 
@@ -111,6 +115,13 @@ class ReadbackTest(unittest.TestCase):
 
     def test_member_drift_rejected_before_network(self):
         self.base.ledger.row['cohort_members']['voice_db']['receipt_sha256'] = 'f'*64
+        with patch.object(upload,'ROOT',self.root), patch.object(readback,'workflow_evidence') as network:
+            with self.assertRaises(readback.ReadbackError):
+                readback.run(self.phase,'fixture-token',self.key,self.bundle,self.destination,lambda:None)
+        network.assert_not_called(); self.assertFalse(self.destination.exists())
+
+    def test_dispatch_drift_rejected_before_network(self):
+        self.base.ledger.row['cohort_dispatch']['challenge'] = 'f'*32
         with patch.object(upload,'ROOT',self.root), patch.object(readback,'workflow_evidence') as network:
             with self.assertRaises(readback.ReadbackError):
                 readback.run(self.phase,'fixture-token',self.key,self.bundle,self.destination,lambda:None)

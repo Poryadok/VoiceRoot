@@ -59,7 +59,8 @@ def render(source_root, source_sha, operation, secret, migrate_image, node):
                                 'kubernetes.io/hostname':node['hostname']},
                 'enableServiceLinks':True,'securityContext':{},'containers':[{'name':'migrate',
                 'image':migrate_image,'imagePullPolicy':'IfNotPresent','command':['/bin/sh','-ec','exec migrate -path=/migrations -database "$DATABASE_URL" up'],
-                'env':[{'name':'DATABASE_URL','valueFrom':{'secretKeyRef':{'name':secret['name'],'key':'DATABASE_URL'}}}],
+                'env':[{'name':'DATABASE_URL','valueFrom':{'secretKeyRef':{'name':secret['name'],'key':'DATABASE_URL'}}},
+                       {'name':'PGAPPNAME','value':name}],
                 'volumeMounts':[{'name':'migrations','mountPath':'/migrations','readOnly':True}],
                 'resources':{'requests':{'cpu':'20m','memory':'64Mi'},'limits':{'cpu':'500m','memory':'512Mi'}}}],
                 'volumes':[{'name':'migrations','configMap':{'name':config_name,'optional':False,'defaultMode':420}}]}}}}

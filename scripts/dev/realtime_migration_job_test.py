@@ -38,6 +38,7 @@ class RendererTest(unittest.TestCase):
         container = spec['template']['spec']['containers'][0]
         self.assertEqual(container['image'],self.migrate)
         self.assertEqual(container['env'][0]['valueFrom']['secretKeyRef'],{'name':self.secret['name'],'key':'DATABASE_URL'})
+        self.assertEqual(container['env'][1], {'name':'PGAPPNAME','value':'voice-realtime-migrate-'+self.operation[-32:]})
 
     def test_reject_changed_bytes_and_wrong_binding(self):
         for mutation in ('source','secret','image','repository','extra'):

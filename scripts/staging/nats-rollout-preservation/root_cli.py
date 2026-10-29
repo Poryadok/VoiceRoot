@@ -71,7 +71,7 @@ def public_code_sha(path):
 
 def code_binding(code):
     manifest=json.loads(public_read(code/'capture-manifest.json'),object_pairs_hook=guard.object_pairs)
-    if not isinstance(manifest,dict) or not 1<=len(manifest)<=86:raise Blocked('rollout_code_manifest_invalid')
+    if not isinstance(manifest,dict) or not 1<=len(manifest)<=87:raise Blocked('rollout_code_manifest_invalid')
     for relative,wanted in manifest.items():
         p=Path(relative)
         if p.is_absolute() or '..' in p.parts or not guard.SHA.fullmatch(wanted):raise Blocked('rollout_code_manifest_invalid')
@@ -212,7 +212,7 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
         base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
@@ -232,9 +232,10 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         (base/'apply-manifests.json').write_bytes(raw);(base/'apply-manifests.json').chmod(0o600)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         if resource_session is not None:lifecycle_args['resource_session']=resource_session
+        if gis_binding is not None:lifecycle_args['gis_binding']=gis_binding
         gis_first_install=(None if 'gis_first_install' not in value else
             __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None else None),gis_transition=gis_transition,**lifecycle_args)
+        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

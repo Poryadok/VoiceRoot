@@ -200,7 +200,16 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None):
+def verify_gis_before_fence(kube,state):
+    import gis_existing_update as existing
+    existing.verify_phase(state['gis_binding'],kube,'active')
+    if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+        raise Blocked('gis_existing_service_account_changed')
+    if private_json(guard.ROOT/'installed'/'active-release.json')!=state['gis_expected_active']:
+        raise Blocked('gis_existing_authority_changed')
+
+
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -249,10 +258,36 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
         import gis_first_install as gis
         gis.validate_transition_binding(gis_transition,kube)
         state['gis_transition']=copy.deepcopy(gis_transition)
+    if gis_binding is not None:
+        import source_authority
+        authority=gis_source_authority
+        required={'schema','repository','source_sha','workflow_id','run_id','run_attempt','tree_sha',
+                  'source_files','images','lock_artifact_id','lock_sha256','image_provenance','verified'}
+        if (not isinstance(authority,dict) or set(authority)!=required
+            or authority.get('schema')!='voice-source-authority-v1'
+            or authority.get('repository')!=source_authority.REPO
+            or authority.get('workflow_id')!=source_authority.WORKFLOW
+            or authority.get('verified') is not True or authority.get('source_sha')!=target.get('tag')
+            or authority.get('image_provenance')!='independently resolved trusted CI tag'
+            or type(authority.get('run_id')) is not int or authority['run_id']<=0
+            or type(authority.get('run_attempt')) is not int or authority['run_attempt']<=0
+            or type(authority.get('lock_artifact_id')) is not int or authority['lock_artifact_id']<=0
+            or not re.fullmatch(r'[a-f0-9]{40}',str(authority.get('tree_sha','')))
+            or not re.fullmatch(r'[a-f0-9]{64}',str(authority.get('lock_sha256','')))
+            or not isinstance(authority.get('source_files'),dict)
+            or not isinstance(authority.get('images'),dict)
+            or set(authority['images'])!=set(source_authority.IMAGE_NAMES)
+            or any(not isinstance(image,str) or not re.fullmatch(re.escape(source_authority.REGISTRY+'/'+name)+r'@sha256:[a-f0-9]{64}',image)
+                   for name,image in authority['images'].items())):
+            raise Blocked('gis_existing_source_authority_invalid')
+        selected_gis=target.get('images',{}).get('voice-gameintegration/gameintegration')
+        if selected_gis is not None and selected_gis!=authority['images']['gameintegration']:
+            raise Blocked('gis_existing_source_image_changed')
+        state['gis_source_authority']=copy.deepcopy(authority)
     if gis_first_install is None and target.get('mode') in ('full','app-only'):
         try:active_release=private_json(guard.ROOT/'installed'/'active-release.json')
         except FileNotFoundError:active_release={}
-        if ('gis_first_install_transition' in active_release and gis_transition is None):
+        if ('gis_first_install_transition' in active_release and gis_transition is None and gis_binding is None):
             raise Blocked('gis_first_install_transition_required')
     if lifecycle is not None:
         if set(lifecycle)-{'provisional','repair_parent','source_authority','execution_authority'}:
@@ -278,13 +313,43 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             # existing workloads, then verifies those same UIDs/templates
             # after the GIS-only target has been applied.
             snapshot_names=existing
+        if gis_binding is not None:
+            if gis_first_install is not None or gis_transition is not None:
+                raise Blocked('gis_existing_admission_conflict')
+            import gis_existing_update as existing
+            if existing.load_authority(kube)!=gis_binding:
+                raise Blocked('gis_existing_authority_changed')
+            state['gis_expected_active']=copy.deepcopy(private_json(guard.ROOT/'installed'/'active-release.json'))
+            if state['gis_expected_active'].get('gis_first_install_transition')!={
+                    'operation':gis_binding['operation'],'receipt_sha256':gis_binding['anchor_sha256']}:
+                raise Blocked('gis_existing_authority_changed')
+            snapshot_names.add('voice-gameintegration')
+        capture_args={'gis_binding':gis_binding} if gis_binding is not None else {}
         stage=RolloutStage.capture(kube,operation,journal,
-            sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []))
+            sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []),**capture_args)
         if target['mode']=='images-only':
             manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
             save(base/'apply-manifests.json',manifests)
             target['manifest_sha256']=file_sha(base/'apply-manifests.json')
-        state['target']=normalize_target(kube,stage,manifests,target,renderer_authority=renderer_authority)
+        normalized_gis=[]
+        def collect_gis(deployment,service,selected):
+            normalized_gis.append((deployment,service,selected))
+        normalize_args=({'gis_target_sink':collect_gis,'gis_binding':gis_binding}
+                        if gis_binding is not None else {})
+        state['target']=normalize_target(kube,stage,manifests,target,renderer_authority=renderer_authority,**normalize_args)
+        if gis_binding is not None:
+            import gis_existing_update as existing
+            if len(normalized_gis)!=1:raise Blocked('gis_existing_normalization_scope_invalid')
+            deployment,service,selected=normalized_gis[0]
+            pair={'deployment_mode':'selected-paused' if selected else 'preserved-active',
+                  'deployment_uid':deployment['metadata']['uid'],'service_uid':service['metadata']['uid'],
+                  'deployment':existing.gis.semantic(deployment),'service':existing.gis.semantic(service)}
+            state['gis_binding']=existing.bind_normalized_target(gis_binding,deployment,service,selected,
+                target['mode'],state['target']['gis_existing_normalized_sha256'])
+            state['gis_normalized_pair']=copy.deepcopy(pair)
+            state['gis_service_account']=existing.service_account_preflight(kube,
+                state['gis_binding']['target']['spec']['template']['spec'])
+            save(base/'checkpoint.json',state)
         if canonical(migration_plan)!=target['migration_sha256']:raise Blocked('rollout_target_migration_digest_invalid')
         state['migrations']=copy.deepcopy(migration_plan)
         state['migration_secret_metadata']=migrations.preflight(kube,migration_plan,target['mode'])
@@ -319,6 +384,7 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
             state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
         shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
         state['kernel_sha256']=file_sha(base/'kernel')
+        if gis_binding is not None:verify_gis_before_fence(kube,state)
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
@@ -330,10 +396,15 @@ def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan
     try:
         nonnats_plan.revalidate(kube,state['nonnats_binding'])
         if before_fence is not None:before_fence()
+        if gis_binding is not None:
+            if resource_session is None:raise Blocked('gis_existing_resource_fence_required')
+            verify_gis_before_fence(kube,state)
         if resource_session is not None:
             resource_session.bind_target(state['target']['tag'],state['target']['images'],stage.old_images,canonical(state['target']))
             state['resource_fence']=resource_session.binding()
             save(base/'checkpoint.json',state)
+        if gis_binding is not None:
+            verify_gis_before_fence(kube,state)
         stage.runtime_base=base
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
         save(base/'checkpoint.json',state)
@@ -424,6 +495,8 @@ def rollback_gis_first_install(kube,base,state,journal):
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
+    if state.get('gis_binding') is not None and expired_authority is not None:
+        raise Blocked('gis_existing_recovery_unsupported')
     def current_deadline():
         if expired_authority is not None:
             import expired_recovery
@@ -465,6 +538,9 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
     if state.get('gis_transition') is not None:
         import gis_first_install as gis
         gis.validate_transition_binding(state['gis_transition'],kube)
+    if state.get('gis_binding') is not None:
+        import gis_existing_update as existing
+        existing.verify_phase(state['gis_binding'],kube,'paused-old')
     # An interrupted owned CM CAS is checked by advance's exact UID/hash/
     # operation annotation. Credential provenance remains strict on retries.
     revalidate_inputs(kube,{'scripts':[]} if migration_recovery else contract,state['provenance'])
@@ -590,7 +666,96 @@ def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contrac
         state['context']=context(stage);save(Path(base)/'checkpoint.json',state);raise
 
 
+def gis_successor_checkpoint(base,state,stage):
+    """Create the first successor from root-owned evidence before release."""
+    import gis_existing_update as existing
+    import gis_first_install as gis
+    binding=state['gis_binding'];existing.validate(binding)
+    evidence=existing.successor_evidence(base,state,stage)
+    state['gis_ready_proof']=existing.verify_ready(binding,stage.kube,state['gis_service_account'])
+    save(Path(base)/'checkpoint.json',state)
+    active=private_json(guard.ROOT/'installed'/'active-release.json')
+    if active!=state['gis_expected_active']:
+        raise Blocked('gis_existing_predecessor_changed')
+    anchor=active['gis_first_install_transition']
+    if anchor!={'operation':binding['operation'],'receipt_sha256':binding['anchor_sha256']}:
+        raise Blocked('gis_existing_anchor_changed')
+    original=private_json(guard.ROOT/('rollout-'+anchor['operation'])/'checkpoint.json',limit=128 << 20)
+    original_receipt=original.get('gis_first_install_transition_receipt')
+    if original.get('status')!='PASS' or not isinstance(original_receipt,dict):
+        raise Blocked('gis_existing_anchor_invalid')
+    gis.validate_transition_receipt(original_receipt,original)
+    if original_receipt['receipt_sha256']!=anchor['receipt_sha256']:
+        raise Blocked('gis_existing_anchor_changed')
+    old={'deployment_uid':binding['deployment_uid'],'service_uid':binding['service_uid'],
+         'deployment':copy.deepcopy(binding['old']),'service':copy.deepcopy(binding['service'])}
+    predecessor=active.get('gis_latest_transition',anchor)
+    if not isinstance(predecessor,dict) or predecessor.get('operation')==state['operation']:
+        raise Blocked('gis_existing_predecessor_invalid')
+    if predecessor==anchor:
+        first_ready=original_receipt['ready']
+        if (first_ready['deployment_uid']!=old['deployment_uid'] or first_ready['service_uid']!=old['service_uid']
+            or first_ready['deployment_spec_sha256']!=gis.digest(old['deployment'])
+            or first_ready['service_spec_sha256']!=gis.digest(old['service'])
+            or original_receipt['namespace_uid']!=binding['namespace_uid']):
+            raise Blocked('gis_existing_genesis_pair_changed')
+    else:
+        if (not isinstance(predecessor,dict) or set(predecessor)!={'operation','receipt_sha256'}
+            or not re.fullmatch(r'[a-f0-9]{12}',str(predecessor.get('operation','')))):
+            raise Blocked('gis_existing_predecessor_invalid')
+        previous=private_json(guard.ROOT/('rollout-'+predecessor['operation'])/'checkpoint.json',limit=128 << 20)
+        prior=previous.get('gis_existing_update',{})
+        prior_receipt=prior.get('receipt',{})
+        if (previous.get('status')!='PASS' or prior_receipt.get('receipt_sha256')!=predecessor['receipt_sha256']
+            or prior_receipt.get('ready_pair_sha256')!=gis.digest(old)
+            or prior.get('ready_pair')!=old):
+            raise Blocked('gis_existing_successor_predecessor_changed')
+    existing.verify_phase(binding,stage.kube,'ready-target')
+    rows=gis._read_pair(stage.kube,None)
+    deployment,service=rows[gis.DEPLOYMENT],rows[gis.SERVICE]
+    existing.verify_phase(binding,stage.kube,'ready-target',pair=rows)
+    ready={'deployment_uid':deployment['metadata']['uid'],'service_uid':service['metadata']['uid'],
+           'deployment':gis.semantic(deployment),'service':gis.semantic(service)}
+    existing.verify_phase(binding,stage.kube,'ready-target')
+    final=gis._read_pair(stage.kube,None)
+    for key,row in ((gis.DEPLOYMENT,deployment),(gis.SERVICE,service)):
+        current=final[key]
+        if (current['metadata']['uid']!=row['metadata']['uid']
+            or current['metadata'].get('resourceVersion')!=row['metadata'].get('resourceVersion')
+            or gis.semantic(current)!=gis.semantic(row)):
+            raise Blocked('gis_existing_ready_observation_changed')
+    authority=state['gis_source_authority'];target=state['target']
+    ready_proof=state['gis_ready_proof']
+    if (not isinstance(ready_proof,dict)
+        or ready_proof.get('deployment_uid')!=binding['deployment_uid']
+        or ready_proof.get('service_uid')!=binding['service_uid']
+        or ready_proof.get('target_sha256')!=gis.digest(binding['target'])
+        or not isinstance(ready_proof.get('endpoints'),list) or not ready_proof['endpoints']):
+        raise Blocked('gis_existing_ready_proof_changed')
+    payload={'schema':'voice-gis-existing-update-receipt-v1','operation':state['operation'],
+        'anchor':copy.deepcopy(anchor),'predecessor':copy.deepcopy(predecessor),
+        'namespace_uid':binding['namespace_uid'],'service_uid':binding['service_uid'],
+        'deployment_uid':binding['deployment_uid'],'source_sha':authority['source_sha'],
+        'source_run_id':authority['run_id'],'source_run_attempt':authority['run_attempt'],
+        'source_authority_sha256':gis.digest(authority),'old_pair_sha256':gis.digest(old),
+        'normalized_pair_sha256':gis.digest(state['gis_normalized_pair']),
+        'ready_pair_sha256':gis.digest(ready),'target_sha256':gis.digest(target),
+        'resource_fence_sha256':gis.digest(state['resource_fence']),
+        'custody_sha256':gis.digest(state['custody']),'preservation_sha256':gis.digest(evidence),
+        'ready_proof_sha256':gis.digest(state['gis_ready_proof'])}
+    payload['receipt_sha256']=gis.digest(payload)
+    state['gis_existing_update']={'receipt':payload,'old_pair':old,
+        'normalized_pair':copy.deepcopy(state['gis_normalized_pair']),'ready_pair':ready,
+        'source_authority':copy.deepcopy(authority),'resource_fence':copy.deepcopy(state['resource_fence']),
+        'custody':copy.deepcopy(state['custody']),'preservation':evidence,
+        'ready_proof':copy.deepcopy(state['gis_ready_proof'])}
+    save(Path(base)/'checkpoint.json',state)
+    return payload
+
+
 def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,publication=None):
+    if state.get('gis_binding') is not None and state.get('expired_recovery_authority') is not None:
+        raise Blocked('gis_existing_recovery_unsupported')
     import provisional
     provisional.receipt_binding(state,receipt)
     if finish_authority is not None:
@@ -622,6 +787,9 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
     # No replica can restart until exact target templates and unchanged data
     # are proved. Original templates remain separately bound for rollback.
     revalidate_inputs(kube,contract,state['provenance'])
+    if state.get('gis_binding') is not None:
+        import gis_existing_update as existing
+        existing.verify_phase(state['gis_binding'],kube,'paused-target')
     stage.adopt_applied_target(receipt,claim_rv)
     if state.get('gis_transition') is not None:
         import gis_first_install as gis
@@ -634,7 +802,24 @@ def finish(kube,base,state,receipt,claim_rv,contract,*,finish_authority=None,pub
         state['preservation']=verify_post_apply(runtime,stage.final_path,baseline,stage.verify_final_storage)
         stage.verified();state['context']=context(stage);save(Path(base)/'checkpoint.json',state)
         state['phase']='RESTART';save(Path(base)/'checkpoint.json',state)
+        if state.get('gis_binding') is not None:
+            import gis_existing_update as existing
+            if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+                raise Blocked('gis_existing_service_account_changed')
         attach_closed_preservation(base,state,stage,resume_authority)
+        if state.get('gis_binding') is not None:
+            import gis_existing_update as existing
+            def gis_start_guard(resumed):
+                existing.verify_phase(state['gis_binding'],resumed.kube,'paused-target')
+                if existing.service_account_preflight(resumed.kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
+                    raise Blocked('gis_existing_service_account_changed')
+            stage.gis_start_guard=gis_start_guard
+            def gis_ready_proof(resumed):
+                state['gis_ready_proof']=existing.verify_ready(state['gis_binding'],resumed.kube,
+                    state['gis_service_account'])
+                save(Path(base)/'checkpoint.json',state)
+                gis_successor_checkpoint(base,state,resumed)
+            stage.gis_ready_proof=gis_ready_proof
         state['restart']=stage.restart()
         resume_authority()
         if state.get('gis_transition') is not None:
@@ -741,6 +926,8 @@ def attach_closed_preservation(base,state,stage,authority,*,nonce=None,admitted_
 def finish_only(kube,base,state,receipt,contract,reference,*,publication=None):
     # Expired application permission is preserved history. A separately loaded
     # root proof permits missing resumes only; never authorize/apply/migrate.
+    if state.get('gis_binding') is not None:
+        raise Blocked('gis_existing_finish_only_unsupported')
     if receipt!=state.get('authorization') or receipt.get('target')!=state['target']:
         raise Blocked('rollout_finish_authorization_changed')
     stage=None
@@ -801,6 +988,12 @@ def rollback(kube,base,state,receipt,claim_rv,contract):
     stage.finish_guard=lambda action,name=None,replicas=None:rollback_resume_authority()
     try:
         rollback_resume_authority()
+        if state.get('gis_binding') is not None:
+            import gis_existing_update as existing
+            try:existing.verify_phase(state['gis_binding'],kube,'paused-old')
+            except existing.gis.Blocked:
+                try:existing.verify_phase(state['gis_binding'],kube,'paused-target')
+                except existing.gis.Blocked:raise Blocked('gis_existing_rollback_pair_changed') from None
         if state['phase']!='ROLLBACK_TEMPLATES':stage.adopt_rollback_target(receipt,claim_rv)
         state['phase']='ROLLBACK_TEMPLATES';save(Path(base)/'checkpoint.json',state)
         if state.get('renderer_authority') is not None:
