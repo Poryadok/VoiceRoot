@@ -186,6 +186,52 @@ def _valid_role(role):
             type(role['connection_limit']) is int and role['connection_limit'] == -1 and role['valid_until'] is None and role['config'] is None)
 
 
+def verify_completed(phase):
+    """Revalidate the owned create-only result before admitting its database to a cut."""
+    if type(phase) is not Provision or type(phase.pg) is not KubePostgres:
+        raise RecoveryRequired('provision phase identity invalid')
+    phase._guard()
+    phase._secret()
+    steps = copy.deepcopy(phase.journal.state.get('steps', {}))
+    row, _ = phase.fence.ledger.read()
+    record = row.get('realtime_db_provision', {})
+    if (not phase._owned(row) or steps.get('realtime-db-invocation') !=
+            {'status': 'pending', 'nonce': phase.nonce} or
+            set(record.get('steps', {})) != {'role', 'database'}):
+        raise RecoveryRequired('provision ownership changed')
+    for name in ('role', 'database'):
+        item = steps.get('realtime-db-' + name)
+        if (not isinstance(item, dict) or set(item) != {'status', 'nonce', 'catalog'} or
+                item['status'] != 'done' or not isinstance(item['nonce'], str) or
+                not re.fullmatch(r'[0-9a-f]{32}', item['nonce']) or
+                item != record['steps'][name]):
+            raise RecoveryRequired('provision receipt changed')
+    role = steps['realtime-db-role']['catalog']
+    final = steps['realtime-db-database']['catalog']
+    if (not isinstance(role, dict) or set(role) != {'role', 'database'} or
+            not _valid_role(role['role']) or role['database'] is not None or
+            not isinstance(final, dict) or set(final) != {'role', 'database'} or final['role'] != role['role'] or
+            not isinstance(final['database'], dict) or set(final['database']) != {'oid', 'owner_oid'} or
+            not _oid(final['database']['oid']) or final['database']['owner_oid'] != role['role']['oid'] or
+            phase.pg.catalog() != final):
+        raise RecoveryRequired('provision catalog changed')
+    phase._guard()
+    phase._secret()
+    observed, _ = phase.fence.ledger.read()
+    if (not phase._owned(observed) or observed.get('realtime_db_provision') != record or
+            phase.journal.state.get('steps') != steps or phase.pg.catalog() != final):
+        raise RecoveryRequired('provision evidence changed')
+    phase._secret()
+    phase._guard()
+    last, _ = phase.fence.ledger.read()
+    if (not phase._owned(last) or last.get('realtime_db_provision') != record or
+            phase.journal.state.get('steps') != steps):
+        raise RecoveryRequired('provision evidence changed')
+    return {'operation_id': phase.fence.context['operation_id'], 'postgres': copy.deepcopy(phase.intent['postgres']),
+            'database': 'realtime_db', 'database_oid': final['database']['oid'],
+            'role': 'realtime', 'role_oid': role['role']['oid'], 'scope': 'create-only'}
+
+
 CATALOG_SQL = """SELECT json_build_object(
  'role', (SELECT json_build_object('oid', r.oid::bigint, 'login', r.rolcanlogin,
    'superuser', r.rolsuper, 'createdb', r.rolcreatedb, 'createrole', r.rolcreaterole,
