@@ -139,6 +139,8 @@ class RoleCreateTest(unittest.TestCase):
              mock.patch.object(create.role_material,'qualify',side_effect=lambda name,*a: {'keys':[]} if name.endswith('signing') else None), \
              mock.patch.object(create,'_create') as write:
             result=phase.prepare()
+            phase._guard=mock.Mock(return_value=({create.LEDGER:phase.record},1))
+            self.assertEqual(create.verify_completed(phase,'token'),phase.proof)
         self.assertEqual(result['status'],'done'); self.assertTrue(phase.completed); write.assert_not_called()
 
 

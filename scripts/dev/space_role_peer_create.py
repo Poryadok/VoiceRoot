@@ -415,7 +415,7 @@ def verify_completed(phase,token):
         phase._distinct_keys()
         if phase._receipt()!=phase.proof: raise ValueError()
         phase._check_current(); row,_=phase._guard(); phase._local()
-        if (row.get(LEDGER)!=phase.record or row.get(EFFECTS)!=phase.effects or phase.journal.state['steps'].get(STEP)!=phase.record or
+        if (row.get(LEDGER)!=phase.record or row.get(EFFECTS,{})!=phase.effects or phase.journal.state['steps'].get(STEP)!=phase.record or
                 phase.record.get('receipt')!=phase.proof): raise ValueError()
         return copy.deepcopy(phase.proof)
     except BaseException as error:
