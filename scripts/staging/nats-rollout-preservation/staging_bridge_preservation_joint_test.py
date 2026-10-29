@@ -66,6 +66,11 @@ def stage_cluster_fixture(session):
             session.check()
             if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
             if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
+            if args==['create','--dry-run=server','-f','/dev/stdin','-o','json']:
+                result=copy.deepcopy(kwargs['body'])
+                if result['kind']=='Service':result['spec'].update(type='ClusterIP',clusterIP='10.2.0.1',
+                    clusterIPs=['10.2.0.1'],ipFamilies=['IPv4'])
+                return result
             raise AssertionError('unexpected external cluster request')
     return Cluster, names, claim
 
