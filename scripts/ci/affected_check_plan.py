@@ -310,10 +310,8 @@ def changed_paths(root, base, head):
     return sorted(paths)
 
 
-def build_plan(root, base, head, candidate, head_ref=''):
-    identity = validate_identity(root, base, head, candidate)
-    validate_checkout(root, candidate)
-    paths = changed_paths(root, base, candidate)
+def plan_paths(root, paths, head_ref=''):
+    """Apply the same filter and dependency resolution to an explicit path set."""
     filter_path = Path(root) / '.github/ci/path-filters.yml'
     unresolved = None
     try:
@@ -331,9 +329,30 @@ def build_plan(root, base, head, candidate, head_ref=''):
         matched = {key: paths or ['unresolved filter configuration'] for key in keys}
     matrix = resolve_go_matrix(root, effective_filters(matched))
     plan = make_plan(matched, matrix, head_ref)
-    plan.update(schema='voice-affected-check-plan-v1', identity=identity,
-                head_ref=head_ref, changed_paths=paths, filter_reasons=matched,
+    plan.update(head_ref=head_ref, changed_paths=paths, filter_reasons=matched,
                 unresolved_filter_configuration=unresolved)
+    return plan
+
+
+def build_plan(root, base, head, candidate, head_ref=''):
+    identity = validate_identity(root, base, head, candidate)
+    validate_checkout(root, candidate)
+    plan = plan_paths(root, changed_paths(root, base, candidate), head_ref)
+    plan.update(schema='voice-affected-check-plan-v1', identity=identity)
+    return plan
+
+
+def build_local_plan(root, base, head, head_ref=''):
+    """Plan the Git-visible working tree; this is not an execution receipt."""
+    from local_source_snapshot import capture
+    validate_identity(root, base, head, head)
+    source = capture(root, head)
+    paths = sorted(set(changed_paths(root, base, source['tree'])) |
+                   set(source['raw_mismatch_paths']))
+    plan = plan_paths(root, paths, head_ref)
+    if capture(root, head) != source:
+        raise ValueError('source changed while building local plan')
+    plan.update(schema='voice-local-affected-check-plan-v1', base=base, source=source)
     return plan
 
 
