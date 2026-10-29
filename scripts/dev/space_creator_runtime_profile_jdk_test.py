@@ -2,6 +2,7 @@ import copy
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -17,6 +18,25 @@ from space_creator_runtime_profile_trust_test import listing
 
 
 class JdkTest(unittest.TestCase):
+    def test_last_ledger_read_cannot_tamper_done_local_record(self):
+        phase=jdk.TargetJdkPhase.__new__(jdk.TargetJdkPhase); row={}; rev=('uid','rv')
+        phase.journal=SimpleNamespace(state={'steps':{}},save=mock.Mock()); phase.poisoned=False
+        phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'},ledger=SimpleNamespace(),uncertain=mock.Mock())
+        phase._guard=mock.Mock(); phase._local=mock.Mock(); phase._inventory=mock.Mock(); phase._package=mock.Mock()
+        def read():
+            result=copy.deepcopy(row)
+            if result.get(jdk.LEDGER,{}).get('status')=='done': phase.journal.state['steps'].pop(jdk.STEP,None)
+            return result,rev
+        def write(_,new): row.clear(); row.update(copy.deepcopy(new))
+        phase._ledger=read; phase.fence.ledger.write=write
+        def capture(*_):
+            marker=copy.deepcopy(row[jdk.LEDGER]); marker['tool']={'status':'removed'}
+            row[jdk.LEDGER]=copy.deepcopy(marker); phase.journal.state['steps'][jdk.STEP]=copy.deepcopy(marker); phase.record=marker
+            return {'scope':'synthetic'}
+        phase._capture=capture
+        with self.assertRaises(jdk.JdkError): phase.run('token','actor')
+        self.assertTrue(phase.poisoned)
+
     def test_declared_volumes_and_wrong_image_are_rejected_before_create(self):
         info=[{'Id':'correct','Os':'linux','Architecture':'amd64','RepoDigests':['image'],'Config':{'Volumes':None}}]
         jdk._image_info(info,'image','correct')

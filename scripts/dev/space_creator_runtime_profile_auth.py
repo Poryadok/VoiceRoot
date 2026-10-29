@@ -177,6 +177,7 @@ class AuthTrustPhase:
             self.record=copy.deepcopy(done); self._guard()
             if self._ledger()[0].get(LEDGER)!=done: raise ValueError()
             self._local()
+            if self.record!=done or self.journal.state['steps'].get(STEP)!=done|{'receipt':receipt}: raise ValueError()
             return copy.deepcopy(receipt)
         except BaseException as error:
             if pending:
