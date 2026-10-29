@@ -40,9 +40,6 @@ func captureLegacy25Rows(ctx context.Context, conn *pgx.Conn) (map[string]legacy
 // The original projection must come only from the immutable, qualified
 // preimage retained by the owning producer. This helper does not authenticate it.
 func captureLegacy25Projection(ctx context.Context, conn *pgx.Conn, original map[string]legacy25TableDigest) (map[string]legacy25TableDigest, error) {
-	const maxRows = 1_000_000
-	const maxRowBytes = 8 << 20
-	const maxTotalBytes = 512 << 20
 	if ctx == nil || conn == nil {
 		return nil, errors.New("legacy25 preimage unavailable")
 	}
@@ -54,6 +51,20 @@ func captureLegacy25Projection(ctx context.Context, conn *pgx.Conn, original map
 	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`); err != nil {
 		return nil, errors.New("legacy25 preimage unavailable")
 	}
+	result, err := captureLegacy25ProjectionTx(ctx, tx, original)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, errors.New("legacy25 preimage unavailable")
+	}
+	return result, nil
+}
+
+func captureLegacy25ProjectionTx(ctx context.Context, tx pgx.Tx, original map[string]legacy25TableDigest) (map[string]legacy25TableDigest, error) {
+	const maxRows = 1_000_000
+	const maxRowBytes = 8 << 20
+	const maxTotalBytes = 512 << 20
 	result := make(map[string]legacy25TableDigest, len(legacy25DataTables))
 	if original != nil && len(original) != len(legacy25DataTables) {
 		return nil, errors.New("legacy25 projection unavailable")
@@ -123,15 +134,49 @@ func captureLegacy25Projection(ctx context.Context, conn *pgx.Conn, original map
 			_, _ = h.Write(length[:])
 			_, _ = h.Write([]byte(*row))
 		}
-		if err = rows.Err(); err != nil {
+		if err := rows.Err(); err != nil {
 			rows.Close()
 			return nil, errors.New("legacy25 preimage unavailable")
 		}
 		rows.Close()
 		result[table] = legacy25TableDigest{Columns: columns, Count: count, SHA256: hex.EncodeToString(h.Sum(nil))}
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return nil, errors.New("legacy25 preimage unavailable")
-	}
 	return result, nil
+}
+
+// The source shape and every original row are read in one database snapshot.
+// This is still not admission: the caller must qualify identity, permissions,
+// dependencies, state and maintenance authority before any effect.
+func captureLegacy25Snapshot(ctx context.Context, conn *pgx.Conn) (string, map[string]legacy25TableDigest, error) {
+	if ctx == nil || conn == nil {
+		return "", nil, errors.New("legacy25 source unavailable")
+	}
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return "", nil, errors.New("legacy25 source unavailable")
+	}
+	defer tx.Rollback(context.Background())
+	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`); err != nil {
+		return "", nil, errors.New("legacy25 source unavailable")
+	}
+	locked := make([]string, 0, len(legacy25DataTables)+1)
+	for _, table := range legacy25DataTables {
+		locked = append(locked, pgx.Identifier{"public", table}.Sanitize())
+	}
+	locked = append(locked, pgx.Identifier{"public", "schema_migrations"}.Sanitize())
+	if _, err = tx.Exec(ctx, `LOCK TABLE `+strings.Join(locked, ",")+` IN ACCESS SHARE MODE`); err != nil {
+		return "", nil, errors.New("legacy25 source unavailable")
+	}
+	digest, err := inspectLegacy25CatalogTx(ctx, tx)
+	if err != nil {
+		return "", nil, err
+	}
+	rows, err := captureLegacy25ProjectionTx(ctx, tx, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", nil, errors.New("legacy25 source unavailable")
+	}
+	return digest, rows, nil
 }

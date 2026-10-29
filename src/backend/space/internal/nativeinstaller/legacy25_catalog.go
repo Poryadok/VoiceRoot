@@ -26,10 +26,6 @@ func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error)
 	if ctx == nil || conn == nil {
 		return "", errors.New("legacy25 catalog unavailable")
 	}
-	queryHash := sha256.Sum256([]byte(legacy25CatalogSQL))
-	if hex.EncodeToString(queryHash[:]) != legacy25CatalogSQLSHA256 {
-		return "", errors.New("legacy25 catalog source changed")
-	}
 	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return "", errors.New("legacy25 catalog unavailable")
@@ -38,8 +34,23 @@ func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error)
 	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog`); err != nil {
 		return "", errors.New("legacy25 catalog unavailable")
 	}
+	digest, err := inspectLegacy25CatalogTx(ctx, tx)
+	if err != nil {
+		return "", err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", errors.New("legacy25 catalog unavailable")
+	}
+	return digest, nil
+}
+
+func inspectLegacy25CatalogTx(ctx context.Context, tx pgx.Tx) (string, error) {
+	queryHash := sha256.Sum256([]byte(legacy25CatalogSQL))
+	if hex.EncodeToString(queryHash[:]) != legacy25CatalogSQLSHA256 {
+		return "", errors.New("legacy25 catalog source changed")
+	}
 	var db, version string
-	if err = tx.QueryRow(ctx, `SELECT current_database(),current_setting('server_version_num')`).Scan(&db, &version); err != nil || db != "space_db" {
+	if err := tx.QueryRow(ctx, `SELECT current_database(),current_setting('server_version_num')`).Scan(&db, &version); err != nil || db != "space_db" {
 		return "", errors.New("legacy25 catalog target unavailable")
 	}
 	server, err := strconv.Atoi(version)
@@ -47,20 +58,17 @@ func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error)
 		return "", errors.New("legacy25 catalog server unsupported")
 	}
 	var rows, clean int64
-	if err = tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE version=25 AND dirty=false) FROM public.schema_migrations`).Scan(&rows, &clean); err != nil || rows != 1 || clean != 1 {
+	if err := tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE version=25 AND dirty=false) FROM public.schema_migrations`).Scan(&rows, &clean); err != nil || rows != 1 || clean != 1 {
 		return "", errors.New("legacy25 migration marker unavailable")
 	}
 	var catalog string
-	if err = tx.QueryRow(ctx, legacy25CatalogSQL).Scan(&catalog); err != nil {
+	if err := tx.QueryRow(ctx, legacy25CatalogSQL).Scan(&catalog); err != nil {
 		return "", errors.New("legacy25 catalog unavailable")
 	}
 	sum := sha256.Sum256([]byte(catalog))
 	digest := hex.EncodeToString(sum[:])
 	if digest != legacy25CatalogPG16SHA256 {
 		return "", errors.New("legacy25 catalog differs")
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return "", errors.New("legacy25 catalog unavailable")
 	}
 	return digest, nil
 }
