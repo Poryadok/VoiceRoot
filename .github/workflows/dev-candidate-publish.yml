@@ -68,6 +68,8 @@ on:
       - scripts/dev/full_cohort_package_phase.py
       - scripts/dev/full_cohort_supervisor.py
       - scripts/dev/full_cohort_supervisor_test.py
+      - scripts/dev/full_cohort_pg_physical_identity.py
+      - scripts/dev/full_cohort_pg_physical_identity_test.py
       - scripts/dev/full_cohort_backup_metadata.py
       - scripts/dev/full_cohort_backup_metadata_test.py
       - scripts/dev/full_cohort_config_custody.py
@@ -102,6 +104,8 @@ on:
       - scripts/dev/realtime_db_provision.py
       - scripts/dev/realtime_db_provision_test.py
       - scripts/dev/realtime_db_provision_journal_test.py
+      - scripts/dev/realtime_absent_phase.py
+      - scripts/dev/realtime_absent_phase_test.py
       - scripts/dev/realtime_p3_adoption.py
       - scripts/dev/realtime_p3_adoption_test.py
       - scripts/dev/realtime_p3_public_inputs.py
@@ -188,6 +192,7 @@ jobs:
           python -B scripts/dev/full_cohort_oci_test.py
           python -B scripts/dev/full_cohort_package_phase_test.py
           python -B scripts/dev/full_cohort_supervisor_test.py
+          python -B scripts/dev/full_cohort_pg_physical_identity_test.py
           python -B scripts/dev/full_cohort_backup_metadata_test.py
           python -B scripts/dev/full_cohort_config_custody_test.py
           python -B scripts/dev/cohort_unmanaged_actual_test.py
@@ -204,6 +209,7 @@ jobs:
           python -B scripts/dev/writer_cut_resumed_probe_test.py
           python -B scripts/dev/realtime_db_provision_test.py
           python -B scripts/dev/realtime_db_provision_journal_test.py
+          python -B scripts/dev/realtime_absent_phase_test.py
           python -B scripts/dev/realtime_p3_adoption_test.py
           python -B scripts/dev/realtime_p3_public_inputs_test.py
           python -B scripts/dev/story_media_backup_cohort_finalize_test.py

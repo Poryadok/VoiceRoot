@@ -88,6 +88,32 @@ class AffectedTests(unittest.TestCase):
                 self.obs['database_observations']['workloads']['analytics'][0]['status']='hold'
                 with self.assertRaises(affected.AffectedError): affected.build(self.package,self.inventory,'token',Catalog())
 
+    def test_realtime_create_only_requires_typed_current_absence(self):
+        import realtime_absent_phase
+        self.obs['projection']['realtime']={'uid':'rt','generation':1,'spec_sha256':'d'*64,
+            'pods':[{'containers':[{'name':'realtime','image_id':'sha256:'+'1'*64}]}]}
+        self.obs['database_observations']['workloads']['realtime']=[{'status':'hold','reason':'database_configuration_missing'}]
+        self.candidate['platform_digests']['voice-realtime/realtime']='sha256:'+'1'*64
+        class Catalog:
+            def __init__(obj):obj.inventory=self.inventory
+            def verify_current(obj,token):return {'engine':{'namespace_uid':'ns'},'server_start':'start',
+                'databases':{'messaging_db':10,'chat_db':11,'postgres':12},
+                'all_databases':{'messaging_db':10,'chat_db':11,'postgres':12},'properties':{},'excluded':{}}
+        catalog=Catalog()
+        class Absence:
+            def __init__(obj):obj.inventory=self.inventory; obj.catalog=catalog
+            def verify_current(obj,token):return {'source_sha':'a'*40,'deployment_uid':'rt',
+                'generation':1,'spec_sha256':'d'*64}
+        with patch.object(affected.metadata,'CONTAINERS',{'messaging':'messaging','realtime':'realtime'}), \
+             patch.object(affected,'FullCatalogPhase',Catalog), \
+             patch.object(realtime_absent_phase,'RealtimeAbsentPhase',Absence):
+            with self.assertRaises(affected.AffectedError): affected.build(self.package,self.inventory,'token',catalog)
+            plan=affected.build(self.package,self.inventory,'token',catalog,Absence())
+            self.assertEqual(plan['writers']['voice-realtime']['reason'],'qualified_create_only_realtime')
+            self.assertNotIn('realtime_db',plan['databases'])
+            self.obs['database_observations']['workloads']['realtime'][0]['reason']='runtime_read_failed'
+            with self.assertRaises(affected.AffectedError): affected.build(self.package,self.inventory,'token',catalog,Absence())
+
     def test_drain_invokes_only_matching_source_derived_scope(self):
         spec={'replicas':1}; self.obs['projection']['messaging']['spec_sha256']=hashlib.sha256(
             json.dumps(spec,sort_keys=True,separators=(',',':')).encode()).hexdigest()

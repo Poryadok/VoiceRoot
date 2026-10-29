@@ -15,6 +15,7 @@ import full_cohort_package_phase
 import media_backup_upload_runner
 import media_operation_guard
 import media_operation_journal
+import realtime_absent_phase
 import resource_fencing
 import story_media_backup
 
@@ -46,7 +47,7 @@ class Supervisor:
         self._journal, self._fence, self._client = journal, fence, client
         self._check = fence.check
         self.journals = []
-        self.package = self.inventory = self.catalog = None
+        self.package = self.inventory = self.catalog = self.realtime_absent = None
         self._guard()
 
     def _guard(self):
@@ -64,7 +65,7 @@ class Supervisor:
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
 
     def _open(self, name, extra):
-        if name not in ('package-journal', 'inventory-journal', 'catalog-journal'):
+        if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal'):
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']
@@ -97,5 +98,12 @@ class Supervisor:
         self.catalog = full_cohort_affected_plan.FullCatalogPhase(journal, fence, client, self.lock,
                                                                   self.namespace_uid, self.inventory)
         self.catalog.run(token)
+        observations=self.inventory.verify_receipt(token)['database_observations']['workloads']['realtime']
+        if (observations and all(item.get('status')=='hold' and item.get('reason')=='database_configuration_missing'
+                                 for item in observations)):
+            journal,fence,client=self._open('realtime-absence-journal',{})
+            self.realtime_absent=realtime_absent_phase.RealtimeAbsentPhase(journal,fence,client,self.lock,
+                self.namespace_uid,self.inventory,self.catalog)
+            self.realtime_absent.run(token)
         self._guard()
-        return full_cohort_affected_plan.build(self.package, self.inventory, token, self.catalog)
+        return full_cohort_affected_plan.build(self.package,self.inventory,token,self.catalog,self.realtime_absent)

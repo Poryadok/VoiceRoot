@@ -253,7 +253,7 @@ def verify_migration_catalog(probe,cut):
     if final!=state or cut.migration is not binding: raise AffectedError('migration changed')
     return {'scope':scope,'catalog':result}
 
-def build(package_phase, inventory_phase, token, catalog_phase=None):
+def build(package_phase, inventory_phase, token, catalog_phase=None, realtime_absent=None):
     """Return only source-observed routes of actual image-changed DB writers."""
     try:
         if type(package_phase) is not package.PackagePhase or type(inventory_phase) is not inventory.InventoryPhase:
@@ -285,7 +285,7 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
             # These fixed services have separately planned configuration changes.
             # Until a protected source-owned config plan exists, an equal image
             # cannot establish that the service is unchanged.
-            if not changed and name in PLANNED_CONFIG_UNKNOWN:
+            if not changed and name in PLANNED_CONFIG_UNKNOWN and not (name=='realtime' and realtime_absent is not None):
                 raise ValueError()
             if not changed:
                 unchanged.append(name)
@@ -293,6 +293,20 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
                 changed_names.add('voice-'+name)
             entries=workloads[name]
             if not isinstance(entries,list) or len(entries)!=len(pods): raise ValueError()
+            if name=='realtime' and realtime_absent is not None:
+                import realtime_absent_phase
+                if (type(realtime_absent) is not realtime_absent_phase.RealtimeAbsentPhase or
+                        realtime_absent.inventory is not inventory_phase or realtime_absent.catalog is not catalog_phase or
+                        any(e.get('status')!='hold' or e.get('reason')!='database_configuration_missing' for e in entries)):
+                    raise ValueError()
+                absent=realtime_absent.verify_current(token)
+                if (absent['source_sha']!=candidate['source_sha'] or absent['deployment_uid']!=projection[name]['uid'] or
+                        absent['generation']!=projection[name]['generation'] or
+                        absent['spec_sha256']!=projection[name]['spec_sha256']): raise ValueError()
+                changed_names.add('voice-realtime')
+                potential['voice-realtime']={'uid':projection[name]['uid'],'generation':projection[name]['generation'],
+                    'spec_sha256':projection[name]['spec_sha256'],'routes':[], 'reason':'qualified_create_only_realtime'}
+                continue
             if name not in metadata.OWNERS and name!='gateway':
                 if name not in POTENTIAL_NONOWNERS or any(e.get('status')!='observed' or
                         e.get('result',{}).get('binding',{}).get('state')!='not_observed' for e in entries):
@@ -352,7 +366,8 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
         if len(engines)!=1 or len({v['database_oid'] for v in databases.values()})!=len(databases): raise ValueError()
         if inventory_phase.verify_current(token)!=observed or package_phase.verify_current(token)!=candidate or \
                 inventory_phase.fence.ledger.read()!=package_phase.fence.ledger.read() or \
-                (full_catalog and catalog_phase.verify_current(token)!=catalog_receipt): raise ValueError()
+                (full_catalog and catalog_phase.verify_current(token)!=catalog_receipt) or \
+                (realtime_absent is not None and realtime_absent.verify_current(token)!=absent): raise ValueError()
         return {'operation_id':candidate['operation_id'],'source_sha':candidate['source_sha'],
                 'package_sha256':candidate['package_sha256'],'writers':writers,'databases':databases,
                 'unchanged_images':unchanged,'unobserved_nonowners':nonowners,
@@ -366,12 +381,12 @@ def build(package_phase, inventory_phase, token, catalog_phase=None):
         raise AffectedError('affected writer routes unavailable') from None
 
 
-def drain(package_phase, inventory_phase, token, cut, catalog_phase=None):
+def drain(package_phase, inventory_phase, token, cut, catalog_phase=None, realtime_absent=None):
     """Re-derive immediately, then invoke only an exactly matching writer cut."""
     try:
         if type(cut) is not writer_cut.WriterCut or cut.fence.context!=package_phase.fence.context or \
                 cut.lock!=package_phase.lock or cut.namespace_uid!=package_phase.namespace_uid: raise ValueError()
-        plan=build(package_phase,inventory_phase,token,catalog_phase)
+        plan=build(package_phase,inventory_phase,token,catalog_phase,realtime_absent)
         sources=cut.admission['controllers']; names=[x['metadata']['name'] for x in sources]
         if len(names)!=len(set(names)) or set(names)!=set(plan['writers']): raise ValueError()
         for source in sources:

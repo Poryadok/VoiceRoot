@@ -44,6 +44,8 @@ class SupervisorTest(unittest.TestCase):
         nodes=[{'name':'node','uid':'uid','hostname':'node','architecture':'amd64'}]
         with mock.patch.object(supervisor.full_cohort_package_phase.PackagePhase,'run',side_effect=lambda *a:calls.append('package')), \
              mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'run',side_effect=lambda *a:calls.append('inventory')), \
+             mock.patch.object(supervisor.full_cohort_inventory_phase.InventoryPhase,'verify_receipt',return_value={
+                 'database_observations':{'workloads':{'realtime':[{'status':'observed'}]}}}), \
              mock.patch.object(supervisor.full_cohort_affected_plan.FullCatalogPhase,'run',side_effect=lambda *a:calls.append('catalog')), \
              mock.patch.object(supervisor.full_cohort_affected_plan,'build',return_value={'plan':'fixture'}):
             subject=supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
