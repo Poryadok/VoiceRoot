@@ -1,7 +1,9 @@
 """Real Space phases and Journal/Fence; Kubernetes, PG and CUT boundaries synthetic."""
 import base64
 import copy
+import hashlib
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -14,6 +16,10 @@ import space_fresh_install_phase_runtime as runtime
 import space_fresh_install_phase_runtime_test as route_fixture
 import space_fresh_install_phase_test as phase_fixture
 import writer_cut_space_test as cut_fixture
+import frontend_runtime_executor as transport
+import media_operation_journal as journals
+import realtime_db_provision as provision
+import resource_fencing
 
 
 def _cleanup_fixture(fixture):
@@ -104,9 +110,56 @@ class RuntimeJointTest(unittest.TestCase):
             f.oid=43
             with self.assertRaises(affected.AffectedError):affected.verify_space_catalog(f.cut.probe,f.cut)
             f.oid=42
+            self._realtime_successor(f)
         with mock.patch.object(runtime,'verify_receipt',wraps=runtime.verify_receipt) as historical:
             self.assertEqual(fresh.verify_historical(phase,'token')['new_oid'],receipt['new_oid'])
             historical.assert_called_once_with(phase.runtime,'token')
+
+    def _realtime_successor(self,f):
+        password=b'fixtureCredential_123456789012345678901234'
+        ref={'name':'voice-realtime-db-fixture','uid':'secret','resourceVersion':'10',
+             'password_sha256':hashlib.sha256(password).hexdigest()}
+        j=journals.Journal(Path(f.temp.name)/'realtime-provision',{'resource_context':copy.deepcopy(f.context),
+            'namespace_uid':'ns','postgres':copy.deepcopy(f.engine),'realtime_credential':ref})
+        self.addCleanup(j.close)
+        client=transport.KubectlTransport(j);ledger=resource_fencing.KubeLedger(client)
+        ledger.read=f.backing.read;ledger.write=f.backing.write
+        fence=resource_fencing.Fence(copy.deepcopy(f.context),lambda:copy.deepcopy(f.card),ledger)
+        url='postgres://realtime:'+password.decode()+'@voice-postgres:5432/realtime_db?sslmode=disable'
+        def call(*args,**kwargs):
+            if args[:2]==('get','secret'):
+                return {'metadata':{'name':ref['name'],'namespace':'voice-dev','uid':ref['uid'],
+                    'resourceVersion':ref['resourceVersion']},'immutable':True,'type':'Opaque',
+                    'data':{'DATABASE_URL':base64.b64encode(url.encode()).decode()}}
+            return f.call(*args,**kwargs)
+        client.call=call
+        class PG:
+            def __init__(self):self.state={'role':None,'database':None}
+            def snapshot(self):return copy.deepcopy(f.engine)
+            def catalog(self):return copy.deepcopy(self.state)
+            def execute(self,sql):
+                if sql==provision.database_sql():self.state['database']={'oid':55,'owner_oid':54}
+                else:self.state['role']={'oid':54,'login':True,'superuser':False,'createdb':False,
+                    'createrole':False,'inherit':False,'replication':False,'bypassrls':False,'memberships':0,
+                    'connection_limit':-1,'valid_until':None,'config':None}
+        pg=PG()
+        def current(*args):
+            result=f.current_catalog()
+            if pg.state['database']:
+                result['all_databases']['realtime_db']=pg.state['database']['oid']
+                result['databases']['realtime_db']=pg.state['database']['oid']
+            return result
+        with mock.patch.object(provision,'KubePostgres',PG),mock.patch.object(affected,'_full_catalog',side_effect=current), \
+             mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:{'scope':copy.deepcopy(scope),
+                 'active_sessions':0,'active_transactions':0}):
+            phase=provision.Provision(j,fence,client,f.lock,'ns',pg,password);phase.run()
+            f.cut.bind_provision_scope(phase)
+            actual=f.cut.current_provisioned_session_scope()
+            self.assertEqual(actual['database_oids']['space_db'],42)
+            self.assertEqual(actual['database_oids']['realtime_db'],55)
+            self.assertEqual(affected.verify_provisioned_catalog(f.cut.probe,f.cut)['all_databases'],actual['database_oids'])
+            pg.state['database']['oid']=56
+            with self.assertRaises(Exception):f.cut.current_provisioned_session_scope()
 
     def test_native_to_runtime_secret_cas_and_terminal_receipt(self): self.exercise(None)
     def test_native_runtime_with_real_cut_separate_facades(self): self.exercise(None,with_real_cut=True)
