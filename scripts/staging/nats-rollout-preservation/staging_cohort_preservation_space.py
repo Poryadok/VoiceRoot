@@ -368,9 +368,8 @@ def _retained_rehearsal(session,attempt,archive,tool):
     return copy.deepcopy(record)
 
 
-def load_native_authority(session):
-    """Transfer qualified off-node evidence, never clone identity, to live code."""
-    import staging_cohort_preservation_pg as pg
+def _retained_native_authority(session):
+    """Revalidate the full qualified evidence without connecting to Space."""
     qualified=owner.load_qualified(session);plan=owner.load_plan(session);base=owner._base(session)
     archive=owner._read(base/'archive-record.json');offnode=owner._read(base/'offnode-restore.json')
     tool=load_tool(session)
@@ -384,12 +383,90 @@ def load_native_authority(session):
     if (offnode.get('proof',{}).get('native_space')!=rehearsal
         or offnode['proof'].get('space_native_rehearsal_sha256')!=owner.digest(rehearsal)):
         raise Blocked('cohort_space_offnode_changed')
-    original=pg.guard_space_identity(session)
     result={'schema':'voice-staging-space-native-authority-v1','operation':session.operation,
-        'preservation_sha256':owner.digest(qualified),'tool':tool,'original':original,'rehearsal':rehearsal}
+        'preservation_sha256':owner.digest(qualified),'tool':tool,'rehearsal':rehearsal}
     if (owner.load_qualified(session)!=qualified or load_tool(session)!=tool
         or owner._read(base/'archive-record.json')!=archive or owner._read(base/'offnode-restore.json')!=offnode
-        or _retained_rehearsal(session,offnode,archive,tool)!=rehearsal
-        or pg.guard_space_identity(session)!=original):
+        or _retained_rehearsal(session,offnode,archive,tool)!=rehearsal):
+        raise Blocked('cohort_space_authority_changed')
+    return copy.deepcopy(result)
+
+
+def load_native_authority(session):
+    """Transfer qualified off-node evidence, never clone identity, to live code."""
+    import staging_cohort_preservation_pg as pg
+    original=pg.guard_space_identity(session)
+    result={**_retained_native_authority(session),'original':original}
+    if pg.guard_space_identity(session)!=original:
+        raise Blocked('cohort_space_authority_changed')
+    return result
+
+
+def _running_native_job(session):
+    """Only the response-owned upgrade or verifier permits exclusive polling."""
+    import staging_space_native as live
+    from stage_runtime import Kube
+    row=session.check()
+    if row.get('phase')!='prepare' or not row.get('target_sha256'):
+        raise Blocked('cohort_space_upgrade_window_invalid')
+    base=owner._base(session)/'space-live'
+    plan=owner._read(base/'plan.json')
+    kind='verify' if (base/'effects'/'verify-create.json').exists() else 'upgrade'
+    created_path=base/'effects'/(kind+'-create.json');created=owner._read(created_path)
+    fields={'schema','operation','binding','authority_sha256','archive_sha256','namespace_uid',
+        'postgres_pvc_uid','postgres_pv_uid','tool_platform_digest','tool_config_digest',
+        'config_sha256','secret_sha256','documents','node','storage_class_uid','storage_class_sha256','storage_provisioner'}
+    effect_fields={'schema','operation','effect','plan_sha256','binding','argv','body_sha256','status','response'}
+    if (set(plan)!=fields or plan.get('schema')!='voice-staging-space-live-plan-v1'
+        or plan.get('operation')!=session.operation or plan.get('binding')!=session.binding()
+        or set(created)!=effect_fields or created.get('schema')!='voice-staging-space-live-effect-v1'
+        or created.get('operation')!=session.operation or created.get('effect')!=kind+'-create'
+        or created.get('status')!='DONE' or created.get('binding')!=session.binding()
+        or created.get('plan_sha256')!=owner.digest(plan)
+        or created.get('argv')!=owner.PREFIX+['create','-f','/dev/stdin','-o','json']
+        or any((base/path).exists() for path in (kind+'-closed.json','effects/'+kind+'-delete.json'))):
+        raise Blocked('cohort_space_upgrade_window_invalid')
+    live._live_closed(session,plan,'bind')
+    if kind=='verify':live._live_closed(session,plan,'upgrade')
+    response=created['response'];tool=load_tool(session)
+    archive=owner._read(owner._base(session)/'archive-record.json');kube=Kube()
+    node=kube.get('pod','voice-postgres-0').get('spec',{}).get('nodeName')
+    storage=plan['documents']['pvc']['spec']['storageClassName']
+    documents=live._live_documents(session,tool,node,storage,archive['binding']['snapshot_id'])
+    if (plan['documents']!=documents or plan['node']!=node or plan['archive_sha256']!=owner.digest(archive)
+        or plan['tool_platform_digest']!=tool['platform_digest'] or plan['tool_config_digest']!=tool['config_digest']
+        or created['body_sha256']!=hashlib.sha256(owner.private._bytes(documents[kind])).hexdigest()
+        or type(response) is not dict or set(response)!={'uid','resourceVersion','creationTimestamp','spec_sha256'}
+        or not owner.guard.UUID.fullmatch(str(response['uid'])) or not response['resourceVersion']
+        or not response['creationTimestamp'] or not owner.guard.SHA.fullmatch(str(response['spec_sha256']))):
+        raise Blocked('cohort_space_upgrade_window_invalid')
+    desired=documents[kind];job=kube.get('job',desired['metadata']['name']);meta=job.get('metadata',{})
+    if (job.get('apiVersion')!='batch/v1' or job.get('kind')!='Job'
+        or meta.get('name')!=desired['metadata']['name'] or meta.get('namespace')!='voice-staging'
+        or meta.get('uid')!=response['uid'] or not meta.get('resourceVersion') or meta.get('deletionTimestamp')
+        or meta.get('creationTimestamp')!=response['creationTimestamp']
+        or any(meta.get('labels',{}).get(key)!=value for key,value in desired['metadata']['labels'].items())
+        or owner.digest(job.get('spec'))!=response['spec_sha256']):
+        raise Blocked('cohort_space_upgrade_job_changed')
+    live._check_live_job_spec(job['spec'],desired)
+    if owner._read(base/'plan.json')!=plan or owner._read(created_path)!=created:
+        raise Blocked('cohort_space_upgrade_window_invalid')
+    session.check()
+    # Status and RV may advance while the same exact owned Job is running.
+    return {'plan':plan,'kind':kind,'created':created,'job_uid':meta['uid'],'job_spec_sha256':response['spec_sha256']}
+
+
+def load_native_authority_during_job(session):
+    """Retain pre-submit Space identity while Go owns its exclusive session."""
+    import staging_cohort_preservation_pg as pg
+    window=_running_native_job(session)
+    retained=_retained_native_authority(session)
+    original=pg._preserved_space_identity(session)
+    result={**retained,'original':original}
+    plan=window['plan'];engine=original['engine']
+    if (plan['authority_sha256']!=owner.digest(result) or plan['namespace_uid']!=engine['namespace_uid']
+        or plan['postgres_pvc_uid']!=engine['pvc_uid'] or plan['postgres_pv_uid']!=engine['pv_uid']
+        or _retained_native_authority(session)!=retained or pg._preserved_space_identity(session)!=original
+        or _running_native_job(session)!=window):
         raise Blocked('cohort_space_authority_changed')
     return copy.deepcopy(result)
