@@ -13,6 +13,8 @@ DEDICATED = {
         'analytics-clickhouse-integration',
     ('role', 'voice/backend/role', 'TestBootstrapActualRole20PG'):
         'role-migration-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestMaintenanceWindowWithRealAutovacuum'):
+        'space-autovacuum-integration',
 }
 
 

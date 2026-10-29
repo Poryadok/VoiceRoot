@@ -3,10 +3,40 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 from go_integration_receipts import make_receipt, read_events, summarize_events, verify_matrix, verify_no_skips
 from go_integration_source_audit import audit
+
+
+def verify_source_checkout(root, candidate, inputs):
+    root = Path(root).resolve()
+    if root != Path(__file__).resolve().parents[2]:
+        raise ValueError('verifier must run from the candidate checkout')
+    def git(*args):
+        result = subprocess.run(['git', '-C', str(root), *args], capture_output=True, check=False)
+        if result.returncode:
+            raise ValueError('candidate checkout is unavailable or modified')
+        return result.stdout
+    if Path(git('rev-parse', '--show-toplevel').decode('utf-8').strip()).resolve() != root:
+        raise ValueError('source root is not the Git worktree root')
+    if git('rev-parse', 'HEAD').decode('ascii').strip() != candidate:
+        raise ValueError('source checkout does not match candidate')
+    git('diff', '--quiet', 'HEAD', '--')
+    for name in inputs:
+        path = Path(name)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError('source inventory is not a regular tracked file')
+        try:
+            relative = path.resolve().relative_to(root).as_posix()
+        except ValueError as exc:
+            raise ValueError('source inventory is outside candidate checkout') from exc
+        git('ls-files', '--error-unmatch', '--', relative)
+    untracked = git('ls-files', '--others', '-z', '--', 'src/backend', 'go.work', 'go.work.sum').decode('utf-8').split('\0')
+    if any(name.endswith('.go') or Path(name).name in ('go.mod', 'go.sum', 'go.work', 'go.work.sum')
+           for name in untracked if name):
+        raise ValueError('untracked Go source or module input in candidate checkout')
 
 
 def main():
@@ -60,6 +90,7 @@ def main():
             verify_matrix(services, inventory, [], identity)
             if not services:
                 raise ValueError('selected integration matrix must not be empty')
+            verify_source_checkout(args.source_root, args.candidate, (args.inventory, args.exceptions))
             exceptions = json.loads(Path(args.exceptions).read_text(encoding='utf-8'))
             source_summary = audit(args.source_root, inventory, exceptions)
             print('Integration source audit: ' + str(source_summary['source_cases']) + ' entrypoints; ' +

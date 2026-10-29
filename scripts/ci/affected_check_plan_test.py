@@ -351,6 +351,34 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('backend-go-integration-evidence', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_space_autovacuum_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['space-autovacuum-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')", job['if'])
+        self.assertIn('space-autovacuum-integration', workflow['jobs']['ci-gate']['needs'])
+        prepare = next(step for step in job['steps'] if step.get('name') == 'Configure owned PostgreSQL autovacuum')
+        self.assertIn('job.services.postgres.id', prepare['env']['PG_CONTAINER'])
+        self.assertIn('autovacuum_naptime', prepare['run'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Space real-autovacuum proof')
+        self.assertIn('-tags=integration', test['run'])
+        self.assertIn('space_autovacuum_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['NATIVE_INSTALLER_WINDOW_TEST_ADMIN_URL'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['space'], 'docker_go_services': [],
+                  'integration_go_services': ['space'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/space/main.go']), matrix)
+        self.assertIn('space-autovacuum-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        needs['space-autovacuum-integration']['result'] = 'skipped'
+        self.assertIn('space-autovacuum-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('space-autovacuum-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_messaging_threadlist_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))

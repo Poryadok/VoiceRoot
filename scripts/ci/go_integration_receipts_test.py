@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,13 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_space_autovacuum_inventory_requires_real_worker_proof(self):
+        inventory = json.loads((ROOT / 'scripts/ci/space_autovacuum_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['space'], [['voice/backend/space/internal/nativeinstaller', 'TestMaintenanceWindowWithRealAutovacuum']])
+        source = (ROOT / 'src/backend/space/internal/nativeinstaller/window_integration_test.go').read_text(encoding='utf-8')
+        self.assertRegex(source, r'(?m)^func TestMaintenanceWindowWithRealAutovacuum\(t \*testing\.T\)')
+        self.assertIn("backend_type='autovacuum worker'", source)
+
     def test_space_bot_native51_cases_and_subtests_are_required(self):
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
         package = 'voice/backend/space/internal/store'
@@ -104,9 +112,19 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 package_dir.mkdir(parents=True)
                 (package_dir / 'store_integration_test.go').write_text(
                     'package store\nimport "testing"\nfunc TestStore(t *testing.T) {}\n', encoding='utf-8')
+            script_dir = root / 'scripts/ci'
+            script_dir.mkdir(parents=True)
+            for name in ('go_integration_matrix.py', 'go_integration_receipts.py', 'go_integration_source_audit.py'):
+                shutil.copyfile(ROOT / 'scripts/ci' / name, script_dir / name)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True, capture_output=True)
+            subprocess.run(['git', '-C', str(root), 'add', 'src', 'scripts', 'inventory.json', 'exceptions.json'],
+                           check=True, capture_output=True)
+            subprocess.run(['git', '-C', str(root), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                            'commit', '-qm', 'fixture'], check=True, capture_output=True)
             artifacts = root / 'artifacts'
             artifacts.mkdir()
-            identity = {'candidate': 'a' * 40, 'run': '123', 'attempt': '1'}
+            candidate = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+            identity = {'candidate': candidate, 'run': '123', 'attempt': '1'}
             for service, cases in inventory.items():
                 folder = artifacts / ('go-integration-' + service + '-1')
                 folder.mkdir()
@@ -120,13 +138,36 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 summary.update(schema='voice-go-integration-diagnostic-v1', service=service,
                                identity=identity, exit_code=0, event_sha256=hashlib.sha256(raw).hexdigest())
                 (folder / 'go-integration-summary.json').write_text(json.dumps(summary), encoding='utf-8')
-            command = [sys.executable, str(ROOT / 'scripts/ci/go_integration_matrix.py'), 'verify-diagnostics',
+            command = [sys.executable, str(script_dir / 'go_integration_matrix.py'), 'verify-diagnostics',
                        '--inventory', str(inv), '--candidate', identity['candidate'], '--run', '123',
                        '--attempt', '1', '--services', json.dumps(list(inventory)), '--directory', str(artifacts),
                        '--exceptions', str(exceptions), '--source-root', str(root)]
             def run():
                 return subprocess.run(command, capture_output=True).returncode
             self.assertEqual(run(), 0)
+            tracked = root / 'src/backend/chat/store/store_integration_test.go'
+            original_source = tracked.read_bytes()
+            tracked.write_bytes(original_source + b'// changed after candidate\n')
+            self.assertNotEqual(run(), 0, 'modified source cannot claim the committed candidate')
+            tracked.write_bytes(original_source)
+            original_inventory = inv.read_bytes()
+            inv.write_bytes(original_inventory + b' ')
+            self.assertNotEqual(run(), 0, 'modified inventory cannot claim the committed candidate')
+            inv.write_bytes(original_inventory)
+            untracked_inventory = root / 'other-inventory.json'
+            untracked_inventory.write_bytes(original_inventory)
+            alternate = command.copy()
+            alternate[alternate.index('--inventory') + 1] = str(untracked_inventory)
+            self.assertNotEqual(subprocess.run(alternate, capture_output=True).returncode, 0,
+                                'untracked inventory cannot claim the committed candidate')
+            extra = tracked.with_name('untracked_test.go')
+            extra.write_text('package store\n', encoding='utf-8')
+            self.assertNotEqual(run(), 0, 'untracked Go source cannot claim the committed candidate')
+            extra.unlink()
+            self.assertEqual(run(), 0)
+            other_candidate = command.copy()
+            other_candidate[other_candidate.index('--candidate') + 1] = 'b' * 40
+            self.assertNotEqual(subprocess.run(other_candidate, capture_output=True).returncode, 0)
             user = artifacts / 'go-integration-user-1'
             user.rename(artifacts / 'missing')
             self.assertNotEqual(run(), 0)

@@ -184,12 +184,18 @@ slice crash harness seams are not represented by this focused proof.
 When Messaging is in the PR integration matrix, `messaging-threadlist-integration`
 requires its PostgreSQL immutable-node and rollback test without skips.
 
+When Space is in the PR integration matrix, `space-autovacuum-integration`
+requires the tagged maintenance-window test against owned PostgreSQL, with a
+real autovacuum worker and no skipped test. This does not replace the separate
+Space native catalog or account-ban proofs.
+
 Each Go PR integration matrix member records its uncached Go JSON event stream
 and a diagnostic summary bound to the candidate, run and attempt. The summary
 includes named pass/skip/fail counts and skipped cases and preserves a nonzero
 test exit. `backend-go-integration-evidence` downloads one artifact per selected
 member, validates the exact member set, candidate/run/attempt, summary and raw
-stream digest, and requires each listed case in `go_integration_required.json`
+stream digest, requires a clean exact-candidate source checkout, and requires
+each listed case in `go_integration_required.json`
 to run and pass. This initial inventory covers observed untagged integration
 cases and an Analytics adapter sentinel; it is not a complete inventory of
 native, tagged, opt-in, subtest or cross-service proofs. Those require their own

@@ -2120,6 +2120,7 @@ jobs:
       - bot-membership-integration
       - voice-ledger-integration
       - messaging-threadlist-integration
+      - space-autovacuum-integration
       - backend-auth
       - backend-auth-image
       - developer-portal
@@ -2446,6 +2447,79 @@ jobs:
           path: |
             ${{ runner.temp }}/notification-quota-events.jsonl
             ${{ runner.temp }}/notification-quota-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  space-autovacuum-integration:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: voice
+          POSTGRES_PASSWORD: voice-autovacuum-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U voice -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Configure owned PostgreSQL autovacuum
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql_owned() { docker exec "$PG_CONTAINER" psql -X -qAt -v ON_ERROR_STOP=1 -U voice -d postgres "$@"; }
+          psql_owned -c "ALTER SYSTEM SET autovacuum_naptime = '1s'"
+          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_delay = '20ms'"
+          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '20'"
+          [[ "$(psql_owned -c 'SELECT pg_reload_conf()')" == t ]]
+          for attempt in {1..10}; do
+            if [[ "$(psql_owned -c 'SHOW autovacuum_naptime')" == 1s &&
+                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_delay')" == 20ms &&
+                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_limit')" == 20 ]]; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'owned PostgreSQL autovacuum settings did not reload' >&2
+          exit 1
+      - name: Run Space real-autovacuum proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          NATIVE_INSTALLER_WINDOW_TEST_ADMIN_URL: postgres://voice:voice-autovacuum-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=integration -run '^TestMaintenanceWindowWithRealAutovacuum$' ./internal/nativeinstaller > "$RUNNER_TEMP/space-autovacuum-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_autovacuum_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-autovacuum-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-autovacuum-receipt.json" --reject-skips
+      - name: Upload Space autovacuum evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: space-autovacuum-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/space-autovacuum-events.jsonl
+            ${{ runner.temp }}/space-autovacuum-receipt.json
           if-no-files-found: warn
           retention-days: 14
 

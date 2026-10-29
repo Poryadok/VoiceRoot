@@ -139,7 +139,9 @@ Docker-dependent test ran; inspect its execution evidence and skips.
 
 For a selected PR Go integration matrix, the evidence job rechecks all
 downloaded member diagnostics against `scripts/ci/go_integration_required.json`
-and the candidate/run/attempt. The initial list covers observed untagged
+and the candidate/run/attempt. Its source audit requires a clean checkout at
+the exact candidate SHA and rejects untracked Go or workspace inputs. The
+initial list covers observed untagged
 integration cases plus an Analytics adapter sentinel; it does not inventory all
 native, tagged, opt-in, subtest or cross-service tests. Dedicated checks below
 remain required for their separate cases.
@@ -195,6 +197,10 @@ claimed as passing by this proof.
 The affected Messaging PR proof runs the immutable thread-list node and
 rollback test against owned PostgreSQL via `THREADLIST_TEST_DATABASE_URL` and
 rejects skips.
+The affected Space PR proof enables the `integration` tag and uses an owned
+PostgreSQL server configured to run a real, cost-delayed autovacuum worker.
+It requires `TestMaintenanceWindowWithRealAutovacuum` without skips and checks
+that the actual worker remains present while the maintenance window is valid.
 - BE-076 message views: from `src/backend/messaging`, run
   `go test ./internal/store ./internal/grpcsvc -run TestMessageViews -count=1`
   and `go test ./testfixture -run TestMessagingCompactionUsesActualUserDeletionAuthority -count=1`.

@@ -258,6 +258,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('bot-membership-integration', enabled='bot' in integration)
         selected('voice-ledger-integration', enabled='voice' in integration)
         selected('messaging-threadlist-integration', enabled='messaging' in integration)
+        selected('space-autovacuum-integration', enabled='space' in integration)
         selected('backend-auth', broad + ('auth', 'auth_test_impact'))
         selected('backend-auth-image', broad + ('auth',))
         selected('admin', broad + ('admin',))
