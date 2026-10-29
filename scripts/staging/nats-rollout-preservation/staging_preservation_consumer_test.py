@@ -225,4 +225,27 @@ class ConsumerTests(unittest.TestCase):
                 staging_cohort_preservation.save(rollout/'checkpoint.json',checkpoint)
                 with self.assertRaisesRegex(Exception,'space_live_history_changed'):staging_space_native.validate_historical_live_completed(operation)
 
+    def test_native_predecessor_is_derived_from_protected_active_history(self):
+        with tempfile.TemporaryDirectory(dir='/root') as path,patch.object(guard,'ROOT',Path(path)):
+            root=Path(path);installed=root/'installed';installed.mkdir(mode=0o700)
+            operation='a'*12;old='b'*12;session=SimpleNamespace(operation=operation)
+            active={'operation':old,'namespace_uid':'ns','target_sha256':'c'*64}
+            receipt={'status':'COMPLETE','operation':old};plan={'namespace_uid':'ns'}
+            prepared={'plan':{'previous_active_sha256':transaction.canonical(active)}}
+            (root/('rollout-'+old)).mkdir(mode=0o700)
+            staging_cohort_preservation._write(installed/'active-release.json',active)
+            staging_cohort_preservation._write(root/('rollout-'+old)/'checkpoint.json',
+                {'operation':old,'status':'PASS','phase':'POST_RESTART','target':{'manifest_sha256':'c'*64},'native_space_migration':receipt})
+            with patch.object(staging_cohort_preservation,'_guard',return_value=plan), \
+                 patch.object(staging_cohort_preservation,'_no_pending'), \
+                 patch.object(staging_cohort_preservation,'_source',return_value=({}, {}, prepared)), \
+                 patch.object(staging_space_native,'validate_historical_live_completed',return_value=receipt) as historical:
+                result=staging_space_native.historical_native_predecessor(session)
+                self.assertEqual(result['previous_operation'],old);historical.assert_called_once_with(old)
+                prepared['plan']['previous_active_sha256']='f'*64
+                with self.assertRaisesRegex(Exception,'space_native_predecessor_changed'):
+                    staging_space_native.historical_native_predecessor(session)
+                prepared['plan']['previous_active_sha256']=None
+                self.assertIsNone(staging_space_native.historical_native_predecessor(session))
+
 if __name__=='__main__':unittest.main()

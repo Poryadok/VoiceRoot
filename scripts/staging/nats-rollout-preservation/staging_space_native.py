@@ -566,6 +566,40 @@ def _validate_historical_live_completed(operation,qualified,rollout,binding):
     return copy.deepcopy(receipt)
 
 
+def historical_native_predecessor(session):
+    """Derive the only possible native successor from protected active history."""
+    plan=owner._guard(session);owner._no_pending(session)
+    _,_,prepared=owner._source(session,plan)
+    expected=prepared['plan'].get('previous_active_sha256')
+    active_path=owner.guard.ROOT/'installed'/'active-release.json'
+    if expected is None:
+        # No protected native predecessor is admitted in this branch. The
+        # actual legacy24 inspector still decides whether fresh migration is
+        # eligible; an unrelated older active release is not such a proof.
+        return None
+    active=owner._read(active_path)
+    if owner.digest(active)!=expected:raise Blocked('space_native_predecessor_changed')
+    operation=active.get('operation')
+    if (not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation)
+        or operation==session.operation or active.get('namespace_uid')!=plan['namespace_uid']):
+        raise Blocked('space_native_predecessor_changed')
+    rollout=owner._read(owner.guard.ROOT/('rollout-'+operation)/'checkpoint.json',limit=128<<20)
+    if (rollout.get('operation')!=operation or rollout.get('status')!='PASS' or rollout.get('phase')!='POST_RESTART'
+        or rollout.get('target',{}).get('manifest_sha256')!=active.get('target_sha256')):
+        raise Blocked('space_native_predecessor_changed')
+    previous=owner.guard.ROOT/'installed'/'cohort-preservation'/operation/'space-live'
+    if 'native_space_migration' not in rollout:
+        if previous.exists() or previous.is_symlink():raise Blocked('space_native_predecessor_changed')
+        return None
+    receipt=validate_historical_live_completed(operation)
+    if receipt!=rollout['native_space_migration']:raise Blocked('space_native_predecessor_changed')
+    if owner._guard(session)!=plan or owner._source(session,plan)[2]!=prepared or owner._read(active_path)!=active:
+        raise Blocked('space_native_predecessor_changed')
+    return {'schema':'voice-staging-space-native-predecessor-v1','operation':session.operation,
+        'plan_sha256':owner.digest(plan),'previous_operation':operation,'active_sha256':owner.digest(active),
+        'native_sha256':owner.digest(receipt)}
+
+
 def _identity(session,kube):
     namespace,before=realtime_bootstrap.engine_snapshot(kube)
     value=pg._query(session,'space_db',IDENTITY_SQL,'space-inspect-identity')
