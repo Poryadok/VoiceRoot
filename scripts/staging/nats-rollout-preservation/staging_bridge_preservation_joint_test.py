@@ -252,6 +252,24 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     'spec':{'volumeName':'fixture-postgres-pv'},'status':{'phase':'Bound'}},
    ('persistentvolume','fixture-postgres-pv'):{'metadata':{'uid':pg_volume,'resourceVersion':'1'},
     'spec':{'claimRef':{'uid':pg_claim,'name':'pgdata-voice-postgres-0','namespace':'voice-staging'}}}}
+  pgmeta=lambda name,uid:{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1'}
+  pg_objects[('namespace','voice-staging')]={'metadata':pgmeta('voice-staging','00000000-0000-0000-0000-000000000001')}
+  pg_objects[('statefulset','voice-postgres')]['metadata'].update(pgmeta('voice-postgres',pg_controller))
+  pod=pg_objects[('pod','voice-postgres-0')]
+  pod['metadata'].update(pgmeta('voice-postgres-0',pg_pod),labels={'app':'voice-postgres'})
+  pod['spec']['volumes'][0]['name']='pgdata'
+  pod['spec']['containers']=[{'name':'postgres','volumeMounts':[{'name':'pgdata','mountPath':'/var/lib/postgresql/data'}]}]
+  pod['status'].update(podIP='10.0.0.2')
+  pod['status']['containerStatuses'][0].update(state={'running':{}},containerID='containerd://fixture',restartCount=0)
+  pg_objects[('persistentvolumeclaim','pgdata-voice-postgres-0')]['metadata'].update(pgmeta('pgdata-voice-postgres-0',pg_claim))
+  pg_objects[('persistentvolume','fixture-postgres-pv')]['metadata'].update(pgmeta('fixture-postgres-pv',pg_volume))
+  pg_objects[('persistentvolume','fixture-postgres-pv')]['status']={'phase':'Bound'}
+  pg_objects[('service','voice-postgres')]={'metadata':pgmeta('voice-postgres','pg-service'),
+   'spec':{'selector':{'app':'voice-postgres'},'clusterIP':'10.0.0.1','ports':[{'port':5432}]}}
+  pg_objects[('endpoints','voice-postgres')]={'metadata':pgmeta('voice-postgres','pg-endpoints'),
+   'subsets':[{'addresses':[{'ip':'10.0.0.2','targetRef':{'kind':'Pod','uid':pg_pod}}],'ports':[{'port':5432}]}]}
+  pg_slice={'metadata':pgmeta('pg-slice','pg-slice-uid'),'ports':[{'port':5432}],
+   'endpoints':[{'addresses':['10.0.0.2'],'conditions':{'ready':True},'targetRef':{'kind':'Pod','uid':pg_pod}}]}
   nats_secrets={};bootstrap_configmaps={}
   if 'VOICE_TEST_NATS_INPUTS' in os.environ:
    import actor_root, bootstrap_auth, bootstrap_selection
@@ -313,6 +331,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   def run(args,**kwargs):
    session.check()
    import actor_root
+   if args==['get','endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json']:
+    return {'items':[copy.deepcopy(pg_slice)]}
    if args==['get','pods','-l','app='+stage_runtime.HUB,'-o','json']:
     return {'items':[{'metadata':{'name':stage_runtime.HUB+'-synthetic',
       'ownerReferences':[{'kind':'ReplicaSet','name':'replicaset-1','uid':'rs-1'}]},
