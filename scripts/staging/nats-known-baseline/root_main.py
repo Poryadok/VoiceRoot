@@ -45,6 +45,31 @@ def operator_error(error):
     types={'TypeError','KeyError','NameError','OSError','ValueError','TimeoutError','FileNotFoundError','FileExistsError','PermissionError'}
     return 'exception_'+type(error).__name__ if type(error).__name__ in types else 'exception_unclassified'
 
+_LOCK_PROOF_KEY=object()
+
+
+class OperationLockProof:
+    """A live, process-local witness for the existing root operation flock."""
+    def __init__(self,key,fd,path):
+        if key is not _LOCK_PROOF_KEY:raise Blocked('operation_lock_proof_invalid')
+        self._fd=fd;self._path=path;self._pid=os.getpid();self._active=True
+
+    def check(self):
+        try:
+            if not self._active or self._pid!=os.getpid() or self._path!=ROOT/'known-baseline.lock':raise ValueError()
+            info=os.fstat(self._fd);path=self._path.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o077 or info.st_nlink!=1
+                or (info.st_dev,info.st_ino)!=(path.st_dev,path.st_ino) or not stat.S_ISREG(path.st_mode)):
+                raise ValueError()
+            rows=Path('/proc/self/fdinfo/'+str(self._fd)).read_text(encoding='ascii').splitlines()
+            pattern=r'lock:\s+\d+:\s+FLOCK\s+ADVISORY\s+WRITE\s+(\d+)\s+([0-9a-f]+):([0-9a-f]+):(\d+)\s+0\s+EOF'
+            matches=[re.fullmatch(pattern,row) for row in rows]
+            matches=[m for m in matches if m]
+            if (len(matches)!=1 or int(matches[0][1])!=self._pid or int(matches[0][2],16)!=os.major(info.st_dev)
+                or int(matches[0][3],16)!=os.minor(info.st_dev) or int(matches[0][4])!=info.st_ino):raise ValueError()
+        except (OSError,ValueError,UnicodeError):raise Blocked('operation_lock_proof_invalid') from None
+
+
 @contextmanager
 def operation_lock():
     fd=os.open(ROOT/'known-baseline.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
@@ -54,7 +79,9 @@ def operation_lock():
             raise Blocked('operation_lock_custody_invalid')
         try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise Blocked('operation_already_running') from None
-        yield
+        proof=OperationLockProof(_LOCK_PROOF_KEY,fd,ROOT/'known-baseline.lock')
+        try:yield proof
+        finally:proof._active=False
     finally:os.close(fd)
 
 def bind_code(code,state):

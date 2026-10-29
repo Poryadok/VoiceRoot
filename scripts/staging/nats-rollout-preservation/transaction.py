@@ -366,8 +366,8 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             raise Blocked('rollout_frontend_auxiliary_action_forbidden')
         snapshot_names={r['metadata']['name'] for r in manifests if r.get('kind')=='Deployment'}
         if gis_first_install is not None:
-            # The add-only target contains only the new GIS pair; independently
-            # retain every pre-existing workload in the preservation cut.
+            # The GIS pair is always create-only. Retain every existing
+            # workload in the cut, including a full application target.
             existing={obj.get('name') for row in non_nats.get('checks',[]) for obj in row.get('objects',[])
                 if obj.get('kind')=='Deployment'}
             import gis_first_install as gis
@@ -375,8 +375,7 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
                 raise Blocked('gis_first_install_baseline_workload_count_invalid')
             # The new GIS Deployment does not exist yet and is managed by its
             # create-only receipt. The preservation stage snapshots the 22
-            # existing workloads, then verifies those same UIDs/templates
-            # after the GIS-only target has been applied.
+            # existing workloads; GIS is bound by its separate create receipt.
             snapshot_names=existing
         if gis_binding is not None:
             if gis_first_install is not None or gis_transition is not None:

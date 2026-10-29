@@ -24,7 +24,7 @@ def _materialize_capture(base):
         raise RuntimeError('captured_code_manifest_missing')
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
-    if not isinstance(manifest, dict) or not 1 <= len(manifest) <= 101:
+    if not isinstance(manifest, dict) or not 1 <= len(manifest) <= 102:
         raise RuntimeError('captured_code_manifest_invalid')
     required = {
         'nats-rollout-preservation/contract_fixture_entry.py',
