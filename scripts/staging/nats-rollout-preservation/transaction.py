@@ -203,34 +203,40 @@ def checkpoint_journal(base,state,stage_getter):
     return journal
 
 
-def verify_gis_before_fence(kube,state):
+def verify_gis_before_fence(kube,state,*,paused=False):
     import gis_existing_update as existing
-    existing.verify_phase(state['gis_binding'],kube,'active')
+    existing.verify_phase(state['gis_binding'],kube,'paused-old' if paused else 'active')
     if existing.service_account_preflight(kube,state['gis_binding']['target']['spec']['template']['spec'])!=state['gis_service_account']:
         raise Blocked('gis_existing_service_account_changed')
     if private_json(guard.ROOT/'installed'/'active-release.json')!=state['gis_expected_active']:
         raise Blocked('gis_existing_authority_changed')
 
 
-def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
+def prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None,preservation_ref=None):
     try:
         return _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,
             before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,
             actor_services=actor_services,renderer_authority=renderer_authority,lifecycle=lifecycle,
             gis_first_install=gis_first_install,gis_source_root=gis_source_root,gis_source_capture=gis_source_capture,
             gis_source_authority=gis_source_authority,gis_transition=gis_transition,resource_session=resource_session,
-            gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt,prerequisites_capture=prerequisites_capture)
+            gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt,prerequisites_capture=prerequisites_capture,preservation_ref=preservation_ref)
     except Exception as error:
         if realtime_bootstrap_receipt is not None or prerequisites_capture is not None:
             path=Path(base)/'checkpoint.json'
             if path.exists():
-                state=private_json(path)
+                state=private_json(path,limit=128<<20)
                 if state.get('phase')=='READ_ONLY_CAPTURE':
                     state.update(status='BLOCKED',fence_status='UNKNOWN',error=safe_error(error))
                     save(path,state)
         raise
 
-def _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
+def prepare_preserved(*args,preservation_ref,resource_session,**kwargs):
+    if preservation_ref is None or resource_session is None or kwargs.get('before_fence') is not None:
+        raise Blocked('cohort_preserved_prepare_invalid')
+    return prepare(*args,preservation_ref=preservation_ref,resource_session=resource_session,**kwargs)
+
+
+def _prepare(kube,base,code,target,contract,operation,code_capture,migration_plan,non_nats,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_first_install=None,gis_source_root=None,gis_source_capture=None,gis_source_authority=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None,preservation_ref=None):
     # base creation/root lock/captured code custody belongs to the root launcher.
     base=Path(base);code=Path(code)
     state={'schema':'nats-rollout-root-v1','operation':operation,'phase':'READ_ONLY_CAPTURE',
@@ -240,6 +246,17 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
            'service_actor_authority':copy.deepcopy(actor_authority),
            'renderer_authority':copy.deepcopy(renderer_authority),
            'service_actor_services':list(actor_services or [])}
+    preserved=None
+    if preservation_ref is not None:
+        import staging_cohort_preservation
+        if (resource_session is None or resource_session.operation!=operation or prerequisites_capture is None
+            or realtime_bootstrap_receipt is None
+            or staging_cohort_preservation.load_qualified(resource_session)!=preservation_ref
+            or target.get('cohort_preservation_sha256')!=canonical(preservation_ref)):
+            raise Blocked('cohort_preserved_prepare_invalid')
+        preserved=staging_cohort_preservation.load_rollout_continuation(resource_session)
+        if preserved['contract']!=contract:raise Blocked('cohort_preserved_contract_changed')
+        state['cohort_preservation']=copy.deepcopy(preservation_ref)
     if realtime_bootstrap_receipt is None and 'realtime_bootstrap_sha256' in target:
         raise Blocked('realtime_bootstrap_receipt_missing')
     if prerequisites_capture is None and 'prerequisites_sha256' in target:
@@ -365,7 +382,8 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             if gis_first_install is not None or gis_transition is not None:
                 raise Blocked('gis_existing_admission_conflict')
             import gis_existing_update as existing
-            if existing.load_authority(kube)!=gis_binding:
+            actual_gis=(existing.load_authority(kube) if preserved is None else staging_prerequisites.load_gis_authority(resource_session))
+            if actual_gis!=gis_binding:
                 raise Blocked('gis_existing_authority_changed')
             state['gis_expected_active']=copy.deepcopy(private_json(guard.ROOT/'installed'/'active-release.json'))
             if state['gis_expected_active'].get('gis_first_install_transition')!={
@@ -373,8 +391,13 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
                 raise Blocked('gis_existing_authority_changed')
             snapshot_names.add('voice-gameintegration')
         capture_args={'gis_binding':gis_binding} if gis_binding is not None else {}
-        stage=RolloutStage.capture(kube,operation,journal,
-            sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []),**capture_args)
+        if preserved is None:
+            stage=RolloutStage.capture(kube,operation,journal,
+                sorted(snapshot_names)+([renderer_root.HUB] if renderer_authority is not None else []),**capture_args)
+        else:
+            stage=staging_cohort_preservation.capture_final_stage(resource_session)
+            stage.save=journal
+            if not snapshot_names<=set(stage.snapshots):raise Blocked('cohort_preserved_workload_inventory_changed')
         if target['mode']=='images-only':
             manifests,target=image_only_documents(stage,manifests,target,renderer_authority=renderer_authority)
             save(base/'apply-manifests.json',manifests)
@@ -426,7 +449,8 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             state['space_preflight']['migration_plan_sha256']=target['migration_sha256']
         try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment.json')
         except FileNotFoundError:enrollment=None
-        state['provenance']=capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
+        state['provenance']=(capture_inputs(kube,base,contract,stage.expected['generation'],bootstrap_enrollment=enrollment)
+                             if preserved is None else copy.deepcopy(preserved['provenance']))
         if enrollment is not None:state['bootstrap_enrollment']=copy.deepcopy(enrollment)
         if nats_authority is not None:
             if enrollment is None:raise Blocked('nats_migration_enrollment_missing')
@@ -434,9 +458,12 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             state['nats_contract_binding']=copy.deepcopy(nats_authority['binding'])
             state['nats_target_scripts']=copy.deepcopy(nats_authority['scripts'])
             state['nats_contract_expires_at']=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=4)).isoformat()
-        shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
+        if preserved is None:
+            shutil.copyfile(code/'kernel',base/'kernel');os.chmod(base/'kernel',0o550);os.chown(base/'kernel',0,65532)
+        elif file_sha(code/'kernel')!=file_sha(base/'kernel'):
+            raise Blocked('cohort_preserved_kernel_changed')
         state['kernel_sha256']=file_sha(base/'kernel')
-        if gis_binding is not None:verify_gis_before_fence(kube,state)
+        if gis_binding is not None:verify_gis_before_fence(kube,state,paused=preserved is not None)
     except Exception as error:
         import deployment_report
         deployment_report.capture_failure(error)
@@ -451,10 +478,19 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
     state['phase']='FENCE';save(base/'checkpoint.json',state)
     try:
         nonnats_plan.revalidate(kube,state['nonnats_binding'])
+        if preserved is not None:
+            import actor_root
+            import compiler
+            preflight=staging_cohort_preservation.load_preflight(resource_session)
+            if (preflight['nats']!=nats_authority or preflight['services']!=list(actor_services or [])
+                or preflight['contract']!=contract):raise Blocked('cohort_preserved_authority_changed')
+            actor_root.revalidate(kube,guard.ROOT/'installed'/'sources'/operation,code.parent,code_capture,
+                                  stage,actor_services,compiler.decode_yaml,actor_authority)
+            staging_cohort_preservation.revalidate_paused(resource_session)
         if before_fence is not None:before_fence()
         if gis_binding is not None:
             if resource_session is None:raise Blocked('gis_existing_resource_fence_required')
-            verify_gis_before_fence(kube,state)
+            verify_gis_before_fence(kube,state,paused=preserved is not None)
         if resource_session is not None:
             if realtime_bootstrap_receipt is not None and bootstrap_schema=='voice-staging-realtime-bootstrap-receipt-v1':
                 resource_session.advance_realtime_bootstrap(state['target'],stage.old_images)
@@ -474,8 +510,15 @@ def _prepare(kube,base,code,target,contract,operation,code_capture,migration_pla
             if staging_prerequisites.load_capture(resource_session,actual=stage.old_images,rollout_target=state['target'])!=prerequisites_capture:
                 raise Blocked('staging_prerequisites_capture_changed')
         if gis_binding is not None:
-            verify_gis_before_fence(kube,state)
+            verify_gis_before_fence(kube,state,paused=preserved is not None)
         stage.runtime_base=base
+        if preserved is not None:
+            staging_cohort_preservation.revalidate_paused(resource_session)
+            state.update(context=context(stage),fence_status='VERIFIED',events=copy.deepcopy(preserved['events']),
+                         cut=copy.deepcopy(preserved['cut']),custody=copy.deepcopy(preserved['custody']),
+                         phase='AWAITING_OFF_NODE',status='WAITING')
+            save(base/'checkpoint.json',state)
+            return state
         stage.fence();state['context']=context(stage);state['fence_status']='VERIFIED'
         save(base/'checkpoint.json',state)
         runtime=DockerRuntime(base,operation)
@@ -567,6 +610,7 @@ def rollback_gis_first_install(kube,base,state,journal):
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
+    migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
     if state.get('gis_first_install') is not None:
         import gis_first_install as gis
         gis.validate_normalized_binding(state['target'],state['gis_first_install'])

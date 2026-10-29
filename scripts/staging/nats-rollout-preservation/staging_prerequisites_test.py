@@ -16,6 +16,62 @@ from root_main import save
 
 
 class PrivateCustodyTests(unittest.TestCase):
+    def test_paused_gis_authority_requires_protected_prepared_hash_and_active_anchor(self):
+        import staging_cohort_preservation as cohort
+        import gis_existing_update
+        from stage_runtime import Kube
+        binding={'operation':'d'*12,'anchor_sha256':'e'*64}
+        active={'gis_first_install_transition':{'operation':binding['operation'],'receipt_sha256':binding['anchor_sha256']}}
+        record={'binding':binding,'active':active}
+        prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':{},'request':{},'gis_authority_sha256':prereq.digest(record)}
+        receipt={'prerequisite_inputs_sha256':prereq.digest(prepared)};session=SimpleNamespace(check=lambda:None)
+        def read(path,**kwargs):
+            values={'prepared.json':prepared,'gis-authority.json':record,'active-release.json':active}
+            return json.dumps(values[path.name]).encode()
+        with patch.object(cohort,'load_qualified',return_value=receipt),patch.object(prereq,'_base',return_value=Path('/fixture')), \
+             patch.object(prereq,'_read_private',side_effect=read),patch.object(gis_existing_update,'verify_phase') as verify,patch.object(Kube,'__init__',return_value=None):
+            self.assertEqual(prereq.load_gis_authority(session),binding)
+            self.assertEqual(verify.call_args.args[2],'paused-old')
+            record['binding']['operation']='f'*12
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_gis_authority_changed'):
+                prereq.load_gis_authority(session)
+
+    def test_v2_capture_binds_producer_paused_stage_and_rejects_drift(self):
+        import realtime_bootstrap
+        import staging_cohort_preservation as cohort
+        from runtime_stage import RolloutStage
+        session=SimpleNamespace(operation='a'*12,context={'claim':'fixture'},helper='b'*64)
+        stage=object.__new__(RolloutStage);stage.operation=session.operation
+        stage.expected={'deployment_uids':{'voice-user':'uid'}};stage.old_images={'voice-user/user':'image'}
+        stage.marker={'metadata':{'name':'marker'},'data':{'phase':'capturing'}}
+        stage.snapshots={'voice-user':{'metadata':{'uid':'uid','generation':2},'spec':{'replicas':0}}}
+        stage.original_snapshots={'voice-user':{'metadata':{'uid':'uid','generation':1},'spec':{'replicas':1}}}
+        state={'plan':{'schema':'voice-staging-prerequisites-plan-v2','source_capture_sha256':'c'*64,'namespace_uid':'namespace'},
+               'receipt':{'actual_before':stage.old_images,'actual_after':stage.old_images}}
+        with patch.object(prereq,'_completed',return_value=state),patch.object(prereq,'_private_write'), \
+             patch.object(prereq,'_base',return_value=Path('/fixed')),patch.object(cohort,'capture_final_stage',return_value=stage):
+            result=prereq.capture(session,stage)
+            self.assertEqual(result['stage']['workloads'],realtime_bootstrap._stage_view(stage))
+            altered=copy.deepcopy(stage);altered.snapshots['voice-user']['spec']['replicas']=1
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_capture_changed'):prereq.capture(session,altered)
+
+    def test_preserved_publisher_accepts_only_bound_auxiliary_metadata(self):
+        import staging_cohort_preservation as cohort
+        response={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging',
+                  'uid':'publisher-uid','resourceVersion':'7','generation':3},'spec':{'replicas':1,'template':{'spec':{'containers':[]}}}}
+        observed={'uid':'publisher-uid','resourceVersion':'2','generation':1,'semantic_sha256':prereq.digest(prereq._semantic(response))}
+        plan={'children':{'p3':{'preserved':{'Deployment/voice-p3-principal-jwks':{'observed':observed}}}}}
+        with patch.object(cohort,'load_auxiliary_successor',return_value={'response':response}):
+            prereq._bind_auxiliary_successor(object(),plan)
+        self.assertEqual((observed['generation'],observed['resourceVersion']),(3,'7'))
+        changed=copy.deepcopy(response);changed['spec']['replicas']=2
+        with patch.object(cohort,'load_auxiliary_successor',return_value={'response':changed}):
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_auxiliary_changed'):
+                prereq._bind_auxiliary_successor(object(),plan)
+        with patch.object(cohort,'load_auxiliary_successor',return_value=None):
+            with self.assertRaisesRegex(prereq.Blocked,'staging_prerequisites_auxiliary_missing'):
+                prereq._bind_auxiliary_successor(object(),plan)
+
     def test_auxiliary_module_executes_exact_source_not_timestamp_cached_bytecode(self):
         import os, py_compile
         with tempfile.TemporaryDirectory(dir='/root') as folder:

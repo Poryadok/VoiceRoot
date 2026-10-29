@@ -2,6 +2,7 @@ package grpcsvc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -87,14 +88,29 @@ func (s *SpaceGRPC) requireSpaceOwnerForProfile(ctx context.Context, spaceID, ca
 }
 
 func (s *SpaceGRPC) bootstrapSpaceRoles(ctx context.Context, spaceID, ownerProfileID uuid.UUID) error {
-	if s.Roles == nil {
-		return nil
+	if s == nil || s.OwnershipRoles == nil || s.PrincipalIssuer == nil {
+		return status.Error(codes.Unavailable, "protected owner bootstrap runtime unavailable")
 	}
-	_, err := s.Roles.BootstrapSpaceRoles(ctx, &rolev1.BootstrapSpaceRolesRequest{
+	req := &rolev1.BootstrapSpaceRolesRequest{
 		SpaceId:        spaceID.String(),
 		OwnerProfileId: ownerProfileID.String(),
-	})
-	return err
+	}
+	// A durable Space retry repeats the same owner binding with a fresh signed
+	// dispatch. The ordinary Role listener cannot establish bootstrap authority.
+	signed, err := s.ownershipRoleContext(ctx, req, rolev1.RoleService_BootstrapSpaceRoles_FullMethodName, uuid.New())
+	if err != nil {
+		return err
+	}
+	bounded, cancel := context.WithTimeout(signed, 5*time.Second)
+	defer cancel()
+	response, err := s.OwnershipRoles.BootstrapSpaceRoles(bounded, req)
+	if err != nil {
+		return err
+	}
+	if response == nil || len(response.ProtoReflect().GetUnknown()) != 0 {
+		return status.Error(codes.Unavailable, "owner bootstrap outcome unavailable")
+	}
+	return nil
 }
 
 func (s *SpaceGRPC) assignDefaultMemberRole(ctx context.Context, spaceID, profileID uuid.UUID) error {
@@ -155,60 +171,73 @@ func (s *SpaceGRPC) revokeAllMemberRoles(ctx context.Context, spaceID, profileID
 	}
 }
 
-// ensureCommunityMemberRole projects only the Space's baseline Member role.
-// External rank claims never select or elevate a Role role.
+// Native Role derives the fixed managed Member from fresh Space community
+// authority. Publication precedes this read; Space never assigns today's
+// default role or impersonates the Owner to manufacture a community grant.
 func (s *SpaceGRPC) ensureCommunityMemberRole(ctx context.Context, spaceID, profileID uuid.UUID) error {
-	if s == nil || s.Roles == nil {
-		return nil
-	}
-	roles, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{SpaceId: spaceID.String(), ProfileId: profileID.String()})
+	present, err := s.communityMemberRolePresent(ctx, spaceID, profileID)
 	if err != nil {
 		return err
 	}
-	for _, role := range roles.GetRoleList().GetRoles() {
-		if role.GetName() == permissions.RoleMember {
-			return nil
-		}
+	if !present {
+		return status.Error(codes.Unavailable, "community Member projection unavailable")
 	}
-	return s.assignDefaultMemberRole(ctx, spaceID, profileID)
+	return nil
 }
 
-// revokeCommunityMemberRole removes only the baseline Member role and only
-// when the profile has no independent Space membership. Elevated user roles
-// are never selected by game rank or removed here.
+// Removal of Space's community episode removes its native Role projection.
+// Confirm that outcome without deleting independent ordinary contributions.
 func (s *SpaceGRPC) revokeCommunityMemberRole(ctx context.Context, spaceID, profileID uuid.UUID) error {
-	if s == nil || s.Roles == nil {
-		return nil
+	if s == nil || s.Store == nil {
+		return status.Error(codes.Unavailable, "community membership authority unavailable")
 	}
 	manual, err := s.Store.IsSpaceMember(ctx, spaceID, profileID)
 	if err != nil || manual {
 		return err
 	}
-	roleList, err := s.Roles.ListRoles(ctx, &rolev1.ListRolesRequest{SpaceId: spaceID.String()})
+	present, err := s.communityMemberRolePresent(ctx, spaceID, profileID)
 	if err != nil {
 		return err
 	}
-	var memberRoleID string
-	for _, role := range roleList.GetRoleList().GetRoles() {
-		if role.GetName() == permissions.RoleMember {
-			memberRoleID = role.GetId()
-			break
-		}
-	}
-	if memberRoleID == "" {
-		return nil
-	}
-	memberRoles, err := s.Roles.GetMemberRoles(ctx, &rolev1.GetMemberRolesRequest{SpaceId: spaceID.String(), ProfileId: profileID.String()})
-	if err != nil {
-		return err
-	}
-	for _, role := range memberRoles.GetRoleList().GetRoles() {
-		if role.GetId() == memberRoleID {
-			_, err = s.Roles.RevokeRole(ctx, &rolev1.RevokeRoleRequest{SpaceId: spaceID.String(), ProfileId: profileID.String(), RoleId: memberRoleID})
-			return err
-		}
+	if present {
+		return status.Error(codes.Unavailable, "community Member revocation unavailable")
 	}
 	return nil
+}
+
+func (s *SpaceGRPC) communityMemberRolePresent(ctx context.Context, spaceID, profileID uuid.UUID) (bool, error) {
+	if s == nil || s.OwnershipRoles == nil || s.PrincipalIssuer == nil {
+		return false, status.Error(codes.Unavailable, "protected community Role runtime unavailable")
+	}
+	req := &rolev1.GetMemberRolesRequest{SpaceId: spaceID.String(), ProfileId: profileID.String()}
+	signed, err := s.ownershipRoleContext(ctx, req, rolev1.RoleService_GetMemberRoles_FullMethodName, uuid.New())
+	if err != nil {
+		return false, err
+	}
+	bounded, cancel := context.WithTimeout(signed, 5*time.Second)
+	defer cancel()
+	response, err := s.OwnershipRoles.GetMemberRoles(bounded, req)
+	if err != nil {
+		return false, err
+	}
+	invalid := status.Error(codes.Unavailable, "community Role projection response unavailable")
+	if response == nil || response.RoleList == nil || len(response.ProtoReflect().GetUnknown()) != 0 || len(response.RoleList.ProtoReflect().GetUnknown()) != 0 {
+		return false, invalid
+	}
+	present := false
+	for _, role := range response.RoleList.Roles {
+		if role == nil || len(role.ProtoReflect().GetUnknown()) != 0 || role.SpaceId != spaceID.String() {
+			return false, invalid
+		}
+		id, err := uuid.Parse(role.Id)
+		if err != nil || id == uuid.Nil || id.String() != role.Id {
+			return false, invalid
+		}
+		if role.Managed && role.Name == permissions.RoleMember {
+			present = true
+		}
+	}
+	return present, nil
 }
 
 func (s *SpaceGRPC) memberRoleNames(ctx context.Context, spaceID, profileID uuid.UUID) []string {

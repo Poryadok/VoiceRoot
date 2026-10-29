@@ -4,6 +4,7 @@ import copy
 import hashlib
 from pathlib import Path
 import unittest
+from unittest import mock
 
 import media_backup_phase_test as fixtures
 import media_operation_journal
@@ -63,6 +64,36 @@ class JournalIntegration(unittest.TestCase):
         self.assertEqual(self.journal.state['steps']['realtime-db-role']['status'], 'pending')
         with self.assertRaises(provision.RecoveryRequired): self.worker.run()
         self.assertIsNone(self.pg.state['database'])
+
+    def test_completed_verifier_rejects_ledger_and_catalog_drift(self):
+        self.worker.run()
+        with mock.patch.object(provision, 'KubePostgres', type(self.pg)):
+            receipt = provision.verify_completed(self.worker)
+            self.assertEqual(receipt['database_oid'], 13)
+            self.assertEqual(receipt['role_oid'], 12)
+            self.base.ledger.row['realtime_db_provision']['steps']['database']['nonce'] = 'changed'
+            with self.assertRaises(provision.RecoveryRequired):
+                provision.verify_completed(self.worker)
+            self.base.ledger.row['realtime_db_provision']['steps']['database'] = copy.deepcopy(
+                self.journal.state['steps']['realtime-db-database'])
+            self.pg.state['database']['oid'] = 14
+            with self.assertRaises(provision.RecoveryRequired):
+                provision.verify_completed(self.worker)
+
+    def test_secret_drift_during_final_catalog_is_rejected(self):
+        self.worker.run()
+        original = self.pg.catalog
+        calls = 0
+        def catalog():
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                self.secret['resourceVersion'] = 'changed'
+            return original()
+        self.pg.catalog = catalog
+        with mock.patch.object(provision, 'KubePostgres', type(self.pg)):
+            with self.assertRaises(provision.RecoveryRequired):
+                provision.verify_completed(self.worker)
 
 
 if __name__ == '__main__': unittest.main()

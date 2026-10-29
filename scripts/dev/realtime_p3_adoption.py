@@ -58,7 +58,7 @@ def plan_service(original_service, expected_pod_labels):
              {'op': 'replace', 'path': '/spec', 'value': target}], target)
 
 
-def plan(original_deployment, admitted_image, assets_receipts):
+def plan(original_deployment, admitted_image, assets_receipts, *, operation_id=None):
     """Return (JSON Patch, target spec, receipt digest); caller verifies evidence."""
     if not isinstance(assets_receipts, dict) or set(assets_receipts) != {'assets', 'schema', 'public_hashes', 'service', 'transport_evidence_sha256'}:
         raise ValueError('unexpected receipt fields')
@@ -70,14 +70,24 @@ def plan(original_deployment, admitted_image, assets_receipts):
     if not all(isinstance(meta.get(k), str) and meta[k] for k in ('uid', 'resourceVersion')):
         raise ValueError('deployment identity required')
     assets = assets_receipts.get('assets', {})
-    if set(assets) != set(ASSETS):
+    expected_assets = dict(ASSETS)
+    secret_name, secret_key = 'voice-app-secrets', 'REALTIME_DATABASE_URL'
+    credential_name = None
+    if operation_id is not None:
+        match = re.fullmatch(r'media-c[12]-([0-9a-f]{32})',operation_id) if isinstance(operation_id,str) else None
+        if not match: raise ValueError('invalid operation identity')
+        credential_name = 'voice-realtime-db-' + match.group(1)
+        expected_assets.pop(secret_name)
+        secret_name, secret_key = credential_name, 'DATABASE_URL'
+        expected_assets[secret_name] = {secret_key}
+    if set(assets) != set(expected_assets):
         raise ValueError('asset inventory incomplete')
-    for name, keys in ASSETS.items():
+    for name, keys in expected_assets.items():
         item = assets[name]
         if not isinstance(item, dict) or not all(isinstance(item.get(k), str) and item[k] for k in ('uid', 'resourceVersion')):
             raise ValueError('asset identity required')
         expected_fields = {'uid', 'resourceVersion', 'keys', 'kind', 'namespace'}
-        if name == 'voice-p3-principal-public':
+        if name == 'voice-p3-principal-public' or name == credential_name:
             expected_fields.add('immutable')
         if set(item) != expected_fields:
             raise ValueError('unexpected receipt fields')
@@ -91,6 +101,8 @@ def plan(original_deployment, admitted_image, assets_receipts):
             raise ValueError('unexpected asset keys')
     if assets['voice-p3-principal-public'].get('immutable') is not True:
         raise ValueError('public issuer set must be immutable')
+    if credential_name is not None and assets[credential_name].get('immutable') is not True:
+        raise ValueError('operation credential must be immutable')
     public, schema = assets_receipts.get('public_hashes', {}), assets_receipts.get('schema', {})
     if set(public) != PUBLIC_HASHES or not all(_digest(x) for x in public.values()):
         raise ValueError('public identity hashes required')
@@ -99,7 +111,7 @@ def plan(original_deployment, admitted_image, assets_receipts):
     if not _digest(assets_receipts.get('transport_evidence_sha256')):
         raise ValueError('transport evidence required')
     env = [
-        _ref('DATABASE_URL', 'secret', 'voice-app-secrets', 'REALTIME_DATABASE_URL'),
+        _ref('DATABASE_URL', 'secret', secret_name, secret_key),
         _env('REALTIME_PRINCIPAL_SIGNING_KEYS_DIR', '/etc/voice/p3/keys'),
         _env('REALTIME_PRINCIPAL_ACTIVE_KID', 'current'),
         _env('REALTIME_PRINCIPAL_JWKS_FILE', '/etc/voice/p3/public/realtime.json'),

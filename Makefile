@@ -317,6 +317,14 @@ ci-script-tests: ci-script-tests-policy ci-script-tests-runtime ci-script-tests-
 ci-script-tests-pr: export VOICE_CONTRACT_PROFILE := current
 ci-script-tests-pr: ci-script-tests
 ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix-test verify-required-jobs-test buf-generate-ci-local-template-check image-catalog-drift-check
+	python3 "$(ROOT)/scripts/dev/auth_flyway_upgrade_qualification_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_flyway_upgrade_qualification_cohort_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_flyway_upgrade_qualification_journal_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_mixed_restore_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_eligibility_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_c2_journal_test.py"
+	python3 "$(ROOT)/scripts/dev/auth_live_migration_phase_cut_test.py"
 	python3 "$(ROOT)/scripts/ci/full_application_request_test.py"
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
@@ -329,6 +337,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
 
 ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
+	python3 -m unittest discover -s "$(ROOT)/scripts/dev" -p 'space_fresh_install_phase*_test.py'
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p a4_rollout_evidence_test.py

@@ -67,20 +67,21 @@ must not be installed solely to reach the later full 23 prerequisite helper.
 The future direct transition is tied to the observed 81-member predecessor,
 not to an assumed intermediate installation. Its final source and member
 inventory must be frozen and independently reviewed before its entry is used.
-The current candidate is based on `e49806531d5b05b6a521b249a9eed46e520699ab`
-and contains 89 members, including both Realtime bootstrap modules and the
-observed binary pins. Its 88-member projection excluding its independently
+The provisional candidate is based on `83950c631442553a551cdacdf659a996ab2a3cf3`
+and contains 94 members, including the protected prerequisite and Realtime
+bootstrap modules and the observed binary pins. Its 93-member projection excluding its independently
 authorized running installer is
-`8f5e1095a702b4bcde11ae5be2111457cf61a05010da1b2bfd95200ed8180dae`.
+`54aa6eca4a2f7435224fac6e3ac5f4953601122d91fded31eb7dd3953fc62ff4`.
 The fixed entry is `--install --upgrade-idle-full23-installed-cohort-v1`;
 any change to its source members requires a new projection, exact bundle and
 independent review. This candidate does not establish eligible source or CI.
 
 For this exact legacy predecessor, new private history paths
-`installed/source-authority` and `installed/realtime-bootstrap` must both be
+`installed/source-authority`, `installed/realtime-bootstrap` and
+`installed/prerequisites` must all be
 absent under the existing operation lock before closing ingress, immediately
 before the code swap, and immediately after it. Any existing file, directory,
-or symbolic link at either path requires reconciliation; nothing is deleted
+or symbolic link at any path requires reconciliation; nothing is deleted
 or adopted. Established checks continue to protect reviewed source workspaces
 and rollout history. The old helper can have `installed/source-archives`; the
 transition neither requires that cache to be absent nor replaces it.

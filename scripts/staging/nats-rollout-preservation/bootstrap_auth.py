@@ -29,7 +29,13 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
         config='host: 127.0.0.1\nport: 4222\nhttp: 127.0.0.1:8222\nmax_control_line: 32768\noperator: '+q(tokens['operator.jwt'])+'\nsystem_account: '+q(tokens['system-account.public'])+'\nresolver: MEMORY\nresolver_preload: { '+q(tokens['account.public'])+': '+q(tokens['account.jwt'])+', '+q(tokens['system-account.public'])+': '+q(tokens['system-account.jwt'])+' }\njetstream { store_dir: /data }\n'
         p=base/'server.conf';p.write_text(config);p.chmod(0o440);os.chown(p,0,65532)
         store=base/'auth-store';store.mkdir(mode=0o700);os.chown(store,65532,65532)
-        runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
+        import commands,resource_claim
+        session=getattr(commands.authority_guard,'__self__',None)
+        cohort_runtime=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+        if cohort_runtime:
+            import staging_cohort_preservation
+            runtime=staging_cohort_preservation.auth_runtime(session,base,'bootstrap')
+        else:runtime=DockerRuntime(base,'auth'+uuid.uuid4().hex[:12])
         try:
             broker=runtime.start_broker('proof',store);ready(runtime,broker)
             actor=Actor(runtime,broker,runtime.owned[broker]['id'],store,unchanged,
@@ -79,6 +85,9 @@ def prove(credentials,operator,unchanged,required_get_streams=None,*,version='vo
             if get_proof is not None:result['get_permissions']=get_proof
             return result
         finally:
-            for name in reversed(list(runtime.owned)):
-                row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
-                if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
+            try:
+                for name in reversed(list(runtime.owned)):
+                    row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
+                    if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('bootstrap_auth_cleanup_failed')
+            finally:
+                if cohort_runtime:runtime.finish_auth()

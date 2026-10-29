@@ -37,6 +37,85 @@ class MemoryJournal:
 
 
 class ResourceTests(unittest.TestCase):
+    def test_cohort_target_requires_exact_root_qualified_receipt(self):
+        import sys
+        from unittest.mock import Mock
+        c=context();session=claim.Session(c,'a'*12,'b'*64,lambda:card(c),MemoryJournal())
+        receipt={'qualified':'fixture'};adapter=Mock();adapter.load_qualified.return_value=receipt
+        with patch.dict(sys.modules,{'staging_cohort_preservation':adapter}):
+            row={'cohort_preservation_sha256':'c'*64}
+            session._validate_cohort_target(row,{'cohort_preservation_sha256':claim.digest(receipt)})
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_target_changed'):
+                session._validate_cohort_target(row,{'cohort_preservation_sha256':'f'*64})
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_target_changed'):
+                session._validate_cohort_target({}, {'cohort_preservation_sha256':claim.digest(receipt)})
+
+    def test_cohort_binding_rejects_unbound_effects_and_target_replacement(self):
+        import sys
+        from unittest.mock import Mock
+        c=context();authority=card(c);journal=MemoryJournal()
+        session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(authority),journal)
+        session.admit(start=True)
+        plan={'actual_before':copy.deepcopy(authority['observed']['images']),
+              'candidate':{'commit':c['commit'],'images':copy.deepcopy(c['images'])}}
+        adapter=Mock()
+        identity=Mock();identity.IDENTITY_ARGS=['exec','voice-postgres-0','-c','postgres','--','fixed-identity']
+        with patch.dict(sys.modules,{'staging_cohort_preservation':adapter,'staging_cohort_preservation_pg':identity}):
+            bad=copy.deepcopy(plan);bad['candidate']['commit']='d'*40
+            before=copy.deepcopy(journal.row)
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_baseline_changed'):
+                session.bind_cohort_preservation(bad,plan['actual_before'])
+            self.assertEqual(journal.row,before)
+            binding=session.bind_cohort_preservation(plan,plan['actual_before'])
+            self.assertEqual(binding['target_sha256'],claim.digest(plan))
+            self.assertEqual(session.check()['phase'],'cohort-preservation')
+            self.assertEqual(session.check()['cohort_preservation_sha256'],claim.digest(plan))
+            saved=copy.deepcopy(journal.row);del journal.row['cohort_preservation_sha256']
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_lineage_invalid'):session.check()
+            journal.row=saved
+            argv=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging','scale','deployment/voice-user','--replicas=0']
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            session._cohort_permit={'effect_id':'scale-user','argv':argv,'body_sha256':'invalid'}
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            session._cohort_permit={'effect_id':'scale-user','argv':argv,'body_sha256':'c'*64}
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):
+                session.check(argv[:-1]+['--replicas=1'])
+            session.check(argv);self.assertIsNone(session._cohort_permit)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(argv)
+            auth=['docker','inspect','owned-fixture']
+            session._cohort_auth_permit={'effect_id':'actor-inspect','argv':auth,'body_sha256':'d'*64}
+            with self.assertRaisesRegex(RuntimeError,'staging_cohort_auth_permit_invalid'):session.check(auth+['other'])
+            session.check(auth);self.assertIsNone(session._cohort_auth_permit)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(auth)
+            import source_plan
+            ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
+            session.check(ch)
+            for bad in (ch[:-1]+['DROP DATABASE voice'],ch[:5]+['other-pod']+ch[6:],ch+['--context=other']):
+                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            pg=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+source_plan.postgres_read_args('gateway_db')
+            session.check(pg)
+            for bad in (pg[:-1]+['DROP DATABASE voice'],pg[:5]+['other-pod']+pg[6:],pg+['--context=other']):
+                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
+            fixed=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+identity.IDENTITY_ARGS
+            session.check(fixed)
+            with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(fixed+['altered'])
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):
+                session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
+            with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
+            with self.assertRaisesRegex(RuntimeError,'actual_finish_required'):
+                session.complete('PASS',c['images'])
+            receipt={'schema':'fixture-qualified'};adapter.load_qualified.return_value=receipt
+            parent=Mock();next_plan={'schema':'voice-staging-prerequisites-plan-v2',
+                'actual_before':plan['actual_before'],'preservation_sha256':claim.digest(receipt)}
+            with patch.dict(sys.modules,{'staging_prerequisites':parent}):
+                altered=dict(next_plan,preservation_sha256='f'*64)
+                with self.assertRaisesRegex(RuntimeError,'baseline_changed'):
+                    session.bind_prerequisites(altered,plan['actual_before'])
+                self.assertEqual(session.check()['phase'],'cohort-preservation')
+                result=session.bind_prerequisites(next_plan,plan['actual_before'])
+                self.assertEqual(result['target_sha256'],claim.digest(next_plan))
+                self.assertEqual(session.check()['phase'],'prerequisites')
+
     def fixture(self):
         c=context(); current=card(c); journal=MemoryJournal()
         session=claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(current),journal)

@@ -105,6 +105,39 @@ def verify_bootstrap_candidate_images(session,images,renderer_authority,first_in
     elif ordinary_target is not None:
         if candidate!={**ordinary_target,**renderer}:raise Blocked('realtime_bootstrap_candidate_changed')
 
+def capture_cohort_authorities(actions,request,approved,workspace,stage,contract):
+    """Capture the existing actor and live NATS authorities before the cut."""
+    import actor_root
+    import nats_root_plan
+    import resource_claim
+    import commands
+    session=actions.tt_session
+    if (type(actions) is not Actions or type(session) is not resource_claim.Session
+        or commands.authority_guard!=session.check or session.check().get('phase')!='prepare'
+        or request.get('mode') not in ('full','app-only') or stage.operation!=session.operation
+        or Path(workspace)!=INSTALLED/'sources'/session.operation or approved.get('source_sha')!=session.context['commit']):
+        raise Blocked('cohort_preflight_authority_invalid')
+    baseline=contract.get('consumer_pairs')
+    try:active=private_json(INSTALLED/'active-contract.json')
+    except FileNotFoundError:active=None
+    if active is not None:
+        validate_active_contract_identity(active,stage.expected,baseline);contract=active['contract']
+    names=[name.removeprefix('voice-') for name in stage.snapshots if name!=HUB]
+    actor=actor_root.preflight(stage.kube,workspace,actions.code,actions.binding,stage,names,compiler.decode_yaml)
+    try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
+    except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
+    previous=private_json(guard.ROOT/'bootstrap-enrollment.json')
+    from nats_contract_plan import digest as enrollment_digest
+    if (not isinstance(enrollment,dict) or enrollment.get('schema')!='voice-nats-bootstrap-enrollment-v4'
+        or enrollment.get('previous_enrollment')!=previous
+        or enrollment.get('previous_enrollment_sha256')!=enrollment_digest(previous)):
+        raise Blocked('enrolled_bootstrap_selection_refused')
+    nats=nats_root_plan.preflight(stage.kube,workspace,enrollment,contract,compiler.decode_yaml)
+    session.check()
+    return {'schema':'voice-staging-cohort-preflight-v1','operation':session.operation,
+            'services':names,'actor':actor,'nats':nats,'enrollment':enrollment,'contract':contract}
+
+
 class Actions:
     def resource_scope(self,request):
         import resource_claim
@@ -146,6 +179,9 @@ class Actions:
         operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
         try:base,state=self.state(operation)
         except (OSError,Blocked):return None
+        if request['action']=='authorize':
+            import migrations
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
         if request['action']=='resume-cipher-upload':
             import preserved_upload
             _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
@@ -277,22 +313,36 @@ class Actions:
         binding=gis.validate_next_operation(receipt,prior,kube)
         return {**binding,'receipt':copy.deepcopy(receipt)}
 
-    def _prepare(self,request,previous=None,repair=None):
-        if repair is None:self._idle()
-        else:self._idle(admitted_parent=repair['operation'])
-        operation=request['nonce'][:12]
-        source_run,execution=self._dispatcher(request)
-        provisional_mode=request.get('provisional_staging') is True
-        if provisional_mode or repair is not None:
-            if (execution['event']!='workflow_dispatch' or execution['workflow_id']!=263689731
-                or request['mode']!='images-only' or previous is not None):raise Blocked('provisional_dispatch_required')
-        workspace=INSTALLED/'sources'/operation;workspace.mkdir(mode=0o700)
-        self._report('source-capture','STARTED')
-        approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
-            if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
-        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
-            if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
-            record_source_authority(self.tt_session,approved,execution)
+    def _prepare(self,request,previous=None,repair=None,*,cohort_ref=None):
+        import migrations
+        if cohort_ref is None:
+            migrations.require_preserving_admission(request.get('mode'))
+            if repair is None:self._idle()
+            else:self._idle(admitted_parent=repair['operation'])
+            operation=request['nonce'][:12]
+            source_run,execution=self._dispatcher(request)
+            provisional_mode=request.get('provisional_staging') is True
+            if provisional_mode or repair is not None:
+                if (execution['event']!='workflow_dispatch' or execution['workflow_id']!=263689731
+                    or request['mode']!='images-only' or previous is not None):raise Blocked('provisional_dispatch_required')
+            workspace=INSTALLED/'sources'/operation;workspace.mkdir(mode=0o700)
+            self._report('source-capture','STARTED')
+            approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
+                if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
+            if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
+                if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
+                record_source_authority(self.tt_session,approved,execution)
+        else:
+            import staging_cohort_preservation
+            if previous is not None or repair is not None or request.get('provisional_staging') is True:
+                raise Blocked('cohort_preserved_prepare_invalid')
+            session=self.tt_session;loaded=staging_cohort_preservation.load_prepared(session)
+            if (staging_cohort_preservation.load_qualified(session)!=cohort_ref
+                or any(request.get(key)!=loaded['request'][key] for key in ('mode','changed_services'))
+                or (request.get('gis_first_install') is True)!=loaded['request']['gis_first_install']):
+                raise Blocked('cohort_preserved_prepare_invalid')
+            operation=session.operation;approved=loaded['approved'];execution=loaded['execution'];workspace=Path(loaded['workspace'])
+            provisional_mode=False
         lifecycle=None
         if provisional_mode or repair is not None:
             import provisional
@@ -308,7 +358,7 @@ class Actions:
         prerequisites=None
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
             import staging_prerequisites
-            staging_prerequisites.run_prepare(self,request,approved,execution,workspace)
+            staging_prerequisites.run_prepare(self,request,approved,execution,workspace,preservation_ref=cohort_ref)
         self._report('workload-capture','STARTED')
         kube=Kube();marker=kube.get('configmap','voice-nats-generation')
         frontends=[s for s in request['changed_services'] if s in ('web','admin','developer-portal')] if request['mode']=='images-only' else ['web','admin','developer-portal']
@@ -319,13 +369,14 @@ class Actions:
         gis_binding=None
         if request.get('gis_first_install') is not True:
             import gis_existing_update
-            gis_binding=gis_existing_update.load_authority(kube)
+            gis_binding=(gis_existing_update.load_authority(kube) if cohort_ref is None else staging_prerequisites.load_gis_authority(self.tt_session))
             if gis_binding is not None and (provisional_mode or repair is not None or previous is not None):
                 raise Blocked('gis_existing_lifecycle_path_unsupported')
         gis_extra=['voice-gameintegration'] if gis_binding is not None else []
         gis_capture_args={'gis_binding':gis_binding} if gis_binding is not None else {}
-        stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else [])+
-            ([source_plan.PRINCIPAL_PUBLISHER] if publisher_selected else [])+gis_extra,**gis_capture_args)
+        stage=(RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else [])+
+            ([source_plan.PRINCIPAL_PUBLISHER] if publisher_selected else [])+gis_extra,**gis_capture_args) if cohort_ref is None
+            else staging_cohort_preservation.capture_final_stage(self.tt_session))
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
             self.tt_session.capture_prerequisites(stage)
             prerequisites=staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)
@@ -421,12 +472,23 @@ class Actions:
         import actor_root
         if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
             raise Blocked('staging_prerequisites_capture_changed')
-        actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+        if cohort_ref is None:
+            actor_authority=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+        else:
+            preserved_preflight=staging_cohort_preservation.load_preflight(self.tt_session)
+            names=preserved_preflight['services'];actor_authority=preserved_preflight['actor']
+            actor_root.revalidate(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml,actor_authority)
+            staging_cohort_preservation.revalidate_paused(self.tt_session)
         if prerequisites is not None and staging_prerequisites.load_capture(self.tt_session,actual=stage.old_images)!=prerequisites:
             raise Blocked('staging_prerequisites_capture_changed')
         if full_story:transaction.validate_full_story_rollback_schema(previous,actor_authority)
         nats_authority=None
-        if not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
+        if cohort_ref is not None:
+            enrollment=preserved_preflight['enrollment'];nats_authority=preserved_preflight['nats']
+            if preserved_preflight['contract']!=parameters['contract'] or nats_authority is None:
+                raise Blocked('cohort_preserved_authority_changed')
+            parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
+        elif not guard.frontend_image_only({**parameters,'template_hashes':{'voice-'+s:None for s in request['changed_services']}}):
             try:enrollment=private_json(guard.ROOT/'bootstrap-enrollment-v4.json')
             except FileNotFoundError:raise Blocked('enrolled_bootstrap_selection_refused')
             if not isinstance(enrollment,dict):raise Blocked('enrolled_bootstrap_selection_refused')
@@ -474,6 +536,7 @@ class Actions:
         if realtime_receipt is not None:
             value['target']['realtime_bootstrap_sha256']=transaction.canonical(realtime_receipt)
         if prerequisites is not None:value['target']['prerequisites_sha256']=transaction.canonical(prerequisites)
+        if cohort_ref is not None:value['target']['cohort_preservation_sha256']=transaction.canonical(cohort_ref)
         if lifecycle is not None and (value['migrations'] or value['nonnats']['actions']
             or nats_authority is not None and nats_authority['plan']['actions']):
             raise Blocked('provisional_migration_forbidden')
@@ -497,7 +560,16 @@ class Actions:
         if getattr(self,'tt_session',None) is not None:lifecycle_args['resource_session']=self.tt_session
         if realtime_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_receipt
         if prerequisites is not None:lifecycle_args['prerequisites_capture']=prerequisites
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True or gis_binding is not None else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,gis_binding=gis_binding,**lifecycle_args)
+        if cohort_ref is None:
+            state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True or gis_binding is not None else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,gis_binding=gis_binding,**lifecycle_args)
+        else:
+            source_authority._head(source_authority._headers(request['token']),approved['source_sha'],time.monotonic()+30)
+            state=root_cli.prepare_preserved_value(value,self.code,self.binding,operation,resource_session=self.tt_session,preservation_ref=cohort_ref,
+                nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,
+                gis_source_authority=(approved if request.get('gis_first_install') is True or gis_binding is not None else None),
+                gis_source_root=(workspace if request.get('gis_first_install') is True else None),
+                gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,
+                gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_receipt,prerequisites_capture=prerequisites)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
         state['service_actor_services']=names
@@ -505,7 +577,7 @@ class Actions:
         state['execution_authority']=execution
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'original_release_source':previous['target']['tag'],'images':images}
         save(base/'checkpoint.json',state)
-        return self._encrypt(base,state,execution)
+        return self._encrypt(base,state,execution) if cohort_ref is None else state
 
     def _verify_decrypted_restore(self,base,state,stage,*,payload_base=None,cut=None,binding=None):
         """Full remote-byte equality binds the actual authenticated restore."""
@@ -624,6 +696,10 @@ class Actions:
         return preserved_upload.result(base,state,record)
 
     def execute(self,request):
+        if request['action']=='authorize-expired-native':
+            import migrations
+            _,state=self.state(request['operation'])
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
         expired_actions={'prepare-expired-native':self._prepare_expired_native,
             'authorize-expired-native':self._authorize_expired_native,'finish-expired-native':self._finish_expired_native,
             'prepare-expired-finish':self._prepare_expired_finish,'authorize-expired-finish':self._authorize_expired_finish}
@@ -658,6 +734,8 @@ class Actions:
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
+            import migrations
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             upload_record=None

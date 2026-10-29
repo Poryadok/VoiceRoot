@@ -165,8 +165,14 @@ def _current_native_kernel(raw,arguments,limit):
                 or identity(os.stat('kernel',dir_fd=directory,follow_symlinks=False))!=identity(before)):
                 raise Blocked('rollout_current_decoder_changed')
         verify()
-        result=capture(['/proc/self/fd/'+str(fd),*arguments],body=raw,
-            timeout=10,limit=limit,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'},pass_fds=(fd,))
+        import commands,resource_claim
+        session=getattr(commands.authority_guard,'__self__',None)
+        if isinstance(session,resource_claim.Session) and session.check().get('phase')=='cohort-preservation':
+            import staging_cohort_preservation
+            result=staging_cohort_preservation.native_kernel(session,fd,arguments,raw,limit)
+        else:
+            result=capture(['/proc/self/fd/'+str(fd),*arguments],body=raw,
+                timeout=10,limit=limit,env={'PATH':'/usr/bin:/bin','HOME':'/nonexistent'},pass_fds=(fd,))
         verify();return result
     finally:
         if fd is not None:os.close(fd)

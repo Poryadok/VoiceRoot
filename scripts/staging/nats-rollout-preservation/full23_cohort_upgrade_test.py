@@ -21,14 +21,13 @@ class FutureHistoryTests(unittest.TestCase):
         result['nats-rollout-preservation/installer.py']=hashlib.sha256(Path(installer.__file__).read_bytes()).hexdigest()
         return result
 
-    def test_exact_actual_81_to_reviewed_89_source_and_binary_pins(self):
-        target=self.target();self.assertEqual(len(target),89)
+    def test_exact_actual_81_to_provisional_94_source_and_binary_pins(self):
+        target=self.target();self.assertEqual(len(target),94)
         self.assertEqual(set(target),installer.TT_FENCING_PREDECESSOR_MEMBERS|
-            {installer.TT_FENCING_NEW_MEMBER,'nats-rollout-preservation/gis_existing_update.py',
-             'nats-rollout-preservation/realtime_bootstrap.py','nats-rollout-preservation/realtime_bootstrap_existing.py'})
+            {installer.TT_FENCING_NEW_MEMBER,'nats-rollout-preservation/gis_existing_update.py'} | installer.FULL23_NEW_MEMBERS)
         projection={k:v for k,v in target.items() if k!='nats-rollout-preservation/installer.py'}
         self.assertEqual(hashlib.sha256(json.dumps(projection,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
-                         '8f5e1095a702b4bcde11ae5be2111457cf61a05010da1b2bfd95200ed8180dae')
+                         '54aa6eca4a2f7435224fac6e3ac5f4953601122d91fded31eb7dd3953fc62ff4')
         old=json.loads((Path(__file__).resolve().parent/'installed_cohort_predecessor_fixture.json').read_bytes())
         for name in installer.TT_FENCING_BINARY_MEMBERS:self.assertEqual(target[name],old[name])
         with patch.object(installer.root_cli,'code_binding',return_value=target), \
