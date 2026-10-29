@@ -5,7 +5,7 @@ import re
 import realtime_p3_create_only_source as source
 
 # Exact integrated payload independently reviewed before this source pin.
-REVIEWED_SOURCE='298c486200f8ac1cdf111f088d0510772298de00'
+REVIEWED_SOURCE='7a2d8245868ce65a67dd1e2943302f752e8b1c6c'
 FILES=('space_creator_runtime_profile_issuer.py','space_creator_runtime_profile_issuer_packet.py',
        'space_creator_runtime_profile_issuer_export.py','space_p3_issuer_preflight_metadata_root.py',
        'space_p3_issuer_preflight_root.py','space_p3_issuer.py','resource_fencing.py','credentials.py',
