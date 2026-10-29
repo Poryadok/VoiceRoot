@@ -72,6 +72,37 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual((receipt['active_sessions'],receipt['active_transactions']),(1,1))
         self.assertEqual(receipt['attributed_sessions'],result['attributed'])
 
+    def test_go_attribution_rejects_invalid_role_or_unowned_database(self):
+        identity={'database':'chat_db','database_oid':11,'role':'chat_login',
+                  'application_name':'voice-go-migrate-chat-'+'a'*32,'pod_ip':'10.1.2.3','pod_uid':'pod-uid'}
+        result=self.result | {'attributed':[]}
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:self.scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(result)):
+            self.assertEqual(probe.inspect_migration(self.scope,identity,lambda:None)['active_sessions'],0)
+            for changes in ({'role':"x' OR true--"},{'database':'other_db'},
+                            {'application_name':'voice-go-migrate-file-'+'a'*32}):
+                with self.assertRaises(probe.ProbeError): probe.inspect_migration(self.scope,identity|changes,lambda:None)
+
+    def test_space_native_window_counts_all_other_clients_and_prepared(self):
+        scope=self.scope | {'databases':['chat_db','postgres','space_db'],
+                           'database_oids':{'chat_db':11,'postgres':1,'space_db':88}}
+        run='12345678-1234-4234-8234-123456789abc'
+        identity={'old_oid':77,'new_oid':88,'role':'voice','pod_uid':'pod','pod_ip':'10.1.2.3',
+                  'run_id':run,'job_kind':'provision'}
+        session={'pid':5,'backend_start':'start','database':'space_db','role':'voice',
+                 'application_name':'native-installer-'+run,'client_addr':'10.1.2.3'}
+        result=self.result | {'matched_databases':3,'prepared':1,'sessions':1,'transactions':0,'attributed':[session]}
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(result)) as run_sql:
+            receipt=probe.inspect_space(scope,identity,lambda:None)
+            self.assertEqual((receipt['active_sessions'],receipt['active_transactions']),(1,1))
+            self.assertIn("backend_type='client backend'",run_sql.call_args.args[0][-1])
+            for fault in ({'role':"x' OR true--"},{'new_oid':77},{'run_id':'bad'},{'pod_ip':'10.1.2.999'}):
+                with self.assertRaises(probe.ProbeError):probe.inspect_space(scope,identity|fault,lambda:None)
+            result['attributed'][0]['application_name']='native-installer-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+            run_sql.return_value=json.dumps(result)
+            with self.assertRaises(probe.ProbeError):probe.inspect_space(scope,identity,lambda:None)
+
     def test_migration_rejects_attribution_drift_or_invalid_identity(self):
         identity = {'database':'realtime_db','database_oid':99,'role':'realtime',
                     'application_name':'voice-realtime-migrate-'+'a'*32,'pod_ip':'10.1.2.3','pod_uid':'pod-uid'}

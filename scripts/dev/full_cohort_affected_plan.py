@@ -188,12 +188,27 @@ def _verify_catalog(probe,cut,scope):
     before=probe.catalog.verify_receipt(probe.token)
     current=_full_catalog(probe.catalog,before['engine'],before['server_start'])
     expected=copy.deepcopy(before['all_databases'])
+    properties=copy.deepcopy(before['properties']); excluded=copy.deepcopy(before['excluded'])
+    if getattr(cut,'space_fresh',None) is not None:
+        import writer_cut_space
+        import space_fresh_install_phase
+        binding=writer_cut_space.verify_binding(cut,require_finished=True)
+        proof=space_fresh_install_phase.verify_historical(binding['phase'],binding['token'])
+        if (proof['operation_id']!=cut.fence.context['operation_id'] or proof['source_sha']!=cut.fence.context['commit'] or
+                proof['namespace_uid']!=cut.namespace_uid or proof['receipt_sha256']!=binding['receipt_sha256'] or
+                proof['original_catalog_sha256']!=writer_cut.digest(before) or expected.get('space_db')!=proof['old_oid']):
+            raise AffectedError('Space catalog proof changed')
+        post=proof['catalog']
+        if (not isinstance(post,dict) or set(post)!={'databases','all_databases','excluded','properties'} or
+                post['all_databases'].get('space_db')!=proof['new_oid']):raise AffectedError('Space catalog proof invalid')
+        expected=copy.deepcopy(post['all_databases']);properties=copy.deepcopy(post['properties']);excluded=copy.deepcopy(post['excluded'])
+        if writer_cut_space.verify_binding(cut,require_finished=True)!=binding:raise AffectedError('Space binding changed')
     if 'realtime_db' not in expected and 'realtime_db' in scope['database_oids']:
         expected['realtime_db']=scope['database_oids']['realtime_db']
     if (scope['engine']!=before['engine'] or scope['server_start']!=before['server_start'] or
             scope['database_oids']!=expected or scope['databases']!=sorted(expected) or
-            current['all_databases']!=expected or current['excluded']!=before['excluded'] or
-            any(current['properties'].get(name)!=value for name,value in before['properties'].items()) or
+            current['all_databases']!=expected or current['excluded']!=excluded or
+            any(current['properties'].get(name)!=value for name,value in properties.items()) or
             ('realtime_db' not in before['all_databases'] and 'realtime_db' in expected and
              current['databases'].get('realtime_db')!=expected['realtime_db']) or
             probe.catalog.verify_receipt(probe.token)!=before):
@@ -234,15 +249,38 @@ def inspect_provisioned(probe,cut):
         raise AffectedError('provisioned scope observation unavailable') from None
 
 
+def verify_space_catalog(probe,cut):
+    """Verify the completed Space successor without asserting zero sessions."""
+    try:
+        scope=cut.current_base_session_scope();result=_verify_catalog(probe,cut,scope)
+        if cut.current_base_session_scope()!=scope:raise ValueError()
+        return copy.deepcopy(result)
+    except BaseException:raise AffectedError('Space catalog unavailable') from None
+
+
+def inspect_space_completed(probe,cut):
+    """Sample zero against only the protected completed Space replacement."""
+    try:
+        scope=cut.current_base_session_scope();before=_verify_catalog(probe,cut,scope)
+        result=pg.inspect(scope,probe.catalog._guard)
+        if (not isinstance(result,dict) or set(result)!={'scope','active_sessions','active_transactions'} or
+                result['scope']!=scope or type(result['active_sessions']) is not int or result['active_sessions']!=0 or
+                type(result['active_transactions']) is not int or result['active_transactions']!=0 or
+                cut.current_base_session_scope()!=scope or _verify_catalog(probe,cut,scope)!=before or
+                cut.current_base_session_scope()!=scope):raise ValueError()
+        return copy.deepcopy(result)
+    except BaseException:raise AffectedError('Space scope observation unavailable') from None
+
+
 def verify_migration_catalog(probe,cut):
     """Bind an active source-owned migration DB before effective-scope completion."""
     import writer_cut_migration
     binding=cut.migration
-    if not isinstance(binding,dict) or binding.get('kind') not in ('auth','realtime'): raise AffectedError('migration unavailable')
+    if not isinstance(binding,dict) or binding.get('kind') not in ('auth','realtime','go'): raise AffectedError('migration unavailable')
     _,state=writer_cut_migration.normalized(cut,binding['kind'],binding['phase'],binding['root'])
     if state['execution']!=binding['plan']['execution'] or state['stable']!=binding['plan']['stable']:
         raise AffectedError('migration identity changed')
-    scope=copy.deepcopy(cut.admission['session_scope']); execution=state['execution']
+    scope=cut.current_base_session_scope(); execution=state['execution']
     db,oid=execution['database'],execution['database_oid']
     if db in scope['database_oids'] and scope['database_oids'][db]!=oid: raise AffectedError('migration database changed')
     if db not in scope['database_oids']:

@@ -153,6 +153,12 @@ class RenderTest(unittest.TestCase):
         with mock.patch.object(migration, 'verify_writer_job', return_value=authored['spec']), \
              mock.patch.object(migration.auth_user_candidate_probe, 'admitted_pod'):
             self.assertEqual(migration.verify_writer_pod(authored, job, pod, execution), {'uid': 'pod-uid', 'ip': '10.0.0.4'})
+            pending = copy.deepcopy(pod); pending['spec'].pop('nodeName')
+            pending['status'] = {'phase': 'Pending', 'containerStatuses': []}
+            self.assertEqual(migration.verify_writer_pod(authored, job, pending, execution), {'uid': 'pod-uid', 'ip': None})
+            pending['status']['containerStatuses'] = [{'name': 'migrate', 'restartCount': 0,
+                                                       'state': {'running': {'startedAt': 'now'}}}]
+            with self.assertRaises(migration.MigrationError): migration.verify_writer_pod(authored, job, pending, execution)
             bad = copy.deepcopy(pod); bad['metadata']['ownerReferences'][0]['uid'] = 'foreign'
             with self.assertRaises(migration.MigrationError): migration.verify_writer_pod(authored, job, bad, execution)
             bad = copy.deepcopy(pod); bad['status']['containerStatuses'][0]['imageID'] = 'sha256:' + 'f' * 64

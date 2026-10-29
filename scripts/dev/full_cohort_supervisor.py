@@ -6,11 +6,14 @@ declares a rollout complete.  Later phases consume the verified objects, not
 an externally supplied description of package or database state.
 """
 import copy
+import os
 import re
 
 import frontend_runtime_executor
 import full_cohort_affected_plan
 import full_cohort_inventory_phase
+import full_cohort_image_only_baseline
+import full_cohort_go_migration_plan
 import full_cohort_namespace_census
 import full_cohort_package_phase
 import media_backup_upload_runner
@@ -25,6 +28,57 @@ class SupervisorError(RuntimeError):
     pass
 
 
+class OperationBootstrap:
+    """Own a new fixed private operation journal through its single begin attempt."""
+    def __init__(self,check,lock,namespace_uid):
+        if (type(check) is not resource_fencing.ResourceCheck or check.endpoint!=media_backup_upload_runner.TT or
+                not isinstance(namespace_uid,str) or not namespace_uid):
+            raise SupervisorError('bootstrap authority invalid')
+        context=copy.deepcopy(check.context);resource_fencing.validate_context(context)
+        operation=context['operation_id']
+        if (context['actor']!='scheduled_devops' or not re.fullmatch(r'media-c[12]-[a-f0-9]{32}',operation)):
+            raise SupervisorError('bootstrap operation invalid')
+        self.check,self.lock,self.namespace_uid=check,copy.deepcopy(lock),namespace_uid
+        self.context=context;self.started=False;self.supervisor=None
+        with story_media_backup.private_directory(media_backup_upload_runner.ROOT) as directory:
+            os.mkdir(operation,0o700,dir_fd=directory);os.fsync(directory)
+        root=media_backup_upload_runner.ROOT/operation
+        with story_media_backup.private_directory(root):
+            self.journal=media_operation_journal.Journal(root/'journal',{
+                'resource_context':copy.deepcopy(context),'namespace_uid':namespace_uid,
+                'kube_lock':copy.deepcopy(lock),'cohort_route_mode':'full-cohort-v1'})
+        self.client=frontend_runtime_executor.KubectlTransport(self.journal)
+        self.fence=resource_fencing.Fence(copy.deepcopy(context),check,resource_fencing.KubeLedger(self.client),check.mark_uncertain)
+        self._identity=(self.check,self.journal,self.client,self.fence,self.fence.ledger)
+        self._fixed=(copy.deepcopy(self.context),copy.deepcopy(self.lock),self.namespace_uid,copy.deepcopy(self.journal.intent))
+
+    def begin(self):
+        if self.started:raise SupervisorError('bootstrap already attempted; reconcile')
+        if (any(a is not b for a,b in zip((self.check,self.journal,self.client,self.fence,self.fence.ledger),self._identity)) or
+                (self.context,self.lock,self.namespace_uid,self.journal.intent)!=self._fixed or
+                self.journal.state.get('intent')!=self._fixed[3] or self.journal.poisoned or
+                self.journal.dirfd is None or self.journal.lockfd is None or self.check.context!=self.context or
+                self.fence.context!=self.context or self.fence.check is not self.check or
+                self.client.journal is not self.journal or self.fence.ledger.client is not self.client):
+            raise SupervisorError('bootstrap identity changed')
+        self.started=True
+        self.supervisor=begin_operation(self.journal,self.fence,self.client,self.lock,self.namespace_uid)
+        return self.supervisor
+
+
+def begin_operation(journal,fence,client,lock,namespace_uid):
+    """Start the fixed C1/C2 admission route while retaining its private journal."""
+    if journal.intent.get('cohort_route_mode')!='full-cohort-v1':
+        raise SupervisorError('full cohort route intent required')
+    operation=fence.context.get('operation_id','')
+    if re.fullmatch(r'media-c1-[a-f0-9]{32}',operation):
+        fence.begin_image_only(client,lock,namespace_uid,journal)
+    elif re.fullmatch(r'media-c2-[a-f0-9]{32}',operation):
+        fence.begin_with_predecessor(client,lock,namespace_uid,journal)
+    else: raise SupervisorError('operation route invalid')
+    return Supervisor(journal,fence,client,lock,namespace_uid)
+
+
 class Supervisor:
     def __init__(self, journal, fence, client, lock, namespace_uid):
         if (type(journal) is not media_operation_journal.Journal or
@@ -37,6 +91,7 @@ class Supervisor:
                 client.journal is not journal or fence.ledger.client is not client or
                 journal.intent.get('resource_context') != fence.context or
                 journal.intent.get('namespace_uid') != namespace_uid or
+                journal.intent.get('cohort_route_mode') != 'full-cohort-v1' or
                 not re.fullmatch(r'media-c[12]-[a-f0-9]{32}', fence.context.get('operation_id', '')) or
                 journal.path != media_backup_upload_runner.ROOT / fence.context['operation_id'] / 'journal' or
                 fence.check.context != fence.context):
@@ -48,8 +103,24 @@ class Supervisor:
         self._journal, self._fence, self._client = journal, fence, client
         self._check = fence.check
         self.journals = []
-        self.package = self.inventory = self.catalog = self.realtime_absent = self.census = None
+        self.package = self.inventory = self.catalog = self.realtime_absent = self.census = self.baseline = None
         self._guard()
+
+    def _image_admission(self):
+        if not self.context['operation_id'].startswith('media-c1-'):return
+        step=copy.deepcopy(self.journal.state['steps'].get('image-only-admission'))
+        capture=copy.deepcopy(self.journal.state['steps'].get(full_cohort_image_only_baseline.STEP)); row,revision=self.fence.ledger.read()
+        if (not isinstance(step,dict) or set(step)!={'status','descriptor','old_revision','new_revision'} or
+                step.get('status')!='done' or not isinstance(step.get('old_revision'),list) or
+                not isinstance(step.get('new_revision'),list) or len(step['old_revision'])!=2 or len(step['new_revision'])!=2 or
+                any(not isinstance(v,str) or not v for v in step['old_revision']+step['new_revision']) or
+                step['old_revision'][0]!=step['new_revision'][0] or not isinstance(revision,tuple) or len(revision)!=2 or
+                revision[0]!=step['new_revision'][0] or not self.fence.owned(row) or row.get('status')!='active' or
+                row.get('image_only_baseline')!=step['descriptor'] or not isinstance(capture,dict) or
+                capture.get('descriptor')!=step['descriptor'] or self.journal.dirfd is None or self.journal.lockfd is None or
+                self.journal.state['steps'].get('image-only-admission')!=step or
+                self.journal.state['steps'].get(full_cohort_image_only_baseline.STEP)!=capture):
+            raise SupervisorError('image-only admission is not confirmed')
 
     def _guard(self):
         if (self.journal is not self._journal or self.fence is not self._fence or self.client is not self._client or
@@ -64,9 +135,11 @@ class Supervisor:
                 getattr(self.fence.on_uncertain, '__func__', None) is not resource_fencing.ResourceCheck.mark_uncertain):
             raise SupervisorError('supervisor authority changed')
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+        self._image_admission()
 
     def _open(self, name, extra):
-        if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal', 'namespace-census-journal'):
+        go_names={'go-migration-'+db+'-journal' for db in full_cohort_go_migration_plan.DATABASES}
+        if name not in ('package-journal', 'inventory-journal', 'catalog-journal', 'realtime-absence-journal', 'namespace-census-journal') and name not in go_names:
             raise SupervisorError('phase journal name invalid')
         self._guard()
         operation = self.context['operation_id']
@@ -83,6 +156,11 @@ class Supervisor:
             raise SupervisorError('phase ledger differs')
         return journal, fence, client
 
+    def _open_go(self,database):
+        if database not in full_cohort_go_migration_plan.DATABASES:
+            raise SupervisorError('Go migration database invalid')
+        return self._open('go-migration-'+database+'-journal',{})
+
     def prepare(self, token, actor, run_id, run_attempt, nodes):
         """Capture the canonical package, live inventory and full DB catalog."""
         if any(x is not None for x in (self.package, self.inventory, self.catalog)):
@@ -91,6 +169,11 @@ class Supervisor:
             {'run_id': run_id, 'run_attempt': run_attempt, 'nodes': copy.deepcopy(nodes)}})
         self.package = full_cohort_package_phase.PackagePhase(journal, fence, client, self.lock, self.namespace_uid)
         self.package.run(token, actor)
+        if not self.context['operation_id'].startswith('media-c1-'):
+            raise SupervisorError('C2 fresh baseline authority unavailable')
+        self.baseline=full_cohort_image_only_baseline.ImageOnlyPhase(self.journal,self.fence,self.client,
+            self.lock,self.namespace_uid,self.package)
+        self.baseline.run(token)
         journal, fence, client = self._open('inventory-journal', {})
         self.inventory = full_cohort_inventory_phase.InventoryPhase(journal, fence, client, self.lock,
                                                                      self.namespace_uid, self.package)
