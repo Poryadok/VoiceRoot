@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import realtime_config_transition_authority as authority
 import realtime_p3_adoption as adoption
+import space_p3_issuer_create as issuer
 
 
 class AuthorityTest(unittest.TestCase):
@@ -77,6 +78,18 @@ class AuthorityTest(unittest.TestCase):
             proof['tls']['certificate_sha256']='c'*64
             with self.assertRaises(authority.AuthorityError):
                 authority.collect(self.cut,object(),self.session,self.migration,self.phase,self.publisher,'/source','token')
+
+    def test_issuer_dispatch_checks_fence_and_detached_jwks(self):
+        phase=issuer.Session.__new__(issuer.Session)
+        phase.fence=self.cut.fence; phase.lock=self.cut.lock; phase.namespace_uid=self.cut.namespace_uid
+        proof={'schema':'voice-dev-space-p3-issuer-v1','operation_id':self.cut.fence.context['operation_id'],
+               'source_sha':self.cut.fence.context['commit'],'namespace_uid':'ns',
+               'scope':'space-two-secret-create-only','public_jwks':{'keys':[]}}
+        self.patches[2].stop()
+        with patch.object(issuer,'verify_completed',return_value=proof):
+            self.assertEqual(authority._space(self.cut,phase,'token'),(proof,b'{"keys":[]}'))
+            phase.namespace_uid='foreign'
+            with self.assertRaises(ValueError): authority._space(self.cut,phase,'token')
 
 
 if __name__=='__main__': unittest.main()

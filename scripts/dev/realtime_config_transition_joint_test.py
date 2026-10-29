@@ -32,7 +32,7 @@ class MixedTest(unittest.TestCase):
     def setUp(self):
         self.base=fixture.WriterCutTest('test_drain_and_resume_use_current_template_not_old')
         self.addCleanup(self.cleanup,self.base); self.base.setUp()
-        self.names=['chat','notification','realtime','user']
+        self.names=['chat','notification','realtime','space','user']
         sources=[]
         for name in self.names:
             item=fixture.workload('Deployment','voice-'+name,'uid-'+name,1,'old-'+name)
@@ -125,6 +125,7 @@ class MixedTest(unittest.TestCase):
         p3.apply(self.base.cut,self.config,'chat')
         backend.apply_development(self.base.cut,self.config,'notification')
         p3.apply(self.base.cut,self.config,'realtime')
+        p3.apply(self.base.cut,self.config,'space')
         backend.apply_development(self.base.cut,self.config,'user')
         self.assertEqual(self.base.cut.config_snapshot['services'],self.names)
         self.assertEqual(self.base.cut.verify_drained()['active_sessions'],0)
