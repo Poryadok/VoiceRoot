@@ -16,14 +16,15 @@ import (
 // Detached private observation only. Neither these hashes nor the catalog
 // comparison assert that a caller possesses backup or maintenance authority.
 type legacy24OriginObservation struct {
-	Target         *store.NativeInstallerSourceFacts `json:"target"`
-	CatalogSHA256  string                            `json:"catalog_sha256"`
-	PreimageSHA256 string                            `json:"preimage_sha256"`
-	AccessSHA256   string                            `json:"access_sha256"`
-	Rows           map[string]legacy25TableDigest    `json:"rows"`
-	Derived        *legacy24Derived                  `json:"derived"`
-	Spaces         []string                          `json:"spaces"`
-	Extras         []legacy24Extra                   `json:"extras"`
+	Target             *store.NativeInstallerSourceFacts `json:"target"`
+	CatalogSHA256      string                            `json:"catalog_sha256"`
+	PreimageSHA256     string                            `json:"preimage_sha256"`
+	AccessSHA256       string                            `json:"access_sha256"`
+	StableAccessSHA256 string                            `json:"stable_access_sha256"`
+	Rows               map[string]legacy25TableDigest    `json:"rows"`
+	Derived            *legacy24Derived                  `json:"derived"`
+	Spaces             []string                          `json:"spaces"`
+	Extras             []legacy24Extra                   `json:"extras"`
 }
 
 // The complete source-owned public object set was fixed by the catalog
@@ -72,6 +73,10 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	if err != nil {
 		return nil, err
 	}
+	stableAccess, err := captureLegacy24StableAccessTx(ctx, tx, rows)
+	if err != nil {
+		return nil, err
+	}
 	derived, err := captureLegacy24DerivedTx(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -107,11 +112,12 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 		return nil, errors.New("legacy24 spaces unavailable")
 	}
 	encoded, err := json.Marshal(struct {
-		Rows    map[string]legacy25TableDigest `json:"rows"`
-		Derived *legacy24Derived               `json:"derived"`
-		Spaces  []string                       `json:"spaces"`
-		Extras  []legacy24Extra                `json:"extras"`
-	}{rows, derived, spaces, extras})
+		Rows               map[string]legacy25TableDigest `json:"rows"`
+		Derived            *legacy24Derived               `json:"derived"`
+		Spaces             []string                       `json:"spaces"`
+		Extras             []legacy24Extra                `json:"extras"`
+		StableAccessSHA256 string                         `json:"stable_access_sha256"`
+	}{rows, derived, spaces, extras, stableAccess})
 	if err != nil || len(encoded) > 1<<20 {
 		return nil, errors.New("legacy24 preimage unavailable")
 	}
@@ -121,7 +127,7 @@ func observeLegacy24Origin(ctx context.Context, conn *pgx.Conn) (*legacy24Origin
 	}
 	return &legacy24OriginObservation{Target: &store.NativeInstallerSourceFacts{Version: 24, DatabaseSystemID: system,
 		DatabaseName: name, DatabaseOID: oid, InstallerRole: role}, CatalogSHA256: catalog,
-		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, Rows: rows, Derived: derived, Spaces: spaces, Extras: extras}, nil
+		PreimageSHA256: hex.EncodeToString(preimageHash[:]), AccessSHA256: accessHash, StableAccessSHA256: stableAccess, Rows: rows, Derived: derived, Spaces: spaces, Extras: extras}, nil
 }
 
 func captureLegacyAccessTx(ctx context.Context, tx pgx.Tx) (string, error) {
