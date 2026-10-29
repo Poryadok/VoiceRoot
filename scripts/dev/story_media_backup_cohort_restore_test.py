@@ -2,11 +2,28 @@ import hashlib
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
+import sys
+import types
 
 import story_media_backup_cohort_restore as restore
 
 
 class CohortPlanTest(unittest.TestCase):
+    def test_staging_restore_uses_fixed_transport_and_clears_context_on_failure(self):
+        session=object()
+        context={key: object() for key in ('root','key','source_root','postgres_image','migrate_image','journal','source_metadata')}
+        adapter=types.SimpleNamespace(validate_backup_binding=mock.Mock(),restore_context=mock.Mock(return_value=context),
+                                      restore_command=mock.Mock(return_value=b'ok'))
+        def failing_qualify(*args,**kwargs):
+            self.assertEqual(restore.media_restore._docker('inspect','owned',input=b'data'),b'ok')
+            raise restore.CohortRestoreError('fixture failure')
+        with mock.patch.dict(sys.modules,{'staging_cohort_preservation':adapter}), mock.patch.object(restore,'_qualify',side_effect=failing_qualify):
+            with self.assertRaisesRegex(restore.CohortRestoreError,'fixture failure'):
+                restore.qualify_staging(session,{},[],{}, {}, {})
+        adapter.restore_command.assert_called_once_with(session,['docker','inspect','owned'],body=b'data',timeout=120)
+        self.assertIsNone(restore.media_restore._STAGING_SESSION.get())
+
     def test_restore_only_never_selects_a_migration_runner(self):
         for db, engine in [('voice_db', 'golang-migrate'), ('auth_db', 'flyway')]:
             plan = {'engine': engine, 'from': 3, 'to': 3, 'files': {'fixture': 'a' * 64}}
