@@ -146,6 +146,9 @@ class Actions:
         operation=request['nonce'][:12] if request['action'] in ('prepare','prepare-rollback','prepare-repair') else request.get('operation')
         try:base,state=self.state(operation)
         except (OSError,Blocked):return None
+        if request['action']=='authorize':
+            import migrations
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
         if request['action']=='resume-cipher-upload':
             import preserved_upload
             _,continuity=preserved_upload.verify_helper_continuity(base,state,self.binding)
@@ -626,6 +629,10 @@ class Actions:
         return preserved_upload.result(base,state,record)
 
     def execute(self,request):
+        if request['action']=='authorize-expired-native':
+            import migrations
+            _,state=self.state(request['operation'])
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
         expired_actions={'prepare-expired-native':self._prepare_expired_native,
             'authorize-expired-native':self._authorize_expired_native,'finish-expired-native':self._finish_expired_native,
             'prepare-expired-finish':self._prepare_expired_finish,'authorize-expired-finish':self._authorize_expired_finish}
@@ -660,6 +667,8 @@ class Actions:
         base,state=self.state(request['operation'])
         if request['action']=='status':return summary(state)
         if request['action'] in ('authorize','authorize-preserved-upload'):
+            import migrations
+            migrations.require_preserving_admission(state.get('target',{}).get('mode'),state.get('migrations'))
             if state.get('provisional') is not None:
                 source_authority.revalidate_ci(request['token'],state['source_authority'])
             upload_record=None

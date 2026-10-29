@@ -1,8 +1,9 @@
 """Unsafe staging migration paths must stop before any external effect."""
+import copy
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import bridge_root
 import migrations
@@ -32,6 +33,24 @@ class PreservationGateTests(unittest.TestCase):
         with self.assertRaisesRegex(Blocked, 'staging_migration_preservation_authority_missing'):
             migrations.execute(kube,stage,[{'database':'space'}],'full',{},journal)
         kube.assert_not_called();stage.verify_final_storage.assert_not_called();journal.assert_not_called()
+
+    def test_bridge_authorization_paths_stop_before_custody_or_restore(self):
+        actions=object.__new__(bridge_root.Actions)
+        state={'operation':'a'*12,'target':{'mode':'full'},'migrations':[{'database':'space'}]}
+        before=copy.deepcopy(state)
+        actions.state=Mock(return_value=(Path('/unused'),state))
+        actions._dispatcher=Mock();actions._verify_decrypted_restore=Mock()
+        actions._authorize_expired_native=Mock()
+        with patch.object(bridge_root.github_custody,'verify_artifact') as artifact, \
+             patch.object(bridge_root,'save') as save:
+            for action in ('authorize','authorize-preserved-upload','authorize-expired-native'):
+                with self.subTest(action=action),self.assertRaisesRegex(Blocked,'staging_migration_preservation_authority_missing'):
+                    actions.execute({'action':action,'operation':'a'*12})
+            with self.assertRaisesRegex(Blocked,'staging_migration_preservation_authority_missing'):
+                actions.recover({'action':'authorize','operation':'a'*12})
+            artifact.assert_not_called();save.assert_not_called()
+        actions._dispatcher.assert_not_called();actions._verify_decrypted_restore.assert_not_called()
+        actions._authorize_expired_native.assert_not_called();self.assertEqual(state,before)
 
     def test_images_only_without_migrations_is_not_held_by_this_gate(self):
         self.assertIsNone(migrations.require_preserving_admission('images-only', []))
