@@ -61,7 +61,8 @@ class RoleJointTest(unittest.TestCase):
                  patch.object(service.root_export,'_check_root_custody'), patch.object(service.custody,'ARCHIVE',archive), \
                  patch.object(role.preflight,'exchange_root_request',side_effect=exchange), \
                  patch.object(role,'_get',side_effect=get), patch.object(role,'_create',side_effect=apply), \
-                 patch.object(client,'trigger_issue',side_effect=lambda *_:service.issue(op,source,'role',os.getpid(),service.root_export._start_ticks(os.getpid()))):
+                 patch.object(client,'new_issue_trigger',side_effect=lambda *_:SimpleNamespace(
+                     run=lambda:service.issue(op,source,'role',os.getpid(),service.root_export._start_ticks(os.getpid())),cancel=lambda:None)):
                 receipt=phase.run()
                 self.assertEqual(role.verify_completed(phase,'token'),receipt)
             self.assertEqual(set(receipt['objects']),role.NAMES)
