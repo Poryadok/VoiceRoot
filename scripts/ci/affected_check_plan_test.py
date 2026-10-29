@@ -584,6 +584,22 @@ class AffectedCheckPlanTests(unittest.TestCase):
                       'migrated50', 'trusted50', 'trusted51', 'complete'):
             self.assertIn('TestCommittedPhaseFailureNeverAutoResumes/' + phase, required)
         self.assertIn('job.services.postgres.ports', test['env']['NATIVE_INSTALLER_TEST_ADMIN_URL'])
+
+    def test_space_native_installer_runs_missing_capture_guard(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['space-native-installer-integration']
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Space account-ban capture guard')
+        self.assertIn('-mode provision', test['run'])
+        self.assertIn('-tags=spacebanintegration', test['run'])
+        self.assertIn('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture', test['run'])
+        self.assertIn('space_account_ban_guard_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('SPACE_NATIVE_ADMIN_URL', test['env'])
+        self.assertIn('SPACE_BAN_TEST_DATABASE_URL', test['env'])
+        inventory = json.loads((ROOT / 'scripts/ci/space_account_ban_guard_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['space'], [['voice/backend/space/internal/store',
+                                               'TestAccountBanCannotSucceedWithoutCompleteOwnerCapture']])
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['space'], 'docker_go_services': [],
                   'integration_go_services': ['space'], 'run_go': True, 'run_pkg': True}

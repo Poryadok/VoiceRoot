@@ -156,6 +156,13 @@ proofs, including both add/remove subtests. Their fixture uses the qualified
 native 45, 50 and 51 migration transitions; this does not replace the separate
 tagged Space catalog and account-ban suite.
 
+The affected Space native-installer job also provisions a separate fresh
+current-schema database with the source-bound installer and runs the tagged
+account-ban missing-capture guard through a signed native creator and the
+authenticated ban path. Its receipt requires the named case and rejects skips.
+This one guard does not cover the other tagged cases that require populated
+historical 34, qualified 50, or separately qualified 51 fixtures.
+
 The affected Story PR proof runs `go test -json -count=1 -p 1` for
 `./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an
 owned PostgreSQL service. It requires the named store and protected transport

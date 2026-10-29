@@ -1,0 +1,5 @@
+{
+  "space": [
+    ["voice/backend/space/internal/store", "TestAccountBanCannotSucceedWithoutCompleteOwnerCapture"]
+  ]
+}
