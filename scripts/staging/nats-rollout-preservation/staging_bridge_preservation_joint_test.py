@@ -188,7 +188,8 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
   def get(kind,name):
    if (kind,name)==('secret','voice-app-secrets'):
     return {'apiVersion':'v1','kind':'Secret','metadata':{'name':name,'namespace':'voice-staging',
-      'uid':'app-secret','resourceVersion':'1'},'type':'Opaque','data':{}}
+      'uid':'00000000-0000-4000-8000-000000000004','resourceVersion':'1'},'type':'Opaque',
+      'data':{'POSTGRES_PASSWORD':'Zml4dHVyZQ=='}}
    return original_get(kind,name)
   def capture(argv,**kwargs):
    commands.authority_guard(argv)
