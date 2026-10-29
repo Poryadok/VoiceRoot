@@ -41,17 +41,16 @@ def stage_cluster_fixture(session,store_kube=None):
         template={'metadata':{'labels':{'app':name}},'spec':spec}
         if store_kube is not None and name in ('voice-user','voice-file'):
             template=copy.deepcopy(store_kube.get('Deployment',name)['spec']['template'])
-            containers=template['spec']['containers']
-            if len(containers)!=1 or template['spec'].get('initContainers'):raise ValueError('fixture_container_shape')
-            container=containers[0]['name']
         rows[name]={'metadata':{'name':name,'namespace':'voice-staging','uid':uid,'resourceVersion':'1','generation':1},
                     'spec':{'replicas':1,'template':template}}
         rs={'kind':'ReplicaSet','metadata':{'name':'replicaset-'+str(index),'uid':rsuid,
             'ownerReferences':[{'kind':'Deployment','uid':uid}]},'spec':{'template':copy.deepcopy(template)}}
         replicasets[rs['metadata']['name']]=rs;images.append(copy.deepcopy(rs))
+        def statuses(containers):return [{'name':c['name'],'ready':True,
+            'imageID':'fixture.invalid/'+c['name']+'@sha256:'+'a'*64} for c in containers]
         images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
-            'status':{'phase':'Running','containerStatuses':[{'name':container,'ready':True,
-                'imageID':'fixture.invalid/'+container+'@sha256:'+'a'*64}]}})
+            'status':{'phase':'Running','containerStatuses':statuses(template['spec']['containers']),
+                      'initContainerStatuses':statuses(template['spec'].get('initContainers',[]))}})
     fixed={('namespace','voice-staging'):{'metadata':{'uid':namespace}},
            ('configmap','voice-nats-generation'):{'metadata':{'uid':'marker','resourceVersion':'1'},
                  'data':{'phase':'active','generation':'r20260930a4','dataPVC':'fixture'}},
