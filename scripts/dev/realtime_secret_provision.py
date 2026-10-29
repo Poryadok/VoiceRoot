@@ -54,6 +54,9 @@ def run_owned(secret, journal, client, fence, lock, namespace_uid, password, cut
                     (expected_record is not None and record != expected_record)):
                 raise RecoveryRequired('credential or ledger authority changed')
             if expected_record is None: expected_record=copy.deepcopy(record)
+            secret._cut_local()
+            if secret.journal.state['steps'].get('realtime-secret') != expected_record | {'password_sha256':digest}:
+                raise RecoveryRequired('credential authority changed')
         credential_guard()
         pg=provision.KubePostgres(credential_guard)
         worker=provision.Provision(journal,fence,client,lock,namespace_uid,pg,password)

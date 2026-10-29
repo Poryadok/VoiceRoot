@@ -60,7 +60,10 @@ class RealtimePreparationTest(unittest.TestCase):
             journal=journals.Journal(root/'journal',{'resource_context':context,'namespace_uid':'ns'}); self.addCleanup(journal.close)
             backing=fixture.Ledger(context); client=activation.frontend_runtime_executor.KubectlTransport(journal)
             ledger=activation.resource_fencing.KubeLedger(client); ledger.read=backing.read; ledger.write=backing.write
-            fence=activation.resource_fencing.Fence(context,lambda:{},ledger); lock={'metadata':{'uid':'lock'}}
+            check=activation.resource_fencing.ResourceCheck.__new__(activation.resource_fencing.ResourceCheck)
+            check.context=copy.deepcopy(context); check.endpoint=activation.supervisor_module.media_backup_upload_runner.TT
+            uncertain=check.mark_uncertain
+            fence=activation.resource_fencing.Fence(context,check,ledger,uncertain); lock={'metadata':{'uid':'lock'}}
             node={'name':'node-1','uid':'node-uid','hostname':'host-1','architecture':'amd64'}
             pod={'metadata':{'name':'voice-postgres-0','namespace':'voice-dev','uid':'pod'},'spec':{'nodeName':'node-1'}}
             kube_node={'metadata':{'name':'node-1','uid':'node-uid','labels':{'kubernetes.io/hostname':'host-1',
@@ -73,7 +76,7 @@ class RealtimePreparationTest(unittest.TestCase):
             def dependency(name,cls):
                 obj=cls.__new__(cls); j=journals.Journal(root/name,{'resource_context':context,'namespace_uid':'ns'}); self.addCleanup(j.close)
                 c=activation.frontend_runtime_executor.KubectlTransport(j); l=activation.resource_fencing.KubeLedger(c); l.read=backing.read; l.write=backing.write
-                obj.journal,obj.client,obj.fence=j,c,activation.resource_fencing.Fence(context,lambda:{},l)
+                obj.journal,obj.client,obj.fence=j,c,activation.resource_fencing.Fence(context,check,l,uncertain)
                 obj.lock,obj.namespace_uid=lock,'ns'; return obj
             s.package=dependency('package',activation.full_cohort_package_phase.PackagePhase)
             s.inventory=dependency('inventory',activation.full_cohort_inventory_phase.InventoryPhase)
@@ -103,6 +106,13 @@ class RealtimePreparationTest(unittest.TestCase):
                 phase._guard=late_change
                 with self.assertRaises(activation.ActivationError):activation.verify_realtime_receipt(phase,'token')
                 self.assertEqual(len(calls),2); s.package.journal.state['steps'].pop('foreign'); phase._guard=original_guard
+                def late_check_change():
+                    answer=original_guard(); calls.append(True)
+                    if len(calls)==2:s.package.fence.check=object()
+                    return answer
+                calls.clear(); phase._guard=late_check_change
+                with self.assertRaises(activation.ActivationError):activation.verify_realtime_receipt(phase,'token')
+                self.assertEqual(len(calls),2); s.package.fence.check=check; phase._guard=original_guard
                 journal.state['steps'][activation.REALTIME_STEP]['receipt']['node']['uid']='foreign'
                 with self.assertRaises(activation.ActivationError):activation.verify_realtime_receipt(phase,'token')
 

@@ -13,6 +13,11 @@ import resource_fencing
 
 
 class BridgeTest(unittest.TestCase):
+    def setUp(self):
+        # This suite isolates bridge/credential behavior; C1 CUT is tested jointly.
+        self.enterContext(patch.object(provision.Provision,'_before_effect'))
+        self.enterContext(patch.object(provision.Provision,'_cut_local'))
+        self.enterContext(patch.object(provision.Provision,'_effect_local'))
     def test_secret_ledger_drift_after_role_prevents_database_sql(self):
         base, client, secret = secret_fixture.SecretPhaseTest().setup_phase()
         self.addCleanup(base.doCleanups)
@@ -64,7 +69,7 @@ class BridgeTest(unittest.TestCase):
             def __init__(inner,guard): inner.guard=guard
             def snapshot(inner): inner.guard(); return state.pg.snapshot()
             def catalog(inner): inner.guard(); return state.pg.catalog()
-            def execute(inner,sql): inner.guard(); state.pg.execute(sql)
+            def execute(inner,sql,worker=None): inner.guard(); state.pg.execute(sql,worker)
         with patch.object(bridge.frontend_runtime_executor,'KubectlTransport',type(separate)), \
              patch.object(bridge.resource_fencing,'KubeLedger',LedgerView), \
              patch.object(provision,'KubePostgres',PG):

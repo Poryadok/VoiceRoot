@@ -58,10 +58,19 @@ class RealtimeFactoryJointTest(unittest.TestCase):
                             'containerID':'containerd://fixture','restartCount':0,'imageID':'containerd://'+migration.PLATFORMS['amd64'],
                             'state':{'terminated':{'exitCode':0}}}]}}]}
                 return super().call(*args)
-        backing=base.ledger
+        backing=base.ledger; tail_drift=[False]; cut_ref=[None]
         class LedgerView:
             def __init__(inner,client):inner.client=client
-            def read(inner):return backing.read()
+            def read(inner):
+                result=backing.read()
+                if tail_drift[0]:
+                    tail_drift[0]=False; cut_ref[0].namespace_uid='drifted'
+                row=result[0]
+                if (cut_ref[0] is not None and cut_ref[0].journal.dirfd is not None and
+                    ((fault=='secret-completion-close' and row.get('realtime_secret',{}).get('status')=='done') or
+                     (fault=='database-completion-close' and row.get('realtime_db_provision',{}).get('steps',{}).get('database',{}).get('status')=='done'))):
+                    cut_ref[0].journal.close()
+                return result
             def write(inner,revision,row):return backing.write(revision,row)
         check=lambda:copy.deepcopy(base.card)
         def facade(journal):
@@ -88,16 +97,27 @@ class RealtimeFactoryJointTest(unittest.TestCase):
         admission={'controllers':[source],'guards':{'jobs':[],'cronjobs':[],'hpas':[]},'linked':{'jobs':[],'cronjobs':[]},'session_scope':scope}
         cut_j,cut_f,cut_c=make_journal('cut',{'writer_cut':admission}); cut_c.workloads={('Deployment','voice-a'):copy.deepcopy(source)}
         cut=writer_cut.WriterCut(cut_j,cut_f,cut_c,base.lock,'ns',admission,probe)
+        cut_ref[0]=cut
         self.enterContext(mock.patch.object(cut,'_patch',side_effect=cut_c.patch))
+        real_psql=provision.KubePostgres._psql
         class PG:
             instance=None
             def __new__(cls,*_args):
                 if cls.instance is None:cls.instance=super().__new__(cls); cls.instance.state={'role':None,'database':None}
                 return cls.instance
-            def __init__(inner,*_args):pass
+            def __init__(inner,*_args):
+                if _args:inner.operation_guard=_args[0]
             def snapshot(inner):return copy.deepcopy(engine)
             def catalog(inner):return copy.deepcopy(inner.state)
-            def execute(inner,sql):
+            def execute(inner,sql,worker=None):
+                if fault=='transport-close':
+                    original=inner.operation_guard
+                    def close_after_guard():original(); cut_j.close()
+                    inner.operation_guard=close_after_guard
+                    with mock.patch.object(provision.subprocess,'run') as submit:
+                        try:real_psql(inner,sql,worker)
+                        finally:self.assertFalse(submit.called)
+                    return
                 events.append('database-sql' if sql==provision.database_sql() else 'role-sql')
                 if sql==provision.database_sql():inner.state['database']={'oid':13,'owner_oid':12}
                 else:inner.state['role']={'oid':12,'login':True,'superuser':False,'createdb':False,'createrole':False,'inherit':False,
@@ -122,6 +142,9 @@ class RealtimeFactoryJointTest(unittest.TestCase):
             result=original_verify()
             if fault=='secret-check-drift' and secret.get('status')=='pending':
                 cut.fence.check=lambda:copy.deepcopy(base.card)
+            if ((fault=='secret-tail-drift' and secret.get('status')=='pending') or
+                    (fault=='role-tail-drift' and steps.get('role',{}).get('status')=='pending')):
+                tail_drift[0]=True
             return result
         self.enterContext(mock.patch.object(cut,'verify_drained',side_effect=checked_cut))
         supervisor=activation.supervisor_module.Supervisor.__new__(activation.supervisor_module.Supervisor)
@@ -140,8 +163,10 @@ class RealtimeFactoryJointTest(unittest.TestCase):
         if fault:
             with self.assertRaises(activation.ActivationError):activation._realtime_database(driver,prepared,'token')
             expected={'lost':['secret-post','role-sql','database-sql','job-post'],
-                      'secret-guard':[],'secret-check-drift':[],'role-guard':['secret-post'],
-                      'database-guard':['secret-post','role-sql']}[fault]
+                      'secret-guard':[],'secret-check-drift':[],'secret-tail-drift':[],
+                      'role-guard':['secret-post'],'role-tail-drift':['secret-post'],'transport-close':['secret-post'],
+                      'database-guard':['secret-post','role-sql'],'secret-completion-close':['secret-post'],
+                      'database-completion-close':['secret-post','role-sql','database-sql']}[fault]
             self.assertEqual(events,expected); self.assertEqual(backing.row['status'],'uncertain')
             with self.assertRaises(activation.ActivationError):activation._realtime_database(driver,prepared,'token')
             self.assertEqual(events,expected); return
@@ -154,6 +179,11 @@ class RealtimeFactoryJointTest(unittest.TestCase):
     def test_lost_migration_reply_is_uncertain_and_never_replayed(self):self.exercise('lost')
     def test_cut_loss_after_secret_pending_never_posts(self):self.exercise('secret-guard')
     def test_cut_check_identity_drift_after_pending_never_posts(self):self.exercise('secret-check-drift')
+    def test_cut_namespace_drift_in_secret_tail_never_posts(self):self.exercise('secret-tail-drift')
+    def test_cut_namespace_drift_in_role_tail_never_executes(self):self.exercise('role-tail-drift')
+    def test_cut_close_after_last_transport_guard_never_submits_sql(self):self.exercise('transport-close')
+    def test_cut_close_during_secret_completion_holds(self):self.exercise('secret-completion-close')
+    def test_cut_close_during_database_completion_holds(self):self.exercise('database-completion-close')
     def test_cut_loss_after_role_pending_never_executes_role(self):self.exercise('role-guard')
     def test_cut_loss_after_database_pending_never_executes_database(self):self.exercise('database-guard')
 

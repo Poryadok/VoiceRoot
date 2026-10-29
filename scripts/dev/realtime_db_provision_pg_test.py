@@ -14,6 +14,10 @@ import realtime_db_provision as provision
 
 
 class PostgreSQLBoundary(unittest.TestCase):
+    def setUp(self):
+        # This disposable PostgreSQL fixture tests SQL, not C1 CUT custody.
+        self.enterContext(mock.patch.object(provision.Provision, '_before_effect'))
+        self.enterContext(mock.patch.object(provision.Provision, '_cut_local'))
     @classmethod
     def setUpClass(cls):
         cls.name = 'voice-realtime-provision-' + uuid.uuid4().hex[:16]
@@ -90,7 +94,7 @@ class PostgreSQLBoundary(unittest.TestCase):
         class PG:
             def snapshot(self): return {'pod_uid': 'p'}
             def catalog(self): return json.loads(fixture.sql('postgres', 'postgres', provision.CATALOG_SQL).stdout)
-            def execute(self, sql): fixture.sql('postgres', 'postgres', sql)
+            def execute(self, sql, worker=None): fixture.sql('postgres', 'postgres', sql)
         with mock.patch.object(provision, 'guard'), mock.patch.object(provision.Provision, '_secret'):
             worker = provision.Provision(journal, fence, mock.Mock(), {}, 'ns', PG(), password)
             receipt = worker.run()
@@ -178,7 +182,7 @@ class PostgreSQLBoundary(unittest.TestCase):
         row.clear(); row.update({'status': 'active'})
         journal.state['steps'].clear()
         class LostPG(PG):
-            def execute(self, sql):
+            def execute(self, sql, worker=None):
                 super().execute(sql)
                 raise TimeoutError('synthetic response loss after commit')
         with mock.patch.object(provision, 'guard'), mock.patch.object(provision.Provision, '_secret'):

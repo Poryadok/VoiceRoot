@@ -32,10 +32,11 @@ class SecretPhaseTest(unittest.TestCase):
     def setup_phase(self):
         # These isolated tests cover Secret reservation mechanics; the actual
         # WriterCut boundary is exercised by the C1 activation joint fixture.
-        self.enterContext(patch.object(phase.SecretPhase, '_before_effect'))
         fixture = fixtures.PhaseTest(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
         client = Client(fixture.lock)
-        return fixture, client, phase.SecretPhase(fixture.journal, fixture.fence, client, fixture.lock, 'ns')
+        subject=phase.SecretPhase(fixture.journal, fixture.fence, client, fixture.lock, 'ns')
+        subject._before_effect=lambda:None; subject._cut_local=lambda:None
+        return fixture, client, subject
 
     def test_create_receipt_and_no_replay(self):
         fixture, client, subject = self.setup_phase()
@@ -105,6 +106,7 @@ class SecretPhaseTest(unittest.TestCase):
         other = journal.Journal(Path(fixture.temp.name)/'other', fixture.intent)
         self.addCleanup(other.close)
         second = phase.SecretPhase(other,fixture.fence,client,fixture.lock,'ns')
+        second._before_effect=lambda:None; second._cut_local=lambda:None
         barrier = threading.Barrier(2, timeout=5)
         actual = fixture.ledger.write
         commits = []

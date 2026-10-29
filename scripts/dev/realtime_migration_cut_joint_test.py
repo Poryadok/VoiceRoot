@@ -119,7 +119,7 @@ class JointTest(unittest.TestCase):
                 if not hasattr(inner,'state'): inner.state={'role':None,'database':None}
             def snapshot(inner): return copy.deepcopy(engine)
             def catalog(inner): return copy.deepcopy(inner.state)
-            def execute(inner,sql):
+            def execute(inner,sql,worker=None):
                 if sql==provision.database_sql(): inner.state['database']={'oid':13,'owner_oid':12}
                 else: inner.state['role']={'oid':12,'login':True,'superuser':False,'createdb':False,
                     'createrole':False,'inherit':False,'replication':False,'bypassrls':False,'memberships':0,

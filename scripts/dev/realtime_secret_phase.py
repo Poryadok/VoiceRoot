@@ -66,6 +66,9 @@ class SecretPhase:
             if (self.cut is not cut or any(a is not b for a,b in zip(self._cut_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger,
                     self.journal,self.fence,self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
                     cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                    cut.fence.context!=self.fence.context or self.fence.context!=self.intent.get('resource_context') or
+                    self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
+                    cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid or
                     self._cut_custody!=(custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal)) or
                     self.journal.state!=own or cut.journal.state!=cut_state):
                 raise RecoveryRequired('writer cut evidence changed')
@@ -78,6 +81,22 @@ class SecretPhase:
                 (hasattr(self.fence.ledger, 'client') and self.fence.ledger.client is not self.client)):
             raise RecoveryRequired('operation identity changed')
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
+
+    def _cut_local(self):
+        import writer_cut
+        import space_native_tool_identity as custody
+        if self.fence.context['operation_id'].startswith('media-c1-') or self.cut is not None:
+            cut=self.cut
+            if (type(cut) is not writer_cut.WriterCut or self._cut_refs is None or
+                    any(a is not b for a,b in zip(self._cut_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger,
+                        self.journal,self.fence,self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
+                    cut.fence.context!=self.fence.context or self.fence.context!=self.intent.get('resource_context') or
+                    self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
+                    cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid or
+                    cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                    self.poisoned or self.journal.poisoned or cut.journal.poisoned or
+                    self._cut_custody!=(custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal))):
+                raise RecoveryRequired('writer cut custody changed')
 
     def run(self, password):
         pending = False
@@ -135,6 +154,9 @@ class SecretPhase:
             confirmed, revision = self.fence.ledger.read()
             if (not self.fence.owned(confirmed) or confirmed.get('status') != 'active' or
                     confirmed.get('realtime_secret') != done or not valid_revision(revision)):
+                raise RecoveryRequired('secret receipt changed')
+            self._cut_local()
+            if self.journal.state['steps'].get('realtime-secret')!=done | {'password_sha256':password_sha256}:
                 raise RecoveryRequired('secret receipt changed')
             return receipt
         except BaseException:

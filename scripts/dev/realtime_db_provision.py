@@ -48,6 +48,7 @@ class Provision:
         self.cut = None
         self._cut_refs = None
         self._cut_custody = None
+        self._effect_proof = None
 
     def bind_cut(self, cut):
         import writer_cut
@@ -92,9 +93,44 @@ class Provision:
                     (cut, cut.journal, cut.fence, cut.client, cut.fence.ledger,self.journal,self.fence,
                      self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
                     cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                    cut.fence.context != self.fence.context or cut.lock != self.lock or cut.namespace_uid != self.namespace_uid or
                     self._cut_custody != (custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal)) or
                     self.journal.state != own or cut.journal.state != cut_state):
                 raise RecoveryRequired('writer cut evidence changed')
+            self._effect_proof = (copy.deepcopy(own),copy.deepcopy(cut_state))
+
+    def _effect_local(self):
+        """Pure final check after the transport's last external credential guard."""
+        import space_native_tool_identity as custody
+        import writer_cut
+        cut=self.cut
+        if (type(cut) is not writer_cut.WriterCut or self._cut_refs is None or self._effect_proof is None or
+                any(a is not b for a,b in zip(self._cut_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger,
+                    self.journal,self.fence,self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
+                cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                cut.fence.context!=self.fence.context or self.fence.context!=self.intent.get('resource_context') or
+                self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
+                cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid or
+                self.poisoned or self.journal.poisoned or cut.journal.poisoned or
+                self._cut_custody!=(custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal)) or
+                (self.journal.state,cut.journal.state)!=self._effect_proof):
+            raise RecoveryRequired('writer cut evidence changed at SQL submission')
+
+    def _cut_local(self):
+        import space_native_tool_identity as custody
+        import writer_cut
+        if self.fence.context['operation_id'].startswith('media-c1-') or self.cut is not None:
+            cut=self.cut
+            if (type(cut) is not writer_cut.WriterCut or self._cut_refs is None or
+                    any(a is not b for a,b in zip(self._cut_refs,(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger,
+                        self.journal,self.fence,self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
+                    cut.fence.context!=self.fence.context or self.fence.context!=self.intent.get('resource_context') or
+                    self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
+                    cut.lock!=self.lock or cut.namespace_uid!=self.namespace_uid or
+                    cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                    self.poisoned or self.journal.poisoned or cut.journal.poisoned or
+                    self._cut_custody!=(custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal))):
+                raise RecoveryRequired('writer cut custody changed')
 
     def _guard(self):
         if (self.poisoned or self.journal.poisoned or self.journal.intent != self.intent or
@@ -183,7 +219,7 @@ class Provision:
         if self.pg.catalog() != before:
             raise RecoveryRequired('catalog changed at submission')
         self._before_effect()
-        self.pg.execute(sql)
+        self.pg.execute(sql,self)
         self._guard()
         self._secret()
         after = self.pg.catalog()
@@ -219,6 +255,7 @@ class Provision:
                                  c['database']['owner_oid'] == role['role']['oid'] and _oid(c['database'].get('oid')))
             self._guard()
             self._secret()
+            self._cut_local()
             return {'operation_id': self.fence.context['operation_id'], 'role_oid': role['role']['oid'],
                     'database_oid': final['database']['oid'], 'credential': copy.deepcopy(self.intent['realtime_credential']),
                     'postgres': copy.deepcopy(self.intent['postgres']), 'scope': 'create-only', 'migration_pass': False}
@@ -279,6 +316,8 @@ def verify_completed(phase):
     if (not phase._owned(last) or last.get('realtime_db_provision') != record or
             phase.journal.state.get('steps') != steps):
         raise RecoveryRequired('provision evidence changed')
+    phase._cut_local()
+    if phase.journal.state.get('steps') != steps: raise RecoveryRequired('provision evidence changed')
     return {'operation_id': phase.fence.context['operation_id'], 'postgres': copy.deepcopy(phase.intent['postgres']),
             'database': 'realtime_db', 'database_oid': final['database']['oid'],
             'role': 'realtime', 'role_oid': role['role']['oid'], 'scope': 'create-only'}
@@ -305,7 +344,7 @@ class KubePostgres:
     def snapshot(self):
         return self._snapshot()
 
-    def _psql(self, sql):
+    def _psql(self, sql, worker=None):
         script = ('export PGPASSWORD="$POSTGRES_PASSWORD"; export PGAPPNAME=voice-realtime-provision; '
                   'export PGOPTIONS="-c statement_timeout=15000 -c lock_timeout=5000 -c search_path=pg_catalog,public"; '
                   'exec psql -h 127.0.0.1 -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres')
@@ -314,6 +353,11 @@ class KubePostgres:
                    '-c', 'postgres', '--', 'sh', '-ec', script]
         try:
             self.operation_guard()
+            if worker is not None:
+                if type(worker) is not Provision or worker.pg is not self:
+                    raise RecoveryRequired('SQL effect authority invalid')
+                if worker.fence.context['operation_id'].startswith('media-c1-') or worker.cut is not None:
+                    worker._effect_local()
             result = subprocess.run(command, input=sql.encode('ascii'), stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL, timeout=25)
             if result.returncode or len(result.stdout) > 65536:
@@ -329,13 +373,13 @@ class KubePostgres:
         except BaseException:
             raise RecoveryRequired('postgres catalog unavailable') from None
 
-    def execute(self, sql):
+    def execute(self, sql, worker=None):
         allowed_role = (r"SET log_statement = 'none';\nSET log_min_error_statement = 'panic';\n"
                         r"SET password_encryption = 'scram-sha-256';\n"
                         r"CREATE ROLE realtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS PASSWORD '[A-Za-z0-9_-]{32,128}';\n")
         if sql != database_sql() and (not isinstance(sql, str) or not re.fullmatch(allowed_role, sql)):
             raise RecoveryRequired('SQL outside fixed provisioning scope')
-        self._psql(sql)
+        self._psql(sql,worker)
 
 
 def role_sql(password):

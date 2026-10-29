@@ -42,12 +42,14 @@ class JournalIntegration(unittest.TestCase):
             def __init__(self): self.state = {'role': None, 'database': None}; self.lost = False
             def snapshot(self): return {'pod_uid': 'p'}
             def catalog(self): return copy.deepcopy(self.state)
-            def execute(self, sql):
+            def execute(self, sql, worker=None):
                 if sql == provision.database_sql(): self.state['database'] = {'oid': 13, 'owner_oid': 12}
                 else: self.state['role'] = copy.deepcopy(test.role)
                 if self.lost: raise TimeoutError()
         self.pg = PG()
         self.worker = provision.Provision(self.journal, base.fence, self.client, base.lock, 'ns', self.pg, self.password)
+        # Reservation mechanics only; the C1 writer cut has its own joint fixture.
+        self.worker._before_effect=lambda:None; self.worker._cut_local=lambda:None
 
     def test_real_guard_and_durable_ledger(self):
         receipt = self.worker.run()

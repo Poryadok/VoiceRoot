@@ -92,6 +92,8 @@ class RealtimePreparation:
     def __init__(self,journal,fence,client,lock,namespace_uid,supervisor):
         if (not _dev(supervisor) or type(journal) is not media_operation_journal.Journal or
                 type(fence) is not resource_fencing.Fence or type(client) is not frontend_runtime_executor.KubectlTransport or
+                type(fence.ledger) is not resource_fencing.KubeLedger or type(fence.check) is not resource_fencing.ResourceCheck or
+                fence.check is not supervisor.fence.check or fence.on_uncertain is not supervisor.fence.on_uncertain or
                 client.journal is not journal or fence.ledger.client is not client or
                 type(supervisor.package) is not full_cohort_package_phase.PackagePhase or
                 type(supervisor.inventory) is not full_cohort_inventory_phase.InventoryPhase or
@@ -103,8 +105,9 @@ class RealtimePreparation:
             raise ActivationError('Realtime preflight identity unavailable')
         self.journal,self.fence,self.client,self.supervisor=journal,fence,client,supervisor
         self.lock,self.namespace_uid=copy.deepcopy(lock),namespace_uid; self.intent=copy.deepcopy(journal.intent)
-        self.refs=(journal,fence,client,fence.ledger,supervisor,supervisor.package,supervisor.inventory,supervisor.catalog,supervisor.cut,supervisor.realtime_absent)
+        self.refs=(journal,fence,client,fence.ledger,supervisor,supervisor.package,supervisor.inventory,supervisor.catalog,supervisor.cut,supervisor.realtime_absent,fence.check,fence.on_uncertain)
         self.context=copy.deepcopy(fence.context); self.custody=native.SpaceNativeToolPhase._custody(journal)
+        self.check,self.on_uncertain=fence.check,fence.on_uncertain
         self.dependencies=(supervisor.package,supervisor.inventory,supervisor.catalog,supervisor.cut,supervisor.realtime_absent)
         self.dependency_refs=tuple((p,p.journal,p.fence,p.client,p.fence.ledger) for p in self.dependencies)
         self.dependency_custody=tuple(native.SpaceNativeToolPhase._custody(p.journal) for p in self.dependencies)
@@ -116,13 +119,23 @@ class RealtimePreparation:
     def _local(self):
         s=self.supervisor
         if (self.poisoned or (self.context,self.lock,self.namespace_uid,self.intent,self.dependency_intents,self.dependency_custody)!=self._fixed or
+                type(self.fence) is not resource_fencing.Fence or type(self.client) is not frontend_runtime_executor.KubectlTransport or
+                type(self.fence.ledger) is not resource_fencing.KubeLedger or type(self.check) is not resource_fencing.ResourceCheck or
+                self.fence.check is not self.check or self.fence.on_uncertain is not self.on_uncertain or
+                s.fence.check is not self.check or s.fence.on_uncertain is not self.on_uncertain or
+                self.check.context!=self.context or self.check.endpoint!=supervisor_module.media_backup_upload_runner.TT or
+                getattr(self.on_uncertain,'__self__',None) is not self.check or
+                getattr(self.on_uncertain,'__func__',None) is not resource_fencing.ResourceCheck.mark_uncertain or
                 self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
                 self.fence.context!=self.context or self.lock!=s.lock or self.namespace_uid!=s.namespace_uid or
                 self.client.journal is not self.journal or self.fence.ledger.client is not self.client or
-                any(a is not b for a,b in zip(self.refs,(self.journal,self.fence,self.client,self.fence.ledger,s,s.package,s.inventory,s.catalog,s.cut,s.realtime_absent))) or
+                any(a is not b for a,b in zip(self.refs,(self.journal,self.fence,self.client,self.fence.ledger,s,s.package,s.inventory,s.catalog,s.cut,s.realtime_absent,self.check,self.on_uncertain))) or
                 self.dependencies is not self._bound_dependencies or self.dependency_refs is not self._bound_refs or
                 self.dependency_custody is not self._bound_custody or self.dependency_intents is not self._bound_intents or
                 any(p.journal is not j or p.fence is not f or p.client is not c or f.ledger is not ledger or
+                    type(j) is not media_operation_journal.Journal or type(f) is not resource_fencing.Fence or
+                    type(c) is not frontend_runtime_executor.KubectlTransport or type(ledger) is not resource_fencing.KubeLedger or
+                    f.check is not self.check or f.on_uncertain is not self.on_uncertain or
                     c.journal is not j or ledger.client is not c or f.context!=self.context or p.lock!=self.lock or
                     p.namespace_uid!=self.namespace_uid or j.poisoned or j.intent!=intent or j.state.get('intent')!=intent or
                     native.SpaceNativeToolPhase._custody(j)!=custody
