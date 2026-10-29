@@ -66,6 +66,9 @@ def stage_cluster_fixture(session):
             session.check()
             if args[:2]==['get','hpa,jobs,deployments']:return {'items':[]}
             if args[:2]==['get','pods,replicasets']:return {'items':copy.deepcopy(images)}
+            if args==['get','pods','-o','json']:
+                return {'items':[{'metadata':{'name':'fixture-hub','uid':'fixture-hub-uid'},
+                    'spec':{'volumes':[{'name':'jsdata','persistentVolumeClaim':{'claimName':'fixture'}}]}}]}
             if args==['create','--dry-run=server','-f','/dev/stdin','-o','json']:
                 result=copy.deepcopy(kwargs['body'])
                 if result['kind']=='Service':result['spec'].update(type='ClusterIP',clusterIP='10.2.0.1',
