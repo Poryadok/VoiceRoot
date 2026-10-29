@@ -56,6 +56,23 @@ class MigrationCutTest(unittest.TestCase):
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_migration_running()
         self.assertEqual(self.ledger.row['status'], 'uncertain')
 
+    def test_pending_job_prepost_requires_absence_and_zero_sessions(self):
+        self.bind()
+        self.state['job']['state'] = 'pending'
+        self.assertEqual(self.cut.verify_migration_pending()['active_sessions'], 0)
+        self.pod = {'uid': 'unexpected', 'ip': '10.1.2.3'}
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_migration_pending()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_pending_job_session_drift_holds_before_post(self):
+        self.bind()
+        self.state['job']['state'] = 'pending'
+        busy = {'scope': self.admission['session_scope'], 'active_sessions': 1,
+                'active_transactions': 1, 'attributed_sessions': []}
+        with mock.patch.object(migration, 'sessions', return_value=busy):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_migration_pending()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
     def test_terminal_binds_observed_pod_and_journal(self):
         self.bind()
         self.state['job'].update(state='done', uid='first', resourceVersion='1')
@@ -489,12 +506,14 @@ class RealCatalogBracketTest(unittest.TestCase):
         current = {'all_databases': {'auth_db': 10, 'realtime_db': 13}, 'excluded': {},
                    'properties': {'auth_db': {'owner': 1}}, 'databases': {'realtime_db': 13}}
         changed = copy.deepcopy(current); changed['all_databases']['foreign_db'] = 14
-        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        expanded = scope | {'databases': ['auth_db', 'realtime_db'], 'database_oids': {'auth_db': 10, 'realtime_db': 13}}
+        receipt = {'scope': expanded, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
         with mock.patch.object(migration, 'normalized', return_value=(None, state)), \
              mock.patch.object(affected, '_full_catalog', side_effect=[copy.deepcopy(current), copy.deepcopy(current),
                                                                         copy.deepcopy(current), changed]), \
-             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt) as sample:
             self.assertEqual(migration.sessions(cut, state, None), receipt)
+            self.assertEqual(sample.call_args.args[0], expanded)
             with self.assertRaises(affected.AffectedError): migration.sessions(cut, state, None)
 
 
