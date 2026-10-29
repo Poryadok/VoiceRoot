@@ -825,6 +825,13 @@ def prepare_inputs(actions,request,approved,execution,workspace):
             namespace_uid=namespace_uid,source_capture_sha256=source_capture_sha256,list_rv=policy_rv)
     _private_write(base/'policy-before.json',old_policy)
     binding=None if request.get('gis_first_install') is True else gis_existing_update.load_authority(kube)
+    gis_active=None
+    if binding is not None:
+        gis_active=_json(_read_private(guard.ROOT/'installed'/'active-release.json'))
+        if gis_active.get('gis_first_install_transition')!={'operation':binding['operation'],'receipt_sha256':binding['anchor_sha256']}:
+            raise Blocked('staging_prerequisites_gis_active_changed')
+    gis_authority={'binding':copy.deepcopy(binding),'active':copy.deepcopy(gis_active)}
+    _private_write(base/'gis-authority.json',_bytes(gis_authority))
     extras=['voice-web','voice-admin','voice-developer-portal']+([HUB] if request['mode']=='full' else [])
     if binding is not None:extras.append('voice-gameintegration')
     if existing:extras.append('voice-p3-principal-jwks')
@@ -896,7 +903,7 @@ def prepare_inputs(actions,request,approved,execution,workspace):
         'previous_active_sha256':digest(active) if existing else None}
     for slot,payloads in (('release_policy',policy_payloads),('p3',{} if existing else p3_payloads),('gis_material',gis_payloads)):_save_payloads(session,slot,payloads)
     _recheck_baseline(session,{'plan':plan});session.check()
-    prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':plan,
+    prepared={'schema':'voice-staging-prerequisites-prepared-v1','plan':plan,'gis_authority_sha256':digest(gis_authority),
               'request':{'mode':request['mode'],'changed_services':copy.deepcopy(request['changed_services']),
                          'gis_first_install':request.get('gis_first_install') is True}}
     _private_write(base/'prepared.json',_bytes(prepared))
@@ -932,7 +939,7 @@ def run_prepare(actions,request,approved,execution,workspace,*,preservation_ref)
     receipt=staging_cohort_preservation.load_qualified(session)
     if receipt!=preservation_ref:raise Blocked('staging_prerequisites_preservation_changed')
     prepared=_json(_read_private(_base(session)/'prepared.json',limit=32<<20))
-    if (type(prepared) is not dict or set(prepared)!={'schema','plan','request'}
+    if (type(prepared) is not dict or set(prepared)!={'schema','plan','request','gis_authority_sha256'}
         or prepared['schema']!='voice-staging-prerequisites-prepared-v1'
         or digest(prepared)!=receipt.get('prerequisite_inputs_sha256')):
         raise Blocked('staging_prerequisites_prepared_changed')
@@ -954,6 +961,30 @@ def run_prepare(actions,request,approved,execution,workspace,*,preservation_ref)
     if not callable(getattr(p3,'verify_complete',None)):raise Blocked('staging_prerequisites_publisher_verifier_missing')
     for slot in SLOTS:importlib.import_module(CHILD_MODULES[slot]).execute(session)
     return _complete(session)
+
+
+def load_gis_authority(session):
+    """Load only the pre-cut GIS authority bound to this preservation receipt."""
+    import staging_cohort_preservation
+    import gis_existing_update
+    from stage_runtime import Kube
+    receipt=staging_cohort_preservation.load_qualified(session)
+    prepared=_json(_read_private(_base(session)/'prepared.json',limit=32<<20))
+    record=_json(_read_private(_base(session)/'gis-authority.json',limit=32<<20))
+    if (type(prepared) is not dict or set(prepared)!={'schema','plan','request','gis_authority_sha256'}
+        or digest(prepared)!=receipt.get('prerequisite_inputs_sha256') or type(record) is not dict
+        or set(record)!={'binding','active'} or digest(record)!=prepared['gis_authority_sha256']):
+        raise Blocked('staging_prerequisites_gis_authority_changed')
+    if record['binding'] is None:
+        if record['active'] is not None:raise Blocked('staging_prerequisites_gis_authority_changed')
+    else:
+        current=_json(_read_private(guard.ROOT/'installed'/'active-release.json'))
+        if current!=record['active'] or current.get('gis_first_install_transition')!={
+            'operation':record['binding']['operation'],'receipt_sha256':record['binding']['anchor_sha256']}:
+            raise Blocked('staging_prerequisites_gis_active_changed')
+        gis_existing_update.verify_phase(record['binding'],Kube(),'paused-old')
+    session.check()
+    return copy.deepcopy(record['binding'])
 
 
 def _verify_children(session,state):

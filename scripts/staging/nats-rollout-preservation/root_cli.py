@@ -212,10 +212,19 @@ def main_unlocked(args,code):
     raise Blocked('rollout_root_arguments_invalid')
 
 
-def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None):
+def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence=None,nats_authority=None,actor_authority=None,actor_services=None,renderer_authority=None,lifecycle=None,gis_source_authority=None,gis_source_root=None,gis_source_capture=None,gis_transition=None,resource_session=None,gis_binding=None,realtime_bootstrap_receipt=None,prerequisites_capture=None,_preservation_ref=None):
         """Trusted root compiler entrypoint; never accepts a runner target file."""
         if not re.fullmatch(r'[a-f0-9]{12}',op):raise Blocked('rollout_operation_invalid')
-        base=ROOT/('rollout-'+op);base.mkdir(mode=0o700)
+        base=ROOT/('rollout-'+op)
+        if _preservation_ref is None:base.mkdir(mode=0o700)
+        else:
+            import staging_cohort_preservation
+            if (resource_session is None or resource_session.operation!=op
+                or staging_cohort_preservation.load_qualified(resource_session)!=_preservation_ref
+                or value['target'].get('cohort_preservation_sha256')!=transaction.canonical(_preservation_ref)):
+                raise Blocked('cohort_preserved_prepare_invalid')
+            if not callable(getattr(transaction,'prepare_preserved',None)):
+                raise Blocked('cohort_preserved_transaction_missing')
         # Runner code remains outside the overwritten target checkout. Copy
         # only the manifest's verified code members, never inputs/credentials.
         runner_code=base/'code';runner_code.mkdir(mode=0o750)
@@ -235,13 +244,28 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         if gis_binding is not None:lifecycle_args['gis_binding']=gis_binding
         if realtime_bootstrap_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_bootstrap_receipt
         if prerequisites_capture is not None:lifecycle_args['prerequisites_capture']=prerequisites_capture
+        if _preservation_ref is not None:lifecycle_args['preservation_ref']=_preservation_ref
         gis_first_install=(None if 'gis_first_install' not in value else
             __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
+        prepare_transaction=transaction.prepare if _preservation_ref is None else transaction.prepare_preserved
+        state=prepare_transaction(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)
         return state
+
+
+def prepare_preserved_value(value,code,binding,op,*,resource_session,preservation_ref,
+                            nats_authority,actor_authority,actor_services,renderer_authority,
+                            gis_source_authority,gis_source_root,gis_source_capture,gis_transition,
+                            gis_binding,realtime_bootstrap_receipt,prerequisites_capture):
+    """Continue only an already qualified, root-owned preservation operation."""
+    if preservation_ref is None:raise Blocked('cohort_preserved_prepare_invalid')
+    return prepare_value(value,code,binding,op,resource_session=resource_session,_preservation_ref=preservation_ref,
+        nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,
+        renderer_authority=renderer_authority,gis_source_authority=gis_source_authority,
+        gis_source_root=gis_source_root,gis_source_capture=gis_source_capture,gis_transition=gis_transition,
+        gis_binding=gis_binding,realtime_bootstrap_receipt=realtime_bootstrap_receipt,prerequisites_capture=prerequisites_capture)
 
 
 def main(args):
