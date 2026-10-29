@@ -188,9 +188,9 @@ buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf lint && buf format -d --exit-code"
 
-backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci testcontainers-prune
+backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci
 
-backend-test-ci-short: go-mod-tidy-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci testcontainers-prune
+backend-test-ci-short: go-mod-tidy-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci
 
 go-mod-tidy-all:
 	$(BASH) -c 'for m in $(GO_MODULES_LINT); do \
@@ -200,7 +200,7 @@ go-mod-tidy-all:
 
 backend-image-ci: $(GO_IMAGE_TARGETS) auth-image-ci
 
-# Remove testcontainers leftovers (Ryuk may be disabled on Windows). Does not touch compose stacks.
+# Refuse unscoped Testcontainers cleanup on shared Docker hosts.
 testcontainers-prune:
 	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune.sh"
 
@@ -236,7 +236,7 @@ gateway-test-race-ci:
 	cd "$(ROOT)/src/backend/gateway" && $(GATEWAY_RACE_RUN)
 
 # Full local CI (parity with .github/workflows/ci.yml): check-toolchain, compose+buf in Docker,
-# host go test/mvn/golangci (testcontainers need host Docker), images, testcontainers-prune.
+# host go test/mvn/golangci (testcontainers need host Docker), and images.
 # Requires Go 1.26, Docker daemon, Maven/Java on PATH. Flutter: make flutter-ci
 build-all: check-toolchain compose-config-ci buf-ci backend-test-ci golangci-ci gateway-test-race-ci backend-image-ci
 
@@ -329,6 +329,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/affected_check_plan_test.py"
 	python3 "$(ROOT)/scripts/ci/go_integration_receipts_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
+	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune_test.sh"
 	python3 "$(ROOT)/scripts/ci/gate-latency_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
