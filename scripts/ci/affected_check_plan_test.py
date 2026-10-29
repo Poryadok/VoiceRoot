@@ -498,6 +498,35 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('space-autovacuum-integration', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_space_native_installer_proof_follows_affected_integration(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['space-native-installer-integration']
+        self.assertIn("contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')", job['if'])
+        self.assertIn('space-native-installer-integration', workflow['jobs']['ci-gate']['needs'])
+        build = next(step for step in job['steps'] if step.get('name') == 'Build source-bound Space installer')
+        self.assertIn('Dockerfile.native-migrate', build['run'])
+        self.assertIn('SOURCE_REVISION', build['run'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Run Space native installer proof')
+        self.assertIn('TestProductionFreshChainAndRetainedVerify', test['run'])
+        self.assertIn('space_native_installer_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        self.assertIn('job.services.postgres.ports', test['env']['NATIVE_INSTALLER_TEST_ADMIN_URL'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': ['space'], 'docker_go_services': [],
+                  'integration_go_services': ['space'], 'run_go': True, 'run_pkg': True}
+        selected = planner.make_plan(planner.match_filters(rules, ['src/backend/space/main.go']), matrix)
+        self.assertIn('space-native-installer-integration', selected['checks'])
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+        needs = {name: {'result': 'success'} for name in selected['checks']}
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            needs['space-native-installer-integration']['result'] = outcome
+            self.assertIn('space-native-installer-integration', planner.verify_gate(selected, needs, identity))
+        matrix['integration_go_services'] = []
+        self.assertNotIn('space-native-installer-integration', planner.make_plan(
+            planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
+
     def test_messaging_threadlist_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
@@ -710,6 +739,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                     expected_extra.add('realtime-lifecycle-integration')
                 if 'role' in plan['components']['go_integration']:
                     expected_extra.add('role-space-receipt-integration')
+                if 'space' in plan['components']['go_integration']:
+                    expected_extra.add('space-native-installer-integration')
                 if 't31-critical' in proposed:
                     expected_extra.add('t31-critical')
                 self.assertEqual(proposed - required, expected_extra)

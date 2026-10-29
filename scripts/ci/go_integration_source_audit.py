@@ -25,6 +25,8 @@ DEDICATED = {
         'role-migration-integration',
     ('space', 'voice/backend/space/internal/nativeinstaller', 'TestMaintenanceWindowWithRealAutovacuum'):
         'space-autovacuum-integration',
+    ('space', 'voice/backend/space/internal/nativeinstaller', 'TestProductionFreshChainAndRetainedVerify'):
+        'space-native-installer-integration',
 }
 
 
