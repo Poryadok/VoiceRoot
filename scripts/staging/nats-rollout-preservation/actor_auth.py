@@ -21,7 +21,8 @@ def prove(credentials,operator,binary,unchanged):
         p=base/'server.conf';p.write_text(config);p.chmod(0o440);os.chown(p,0,65532)
         import commands,resource_claim
         session=getattr(commands.authority_guard,'__self__',None)
-        if isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None:
+        cohort_runtime=isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None
+        if cohort_runtime:
             import staging_cohort_preservation
             runtime=staging_cohort_preservation.auth_runtime(session,base,'actor')
         else:runtime=DockerRuntime(base,'actor'+uuid.uuid4().hex[:12])
@@ -42,6 +43,9 @@ def prove(credentials,operator,binary,unchanged):
                 'credential_sha256':hash_bytes(credentials),'empty_scratch':True,
                 'publication_authorization_exercised':False,'business_delivery_exercised':False}
         finally:
-            for name in reversed(list(runtime.owned)):
-                row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
-                if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('existing_service_actor_cleanup_failed')
+            try:
+                for name in reversed(list(runtime.owned)):
+                    row=runtime.inspect(name);runtime.run(['rm','-f',row['Id']])
+                    if runtime.run(['ps','-a','--filter','id='+row['Id'],'--format','{{.ID}}']):raise Blocked('existing_service_actor_cleanup_failed')
+            finally:
+                if cohort_runtime:runtime.finish_auth()

@@ -220,7 +220,9 @@ class Session:
             is_get=any(safe_get(prefix) for prefix in prefixes)
             import actor_root
             actor_read=prefixes[0]+list(actor_root.STORY_SCHEMA_ARGS)
-            if args!=decode and args!=actor_read and not is_dryrun and not is_get:
+            import source_plan
+            clickhouse_read=prefixes[0]+list(source_plan.CLICKHOUSE_READ_ARGS)
+            if args!=decode and args!=actor_read and args!=clickhouse_read and not is_dryrun and not is_get:
                 raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
         # stage guards own those queries. No workload fence/apply/cleanup may

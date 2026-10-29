@@ -73,6 +73,11 @@ class ResourceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'staging_cohort_auth_permit_invalid'):session.check(auth+['other'])
             session.check(auth);self.assertIsNone(session._cohort_auth_permit)
             with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(auth)
+            import source_plan
+            ch=['/usr/local/bin/k3s','kubectl','--namespace','voice-staging']+list(source_plan.CLICKHOUSE_READ_ARGS)
+            session.check(ch)
+            for bad in (ch[:-1]+['DROP DATABASE voice'],ch[:5]+['other-pod']+ch[6:],ch+['--context=other']):
+                with self.assertRaisesRegex(RuntimeError,'staging_prerequisite_command_forbidden'):session.check(bad)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):
                 session.bind_target(c['commit'],c['images'],plan['actual_before'],'e'*64)
             with self.assertRaisesRegex(RuntimeError,'advance_required'):session.ready()
