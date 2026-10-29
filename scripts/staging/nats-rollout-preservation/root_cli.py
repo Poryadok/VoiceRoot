@@ -223,6 +223,8 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
                 or staging_cohort_preservation.load_qualified(resource_session)!=_preservation_ref
                 or value['target'].get('cohort_preservation_sha256')!=transaction.canonical(_preservation_ref)):
                 raise Blocked('cohort_preserved_prepare_invalid')
+            if not callable(getattr(transaction,'prepare_preserved',None)):
+                raise Blocked('cohort_preserved_transaction_missing')
         # Runner code remains outside the overwritten target checkout. Copy
         # only the manifest's verified code members, never inputs/credentials.
         runner_code=base/'code';runner_code.mkdir(mode=0o750)
@@ -245,7 +247,8 @@ def prepare_value(value,code,binding,op,previous=None,publish=False,before_fence
         if _preservation_ref is not None:lifecycle_args['preservation_ref']=_preservation_ref
         gis_first_install=(None if 'gis_first_install' not in value else
             __import__('gis_first_install').bind_operation(value['gis_first_install'],op,value['target']))
-        state=transaction.prepare(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
+        prepare_transaction=transaction.prepare if _preservation_ref is None else transaction.prepare_preserved
+        state=prepare_transaction(Kube(),base,code/'nats-known-baseline',value['target'],value['contract'],op,binding,value['migrations'],value['nonnats'],before_fence=before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=actor_services,renderer_authority=renderer_authority,gis_first_install=gis_first_install,gis_source_root=(gis_source_root if gis_first_install is not None else None),gis_source_capture=(gis_source_capture if gis_first_install is not None else None),gis_source_authority=(gis_source_authority if gis_first_install is not None or gis_binding is not None else None),gis_transition=gis_transition,**lifecycle_args)
         if previous is not None:state['rollback_from']={'operation':previous['operation'],'images':value['target']['images']}
         state['code_capture']=binding;state['contract']=value['contract'];save(base/'checkpoint.json',state)
         if publish:publish_copy(base,state)

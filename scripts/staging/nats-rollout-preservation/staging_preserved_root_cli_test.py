@@ -21,6 +21,10 @@ class PreservedRootCLITest(unittest.TestCase):
             with patch.object(cohort,'load_qualified',return_value={'receipt':'different'}):
                 with self.assertRaisesRegex(root_cli.Blocked,'cohort_preserved_prepare_invalid'):
                     root_cli.prepare_preserved_value(value,Path('/source'),{},'a'*12,preservation_ref={'receipt':'claimed'},**args)
+            receipt={'receipt':'qualified'};value['target']['cohort_preservation_sha256']=root_cli.transaction.canonical(receipt)
+            with patch.object(cohort,'load_qualified',return_value=receipt):
+                with self.assertRaisesRegex(root_cli.Blocked,'cohort_preserved_transaction_missing'):
+                    root_cli.prepare_preserved_value(value,Path('/source'),{},'a'*12,preservation_ref=receipt,**args)
             self.assertEqual(list(Path(folder).iterdir()),[])
 
 
