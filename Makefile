@@ -331,6 +331,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/testcontainers-prune_test.sh"
 	python3 "$(ROOT)/scripts/ci/local_heavy_slots_test.py"
+	python3 "$(ROOT)/scripts/ci/story-media-cohort-chain-ci_test.py"
 	python3 "$(ROOT)/scripts/ci/gate-latency_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/ci-script-tests-reachability_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/check-auth-testcontainers-reports_test.sh"
@@ -340,6 +341,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
 
 ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
+	$(BASH) "$(ROOT)/scripts/ci/story-media-cohort-chain.sh"
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p a4_rollout_evidence_test.py

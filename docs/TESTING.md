@@ -230,6 +230,19 @@ rejects skips.
   must HOLD; restored state verifies without migration or resealing. The test
   drops only the exact database it created; discard the private server afterward.
   This bounded source regression does not prove full Compose/Gateway startup.
+- Space maintenance-window regression: on an owned disposable PostgreSQL server
+  with absent `space_db`, configure `autovacuum_naptime=1s`,
+  `autovacuum_vacuum_cost_delay=20ms` and `autovacuum_vacuum_cost_limit=1`.
+  Set `NATIVE_INSTALLER_WINDOW_TEST_ADMIN_URL` to its administrative `postgres`
+  database and run from `src/backend/space`: `go test -tags=integration
+  ./internal/nativeinstaller -run '^TestMaintenanceWindowWithRealAutovacuum$'
+  -count=1 -v`. The actual production checker must accept a real autovacuum worker
+  while rejecting foreign writers, idle unnamed clients, changed PID/role/OID
+  and lost owner locks. The test creates/drops only its previously absent
+  `space_db`; discard the private server afterward. This checks the window guard,
+  not the full migration chain or a hosted failure's backend inventory.
+  Required CI executes this same test in the `backend-go` Space matrix entry
+  with an owned digest-pinned PostgreSQL 16 container and unconditional cleanup.
 - gRPC: in-process server или клиент в тесте — как в уже существующем сервисе с тестами.
 - Voice R22.3: `go test ./internal/roomlifecycle -run '^Test(VoiceDBRedisDivergenceMigration|PostgresLifecycleStore)_D1[^0-9].*$' -count=1`,
   затем `go test ./internal/roomlifecycle -count=1`, `go test -race

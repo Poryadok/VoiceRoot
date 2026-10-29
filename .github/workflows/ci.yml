@@ -1141,6 +1141,43 @@ jobs:
         env:
           CGO_ENABLED: "0"
         run: go test -short ./...
+      - name: Space native maintenance window with real autovacuum
+        if: matrix.service == 'space'
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: "0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          cidfile=$(mktemp)
+          rm -- "$cidfile"
+          cleanup() {
+            if [[ -s "$cidfile" ]]; then
+              docker rm --force --volumes "$(cat "$cidfile")" >/dev/null
+            fi
+            rm -f -- "$cidfile"
+          }
+          trap cleanup EXIT
+          docker run -d --cidfile "$cidfile" \
+            -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 \
+            postgres@sha256:efedf3595f1d6f415c08568ba171029bf54052e754cc9f030e3f2412b21f3d67 \
+            -c autovacuum_naptime=1s -c autovacuum_vacuum_cost_delay=20ms \
+            -c autovacuum_vacuum_cost_limit=1 >/dev/null
+          cid=$(cat "$cidfile")
+          ready=false
+          for attempt in {1..30}; do
+            if docker exec "$cid" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          [[ "$ready" == true ]]
+          port=$(docker port "$cid" 5432/tcp)
+          port=${port##*:}
+          [[ "$port" =~ ^[0-9]+$ ]]
+          export NATIVE_INSTALLER_WINDOW_TEST_ADMIN_URL="postgres://postgres@127.0.0.1:${port}/postgres?sslmode=disable"
+          go test -tags=integration ./internal/nativeinstaller -run '^TestMaintenanceWindowWithRealAutovacuum$' -count=1 -timeout=2m -v
       - name: Role native membership authority and invite decisions
         if: matrix.service == 'role'
         working-directory: src/backend/role
