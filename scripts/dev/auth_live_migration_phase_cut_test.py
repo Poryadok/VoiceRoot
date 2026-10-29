@@ -152,9 +152,16 @@ class TwoJournalTest(unittest.TestCase):
                 self.assertEqual(work.base.ledger.row['auth_live_c1']['status'],'done')
                 self.assertFalse(state['jobs'] or state['pods'] or state['configmaps'])
                 self.assertIsNone(cut.migration)
-                result=live.verify_completed(work.phase,cut,'.',metadata)
+                result=live.verify_completed(work.phase,cut,'.')
                 self.assertEqual(result['status'],'migrated')
                 self.assertEqual(result['candidate']['route']['database'],'auth_db')
+                original_guard=cut._guard; calls=[0]
+                def mutate_at_final_guard():
+                    original_guard(); calls[0]+=1
+                    if calls[0]==2:
+                        work.journal.state['steps']['auth-live-c1-inputs']['candidate']['route']['database']='other_db'
+                with patch.object(cut,'_guard',side_effect=mutate_at_final_guard),self.assertRaises(live.PhaseError):
+                    live.verify_completed(work.phase,cut,'.')
         finally:
             if cut_journal is not None: cut_journal.close()
             if not work.doCleanups(): raise RuntimeError('fixture cleanup failed')

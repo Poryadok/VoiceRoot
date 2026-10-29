@@ -31,7 +31,7 @@ require the C2 whole source SHA, database identity, or installation timestamps
 to equal C1. A changed Auth subtree or migration catalog needs a new reviewed
 qualification and is not silently treated as a no-op.
 
-`verify_completed(phase, cut, source_root, metadata)` rechecks protected package,
+`verify_completed(phase, cut, source_root)` rechecks protected package,
 cohort and private/ledger receipts and returns the candidate route and target
 digest for the resumed-session consumer. It does not require zero sessions or
 prove that the resumed Pods use that target; the consumer must independently

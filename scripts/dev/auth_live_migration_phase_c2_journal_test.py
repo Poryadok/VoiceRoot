@@ -98,7 +98,7 @@ class C2JournalTest(unittest.TestCase):
             metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
                 [{k:r[k] for k in ('version','script','checksum','success')} for r in history]}}}
             observation={'history':history,'sessions':[],'prepared':0}
-            cut=SimpleNamespace(verify_drained=lambda:None,_guard=lambda:None)
+            cut=SimpleNamespace(verify_drained=lambda:None,_guard=lambda:None,journal=SimpleNamespace(state={'steps':{}}))
             target=live.eligibility.candidate_target(work.media.intent['auth_live_candidate']['deployment']['spec'],work.base.context['images']['voice-auth/auth'])
             candidate={'source_sha':binding['source_sha'],'image':work.base.context['images']['voice-auth/auth'],
                 'auth_tree':'a'*40,'platform_digest':'sha256:'+'e'*64,'target_spec_sha256':live._digest(target),
@@ -117,13 +117,27 @@ class C2JournalTest(unittest.TestCase):
                 work.base.ledger.row['cohort_restore']=bad
                 receipt=live.no_op_c2(work.phase,cut,'.','actor','token',metadata)
                 self.assertEqual(receipt['operation_id'],binding['operation_id'])
+                self.assertEqual(receipt['metadata'],metadata)
                 self.assertEqual(work.base.ledger.row['auth_live_c2']['status'],'done')
                 self.assertEqual(work.journal.state['steps']['auth-live-c2-private'],receipt)
                 with patch.object(cut,'verify_drained',side_effect=AssertionError('resume reader must not drain')):
-                    completed=live.verify_completed(work.phase,cut,'.',metadata)
+                    completed=live.verify_completed(work.phase,cut,'.')
                 self.assertEqual(completed['status'],'no-op')
                 work.journal.state['steps']['auth-live-c2-private']['candidate']['route']['database']='other_db'
-                with self.assertRaises(live.PhaseError): live.verify_completed(work.phase,cut,'.',metadata)
+                with self.assertRaises(live.PhaseError): live.verify_completed(work.phase,cut,'.')
+                work.journal.state['steps']['auth-live-c2-private']=copy.deepcopy(receipt)
+                original_row=copy.deepcopy(work.base.ledger.row)
+                for kind in ('private','ledger'):
+                    calls=[0]
+                    def mutate():
+                        calls[0]+=1
+                        if calls[0]==2:
+                            if kind=='private': work.journal.state['steps']['auth-live-c2-private']['candidate']['route']['database']='other_db'
+                            else: work.base.ledger.row['auth_live_c2']['receipt_sha256']='f'*64
+                    with patch.object(cut,'_guard',side_effect=mutate),self.assertRaises(live.PhaseError):
+                        live.verify_completed(work.phase,cut,'.')
+                    work.journal.state['steps']['auth-live-c2-private']=copy.deepcopy(receipt)
+                    work.base.ledger.row=copy.deepcopy(original_row)
         finally:
             if not work.doCleanups(): raise RuntimeError('fixture cleanup failed')
 
