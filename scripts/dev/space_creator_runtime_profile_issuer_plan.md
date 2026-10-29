@@ -18,10 +18,10 @@ Only new `space_creator_runtime_profile_issuer*` files. The Creator phase owner 
 ## Milestones and steps
 
 - [x] Agree fixed Secret names and TLS SAN/EKU with Creator consumer.
-- [ ] Bind a source-owned root guard to a complete, fresh missing-subset preflight before key generation.
+- [x] Bind the draft stage to the source-owned root guard and two fresh missing-subset preflight exchanges.
 - [x] Validate the closed packet and generated cryptographic material against a fixture media CA.
 - [x] Exercise one-shot sealed memfd export to a verified operation-specific fixture peer; lost outcome holds.
-- [ ] Exercise immutable Linux fixtures and obtain independent security review.
+- [ ] Pin the reviewed root bundle source, exercise immutable Linux fixtures and obtain independent security review.
 
 ## Validation
 
@@ -29,7 +29,7 @@ Linux tests must cover each subset, unknown members, existing/partial objects, m
 
 ## Progress and decisions
 
-The five-object catalog is source-backed. The draft root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently owned root metadata observer before and after generation. The observer and consumer integration are not yet reviewed or proven together. No caller-supplied list or boolean is an authority. Linux fixture tests cover crypto, one-shot FD transfer, missing READY and post-generation drift; external metadata and guards are mocked in stage tests.
+The five-object catalog is source-backed. The root stage exchanges two fixed authenticated preflight messages with the consumer and invokes the independently reviewed root metadata observer before and after generation. A joint fixture exercises the real protected phase, socket exchange, root CA/key check and actual leaf creation; Kubernetes and TT remain fixture inputs. The bundle source anchor intentionally holds until the complete payload is independently reviewed. No caller-supplied list or boolean is an authority.
 
 ## Risks and follow-ups
 
