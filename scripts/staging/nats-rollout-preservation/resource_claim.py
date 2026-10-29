@@ -228,11 +228,12 @@ class Session:
             if args not in postgres_reads and args[:len(prefixes[0])+3]==prefixes[0]+['exec','voice-postgres-0','-c']:
                 try:
                     import staging_cohort_preservation_pg
-                    identity_args=getattr(staging_cohort_preservation_pg,'IDENTITY_ARGS',None)
+                    identity_args=[getattr(staging_cohort_preservation_pg,name,None)
+                        for name in ('IDENTITY_ARGS','SPACE_IDENTITY_ARGS')]
                 except ModuleNotFoundError as error:
                     if error.name!='staging_cohort_preservation_pg':raise
-                    identity_args=None
-                identity_read=identity_args is not None and args==prefixes[0]+list(identity_args)
+                    identity_args=[]
+                identity_read=any(isinstance(value,(list,tuple)) and args==prefixes[0]+list(value) for value in identity_args)
             if args!=decode and args!=actor_read and args!=clickhouse_read and args not in postgres_reads and not identity_read and not is_dryrun and not is_get:
                 raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
