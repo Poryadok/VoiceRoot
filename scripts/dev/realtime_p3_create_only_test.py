@@ -97,6 +97,32 @@ class CreateOnlyTest(unittest.TestCase):
         self.assertEqual(self.created,{})
         self.assertEqual(self.base.ledger.row['status'],'uncertain')
 
+    def test_delegated_failure_never_falls_back_or_dry_runs(self):
+        fake_source = SimpleNamespace(verify=lambda *args:None)
+        fake_receiver = SimpleNamespace(receive=lambda *args:(_ for _ in ()).throw(ValueError('not ready')))
+        with patch.dict(sys.modules,{'realtime_p3_create_only_source':fake_source,'realtime_p3_delegated_receiver':fake_receiver}), \
+             patch.object(create,'SOCKET_PARENT',self.parent), patch.object(create.transport,'public_certificate',side_effect=self.public), \
+             patch.object(create.transport,'get',side_effect=self.get), patch.object(create.transport,'create',side_effect=self.create), \
+             patch.object(create.channel,'receive',side_effect=AssertionError('must not fall back')):
+            self.session.prepare()
+            with self.assertRaises(create.CreateError):self.session.finish_delegated(None,None)
+        self.assertEqual(self.calls,[]); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
+    def test_delegated_drain_loss_refuses_first_dry_run(self):
+        fake_source = SimpleNamespace(verify=lambda *args:None)
+        cut=SimpleNamespace(journal=object(),client=object(),fence=SimpleNamespace(ledger=object()),
+                            verify_drained=lambda:(_ for _ in ()).throw(ValueError('drain lost')))
+        def received(session,*_):
+            session._delegated_cut=cut; session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+            return self.envelope
+        fake_receiver=SimpleNamespace(receive=received)
+        with patch.dict(sys.modules,{'realtime_p3_create_only_source':fake_source,'realtime_p3_delegated_receiver':fake_receiver}), \
+             patch.object(create,'SOCKET_PARENT',self.parent), patch.object(create.transport,'public_certificate',side_effect=self.public), \
+             patch.object(create.transport,'get',side_effect=self.get), patch.object(create.transport,'create',side_effect=self.create):
+            self.session.prepare()
+            with self.assertRaises(create.CreateError):self.session.finish_delegated(object(),'token')
+        self.assertEqual(self.calls,[]); self.assertEqual(self.base.ledger.row['status'],'uncertain')
+
     def test_live_ca_drift_retains_created_resources_and_holds(self):
         self.fault = 'root-drift'
         with self.assertRaises(create.CreateError): self.execute()

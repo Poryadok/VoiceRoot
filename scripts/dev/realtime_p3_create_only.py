@@ -56,6 +56,7 @@ class Session:
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.intent = copy.deepcopy(journal.intent); self.listener = None; self.dirfd = None; self.inode = None
         self.pending = False; self.handoff = None; self.effects = {}; self.roots = None; self.completed = False
+        self._delegated_cut = None; self._delegated_refs = None
         self.plan = self.intent.get('realtime_p3_create')
         match = re.fullmatch(r'media-c[12]-([0-9a-f]{32})',fence.context.get('operation_id',''))
         if (not match or self.intent.get('resource_context') != fence.context or self.intent.get('namespace_uid') != namespace_uid
@@ -71,6 +72,11 @@ class Session:
     def _guard(self):
         if (self.journal.poisoned or self.journal.intent != self.intent or self.journal.state.get('intent') != self.intent): raise ValueError()
         media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid)
+        if self._delegated_cut is not None:
+            cut=self._delegated_cut
+            if self._delegated_refs!=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger): raise ValueError()
+            cut.verify_drained()
+            if self._delegated_refs!=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger): raise ValueError()
         row, _ = self.fence.ledger.read()
         if self.handoff is not None and (row.get('realtime_p3_handoff') != self.handoff
                 or self.journal.state['steps'].get('realtime-p3-handoff') != self.handoff): raise ValueError()
@@ -166,13 +172,24 @@ class Session:
 
     def finish(self):
         """Receive root packet, dry-run, then create and observe each fixed object."""
+        return self._finish(False,None,None)
+
+    def finish_delegated(self,capability,token):
+        """Use the fixed delegated issuer; its terminal success precedes all effects."""
+        return self._finish(True,capability,token)
+
+    def _finish(self,delegated,capability,token):
         try:
             if self.listener is None or self.handoff is None: raise ValueError()
             self._guard()
             info = os.stat('packet.sock',dir_fd=self.dirfd,follow_symlinks=False)
             if (not stat.S_ISSOCK(info.st_mode) or (info.st_dev,info.st_ino) != self.inode
                     or os.getpid() != self.handoff['pid'] or _ticks() != self.handoff['start_ticks']): raise ValueError()
-            envelope = channel.receive(self.listener,self.fence.context['operation_id'],self.plan['issuer_source_sha'])
+            if not delegated:
+                envelope = channel.receive(self.listener,self.fence.context['operation_id'],self.plan['issuer_source_sha'])
+            else:
+                from realtime_p3_delegated_receiver import receive
+                envelope = receive(self,capability,token)
             self._guard(); self._check_roots()
             principal = self.roots[PUBLIC[0]]['certificate']; media = self.roots[PUBLIC[1]]['certificate']; space = self.roots[PUBLIC[2]]['certificate']
             objects = packet.validate(envelope,self.fence.context['operation_id'],self.plan['issuer_source_sha'],principal,media,space)
