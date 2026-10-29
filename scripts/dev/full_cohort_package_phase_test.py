@@ -140,13 +140,12 @@ class PackagePhaseTest(unittest.TestCase):
             with patch.object(self.phase,'_nodes',side_effect=drift):
                 with self.assertRaises(admission.PackageError): self.phase.verify_current('fixture-token')
 
-    def test_master_moved_after_package_rejected(self):
+    def test_master_moved_after_package_does_not_invalidate_pinned_receipt(self):
         with patch.object(admission,'ROOT',self.root.parent), patch.object(package,'capture',side_effect=self.capture), \
              patch.object(admission.oci,'resolve',return_value=self.platforms), patch.object(admission.source,'Registry'):
-            self.phase.run('fixture-token','fixture-actor')
+            result=self.phase.run('fixture-token','fixture-actor')
             with patch.object(package.source,'_head',side_effect=ValueError('private sentinel')):
-                with self.assertRaises(admission.PackageError) as error: self.phase.verify_current('fixture-token')
-            self.assertNotIn('sentinel',str(error.exception))
+                self.assertEqual(self.phase.verify_current('fixture-token'),result)
 
     def test_actual_capture_and_oci_composition_with_fake_remote(self):
         registry_fixture = oci_fixture.OCITest(); registry_fixture.setUp()
