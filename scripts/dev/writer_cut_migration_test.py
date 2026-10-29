@@ -25,6 +25,8 @@ class MigrationCutTest(unittest.TestCase):
                       'execution': {'database': 'auth_db', 'database_oid': 10}, 'terminal': None}
         self.pod = None
         self.phase = types.SimpleNamespace(journal=types.SimpleNamespace(state={'steps': {}}))
+        self.scope_match_patch = mock.patch.object(self.cut, '_effective_scope_matches', return_value=True)
+        self.scope_match_patch.start(); self.addCleanup(self.scope_match_patch.stop)
         self.normal = mock.patch.object(migration, 'normalized', side_effect=lambda *args: (None, copy.deepcopy(self.state)))
         self.observer = mock.patch.object(migration, 'observe', side_effect=lambda *args, **kwargs: (copy.deepcopy(self.state), copy.deepcopy(self.pod)))
         self.session_patch = mock.patch.object(migration, 'sessions', side_effect=lambda *args: {
@@ -298,6 +300,7 @@ class EffectiveScopeTest(unittest.TestCase):
         for patcher in patches: patcher.start(); self.addCleanup(patcher.stop)
 
     def test_realtime_scope_adds_only_source_oid_and_detects_drift(self):
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.current_effective_session_scope()
         self.cut.bind_realtime_scope()
         scope = self.cut.current_effective_session_scope()
         self.assertEqual(scope['database_oids'], {'auth_db': 10, 'realtime_db': 13})

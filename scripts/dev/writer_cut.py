@@ -727,7 +727,8 @@ class WriterCut:
 
     def _effective_scope_matches(self, row):
         if self.effective_session is None:
-            return not any(o['metadata']['name'] == 'voice-realtime' for o in self.admission['controllers'])
+            return ((self.migration is None or self.migration.get('kind') != 'realtime') and
+                    not any(o['metadata']['name'] == 'voice-realtime' for o in self.admission['controllers']))
         binding = self.effective_session; source = binding['phase'].journal
         step = self.journal.state['steps'].get('writer-cut-realtime-scope', {})
         return (not source.poisoned and source.dirfd is not None and source.lockfd is not None and
