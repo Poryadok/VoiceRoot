@@ -47,7 +47,9 @@ def stage_cluster_fixture(session,store_kube=None):
             'ownerReferences':[{'kind':'Deployment','uid':uid}]},'spec':{'template':copy.deepcopy(template)}}
         replicasets[rs['metadata']['name']]=rs;images.append(copy.deepcopy(rs))
         def statuses(containers):return [{'name':c['name'],'ready':True,
-            'imageID':'fixture.invalid/'+c['name']+'@sha256:'+'a'*64} for c in containers]
+            'imageID':('ghcr.io/poryadok/voiceroot/story@sha256:8b142297965b3121fc19e0d970b137ad4ff8c8afa2c79eb49e490d59324f3c5f'
+                if name=='voice-story' and c['name']=='story' and os.environ.get('VOICE_TEST_STORY_OCI')
+                else 'fixture.invalid/'+c['name']+'@sha256:'+'a'*64)} for c in containers]
         images.append({'kind':'Pod','metadata':{'uid':'pod-'+str(index),'ownerReferences':[{'kind':'ReplicaSet','uid':rsuid}]},
             'status':{'phase':'Running','containerStatuses':statuses(template['spec']['containers']),
                       'initContainerStatuses':statuses(template['spec'].get('initContainers',[]))}})
@@ -179,7 +181,8 @@ card=dict(code='STAGING',environment='stg',state='held',phase='deploy',owner=c['
  candidate=dict(state='known',commit=c['commit'],images=copy.deepcopy(c['images'])),
  observed=dict(state='known',claim=c['claim'],window=c['window'],operation=1,
  images={'voice-user/user':'registry/user@sha256:'+'b'*64}))
-approved={'source_sha':c['commit'],'images':{'gameintegration':c['images']['voice-gameintegration/gameintegration']},
+approved={'source_sha':c['commit'],'images':{name:source_authority.REGISTRY+'/'+name+'@sha256:'+'c'*64
+ for name in source_authority.IMAGE_NAMES},
  'source_files':{p.relative_to(workspace).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
  for p in workspace.rglob('*') if p.is_file()}}
 execution={'head_sha':c['commit']}; session=resource_claim.Session(c,'a'*12,resource_claim.digest(binding),
@@ -304,10 +307,21 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     if name is None:raise AssertionError('unexpected registry digest')
     return Response((Path(os.environ['VOICE_TEST_OCI'])/(name+'.json')).read_bytes())
    def close(self):pass
+  class RegistryResponse:
+   status=200
+   def __init__(self,raw,headers):self.raw=raw;self.headers=headers
+   def read(self,size):chunk=self.raw[:size];self.raw=self.raw[size:];return chunk
+   def close(self):pass
+  def story_request(url,headers,limit,deadline):
+   if url.startswith('https://ghcr.io/token?'):return RegistryResponse(b'{"token":"synthetic-token"}',{})
+   records=json.loads((Path(os.environ['VOICE_TEST_STORY_OCI'])/'records.json').read_bytes())
+   record=records[url];raw=(Path(os.environ['VOICE_TEST_STORY_OCI'])/(record['sha256']+'.json')).read_bytes()
+   return RegistryResponse(raw,record['headers'])
   with patch.object(stage_runtime.Kube,'get',side_effect=get), \
        patch.object(stage_runtime.Kube,'_run',side_effect=run),patch.object(commands,'capture',side_effect=capture), \
        patch.object(stage_runtime.Kube,'secret_meta',side_effect=lambda name:{k:get('secret',name)['metadata'][k] for k in ('uid','resourceVersion')}), \
        patch.object(compiler,'capture',side_effect=capture), \
+       patch.object(source_authority.transport,'_request',side_effect=story_request), \
        patch.object(http.client,'HTTPSConnection',Https):
    try: producer.prepare(actions,{'mode':'app-only','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
