@@ -72,6 +72,7 @@ nats_renderer:
 # Changes to the historical validator require its complete fixtures on the PR.
 # The full audit is also mandatory for release branches and master pushes.
 history_audit:
+  - scripts/ci/f13_*.py
   - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
   - scripts/ci/voice-r22-runtime-scope*
   - scripts/ci/resolve-voice-r22-base.sh

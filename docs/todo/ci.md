@@ -75,6 +75,19 @@ Latest deployment and live-browser evidence is recorded in [`a1-staging-acceptan
 
 ### Pipeline bugs
 
+- [ ] **F13 current-candidate source qualification** — The mandatory historical
+  audit must execute on genuine event/source bindings. The existing Native v4 /
+  production v10 bridge accepts its fixed historical event base and reviewed
+  source unit; a manual dispatch cannot supply a PR event, and selecting the PR
+  job alone does not qualify a later base or changed unit. Complete the separately
+  typed current-source route in [PR #1051](https://github.com/Poryadok/VoiceRoot/pull/1051)
+  using its [source plan](../../.agent/execplans/pr875-current-native-source.md):
+  independently review the final source extension and complete participating
+  unit, publish the immutable source record and later carrier, then run the real
+  full producer/fold and hosted gate on that candidate. Preserve all old records,
+  literal guards, source owners, runtime flags and selected checks. Fixture PASS
+  and historical traces do not replace current-candidate qualification.
+
 - [x] **`.github/ci/batch11-audit.md` удалён** — устаревший аудит 2026-07-07; актуальные риски перенесены в эту секцию / [`branch-protection-checklist.md`](../../.github/ci/branch-protection-checklist.md).
 
 ### Tech debt

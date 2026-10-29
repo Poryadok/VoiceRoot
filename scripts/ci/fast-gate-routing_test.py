@@ -170,6 +170,26 @@ class FastGateRoutingTests(unittest.TestCase):
             values['needs.changes.result'] = 'skipped'
             self.assertTrue(policy.evaluate(condition, values))
 
+    def test_f13_python_changes_require_fresh_historical_audit(self):
+        paths = sorted((ROOT / 'scripts/ci').glob('f13_*.py'))
+        self.assertTrue(paths)
+        for path in [*(p.relative_to(ROOT).as_posix() for p in paths),
+                     'scripts/ci/f13_future_source.py',
+                     'scripts/ci/voice-db-runtime-provisioning-contract_test.sh',
+                     'scripts/ci/voice-r22-runtime-scope.sh',
+                     'scripts/ci/resolve-voice-r22-base.sh']:
+            with self.subTest(path=path):
+                flags = self.filters_for(path)
+                self.assertEqual(flags['history_audit'], 'true')
+                values = policy.context('pull_request', **flags)
+                self.assertTrue(policy.evaluate(policy.job_condition('voice-history-audit'), values))
+                for result in ('skipped', 'failure', 'cancelled'):
+                    self.assertNotEqual(policy.run_gate(values, 'voice-history-audit', result).returncode, 0)
+        for path in ('src/backend/voice/main.go', 'docs/TESTING.md',
+                     'scripts/ci/auth_session_floor_diagnostics.py'):
+            with self.subTest(unrelated=path):
+                self.assertEqual(self.filters_for(path)['history_audit'], 'false')
+
     def test_shards_are_explicit_and_all_required(self):
         block = policy.block('ci-script-tests')
         self.assertIn('fail-fast: false', block)
