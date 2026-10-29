@@ -72,6 +72,17 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual((receipt['active_sessions'],receipt['active_transactions']),(1,1))
         self.assertEqual(receipt['attributed_sessions'],result['attributed'])
 
+    def test_go_attribution_rejects_invalid_role_or_unowned_database(self):
+        identity={'database':'chat_db','database_oid':11,'role':'chat_login',
+                  'application_name':'voice-go-migrate-chat-'+'a'*32,'pod_ip':'10.1.2.3','pod_uid':'pod-uid'}
+        result=self.result | {'attributed':[]}
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:self.scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(result)):
+            self.assertEqual(probe.inspect_migration(self.scope,identity,lambda:None)['active_sessions'],0)
+            for changes in ({'role':"x' OR true--"},{'database':'other_db'},
+                            {'application_name':'voice-go-migrate-file-'+'a'*32}):
+                with self.assertRaises(probe.ProbeError): probe.inspect_migration(self.scope,identity|changes,lambda:None)
+
     def test_migration_rejects_attribution_drift_or_invalid_identity(self):
         identity = {'database':'realtime_db','database_oid':99,'role':'realtime',
                     'application_name':'voice-realtime-migrate-'+'a'*32,'pod_ip':'10.1.2.3','pod_uid':'pod-uid'}

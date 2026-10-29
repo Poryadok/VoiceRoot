@@ -238,7 +238,7 @@ def verify_migration_catalog(probe,cut):
     """Bind an active source-owned migration DB before effective-scope completion."""
     import writer_cut_migration
     binding=cut.migration
-    if not isinstance(binding,dict) or binding.get('kind') not in ('auth','realtime'): raise AffectedError('migration unavailable')
+    if not isinstance(binding,dict) or binding.get('kind') not in ('auth','realtime','go'): raise AffectedError('migration unavailable')
     _,state=writer_cut_migration.normalized(cut,binding['kind'],binding['phase'],binding['root'])
     if state['execution']!=binding['plan']['execution'] or state['stable']!=binding['plan']['stable']:
         raise AffectedError('migration identity changed')
