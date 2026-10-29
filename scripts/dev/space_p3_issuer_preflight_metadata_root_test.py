@@ -9,10 +9,30 @@ import unittest
 from unittest.mock import patch
 
 import space_p3_issuer_preflight_metadata_root as subject
+import media_backup_phase_test as fixture
 
 
 @unittest.skipUnless(os.name=='posix' and os.geteuid()==0,'isolated root Linux fixture')
 class MetadataTest(unittest.TestCase):
+    def test_tt_guard_rejects_candidate_and_uses_fixed_endpoint(self):
+        base=fixture.PhaseTest('test_exact_terminal_receipt_and_no_replay')
+        def cleanup():
+            if not base.doCleanups(): raise RuntimeError('nested cleanup failed')
+        self.addCleanup(cleanup); base.setUp()
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def read(self,limit): return json.dumps({'valid':True,'resource':base.card}).encode()
+        class Opener:
+            def open(self,url,timeout):
+                self_url.append(url); return Response()
+        self_url=[]
+        with patch.object(subject.urllib.request,'build_opener',return_value=Opener()):
+            subject._tt(base.context)
+            self.assertTrue(self_url[0].startswith(subject.TT+'/api/projects/voice/resources/DEV/check?'))
+            base.card['candidate']['commit']='f'*40
+            with self.assertRaises(ValueError): subject._tt(base.context)
+
     def test_fixed_subprocess_names_absence_and_transport_failure(self):
         with tempfile.TemporaryDirectory(dir='/root',prefix='space-metadata-') as tmp:
             directory=Path(tmp); binary=directory/'k3s'; config=directory/'config'
