@@ -55,6 +55,20 @@ def _job(session,tool,node):
 
 def _mutate(session,ident,argv,body):
     owner._guard(session);owner._no_pending(session)
+    name='voice-space-inspect-'+session.operation
+    if ident=='space-inspect-create':
+        expected_argv=owner.PREFIX+['create','-f','/dev/stdin','-o','json']
+        node=Kube().get('pod','voice-postgres-0').get('spec',{}).get('nodeName')
+        expected=_job(session,space.load_tool(session),node)
+        if argv!=expected_argv or body!=owner.private._bytes(expected):raise Blocked('space_inspect_effect_invalid')
+    elif ident=='space-inspect-delete':
+        expected_argv=owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin']
+        value=owner.private._json(body);current=Kube().get('job',name).get('metadata',{})
+        if (argv!=expected_argv or value!={'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
+                'preconditions':{'uid':current.get('uid'),'resourceVersion':current.get('resourceVersion')}}
+            or not owner.guard.UUID.fullmatch(str(current.get('uid',''))) or not current.get('resourceVersion')):
+            raise Blocked('space_inspect_effect_invalid')
+    else:raise Blocked('space_inspect_effect_invalid')
     folder=owner._base(session)/'effects';owner.private._private_directory(folder)
     intent={'schema':'voice-staging-cohort-effect-v1','operation':session.operation,'effect_id':ident,
         'binding':session.binding(),'argv':argv,'body_sha256':hashlib.sha256(body).hexdigest(),'status':'PENDING'}

@@ -31,11 +31,19 @@ class InspectSourceTest(unittest.TestCase):
                     commands.authority_guard(argv);calls.append(argv)
                     raise RuntimeError('create_response_lost')
                 argv=native.owner.PREFIX+['create','-f','/dev/stdin','-o','json']
-                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=lost):
+                tool={'immutable_image':'ghcr.io/poryadok/voiceroot/space-native-installer@sha256:'+'c'*64,
+                      'source_inventory':{'build_source_sha256':'d'*64}}
+                kube=Mock();kube.get.return_value={'spec':{'nodeName':'node-a'}}
+                body=native.owner.private._bytes(native._job(session,tool,'node-a'))
+                with resource_claim.command_scope(session.check),patch.object(commands,'capture',side_effect=lost), \
+                     patch.object(native,'Kube',return_value=kube),patch.object(native.space,'load_tool',return_value=tool):
+                    with self.assertRaisesRegex(native.Blocked,'space_inspect_effect_invalid'):
+                        native._mutate(session,'space-inspect-create',argv,b'{}')
+                    self.assertEqual(calls,[])
                     with self.assertRaisesRegex(RuntimeError,'create_response_lost'):
-                        native._mutate(session,'space-inspect-create',argv,b'{}')
+                        native._mutate(session,'space-inspect-create',argv,body)
                     with self.assertRaisesRegex(Exception,'cohort_reconciliation_required'):
-                        native._mutate(session,'space-inspect-create',argv,b'{}')
+                        native._mutate(session,'space-inspect-create',argv,body)
                 self.assertEqual(len(calls),1)
                 record=native.owner._read(native.owner._base(session)/'effects'/'space-inspect-create.json')
                 self.assertEqual(record['status'],'PENDING')
