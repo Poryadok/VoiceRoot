@@ -329,11 +329,13 @@ def exercise_bridge(test, *, accept_candidate=False, trace_after_capture=False):
                             test.assertEqual((failed['status'],failed['fence_status']),('BLOCKED','UNKNOWN'))
                             test.assertFalse((base/'apply-authorization.json').exists())
                             test.assertEqual(session.check()['phase'],'prepare')
+                            parent=prerequisites.load_capture(session,actual=stage.old_images,rollout_target=failed['target'])
+                            test.assertEqual(failed['target']['prerequisites_sha256'],prerequisites.digest(parent))
                         finally:trace_stack.close()
                     else:
                         with test.assertRaises(ReachedPolicy):actions._prepare(request)
                     if not trace_after_capture:test.assertEqual(session.check()['phase'],'prerequisites-captured')
-                    test.assertEqual(prerequisites._checkpoint(session)['status'],'COMPLETE')
+                    if not trace_after_capture:test.assertEqual(prerequisites._checkpoint(session)['status'],'COMPLETE')
                     test.assertEqual(len(submit.call_args_list),16)
                     bind.assert_called_once()
                 else:
