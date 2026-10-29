@@ -5,18 +5,104 @@ guard after it establishes the exact protected missing subset. It is not an
 operator entry point or a substitute for that guard.
 """
 import hashlib
+import argparse
 import json
 import os
 from pathlib import Path
 import re
+import socket
+import struct
+import sys
 
 import credentials
 import realtime_p3_missing_issuer as existing
 import reset_credentials as reset
 import space_p3_issuer as ca_custody
 import space_creator_runtime_profile_issuer_packet as packet
+import space_creator_runtime_profile_issuer_export as exporter
 
 class IssuerError(RuntimeError): pass
+
+def _unique(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result: raise ValueError()
+        result[key]=value
+    return result
+
+def _exchange(channel,operation_id):
+    from space_p3_issuer_preflight_metadata_root import MEMBERS
+    if channel.send(b'PREFLIGHT-REQUEST\n')!=len(b'PREFLIGHT-REQUEST\n'): raise ValueError()
+    raw,ancillary,flags,_=channel.recvmsg(65537,1)
+    if ancillary or flags&(socket.MSG_TRUNC|socket.MSG_CTRUNC) or not 0<len(raw)<=65536: raise ValueError()
+    request=json.loads(raw,object_pairs_hook=_unique)
+    if channel.recv(64)!=b'PREFLIGHT-READY\n': raise ValueError()
+    if (set(request)!={'context','namespace_uid','lock','ca','creator_secrets','preflight_sha256'} or
+        request['context'].get('operation_id')!=operation_id or
+        not re.fullmatch(r'[a-f0-9]{64}',request['preflight_sha256']) or
+        set(request['creator_secrets'])!=set(MEMBERS) or set(MEMBERS)!=set(packet.FAMILIES)):
+        raise ValueError()
+    for name,item in request['creator_secrets'].items():
+        if item=={'state':'absent'}: continue
+        if (not isinstance(item,dict) or set(item)!={'state','uid','resourceVersion','keys'} or item['state']!='present' or
+            not all(isinstance(item[k],str) and item[k] for k in ('uid','resourceVersion')) or
+            item['keys']!=sorted(MEMBERS[name])): raise ValueError()
+    return request
+
+def _guard(request):
+    import space_p3_issuer_preflight_metadata_root as metadata
+    import space_p3_issuer_preflight_root as preflight
+    preflight._check_ca(request['ca'])
+    if metadata.observe(request['namespace_uid'],request['context'],request['lock'],request['ca'])!=request['creator_secrets']:
+        raise ValueError()
+    preflight._check_ca(request['ca'])
+
+def stage(operation_id,source_sha,consumer_pid,consumer_start_ticks):
+    """One guarded issuance; all failed or uncertain attempts require reconciliation."""
+    try:
+        if (os.geteuid()!=0 or not re.fullmatch(r'media-c1-[a-f0-9]{32}',operation_id) or
+            not re.fullmatch(r'[a-f0-9]{40}',source_sha) or type(consumer_pid) is not int or consumer_pid<=0 or
+            type(consumer_start_ticks) is not int or consumer_start_ticks<=0): raise ValueError()
+        exporter.existing._check_root_custody(exporter.ROOT); suffix=operation_id[-32:]
+        with socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET) as channel:
+            channel.settimeout(120); channel.connect(str(exporter._socket_path(suffix)))
+            pid,uid,_=struct.unpack('3i',channel.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
+            if uid!=exporter.existing._pmd_uid() or pid!=consumer_pid or exporter.existing._start_ticks(pid)!=consumer_start_ticks: raise ValueError()
+            first=_exchange(channel,operation_id); _guard(first)
+            missing=sorted(name for name,item in first['creator_secrets'].items() if item=={'state':'absent'})
+            if not missing: raise ValueError()
+            destination=exporter.ROOT/('space-creator-'+suffix)
+            reservation=exporter.ROOT/('space-creator-'+suffix+'.once')
+            fd=os.open(reservation,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+            try: os.write(fd,b'Potentially issued; reconcile before retry.\n'); os.fsync(fd)
+            finally: os.close(fd)
+            parent_fd=os.open(exporter.ROOT,os.O_RDONLY|os.O_DIRECTORY)
+            try: os.fsync(parent_fd)
+            finally: os.close(parent_fd)
+            destination.mkdir(mode=0o700); credentials.write_private(destination/'pending',b'Generation begun; reconcile before retry.\n')
+            existing._sync_file(destination/'pending')
+            dfd=os.open(destination,os.O_RDONLY|os.O_DIRECTORY)
+            try: os.fsync(dfd)
+            finally: os.close(dfd)
+            cert_fd,cert_identity=ca_custody._open('media-ca.crt',False)
+            try:
+                media=os.read(cert_fd,65537)
+                if not existing._unchanged(cert_fd,cert_identity) or len(media)!=cert_identity[2]: raise ValueError()
+            finally: os.close(cert_fd)
+            receipt=_prepare(destination,media,missing,operation_id,source_sha,first['namespace_uid'],first['preflight_sha256'])
+            second=_exchange(channel,operation_id)
+            if second!=first: raise ValueError()
+            _guard(second)
+            credentials.write_private(destination/'receipt.json',json.dumps(receipt,sort_keys=True,separators=(',',':'))+'\n')
+            for path in destination.iterdir(): existing._sync_file(path)
+            credentials.write_private(destination/'complete',b'Creator profile issuance complete; runtime not qualified.\n')
+            existing._sync_file(destination/'complete')
+            for path in (destination,exporter.ROOT):
+                fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
+                try: os.fsync(fd)
+                finally: os.close(fd)
+            return {'status':'staged','object_names':missing,'runtime_qualified':False,'cluster_applied':False}
+    except Exception: raise IssuerError('Creator profile issuance unavailable; reconcile if attempted') from None
 
 def _prepare(destination,media,missing,operation_id,source_sha,namespace_uid,preflight_sha256):
     """Generate a fixed subset after an external source-owned guard has admitted it."""
