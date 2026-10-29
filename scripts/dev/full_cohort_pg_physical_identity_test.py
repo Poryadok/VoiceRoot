@@ -49,6 +49,7 @@ class PhysicalPhaseTest(unittest.TestCase):
             'namespace_uid':'ns','engine':self.engine,'server_start':'start',
             'databases':{'postgres':42},'all_databases':{'postgres':42},'excluded':{},'properties':{}}
         self.catalog.verify_current=mock.Mock(return_value=self.receipt)
+        self.catalog.verify_receipt=mock.Mock(return_value=self.receipt)
         self.objects={
             ('statefulset','voice-postgres'):{'metadata':{'name':'voice-postgres','namespace':'voice-dev','uid':'sts'}},
             ('pod','voice-postgres-0'):{'metadata':{'name':'voice-postgres-0','namespace':'voice-dev','uid':'pod',
@@ -80,6 +81,32 @@ class PhysicalPhaseTest(unittest.TestCase):
                 'pv_name':'pvc-volume','pv_uid':'pv','container':'postgres','container_id':'containerd://fixture',
                 'restart_count':0,'mount_path':'/var/lib/postgresql/data','data_directory':'/var/lib/postgresql/data','pg_major':16})
             self.assertEqual(module.verify_current(phase,'token'),expected)
+            self.assertEqual(module.verify_receipt(phase,'token')['physical']['system_identifier'],self.pg['system_identifier'])
+            self.pg['system_identifier']='7350000000000000002'
+            self.assertEqual(module.verify_receipt(phase,'token')['physical']['system_identifier'],'7350000000000000001')
+            with self.assertRaises(module.PhysicalError):module.verify_current(phase,'token')
+            self.pg['system_identifier']='7350000000000000001'
+            saved=copy.deepcopy(self.journal.state['steps'][module.STEP])
+            self.journal.state['steps'][module.STEP]['receipt']['physical']['system_identifier']='7'
+            with self.assertRaises(module.PhysicalError):module.verify_receipt(phase,'token')
+            self.journal.state['steps'][module.STEP]=saved
+            calls=[0]
+            def catalog_drift(_token):
+                calls[0]+=1
+                if calls[0]==2:self.journal.state['steps'].pop(module.STEP)
+                return copy.deepcopy(self.receipt)
+            with mock.patch.object(self.catalog,'verify_receipt',side_effect=catalog_drift):
+                with self.assertRaises(module.PhysicalError):module.verify_receipt(phase,'token')
+            self.journal.state['steps'][module.STEP]=copy.deepcopy(saved)
+            real_ledger=phase._ledger;calls=[0]
+            def ledger_drift():
+                calls[0]+=1
+                result=real_ledger()
+                if calls[0]==4:self.journal.state['steps'].pop(module.STEP)
+                return result
+            with mock.patch.object(phase,'_ledger',side_effect=ledger_drift):
+                with self.assertRaises(module.PhysicalError):module.verify_receipt(phase,'token')
+            self.journal.state['steps'][module.STEP]=saved
             for kind, fault in [('pod','uid'),('pv','uid'),('claim','uid'),('mount','path'),('node','uid'),('database','oid'),('server','start'),('system','identifier'),('fence','claim'),('ledger','status')]:
                 with self.subTest(fault=kind):
                     before=copy.deepcopy(self.objects);pg=copy.deepcopy(self.pg);context=copy.deepcopy(self.fence.context)
@@ -140,6 +167,34 @@ class PhysicalPhaseTest(unittest.TestCase):
             wf.ledger.read=original
             self.cut.client=cc
             with self.assertRaises(module.PhysicalError):module.verify_current(phase,'token')
+
+    def test_closed_physical_journal_invalidates_historical_receipt(self):
+        module=importlib.import_module('full_cohort_pg_physical_identity')
+        self.ledger.row['full_cohort_db_catalog']={'status':'done','receipt_sha256':module._digest(self.receipt)}
+        value={'expected':{'fixture':'physical'},'engine':self.engine,'server_start':'start',
+               'database_oid':42,'system_identifier':'7','node':{'name':'node','uid':'node-uid'}}
+        with mock.patch.object(module.media_operation_guard,'verify'), \
+             mock.patch.object(module.PhysicalPhase,'_observe',return_value=value):
+            phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
+            phase.run('token')
+            self.journal.close()
+            with self.assertRaises(module.PhysicalError):module.verify_receipt(phase,'token')
+
+    def test_physical_journal_closed_during_catalog_recheck_holds(self):
+        module=importlib.import_module('full_cohort_pg_physical_identity')
+        self.ledger.row['full_cohort_db_catalog']={'status':'done','receipt_sha256':module._digest(self.receipt)}
+        value={'expected':{'fixture':'physical'},'engine':self.engine,'server_start':'start',
+               'database_oid':42,'system_identifier':'7','node':{'name':'node','uid':'node-uid'}}
+        with mock.patch.object(module.media_operation_guard,'verify'), \
+             mock.patch.object(module.PhysicalPhase,'_observe',return_value=value):
+            phase=module.PhysicalPhase(self.journal,self.fence,self.client,self.lock,'ns',self.catalog,self.cut)
+            phase.run('token'); calls=[0]
+            def close_on_recheck(_token):
+                calls[0]+=1
+                if calls[0]==2:self.journal.close()
+                return copy.deepcopy(self.receipt)
+            with mock.patch.object(self.catalog,'verify_receipt',side_effect=close_on_recheck):
+                with self.assertRaises(module.PhysicalError):module.verify_receipt(phase,'token')
 
     def test_catalog_cut_and_physical_share_authority_through_distinct_facades(self):
         module=importlib.import_module('full_cohort_pg_physical_identity')
