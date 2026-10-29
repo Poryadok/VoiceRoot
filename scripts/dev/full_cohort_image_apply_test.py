@@ -264,7 +264,7 @@ class FullCohortTest(unittest.TestCase):
             container['image'] = self.context['images'][name + '/' + container['name']]
             self.assertEqual(self.client.deployments[name]['spec'], expected)
             self.assertEqual(result[name]['spec'], expected)
-            self.assertEqual(result[name]['resourceVersion'], '2')
+            self.assertEqual(result[name]['resourceVersion'], '1' if name in names else '2')
 
     def test_source_owned_cut_capture_cannot_be_a_caller_dictionary(self):
         with self.assertRaises(cohort.RecoveryRequired):

@@ -483,12 +483,15 @@ class FullCohortImageApply:
                     raise RecoveryRequired('admitted workload changed')
                 old_rv = current['metadata']['resourceVersion']
                 target_generation = snap['generation'] + (old != target)
+                changed = old != target
                 patch = [{'op': 'test', 'path': '/metadata/uid', 'value': snap['uid']},
                          {'op': 'test', 'path': '/metadata/resourceVersion', 'value': old_rv},
                          {'op': 'test', 'path': '/metadata/generation', 'value': snap['generation']},
                          {'op': 'test', 'path': '/spec', 'value': old},
-                         {'op': 'replace', 'path': '/spec', 'value': target}]
-                step, record = self._reserve(name, {'uid': snap['uid'], 'old': old, 'target': target, 'patch': patch})
+                         {'op': 'replace', 'path': '/spec', 'value': target}] if changed else None
+                mode = 'patch' if changed else 'already-target'
+                step, record = self._reserve(name, {'uid': snap['uid'], 'old': old, 'target': target, 'patch': patch,
+                                                    'mode': mode})
                 self._accounts()
                 self._guard()
                 row, _ = self.fence.ledger.read()
@@ -499,14 +502,14 @@ class FullCohortImageApply:
                 self._records(row)
                 self._drained(row)
                 self._partial(receipts)
-                response = self.client.patch(name, patch)
+                response = self.client.patch(name, patch) if changed else self._get('deployment', name)
                 if not self._match(name, response, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch response differs')
                 observed = self._get('deployment', name)
                 if not self._match(name, observed, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch readback differs')
                 receipt = {'uid': snap['uid'], 'resourceVersion': observed['metadata']['resourceVersion'],
-                           'generation': target_generation, 'spec': target}
+                           'generation': target_generation, 'spec': target, 'mode': mode}
                 self._complete(step, record, receipt)
                 receipts[name] = receipt
                 self._partial(receipts)
