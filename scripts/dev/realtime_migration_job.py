@@ -65,6 +65,19 @@ def _hash(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
+def admitted_job(intended, actual):
+    """Accept only the observed Kubernetes Job labels tied to its own UID."""
+    value = copy.deepcopy(actual)
+    meta = value.get('metadata',{})
+    uid, name = meta.get('uid'), intended['metadata']['name']
+    expected = {'app':name, 'batch.kubernetes.io/controller-uid':uid, 'controller-uid':uid,
+                'batch.kubernetes.io/job-name':name, 'job-name':name}
+    if not isinstance(uid,str) or not uid or meta.get('labels')!=expected:
+        raise RecoveryRequired('Job generated metadata labels invalid')
+    meta.pop('labels')
+    return auth_user_candidate_probe.admitted_job(intended,value)
+
+
 class Migration:
     """One-shot guarded create and verification; uncertain outcomes retain lock.
 
@@ -248,13 +261,13 @@ class Migration:
                     raise RecoveryRequired('migration inputs changed')
             inputs()
             dryrun = self.client.call('create','--dry-run=server','-f','-','-o','json',body=planned)
-            auth_user_candidate_probe.admitted_job(planned,dryrun)
+            admitted_job(planned,dryrun)
             inputs()
             record = self._reserve('job',planned)
             inputs()
             self._check_step('job',record)
             created = self.client.call('create','-f','-','-o','json',body=planned)
-            accepted_spec = auth_user_candidate_probe.admitted_job(planned,created)
+            accepted_spec = admitted_job(planned,created)
             jm = created['metadata']; uid = jm['uid']
             if (not jm.get('resourceVersion') or jm.get('annotations',{}).get('voice.io/source-sha')!=spec['source_sha']):
                 raise RecoveryRequired('created Job metadata changed')

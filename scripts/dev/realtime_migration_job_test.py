@@ -50,6 +50,21 @@ class RendererTest(unittest.TestCase):
                 with self.assertRaises(job.RecoveryRequired):
                     job.render(self.root,self.source,self.operation,secret,image)
 
+    def test_only_uid_bound_generated_metadata_labels_are_allowed(self):
+        with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':self.source,'files':self.files}):
+            _, intended = job.render(self.root,self.source,self.operation,self.secret,self.migrate)
+        actual = copy.deepcopy(intended); meta = actual['metadata']; meta.update(uid='uid',resourceVersion='1')
+        name = meta['name']; meta['labels']={'app':name,'batch.kubernetes.io/controller-uid':'uid',
+            'controller-uid':'uid','batch.kubernetes.io/job-name':name,'job-name':name}
+        actual['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':'uid'}}
+        actual['spec']['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']='uid'
+        job.admitted_job(intended,actual)
+        for mutation in ('foreign-uid','extra'):
+            bad = copy.deepcopy(actual)
+            if mutation=='foreign-uid': bad['metadata']['labels']['controller-uid']='foreign'
+            else: bad['metadata']['labels']['extra']='untrusted'
+            with self.assertRaises(job.RecoveryRequired): job.admitted_job(intended,bad)
+
 
 class PhaseTest(unittest.TestCase):
     def setup_operation(self):
@@ -104,6 +119,9 @@ class PhaseTest(unittest.TestCase):
                 obj = copy.deepcopy(body)
                 meta = obj['metadata']; meta.update(uid='uid-'+obj['kind'],resourceVersion='5')
                 if obj['kind']=='Job':
+                    meta['labels']={'app':meta['name'],'batch.kubernetes.io/controller-uid':meta['uid'],
+                                    'controller-uid':meta['uid'],'batch.kubernetes.io/job-name':meta['name'],
+                                    'job-name':meta['name']}
                     spec = obj['spec']; spec['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':meta['uid']}}
                     spec['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']=meta['uid']
                     obj['status']={'conditions':[{'type':'Complete','status':'True'}]}
