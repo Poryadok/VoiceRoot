@@ -19,3 +19,12 @@ test receipts, account for ignored files that influence a build, isolate Docker,
 or establish a passing preflight. Revalidate source inputs around actual
 execution and use the hosted merge-candidate gate; do not use this plan as a
 merge or release approval.
+
+For a Flutter run captured with `flutter test --reporter json`,
+`python scripts/ci/flutter_test_events.py --events <log> --suite <absolute-test-file>`
+checks the expected suite, visible test starts and completions, runner outcome,
+and skips, then reports counts and a hash of the original event bytes. Repeat
+`--suite` for every selected file. Skips are rejected unless `--allow-skips` is
+explicitly supplied, in which case they are listed. This parser does not run
+Flutter, bind the stream to source or toolchain identities, establish the
+process exit code, or replace the full unit/widget file inventory receipt.
