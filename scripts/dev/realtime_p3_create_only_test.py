@@ -159,6 +159,20 @@ class CreateOnlyTest(unittest.TestCase):
         self.assertTrue(mutated); self.assertEqual(len(self.created),7)
         self.assertFalse(self.session.completed); self.assertEqual(self.base.ledger.row['status'],'uncertain')
 
+    def test_delegated_final_ledger_callback_cannot_change_cut_identity(self):
+        armed=[]
+        cut=SimpleNamespace(journal=self.base.journal,client=object(),fence=SimpleNamespace(ledger=self.base.ledger),
+                            verify_drained=lambda:armed.append(True),lock=self.base.lock,namespace_uid='ns')
+        cut.fence.context=self.base.context
+        self.session._delegated_cut=cut; self.session._delegated_refs=(cut,cut.journal,cut.fence,cut.client,cut.fence.ledger)
+        original=self.base.ledger.read
+        def drift():
+            result=original()
+            if armed:cut.lock={'uid':'foreign'}
+            return result
+        with patch.object(self.base.ledger,'read',side_effect=drift):
+            with self.assertRaises(ValueError):self.session._guard()
+
     def test_live_ca_drift_retains_created_resources_and_holds(self):
         self.fault = 'root-drift'
         with self.assertRaises(create.CreateError): self.execute()
