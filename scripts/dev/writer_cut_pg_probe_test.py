@@ -23,6 +23,15 @@ class ProbeTest(unittest.TestCase):
         self.assertGreaterEqual(len(calls),4)
         self.assertIn('chat_db',run.call_args.args[0][-1])
 
+    def test_catalog_qualified_extra_and_postgres_scope(self):
+        scope=self.scope|{'databases':['postgres','custom_db'], 'database_oids':{'postgres':1,'custom_db':2}}
+        scope['databases'].sort()
+        with patch.object(probe.metadata,'kube_engine_snapshot',return_value=lambda:scope['engine']), \
+             patch.object(probe.metadata,'linux_psql',return_value=json.dumps(self.result)):
+            self.assertEqual(probe.inspect(scope,lambda:None)['active_sessions'],0)
+        scope['databases']=['bad-name']; scope['database_oids']={'bad-name':1}
+        with self.assertRaises(probe.ProbeError): probe.inspect(scope,lambda:None)
+
     def test_scope_privilege_and_engine_fail_closed(self):
         for mutation in ('unknown-db','duplicate','privilege','engine','restart'):
             scope = dict(self.scope); result = dict(self.result)

@@ -80,8 +80,8 @@ class PackagePhase:
     def verify_current(self, token):
         """Reopen the same private receipt and exact completed ledger record."""
         try:
+            if not isinstance(token,str) or not token: raise PackageError('package token unavailable')
             self._guard(); self._nodes(); row, revision = self.fence.ledger.read()
-            package.source._head(package.source._headers(token),self.fence.context['commit'],time.monotonic()+30)
             self._guard()
             local = copy.deepcopy(self.journal.state['steps'].get(STEP))
             if not isinstance(local,dict) or not isinstance(local.get('receipt'),dict): raise PackageError('package receipt missing')

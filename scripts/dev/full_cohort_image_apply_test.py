@@ -113,6 +113,9 @@ class FakeWriterCut:
     def _pods_drained(self):
         return True
 
+    def _session_observation(self):
+        return self.probe(copy.deepcopy(self.admission['session_scope']))
+
     def current_cut_proof(self):
         self.proof_calls += 1
         writers = []

@@ -31,7 +31,7 @@ def _validate_scope(scope, guard):
             type(engine.get('restart_count')) is not int or engine['restart_count']<0 or
             engine.get('namespace')!='voice-dev' or engine.get('pod_name')!='voice-postgres-0' or
             engine.get('container_name')!='postgres' or not isinstance(databases,list) or not databases or
-            databases!=sorted(set(databases)) or any(not isinstance(db,str) or db not in ALLOWED for db in databases) or
+            databases!=sorted(set(databases)) or any(not isinstance(db,str) or not metadata.SAFE.fullmatch(db) for db in databases) or
             not isinstance(frozen['database_oids'],dict) or set(frozen['database_oids'])!=set(databases) or
             any(type(oid) is not int or oid<=0 for oid in frozen['database_oids'].values()) or
             len(set(frozen['database_oids'].values()))!=len(databases) or
