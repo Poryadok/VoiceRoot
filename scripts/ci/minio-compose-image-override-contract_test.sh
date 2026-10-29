@@ -52,10 +52,10 @@ assert_job() {
   grep -Fq "$filter" <<<"$block" || fail "$name pull request gate must follow its scoped path filter"
 }
 
-assert_job compose-e2e 'COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build' "needs.changes.outputs.global == 'true'"
+assert_job compose-e2e 'COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --no-build' "needs.changes.outputs.global == 'true'"
 assert_job a1-e2e 'make compose-a1-multi-account-proof' "needs.changes.outputs.global == 'true'"
 assert_job a1-flutter-profile-handoff 'make compose-a1-flutter-profile-handoff' "needs.changes.outputs.global == 'true'"
-expected_compose='COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --build'
+expected_compose='COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml -f docker-compose.voice-space-media.yml -f docker-compose.phase0.yml --profile app up -d --no-build'
 valid_compose_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" "run: $expected_compose")"
 compose_invocation_is_valid "$valid_compose_fixture" "$expected_compose" \
   || fail 'Compose contract rejected the expected verified app invocation'
@@ -66,7 +66,7 @@ wrong_app_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY"
 if compose_invocation_is_valid "$wrong_app_fixture" "$expected_compose"; then
   fail 'Compose contract accepted the obsolete app target'
 fi
-wrong_overlay_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" 'run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml --profile app up -d --build')"
+wrong_overlay_fixture="$(printf '%s\n' 'uses: docker/login-action@v4' "run: $VERIFY" 'run: COMPOSE_PARALLEL_LIMIT=4 docker compose -f docker-compose.yml --profile app up -d --no-build')"
 if compose_invocation_is_valid "$wrong_overlay_fixture" "$expected_compose"; then
   fail 'Compose contract accepted an app invocation without the voice media overlay'
 fi
