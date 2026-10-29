@@ -173,7 +173,7 @@ class HostedTransportTests(unittest.TestCase):
             source = Path(__file__).resolve().parents[3]
             captured = integration._captured_python_sources(source)
             self.assertEqual(set(manifest), set(captured) | {'nats-known-baseline/kernel'})
-            self.assertLessEqual(len(manifest), 101)
+            self.assertLessEqual(len(manifest), 102)
             self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
             for relative, wanted in manifest.items():
                 content = (bundle / 'capture' / relative).read_bytes()
@@ -365,7 +365,7 @@ class CaptureEntryBoundsTests(unittest.TestCase):
             with patch.object(entry, 'Path', side_effect=resolve), patch.object(entry.os, 'chown'), \
                  patch.object(Path, 'stat', owned_stat), \
                  patch.object(sys, 'path', list(sys.path)), patch.dict(sys.modules, {'root_cli': SimpleNamespace(code_binding=binding)}):
-                if count > 101:
+                if count > 102:
                     with self.assertRaisesRegex(RuntimeError, 'captured_code_manifest_invalid'):
                         entry._materialize_capture(base)
                     self.assertFalse((base / 'scripts/staging').exists()); binding.assert_not_called()
@@ -380,11 +380,11 @@ class CaptureEntryBoundsTests(unittest.TestCase):
                     binding.assert_called_once_with(code)
 
     def test_accepts_current_size_and_bound(self):
-        for count in (94, 101):
+        for count in (94, 102):
             with self.subTest(count=count): self.exercise(count)
 
     def test_rejects_over_bound_before_materialization(self):
-        self.exercise(102)
+        self.exercise(103)
 
     def test_rejects_changed_bytes(self):
         self.exercise(94, changed=True)
