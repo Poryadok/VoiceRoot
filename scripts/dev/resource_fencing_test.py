@@ -102,19 +102,24 @@ class FenceTests(unittest.TestCase):
 
     def test_predecessor_begin_lost_reply_marks_uncertain(self):
         import full_cohort_predecessor_phase as predecessor
+        from types import SimpleNamespace
         context=identity(); context['operation_id']='media-c2-'+'a'*32
-        ledger=MemoryLedger(); ledger.row={'status':'complete'}
+        ledger=MemoryLedger(); ledger.row={'status':'complete'};ledger.revision=('uid','old')
+        journal=SimpleNamespace(dirfd=1,lockfd=2,state={'steps':{}},save=lambda:None)
+        def capture(_f,_c,_l,_n,j,_p,_r):
+            descriptor={'snapshot_sha256':'d'*64};j.state['steps']['full-cohort-predecessor']={'status':'captured','descriptor':descriptor};return descriptor
         notices=[]; check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
         def lost(previous,row):
-            ledger.row=copy.deepcopy(row); ledger.revision+=1
+            ledger.row=copy.deepcopy(row); ledger.revision=('uid','new')
             raise OSError('reply lost')
         with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
              patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=lambda obj,reason:notices.append(reason)), \
-             patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), patch.object(ledger,'write',side_effect=lost):
+             patch.object(predecessor,'capture',side_effect=capture), patch.object(ledger,'write',side_effect=lost):
             fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
-            with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',None)
+            with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',journal)
         self.assertEqual(ledger.row['status'],'active')
         self.assertEqual(ledger.row['predecessor']['snapshot_sha256'],'d'*64)
+        self.assertEqual(journal.state['steps']['predecessor-admission']['status'],'pending')
         self.assertEqual(notices,['C2 predecessor begin outcome uncertain'])
 
     def test_predecessor_requires_uncertainty_handler_before_capture(self):
@@ -122,18 +127,70 @@ class FenceTests(unittest.TestCase):
         fence=fencing.Fence(context,lambda:card(context),MemoryLedger())
         with self.assertRaises(RuntimeError): fence.begin_with_predecessor(None,None,'ns',None)
 
+    def test_predecessor_lost_ack_stays_pending_after_reopen(self):
+        import full_cohort_predecessor_phase as predecessor
+        import media_operation_journal
+        context=identity();context['operation_id']='media-c2-'+'a'*32
+        class Ledger(MemoryLedger):
+            def __init__(self):super().__init__();self.row={'status':'complete'};self.revision=('uid','old')
+            def write(self,revision,row):
+                if revision!=self.revision:raise RuntimeError('CAS conflict')
+                self.row=copy.deepcopy(row);self.revision=('uid','new');raise OSError('lost reply')
+        ledger=Ledger();check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
+        intent={'resource_context':context,'namespace_uid':'ns','cohort_route_mode':'full-cohort-v1'}
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'journal'
+            with media_operation_journal.Journal(path,intent) as journal, \
+                 patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+                 patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=OSError('unknown notice')):
+                def capture(_f,_c,_l,_n,j,_p,_r):
+                    descriptor={'snapshot_sha256':'d'*64}
+                    j.state['steps']['full-cohort-predecessor']={'status':'captured','descriptor':descriptor};j.save()
+                    return descriptor
+                with patch.object(predecessor,'capture',side_effect=capture):
+                    fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
+                    with self.assertRaises(OSError):fence.begin_with_predecessor(None,None,'ns',journal)
+            with media_operation_journal.Journal(path,intent) as reopened:
+                self.assertEqual(reopened.state['steps']['predecessor-admission']['status'],'pending')
+                self.assertEqual(ledger.row['status'],'active')
+
+    def test_predecessor_ack_and_readback_confirm_admission(self):
+        import full_cohort_predecessor_phase as predecessor
+        from types import SimpleNamespace
+        context=identity();context['operation_id']='media-c2-'+'a'*32
+        class Ledger(MemoryLedger):
+            def __init__(self):super().__init__();self.row={'status':'complete'};self.revision=('uid','old')
+            def write(self,revision,row):
+                if revision!=self.revision:raise RuntimeError('CAS conflict')
+                self.row=copy.deepcopy(row);self.revision=('uid','new')
+        ledger=Ledger();check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
+        journal=SimpleNamespace(dirfd=1,lockfd=2,state={'steps':{}},save=lambda:None)
+        def capture(_f,_c,_l,_n,j,_p,_r):
+            descriptor={'snapshot_sha256':'d'*64};j.state['steps']['full-cohort-predecessor']={'status':'captured','descriptor':descriptor};return descriptor
+        with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+             patch.object(predecessor,'capture',side_effect=capture),patch.object(predecessor,'load') as load:
+            fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
+            fence.begin_with_predecessor(None,None,'ns',journal)
+            self.assertEqual(journal.state['steps']['predecessor-admission']['status'],'done')
+            load.assert_called_once_with(fence,None,None,'ns',journal)
+
     def test_predecessor_callback_failure_preserves_unknown_effect(self):
         import full_cohort_predecessor_phase as predecessor
+        from types import SimpleNamespace
         context=identity(); context['operation_id']='media-c2-'+'a'*32
-        ledger=MemoryLedger(); ledger.row={'status':'complete'}
+        ledger=MemoryLedger(); ledger.row={'status':'complete'};ledger.revision=('uid','old')
+        journal=SimpleNamespace(dirfd=1,lockfd=2,state={'steps':{}},save=lambda:None)
+        def capture(_f,_c,_l,_n,j,_p,_r):
+            descriptor={'snapshot_sha256':'d'*64};j.state['steps']['full-cohort-predecessor']={'status':'captured','descriptor':descriptor};return descriptor
         check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
         def lost(previous,row): ledger.row=copy.deepcopy(row); raise OSError('reply lost')
         with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
              patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=RuntimeError('notice failed')), \
-             patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), patch.object(ledger,'write',side_effect=lost):
+             patch.object(predecessor,'capture',side_effect=capture), patch.object(ledger,'write',side_effect=lost):
             fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
-            with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',None)
+            with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',journal)
         self.assertEqual(ledger.row['status'],'active')
+        self.assertEqual(journal.state['steps']['predecessor-admission']['status'],'pending')
 
     def test_required_identity_and_exact_authority_not_actor_label(self):
         for key in identity():

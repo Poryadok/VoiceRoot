@@ -188,6 +188,28 @@ class SupervisorTest(unittest.TestCase):
         with self.assertRaises(supervisor.SupervisorError):
             supervisor.Supervisor(self.root_journal,self.fence,self.client,self.base.lock,'ns')
 
+    def test_c2_pending_admission_cannot_reconstruct_supervisor(self):
+        import full_cohort_predecessor_phase as predecessor
+        context=copy.deepcopy(self.base.context);context['operation_id']='media-c2-'+'e'*32
+        operation=self.root/context['operation_id'];operation.mkdir(mode=0o700)
+        root_journal=media_operation_journal.Journal(operation/'journal',{
+            'resource_context':context,'namespace_uid':'ns','cohort_route_mode':'full-cohort-v1'})
+        self.addCleanup(root_journal.close)
+        client=type(self.client)(root_journal);check=type(self.fence.check)(context)
+        ledger=type(self.fence.ledger)(client);fence=resource_fencing.Fence(context,check,ledger,check.mark_uncertain)
+        snapshot={'fixture':'predecessor'};descriptor={'snapshot_sha256':predecessor.digest(snapshot)}
+        self.base.ledger.row=copy.deepcopy(context)|{'status':'active','predecessor':descriptor}
+        root_journal.state['steps']['full-cohort-predecessor']={'status':'captured','descriptor':descriptor,'snapshot':snapshot}
+        root_journal.state['steps']['predecessor-admission']={'status':'pending','descriptor':descriptor,'old_revision':['ledger','0']}
+        with self.assertRaises(supervisor.SupervisorError):
+            supervisor.Supervisor(root_journal,fence,client,self.base.lock,'ns')
+        root_journal.state['steps']['predecessor-admission']={'status':'done','descriptor':descriptor,
+            'old_revision':['ledger','0'],'new_revision':['ledger','1']}
+        self.assertIsInstance(supervisor.Supervisor(root_journal,fence,client,self.base.lock,'ns'),supervisor.Supervisor)
+        root_journal.state['steps']['full-cohort-predecessor']['snapshot']['fixture']='changed'
+        with self.assertRaises(supervisor.SupervisorError):
+            supervisor.Supervisor(root_journal,fence,client,self.base.lock,'ns')
+
     def test_wrong_journal_path_and_replaced_check_are_refused(self):
         other=media_operation_journal.Journal(self.operation/'other',self.root_journal.intent)
         self.addCleanup(other.close)
