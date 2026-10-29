@@ -98,6 +98,9 @@ class RoutingTest(unittest.TestCase):
         self.slice['endpoints'][0]['targetRef']['uid'] = 'pod-uid'
         self.endpoints['subsets'][0]['notReadyAddresses'] = [{'ip': '10.0.0.3'}]
         with self.assertRaises(ValueError): health._routing(self.client, self.proof)
+        self.endpoints['subsets'][0].pop('notReadyAddresses')
+        self.slice['endpoints'][0]['conditions']['terminating'] = True
+        with self.assertRaises(ValueError): health._routing(self.client, self.proof)
 
 
 class HealthPhaseTest(unittest.TestCase):

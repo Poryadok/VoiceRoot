@@ -57,6 +57,7 @@ def _routing(client, proof):
     if len(subsets) != 1 or subsets[0].get('notReadyAddresses') or len(subsets[0].get('addresses', [])) != 1: raise ValueError()
     addr = subsets[0]['addresses'][0]; ref = addr.get('targetRef', {})
     if (addr.get('ip') != ip or ref.get('kind') != 'Pod' or ref.get('name') != podname or ref.get('uid') != pm['uid']
+            or ref.get('namespace', publisher.NAMESPACE) != publisher.NAMESPACE or len(subsets[0].get('ports', [])) != 1
             or sum(p.get('name') == 'https' and p.get('port') == 8443 and p.get('protocol', 'TCP') == 'TCP'
                    for p in subsets[0].get('ports', [])) != 1): raise ValueError()
     slices = client.call('get', 'endpointslices', '-l', 'kubernetes.io/service-name=' + name, '-o', 'json')['items']
@@ -71,7 +72,10 @@ def _routing(client, proof):
     if len(endpoints) != 1: raise ValueError()
     endpoint = endpoints[0]; target = endpoint.get('targetRef', {})
     if (endpoint.get('addresses') != [ip] or endpoint.get('conditions', {}).get('ready') is not True
+            or endpoint.get('conditions', {}).get('terminating', False) is not False
+            or endpoint.get('conditions', {}).get('serving', True) is not True
             or target.get('kind') != 'Pod' or target.get('name') != podname or target.get('uid') != pm['uid']
+            or target.get('namespace', publisher.NAMESPACE) != publisher.NAMESPACE or len(sl.get('ports', [])) != 1
             or sum(p.get('name') == 'https' and p.get('port') == 8443 and p.get('protocol', 'TCP') == 'TCP'
                    for p in sl.get('ports', [])) != 1): raise ValueError()
     return {'pod': pm, 'service': sm, 'endpoints': em, 'slice': slm, 'pod_ip': ip}
