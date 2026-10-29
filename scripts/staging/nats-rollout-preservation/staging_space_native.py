@@ -75,6 +75,7 @@ def _check_template(actual,wanted):
     for container in actual.get('containers',[]):
         if container.get('terminationMessagePath')=='/dev/termination-log':container.pop('terminationMessagePath')
         if container.get('terminationMessagePolicy')=='File':container.pop('terminationMessagePolicy')
+        if container.get('resources')=={}:container.pop('resources')
     if any(actual.get(k)!=v for k,v in wanted.items()):
         raise Blocked('space_inspect_job_invalid')
     if any(actual.get(k) for k in ('initContainers','ephemeralContainers','volumes','hostNetwork',

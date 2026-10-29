@@ -39,6 +39,9 @@ class InspectSourceTest(unittest.TestCase):
               'source_inventory':{'build_source_sha256':'d'*64}}
         wanted=native._job(session,tool,'node-a')['spec']['template']['spec']
         native._check_template(copy.deepcopy(wanted),wanted)
+        defaulted=copy.deepcopy(wanted)
+        defaulted['containers'][0].update(resources={},terminationMessagePath='/dev/termination-log',terminationMessagePolicy='File')
+        native._check_template(defaulted,wanted)
         for field,value in [('initContainers',[{'name':'foreign'}]),('hostNetwork',True),('volumes',[{'name':'foreign'}])]:
             changed=copy.deepcopy(wanted);changed[field]=value
             with self.subTest(field=field),self.assertRaisesRegex(native.Blocked,'space_inspect_job_invalid'):
