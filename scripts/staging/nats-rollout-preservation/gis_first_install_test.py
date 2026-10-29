@@ -229,6 +229,12 @@ class NamespaceTests(unittest.TestCase):
 
 
 class Tests(unittest.TestCase):
+    def test_v2_receipt_cannot_reuse_unqualified_v1_source(self):
+        value=plan();receipt=copy.deepcopy(value['prerequisite_receipt'])
+        receipt['schema']=gis.PREREQUISITE_SCHEMA_V2;receipt['verifier']=gis.verifier_output(32)
+        value['prerequisite_receipt']=receipt
+        with self.assertRaisesRegex(gis.Blocked,'source_revision_unsupported'):
+            gis.validate_prerequisite_receipt(receipt,value)
     def test_database_prerequisite_receipt_is_required_before_any_mutation(self):
         current = plan(); kube = FakeKube(); current.pop('prerequisite_receipt')
         with self.assertRaises(gis.Blocked):

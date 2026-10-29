@@ -29,6 +29,7 @@ INPUTS_KEYS = {'schema', 'database', 'configmaps', 'migrations', 'migration_inpu
                'provision_sql_sha256', 'verifier_sql_sha256', 'templates', 'images',
                'job_images', 'jobs', 'secret_refs'}
 JOB_ROLES = ('provision', 'migrate', 'verify')
+VERIFIER_V1_SHA256 = '4297373f6d91364da34f46f959d5df8ea07f71553ebaf52d048f48782f5da11c'
 
 
 def _canonical(value):
@@ -37,6 +38,18 @@ def _canonical(value):
 
 def _sha(value):
     return hashlib.sha256(value).hexdigest()
+
+
+def validate_source_revision(inputs):
+    """Refuse a verifier and migration set that cannot describe the same revision."""
+    try:
+        rows=inputs['migrations']
+        versions=[int(row['name'].split('_',1)[0]) for row in rows if row['name'].endswith('.up.sql')]
+        if (not versions or len(set(versions))!=len(versions) or max(versions)!=31
+                or inputs['verifier_sql_sha256']!=VERIFIER_V1_SHA256):raise ValueError()
+        return 31
+    except (KeyError,TypeError,ValueError,AttributeError):
+        raise Blocked('gis_prerequisite_source_revision_unsupported') from None
 
 
 def _load_producer(root):
@@ -102,6 +115,7 @@ def source_inputs(root, code_capture):
         or any(not isinstance(inputs[key], str) or not SHA.fullmatch(inputs[key])
                for key in ('provision_sql_sha256', 'verifier_sql_sha256'))):
         raise Blocked('gis_prerequisite_source_contract_invalid')
+    validate_source_revision(inputs)
     total = 0
     for row in inputs['migrations']:
         raw = (root / 'src/backend/migrations/game_integration_db' / row['name']).read_bytes()
