@@ -193,6 +193,11 @@ When Chat is in the PR integration matrix, `chat-lifecycle-integration` requires
 the tagged realtime lifecycle storage test against owned PostgreSQL without skips.
 When Realtime is in that matrix, `realtime-lifecycle-integration` requires its
 tagged fanout and protected transport tests against owned PostgreSQL without skips.
+The affected `t31-critical` job calls the existing T31 Compose workflow, including
+the GIS-to-Chat lost-response retry proof, and its result is required by the PR
+gate. The standalone workflow remains enabled for comparison.
+The current Compose Gateway starts the wider backend dependency set, so backend
+changes remain conservatively selected until that runtime scope is reduced.
 When File is in the matrix, its required cases include the real GIF codec tests;
 the File runner installs FFmpeg and treats an unavailable codec as a failure.
 Its PDF renderer and upload-to-thumbnail runtime tests also require Poppler and

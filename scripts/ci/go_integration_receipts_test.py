@@ -80,6 +80,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         source = (ROOT / 'src/backend/space/internal/nativeinstaller/window_integration_test.go').read_text(encoding='utf-8')
         self.assertRegex(source, r'(?m)^func TestMaintenanceWindowWithRealAutovacuum\(t \*testing\.T\)')
         self.assertIn("backend_type='autovacuum worker'", source)
+        self.assertIn('pg_stat_progress_vacuum', source)
+        self.assertIn('p.heap_blks_scanned < p.heap_blks_total/2', source)
 
     def test_space_bot_native51_cases_and_subtests_are_required(self):
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))

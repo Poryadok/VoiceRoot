@@ -1,6 +1,7 @@
 name: T31 HTTPS session events E2E
 
 on:
+  workflow_call:
   pull_request:
     paths:
       - ".github/workflows/t31-session-events-e2e.yml"
@@ -12,8 +13,16 @@ on:
       - "docs/testing/game-integrations-exec-plan.md"
       - "scripts/ci/t31-session-event-compose-bootstrap.py"
       - "scripts/ci/t31-session-event-compose-bootstrap_test.py"
+      - "scripts/ci/t31-startup-diagnostics.py"
       - "scripts/dev/generate-phase0-fixture.py"
       - "scripts/dev/t31-session-event-gateway.conf"
+      - "protos/**"
+      - "src/backend/pkg/**"
+      - "src/backend/scripts/docker-go-mod-download.sh"
+      - "src/backend/file/pb/**"
+      - "src/backend/messaging/pb/**"
+      - "src/backend/user/pb/**"
+      - "src/backend/migrations/**"
       - "src/backend/auth/**"
       - "src/backend/chat/**"
       - "src/backend/controlledgame/**"
@@ -22,6 +31,7 @@ on:
       - "src/backend/migrations/game_integration_db/**"
       - "src/backend/role/**"
       - "src/backend/voice/**"
+      - "src/backend/**"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +42,7 @@ env:
   T31_COMPOSE_PROJECT: voice-t31-session-events-${{ github.run_id }}
 
 concurrency:
-  group: t31-session-events-${{ github.ref }}
+  group: t31-session-events-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

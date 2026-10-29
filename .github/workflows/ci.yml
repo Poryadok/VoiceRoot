@@ -50,6 +50,7 @@ jobs:
       global: ${{ steps.filter.outputs.global == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       ci_global: ${{ steps.scope.outputs.ci_global }}
       ci_scripts: ${{ steps.filter.outputs.ci_scripts }}
+      t31: ${{ steps.filter.outputs.t31 }}
       nats_renderer: ${{ steps.filter.outputs.nats_renderer }}
       a1_attachment_restart: ${{ steps.filter.outputs.a1_attachment_restart }}
       history_audit: ${{ steps.history.outputs.required == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
@@ -2096,11 +2097,23 @@ jobs:
           flutter pub get
           flutter build windows --release --dart-define=VOICE_API_BASE_URL=http://127.0.0.1:18080 --dart-define=VOICE_APP_VERSION=1.0.0 --dart-define=VOICE_INVITE_SHARE_ORIGIN=$inviteOrigin
 
+  t31-critical:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (needs.changes.outputs.t31 == 'true' || needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true')
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/t31-session-events-e2e.yml
+
   ci-gate:
     needs:
       - changes
       - ci-skip-gate
       - compose-e2e
+      - t31-critical
       - protobuf
       - compose-config
       - ci-script-tests
@@ -2594,13 +2607,13 @@ jobs:
           set -euo pipefail
           psql_owned() { docker exec "$PG_CONTAINER" psql -X -qAt -v ON_ERROR_STOP=1 -U voice -d postgres "$@"; }
           psql_owned -c "ALTER SYSTEM SET autovacuum_naptime = '1s'"
-          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_delay = '20ms'"
-          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '20'"
+          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_delay = '100ms'"
+          psql_owned -c "ALTER SYSTEM SET autovacuum_vacuum_cost_limit = '1'"
           [[ "$(psql_owned -c 'SELECT pg_reload_conf()')" == t ]]
           for attempt in {1..10}; do
             if [[ "$(psql_owned -c 'SHOW autovacuum_naptime')" == 1s &&
-                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_delay')" == 20ms &&
-                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_limit')" == 20 ]]; then
+                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_delay')" == 100ms &&
+                  "$(psql_owned -c 'SHOW autovacuum_vacuum_cost_limit')" == 1 ]]; then
               exit 0
             fi
             sleep 1

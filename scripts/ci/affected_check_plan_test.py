@@ -351,6 +351,37 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('backend-go-integration-evidence', planner.make_plan(
             planner.match_filters(rules, ['src/backend/chat/main.go']), matrix)['checks'])
 
+    def test_t31_shared_and_contract_inputs_are_required_by_gate(self):
+        import yaml
+        workflow = yaml.load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+        standalone = yaml.load((ROOT / '.github/workflows/t31-session-events-e2e.yml').read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+        self.assertIn('workflow_call', standalone['on'])
+        self.assertIn('github.workflow', standalone['concurrency']['group'])
+        job = workflow['jobs']['t31-critical']
+        self.assertEqual(job['uses'], './.github/workflows/t31-session-events-e2e.yml')
+        self.assertIn('needs.changes.outputs.t31', job['if'])
+        self.assertIn('t31-critical', workflow['jobs']['ci-gate']['needs'])
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        self.assertEqual(set(rules['t31']), set(standalone['on']['pull_request']['paths']))
+        matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': [],
+                  'run_go': False, 'run_pkg': False}
+        for path in ('src/backend/pkg/principal/verifier.go', 'protos/voice/chat/v1/chat.proto',
+                     'src/backend/migrations/chat_db/000001_initial.up.sql',
+                     'docs/testing/game-integrations-acceptance.md', 'new-area/executable.sh'):
+            with self.subTest(path=path):
+                selected = planner.make_plan(planner.match_filters(rules, [path]), matrix)
+                self.assertIn('t31-critical', selected['checks'])
+                identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+                selected.update(schema='voice-affected-check-plan-v1', identity=identity)
+                needs = {name: {'result': 'success'} for name in selected['checks']}
+                for outcome in ('skipped', 'failure', 'cancelled'):
+                    needs['t31-critical']['result'] = outcome
+                    self.assertIn('t31-critical', planner.verify_gate(selected, needs, identity))
+                del needs['t31-critical']
+                self.assertIn('t31-critical', planner.verify_gate(selected, needs, identity))
+        selected = planner.make_plan(planner.match_filters(rules, ['docs/TESTING.md']), matrix)
+        self.assertNotIn('t31-critical', selected['checks'])
+
     def test_realtime_lifecycle_proof_follows_affected_integration(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
@@ -412,6 +443,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
         prepare = next(step for step in job['steps'] if step.get('name') == 'Configure owned PostgreSQL autovacuum')
         self.assertIn('job.services.postgres.id', prepare['env']['PG_CONTAINER'])
         self.assertIn('autovacuum_naptime', prepare['run'])
+        self.assertIn("autovacuum_vacuum_cost_delay = '100ms'", prepare['run'])
+        self.assertIn("autovacuum_vacuum_cost_limit = '1'", prepare['run'])
         test = next(step for step in job['steps'] if step.get('name') == 'Run Space real-autovacuum proof')
         self.assertIn('-tags=integration', test['run'])
         self.assertIn('space_autovacuum_required.json', test['run'])
@@ -641,6 +674,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                     expected_extra.add('chat-lifecycle-integration')
                 if 'realtime' in plan['components']['go_integration']:
                     expected_extra.add('realtime-lifecycle-integration')
+                if 't31-critical' in proposed:
+                    expected_extra.add('t31-critical')
                 self.assertEqual(proposed - required, expected_extra)
 
     def test_git_diff_includes_both_rename_paths_and_deletions(self):
