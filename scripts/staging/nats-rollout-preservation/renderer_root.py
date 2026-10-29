@@ -123,7 +123,21 @@ def validate_target(target,authority,stage):
     import renderer_transition
     if authority['descriptor']['source_sha']!=target['tag']:
         raise Blocked('renderer_target_source_changed')
-    snapshot=stage.snapshots[HUB];binding=authority['descriptor']['hub']
+    import commands,resource_claim
+    session=getattr(commands.authority_guard,'__self__',None)
+    if isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None:
+        import staging_cohort_preservation
+        protected=staging_cohort_preservation.capture_final_stage(session)
+        if (stage.expected!=protected.expected or stage.snapshots!=protected.snapshots
+            or stage.original_snapshots!=protected.original_snapshots or stage.old_images!=protected.old_images):
+            raise Blocked('renderer_target_capture_changed')
+        snapshot=stage.original_snapshots[HUB]
+        paused=stage.snapshots[HUB]
+        if (paused['metadata']['uid']!=snapshot['metadata']['uid'] or paused['spec'].get('replicas',1)!=0
+            or paused['spec']['template']!=snapshot['spec']['template']):
+            raise Blocked('renderer_target_capture_changed')
+    else:snapshot=stage.snapshots[HUB]
+    binding=authority['descriptor']['hub']
     if snapshot['metadata']['uid']!=binding['uid'] or snapshot['metadata']['resourceVersion']!=binding['resourceVersion']:
         raise Blocked('renderer_target_capture_changed')
     renderer_transition.validate(authority['descriptor'],snapshot,storage(stage),expected_hub=snapshot,paused=False)

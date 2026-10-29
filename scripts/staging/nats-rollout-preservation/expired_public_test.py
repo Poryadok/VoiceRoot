@@ -104,22 +104,25 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('gis_existing_update.py',bundle.ROLLOUT)
         self.assertIn('realtime_bootstrap.py',bundle.ROLLOUT)
         self.assertIn('realtime_bootstrap_existing.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,89)
+        self.assertTrue({'staging_prerequisites.py','staging_p3_prerequisites.py','staging_p3_prerequisites_crypto.py',
+            'staging_gis_material.py','staging_release_policy_prepare.py'} <= set(bundle.ROLLOUT))
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,94)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}
-            for index in range(89):
+            for index in range(94):
                 name='module'+str(index)+'.py';raw=('pinned source '+str(index)).encode()
                 path=code/name;path.write_bytes(raw);path.chmod(0o440);manifest[name]=hashlib.sha256(raw).hexdigest()
             def write():
                 path=code/'capture-manifest.json'
                 if path.exists():path.chmod(0o600)
                 path.write_text(json.dumps(manifest));path.chmod(0o440)
-            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py')]
+            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py','module89.py','module90.py','module91.py','module92.py','module93.py')]
             write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest.update(last[:1]);write();self.assertEqual(root_cli.code_binding(code),manifest)
-            manifest.update(last[1:])
+            manifest.update(last[1:3]);write();self.assertEqual(root_cli.code_binding(code),manifest)
+            manifest.update(last[3:])
             write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest['extra.py']='a'*64;write()
             with self.assertRaises(root_cli.Blocked):root_cli.code_binding(code)
