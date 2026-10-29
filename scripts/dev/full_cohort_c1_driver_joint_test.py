@@ -158,6 +158,11 @@ class DriverJointTest(unittest.TestCase):
         self.assertEqual(result['workloads']['gateway'][0]['status'],'observed')
         self.assertEqual(result['workloads']['realtime'][0],{'status':'hold','reason':'database_configuration_missing'})
         self.assertEqual(result['workloads']['auth'][0],{'status':'hold','reason':'auth_source_policy_unknown'})
+        for name in set(schema.CONTAINERS)-{'auth','realtime'}:
+            self.assertEqual(result['workloads'][name][0]['status'],'observed',name)
+        for name in ('chat','messaging'):
+            for secondary in result['workloads'][name][0]['result']['secondary']:
+                self.assertEqual(secondary['owner_consistency'],'matched')
         self.assertFalse(result['startup_qualified'])
 
     def test_external_postgres_catalog_runs_real_fenced_parser(self):
