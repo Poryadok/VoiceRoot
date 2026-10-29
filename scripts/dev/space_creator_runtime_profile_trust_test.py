@@ -3,7 +3,7 @@ import space_creator_runtime_profile_trust as trust
 
 
 def listing(*entries):
-    return ('Your keystore contains %d entries\n' % len(entries) + ''.join(
+    return ('Keystore type: PKCS12\nYour keystore contains %d entries\n' % len(entries) + ''.join(
         'Entry type: %s\nSHA256: %s\n' % (kind, ':'.join([byte]*32)) for kind,byte in entries)).encode()
 
 
@@ -14,6 +14,7 @@ class TrustTest(unittest.TestCase):
         result=trust.compare(before,after,'bb'*32)
         self.assertEqual(result['root_count'],1)
         self.assertEqual(result['store_count'],2)
+        with self.assertRaises(ValueError): trust.compare(before,after.replace(b'PKCS12',b'JKS'),'bb'*32)
         for bad in (listing(('trustedCertEntry','BB')), listing(('PrivateKeyEntry','AA'),('trustedCertEntry','BB')),
                     listing(('trustedCertEntry','AA'))):
             with self.assertRaises(ValueError): trust.compare(before,bad,'bb'*32)

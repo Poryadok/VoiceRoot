@@ -16,6 +16,7 @@ def parse(raw):
 
 def compare(jdk_output,store_output,media_sha256):
     if not isinstance(media_sha256,str) or not re.fullmatch(r'[a-f0-9]{64}',media_sha256): raise ValueError('media certificate invalid')
+    if len(re.findall(rb'^Keystore type: PKCS12\s*$',store_output,re.MULTILINE))!=1: raise ValueError('trust store type invalid')
     original=parse(jdk_output); selected=parse(store_output)
     if media_sha256 in original or selected!=original|{media_sha256}: raise ValueError('trust roots differ')
     return {'root_count':len(original),'store_count':len(selected),'media_ca_sha256':media_sha256,

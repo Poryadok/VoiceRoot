@@ -17,6 +17,7 @@ import realtime_p3_create_only_transport as private
 import resource_fencing
 import space_creator_runtime_profile_material as material
 import space_creator_runtime_profile_trust as trust
+import space_native_tool_identity as native
 import writer_cut
 
 STEP='space-creator-auth-trust'
@@ -61,15 +62,30 @@ class AuthTrustPhase:
             type(package_phase) is not package.PackagePhase or type(inventory_phase) is not inventory.InventoryPhase or
             inventory_phase.package is not package_phase or any(x.fence.context!=fence.context or x.lock!=lock or
             x.namespace_uid!=namespace_uid for x in (package_phase,inventory_phase)) or
+            any(type(x.journal) is not media_operation_journal.Journal or x.client.journal is not x.journal or
+                x.fence.ledger.client is not x.client for x in (package_phase,inventory_phase)) or
             journal.intent.get('resource_context')!=fence.context or journal.intent.get('namespace_uid')!=namespace_uid):
             raise AuthTrustError('Auth trust identity unavailable')
         self.journal,self.fence,self.client,self.package,self.inventory=journal,fence,client,package_phase,inventory_phase
         self.lock,self.namespace_uid=copy.deepcopy(lock),namespace_uid
         self.intent=copy.deepcopy(journal.intent); self.record=None; self.poisoned=False
+        self._references=(journal,fence,client,fence.ledger,package_phase,package_phase.journal,package_phase.fence,
+                          package_phase.client,package_phase.fence.ledger,inventory_phase,inventory_phase.journal,
+                          inventory_phase.fence,inventory_phase.client,inventory_phase.fence.ledger)
+        self._custodies=tuple(native.SpaceNativeToolPhase._custody(j) for j in (journal,package_phase.journal,inventory_phase.journal))
 
     def _guard(self):
-        if self.poisoned or self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent:
-            raise metadata.GuardLost('Auth trust identity changed')
+        try:
+            refs=(self.journal,self.fence,self.client,self.fence.ledger,self.package,self.package.journal,self.package.fence,
+                  self.package.client,self.package.fence.ledger,self.inventory,self.inventory.journal,self.inventory.fence,
+                  self.inventory.client,self.inventory.fence.ledger)
+            if (self.poisoned or self.journal.poisoned or self.journal.intent!=self.intent or self.journal.state.get('intent')!=self.intent or
+                any(a is not b for a,b in zip(refs,self._references)) or self.client.journal is not self.journal or
+                self.fence.ledger.client is not self.client or self.package.client.journal is not self.package.journal or
+                self.package.fence.ledger.client is not self.package.client or self.inventory.client.journal is not self.inventory.journal or
+                self.inventory.fence.ledger.client is not self.inventory.client or
+                tuple(native.SpaceNativeToolPhase._custody(j) for j in (self.journal,self.package.journal,self.inventory.journal))!=self._custodies): raise ValueError()
+        except BaseException: raise metadata.GuardLost('Auth trust identity changed') from None
         metadata._fence(lambda:media_operation_guard.verify(self.fence,self.client,self.lock,self.namespace_uid))
 
     def _ledger(self):

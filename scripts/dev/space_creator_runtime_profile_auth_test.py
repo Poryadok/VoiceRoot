@@ -41,7 +41,7 @@ class AuthTest(unittest.TestCase):
             ledger=resource_fencing.KubeLedger(client); ledger.read=backing.read; ledger.write=backing.write
             fence=resource_fencing.Fence(context,lambda:{},ledger); lock={'metadata':{'uid':'lock'}}
             pkg=package.PackagePhase.__new__(package.PackagePhase); inv=inventory.InventoryPhase.__new__(inventory.InventoryPhase)
-            for obj in (pkg,inv): obj.fence=fence; obj.lock=lock; obj.namespace_uid='ns'
+            for obj in (pkg,inv): obj.fence=fence; obj.client=client; obj.journal=j; obj.lock=lock; obj.namespace_uid='ns'
             inv.package=pkg; inv.verify_current=mock.Mock(return_value={})
             phase=auth.AuthTrustPhase(j,fence,client,lock,'ns',pkg,inv)
             observation={'scope':'synthetic'}; phase._observe=mock.Mock(return_value=observation)
@@ -51,6 +51,8 @@ class AuthTest(unittest.TestCase):
                 phase._observe.return_value={'scope':'drift'}
                 with self.assertRaises(auth.AuthTrustError): auth.verify_completed(phase,'token')
                 with self.assertRaises(auth.AuthTrustError): phase.run('token')
+                j.close()
+                with self.assertRaises(auth.metadata.GuardLost): phase._guard()
 
     def test_observation_binds_mounted_bytes_and_pod_restarts(self):
         phase=auth.AuthTrustPhase.__new__(auth.AuthTrustPhase)
@@ -75,7 +77,7 @@ class AuthTest(unittest.TestCase):
             if args[0]=='bash': return b'M'
             root_line=listing(('trustedCertEntry','AA'))
             if auth.JDK in args: return root_line
-            return b'Your keystore contains 2 entries\nEntry type: trustedCertEntry\nSHA256: '+row('aa'*32).encode()+b'\nEntry type: trustedCertEntry\nSHA256: '+row(media).encode()+b'\n'
+            return b'Keystore type: PKCS12\nYour keystore contains 2 entries\nEntry type: trustedCertEntry\nSHA256: '+row('aa'*32).encode()+b'\nEntry type: trustedCertEntry\nSHA256: '+row(media).encode()+b'\n'
         phase._exec=mock.Mock(side_effect=exec_value)
         reader=mock.Mock(return_value='-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0 -Djavax.net.ssl.trustStore='+auth.TRUST+' -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=PKCS12')
         snapshot=mock.Mock(return_value=identity)
