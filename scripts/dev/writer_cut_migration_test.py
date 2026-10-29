@@ -489,12 +489,14 @@ class RealCatalogBracketTest(unittest.TestCase):
         current = {'all_databases': {'auth_db': 10, 'realtime_db': 13}, 'excluded': {},
                    'properties': {'auth_db': {'owner': 1}}, 'databases': {'realtime_db': 13}}
         changed = copy.deepcopy(current); changed['all_databases']['foreign_db'] = 14
-        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        expanded = scope | {'databases': ['auth_db', 'realtime_db'], 'database_oids': {'auth_db': 10, 'realtime_db': 13}}
+        receipt = {'scope': expanded, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
         with mock.patch.object(migration, 'normalized', return_value=(None, state)), \
              mock.patch.object(affected, '_full_catalog', side_effect=[copy.deepcopy(current), copy.deepcopy(current),
                                                                         copy.deepcopy(current), changed]), \
-             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt) as sample:
             self.assertEqual(migration.sessions(cut, state, None), receipt)
+            self.assertEqual(sample.call_args.args[0], expanded)
             with self.assertRaises(affected.AffectedError): migration.sessions(cut, state, None)
 
 
