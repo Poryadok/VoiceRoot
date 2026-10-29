@@ -24,7 +24,17 @@ class JointTest(unittest.TestCase):
         base = base_fixture.PhaseTest(); base.setUp(); self.addCleanup(base.doCleanups)
         renderer = migration_fixture.RendererTest(); renderer.setUp(); self.addCleanup(renderer.doCleanups)
         password = b'a' * 32
-        objects = {}; events = []; observed = []
+        objects = {}; events = []; observed = []; pod_phases = []
+        lifecycle = fault not in (None, 'lost', 'busy')
+        tick = [0]
+        def advance(seconds):
+            tick[0] += 700 if fault == 'timeout' else seconds
+        def current_phase():
+            if not lifecycle: return 'Succeeded'
+            if fault == 'timeout': return 'Scheduling'
+            return ('Scheduling', 'Pulling', 'Running', 'Succeeded')[min(tick[0] // 2, 3)]
+        self.enterContext(mock.patch.object(migration.time, 'sleep', side_effect=advance))
+        self.enterContext(mock.patch.object(migration.time, 'monotonic', side_effect=lambda: tick[0]))
         class Client(writer_cut_test.Client):
             def call(inner, *args, body=None):
                 if args[:2] == ('get', 'nodes'):
@@ -40,7 +50,7 @@ class JointTest(unittest.TestCase):
                         meta['labels'] = {'app':name, **generated}
                         obj['spec']['selector']={'matchLabels':{'batch.kubernetes.io/controller-uid':uid}}
                         obj['spec']['template']['metadata']['labels']['batch.kubernetes.io/controller-uid']=uid
-                        obj['status']={'conditions':[{'type':'Complete','status':'True'}]}
+                        obj['status']={}
                     if not dry:
                         objects[kind] = copy.deepcopy(obj)
                         if kind == 'Job':
@@ -50,20 +60,46 @@ class JointTest(unittest.TestCase):
                 if args[0] == 'get' and args[1] in ('secret','configmap','job') and len(args)>2:
                     kind={'secret':'Secret','configmap':'ConfigMap','job':'Job'}[args[1]]
                     value=objects.get(kind)
-                    if value and value['metadata']['name']==args[2]: return copy.deepcopy(value)
+                    if value and value['metadata']['name']==args[2]:
+                        value = copy.deepcopy(value)
+                        if kind == 'Job':
+                            phase = current_phase()
+                            if phase == 'Succeeded': value['status']={'conditions':[{'type':'Complete','status':'True'}]}
+                            if fault == 'failed-job': value['status']={'conditions':[{'type':'Failed','status':'True'}]}
+                        return value
                     if kind != 'ConfigMap' or args[2] != 'voice-dev-image-update-lock': return {}
                 if args[:2] == ('get','jobs'):
-                    return {'items':[copy.deepcopy(objects['Job'])] if 'Job' in objects else []}
+                    return {'items':[inner.call('get','job',objects['Job']['metadata']['name'])] if 'Job' in objects else []}
                 if args[:2] == ('get','pods') and 'Job' in objects:
                     job=objects['Job']; template=job['spec']['template']; spec=copy.deepcopy(template['spec'])
                     spec['nodeName']=renderer.node['name']
-                    return {'items':[{'apiVersion':'v1','kind':'Pod','metadata':{'name':'job-pod','namespace':'voice-dev',
+                    pod = {'apiVersion':'v1','kind':'Pod','metadata':{'name':'job-pod','namespace':'voice-dev',
                         'uid':'pod-uid','resourceVersion':'2','labels':copy.deepcopy(template['metadata']['labels']),
                         'ownerReferences':[{'kind':'Job','uid':job['metadata']['uid'],'controller':True}]},
                         'spec':spec,'status':{'phase':'Succeeded','podIP':'10.1.2.3','containerStatuses':[{
                             'name':'migrate','containerID':'containerd://fixture','restartCount':0,
                             'imageID':'containerd://'+migration.PLATFORMS['amd64'],
-                            'state':{'terminated':{'exitCode':0}}}]}}]}
+                            'state':{'terminated':{'exitCode':0}}}]}}
+                    phase = current_phase(); pod_phases.append(phase)
+                    if phase in ('Scheduling', 'Pulling'):
+                        pod['status']={'phase':'Pending'}
+                        if phase == 'Scheduling': pod['spec'].pop('nodeName')
+                        else:
+                            pod['status'].update(podIP='10.1.2.3', containerStatuses=[{
+                                'name':'migrate','restartCount':0,'imageID':'','containerID':'',
+                                'state':{'waiting':{'reason':'ContainerCreating'}}}])
+                    elif phase == 'Running':
+                        pod['status']['phase']='Running'
+                        pod['status']['containerStatuses'][0]['state']={'running':{'startedAt':'fixture'}}
+                    if fault == 'wrong-uid' and phase != 'Scheduling': pod['metadata']['uid']='foreign'
+                    if fault == 'wrong-node': pod['spec']['nodeName']='foreign'
+                    if fault == 'wrong-image' and phase == 'Pulling':
+                        pod['status']['containerStatuses'][0]['imageID']='containerd://sha256:'+'f'*64
+                    if fault == 'pending-execution' and phase == 'Pulling':
+                        pod['status']['containerStatuses'][0].update(containerID='containerd://unexpected',
+                            state={'running':{}})
+                    if fault == 'failed-pod': pod['status']['phase']='Failed'
+                    return {'items':[pod]}
                 return super().call(*args)
         backing=base.ledger
         class LedgerView:
@@ -141,17 +177,25 @@ class JointTest(unittest.TestCase):
             value={'scope':copy.deepcopy(scope),'active_sessions':0,'active_transactions':0,'attributed_sessions':[]}
             state=base.ledger.row.get('realtime_migration',{}).get('steps',{}).get('job',{}).get('status')
             observed.append(state)
+            if lifecycle and current_phase() in ('Scheduling','Pulling') and state == 'owned':
+                self.assertIsNone(identity['pod_ip'])
+                self.assertIsNone(identity['pod_uid'])
             self.assertEqual(scope['database_oids']['realtime_db'],13)
             if fault=='busy' and state=='pending': value['active_sessions']=1
             return value
         self.enterContext(mock.patch.object(writer_cut_migration.writer_cut_pg_probe,'inspect_migration',side_effect=sessions))
-        if fault:
+        if fault and fault != 'progression':
             with self.assertRaises(migration.RecoveryRequired): phase.run(cut)
             self.assertEqual(base.ledger.row['status'],'uncertain')
             self.assertIn('pending',observed)
-            self.assertEqual(len(events),1 if fault=='lost' else 0)
+            if lifecycle:
+                if fault not in ('wrong-node','failed-pod'): self.assertIn('owned', observed)
+                if fault == 'timeout': self.assertGreaterEqual(tick[0], 650)
+                if fault in ('wrong-uid','wrong-image','pending-execution'): self.assertIn('Pulling', pod_phases)
+                self.assertEqual(migration_j.state['steps']['job']['status'], 'owned')
+            self.assertEqual(len(events),0 if fault=='busy' else 1)
             with self.assertRaises(migration.RecoveryRequired): phase.run(cut)
-            self.assertEqual(len(events),1 if fault=='lost' else 0)
+            self.assertEqual(len(events),0 if fault=='busy' else 1)
         else:
             phase.run(cut)
             self.assertEqual(events,['job-post'])
@@ -159,9 +203,15 @@ class JointTest(unittest.TestCase):
             self.assertEqual(migration_j.state['steps']['job']['status'],'done')
             self.assertEqual(base.ledger.row['realtime_migration']['status'],'done')
             self.assertTrue(cut.migration['finished'])
+            if lifecycle: self.assertTrue({'Scheduling','Pulling','Running','Succeeded'}.issubset(pod_phases))
             step='writer-cut-migration-finish-'+phase.invocation
             self.assertEqual(cut_j.state['steps'][step]['status'],'done')
             self.assertEqual(base.ledger.row['writer_cut_effects'][step]['status'],'done')
+
+    def test_pending_progression(self): self.exercise('progression')
+    def test_pending_identity_failure_and_timeout(self):
+        for fault in ('wrong-uid','wrong-node','wrong-image','pending-execution','failed-job','failed-pod','timeout'):
+            with self.subTest(fault=fault): self.exercise(fault)
 
     def test_success(self): self.exercise(None)
     def test_lost_reply(self): self.exercise('lost')
