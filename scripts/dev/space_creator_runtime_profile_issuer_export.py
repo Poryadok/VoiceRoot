@@ -17,6 +17,7 @@ import space_creator_runtime_profile_issuer_packet as packet
 ROOT=Path('/home/voice-dev/issuance')
 SOCKET_ROOT=Path('/home/pmd/voice-space-creator/operations')
 FRAME=b'SPACE-CREATOR-PROFILE\n'
+ACK=b'SPACE-CREATOR-ACCEPTED\n'
 
 class ExportError(RuntimeError): pass
 
@@ -91,8 +92,10 @@ def export(operation_id,source_sha,namespace_uid,preflight_sha256,consumer_pid,c
                 try: os.fsync(dfd)
                 finally: os.close(dfd)
                 if channel.sendmsg([FRAME],[(socket.SOL_SOCKET,socket.SCM_RIGHTS,array.array('i',[fd]))])!=len(FRAME): raise ValueError()
+                response,ancillary,flags,_=channel.recvmsg(128,0)
+                if ancillary or flags&(socket.MSG_TRUNC|socket.MSG_CTRUNC) or response!=ACK: raise ValueError()
         finally: os.close(fd)
-        return {'status':'send_attempted','receiver_verified':False,'admission_qualified':False}
+        return {'status':'send_acknowledged','receiver_verified':False,'admission_qualified':False}
     except Exception: raise ExportError('Creator profile handoff failed or uncertain; reconcile') from None
 
 def main():
