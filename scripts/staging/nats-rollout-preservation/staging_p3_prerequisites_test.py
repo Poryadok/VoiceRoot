@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -7,6 +8,15 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_source_contract_binds_exact_approved_source_and_file(self):
+        root=Path(__file__).resolve().parents[3]; raw=(root/'deploy/staging/services.yaml').read_bytes()
+        approved={'source_sha':'a'*40,'source_files':{'deploy/staging/services.yaml':hashlib.sha256(raw).hexdigest()}}
+        contract=p3.source_contract(approved,raw)
+        self.assertEqual(contract['source_sha'],'a'*40)
+        with self.assertRaises(p3.PrerequisiteError): p3.source_contract(approved,raw+b' ')
+        bad=copy.deepcopy(approved); bad['source_sha']='bad'
+        with self.assertRaises(p3.PrerequisiteError): p3.source_contract(bad,raw)
+
     def test_private_material_payload_roundtrip_is_exact(self):
         values={name:{key:b'value' for key in keys} for name,keys in p3.ASSET_KEYS.items()}
         rows=p3.material_objects(values)

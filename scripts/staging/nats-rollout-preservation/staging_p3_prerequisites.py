@@ -54,6 +54,17 @@ def inventory_intent():
             for name in ASSET_KEYS]+list(PUBLISHER)
 
 
+def source_contract(approved,raw):
+    """Bind publisher source bytes; caller authenticates the approved capture."""
+    try:
+        sha=approved['source_sha']; expected=approved['source_files']['deploy/staging/services.yaml']
+        if (not isinstance(sha,str) or not re.fullmatch(r'[0-9a-f]{40}',sha)
+            or not isinstance(expected,str) or not re.fullmatch(r'[0-9a-f]{64}',expected)
+            or not isinstance(raw,bytes) or not 0<len(raw)<=2<<20 or hashlib.sha256(raw).hexdigest()!=expected): raise ValueError()
+        return {'schema':'voice-staging-p3-source-contract-v1','source_sha':sha,'services_sha256':expected}
+    except Exception: raise PrerequisiteError('staging P3 source contract invalid') from None
+
+
 def mark_operation(objects,operation):
     """Build private payloads; caller must derive operation from the root session."""
     try:
