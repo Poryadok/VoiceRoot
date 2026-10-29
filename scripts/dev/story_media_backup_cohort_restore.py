@@ -329,7 +329,8 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
             cohort.verify_staging(session,binding,databases,manifest,catalog_ref,metadata_ref)
         sources = migration_inventory(source_root, databases, source_metadata['migrations'],full_catalog)
         changed = [db for db in databases if classify_plan(db, source_metadata['migrations'][db],full_catalog) == 'migrate']
-        if _staging is not None and 'space_db' in changed:
+        native_space=None
+        if _staging is not None and 'space_db' in changed and not callable(getattr(staging,'native_space_rehearsal',None)):
             raise CohortRestoreError('staging Space native migration qualification required')
         if media_restore._docker('info', '--format', '{{.OSType}}').strip() != b'linux':
             raise CohortRestoreError('Linux Docker required')
@@ -406,7 +407,11 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
                 results[db]={'mode':'restore-only','from':None,'to':None}
                 continue
             if mode == 'migrate':
-                if full_catalog:
+                if _staging is not None and db=='space_db':
+                    native_space=staging.native_space_rehearsal(session)
+                    if type(native_space) is not dict or native_space.get('status')!='COMPLETE':
+                        raise CohortRestoreError('staging Space native rehearsal incomplete')
+                elif full_catalog:
                     _run_go_as_role(postgres, admin, db, migration_roles[db]['role'])
                 else:
                     _run_go_as_role(postgres, admin, db, admin)
@@ -438,6 +443,7 @@ def _qualify(root, key, binding, databases, manifest, source_metadata, source_ro
         if migration_roles:
             receipt['migration_logins'] = {db: {'role': migration_roles[db]['role'], 'from': results[db]['from'],
                                                 'to': results[db]['to']} for db in changed}
+        if native_space is not None:receipt['native_space']=copy.deepcopy(native_space)
     except media_restore.RestoreUncertain:
         raise CohortRestoreError('cohort resources uncertain; retain operation') from None
     except Exception:
