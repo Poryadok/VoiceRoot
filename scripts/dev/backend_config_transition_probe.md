@@ -16,10 +16,15 @@ The ordered `env_sources` list includes every envFrom object's identity and
 prefix, even when none of the selected keys exists, with only the selected
 field names that exist. This allows later checks to detect changes to sources
 that initially contributed no selected field.
+`explicit_sources` also records each selected key reference, including an
+optional missing key or object. An optional missing reference does not override
+an earlier envFrom value. The bounded transport uses Kubernetes
+`--ignore-not-found` to distinguish an actual absent object from a failed or
+unknown read; relevant absence is rechecked before a configuration effect.
 These are current API object identities observed around the probe; they do not
 prove which object version supplied a running process at its startup.
 Explicit env overrides envFrom, and later envFrom sources override earlier
-sources. Duplicate explicit variables, unsupported or optional sources, unknown
+sources. Duplicate explicit variables, unsupported sources, unknown
 runtime origins, guard loss, container drift and resource identity drift hold.
 The current program checks `/proc/1/exe` and examines `/proc/1/environ` inside
 the container, emitting only the bounded category, never the variable value.

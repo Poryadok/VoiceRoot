@@ -61,22 +61,26 @@ def inspect(workload, pod_name, run_bytes, guard):
                 or len(containers) != 1 or canonical(containers[0].get('env',[])) != canonical(before['env'])
                 or canonical(containers[0].get('envFrom',[])) != canonical(before['envFrom'])): raise ValueError()
         fields = FIELDS[workload]; objects = {}
-        def reference(kind,name):
+        def reference(kind,name,optional=False):
             if (kind not in ('secret','configmap') or not isinstance(name,str)
                     or not re.fullmatch(r'[a-z0-9]([-a-z0-9.]*[a-z0-9])?',name)): raise ValueError()
             key = (kind,name)
             if key not in objects:
                 metadata._fence(guard)
                 template = '{{.metadata.uid}}{{"\\n"}}{{.metadata.resourceVersion}}{{"\\n"}}{{range $k,$v := .data}}{{$k}}{{"\\n"}}{{end}}'
-                raw = metadata._external(run_bytes, BASE+['get',kind,name,'-o','go-template='+template])
+                raw = metadata._external(run_bytes, BASE+['get',kind,name,'--ignore-not-found=true','-o','go-template='+template])
                 metadata._fence(guard)
                 if not isinstance(raw,bytes) or len(raw) > 65536: raise ValueError()
-                rows = raw.decode('utf-8').splitlines()
-                if len(rows) < 2 or not rows[0] or not rows[1] or len(rows[2:]) != len(set(rows[2:])): raise ValueError()
-                objects[key] = {'kind':kind,'name':name,'uid':rows[0],'resource_version':rows[1],'keys':set(rows[2:])}
+                if not raw:
+                    objects[key] = {'kind':kind,'name':name,'uid':None,'resource_version':None,'keys':set(),'object_present':False}
+                else:
+                    rows = raw.decode('utf-8').splitlines()
+                    if len(rows) < 2 or not rows[0] or not rows[1] or len(rows[2:]) != len(set(rows[2:])): raise ValueError()
+                    objects[key] = {'kind':kind,'name':name,'uid':rows[0],'resource_version':rows[1],'keys':set(rows[2:]),'object_present':True}
+            if not objects[key]['object_present'] and not optional: raise ValueError()
             return objects[key]
         reason = 'env-from'
-        origins = {name:None for name in fields}; env_sources = []
+        origins = {name:None for name in fields}; env_sources = []; explicit_sources = []
         for item in before['envFrom']:
             if not isinstance(item,dict) or set(item)-{'prefix','secretRef','configMapRef'}: raise ValueError()
             prefix = item.get('prefix','')
@@ -84,11 +88,12 @@ def inspect(workload, pod_name, run_bytes, guard):
             refs = [(k,item[k]) for k in ('secretRef','configMapRef') if k in item]
             if len(refs) != 1: raise ValueError()
             typ, ref = refs[0]
-            if not isinstance(ref,dict) or set(ref)-{'name','optional'} or ref.get('optional',False) is not False: raise ValueError()
-            obj = reference('secret' if typ == 'secretRef' else 'configmap',ref['name'])
+            if not isinstance(ref,dict) or set(ref)-{'name','optional'} or type(ref.get('optional',False)) is not bool: raise ValueError()
+            obj = reference('secret' if typ == 'secretRef' else 'configmap',ref['name'],ref.get('optional',False))
             selected = sorted(name for name in fields if name.startswith(prefix) and name[len(prefix):] in obj['keys'])
             env_sources.append({'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
-                                'resource_version':obj['resource_version'],'prefix':prefix,'fields':selected})
+                                'resource_version':obj['resource_version'],'prefix':prefix,'fields':selected,
+                                'optional':ref.get('optional',False),'object_present':obj['object_present']})
             for name in fields:
                 if name.startswith(prefix) and name[len(prefix):] in obj['keys']:
                     origins[name] = {'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
@@ -115,14 +120,20 @@ def inspect(workload, pod_name, run_bytes, guard):
                 typ, ref = next(iter(value.items()))
                 reason = 'explicit-env-unsupported-ref-'+name
                 if typ not in ('secretKeyRef','configMapKeyRef') or not isinstance(ref,dict) or set(ref)-{'name','key','optional'}: raise ValueError()
-                reason = 'explicit-env-optional-'+name
-                if ref.get('optional',False) is not False: raise ValueError()
+                reason = 'explicit-env-malformed-'+name
+                if type(ref.get('optional',False)) is not bool: raise ValueError()
                 reason = 'explicit-env-reference-read-'+name
-                obj = reference('secret' if typ == 'secretKeyRef' else 'configmap',ref['name'])
+                obj = reference('secret' if typ == 'secretKeyRef' else 'configmap',ref['name'],ref.get('optional',False))
                 reason = 'explicit-env-missing-key-'+name
-                if not isinstance(ref.get('key'),str) or ref['key'] not in obj['keys']: raise ValueError()
-                origins[name] = {'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
-                                 'resource_version':obj['resource_version'],'key':ref['key'],'source':'explicit'}
+                if not isinstance(ref.get('key'),str): raise ValueError()
+                present = ref['key'] in obj['keys']
+                explicit_sources.append({'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
+                    'resource_version':obj['resource_version'],'key':ref['key'],'optional':ref.get('optional',False),
+                    'present':present,'field':name,'object_present':obj['object_present']})
+                if not present and not ref.get('optional',False): raise ValueError()
+                if present:
+                    origins[name] = {'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
+                                     'resource_version':obj['resource_version'],'key':ref['key'],'source':'explicit'}
             else: raise ValueError()
         observed = {}
         for name in fields:
@@ -141,7 +152,7 @@ def inspect(workload, pod_name, run_bytes, guard):
             observed[name] = {'state':status,'origin':origins[name]}
         reason = 'reference-recheck'
         expected_objects = copy.deepcopy(objects); objects.clear()
-        for kind,name in expected_objects: reference(kind,name)
+        for kind,name in expected_objects: reference(kind,name,True)
         reason = 'workload-after'
         metadata._fence(guard); after = snap(); metadata._fence(guard)
         reason = 'identity-drift'
@@ -149,6 +160,7 @@ def inspect(workload, pod_name, run_bytes, guard):
         identity = {k:before[k] for k in ('namespace','namespace_uid','deployment','deployment_uid','deployment_rv',
                     'pod_name','pod_uid','pod_rv','container_name','container_id','restart_count')}
         return {'status':'observed','identity':identity,'fields':observed,'env_sources':env_sources,
+                'explicit_sources':explicit_sources,
                 'template_binding':'pod-env-and-deployment-template-v1',
                 'scope':'runtime-config-metadata-only-no-provider-validation'}
     except BaseException:
