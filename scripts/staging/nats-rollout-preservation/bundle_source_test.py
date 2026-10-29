@@ -192,6 +192,20 @@ class WorkflowLauncherTests(unittest.TestCase):
                 path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700);path.write_bytes(raw);path.chmod(0o400)
             self.launch(root)
 
+    def test_workflow_accepts_87_and_rejects_88_members(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);code=root/'installed/code';code.mkdir(parents=True,mode=0o700)
+            manifest={}
+            names=['nats-rollout-preservation/bridge_client.py','nats-rollout-preservation/resource_claim.py']+['module%d.py'%n for n in range(85)]
+            for name in names:
+                path=code/name;path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+                raw=('fixture '+name).encode();path.write_bytes(raw);path.chmod(0o400)
+                manifest[name]=hashlib.sha256(raw).hexdigest()
+            index=code/'capture-manifest.json';index.write_text(json.dumps(manifest));index.chmod(0o400)
+            self.launch(root)
+            manifest['extra.py']='a'*64;index.chmod(0o600);index.write_text(json.dumps(manifest));index.chmod(0o400)
+            with self.assertRaises(SystemExit):self.launch(root)
+
     def test_actual_workflow_keeps_custody_member_and_entrypoint_vetoes(self):
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder);members=self.members(base)
@@ -208,7 +222,7 @@ class WorkflowLauncherTests(unittest.TestCase):
                     elif failure=='parent':manifest['../outside']='a'*64
                     elif failure=='missing-entry':del manifest[str(target.relative_to(code))]
                     elif failure=='overbound':
-                        for index in range(87-len(manifest)):manifest['extra'+str(index)]='a'*64
+                        for index in range(88-len(manifest)):manifest['extra'+str(index)]='a'*64
                     elif failure=='directory-mode':code.chmod(0o720)
                     elif failure=='member-mode':target.chmod(0o420)
                     elif failure=='member-owner':os.chown(target,1000,0)

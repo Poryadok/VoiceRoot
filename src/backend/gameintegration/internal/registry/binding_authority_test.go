@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
@@ -170,6 +171,35 @@ func TestPlayerBindingExecutionPermitIsBoundedIdempotentAndRevocationDrains(t *t
 	require.NoError(t, err)
 	require.Equal(t, "revoked", revoked.Status)
 	require.EqualValues(t, 2, revoked.BindingRevision)
+}
+
+func TestPlayerBindingExecutionPermitExpiryUsesUTCOnIssueAndReplay(t *testing.T) {
+	ctx := context.Background()
+	store := &Store{Pool: startT12Postgres(t, ctx)}
+	app, env := createBindingTestEnvironment(t, ctx, store)
+	claims := activeBindingClaims(app, env)
+	claims.ExpiresAt = claims.IssuedAt.Add(2 * time.Second).In(time.FixedZone("test-offset", 3*60*60))
+	binding, err := store.CreatePlayerBinding(ctx, CreatePlayerBindingInput{
+		BindingID: claims.BindingID, ApplicationID: app, EnvironmentID: env,
+		Provider: "google", ProviderSubjectDigest: "hmac-sha256-v1:test:" + strings.Repeat("a", 64),
+		AccountID: claims.AccountID, ActorID: claims.ActorID, ProfileID: uuid.New(), DeviceID: claims.DeviceID,
+	})
+	require.NoError(t, err)
+	operationID := uuid.New()
+	issued, err := store.IssuePlayerBindingExecutionPermit(ctx, binding.BindingID, operationID, claims)
+	require.NoError(t, err)
+	replayed, err := store.IssuePlayerBindingExecutionPermit(ctx, binding.BindingID, operationID, claims)
+	require.NoError(t, err)
+	require.True(t, issued.ExpiresAt.Equal(claims.ExpiresAt))
+	for _, permit := range []PlayerBindingExecutionPermit{issued, replayed} {
+		payload, err := json.Marshal(permit)
+		require.NoError(t, err)
+		var wire map[string]any
+		require.NoError(t, json.Unmarshal(payload, &wire))
+		require.Equal(t, claims.ExpiresAt.UTC().Format(time.RFC3339Nano), wire["expires_at"].(string))
+		require.True(t, strings.HasSuffix(wire["expires_at"].(string), "Z"))
+	}
+	require.Equal(t, issued, replayed)
 }
 
 func TestPlayerBindingExecutionPermitRejectsStaleAndMismatchedClaims(t *testing.T) {

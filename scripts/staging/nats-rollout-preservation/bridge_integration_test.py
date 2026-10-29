@@ -37,17 +37,19 @@ class IntegrationTests(unittest.TestCase):
             with patch.object(bridge_root,'INSTALLED',installed),patch.object(guard,'ROOT',root),\
                     patch.object(bridge_root,'private_json',side_effect=read),patch.object(bridge_root,'save',side_effect=save):
                 actions._active_release(original)
-                # An unrelated images-only release keeps the receipt available until the
-                # separate full/app-only wiring operation consumes it.
-                actions._active_release({'operation':'c'*12,'context':{'expected':original['context']['expected']},
-                    'target':{'manifest_sha256':'8'*64},'gis_transition':None})
-                self.assertIn('gis_first_install_transition',read(installed/'active-release.json'))
+                anchor=read(installed/'active-release.json')['gis_first_install_transition']
+                # A legacy release cannot replace the current GIS authority.
+                with self.assertRaisesRegex(bridge_root.Blocked,'gis_existing_publication_stale'):
+                    actions._active_release({'operation':'c'*12,'context':{'expected':original['context']['expected']},
+                        'target':{'manifest_sha256':'8'*64},'gis_transition':None})
+                self.assertEqual(anchor,read(installed/'active-release.json')['gis_first_install_transition'])
                 binding=actions._previous_gis_transition(kube)
                 self.assertEqual(binding['receipt_sha256'],transition['receipt_sha256'])
                 second={'operation':'b'*12,'context':{'expected':original['context']['expected']},
                     'target':{'manifest_sha256':'a'*64},'gis_transition':copy.deepcopy(binding)}
-                actions._active_release(second)
-                self.assertNotIn('gis_first_install_transition',read(installed/'active-release.json'))
+                with self.assertRaisesRegex(bridge_root.Blocked,'gis_existing_publication_stale'):
+                    actions._active_release(second)
+                self.assertEqual(anchor,read(installed/'active-release.json')['gis_first_install_transition'])
 
     def test_workflows_use_supported_yaml_aliases_without_merge_keys(self):
         import yaml

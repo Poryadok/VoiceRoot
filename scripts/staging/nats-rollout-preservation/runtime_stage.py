@@ -101,13 +101,18 @@ def running_image_pins(deployments,rows,*,include_hub=False):
 
 class RolloutStage(Staging):
     @classmethod
-    def capture(cls,kube,operation,save,extra_deployments=()):
+    def capture(cls,kube,operation,save,extra_deployments=(),*,gis_binding=None):
         namespace=kube.get('namespace',guard.NS);marker=kube.get('configmap',MARKER)
         data=marker['data']
         if data.get('phase')!='active' or any(k in data for k in ('knownBaselineOperation','knownRolloutOperation')):
             raise Blocked('rollout_active_marker_required')
         extras=set(extra_deployments)-{HUB,'voice-gateway',*('voice-'+s for s in LEAVES)}
-        if not extras<={'voice-web','voice-admin','voice-developer-portal',PRINCIPAL_PUBLISHER}:raise Blocked('rollout_extra_workload_unsupported')
+        if gis_binding is not None:
+            if 'voice-gameintegration' not in extras:raise Blocked('gis_existing_capture_scope_invalid')
+            import gis_existing_update
+            gis_existing_update.verify_phase(gis_binding,kube,'active')
+            gis_account=gis_existing_update.service_account_preflight(kube,gis_binding['old']['spec']['template']['spec'])
+        if not extras<={'voice-web','voice-admin','voice-developer-portal',PRINCIPAL_PUBLISHER,*({'voice-gameintegration'} if gis_binding is not None else set())}:raise Blocked('rollout_extra_workload_unsupported')
         rows={n:kube.get('deployment',n) for n in (HUB,'voice-gateway',*('voice-'+s for s in LEAVES),*sorted(extras))}
         volumes=rows[HUB]['spec']['template']['spec']['volumes']
         claims=[v.get('persistentVolumeClaim',{}).get('claimName') for v in volumes if v['name']=='jsdata']
@@ -134,6 +139,20 @@ class RolloutStage(Staging):
             if actual['metadata']['uid']!=row['metadata']['uid']:raise Blocked('rollout_old_revision_identity_changed')
             row['spec']={'template':actual['spec']['template']}
         stage.old_images=running_image_pins(stage.original_snapshots,image_rows,include_hub=HUB in extra_deployments)
+        if gis_binding is not None:
+            gis_existing_update.verify_phase(gis_binding,kube,'active')
+            if gis_existing_update.service_account_preflight(kube,gis_binding['old']['spec']['template']['spec'])!=gis_account:
+                raise Blocked('gis_existing_service_account_changed')
+            captured=stage.original_snapshots['voice-gameintegration']
+            if (captured['metadata']['uid']!=gis_binding['deployment_uid']
+                    or gis_existing_update.gis.semantic(captured)!=gis_binding['old']):
+                raise Blocked('gis_existing_capture_changed')
+            spec=captured['spec']['template']['spec']
+            for container in spec.get('initContainers',[])+spec['containers']:
+                key='voice-gameintegration/'+container['name']
+                if stage.old_images.get(key)!=container.get('image'):
+                    raise Blocked('gis_existing_runtime_image_changed')
+            stage.gis_service_account=gis_account
         stage.final_claim=claim;stage.final_pv=pv;stage.final_path=Path(path)
         save({'kind':'rollout_original_capture','snapshots':stage.original_snapshots,
               'marker':stage.marker,'service':stage.service,'expected':expected,'store':path,'old_images':stage.old_images})
@@ -491,11 +510,19 @@ class RolloutStage(Staging):
     def release_marker(self):
         row=self.owned_marker()
         if row['data']['phase']!='rollout-verified':raise Blocked('rollout_unverified_release_forbidden')
+        if 'voice-gameintegration' in self.snapshots and not callable(getattr(self,'gis_ready_proof',None)):
+            raise Blocked('gis_existing_ready_proof_missing')
+        if 'voice-gameintegration' in self.snapshots and not callable(getattr(self,'gis_start_guard',None)):
+            raise Blocked('gis_existing_start_guard_missing')
         core={HUB,'voice-gateway',PRINCIPAL_PUBLISHER,*('voice-'+s for s in LEAVES)}
         for name in sorted(set(self.snapshots)-core):
             ledger=getattr(self,'finish_ledger',None)
-            if ledger is None or name in ledger.record['pending']:self.scale(name,1)
+            if ledger is None or name in ledger.record['pending']:
+                if name=='voice-gameintegration':self.gis_start_guard(self)
+                self.scale(name,1)
             self.wait_ready(name)
+        if 'voice-gameintegration' in self.snapshots:
+            self.gis_ready_proof(self)
         row=self.owned_marker()
         finish_guard=getattr(self,'finish_guard',None)
         if finish_guard is not None:finish_guard('release',None,None)
