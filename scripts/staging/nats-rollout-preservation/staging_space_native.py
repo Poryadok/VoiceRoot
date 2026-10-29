@@ -64,8 +64,10 @@ def _mutate(session,ident,argv,body):
     elif ident=='space-inspect-delete':
         expected_argv=owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/'+name,'-f','/dev/stdin']
         value=owner.private._json(body);current=Kube().get('job',name).get('metadata',{})
+        created=owner._read(owner._base(session)/'effects'/'space-inspect-create.json')
         if (argv!=expected_argv or value!={'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
                 'preconditions':{'uid':current.get('uid'),'resourceVersion':current.get('resourceVersion')}}
+            or created.get('status')!='DONE' or created.get('response',{}).get('uid')!=current.get('uid')
             or not owner.guard.UUID.fullmatch(str(current.get('uid',''))) or not current.get('resourceVersion')):
             raise Blocked('space_inspect_effect_invalid')
     else:raise Blocked('space_inspect_effect_invalid')

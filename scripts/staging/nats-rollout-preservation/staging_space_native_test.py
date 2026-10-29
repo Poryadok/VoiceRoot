@@ -19,6 +19,20 @@ class InspectSourceTest(unittest.TestCase):
                 native._cleanup(SimpleNamespace(),kube,'voice-space-inspect-aaaaaaaaaaaa','owned')
             mutate.assert_not_called()
 
+    def test_effect_boundary_rejects_foreign_job_delete(self):
+        session=SimpleNamespace(operation='a'*12)
+        uid='11111111-1111-4111-8111-111111111111'
+        kube=Mock();kube.get.return_value={'metadata':{'uid':uid,'resourceVersion':'9'}}
+        options={'apiVersion':'v1','kind':'DeleteOptions','propagationPolicy':'Foreground',
+                 'preconditions':{'uid':uid,'resourceVersion':'9'}}
+        argv=native.owner.PREFIX+['delete','--raw=/apis/batch/v1/namespaces/voice-staging/jobs/voice-space-inspect-'+session.operation,'-f','/dev/stdin']
+        with patch.object(native.owner,'_guard'),patch.object(native.owner,'_no_pending'),patch.object(native,'Kube',return_value=kube), \
+             patch.object(native.owner,'_base',return_value=Path('/unused')),patch.object(native.owner,'_read',return_value={'status':'DONE','response':{'uid':'foreign'}}), \
+             patch.object(native.owner,'_send') as submit:
+            with self.assertRaisesRegex(native.Blocked,'space_inspect_effect_invalid'):
+                native._mutate(session,'space-inspect-delete',argv,native.owner.private._bytes(options))
+            submit.assert_not_called()
+
     def test_lost_create_reply_stays_pending_and_cannot_be_replayed(self):
         import commands, guard, resource_claim
         from staging_cohort_preservation_test import CutEffectTests
