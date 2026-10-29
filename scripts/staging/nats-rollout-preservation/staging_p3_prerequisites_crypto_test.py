@@ -1,5 +1,6 @@
 """Isolated synthetic CA/key fixture; no staging custody or admission."""
 import copy
+import base64
 import hashlib
 import os
 from pathlib import Path
@@ -47,6 +48,14 @@ class CryptoFixture(unittest.TestCase):
             finally: os.close(fd)
             generated=crypto.issue_private_bytes(key.read_bytes(),ca,trust,peer_cert,peer_cert,ca,b'fixture-password')
             self.assertEqual(crypto.validate_values(generated,trust,peer_cert,peer_cert,ca)['scope'],'offline-material-only')
+            issuer={'schema':'voice-staging-p3-issuer-input-v1','receipt':{'fixture':'not-authority'},
+                    'ca_certificate_pem':ca.decode(),'ca_private_key_pem':key.read_text(),
+                    'trust':{k:v.decode() for k,v in trust.items()},'space_client_certificate_pem':peer_cert.decode(),
+                    'space_jwks_certificate_pem':peer_cert.decode(),'space_server_ca_pem':ca.decode(),
+                    'replay_password_b64':base64.b64encode(b'fixture-password').decode()}
+            self.assertEqual(crypto.validate_issuer_materials(generated,issuer)['scope'],'offline-material-only')
+            bad=copy.deepcopy(issuer); bad['replay_password_b64']=base64.b64encode(b'wrong').decode()
+            with self.assertRaises(crypto.CryptoError): crypto.validate_issuer_materials(generated,bad)
             proof=crypto.validate_values(values,trust,peer_cert,peer_cert,ca)
             self.assertEqual(proof['namespace'],'voice-staging')
             servercert=root/'server.crt'; serverkey=root/'server.key'

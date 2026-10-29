@@ -152,6 +152,30 @@ def validate_values(values, trust, space_client_cert, space_jwks_cert, space_ser
     except Exception: raise CryptoError('staging P3 material not qualified') from None
 
 
+def validate_issuer_materials(values,issuer):
+    """Offline consistency only; caller must authenticate issuer and live anchors."""
+    try:
+        fields={'schema','receipt','ca_certificate_pem','ca_private_key_pem','trust',
+                'space_client_certificate_pem','space_jwks_certificate_pem','space_server_ca_pem','replay_password_b64'}
+        if (not isinstance(issuer,dict) or set(issuer)!=fields or issuer['schema']!='voice-staging-p3-issuer-input-v1'
+            or not isinstance(issuer['receipt'],dict)): raise ValueError()
+        def pem(value):
+            if not isinstance(value,str): raise ValueError()
+            return value.encode('ascii')
+        ca=pem(issuer['ca_certificate_pem']); key=pem(issuer['ca_private_key_pem'])
+        if not isinstance(issuer['trust'],dict) or set(issuer['trust'])!=TRUST_KEYS: raise ValueError()
+        trust={name:pem(cert) for name,cert in issuer['trust'].items()}
+        password=base64.b64decode(issuer['replay_password_b64'],validate=True)
+        if base64.b64encode(password).decode()!=issuer['replay_password_b64'] or password!=values['voice-p3-principal-replay']['password']: raise ValueError()
+        validate_issuer_key(key,ca)
+        result=validate_values(values,trust,pem(issuer['space_client_certificate_pem']),
+                               pem(issuer['space_jwks_certificate_pem']),pem(issuer['space_server_ca_pem']))
+        for name,(host,purposes) in LEAVES.items():
+            leaf=values[name]; _leaf(leaf['tls.crt'],leaf['tls.key'],ca,host,purposes); _validity_within(leaf['tls.crt'],ca)
+        return result
+    except Exception: raise CryptoError('staging P3 issuer material mismatch') from None
+
+
 def issue_private_bytes(key, ca_cert, trust, space_client_cert, space_jwks_cert, space_server_ca, replay_password):
     """Issue offline from bytes; custody and issuer authority are external."""
     try:
