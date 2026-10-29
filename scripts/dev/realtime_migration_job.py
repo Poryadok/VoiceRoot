@@ -9,6 +9,7 @@ import secrets
 import time
 import auth_user_candidate_probe
 import media_operation_guard
+import media_operation_journal
 import publish_candidate
 import realtime_db_provision
 import realtime_migration_verify
@@ -235,12 +236,22 @@ class Migration:
     and provision journals belong to the same fenced operation. No cleanup or
     retry is attempted after any pending write.
     """
-    def __init__(self, secret, provision_journal, journal, source_root, password):
+    def __init__(self, secret, provision_journal, journal, source_root, password, client, fence):
+        import frontend_runtime_executor
+        import resource_fencing
+        if (type(secret) is not realtime_secret_phase.SecretPhase or
+                type(journal) is not media_operation_journal.Journal or
+                type(client) is not frontend_runtime_executor.KubectlTransport or
+                type(fence) is not resource_fencing.Fence or type(fence.ledger) is not resource_fencing.KubeLedger or
+                client.journal is not journal or fence.ledger.client is not client or
+                fence.context != secret.fence.context or fence.ledger.read() != secret.fence.ledger.read()):
+            raise RecoveryRequired('migration journal or ledger identity invalid')
         self.secret, self.provision_journal, self.journal = secret, provision_journal, journal
         self.provision_intent = copy.deepcopy(provision_journal.intent)
         self.root, self.password = Path(source_root), password
         self.intent = copy.deepcopy(journal.intent)
-        self.fence, self.client = secret.fence, secret.client
+        self.fence, self.client = fence, client
+        self._fence, self._client = fence, client
         self.lock, self.namespace = secret.lock, secret.namespace_uid
         self.invocation = secrets.token_hex(16)
         self.poisoned = False
@@ -249,12 +260,16 @@ class Migration:
         self.invocation_status = 'pending'
 
     def _guard(self):
-        if (self.poisoned or self.journal.poisoned or self.journal.intent!=self.intent or
+        if (self.poisoned or self.fence is not self._fence or self.client is not self._client or
+                self.client.journal is not self.journal or self.fence.ledger.client is not self.client or
+                self.journal.poisoned or self.journal.intent!=self.intent or
                 self.journal.state.get('intent')!=self.intent or
                 self.intent.get('resource_context')!=self.fence.context or
                 self.intent.get('namespace_uid')!=self.namespace):
             raise RecoveryRequired('operation identity changed')
         self.secret._guard()
+        if self.fence.ledger.read()!=self.secret.fence.ledger.read():
+            raise RecoveryRequired('migration ledger authority differs')
         if self.bound_secret is not None:
             row, revision = self.fence.ledger.read()
             if (not self.fence.owned(row) or row.get('status')!='active' or

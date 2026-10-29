@@ -10,6 +10,8 @@ import realtime_db_provision_journal_test as pg_fixture
 import realtime_secret_provision as bridge
 import media_operation_journal as journal
 import writer_cut
+import frontend_runtime_executor
+import resource_fencing
 
 
 class RendererTest(unittest.TestCase):
@@ -101,6 +103,19 @@ class RendererTest(unittest.TestCase):
 
 
 class PhaseTest(unittest.TestCase):
+    def migration_worker(self, secret, provision, journal, root, password):
+        client=copy.copy(secret.client); client.journal=journal
+        backing=secret.fence.ledger
+        class LedgerView:
+            def __init__(inner): inner.client=client
+            def read(inner): return backing.read()
+            def write(inner,revision,row): return backing.write(revision,row)
+        fence=resource_fencing.Fence(secret.fence.context,secret.fence.check,LedgerView())
+        for patcher in (patch.object(frontend_runtime_executor,'KubectlTransport',type(client)),
+                        patch.object(resource_fencing,'KubeLedger',LedgerView)):
+            patcher.start(); self.addCleanup(patcher.stop)
+        return job.Migration(secret,provision,journal,root,password,client,fence)
+
     def setup_operation(self):
         setup = secret_fixture.SecretPhaseTest()
         base, client, secret = setup.setup_phase(); self.addCleanup(base.doCleanups)
@@ -142,13 +157,20 @@ class PhaseTest(unittest.TestCase):
             if args[:2]==('create','-f'): raise TimeoutError('lost')
             return original(*args,body=body)
         client.call = lost
-        worker = job.Migration(secret,provision,j,renderer.root,password)
+        worker = self.migration_worker(secret,provision,j,renderer.root,password)
         with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':base.context['commit'],'files':files}), \
              patch.object(job.realtime_db_provision,'KubePostgres',return_value=pg):
             with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
             with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
         self.assertEqual(base.ledger.row['status'],'uncertain')
         self.assertEqual(j.state['steps']['config']['status'],'pending')
+
+    def test_swapped_migration_client_journal_is_rejected(self):
+        base,client,secret,provision,pg,renderer,j,files,password = self.setup_operation()
+        worker = self.migration_worker(secret,provision,j,renderer.root,password)
+        worker.client.journal = secret.journal
+        with self.assertRaises(job.RecoveryRequired): worker._guard()
+        self.assertNotIn('realtime_migration',base.ledger.row)
 
     def test_wrong_node_uid_refused_before_any_create(self):
         base,client,secret,provision,pg,renderer,j,files,password = self.setup_operation()
@@ -160,7 +182,7 @@ class PhaseTest(unittest.TestCase):
             if args[:2]==('create','-f'): creates.append(True)
             return original(*args,body=body)
         client.call = api
-        worker = job.Migration(secret,provision,j,renderer.root,password)
+        worker = self.migration_worker(secret,provision,j,renderer.root,password)
         with patch.object(job.publish_candidate,'source_snapshot',return_value={'source_sha':base.context['commit'],'files':files}), \
              patch.object(job.realtime_db_provision,'KubePostgres',return_value=pg):
             with self.assertRaises(job.RecoveryRequired): worker.run(self.cut)
@@ -218,7 +240,7 @@ class PhaseTest(unittest.TestCase):
                 return {'items':[pod]}
             return original(*args,body=body)
         client.call = api
-        worker = job.Migration(secret,provision,j,renderer.root,password)
+        worker = self.migration_worker(secret,provision,j,renderer.root,password)
         if fault == 'pending-cut':
             self.cut.verify_migration_pending = Mock(side_effect=RuntimeError('guard changed'))
         original_reserve, original_finish = worker._reserve, worker._finish
