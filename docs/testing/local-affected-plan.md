@@ -28,3 +28,16 @@ and skips, then reports counts and a hash of the original event bytes. Repeat
 explicitly supplied, in which case they are listed. This parser does not run
 Flutter, bind the stream to source or toolchain identities, establish the
 process exit code, or replace the full unit/widget file inventory receipt.
+
+For an isolated Flutter diagnostic, run
+`python scripts/ci/local_flutter_execution.py --head <full-HEAD-commit> --output <new-directory-outside-checkout> --flutter <flutter-executable>`.
+By default it discovers the full `test/` inventory; repeat `--suite` with a path
+relative to `test/` to diagnose a smaller selection. It copies Git-visible
+source bytes into the new directory, uses a private pub cache and temporary
+directory, runs locked dependency resolution, the repository SQLite prefetch,
+analysis and JSON-reported tests, and rechecks captured files after commands.
+Logs and `diagnostic.json` are retained there. The command reports `incomplete`
+and exits nonzero even when those checks pass: SDK, package, generated and
+ambient inputs are not fully bound, opt-in live skips need classification, and
+the complete affected-check preflight and Docker scheduler are not integrated.
+Do not use this diagnostic as a passing preflight or PR handoff receipt.
