@@ -96,6 +96,12 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
  session.admit(start=True)
  with resource_claim.command_scope(session.check):
   bridge_root.record_source_authority(session,approved,execution)
+  wrong=copy.deepcopy(approved); wrong['source_sha']='d'*40
+  try: parent._capture_authority(actions,session,wrong,execution)
+  except parent.Blocked as exc:
+   assert str(exc)=='staging_prerequisites_source_changed', str(exc)
+  else: raise AssertionError('counterfeit source receipt accepted')
+  assert not (root/'installed'/'prerequisites').exists()
   parent._capture_authority(actions,session,approved,execution)
   p=workspace/'scripts/staging/nats-rollout-preservation/staging_cohort_preservation.py'
   p.write_bytes(p.read_bytes()+b'\n# fixture drift\n')
