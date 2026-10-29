@@ -63,6 +63,7 @@ class CompilerTest(unittest.TestCase):
                 folder=self.source/mode;folder.mkdir();params=folder/'parameters.json';params.write_text(json.dumps(p));output=folder/('target-'+p['tag']+'.json')
                 def capture(args,body=b'',**kwargs):
                     if args[1]=='create':return json.dumps(fixtures.decoder(body)).encode()
+                    if args[3:5]==['get','--raw']:return json.dumps(kube.run(args[3:])).encode()
                     return json.dumps(kube.run(args[3:],None if not body else json.loads(body))).encode() if args[3] in ('apply','exec') else json.dumps(kube.get(args[4],args[5])).encode()
                 with patch('commands.capture',side_effect=capture),patch.object(sys,'argv',[compiler.__file__,str(fixtures.SOURCE),str(params),str(output)]):
                     runpy.run_path(compiler.__file__,run_name='__main__')

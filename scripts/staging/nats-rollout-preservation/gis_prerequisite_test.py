@@ -567,10 +567,13 @@ class Tests(unittest.TestCase):
             gis_plan.pop(key,None)
         kube=FullKube()
         prerequisite.preflight(kube,gis_plan)
-        state={'operation':gis_plan['operation'],'target':{'tag':gis_plan['source_sha'],'mode':'app-only'},
+        snapshots={name:{'kind':'Deployment','metadata':{'name':name,'namespace':gis.NS,
+            'uid':f'00000000-0000-0000-0000-{index:012x}'}} for index,name in enumerate(sorted(gis.baseline_workload_names(include_hub=True)),1)}
+        state={'operation':gis_plan['operation'],'target':{'tag':gis_plan['source_sha'],'mode':'app-only',
+            'gis_first_install_sha256':gis_plan['source_plan_sha256'],'gis_first_install_normalized_sha256':gis.normalized_binding(gis_plan)},
             'gis_first_install':gis_plan,'custody':{'verified':True},
             'cut':{'manifest':{'archive_sha256':'6'*64},'manifest_sha256':'7'*64,'census_sha256':'8'*64},
-            'context':{'snapshots':{'voice-'+str(i):{} for i in range(22)}}}
+            'context':{'snapshots':copy.deepcopy(snapshots),'original_snapshots':snapshots}}
         class Stage:
             expected={'namespace_uid':'00000000-0000-0000-0000-000000000001',
                 'marker_uid':'00000000-0000-0000-0000-000000000011',
@@ -665,12 +668,14 @@ class Tests(unittest.TestCase):
                     kube.objects[('Deployment',name)]=row
                 protected_before=copy.deepcopy(protected)
                 prerequisite.preflight(kube,plan)
-                snapshots={'voice-'+str(i):{} for i in range(22)}
+                snapshots={name:{'kind':'Deployment','metadata':{'name':name,'namespace':gis.NS,
+                    'uid':f'00000000-0000-0000-0000-{index:012x}'}} for index,name in enumerate(sorted(gis.baseline_workload_names(include_hub=True)),1)}
                 target={'tag':plan['source_sha'],'mode':'app-only',
                     'migration_sha256':transaction.canonical([]),
-                    'gis_first_install_sha256':plan['source_plan_sha256']}
+                    'gis_first_install_sha256':plan['source_plan_sha256'],
+                    'gis_first_install_normalized_sha256':gis.normalized_binding(plan)}
                 state={'operation':plan['operation'],'phase':'AWAITING_OFF_NODE','status':'WAITING',
-                    'events':[],'context':{'snapshots':snapshots},'provenance':{},
+                    'events':[],'context':{'snapshots':snapshots,'original_snapshots':copy.deepcopy(snapshots)},'provenance':{},
                     'target':target,'migrations':[],'migration_secret_metadata':{},
                     'gis_first_install':plan,'custody':{'verified':True},
                     'cut':{'manifest':{'archive_sha256':'6'*64},'manifest_sha256':'7'*64,
@@ -697,7 +702,7 @@ class Tests(unittest.TestCase):
                     if failure=='authorize-post-create' else None)
                 patches=[
                     patch.object(transaction,'reconstruct',return_value=stage),
-                    patch.object(transaction,'context',return_value={'snapshots':snapshots}),
+                    patch.object(transaction,'context',return_value={'snapshots':snapshots,'original_snapshots':copy.deepcopy(snapshots)}),
                     patch.object(transaction,'save'),
                     patch.object(transaction,'file_sha',return_value='7'*64),
                     patch.object(transaction,'verify_archive',return_value=True),
