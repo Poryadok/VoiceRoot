@@ -6,6 +6,7 @@ from pathlib import Path
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -22,7 +23,7 @@ class ExportTest(unittest.TestCase):
             (self.path/name).write_bytes(data); os.chmod(self.path/name,0o600)
         self.sock=self.root/'packet.sock'; self.server=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
         self.server.bind(str(self.sock)); self.server.listen(1); self.addCleanup(self.server.close)
-        self.received=[]; self.response=export.ACK; self.extra_fd=False
+        self.received=[]; self.response=export.ACK; self.extra_fd=False; self.response_delay=0
         def receive():
             conn,_=self.server.accept()
             with conn:
@@ -31,6 +32,7 @@ class ExportTest(unittest.TestCase):
                 fds=array.array('i'); fds.frombytes(anc[0][2][:fds.itemsize]); fd=fds[0]
                 try: self.received.append((message,fcntl.fcntl(fd,fcntl.F_GET_SEALS),os.read(fd,524288)))
                 finally: os.close(fd)
+                if self.response_delay: time.sleep(self.response_delay)
                 if self.response is not None:
                     if self.extra_fd:
                         extra=os.open('/dev/null',os.O_RDONLY)
@@ -71,5 +73,17 @@ class ExportTest(unittest.TestCase):
         self.extra_fd=True; start=export.existing._start_ticks(os.getpid())
         with self.assertRaises(export.ExportError): export.export(self.op,'b'*40,'namespace','c'*64,os.getpid(),start)
         self.thread.join(timeout=5); self.assertTrue((self.path/'handoff-started').is_file())
+
+    def test_bounded_timeout_without_ack_is_uncertain(self):
+        self.response=None; self.response_delay=0.2; start=export.existing._start_ticks(os.getpid())
+        with patch.object(export,'ACK_TIMEOUT_SECONDS',0.05),self.assertRaises(export.ExportError):
+            export.export(self.op,'b'*40,'namespace','c'*64,os.getpid(),start)
+        self.thread.join(timeout=5); self.assertTrue((self.path/'handoff-started').is_file())
+
+    def test_delayed_valid_ack_is_accepted(self):
+        self.response_delay=0.1; start=export.existing._start_ticks(os.getpid())
+        with patch.object(export,'ACK_TIMEOUT_SECONDS',2):
+            self.assertEqual(export.export(self.op,'b'*40,'namespace','c'*64,os.getpid(),start)['status'],'send_acknowledged')
+        self.thread.join(timeout=5)
 
 if __name__=='__main__': unittest.main()

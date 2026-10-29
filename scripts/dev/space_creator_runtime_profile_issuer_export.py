@@ -18,6 +18,7 @@ ROOT=Path('/home/voice-dev/issuance')
 SOCKET_ROOT=Path('/home/pmd/voice-space-creator/operations')
 FRAME=b'SPACE-CREATOR-PROFILE\n'
 ACK=b'SPACE-CREATOR-ACCEPTED\n'
+ACK_TIMEOUT_SECONDS=120
 
 class ExportError(RuntimeError): pass
 
@@ -82,7 +83,7 @@ def export(operation_id,source_sha,namespace_uid,preflight_sha256,consumer_pid,c
             os.lseek(fd,0,os.SEEK_SET); fcntl.fcntl(fd,fcntl.F_ADD_SEALS,existing.REQUIRED_SEALS)
             if fcntl.fcntl(fd,fcntl.F_GET_SEALS)&existing.REQUIRED_SEALS!=existing.REQUIRED_SEALS: raise ValueError()
             with socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET) as channel:
-                channel.settimeout(10); channel.connect(str(_socket_path(suffix)))
+                channel.settimeout(ACK_TIMEOUT_SECONDS); channel.connect(str(_socket_path(suffix)))
                 pid,uid,_=struct.unpack('3i',channel.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize('3i')))
                 if uid!=existing._pmd_uid() or pid!=consumer_pid or existing._start_ticks(pid)!=consumer_start_ticks: raise ValueError()
                 marker=os.open(directory/'handoff-started',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
