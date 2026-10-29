@@ -67,8 +67,9 @@ def _trigger(value, token, action, session=None, control=None):
         with socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET) as channel:
             if control is not None: control._register(channel)
             try:
-                channel.settimeout(300)
+                channel.settimeout(5)
                 channel.connect(peer_client.SOCKET)
+                channel.settimeout(300)
                 if control is not None: control._check()
                 _, uid, _ = struct.unpack('3i', channel.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
                 if uid != 0:
