@@ -50,7 +50,7 @@ def helper_binding(source, code, *, with_contract=False):
     return binding
 
 
-def exercise_candidate_drift(test):
+def exercise_candidate_drift(test, *, accept_candidate=False):
     """Join real bridge/source/candidate admission; cluster and OCI are fixtures."""
     import copy
     from unittest.mock import patch
@@ -58,6 +58,7 @@ def exercise_candidate_drift(test):
     import commands
     import resource_claim
     import resource_claim_test
+    import runtime_stage
     import source_authority
     import staging_prerequisites_test
     import staging_release_policy_prepare as policy
@@ -81,7 +82,8 @@ def exercise_candidate_drift(test):
             binding=helper_binding(source,code,with_contract=True)
             images={name:source_authority.REGISTRY+'/'+name+'@sha256:'+'a'*64 for name in source_authority.IMAGE_NAMES}
             context=copy.deepcopy(old_session.context)
-            context['images']={'voice-gameintegration/gameintegration':images['gameintegration'][:-1]+'b'}
+            candidate=images['gameintegration'] if accept_candidate else images['gameintegration'][:-1]+'b'
+            context['images']={'voice-gameintegration/gameintegration':candidate}
             card=resource_claim_test.card(context);card['observed']['images']={'voice-user/user':'registry/user@sha256:'+'b'*64}
             session=resource_claim.Session(context,old_session.operation,resource_claim.digest(binding),
                 lambda:copy.deepcopy(card),resource_claim_test.MemoryJournal());session.admit(start=True)
@@ -98,22 +100,43 @@ def exercise_candidate_drift(test):
                     for path in destination.rglob('*') if path.is_file()}
                 return copy.deepcopy(approved)
             request=dict(request,action='prepare',nonce=session.operation+'a'*52,token='fixture')
+            stage=runtime_stage.RolloutStage.capture.return_value
+            def capture_stage(*args,**kwargs):
+                if session.check()['phase']=='prerequisites':
+                    publisher=stage.kube.get('deployment','voice-p3-principal-jwks')
+                    stage.snapshots['voice-p3-principal-jwks']=publisher
+                    stage.original_snapshots=copy.deepcopy(stage.snapshots)
+                    stage.expected['deployment_uids']['voice-p3-principal-jwks']=publisher['metadata']['uid']
+                    stage.old_images=prerequisites._checkpoint(session)['receipt']['actual_after']
+                return stage
+            class ReachedPolicy(Exception):pass
+            def report(name,status):
+                if (name,status)==('policy-validation','STARTED'):raise ReachedPolicy()
             with patch.object(prerequisites,'run_prepare',real_prepare),patch.object(prerequisites,'_candidate_images',real_candidate), \
                  patch.object(policy,'validate_source',real_policy_source),patch.object(bridge_root,'INSTALLED',installed), \
                  patch.object(actions,'_idle'),patch.object(actions,'_dispatcher',return_value=(17,execution)), \
                  patch.object(source_authority,'capture_source',side_effect=capture), \
+                 patch.object(runtime_stage.RolloutStage,'capture',side_effect=capture_stage), \
+                 patch.object(actions,'_report',side_effect=report), \
                  patch.object(prerequisites,'submit_effect',wraps=prerequisites.submit_effect) as submit, \
                  patch.object(session,'bind_prerequisites',wraps=session.bind_prerequisites) as bind, \
                  resource_claim.command_scope(session.check):
-                with test.assertRaisesRegex(bridge_root.Blocked,'realtime_bootstrap_candidate_changed'):
-                    actions._prepare(request)
-                submit.assert_not_called();bind.assert_not_called()
-                for call in commands.capture.call_args_list:
-                    argv=call.args[0]
-                    test.assertFalse(any(verb in argv for verb in ('patch','apply','create','delete','replace'))
-                                     and not any(arg.startswith('--dry-run=') for arg in argv))
-                test.assertEqual(session.check()['phase'],'prepare')
-                test.assertFalse((installed/'prerequisites'/session.operation/'checkpoint.json').exists())
+                if accept_candidate:
+                    with test.assertRaises(ReachedPolicy):actions._prepare(request)
+                    test.assertEqual(session.check()['phase'],'prerequisites-captured')
+                    test.assertEqual(prerequisites._checkpoint(session)['status'],'COMPLETE')
+                    test.assertEqual(len(submit.call_args_list),16)
+                    bind.assert_called_once()
+                else:
+                    with test.assertRaisesRegex(bridge_root.Blocked,'realtime_bootstrap_candidate_changed'):
+                        actions._prepare(request)
+                    submit.assert_not_called();bind.assert_not_called()
+                    for call in commands.capture.call_args_list:
+                        argv=call.args[0]
+                        test.assertFalse(any(verb in argv for verb in ('patch','apply','create','delete','replace'))
+                                         and not any(arg.startswith('--dry-run=') for arg in argv))
+                    test.assertEqual(session.check()['phase'],'prepare')
+                    test.assertFalse((installed/'prerequisites'/session.operation/'checkpoint.json').exists())
         raise Rejected()
 
     fixture=staging_prerequisites_test.PrepareCompositionTests()

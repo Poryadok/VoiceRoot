@@ -499,6 +499,9 @@ class RootCompositionContract(unittest.TestCase):
     def test_bridge_rejects_foreign_candidate_before_any_prerequisite_effect(self):
         root_composition_fixture.exercise_candidate_drift(self)
 
+    def test_bridge_captures_real_prerequisites_before_policy(self):
+        root_composition_fixture.exercise_candidate_drift(self,accept_candidate=True)
+
     def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
         self._exercise_bridge('c2')
 
