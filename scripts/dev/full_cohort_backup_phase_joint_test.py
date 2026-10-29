@@ -5,16 +5,26 @@ This is not a successful full backup or a live environment qualification.
 import copy
 from contextlib import contextmanager
 import hashlib
+import io
 import json
+import os
 from pathlib import Path
+import subprocess
+import time
+import traceback
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import zipfile
+from datetime import datetime, timedelta, timezone
 
 import canonical_application_package as canonical
 import cohort_backup_operation
 import cohort_dispatch
+import cohort_readback
 import cohort_upload_phase
+import cohort_upload_runner
+import cohort_upload_run
 import frontend_runtime_executor
 import full_cohort_backup_metadata as metadata
 import full_cohort_backup_phase as backup
@@ -27,6 +37,11 @@ import full_cohort_supervisor as supervisor
 import media_operation_journal
 import resource_fencing
 import story_media_backup_capture as capture
+import story_media_backup_cohort_custody as custody
+import cohort_unmanaged_actual as unmanaged
+import story_media_backup_restore as media_restore
+import story_media_backup_integration_test as pg_fixture
+from story_media_backup_capture_integration_test import cleanup_fixture
 import update_images
 import writer_cut
 import writer_cut_test
@@ -60,7 +75,7 @@ class RealPreflightTest(unittest.TestCase):
             def write(self,revision,row):return base.ledger.write(revision,row)
         class Check:
             endpoint='http://fixture'
-            def __init__(self,context):self.context=context
+            def __init__(self,*args):self.context=args[-1]
             def __call__(self):return copy.deepcopy(base.card)
             def mark_uncertain(self,reason):pass
         check=Check(base.context)
@@ -110,6 +125,13 @@ class RealPreflightTest(unittest.TestCase):
 
     def test_synthetic_observations_reach_one_shot_dispatch_and_reconcile(self):
         """Real journals/capture/encryption; synthetic source, Kube, PG and failed GH."""
+        self.scenario(False)
+
+    def test_synthetic_transport_readback_and_real_pg16_restore(self):
+        """Real capture/readback/restore; Kube, source and GitHub are synthetic."""
+        self.scenario(True)
+
+    def scenario(self, succeed):
         images={name:canonical.REGISTRY+'/'+name+'@sha256:'+'b'*64 for name in canonical.IMAGE_NAMES}
         mapped={'voice-'+name+'/'+container:images[name] for name,container in update_images.SERVICES.items()}
         engine={'namespace_uid':'00000000-0000-0000-0000-000000000001',
@@ -120,6 +142,28 @@ class RealPreflightTest(unittest.TestCase):
         start='2026-01-01T00:00:00Z'; catalog={'databases':{'postgres':1},'all_databases':{'postgres':1},
             'excluded':{},'properties':{'postgres':{'allowconn':True}}}
         state={};observations=[]
+        if succeed:
+            pg=pg_fixture.PopulatedRestoreTest();self.addCleanup(cleanup_fixture,pg);pg.setUp()
+            deadline=time.monotonic()+60
+            while True:
+                ready=subprocess.run(['docker','exec',pg.source,'sh','-ec',
+                    'test "$(cat /proc/1/comm)" = postgres && exec psql -X -qAt -v ON_ERROR_STOP=1 -U source_admin -d postgres -c "SELECT 1"'],
+                    stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10)
+                if ready.returncode==0 and ready.stdout.strip()==b'1':break
+                if time.monotonic()>=deadline:self.fail('source postgres readiness failed')
+            pg.sql(pg.source,'source_admin','postgres',
+                   "CREATE ROLE app_writer LOGIN; CREATE SCHEMA tenant AUTHORIZATION app_writer; "
+                   "CREATE TABLE tenant.items(id integer PRIMARY KEY); ALTER TABLE tenant.items OWNER TO app_writer; "
+                   "INSERT INTO tenant.items VALUES (7)")
+            source_catalog=json.loads(pg.sql(pg.source,'source_admin','postgres',unmanaged.CATALOG_SQL))
+            roles=json.loads(pg.sql(pg.source,'source_admin','postgres',media_restore.role_catalog_sql()))
+            oid=int(pg.sql(pg.source,'source_admin','postgres',"SELECT oid FROM pg_database WHERE datname='postgres'"))
+            props=source_catalog['database_properties']
+            selected={k:props[k] for k in ('template','allowconn','encoding','collate','ctype','locale_provider','icu_locale','connection_limit')}
+            selected.update(owner=source_catalog['database_owner'],acl=props['acl_raw'])
+            catalog={'databases':{'postgres':oid},'all_databases':{'postgres':oid},'excluded':{},'properties':{'postgres':selected}}
+            state.update(pg=pg,roles=roles,source_catalog=source_catalog)
+        admin='source_admin' if succeed else 'postgres'
         def configure(base):
             base.context['images']=copy.deepcopy(mapped);base.fence.context['images']=copy.deepcopy(mapped)
             base.ledger.row['images']=copy.deepcopy(mapped);base.card['candidate']['images']=copy.deepcopy(mapped)
@@ -156,7 +200,7 @@ class RealPreflightTest(unittest.TestCase):
             self.enterContext(mock.patch.object(inventory,'inventory',return_value=(pods,controllers,projection)))
             self.enterContext(mock.patch.object(inventory.metadata,'catalog_from_source',return_value={}))
             self.enterContext(mock.patch.object(inventory.metadata,'inspect_all',return_value=observed['database_observations']))
-            self.enterContext(mock.patch.object(owner.inventory,'_admin_role',return_value='postgres'))
+            self.enterContext(mock.patch.object(owner.inventory,'_admin_role',return_value=admin))
             self.enterContext(mock.patch.object(census,'APP_NAMES',frozenset(('a','b'))))
             owner.inventory.run('fixture-token')
             def snapshot(token):
@@ -175,29 +219,70 @@ class RealPreflightTest(unittest.TestCase):
             self.enterContext(mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:
                 {'scope':scope,'active_sessions':0,'active_transactions':0}))
             receipt=owner.catalog.run('fixture-token')
-            admission['session_scope']={'engine':receipt['engine'],'server_start':start,'databases':['postgres'],'database_oids':{'postgres':1}}
+            admission['session_scope']={'engine':receipt['engine'],'server_start':start,'databases':['postgres'],
+                                        'database_oids':catalog['all_databases']}
             return admission,affected.CatalogScopedProbe(owner.catalog,'fixture-token')
         def after(owner,cut,storage,source,namespace_uid):
             expected=engine|{'statefulset_uid':'statefulset','pv_name':'pv','container':'postgres',
                  'mount_path':'/var/lib/postgresql/data','data_directory':'/var/lib/postgresql/data/pgdata','pg_major':16}
-            observed={'expected':expected,'engine':engine,'server_start':start,'database_oid':1,
+            observed={'expected':expected,'engine':engine,'server_start':start,'database_oid':catalog['databases']['postgres'],
                       'system_identifier':'7','node':{'name':'node','uid':'uid'}}
             self.enterContext(mock.patch.object(physical.PhysicalPhase,'_observe',return_value=observed))
             self.enterContext(mock.patch.object(metadata.media_backup_upload_phase,'ROOT',owner.journal.path.parent.parent))
             self.enterContext(mock.patch.object(metadata.schema,'kube_engine_snapshot',return_value=lambda:engine))
-            self.enterContext(mock.patch.object(metadata.unmanaged,'validate_source_catalog'))
+            if not succeed:self.enterContext(mock.patch.object(metadata.unmanaged,'validate_source_catalog'))
             self.enterContext(mock.patch.object(source,'_source_files',return_value={'files':{}}))
             self.enterContext(mock.patch.object(source,'_read',side_effect=lambda db,*args:
-                {'roles':[],'memberships':[]} if db=='roles' else {'database_owner':'postgres'}))
+                (copy.deepcopy(state['roles']) if db=='roles' else copy.deepcopy(state['source_catalog'])) if succeed else
+                ({'roles':[],'memberships':[]} if db=='roles' else {'database_owner':'postgres'})))
             def tool():source._tool_state({'status':'removed'});return 'd'*64
             self.enterContext(mock.patch.object(source,'_tool_sha',side_effect=tool))
             storage.run('fixture-token');source.run('fixture-token')
         with self.phases(before_cut=before,after_cut=after,configure=configure) as work:
             self.enterContext(mock.patch.object(cohort_upload_phase,'ROOT',work.root))
             self.enterContext(mock.patch.object(backup.publish_candidate,'source_snapshot',return_value={}))
-            self.enterContext(mock.patch.object(cohort_dispatch,'_transport',side_effect=OSError('synthetic lost dispatch')))
+            original_run=subprocess.run
+            if succeed:
+                output=work.operation/'github-output';output.touch(mode=0o600)
+                env={'GITHUB_REPOSITORY':cohort_upload_run.REPOSITORY,'GITHUB_EVENT_NAME':'workflow_dispatch',
+                     'GITHUB_REF':'refs/heads/master','GITHUB_WORKFLOW_REF':cohort_upload_run.WORKFLOW_REF,
+                     'GITHUB_SHA':work.base.context['commit'],'GITHUB_WORKFLOW_SHA':work.base.context['commit'],
+                     'GITHUB_RUN_ID':'123','GITHUB_RUN_ATTEMPT':'1','GITHUB_OUTPUT':str(output)}
+                self.enterContext(mock.patch.object(cohort_upload_runner,'ROOT',work.root))
+                self.enterContext(mock.patch.object(cohort_upload_runner,'OPERATOR_UID',os.geteuid()))
+                self.enterContext(mock.patch.object(cohort_upload_runner.media,'Client',return_value=work.owner.client))
+                now=datetime.now(timezone.utc);created=(now-timedelta(seconds=1)).isoformat()
+                run_json={'id':123,'head_sha':env['GITHUB_SHA'],'head_branch':'master','event':'workflow_dispatch',
+                          'path':cohort_readback.WORKFLOW,'run_attempt':1,'status':'completed','conclusion':'success'}
+                def get_json(token,url):
+                    if url.endswith('/artifacts?per_page=100'):
+                        return {'total_count':1,'artifacts':[{'id':456,'name':state['artifact_name'],'created_at':created}]}
+                    return run_json
+                self.enterContext(mock.patch.object(cohort_readback,'get_json',side_effect=get_json))
+                def upload_transport(command,payload):
+                    request=json.loads(payload);challenge=request['inputs']['challenge']
+                    state['artifact_name']='voice-cohort-backup-'+work.base.context['operation_id']+'-'+challenge
+                    try:path=cohort_upload_runner.stage(env,work.base.context['operation_id'],challenge,Path('/fixture'))
+                    except Exception as exc:
+                        state['upload_failure']=(type(exc).__name__,[(Path(x.filename).name,x.lineno,x.name) for x in traceback.extract_tb(exc.__traceback__)])
+                        raise
+                    wire=io.BytesIO()
+                    with zipfile.ZipFile(wire,'w',compression=zipfile.ZIP_STORED) as zipped:zipped.writestr('cohort-backup.tar',path.read_bytes())
+                    state['artifact']=wire.getvalue()
+                    return json.dumps({'workflow_run_id':123,'run_url':cohort_readback.API+'123',
+                        'html_url':'https://github.com/Poryadok/VoiceRoot/actions/runs/123'}).encode()
+                self.enterContext(mock.patch.object(cohort_dispatch,'_transport',side_effect=upload_transport))
+                def download(url,headers,target,limit,deadline,redirects=False):
+                    data=state['artifact'] if redirects else json.dumps({'id':456,'url':custody.API+'456','expired':False,
+                        'name':state['artifact_name'],'created_at':now.isoformat(),'expires_at':(now+timedelta(days=1)).isoformat(),
+                        'workflow_run':{'id':123,'head_sha':env['GITHUB_SHA']},'size_in_bytes':len(state['artifact'])}).encode()
+                    target.write(data);return len(data)
+                self.enterContext(mock.patch.object(custody.transport,'_download',side_effect=download))
+            else:
+                self.enterContext(mock.patch.object(cohort_dispatch,'_transport',side_effect=OSError('synthetic lost dispatch')))
             mount='42 1 0:42 / /var/lib/postgresql/data rw - ext4 /dev/x rw\n'
             def transport(command,**kwargs):
+                if command[0]!='kubectl':return original_run(command,**kwargs)
                 text=' '.join(command)
                 if 'get' in command:
                     kind=command[command.index('get')+1];objects={
@@ -210,17 +295,38 @@ class RealPreflightTest(unittest.TestCase):
                         'pv':{'metadata':{'uid':engine['pv_uid']},'spec':{'claimRef':{'uid':engine['pvc_uid'],'namespace':'voice-dev','name':'pgdata-voice-postgres-0'}}}}
                     return SimpleNamespace(returncode=0,stdout=json.dumps(objects[kind]).encode())
                 if 'pg_postmaster_start_time' in text:
-                    return SimpleNamespace(returncode=0,stdout=json.dumps({'database':'postgres','database_oid':1,'role':'postgres','server_start':start}).encode())
+                    return SimpleNamespace(returncode=0,stdout=json.dumps({'database':'postgres','database_oid':catalog['databases']['postgres'],'role':admin,'server_start':start}).encode())
                 if 'pg_read_file' in text:
                     return SimpleNamespace(returncode=0,stdout=json.dumps({'data_directory':'/var/lib/postgresql/data/pgdata','version':'160014','mountinfo':mount}).encode())
                 if 'readlink' in text:
                     return SimpleNamespace(returncode=0,stdout=('/var/lib/postgresql/data/pgdata\n/var/lib/postgresql/data\n'+mount).encode())
-                observations.append(command[-1]);kwargs['stdout'].write(b'synthetic-pg-dump');return SimpleNamespace(returncode=0,stdout=b'')
+                observations.append(command[-1])
+                if succeed:
+                    program=['pg_dumpall','-U',admin,'--roles-only','--no-role-passwords'] if command[-1]=='roles' else ['pg_dump','-U',admin,'-Fc','-d','postgres']
+                    return original_run(['docker','exec',state['pg'].source,*program],stdout=kwargs['stdout'],stderr=subprocess.DEVNULL,timeout=90)
+                kwargs['stdout'].write(b'synthetic-pg-dump');return SimpleNamespace(returncode=0,stdout=b'')
             with mock.patch.object(capture.subprocess,'run',side_effect=transport):
-                with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
+                if succeed:
+                    original_psql=media_restore._psql;checked=[]
+                    def checked_psql(cid,role,db,sql,timeout=120):
+                        result=original_psql(cid,role,db,sql,timeout=timeout)
+                        if db=='postgres' and sql==unmanaged.CATALOG_SQL:
+                            value=original_psql(cid,role,db,"SELECT id,pg_get_userbyid(relowner) FROM tenant.items CROSS JOIN pg_class WHERE oid='tenant.items'::regclass")
+                            self.assertEqual(value.strip(),b'7|app_writer');checked.append(True)
+                        return result
+                    with mock.patch.object(media_restore,'_psql',side_effect=checked_psql):
+                        try:result=work.phase.run('fixture-token')
+                        except backup.BackupError:
+                            steps=sorted(work.phase.journal.state['steps']) if work.phase.journal else []
+                            self.fail('synthetic joint incomplete; stages='+repr(steps)+'; dump_count='+str(len(observations))+'; upload='+repr(state.get('upload_failure')))
+                    self.assertEqual(len(checked),2)
+                    self.assertEqual(result['scope'],'full-cohort-private-backup-and-isolated-restore')
+                    self.assertEqual(backup.verify_completed(work.phase,'fixture-token'),result)
+                else:
+                    with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
                 self.assertEqual(sorted(observations),['postgres','roles'])
                 with self.assertRaises(backup.BackupError):work.phase.run('fixture-token')
-            self.assertEqual(work.base.ledger.row['status'],'uncertain')
+            self.assertEqual(work.base.ledger.row['status'],'active' if succeed else 'uncertain')
 
 
 if __name__=='__main__':unittest.main()
