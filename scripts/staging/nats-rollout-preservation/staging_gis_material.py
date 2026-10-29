@@ -183,6 +183,7 @@ def _verify_issuer_tls(parent, session, plan, desired, kube):
         raise ValueError()
     expected_ca = issuer['ca_secret']
     def check_ca():
+        if parent.load_issuer(session, 'gis_material') != issuer: raise ValueError()
         actual = kube.get('secret', 'voice-media-ca')
         if (expected_ca['metadata'].get('name') != 'voice-media-ca'
             or expected_ca['metadata'].get('namespace') != 'voice-staging'
@@ -206,6 +207,7 @@ def verify_effect(session, effect_id, observation):
     import staging_prerequisites as parent
     import stage_runtime
     try:
+        session.check()
         plan = parent.require_child(session, 'gis_material')
         validate_plan(plan)
         if effect_id in plan['preserved']:
@@ -229,6 +231,8 @@ def verify_effect(session, effect_id, observation):
                     or fresh['metadata']['resourceVersion'] != expected['resourceVersion']):
                     raise ValueError()
                 check_ca()
+            if parent.require_child(session, 'gis_material') != plan: raise ValueError()
+            session.check()
             return expected
         if effect_id not in ('gis-app-credentials', 'gis-workload', 'gis-signer', 'gis-tls'): raise ValueError()
         effect = next(row for row in plan['effects'] if row['id'] == effect_id)
@@ -283,6 +287,8 @@ def verify_effect(session, effect_id, observation):
             expected = {'kind': 'Secret', 'name': effect['name'], 'namespace': effect['namespace'],
                 'uid': meta['uid'], 'resourceVersion': meta['resourceVersion'], 'semantic_sha256': desired_hash}
             if observation != expected: raise ValueError()
+            if parent.require_child(session, 'gis_material') != plan: raise ValueError()
+            session.check()
             return expected
         if type(payload) is not dict or set(payload) != {'before', 'after_data'}: raise ValueError()
         before, after = payload['before'], payload['after_data']
@@ -306,6 +312,8 @@ def verify_effect(session, effect_id, observation):
             or current['resourceVersion'] == original['resourceVersion']
             or _secret_semantic(live) != desired or observation != expected_observation):
             raise ValueError()
+        if parent.require_child(session, 'gis_material') != plan: raise ValueError()
+        session.check()
         return expected_observation
     except (KeyError, StopIteration, TypeError, ValueError, UnicodeError, binascii.Error, OSError,
             subprocess.SubprocessError, MaterialError):
@@ -538,6 +546,7 @@ def preflight_payloads(session):
     import staging_prerequisites as parent
     import stage_runtime
     try:
+        session.check()
         plan = parent.require_child(session, 'gis_material')
         validate_plan(plan)
         kube = stage_runtime.Kube()
@@ -597,6 +606,8 @@ def preflight_payloads(session):
                 if not publics[0] or publics[0] == publics[1]: raise ValueError()
             elif effect_id == 'gis-tls':
                 _verify_issuer_tls(parent, session, plan, obj, kube)()
+        if parent.require_child(session, 'gis_material') != plan: raise ValueError()
+        session.check()
         return True
     except (KeyError, TypeError, ValueError, UnicodeError, binascii.Error, OSError,
             subprocess.SubprocessError, MaterialError):

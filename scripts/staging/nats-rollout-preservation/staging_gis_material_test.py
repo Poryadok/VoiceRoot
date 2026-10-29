@@ -351,7 +351,7 @@ class ClosedPlanTest(unittest.TestCase):
             submit_effect=Mock(side_effect=lambda _s, slot, item: events.append(('submit', slot, item)) or {'id': item}),
             record_done=Mock(side_effect=lambda _s, slot, item, _observation: events.append(('done', slot, item))))
         execute = getattr(module, 'execute', lambda _session: None)
-        session = object()
+        session = SimpleNamespace(check=Mock())
         with patch.dict(sys.modules, {'staging_prerequisites': parent}):
             execute(session)
         parent.require_child.assert_called_once_with(session, 'gis_material')
@@ -397,8 +397,11 @@ class AppEffectVerificationTest(ClosedPlanTest):
             preflight = getattr(module, 'preflight_payloads', None)
             self.assertTrue(callable(preflight), 'fixed GIS preflight is required')
             with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
-                preflight(object())
+                preflight(SimpleNamespace(check=Mock()))
                 parent.submit_effect.assert_not_called()
+                guarded=SimpleNamespace(check=Mock(side_effect=[None, RuntimeError('claim changed')]))
+                with self.assertRaisesRegex(RuntimeError,'claim changed'): preflight(guarded)
+                self.assertEqual(guarded.check.call_count,2)
                 valid_listing = {'apiVersion': 'v1', 'kind': 'SecretList', 'metadata': {'resourceVersion': '5'}, 'items': []}
                 for fault in ('present', 'rv', 'continued', 'wrong_kind'):
                     listing = copy.deepcopy(valid_listing)
@@ -408,11 +411,11 @@ class AppEffectVerificationTest(ClosedPlanTest):
                     else: listing['kind'] = 'List'
                     kube.run.return_value = listing
                     with self.subTest(fault=fault):
-                        with self.assertRaises(module.MaterialError): preflight(object())
+                        with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(check=Mock()))
                 kube.run.return_value = valid_listing
                 changed_rv = copy.deepcopy(valid_listing); changed_rv['metadata']['resourceVersion'] = '6'
                 kube.run.return_value = changed_rv
-                preflight(object())
+                preflight(SimpleNamespace(check=Mock()))
                 kube.run.return_value = valid_listing
                 workload = json.loads(payloads['gis-workload'])
                 workload['metadata']['annotations']['voice.poryadok.io/prerequisites-operation'] = 'abcdef123456'
@@ -431,7 +434,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 parent.load_preserved = Mock(return_value={'authority': authority, 'semantic': workload, 'uid': observed['uid']})
                 kube.get.side_effect = lambda _kind, name: (before if name == 'voice-app-secrets' else
                     namespace if name == 'voice-staging' else workload_live if name == observed['name'] else issuer_ca)
-                preflight(object())
+                preflight(SimpleNamespace(check=Mock()))
                 parent.load_preserved.assert_called_once()
                 parent.require_child.return_value = plan
                 paths = {'/api/v1/namespaces/voice-staging/secrets?fieldSelector=metadata.name%3D' +
@@ -444,7 +447,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
                                                    base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
                 parent.require_child.return_value = plan
-                with self.assertRaises(module.MaterialError): preflight(object())
+                with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(check=Mock()))
                 payloads['gis-workload'] = original_workload
                 broken_app = json.loads(payloads['gis-app-credentials'])
                 broken_app['after_data']['GAME_INTEGRATION_DB_PASSWORD'] = base64.b64encode(b'x').decode()
@@ -454,7 +457,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 plan, payloads = module.build_plan(base['operation'], base['namespace_uid'], base['source_capture_sha256'],
                                                    base['source_contract_sha256'], base['issuer'], before_map, {}, payloads)
                 parent.require_child.return_value = plan
-                with self.assertRaises(module.MaterialError): preflight(object())
+                with self.assertRaises(module.MaterialError): preflight(SimpleNamespace(check=Mock()))
                 parent.submit_effect.assert_not_called()
     def test_preserved_effect_requires_protected_ancestry_and_fresh_exact_observation(self):
         module = importlib.import_module('staging_gis_material')
@@ -473,7 +476,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
         plan['preserved'][effect['id']] = {'authority': authority, 'observed': observation}
         parent = SimpleNamespace(require_child=Mock(return_value=plan), load_preserved=Mock(return_value={
             'authority': authority, 'semantic': semantic, 'uid': observation['uid']}))
-        kube = SimpleNamespace(get=Mock(return_value=secret)); session = object()
+        kube = SimpleNamespace(get=Mock(return_value=secret)); session = SimpleNamespace(check=Mock())
         with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
             self.assertEqual(module.verify_effect(session, effect['id'], observation), observation)
             parent.load_preserved.assert_called_with(session, 'gis_material', effect['id'])
@@ -510,9 +513,18 @@ class AppEffectVerificationTest(ClosedPlanTest):
         parent = SimpleNamespace(require_child=Mock(return_value=plan), load_payload=Mock(return_value=payload))
         verify = getattr(module, 'verify_effect', None)
         self.assertTrue(callable(verify), 'fresh GIS effect verifier is required')
-        session = object()
+        session = SimpleNamespace(check=Mock())
         with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
             self.assertEqual(verify(session, 'gis-app-credentials', observation), observation)
+            guarded = SimpleNamespace(check=Mock(side_effect=[None, RuntimeError('claim changed')]))
+            with self.assertRaisesRegex(RuntimeError, 'claim changed'):
+                verify(guarded, 'gis-app-credentials', observation)
+            self.assertEqual(guarded.check.call_count, 2)
+            changed_plan = copy.deepcopy(plan); changed_plan['source_capture_sha256'] = 'a' * 64
+            parent.require_child.side_effect = [plan, changed_plan]
+            with self.assertRaises(module.MaterialError):
+                verify(SimpleNamespace(check=Mock()), 'gis-app-credentials', observation)
+            parent.require_child.side_effect = None
             for fault in ('uid', 'resourceVersion', 'data', 'metadata'):
                 with self.subTest(fault=fault):
                     changed = copy.deepcopy(live)
@@ -563,7 +575,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
         kube = SimpleNamespace(get=Mock(return_value=live))
         parent = SimpleNamespace(require_child=Mock(return_value=plan), load_payload=Mock(return_value=raw))
         with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
-            self.assertEqual(module.verify_effect(object(), effect['id'], observation), observation)
+            self.assertEqual(module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation), observation)
             broken = copy.deepcopy(secret)
             keys = list(broken['data'])
             broken['data'][keys[1]] = broken['data'][keys[0]]
@@ -573,7 +585,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
             candidate = copy.deepcopy(broken); candidate['metadata'].update(uid=observation['uid'], resourceVersion='8')
             kube.get.return_value = candidate
             with self.assertRaises(module.MaterialError):
-                module.verify_effect(object(), effect['id'], {**observation, 'semantic_sha256': effect['desired_sha256']})
+                module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], {**observation, 'semantic_sha256': effect['desired_sha256']})
 
     def test_signer_create_requires_two_valid_distinct_3072_bit_private_keys(self):
         module = importlib.import_module('staging_gis_material')
@@ -592,7 +604,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
         kube = SimpleNamespace(get=Mock(return_value=live))
         parent = SimpleNamespace(require_child=Mock(return_value=plan), load_payload=Mock(return_value=raw))
         with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
-            self.assertEqual(module.verify_effect(object(), effect['id'], observation), observation)
+            self.assertEqual(module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation), observation)
             broken = copy.deepcopy(secret); broken['data']['next.pem'] = broken['data']['current.pem']
             raw = json.dumps(broken, sort_keys=True, separators=(',', ':')).encode()
             effect['payload_sha256'], effect['desired_sha256'] = hashlib.sha256(raw).hexdigest(), digest(broken)
@@ -600,7 +612,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
             candidate = copy.deepcopy(broken); candidate['metadata'].update(uid=observation['uid'], resourceVersion='8')
             kube.get.return_value = candidate
             with self.assertRaises(module.MaterialError):
-                module.verify_effect(object(), effect['id'], {**observation, 'semantic_sha256': effect['desired_sha256']})
+                module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], {**observation, 'semantic_sha256': effect['desired_sha256']})
 
     def test_tls_create_requires_protected_issuer_and_fresh_ca_secret(self):
         module = importlib.import_module('staging_gis_material')
@@ -630,7 +642,12 @@ class AppEffectVerificationTest(ClosedPlanTest):
             parent = SimpleNamespace(require_child=Mock(return_value=plan), load_payload=Mock(return_value=raw),
                                      load_issuer=Mock(return_value=issuer))
             with patch.dict(sys.modules, {'staging_prerequisites': parent, 'stage_runtime': SimpleNamespace(Kube=lambda: kube)}):
-                self.assertEqual(module.verify_effect(object(), effect['id'], observation), observation)
+                self.assertEqual(module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation), observation)
+                changed_issuer=copy.deepcopy(issuer);changed_issuer['receipt']={'different':True}
+                parent.load_issuer.side_effect=[issuer,changed_issuer]
+                with self.assertRaises(module.MaterialError):
+                    module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation)
+                parent.load_issuer.side_effect=None
                 ca_calls = []
                 def race(_kind, name):
                     if name == 'voice-media-ca':
@@ -640,22 +657,22 @@ class AppEffectVerificationTest(ClosedPlanTest):
                             return changed
                     return objects[name]
                 kube.get.side_effect = race
-                with self.assertRaises(module.MaterialError): module.verify_effect(object(), effect['id'], observation)
+                with self.assertRaises(module.MaterialError): module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation)
                 self.assertEqual(len(ca_calls), 3)
                 kube.get.side_effect = lambda _kind, name: objects[name]
                 prior = {'operation': 'abcdef123456', 'receipt_sha256': 'f' * 64}
                 plan['effects'].remove(effect)
                 plan['preserved'][effect['id']] = {'authority': prior, 'observed': observation}
                 parent.load_preserved = Mock(return_value={'authority': prior, 'semantic': secret, 'uid': observation['uid']})
-                self.assertEqual(module.verify_effect(object(), effect['id'], observation), observation)
+                self.assertEqual(module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation), observation)
                 objects['voice-media-ca'] = copy.deepcopy(ca_secret)
                 objects['voice-media-ca']['metadata']['resourceVersion'] = '12'
-                with self.assertRaises(module.MaterialError): module.verify_effect(object(), effect['id'], observation)
+                with self.assertRaises(module.MaterialError): module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation)
                 plan['preserved'].clear(); plan['effects'].insert(2, effect)
                 objects['voice-media-ca'] = ca_secret
                 objects['voice-media-ca'] = copy.deepcopy(ca_secret)
                 objects['voice-media-ca']['metadata']['uid'] = '00000000-0000-0000-0000-000000000303'
-                with self.assertRaises(module.MaterialError): module.verify_effect(object(), effect['id'], observation)
+                with self.assertRaises(module.MaterialError): module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], observation)
                 objects['voice-media-ca'] = ca_secret
                 broken = copy.deepcopy(secret)
                 broken['data']['tls.key'] = base64.b64encode(key).decode()
@@ -665,7 +682,7 @@ class AppEffectVerificationTest(ClosedPlanTest):
                 objects[effect['name']] = copy.deepcopy(broken)
                 objects[effect['name']]['metadata'].update(uid=observation['uid'], resourceVersion='8')
                 with self.assertRaises(module.MaterialError):
-                    module.verify_effect(object(), effect['id'], {**observation, 'semantic_sha256': effect['desired_sha256']})
+                    module.verify_effect(SimpleNamespace(check=Mock()), effect['id'], {**observation, 'semantic_sha256': effect['desired_sha256']})
 
 
 if __name__ == '__main__':
