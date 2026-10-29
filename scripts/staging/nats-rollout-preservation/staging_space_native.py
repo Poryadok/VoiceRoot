@@ -802,6 +802,13 @@ def verify_native_successor(session):
     return load_native_successor(session)
 
 
+def _successor_snapshot(operation):
+    base=owner.guard.ROOT/'installed'/'cohort-preservation'/operation
+    return tuple(owner._read(base/path) for path in ('space-native-successor-plan.json',
+        'space-native-successor.json','effects/space-native-successor-create.json',
+        'effects/space-native-successor-delete.json'))
+
+
 def _successor_records(operation,binding):
     """Verify durable C2 records using an already authenticated operation binding."""
     if not isinstance(operation,str) or not re.fullmatch('[a-f0-9]{12}',operation):
@@ -842,14 +849,19 @@ def _successor_records(operation,binding):
 def load_native_successor(session):
     """Reload the exact C2 verification while the pre-cut Session is active."""
     owner._guard(session);owner._no_pending(session)
-    plan,receipt=_successor_records(session.operation,session.binding())
+    binding=session.binding()
+    snapshot=_successor_snapshot(session.operation)
+    plan,receipt=_successor_records(session.operation,binding)
     if _successor_context(session)!=plan:raise Blocked('space_native_successor_changed')
     _successor_unmounted(plan);owner._no_pending(session);session.check()
+    if _successor_snapshot(session.operation)!=snapshot:
+        raise Blocked('space_native_successor_changed')
     return copy.deepcopy(receipt)
 
 
 def _successor_history(operation,cohort_plan,prepared,binding):
     """Validate protected C2 proof without opening the current database."""
+    snapshot=_successor_snapshot(operation)
     plan,receipt=_successor_records(operation,binding)
     fields={'schema','operation','predecessor','prior_native_sha256','identity','pvc_uid','pv_uid','pv_name',
         'pvc_sha256','pv_sha256','config_sha256','secret_sha256','expected_hashes','tool_platform_digest',
@@ -883,6 +895,10 @@ def _successor_history(operation,cohort_plan,prepared,binding):
         or any(not isinstance(plan[key],str) or not re.fullmatch('[a-f0-9]{64}',plan[key])
                for key in ('pvc_sha256','pv_sha256','config_sha256','secret_sha256'))):
         raise Blocked('space_native_successor_changed')
+    if (owner._read(owner.guard.ROOT/'installed'/'prerequisites'/operation/'previous-active.json')!=prior_active
+        or owner._read(root/'space-live'/'plan.json')!=oldplan or owner._read(root/'catalog.json')!=catalog
+        or owner._read(root/'metadata.json')!=metadata or _successor_snapshot(operation)!=snapshot):
+        raise Blocked('space_native_successor_changed')
     return copy.deepcopy(receipt)
 
 
@@ -894,6 +910,10 @@ def load_retained_native_successor(session):
         'helper_sha256':session.helper,'target_sha256':owner.digest(cohort_plan)}
     receipt=_successor_history(session.operation,cohort_plan,prepared,binding)
     owner._phase_continuity(session,cohort_plan);owner._no_pending(session);session.check()
+    if (_successor_history(session.operation,cohort_plan,prepared,binding)!=receipt
+        or owner._read(owner._base(session)/'checkpoint.json').get('plan')!=cohort_plan
+        or owner._read(owner.guard.ROOT/'installed'/'prerequisites'/session.operation/'prepared.json')!=prepared):
+        raise Blocked('space_native_successor_changed')
     return receipt
 
 

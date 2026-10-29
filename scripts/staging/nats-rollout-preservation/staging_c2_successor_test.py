@@ -56,9 +56,13 @@ class SuccessorTests(unittest.TestCase):
             parent=root/'installed'/'prerequisites'/operation;parent.mkdir(parents=True,mode=0o700)
             owner._write(prior/'space-live'/'plan.json',oldplan);owner._write(prior/'catalog.json',catalog)
             owner._write(prior/'metadata.json',metadata);owner._write(parent/'previous-active.json',active)
-            with patch.object(native,'_successor_records',return_value=(plan,{'receipt':'fixture'})), \
+            with patch.object(native,'_successor_snapshot',return_value=('fixture',)), \
+                 patch.object(native,'_successor_records',return_value=(plan,{'receipt':'fixture'})), \
                  patch.object(native,'validate_historical_live_completed',return_value=previous):
                 self.assertEqual(native._successor_history(operation,cohort,prepared,{}),{'receipt':'fixture'})
+                with patch.object(native,'_successor_snapshot',side_effect=[('before',),('after',)]):
+                    with self.assertRaisesRegex(Exception,'space_native_successor_changed'):
+                        native._successor_history(operation,cohort,prepared,{})
                 plan['job']['spec']['template']['spec']['containers'][0]['image']='foreign'
                 with self.assertRaisesRegex(Exception,'space_native_successor_changed'):
                     native._successor_history(operation,cohort,prepared,{})
@@ -144,6 +148,15 @@ class SuccessorTests(unittest.TestCase):
                             self.assertEqual(receipt['hashes'],hashes);self.assertEqual(receipt['cleanup'],'verified')
                             self.assertEqual(calls.count('create'),1);self.assertEqual(calls.count('delete'),1)
                             self.assertGreaterEqual(polls[0],2);self.assertEqual(context.call_count,5)
+                            effect=owner._base(session)/'effects'/'space-native-successor-create.json'
+                            original=owner._read(effect)
+                            def alter_after_validation(_plan):
+                                changed=copy.deepcopy(original);changed['response']['resourceVersion']='changed'
+                                owner.save(effect,changed)
+                            with patch.object(native,'_successor_unmounted',side_effect=alter_after_validation):
+                                with self.assertRaisesRegex(Exception,'space_native_successor_changed'):
+                                    native.load_native_successor(session)
+                            owner.save(effect,original)
                             tampered=copy.deepcopy(receipt);tampered['hashes']['/evidence/origin.json']='f'*64
                             owner.save(owner._base(session)/'space-native-successor.json',tampered)
                             with self.assertRaisesRegex(Exception,'space_native_successor_changed'):
