@@ -5,6 +5,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+import full_cohort_config_custody as custody
+import full_cohort_config_custody_test as config_fixture
 import full_cohort_predecessor_phase as predecessor
 import full_cohort_predecessor_phase_test as pred_fixture
 import media_backup_phase_test as base_fixture
@@ -51,6 +53,18 @@ class JointTest(unittest.TestCase):
                     'previous_operation_id':old['operation_id'], 'previous_commit':old['commit'], 'deployment':{},
                     'p3_receipt':copy.deepcopy(receipt), 'p3_handoff':copy.deepcopy(handoff),
                     'p3_objects':copy.deepcopy(old['realtime_p3_objects']), 'publisher':copy.deepcopy(item)}
+        operation, entries, effects = config_fixture.facts()
+        self.assertEqual(operation, old["operation_id"])
+        config_context = copy.deepcopy(self.base.context)
+        config_context.update(operation_id=operation, commit=old["commit"])
+        config = {"schema":"voice-full-cohort-config-snapshot-v1",
+                  "resource_context":config_context, "namespace_uid":"ns",
+                  "cut_invocation":"b"*32, "services":["chat"], "effects":entries}
+        marker = {"schema":"voice-full-cohort-config-marker-v1", "status":"done",
+                  "operation_id":operation, "source_sha":old["commit"], "namespace_uid":"ns",
+                  "cut_invocation":"b"*32, "snapshot_sha256":custody.digest(config),
+                  "effects_sha256":custody.digest(effects)}
+        snapshot["config_completion"] = {"snapshot":config, "marker":marker, "ledger_effects":effects}
         descriptor = {'schema':'voice-full-cohort-predecessor-v1', 'snapshot_sha256':predecessor.digest(snapshot),
                       'old_row_sha256':snapshot['old_row_sha256'], 'ledger_uid':'ledger', 'ledger_resourceVersion':'8',
                       'previous_operation_id':old['operation_id']}

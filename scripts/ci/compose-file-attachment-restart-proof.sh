@@ -172,8 +172,22 @@ echo "A1 restart proof project=${project} gateway=${VOICE_API_BASE_URL}"
 compose config --quiet
 compose_started=true
 set +e
-compose up -d --build
-initial_up_status=$?
+preparation_started=$SECONDS
+if [[ -n "${VOICE_COMPOSE_BUILD_CACHE_SCOPE:-}" ]]; then
+  python3 "$ROOT/scripts/ci/compose_build_cache.py" \
+    --scope "$VOICE_COMPOSE_BUILD_CACHE_SCOPE" --builder "${BUILDX_BUILDER:?isolated Buildx builder required}" -- \
+    docker compose --env-file "$compose_env" --project-name "$project" --project-directory "$ROOT" \
+    -f "$ROOT/docker-compose.yml" -f "$ROOT/docker-compose.voice-space-media.yml" --profile app
+  initial_up_status=$?
+  if (( initial_up_status == 0 )); then
+    compose up -d --no-build
+    initial_up_status=$?
+  fi
+else
+  compose up -d --build
+  initial_up_status=$?
+fi
+printf 'compose_restart_phase=stack_preparation elapsed_seconds=%d exit=%d\n' "$((SECONDS-preparation_started))" "$initial_up_status"
 set -e
 if (( initial_up_status != 0 )); then
   compose ps --all >&2 || true
@@ -215,16 +229,19 @@ expect_file_principal_probe_failure missing-config -e FILE_PRINCIPAL_SIGNING_KEY
 expect_file_principal_probe_failure tls-ca -e USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem
 expect_file_principal_probe_failure wrong-issuer -e FILE_PRINCIPAL_PROBE=1 -e FILE_PRINCIPAL_PROBE_ISSUER=wrong
 
+proof_started=$SECONDS
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=prepare
 (
   cd "$ROOT/src/backend/gateway"
   go test -count=1 -parallel 1 -timeout 10m -run "^${restart_test}$" ./...
 )
+printf 'compose_restart_phase=prepare elapsed_seconds=%d exit=0\n' "$((SECONDS-proof_started))"
 [[ -f "$state_path_posix" ]] || { echo "prepare did not create restart-proof state" >&2; exit 1; }
 
 # User restart must not erase the shared replay guard. The probe generates a
 # fresh credential and replays it after User comes back; then File restart
 # exercises a fresh signer process before attachment durability is checked.
+restart_started=$SECONDS
 compose restart user
 wait_healthy user
 run_file_principal_probe
@@ -237,8 +254,11 @@ wait_healthy gateway
 wait_gateway
 run_file_principal_probe
 
+printf 'compose_restart_phase=user_file_restart elapsed_seconds=%d exit=0\n' "$((SECONDS-restart_started))"
+proof_started=$SECONDS
 export VOICE_FILE_ATTACHMENT_RESTART_PHASE=verify
 (
   cd "$ROOT/src/backend/gateway"
   go test -count=1 -parallel 1 -timeout 10m -run "^${restart_test}$" ./...
 )
+printf 'compose_restart_phase=verify elapsed_seconds=%d exit=0\n' "$((SECONDS-proof_started))"

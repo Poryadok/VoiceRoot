@@ -68,7 +68,15 @@ source plan with `bind_migration(kind, phase, source_root)` before the Job
 create. The producer records pending before POST and the accepted Job UID after
 POST before calling `verify_migration_running()`. The cut checks source-owned
 Job and Pod validators, the unchanged unrelated Job inventory, pinned node and
-scoped session observation. `finish_migration()` requires the source terminal
+scoped session observation. A verified Pending Realtime Pod retains its UID while
+waiting for scheduling or image pull; any supplied node/runtime identity must
+match. Pending supplies no IP for session attribution. Running and Succeeded
+require the full pinned node, image, container and IP identity. Pod UID changes,
+failed phases and the existing bounded timeout hold the operation. If an owned
+Realtime Pod appears or gains runtime identity during a session sample, the cut
+resamples with each strictly advancing validated identity, at most twice for
+absent to Pending to runtime, then requires a stable full result; it never
+reuses the earlier sample or accepts a changed UID or established runtime IP. `finish_migration()` requires the source terminal
 receipt, a Complete Job, its original successful Pod and zero migration
 sessions. Auth cleanup is accepted only after the producer's exact UID removal
 receipts and absence checks. A lost response remains uncertain and is not replayed.

@@ -617,16 +617,31 @@ class WriterCut:
                 if self.migration['pod_uid'] not in (None, pod['uid']):
                     raise RecoveryRequired('migration Pod changed')
                 self.migration['pod_uid'] = pod['uid']
-            receipt = migration.sessions(self, state, pod)
-            if self.migration['finished'] and receipt['attributed_sessions']:
-                raise RecoveryRequired('terminal migration sessions remain')
-            self._guard()
-            self._guards()
-            self._recheck_config_successors()
-            after, next_pod = migration.observe(self, self.migration, allow_removed=self.migration['finished'])
-            if state != after or pod != next_pod or not self._retired():
-                raise RecoveryRequired('migration changed during session observation')
-            return receipt
+            # Identity has only three startup ranks: absent, Pending, runtime.
+            # Every resample must strictly advance, so at most two are possible.
+            startup_rank = 0 if pod is None else 1 if not pod.get('ip') else 2
+            while True:
+                receipt = migration.sessions(self, state, pod)
+                if self.migration['finished'] and receipt['attributed_sessions']:
+                    raise RecoveryRequired('terminal migration sessions remain')
+                self._guard()
+                self._guards()
+                self._recheck_config_successors()
+                after, next_pod = migration.observe(self, self.migration, allow_removed=self.migration['finished'])
+                if state == after and pod == next_pod and self._retired():
+                    return receipt
+                # Keep the complete sample stable; only validated monotonic startup
+                # edges permit another full sample, never a UID or established-IP change.
+                next_rank = 0 if next_pod is None else 1 if not next_pod.get('ip') else 2
+                progressing = (self.migration['kind'] == 'realtime' and not self.migration['finished']
+                    and state == after and state['job']['state'] == 'owned' and not state['terminal']
+                    and next_rank > startup_rank and next_pod and ((pod is None and self.migration['pod_uid'] is None)
+                        or (pod and not pod.get('ip') and next_pod['uid'] == pod['uid'] and next_pod.get('ip'))))
+                if not progressing or not self._retired():
+                    raise RecoveryRequired('migration changed during session observation')
+                self.migration['pod_uid'] = next_pod['uid']
+                state, pod, startup_rank = after, next_pod, next_rank
+
         except BaseException:
             self._uncertain()
 

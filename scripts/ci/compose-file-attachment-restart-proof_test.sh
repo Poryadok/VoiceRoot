@@ -95,6 +95,11 @@ set -euo pipefail
   elif [[ "$1" == */scripts/dev/generate-phase0-fixture.py ]]; then
   mkdir -p "$2"
   printf 'fixture=%s\n' "$2" >>"${FAKE_LOG:?}"
+elif [[ "$1" == */scripts/ci/compose_build_cache.py ]]; then
+  printf 'cache_build' >>"${FAKE_LOG:?}"
+  for arg in "$@"; do printf ' <%s>' "$arg" >>"${FAKE_LOG}"; done
+  printf '\n' >>"${FAKE_LOG}"
+  exit "${FAKE_BUILD_RC:-0}"
 elif [[ "$1" == */scripts/dev/restore-phase0-fixture-owner.py ]]; then
   printf 'restore=%s\n' "$2" >>"${FAKE_LOG:?}"
 else
@@ -230,5 +235,23 @@ assert_contains "$case_dir/commands.log" 'compose.*<run>.*<FILE_PRINCIPAL_SIGNIN
 assert_contains "$case_dir/commands.log" 'compose.*<run>.*<USER_FILE_PRINCIPAL_TLS_CA_FILE=/missing-ca.pem>.*<file>'
 assert_contains "$case_dir/commands.log" 'compose.*<run>.*<FILE_PRINCIPAL_PROBE_ISSUER=wrong>.*<file>'
 assert_not_contains "$case_dir/commands.log" 'compose.*<restart> <messaging>'
+
+echo '== CI cache path still builds current sources and preserves both proof phases =='
+case_dir="$(new_case cached-success)"
+VOICE_COMPOSE_BUILD_CACHE_SCOPE=voice-compose-linux-amd64-v1 BUILDX_BUILDER=owned-builder run_runner "$case_dir"
+assert_eq "$(cat "$case_dir/rc")" 0
+assert_contains "$case_dir/commands.log" '^cache_build.*<--scope> <voice-compose-linux-amd64-v1>.*<--builder> <owned-builder>.*<--project-name> <voice-a1-file-restart-'
+assert_contains "$case_dir/commands.log" 'compose.*<up> <-d> <--no-build>'
+assert_not_contains "$case_dir/commands.log" 'compose.*<up> <-d> <--build>'
+assert_eq "$(grep -c '^go ' "$case_dir/commands.log")" 2
+assert_contains "$case_dir/commands.log" '<restart> <user>'
+assert_contains "$case_dir/commands.log" '<restart> <file>'
+
+echo '== failed current build cannot reach no-build startup or proof =='
+case_dir="$(new_case cached-failure)"
+VOICE_COMPOSE_BUILD_CACHE_SCOPE=voice-compose-linux-amd64-v1 BUILDX_BUILDER=owned-builder FAKE_BUILD_RC=29 run_runner "$case_dir"
+assert_eq "$(cat "$case_dir/rc")" 29
+assert_not_contains "$case_dir/commands.log" 'compose.*<up>|^go '
+assert_contains "$case_dir/commands.log" 'compose.*<ps> <--all>'
 
 echo 'All compose-file-attachment-restart-proof tests passed.'

@@ -1,4 +1,5 @@
 import os
+import base64
 from pathlib import Path
 import socket
 import ssl
@@ -6,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
+import signal
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -14,6 +17,37 @@ import full_cohort_chat_health as health
 
 
 class ResponseTests(unittest.TestCase):
+    def test_private_key_selection_rejects_uid_drift_and_lost_guard(self):
+        import full_cohort_schema_metadata as common
+        import realtime_p3_create_only_transport as transport
+        values = (b'client-certificate', b'private-secret', b'public-ca')
+        raw = b'client-uid\n17\n' + base64.b64encode(values[0]) + b'\n' + base64.b64encode(values[1])
+        ca = b'ca-uid\n23\n' + base64.b64encode(values[2])
+        with patch.object(transport, '_run', return_value=raw) as read, patch.object(transport, 'public_certificate', return_value=ca):
+            self.assertEqual(health._private_material({'uid':'client-uid','resourceVersion':'17'},
+                {'uid':'ca-uid','resourceVersion':'23'}, lambda:None), values)
+            arguments = read.call_args.args[0]
+            self.assertEqual(arguments[:3], ['get', 'secret', 'voice-realtime-p3-tls'])
+            self.assertNotIn('private-secret', repr(arguments))
+            with self.assertRaises(health.HealthError) as error:
+                health._private_material({'uid':'other','resourceVersion':'17'}, {'uid':'ca-uid','resourceVersion':'23'}, lambda:None)
+            self.assertNotIn('private-secret', str(error.exception))
+            with self.assertRaises(common.GuardLost):
+                health._private_material({'uid':'client-uid','resourceVersion':'17'},
+                    {'uid':'ca-uid','resourceVersion':'23'}, lambda:False)
+
+    def test_dependency_error_is_never_downgraded_to_health_failure(self):
+        import full_cohort_schema_metadata as common
+        def unavailable(): raise RuntimeError('producer masked a lost guard')
+        with self.assertRaises(common.GuardLost): health._authority_call(unavailable)
+
+    def test_overall_deadline_interrupts_and_restores_timer(self):
+        original = signal.getsignal(signal.SIGALRM)
+        with self.assertRaises(health._Deadline):
+            with health._bounded_observation(0.05): time.sleep(1)
+        self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+        self.assertEqual(signal.getsignal(signal.SIGALRM), original)
+
     def test_completed_guard_loss_is_not_downgraded(self):
         import full_cohort_schema_metadata as common
         phase = object.__new__(health.ChatHealthPhase)
@@ -183,14 +217,19 @@ class ResponseTests(unittest.TestCase):
                 return {'deployment':deployment,'replicasets':{'items':[rs]},'pods':{'items':[pod]},
                         'service':service,'endpointslices':{'items':[slice_]}}[args[1]]
         ledger_row = {'status':'active','full_cohort_invocation':{'nonce':'nonce','operation_id':'op'}}
-        image = SimpleNamespace(_guard=lambda:None, _valid_pod=lambda *a:True, _accounts=lambda:None,
-            _records=lambda row:None, started=True, invocation='nonce',
+        image = SimpleNamespace(verify_activation_lineage=lambda:None, _valid_pod=lambda *a:True, _accounts=lambda:None,
+            _records=lambda row:None, _target=lambda name:target['spec'], started=True, invocation='nonce',
+            journal=SimpleNamespace(state={'steps':{'full-cohort-image-voice-chat':
+                {'status':'done','receipt':{'uid':'deployment','spec':target['spec'],'resourceVersion':'7'}}}}),
             _controller=lambda m,k: next((o['uid'] for o in m.get('ownerReferences',[]) if o['kind']==k and o['controller']),None),
             fence=SimpleNamespace(context={'images':{'voice-chat/chat':'image'},'operation_id':'op'},
                 owned=lambda row:True, ledger=SimpleNamespace(read=lambda:(ledger_row,('ledger','1')))),
             intent={'full_cohort':{'platform_digests':{'voice-chat/chat':'platform'}}})
         package = {'images':{'voice-chat/chat':'image'}, 'platform_digests':{'voice-chat/chat':'platform'}}
         self.assertEqual(health._workloads(Client(), image, cut, package)['pods'][0]['uid'], 'pod')
+        image.journal.state['steps']['full-cohort-image-voice-chat']['status'] = 'pending'
+        with self.assertRaises(health.HealthError): health._workloads(Client(), image, cut, package)
+        image.journal.state['steps']['full-cohort-image-voice-chat']['status'] = 'done'
         import full_cohort_schema_metadata as common
         cut._guard = lambda: (_ for _ in ()).throw(ValueError('lost claim'))
         with self.assertRaises(common.GuardLost): health._workloads(Client(), image, cut, package)

@@ -116,11 +116,13 @@ def verify_writer_pod(authored, job, pod, execution):
                 execution['platform_digest'] not in PLATFORMS.values()): raise RecoveryRequired('execution differs')
         meta = pod.get('metadata',{}); spec = copy.deepcopy(pod.get('spec',{})); status = pod.get('status',{})
         owner = [o for o in meta.get('ownerReferences',[]) if o.get('controller') is True]
+        phase = status.get('phase'); node_name = spec.pop('nodeName',None)
         if (pod.get('apiVersion')!='v1' or pod.get('kind')!='Pod' or meta.get('namespace')!='voice-dev' or
                 not isinstance(meta.get('uid'),str) or not meta['uid'] or not isinstance(meta.get('resourceVersion'),str) or
                 not meta['resourceVersion'] or meta.get('deletionTimestamp') or len(owner)!=1 or
                 owner[0].get('kind')!='Job' or owner[0].get('uid')!=job['metadata']['uid'] or
-                spec.pop('nodeName',None)!=execution['node_name'] or spec.get('hostNetwork',False) is not False):
+                (node_name!=execution['node_name'] and not (phase=='Pending' and node_name is None)) or
+                spec.get('hostNetwork',False) is not False):
             raise RecoveryRequired('Pod identity differs')
         name = authored['metadata']['name']; uid = job['metadata']['uid']
         generated = {'batch.kubernetes.io/controller-uid':uid,'controller-uid':uid,
@@ -137,9 +139,23 @@ def verify_writer_pod(authored, job, pod, execution):
         observed = copy.deepcopy(intended); observed['spec'] = spec
         auth_user_candidate_probe.admitted_pod(intended,observed)
         addresses = status.get('podIP'); containers = status.get('containerStatuses',[])
+        if phase not in ('Pending','Running','Succeeded') or not isinstance(containers,list) or len(containers)>1:
+            raise RecoveryRequired('Pod phase differs')
+        if addresses is not None and (not isinstance(addresses,str) or str(ipaddress.ip_address(addresses))!=addresses):
+            raise RecoveryRequired('Pod address differs')
         image_id = containers[0].get('imageID','') if len(containers)==1 else ''
         image_match = re.fullmatch(r'(?:docker-pullable://[^@]+@|containerd://|docker://)?(sha256:[0-9a-f]{64})',image_id)
-        if (status.get('phase') not in ('Running','Succeeded') or not isinstance(addresses,str) or
+        if phase == 'Pending':
+            # Bind ownership now, but do not grant session authority before runtime.
+            if containers:
+                item = containers[0]; state = item.get('state',{})
+                if (item.get('name')!='migrate' or type(item.get('restartCount')) is not int or
+                        item['restartCount']!=0 or item.get('containerID') or not isinstance(state,dict) or
+                        set(state) - {'waiting'} or
+                        (image_id and (not image_match or image_match.group(1)!=execution['platform_digest']))):
+                    raise RecoveryRequired('Pending Pod runtime differs')
+            return {'pod_uid':meta['uid'],'pod_ip':None}
+        if (not isinstance(addresses,str) or
                 str(ipaddress.ip_address(addresses)) != addresses or len(containers)!=1 or
                 containers[0].get('name')!='migrate' or not containers[0].get('containerID') or
                 type(containers[0].get('restartCount')) is not int or containers[0]['restartCount']!=0 or

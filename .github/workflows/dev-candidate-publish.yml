@@ -66,6 +66,10 @@ on:
       - scripts/dev/realtime_config_transition*.py
       - scripts/dev/space_p3_issuer*.py
       - scripts/dev/backend_config_transition*.py
+      - scripts/dev/full_cohort_chat_health.py
+      - scripts/dev/full_cohort_chat_health_test.py
+      - scripts/dev/full_cohort_chat_health_config_test.py
+      - scripts/dev/full_cohort_chat_health_cut_test.py
       - scripts/dev/full_cohort_image_apply.py
       - scripts/dev/full_cohort_image_apply_test.py
       - scripts/dev/full_cohort_image_apply_composition_test.py
@@ -119,6 +123,8 @@ on:
       - scripts/dev/full_cohort_activation_plan_test.py
       - scripts/dev/full_cohort_affected_plan.py
       - scripts/dev/full_cohort_affected_plan_test.py
+      - scripts/dev/full_cohort_config_custody.py
+      - scripts/dev/full_cohort_config_custody_test.py
       - scripts/dev/full_cohort_predecessor_phase.py
       - scripts/dev/full_cohort_predecessor_phase_test.py
       - scripts/dev/realtime_secret_phase.py
@@ -237,6 +243,9 @@ jobs:
           python -B scripts/dev/backend_config_transition_observation_test.py
           python -B scripts/dev/backend_config_transition_deployment_test.py
           python -B scripts/dev/backend_config_transition_composition_test.py
+          python -B scripts/dev/full_cohort_chat_health_test.py
+          python -B scripts/dev/full_cohort_chat_health_config_test.py
+          python -B scripts/dev/full_cohort_chat_health_cut_test.py
           python -B scripts/dev/full_cohort_image_apply_test.py
           python -B scripts/dev/full_cohort_image_apply_composition_test.py
           python -B scripts/dev/full_cohort_oci_test.py
@@ -268,6 +277,7 @@ jobs:
           python -B scripts/dev/full_cohort_namespace_census_test.py
           python -B scripts/dev/full_cohort_activation_plan_test.py
           python -B scripts/dev/full_cohort_affected_plan_test.py
+          python -B scripts/dev/full_cohort_config_custody_test.py
           python -B scripts/dev/full_cohort_predecessor_phase_test.py
           python -B scripts/dev/realtime_secret_phase_test.py
           python -B scripts/dev/realtime_secret_provision_test.py
