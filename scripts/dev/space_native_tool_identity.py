@@ -28,7 +28,7 @@ class ToolIdentityError(RuntimeError): pass
 GATE_SOURCE_SHA256={
     'src/backend/space/internal/nativeinstaller/runner.go':'fb216adceb399966c38284f9a4df305aac265b0a31ce25ffbc31a51cc33b3c8b',
     'src/backend/space/internal/store/native_catalog_rowjson_types.go':'110c2a4c5f70cdc955ba4cb9f8d7cee424ec15176a7ab70c9c863c0d4f0dbc25',
-    'src/backend/space/cmd/native-migrate/main.go':'9c197b2d384f368fdec76fc7d69f0e09074e90beb1ef54c45b9e1315978476a0',
+    'src/backend/space/cmd/native-migrate/main.go':'9a4c0a2aa937a30ab5800ee9efbce17bd76a9064cdb855f6816f5d797f720cc9',
 }
 
 
