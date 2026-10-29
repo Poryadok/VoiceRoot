@@ -56,6 +56,23 @@ class MigrationCutTest(unittest.TestCase):
         with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_migration_running()
         self.assertEqual(self.ledger.row['status'], 'uncertain')
 
+    def test_pending_job_prepost_requires_absence_and_zero_sessions(self):
+        self.bind()
+        self.state['job']['state'] = 'pending'
+        self.assertEqual(self.cut.verify_migration_pending()['active_sessions'], 0)
+        self.pod = {'uid': 'unexpected', 'ip': '10.1.2.3'}
+        with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_migration_pending()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
+    def test_pending_job_session_drift_holds_before_post(self):
+        self.bind()
+        self.state['job']['state'] = 'pending'
+        busy = {'scope': self.admission['session_scope'], 'active_sessions': 1,
+                'active_transactions': 1, 'attributed_sessions': []}
+        with mock.patch.object(migration, 'sessions', return_value=busy):
+            with self.assertRaises(writer_cut.RecoveryRequired): self.cut.verify_migration_pending()
+        self.assertEqual(self.ledger.row['status'], 'uncertain')
+
     def test_terminal_binds_observed_pod_and_journal(self):
         self.bind()
         self.state['job'].update(state='done', uid='first', resourceVersion='1')

@@ -964,6 +964,31 @@ class WriterCut:
         if state != after or pod != next_pod:
             raise RecoveryRequired('migration changed before writer resume')
 
+    def verify_migration_pending(self):
+        """Recheck the source-owned pending Job and zero sessions before POST."""
+        import writer_cut_migration as migration
+        try:
+            if self.migration is None or self.migration['finished']:
+                raise RecoveryRequired('pending migration unavailable')
+            self._guard()
+            before, pod = migration.observe(self, self.migration)
+            if before['job']['state'] != 'pending' or before['job']['uid'] is not None or pod is not None:
+                raise RecoveryRequired('pending migration Job is not absent')
+            receipt = self.verify_migration_running()
+            if (not isinstance(receipt, dict) or set(receipt) !=
+                    {'scope', 'active_sessions', 'active_transactions', 'attributed_sessions'} or
+                    receipt['active_sessions'] != 0 or receipt['active_transactions'] != 0 or
+                    type(receipt['active_sessions']) is not int or type(receipt['active_transactions']) is not int or
+                    receipt['attributed_sessions'] != []):
+                raise RecoveryRequired('pending migration sessions remain')
+            after, pod = migration.observe(self, self.migration)
+            self._guard()
+            if after != before or pod is not None:
+                raise RecoveryRequired('pending migration changed')
+            return copy.deepcopy(receipt)
+        except BaseException:
+            self._uncertain()
+
     def finish_migration(self):
         import writer_cut_migration as migration
         try:
