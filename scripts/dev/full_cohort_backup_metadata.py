@@ -88,6 +88,7 @@ def checked_session(observation, expected):
     fields = {'database', 'database_oid', 'role', 'server_start', 'read_only', 'data_directory', 'pg_major'}
     if (not isinstance(expected, dict) or set(expected) != fields or
             not isinstance(observation, dict) or set(observation) != fields | {'value'} or
+            type(observation['database_oid']) is not int or type(observation['pg_major']) is not int or
             any(observation[k] != expected[k] for k in fields)):
         raise MetadataError('database session changed')
     return copy.deepcopy(observation['value'])
@@ -436,3 +437,32 @@ def verify_completed(phase, token):
         return copy.deepcopy(result)
     except BaseException:
         raise MetadataError('completed backup metadata unavailable') from None
+
+
+def verify_current(phase, token):
+    """Recheck twice around a drained pre-provision backup, not an atomic snapshot."""
+    try:
+        result = verify_completed(phase, token)
+        phase.cut.verify_drained()
+        catalog = phase.catalog.verify_current(token)
+        if _digest(catalog) != result['catalog_receipt_sha256']:
+            raise ValueError()
+        candidate = phase.package.verify_current(token)
+        source = phase._source_files(candidate, token)
+        restore.migration_inventory(phase.source_root, result['databases'], result['metadata']['migrations'], full_catalog=True)
+        engine, start = catalog['engine'], catalog['server_start']
+        snapshot = schema.kube_engine_snapshot(schema.linux_private_bytes, phase._guard)
+        role = phase.inventory._admin_role()
+        for _ in range(2):
+            if phase._read('roles', catalog['databases']['postgres'], engine, start, role, snapshot) != result['metadata']['roles']:
+                raise ValueError()
+            for db in result['databases']:
+                if phase._read(db, catalog['databases'][db], engine, start, role, snapshot) != result['metadata']['catalog'][db]:
+                    raise ValueError()
+        phase.cut.verify_drained()
+        if (phase.catalog.verify_current(token) != catalog or phase._source_files(candidate, token) != source or
+                verify_completed(phase, token) != result):
+            raise ValueError()
+        return result
+    except BaseException:
+        raise MetadataError('current backup metadata unavailable') from None

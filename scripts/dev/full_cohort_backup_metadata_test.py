@@ -210,22 +210,21 @@ class JournalBoundaryTest(unittest.TestCase):
         self.ledger.client = client
         package = object.__new__(metadata.package.PackagePhase)
         inventory = object.__new__(metadata.inventory.InventoryPhase)
-        catalog_phase = object.__new__(metadata.affected.FullCatalogPhase)
         cut = object.__new__(metadata.writer_cut.WriterCut)
-        for obj in (package, inventory, catalog_phase, cut):
+        for obj in (package, inventory, cut):
             obj.fence = self.fence; obj.lock = {}; obj.namespace_uid = 'ns'
-        inventory.package = package; catalog_phase.inventory = inventory
+        inventory.package = package
         candidate = {'package_sha256': 'c' * 64}
         package.verify_current = lambda token: candidate
-        inventory.verify_receipt = lambda token: {}
+        report = {'database_observations': {'workloads': {'fixture': [{'status': 'observed', 'result': {
+            'metadata': {'engine': {'namespace_uid': 'ns'}, 'session': {'server_start': 'start'}}}}]}}}
+        inventory.verify_receipt = lambda token: report
+        inventory.verify_current = lambda token: report
         inventory._admin_role = lambda: 'postgres'
         cut.verify_drained = lambda: None
-        observed = {'operation_id': self.context['operation_id'], 'source_sha': self.context['commit'],
-                    'namespace_uid': 'ns', 'engine': {'namespace_uid': 'ns'}, 'server_start': 'start',
-                    'databases': {'postgres': 1}, 'properties': {'postgres': {'allowconn': True}}}
-        catalog_phase.verify_current = lambda token: observed
-        catalog_phase.verify_receipt = lambda token: observed
-        self.ledger.row['full_cohort_db_catalog'] = {'receipt_sha256': metadata._digest(observed)}
+        projected = {'all_databases': {'postgres': 1}, 'databases': {'postgres': 1}, 'excluded': {},
+                     'properties': {'postgres': {'allowconn': True}}}
+        catalog_phase = metadata.affected.FullCatalogPhase(self.journal, self.fence, client, {}, 'ns', inventory)
         operation = Path(self.tmp.name) / self.context['operation_id']
         operation.mkdir(mode=0o700)
         phase = metadata.BackupMetadataPhase(self.journal, self.fence, client, {}, 'ns', package,
@@ -236,15 +235,24 @@ class JournalBoundaryTest(unittest.TestCase):
         def read(database, *args):
             return {'roles': [], 'memberships': []} if database == 'roles' else {'database_owner': 'postgres'}
         with mock.patch.object(metadata.media_operation_guard, 'verify'), \
+             mock.patch.object(metadata.affected, '_full_catalog', return_value=projected), \
              mock.patch.object(metadata.media_backup_upload_phase, 'ROOT', Path(self.tmp.name)), \
-             mock.patch.object(metadata.schema, 'kube_engine_snapshot', return_value=lambda: observed['engine']), \
+             mock.patch.object(metadata.schema, 'kube_engine_snapshot', return_value=lambda: {'namespace_uid': 'ns'}), \
              mock.patch.object(metadata.unmanaged, 'validate_source_catalog'), \
              mock.patch.object(phase, '_source_files', return_value={'files': {}}), \
-             mock.patch.object(phase, '_tool_sha', side_effect=tool), mock.patch.object(phase, '_read', side_effect=read):
+             mock.patch.object(phase, '_tool_sha', side_effect=tool), mock.patch.object(phase, '_read', side_effect=read) as observer:
+            catalog_phase.run('token')
             result = phase.run('token')
             self.assertEqual(result['databases'], ['postgres'])
             self.assertEqual(result['metadata']['migrations']['postgres']['engine'], 'unmanaged')
             self.assertEqual(metadata.verify_completed(phase, 'token'), result)
+            self.assertEqual(metadata.verify_current(phase, 'token'), result)
+            values = iter([{'roles': [], 'memberships': []}, {'database_owner': 'postgres'},
+                           {'roles': [], 'memberships': []}, {'database_owner': 'changed'}])
+            observer.side_effect = lambda *args: next(values)
+            with self.assertRaises(metadata.MetadataError): metadata.verify_current(phase, 'token')
+            observer.side_effect = lambda database, *args: {'roles': [], 'memberships': []} if database == 'roles' else {}
+            with self.assertRaises(metadata.MetadataError): metadata.verify_current(phase, 'token')
             with self.assertRaises(metadata.MetadataError): phase.run('token')
             path = operation / metadata.FILENAME
             path.write_bytes(b'{}')
