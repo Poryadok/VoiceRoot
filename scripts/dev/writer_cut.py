@@ -73,7 +73,7 @@ class WriterCut:
         self.journal, self.fence, self.client = journal, fence, client
         self.lock, self.namespace_uid = copy.deepcopy(lock), namespace_uid
         self.intent, self.admission = copy.deepcopy(journal.intent), copy.deepcopy(admission)
-        self.probe = probe
+        self.probe = self._initial_probe = probe
         self.invocation = secrets.token_hex(16)
         self.started = self.drained = self.poisoned = False
         self.retired_rs = set()
@@ -96,7 +96,8 @@ class WriterCut:
                 self.intent.get('namespace_uid') != self.namespace_uid or self.intent.get('writer_cut') != a or
                 type(self.client) is not frontend_runtime_executor.KubectlTransport or
                 self.client.journal is not self.journal or getattr(self.fence.ledger, 'client', None) is not self.client or
-                not callable(self.probe) or not isinstance(a, dict) or set(a) != {'controllers', 'guards', 'linked', 'session_scope'} or
+                not callable(self.probe) or self.probe is not self._initial_probe or
+                not isinstance(a, dict) or set(a) != {'controllers', 'guards', 'linked', 'session_scope'} or
                 not isinstance(a['controllers'], list) or not a['controllers'] or
                 not isinstance(a['session_scope'], dict) or not a['session_scope'] or
                 not isinstance(a['guards'], dict) or set(a['guards']) != {'jobs', 'cronjobs', 'hpas'} or
