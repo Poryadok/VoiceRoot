@@ -11,6 +11,106 @@ from unittest.mock import Mock, patch
 import nats_contract_integration as integration
 
 
+# The previous reviewed capture contained 83 Python sources. The read-only
+# source comparison records that the five staged prerequisite modules below
+# are the only additions; preserve the baseline membership separately from
+# those source-derived imports. The manifest also includes the built kernel.
+BASELINE_CAPTURED_PYTHON_SOURCES = frozenset((
+    'nats-known-baseline/commands.py',
+    'nats-known-baseline/controller.py',
+    'nats-known-baseline/docker_runtime.py',
+    'nats-known-baseline/root_main.py',
+    'nats-known-baseline/scenario.py',
+    'nats-known-baseline/stage_runtime.py',
+    'nats-rollout-preservation/actor_auth.py',
+    'nats-rollout-preservation/actor_permissions.py',
+    'nats-rollout-preservation/actor_root.py',
+    'nats-rollout-preservation/actor_verification.py',
+    'nats-rollout-preservation/apply.py',
+    'nats-rollout-preservation/bootstrap_auth.py',
+    'nats-rollout-preservation/bootstrap_enrollment.py',
+    'nats-rollout-preservation/bootstrap_renewal.py',
+    'nats-rollout-preservation/bootstrap_root.py',
+    'nats-rollout-preservation/bootstrap_selection.py',
+    'nats-rollout-preservation/bot_migration.py',
+    'nats-rollout-preservation/bridge.py',
+    'nats-rollout-preservation/bridge_root.py',
+    'nats-rollout-preservation/closed_archive.py',
+    'nats-rollout-preservation/closed_durable.py',
+    'nats-rollout-preservation/compiler.py',
+    'nats-rollout-preservation/contract_fixture_entry.py',
+    'nats-rollout-preservation/deployment_report.py',
+    'nats-rollout-preservation/encrypted_cut.py',
+    'nats-rollout-preservation/errors.py',
+    'nats-rollout-preservation/expired_admission.py',
+    'nats-rollout-preservation/expired_finish.py',
+    'nats-rollout-preservation/expired_proof.py',
+    'nats-rollout-preservation/expired_recovery.py',
+    'nats-rollout-preservation/expired_transport.py',
+    'nats-rollout-preservation/gis_existing_update.py',
+    'nats-rollout-preservation/gis_first_install.py',
+    'nats-rollout-preservation/gis_prerequisite.py',
+    'nats-rollout-preservation/github_custody.py',
+    'nats-rollout-preservation/guard.py',
+    'nats-rollout-preservation/hub_bridge_identity.py',
+    'nats-rollout-preservation/hub_bridge_unit.py',
+    'nats-rollout-preservation/installer.py',
+    'nats-rollout-preservation/migrations.py',
+    'nats-rollout-preservation/native_store.py',
+    'nats-rollout-preservation/nats_a3_roster_integration.py',
+    'nats-rollout-preservation/nats_active_contract.py',
+    'nats-rollout-preservation/nats_contract_actor.py',
+    'nats-rollout-preservation/nats_contract_custody.py',
+    'nats-rollout-preservation/nats_contract_integration.py',
+    'nats-rollout-preservation/nats_contract_plan.py',
+    'nats-rollout-preservation/nats_deliver_all.py',
+    'nats-rollout-preservation/nats_migration.py',
+    'nats-rollout-preservation/nats_root_plan.py',
+    'nats-rollout-preservation/nonnats_plan.py',
+    'nats-rollout-preservation/nonnats_runtime.py',
+    'nats-rollout-preservation/normalize.py',
+    'nats-rollout-preservation/operator_reset.py',
+    'nats-rollout-preservation/operator_retirement.py',
+    'nats-rollout-preservation/paused_recovery.py',
+    'nats-rollout-preservation/prebuild_disposition.py',
+    'nats-rollout-preservation/prebuild_v5_disposition.py',
+    'nats-rollout-preservation/preserve.py',
+    'nats-rollout-preservation/preserved_upload.py',
+    'nats-rollout-preservation/provisional.py',
+    'nats-rollout-preservation/realtime_bootstrap.py',
+    'nats-rollout-preservation/realtime_bootstrap_existing.py',
+    'nats-rollout-preservation/release_policy_wiring.py',
+    'nats-rollout-preservation/renderer_execution.py',
+    'nats-rollout-preservation/renderer_root.py',
+    'nats-rollout-preservation/renderer_transition.py',
+    'nats-rollout-preservation/resource_claim.py',
+    'nats-rollout-preservation/rollout_census.py',
+    'nats-rollout-preservation/rollout_census_integration.py',
+    'nats-rollout-preservation/root_cli.py',
+    'nats-rollout-preservation/runtime_stage.py',
+    'nats-rollout-preservation/source_authority.py',
+    'nats-rollout-preservation/source_plan.py',
+    'nats-rollout-preservation/space_authority.py',
+    'nats-rollout-preservation/space_backup.py',
+    'nats-rollout-preservation/space_migration.py',
+    'nats-rollout-preservation/space_restore.py',
+    'nats-rollout-preservation/space_safeguards.py',
+    'nats-rollout-preservation/story_fixture.py',
+    'nats-rollout-preservation/story_witness.py',
+    'nats-rollout-preservation/transaction.py',
+    'nats-rollout-preservation/v8_upgrade.py',
+))
+INTENDED_STAGED_PREREQUISITE_SOURCES = frozenset((
+    'nats-rollout-preservation/staging_prerequisites.py',
+    'nats-rollout-preservation/staging_gis_material.py',
+    'nats-rollout-preservation/staging_p3_prerequisites.py',
+    'nats-rollout-preservation/staging_p3_prerequisites_crypto.py',
+    'nats-rollout-preservation/staging_release_policy_prepare.py',
+))
+EXPECTED_CAPTURED_PYTHON_SOURCES = (
+    BASELINE_CAPTURED_PYTHON_SOURCES | INTENDED_STAGED_PREREQUISITE_SOURCES)
+
+
 class HostedTransportTests(unittest.TestCase):
     def test_existing_fixture_credentials_do_not_already_grant_music_consumer(self):
         contract=json.loads((Path(__file__).parents[1]/'nats-known-baseline/deployed-contract.json').read_text())
@@ -169,7 +269,13 @@ class HostedTransportTests(unittest.TestCase):
 
             manifest_path = bundle / 'capture/capture-manifest.json'
             manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-            self.assertLessEqual(len(manifest), 85)
+            self.assertEqual(len(BASELINE_CAPTURED_PYTHON_SOURCES), 83)
+            self.assertEqual(len(INTENDED_STAGED_PREREQUISITE_SOURCES), 5)
+            self.assertEqual(set(manifest), EXPECTED_CAPTURED_PYTHON_SOURCES | {
+                'nats-known-baseline/kernel',
+            })
+            self.assertEqual(len(manifest), 89)
+            self.assertTrue(INTENDED_STAGED_PREREQUISITE_SOURCES <= set(manifest))
             self.assertIn('nats-rollout-preservation/contract_fixture_entry.py', manifest)
             for relative, wanted in manifest.items():
                 content = (bundle / 'capture' / relative).read_bytes()
