@@ -102,7 +102,7 @@ class FullCohortImageApply:
         self.cut_journal = admission.cut.journal
         self.cut_intent = copy.deepcopy(admission.cut_intent)
         self.invocation = secrets.token_hex(16)
-        self.started = self.poisoned = self.verifying = False
+        self.started = self.poisoned = self.verifying = self.activation_checking = False
         if (type(client) is not KubectlTransport or client.journal is not journal
                 or getattr(fence.ledger, 'client', None) is not client):
             raise RecoveryRequired('single fixed Kubernetes client required')
@@ -224,7 +224,9 @@ class FullCohortImageApply:
             if cut.journal.state['steps'].get(key) != value:
                 raise RecoveryRequired('cut journal lineage changed')
         for key in cut.journal.state['steps']:
-            if key not in capture.cut_steps and (not self.verifying or not key.startswith('writer-resume-')):
+            allowed = key.startswith('writer-resume-') or key in ('writer-cut-resume-inventory',
+                'writer-cut-activation-plan', 'writer-cut-space-health', 'writer-cut-publisher-health', 'writer-cut-chat-health')
+            if key not in capture.cut_steps and (not self.verifying or not allowed):
                 raise RecoveryRequired('unexpected cut journal step')
         config = capture.config_journal
         if (config is not cut.config_journal or cut.config_snapshot != capture.config_snapshot
@@ -364,16 +366,127 @@ class FullCohortImageApply:
         for step, item in steps.items():
             if not (step.startswith('writer-drain-') or step.startswith('writer-resume-')
                     or step.startswith('writer-cut-config-successor-')
-                    or step in ('writer-cut-drained', 'writer-cut-config-plan')):
+                    or re.fullmatch(r'writer-cut-migration-(?:plan|finish|cleanup)-[0-9a-f]{32}', step)
+                    or step in ('writer-cut-drained', 'writer-cut-config-plan', 'writer-cut-resume-inventory',
+                                'writer-cut-auth-successor', 'writer-cut-activation-plan', 'writer-cut-space-health',
+                                'writer-cut-publisher-health', 'writer-cut-chat-health')):
                 continue
-            if (not isinstance(item, dict) or item.get('status') != 'done'
+            pending_resume = (self.activation_checking and step.startswith('writer-resume-') and
+                              isinstance(item, dict) and item.get('status') == 'pending')
+            if pending_resume and getattr(self.admission.cut, 'activation', None) is None:
+                raise RecoveryRequired('pending resume has no activation plan')
+            if (not isinstance(item, dict) or (item.get('status') != 'done' and not pending_resume)
                     or not isinstance(item.get('nonce'), str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
-                    or item.get('details_sha256') != digest(item.get('details')) or not isinstance(item.get('receipt'), dict)):
+                    or item.get('details_sha256') != digest(item.get('details')) or
+                    (not pending_resume and not isinstance(item.get('receipt'), dict)) or
+                    (pending_resume and 'receipt' in item)):
                 raise RecoveryRequired('writer effect incomplete or changed')
             expected[step] = {k: item[k] for k in ('status', 'nonce', 'details_sha256')}
-            expected[step]['receipt_sha256'] = digest(item['receipt'])
+            if not pending_resume:
+                expected[step]['receipt_sha256'] = digest(item['receipt'])
         if row.get('writer_cut_effects') != expected or 'writer-cut-drained' not in expected:
             raise RecoveryRequired('writer effect map changed')
+        cut = self.admission.cut
+        activation = getattr(cut, 'activation', None)
+        activation_step = steps.get('writer-cut-activation-plan')
+        if (activation is None) != (activation_step is None):
+            raise RecoveryRequired('activation plan custody changed')
+        if activation is not None:
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                       'plan_sha256': activation['plan_sha256']}
+            if (activation_step['details'] != details or activation_step['receipt'] != details or
+                    not cut._activation_matches(row)):
+                raise RecoveryRequired('activation plan receipt changed')
+            cut.verify_activation_stage()
+            pending = [step for step, item in steps.items() if step.startswith('writer-resume-') and item.get('status') == 'pending']
+            if pending:
+                ordered = activation['plan']['ordered']
+                completed = len(cut.current_resumed_proof()['controllers'])
+                if len(pending) != 1 or completed >= len(ordered):
+                    raise RecoveryRequired('activation pending resume invalid')
+                target = ordered[completed]
+                step = 'writer-resume-' + target['kind'].lower() + '-' + target['name']
+                source = steps[step]['details']['source'] if pending[0] == step else {}
+                originals = [o for o in cut.admission['controllers'] if o['kind'] == target['kind'] and
+                             o['metadata']['name'] == target['name']]
+                resumed_spec = copy.deepcopy(target['spec'])
+                if len(originals) != 1: raise RecoveryRequired('activation writer scope changed')
+                resumed_spec['replicas'] = originals[0]['spec']['replicas']
+                if (pending[0] != step or source.get('kind') != target['kind'] or
+                        source.get('metadata', {}).get('name') != target['name'] or
+                        source.get('metadata', {}).get('namespace') != 'voice-dev' or
+                        source.get('metadata', {}).get('uid') != target['uid'] or
+                        source.get('metadata', {}).get('generation') != target['generation'] or
+                        source.get('spec') != target['spec'] or steps[step]['details'].get('target_spec') != resumed_spec):
+                    raise RecoveryRequired('activation pending target changed')
+            for name in ('space_health', 'publisher_health', 'chat_health'):
+                step = 'writer-cut-' + name.replace('_', '-')
+                health = activation['health'].get(name)
+                if (health is None) != (step not in steps):
+                    raise RecoveryRequired('activation health custody changed')
+                if health is not None:
+                    details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                               'activation_plan_sha256': activation['plan_sha256'],
+                               'health_receipt_sha256': health['receipt_sha256']}
+                    if steps[step]['details'] != details or steps[step]['receipt'] != details:
+                        raise RecoveryRequired('activation health receipt changed')
+        auth = getattr(cut, 'auth_successor', None)
+        auth_step = steps.get('writer-cut-auth-successor')
+        if auth is None or auth_step is None:
+            raise RecoveryRequired('Auth successor custody absent')
+        if auth is not None:
+            details = {'operation_id': self.fence.context['operation_id'], 'cut_invocation': cut.invocation,
+                       'receipt_sha256': auth['receipt_sha256']}
+            if (auth_step['details'] != details or auth_step['receipt'] != details or
+                    not cut._auth_successor_matches(row)):
+                raise RecoveryRequired('Auth successor receipt changed')
+            candidate = auth.get('proof', {}).get('candidate', {})
+            plan = self.intent['full_cohort']
+            if ('voice-auth' not in plan['cut'] or self._target('voice-auth').get('replicas') != 0 or
+                    digest(auth['proof']) != auth['receipt_sha256'] or
+                    candidate.get('target_spec_sha256') != digest(self._target('voice-auth')) or
+                    candidate.get('image') != plan['images']['voice-auth/auth'] or
+                    candidate.get('platform_digest') != plan['platform_digests']['voice-auth/auth']):
+                raise RecoveryRequired('Auth target is not source-qualified')
+        inventory = getattr(cut, 'resume_inventory', None)
+        inventory_step = steps.get('writer-cut-resume-inventory')
+        if (inventory is None) != (inventory_step is None):
+            raise RecoveryRequired('resume inventory custody changed')
+        if inventory is not None:
+            details = {'operation_id': self.fence.context['operation_id'],
+                       'cut_invocation': cut.invocation, 'inventory_sha256': inventory['receipt_sha256']}
+            if (inventory_step['details'] != details or inventory_step['receipt'] != details or
+                    not cut._resume_inventory_matches(row)):
+                raise RecoveryRequired('resume inventory receipt changed')
+        histories = getattr(cut, 'migration_history', [])
+        active = getattr(cut, 'migration', None)
+        bound = list(histories) + ([active] if active is not None else [])
+        expected_migrations = set()
+        for binding in bound:
+            nonce = binding['plan']['stable']['nonce']
+            if not binding['finished']:
+                raise RecoveryRequired('migration not finished')
+            plan_step = 'writer-cut-migration-plan-' + nonce
+            finish_step = 'writer-cut-migration-finish-' + nonce
+            expected_migrations.update((plan_step, finish_step))
+            plan_hash = digest(binding['plan'])
+            if (steps[plan_step]['details'] != {'kind': binding['kind'], 'plan': binding['plan']} or
+                    steps[plan_step]['receipt'] != {'operation_id': self.fence.context['operation_id'], 'plan_sha256': plan_hash}):
+                raise RecoveryRequired('migration plan receipt changed')
+            details = {'plan_sha256': plan_hash, 'job_uid': binding['job_uid'], 'terminal_sha256': binding['terminal']}
+            if (steps[finish_step]['details'] != details or steps[finish_step]['receipt'] !=
+                    {'operation_id': self.fence.context['operation_id'], **details}):
+                raise RecoveryRequired('migration terminal receipt changed')
+            if binding in histories:
+                cleanup_step = 'writer-cut-migration-cleanup-' + nonce
+                expected_migrations.add(cleanup_step)
+                details = {'plan_sha256': plan_hash, 'job_uid': binding['job_uid'],
+                           'config_uid': binding['config_uid'], 'terminal_sha256': binding['terminal']}
+                if (steps[cleanup_step]['details'] != details or steps[cleanup_step]['receipt'] !=
+                        {'operation_id': self.fence.context['operation_id'], **details}):
+                    raise RecoveryRequired('migration cleanup receipt changed')
+        if {step for step in expected if step.startswith('writer-cut-migration-')} != expected_migrations:
+            raise RecoveryRequired('migration effect lineage changed')
         return expected
 
     def _drained(self, row):
@@ -483,12 +596,15 @@ class FullCohortImageApply:
                     raise RecoveryRequired('admitted workload changed')
                 old_rv = current['metadata']['resourceVersion']
                 target_generation = snap['generation'] + (old != target)
+                changed = old != target
                 patch = [{'op': 'test', 'path': '/metadata/uid', 'value': snap['uid']},
                          {'op': 'test', 'path': '/metadata/resourceVersion', 'value': old_rv},
                          {'op': 'test', 'path': '/metadata/generation', 'value': snap['generation']},
                          {'op': 'test', 'path': '/spec', 'value': old},
-                         {'op': 'replace', 'path': '/spec', 'value': target}]
-                step, record = self._reserve(name, {'uid': snap['uid'], 'old': old, 'target': target, 'patch': patch})
+                         {'op': 'replace', 'path': '/spec', 'value': target}] if changed else None
+                mode = 'patch' if changed else 'already-target'
+                step, record = self._reserve(name, {'uid': snap['uid'], 'old': old, 'target': target, 'patch': patch,
+                                                    'mode': mode})
                 self._accounts()
                 self._guard()
                 row, _ = self.fence.ledger.read()
@@ -499,14 +615,14 @@ class FullCohortImageApply:
                 self._records(row)
                 self._drained(row)
                 self._partial(receipts)
-                response = self.client.patch(name, patch)
+                response = self.client.patch(name, patch) if changed else self._get('deployment', name)
                 if not self._match(name, response, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch response differs')
                 observed = self._get('deployment', name)
                 if not self._match(name, observed, snap['uid'], target, generation=target_generation):
                     raise RecoveryRequired('patch readback differs')
                 receipt = {'uid': snap['uid'], 'resourceVersion': observed['metadata']['resourceVersion'],
-                           'generation': target_generation, 'spec': target}
+                           'generation': target_generation, 'spec': target, 'mode': mode}
                 self._complete(step, record, receipt)
                 receipts[name] = receipt
                 self._partial(receipts)
@@ -561,6 +677,43 @@ class FullCohortImageApply:
                 raise RecoveryRequired('writer resume receipt invalid')
             generations[name] = expected_generation
         return generations
+
+    def verify_activation_lineage(self):
+        """Read the completed source-owned image receipts for activation admission."""
+        entered = False
+        try:
+            if not self.started or self.verifying:
+                raise RecoveryRequired('image invocation not available')
+            self.verifying = True
+            self.activation_checking = True
+            entered = True
+            self._guard()
+            row, _ = self.fence.ledger.read()
+            self._records(row)
+            self._writer_records(row)
+            receipts = {}
+            for name in CATALOG:
+                local = self.journal.state['steps'].get('full-cohort-image-' + name, {})
+                receipt = local.get('receipt', {})
+                if (local.get('status') != 'done' or receipt.get('uid') != self.intent['full_cohort']['workloads'][name]['uid']
+                        or receipt.get('spec') != self._target(name) or not receipt.get('resourceVersion')):
+                    raise RecoveryRequired('image receipt incomplete')
+                receipts[name] = copy.deepcopy(receipt)
+            self._guard()
+            row, _ = self.fence.ledger.read()
+            self._records(row)
+            self._writer_records(row)
+            if any(self.journal.state['steps'].get('full-cohort-image-' + name, {}).get('receipt') != receipt
+                   for name, receipt in receipts.items()):
+                raise RecoveryRequired('image receipts changed during activation check')
+            return {'operation_id': self.fence.context['operation_id'], 'source_sha': self.fence.context['commit'],
+                    'images': receipts}
+        except BaseException:
+            self._uncertain()
+        finally:
+            if entered:
+                self.verifying = False
+                self.activation_checking = False
 
     def verify_after_resume(self):
         try:
