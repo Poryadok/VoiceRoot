@@ -17,6 +17,12 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_role_bootstrap_inventory_requires_actual_postgres_case(self):
+        inventory = json.loads((ROOT / 'scripts/ci/role_bootstrap_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['role'], [['voice/backend/role', 'TestBootstrapActualRole20PG']])
+        source = (ROOT / 'src/backend/role/bootstrap_pg_integration_test.go').read_text(encoding='utf-8')
+        self.assertRegex(source, r'(?m)^func TestBootstrapActualRole20PG\(t \*testing\.T\)')
+
     def test_bot_membership_inventory_requires_both_native_boundaries(self):
         inventory = json.loads((ROOT / 'scripts/ci/bot_membership_required.json').read_text(encoding='utf-8'))
         self.assertEqual(inventory['bot'], [

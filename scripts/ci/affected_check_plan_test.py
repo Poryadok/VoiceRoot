@@ -353,6 +353,11 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('TestRole13', test['run'])
         self.assertIn('--reject-skips', test['run'])
         self.assertIn('job.services.postgres.ports', test['env']['ROLE_MIGRATION_TEST_DSN'])
+        bootstrap = next(step for step in job['steps'] if step.get('name') == 'Run Role bootstrap proof')
+        self.assertIn('role_bootstrap_required.json', bootstrap['run'])
+        self.assertIn('--reject-skips', bootstrap['run'])
+        self.assertIn('job.services.postgres.ports', bootstrap['env']['VOICE_ROLE_BOOTSTRAP_PG_DSN'])
+        self.assertIn('job.services.redis.ports', bootstrap['env']['VOICE_ROLE_BOOTSTRAP_REDIS_ADDR'])
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['role'], 'docker_go_services': [],
                   'integration_go_services': ['role'], 'run_go': True, 'run_pkg': True}

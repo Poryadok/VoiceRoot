@@ -2453,6 +2453,13 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U voice -d postgres"
           --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -2475,6 +2482,46 @@ jobs:
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --events "$RUNNER_TEMP/role-migration-events.jsonl" --exit-code "$result" \
             --output "$RUNNER_TEMP/role-migration-receipt.json" --reject-skips
+      - name: Prepare Role version 20 catalog
+        working-directory: src/backend/role
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql_owned() { docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U voice -d postgres; }
+          printf '%s\n' 'CREATE TABLE schema_migrations(version bigint NOT NULL, dirty boolean NOT NULL); INSERT INTO schema_migrations VALUES (0, false);' | psql_owned
+          version=0
+          for file in ../migrations/role_db/*.up.sql; do
+            name=${file##*/}
+            number=${name%%_*}
+            [[ "$number" =~ ^[0-9]{6}$ ]] || exit 1
+            next=$((10#$number))
+            (( next <= 20 )) || break
+            (( next == version + 1 )) || exit 1
+            psql_owned < "$file"
+            printf 'UPDATE schema_migrations SET version=%d;\n' "$next" | psql_owned
+            version=$next
+          done
+          (( version == 20 ))
+      - name: Run Role bootstrap proof
+        working-directory: src/backend/role
+        env:
+          CGO_ENABLED: '0'
+          VOICE_ROLE_BOOTSTRAP_PG_DSN: postgres://voice:voice-role-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          VOICE_ROLE_BOOTSTRAP_REDIS_ADDR: 127.0.0.1:${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 10m -run '^TestBootstrapActualRole20PG$' . > "$RUNNER_TEMP/role-bootstrap-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/role_bootstrap_required.json --service role \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/role-bootstrap-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/role-bootstrap-receipt.json" --reject-skips
       - name: Upload Role migration evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -2483,6 +2530,8 @@ jobs:
           path: |
             ${{ runner.temp }}/role-migration-events.jsonl
             ${{ runner.temp }}/role-migration-receipt.json
+            ${{ runner.temp }}/role-bootstrap-events.jsonl
+            ${{ runner.temp }}/role-bootstrap-receipt.json
           if-no-files-found: warn
           retention-days: 14
 

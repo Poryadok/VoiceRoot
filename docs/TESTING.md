@@ -166,6 +166,9 @@ The affected Role PR proof runs `TestRole13` in `./internal/store` against an
 owned PostgreSQL server via `ROLE_MIGRATION_TEST_DSN`. The fixtures create and
 drop disposable databases. The named rollback and concurrency cases in
 `scripts/ci/role_migration_required.json` must run without skips.
+The same affected job also prepares an owned Role version 20 catalog from the
+ordered migration files and runs `TestBootstrapActualRole20PG` with owned Redis;
+that historical-catalog proof does not replace current-schema migration checks.
 The affected Bot PR proof uses an owned PostgreSQL server through
 `BOT_MEMBERSHIP_TEST_DATABASE_URL` and requires both native membership cases in
 `scripts/ci/bot_membership_required.json` without skips.

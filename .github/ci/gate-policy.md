@@ -169,6 +169,9 @@ the migration 13 rollback writer-fence, retained-evidence, stale-snapshot and
 empty round-trip cases against an owned PostgreSQL service. The named cases
 and subtests in `scripts/ci/role_migration_required.json` must pass with no
 skips; this is separate from current-diff migration immutability validation.
+The same job also requires the actual Role version 20 PostgreSQL bootstrap
+transport test with an owned Redis service. Its historical schema fixture is
+not evidence for migrations after version 20.
 
 When Bot is in the PR integration matrix, `bot-membership-integration` requires
 both native membership transition and protected cleanup cases against owned
