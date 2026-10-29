@@ -595,8 +595,20 @@ def capture_final_stage(session):
             or step.get('observation')!=identity or name in stage.original_snapshots
             or name in stage.expected['deployment_uids'] or key in stage.old_images):
             raise Blocked('cohort_final_publisher_unowned')
-        stage.snapshots[name]=copy.deepcopy(current)
-        stage.original_snapshots[name]=copy.deepcopy(current)
+        if private.load_done(session,'p3').get(ident)!=identity:
+            raise Blocked('cohort_final_publisher_unowned')
+        attempt=hashlib.sha256(('p3/'+ident).encode()).hexdigest()
+        response=_read(guard.ROOT/'installed'/'prerequisites'/session.operation/'attempts'/(attempt+'.response.json'))
+        original=response['object'];om=original['metadata']
+        if (response.get('observation')!=identity or om.get('uid')!=meta['uid']
+            or om.get('generation')!=meta['generation'] or om.get('resourceVersion')!=identity['resourceVersion']
+            or digest(p3.private_semantic(original))!=identity['semantic_sha256']
+            or original.get('spec')!=current.get('spec')):
+            raise Blocked('cohort_final_publisher_unowned')
+        # Readiness/status and controller revision are independently checked by
+        # verify_complete. Pin the acknowledged create, never a later status RV.
+        stage.snapshots[name]=copy.deepcopy(original)
+        stage.original_snapshots[name]=copy.deepcopy(original)
         stage.expected['deployment_uids'][name]=meta['uid']
         stage.old_images[key]=images[key]
     if stage.old_images!=state['receipt']['actual_after']:
@@ -1236,7 +1248,9 @@ def load_qualified(session,*,actual=None,rollout_target=None):
     if actual is not None and actual!=plan['actual_before']:raise Blocked('cohort_actual_changed')
     if rollout_target is not None:
         capture=_read(guard.ROOT/'installed'/'prerequisites'/session.operation/'capture.json')
-        if rollout_target.get('prerequisites_sha256')!=digest(capture):raise Blocked('cohort_target_changed')
+        if (rollout_target.get('prerequisites_sha256')!=digest(capture)
+            or rollout_target.get('cohort_preservation_sha256')!=digest(receipt)):
+            raise Blocked('cohort_target_changed')
     revalidate_paused(session)
     return copy.deepcopy(receipt)
 
@@ -1329,6 +1343,7 @@ def validate_historical_capture(operation):
         or successor['plan'].get('preservation_sha256')!=digest(receipt)
         or captured.get('plan_sha256')!=digest(successor['plan']) or rollout.get('prerequisites')!=captured
         or rollout['target'].get('prerequisites_sha256')!=digest(captured)
+        or rollout['target'].get('cohort_preservation_sha256')!=digest(receipt)
         or digest(_read(root/'precut.json'))!=plan['precut_capture_sha256']
         or digest(_read(root/'stores.json'))!=plan['stores_sha256']
         or digest(_read(root/'preflight.json'))!=plan['preflight_sha256']):raise Blocked('cohort_history_changed')

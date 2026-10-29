@@ -227,7 +227,7 @@ class CutEffectTests(unittest.TestCase):
     def test_final_capture_adds_only_completed_publisher_to_paused_stage(self):
         import staging_p3_prerequisites as p3
         name='voice-p3-principal-jwks';ident='Deployment/'+name;image='nginx@sha256:'+'e'*64
-        for fault in ('success','foreign_uid','pending','extra_image'):
+        for fault in ('success','status_only','foreign_uid','pending','extra_image'):
             with self.subTest(fault=fault),tempfile.TemporaryDirectory(dir='/root') as directory:
                 root=Path(directory);(root/'installed').mkdir(mode=0o700)
                 with patch.object(guard,'ROOT',root),patch.object(preservation,'_source'):
@@ -242,7 +242,14 @@ class CutEffectTests(unittest.TestCase):
                         expected={'deployment_uids':{'voice-user':'user'}},old_images=copy.deepcopy(old),
                         kube=SimpleNamespace(get=lambda *args:copy.deepcopy(publisher)))
                     qualified={'root_qualified_fixture':True};child={'preserved':{}}
-                    observation={'uid':'publisher','resourceVersion':'7','generation':1}
+                    observation={'uid':'publisher','resourceVersion':'7','generation':1,
+                        'semantic_sha256':preservation.digest(p3.private_semantic(publisher))}
+                    original_publisher=copy.deepcopy(publisher)
+                    import hashlib
+                    attempts=root/'installed'/'prerequisites'/session.operation/'attempts'
+                    attempts.mkdir(parents=True,mode=0o700)
+                    preservation._write(attempts/(hashlib.sha256(('p3/'+ident).encode()).hexdigest()+'.response.json'),
+                        {'object':original_publisher,'observation':observation})
                     state={'plan':{'schema':'voice-staging-prerequisites-plan-v2','preservation_sha256':preservation.digest(qualified),
                         'auxiliary_images':{name+'/jwks':image},'children':{'p3':child}},
                         'steps':{'p3':{ident:{'status':'DONE','observation':observation}}},
@@ -253,17 +260,19 @@ class CutEffectTests(unittest.TestCase):
                     if fault=='foreign_uid':publisher['metadata']['uid']='foreign'
                     if fault=='pending':state['steps']['p3'][ident]['status']='PENDING'
                     if fault=='extra_image':state['plan']['auxiliary_images']['voice-other/x']=image
+                    if fault=='status_only':publisher['metadata']['resourceVersion']='8';publisher['status']={'readyReplicas':1}
                     with resource_claim.command_scope(session.check),patch.object(preservation,'load_qualified',return_value=qualified),\
                         patch.object(preservation,'capture_stage',return_value=stage),patch.object(preservation.private,'_completed',return_value=state),\
                         patch.object(preservation.private,'_checkpoint',return_value=state),patch.object(preservation,'revalidate_paused'),\
+                        patch.object(preservation.private,'load_done',return_value={ident:observation}),\
                         patch.object(p3,'verify_complete',return_value=ready):
-                        if fault!='success':
+                        if fault not in ('success','status_only'):
                             with self.assertRaisesRegex(Exception,'cohort_final_'):preservation.capture_final_stage(session)
                         else:
                             result=preservation.capture_final_stage(session)
                             self.assertEqual(result.snapshots['voice-user'],paused)
                             self.assertEqual(result.original_snapshots['voice-user'],before)
-                            self.assertEqual(result.snapshots[name],publisher)
+                            self.assertEqual(result.snapshots[name],original_publisher)
                             self.assertEqual(set(result.snapshots),{'voice-user',name})
                             self.assertEqual(result.old_images,state['receipt']['actual_after'])
 
