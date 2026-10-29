@@ -5,12 +5,30 @@ import re
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 from pathlib import Path
 
 import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_deployment_revision_requires_exact_owned_replicaset_template(self):
+        template={'metadata':{'labels':{'app':'voice-p3-principal-jwks'}},'spec':{'containers':[{'name':'jwks','image':'digest'}]}}
+        desired={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging',
+                 'annotations':{'voice.poryadok.io/prerequisites-operation':'op'}},'spec':{'replicas':1,
+                 'selector':{'matchLabels':{'app':'voice-p3-principal-jwks'}},'template':template}}
+        actual=copy.deepcopy(desired); actual['metadata'].update(uid='dep',resourceVersion='3',generation=1)
+        actual['metadata']['annotations']['deployment.kubernetes.io/revision']='1'
+        rs={'metadata':{'namespace':'voice-staging','uid':'rs','annotations':{'deployment.kubernetes.io/revision':'1'},
+                        'ownerReferences':[{'kind':'Deployment','uid':'dep','controller':True}]},
+            'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-p3-principal-jwks','pod-template-hash':'hash'}},'template':copy.deepcopy(template)}}
+        rs['spec']['template']['metadata']['labels']['pod-template-hash']='hash'
+        self.assertTrue(p3.deployment_successor(desired,actual,[rs]))
+        bad=copy.deepcopy(rs); bad['spec']['template']['spec']['containers'][0]['image']='foreign'
+        with self.assertRaises(p3.PrerequisiteError): p3.deployment_successor(desired,actual,[bad])
+        bad=copy.deepcopy(rs); bad['metadata']['annotations']['deployment.kubernetes.io/revision']='2'
+        with self.assertRaises(p3.PrerequisiteError): p3.deployment_successor(desired,actual,[bad])
+
     def test_source_image_reloads_real_session_capture_and_refuses_record_drift(self):
         import compiler, guard, resource_claim, resource_claim_test, staging_prerequisites as parent
         rows=json.loads(Path(__file__).with_name('staging_p3_prerequisites_source_fixture.json').read_text())
@@ -219,6 +237,26 @@ class StagingP3Contract(unittest.TestCase):
             wrong_plan['effects'][0].update(wrong_plan['objects'][0])
             with patch.object(parent,'require_child',return_value=wrong_plan),patch.object(parent,'load_payload',return_value=wrong_raw),self.assertRaises(p3.PrerequisiteError):
                 p3.verify_effect(session,ids[0],observation)
+        template={'metadata':{'labels':{'app':'voice-p3-principal-jwks'}},'spec':{'containers':[{'name':'jwks','image':'digest'}]}}
+        deployment={'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':'voice-p3-principal-jwks','namespace':'voice-staging',
+                    'annotations':{'voice.poryadok.io/prerequisites-operation':session.operation}},
+                    'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-p3-principal-jwks'}},'template':template}}
+        deployment_raw=json.dumps(deployment,sort_keys=True,separators=(',',':')).encode()
+        finalplan=copy.deepcopy(plan); finalplan['objects'][-1]['payload_sha256']=hashlib.sha256(deployment_raw).hexdigest()
+        finalplan['objects'][-1]['desired_sha256']=resource_claim.digest(p3.private_semantic(deployment))
+        finalplan['effects'][-1].update(finalplan['objects'][-1])
+        live=copy.deepcopy(deployment); live['metadata'].update(uid='dep',resourceVersion='2',generation=1)
+        live['metadata']['annotations']['deployment.kubernetes.io/revision']='1'
+        rs={'metadata':{'namespace':'voice-staging','uid':'rs','annotations':{'deployment.kubernetes.io/revision':'1'},
+                        'ownerReferences':[{'kind':'Deployment','uid':'dep','controller':True}]},
+            'spec':{'replicas':1,'selector':{'matchLabels':{'app':'voice-p3-principal-jwks','pod-template-hash':'hash'}},'template':copy.deepcopy(template)}}
+        rs['spec']['template']['metadata']['labels']['pod-template-hash']='hash'
+        depobs={'kind':'Deployment','name':'voice-p3-principal-jwks','namespace':'voice-staging','uid':'dep',
+                'resourceVersion':'1','generation':1,'semantic_sha256':resource_claim.digest(p3.private_semantic(deployment))}
+        kube=SimpleNamespace(get=lambda *_:copy.deepcopy(live),run=lambda *_:{'items':[copy.deepcopy(rs)]})
+        with patch.object(parent,'require_child',return_value=finalplan),patch.object(parent,'load_payload',return_value=deployment_raw), \
+             patch.object(stage_runtime,'Kube',return_value=kube):
+            self.assertEqual(p3.verify_effect(session,ids[-1],depobs),depobs)
         preserved=copy.deepcopy(plan); preserved['effects']=[]
         for obj in objects:
             observed={'kind':obj['kind'],'name':obj['name'],'namespace':obj['namespace'],

@@ -153,6 +153,40 @@ def private_semantic(obj):
     except Exception: raise PrerequisiteError('staging P3 object invalid') from None
 
 
+def deployment_successor(desired,actual,replicasets):
+    """Permit only a controller revision backed by one exact owned ReplicaSet."""
+    try:
+        wanted=private_semantic(desired); observed=private_semantic(actual)
+        meta=actual['metadata']; uid=meta['uid']
+        if (not uid or meta.get('name')!='voice-p3-principal-jwks' or meta.get('namespace')!=NAMESPACE
+            or actual.get('kind')!='Deployment' or desired.get('kind')!='Deployment'): raise ValueError()
+        annotations=observed['metadata'].get('annotations',{})
+        revision=annotations.pop('deployment.kubernetes.io/revision',None)
+        if not isinstance(revision,str) or not re.fullmatch(r'[1-9][0-9]*',revision): raise ValueError()
+        if not annotations: observed['metadata'].pop('annotations',None)
+        wanted_annotations=wanted['metadata'].get('annotations',{})
+        wanted_revision=wanted_annotations.pop('deployment.kubernetes.io/revision',None)
+        if wanted_revision is not None and wanted_revision!=revision: raise ValueError()
+        if not wanted_annotations: wanted['metadata'].pop('annotations',None)
+        if observed!=wanted: raise ValueError()
+        owned=[]
+        for row in replicasets:
+            refs=[ref for ref in row.get('metadata',{}).get('ownerReferences',[]) if ref.get('controller') is True]
+            if len(refs)==1 and refs[0].get('kind')=='Deployment' and refs[0].get('uid')==uid and row.get('spec',{}).get('replicas',0)!=0:
+                owned.append(row)
+        if len(owned)!=1: raise ValueError()
+        rs=owned[0]; rm=rs['metadata']; spec=rs['spec']
+        if (rm.get('namespace')!=NAMESPACE or not rm.get('uid') or rm.get('deletionTimestamp') or spec.get('replicas')!=1
+            or set(spec)-{'replicas','selector','template','minReadySeconds'}
+            or spec.get('minReadySeconds',0)!=desired['spec'].get('minReadySeconds',0)
+            or rm.get('annotations',{}).get('deployment.kubernetes.io/revision')!=revision): raise ValueError()
+        template=copy.deepcopy(spec['template']); labels=template['metadata']['labels']; token=labels.pop('pod-template-hash')
+        if (not isinstance(token,str) or not token or template!=desired['spec']['template']
+            or spec['selector']!={'matchLabels':{**desired['spec']['selector']['matchLabels'],'pod-template-hash':token}}): raise ValueError()
+        return rm['uid']
+    except Exception: raise PrerequisiteError('staging P3 Deployment successor invalid') from None
+
+
 def _source_and_image(session,plan):
     """Reload captured authority, exact source bytes and fixed auxiliary proof."""
     import compiler
@@ -273,7 +307,7 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
         statuses=ps['containerStatuses']
         if (len(statuses)!=1 or statuses[0].get('name')!='jwks' or statuses[0].get('ready') is not True
             or 'running' not in statuses[0].get('state',{}) or not re.fullmatch(r'sha256:[0-9a-f]{64}',platform_digest)
-            or not re.fullmatch(r'(?:docker-pullable|containerd)://[^@\s]+@'+re.escape(platform_digest),statuses[0].get('imageID',''))): raise ValueError()
+            or not re.fullmatch(r'(?:(?:docker-pullable|containerd)://)?(?:docker\.io/library/)?nginx@'+re.escape(platform_digest),statuses[0].get('imageID',''))): raise ValueError()
         if (not isinstance(node_uid,str) or not node_uid or node['metadata'].get('uid')!=node_uid
             or node['metadata'].get('deletionTimestamp') or not isinstance(node['metadata'].get('name'),str)
             or not node['metadata']['name'] or pod['spec'].get('nodeName')!=node['metadata']['name']
@@ -419,6 +453,12 @@ def preflight_payloads(session):
         issuer=parent.load_issuer(session,'p3')
         effects={row['id']:row for row in plan['effects']}; objects={row['id']:row for row in plan['objects']}
         kube=Kube(); current={}; payloads={}; operations={}; provenances={}
+        def check_namespace():
+            with resource_claim.command_scope(session.check): namespace=kube.get('namespace',NAMESPACE)
+            meta=namespace['metadata']
+            if (namespace.get('kind')!='Namespace' or meta.get('name')!=NAMESPACE or meta.get('uid')!=plan['namespace_uid']
+                or meta.get('deletionTimestamp')): raise ValueError()
+        check_namespace()
         with resource_claim.command_scope(session.check):
             listings={kind:kube.run(['get',kind.lower(),'-o','json']) for kind in ('Secret','ConfigMap','Service','Deployment')}
         for listing in listings.values():
@@ -452,17 +492,7 @@ def preflight_payloads(session):
             if (row.get('kind')!=kind or row.get('metadata',{}).get('name')!=name
                 or row['metadata'].get('namespace')!=NAMESPACE or row['metadata'].get('annotations',{}).get(
                     'voice.poryadok.io/prerequisites-operation')!=operations[ident]): raise ValueError()
-        values={}
-        for ident in inventory_intent()[:len(ASSET_KEYS)]:
-            kind,name=ident.split('/'); row=payloads[ident]; data=row['data']
-            if not isinstance(data,dict) or set(data)!=ASSET_KEYS[name]: raise ValueError()
-            if kind=='ConfigMap':
-                if row.get('immutable') is not True: raise ValueError()
-                values[name]={k:v.encode('utf-8') for k,v in data.items()}
-            else:
-                if row.get('type')!=('kubernetes.io/tls' if name in TLS_NAMES else 'Opaque'): raise ValueError()
-                values[name]={k:base64.b64decode(v,validate=True) for k,v in data.items()}
-                if any(base64.b64encode(values[name][k]).decode()!=v for k,v in data.items()): raise ValueError()
+        values=_material_values(payloads)
         crypto.validate_issuer_materials(values,issuer)
         requested=material_objects(values)+copy.deepcopy(publisher)
         for row in requested:
@@ -495,6 +525,7 @@ def preflight_payloads(session):
                   or (kind!='Deployment' and matches[0]['metadata'].get('resourceVersion')!=current[ident]['metadata'].get('resourceVersion'))): raise ValueError()
         for ident,provenance in provenances.items():
             if parent.load_preserved(session,'p3',ident)!=provenance: raise ValueError()
+        check_namespace()
         session.check()
         if parent.require_child(session,'p3')!=plan: raise ValueError()
         return True
@@ -507,6 +538,21 @@ def _unique_json(pairs):
         if key in result: raise ValueError()
         result[key]=value
     return result
+
+
+def _material_values(rows):
+    values={}
+    for ident in inventory_intent()[:len(ASSET_KEYS)]:
+        kind,name=ident.split('/'); row=rows[ident]; data=row['data']
+        if not isinstance(data,dict) or set(data)!=ASSET_KEYS[name]: raise ValueError()
+        if kind=='ConfigMap':
+            if row.get('immutable') is not True: raise ValueError()
+            values[name]={k:v.encode('utf-8') for k,v in data.items()}
+        else:
+            if row.get('type')!=('kubernetes.io/tls' if name in TLS_NAMES else 'Opaque'): raise ValueError()
+            values[name]={k:base64.b64decode(v,validate=True) for k,v in data.items()}
+            if any(base64.b64encode(values[name][k]).decode()!=v for k,v in data.items()): raise ValueError()
+    return values
 def verify_effect(session,effect_id,observation):
     """Freshly verify one parent-owned create response against private intent."""
     import resource_claim
@@ -541,20 +587,151 @@ def verify_effect(session,effect_id,observation):
         session.check()
         with resource_claim.command_scope(session.check): actual=Kube().get(kind.lower(),name)
         meta=actual['metadata']; observed=private_semantic(actual)
+        original=copy.deepcopy(observed); successor_uid=None
         if (actual.get('kind')!=kind or meta.get('name')!=name or meta.get('namespace')!=NAMESPACE
-            or meta.get('uid')!=observation['uid'] or resource_claim.digest(observed)!=observation['semantic_sha256']): raise ValueError()
+            or meta.get('uid')!=observation['uid']): raise ValueError()
         if kind=='Deployment':
             if (type(observation['generation']) is not int or observation['generation']<1
                 or meta.get('generation')!=observation['generation']): raise ValueError()
-        elif meta.get('resourceVersion')!=observation['resourceVersion']: raise ValueError()
+            if observation['semantic_sha256'] not in (resource_claim.digest(observed),resource_claim.digest(expected)): raise ValueError()
+            if observed!=expected:
+                with resource_claim.command_scope(session.check): rs=Kube().run(['get','replicaset','-o','json'])
+                if not isinstance(rs,dict) or not isinstance(rs.get('items'),list): raise ValueError()
+                successor_uid=deployment_successor(desired,actual,rs['items']); observed=expected
+        elif (meta.get('resourceVersion')!=observation['resourceVersion']
+              or resource_claim.digest(observed)!=observation['semantic_sha256']): raise ValueError()
         if kind=='Service':
             service_allocation(desired,actual)
             observed['spec'].pop('clusterIP'); observed['spec'].pop('clusterIPs')
         if observed!=expected: raise ValueError()
         session.check()
+        with resource_claim.command_scope(session.check):
+            fresh=Kube().get(kind.lower(),name)
+            rs2=Kube().run(['get','replicaset','-o','json']) if successor_uid else None
+        if (fresh.get('metadata',{}).get('uid')!=observation['uid'] or private_semantic(fresh)!=original
+            or (kind=='Deployment' and fresh['metadata'].get('generation')!=observation['generation'])
+            or (kind!='Deployment' and fresh['metadata'].get('resourceVersion')!=observation['resourceVersion'])): raise ValueError()
+        if successor_uid and (not isinstance(rs2,dict) or not isinstance(rs2.get('items'),list)
+                              or deployment_successor(desired,fresh,rs2['items'])!=successor_uid): raise ValueError()
+        session.check()
         if parent.require_child(session,'p3')!=plan: raise ValueError()
         return copy.deepcopy(observation)
     except Exception: raise PrerequisiteError('staging P3 effect readback invalid') from None
+
+
+def _ready_snapshot(session,desired,record):
+    """Read and check one bounded publisher snapshot; caller repeats after TLS."""
+    import gis_existing_update
+    import resource_claim
+    from stage_runtime import Kube
+    kube=Kube(); node_ref=record['node']
+    with resource_claim.command_scope(session.check):
+        deployment=kube.get('deployment','voice-p3-principal-jwks')
+        service=kube.get('service','voice-p3-principal-jwks')
+        node=kube.get('node',node_ref['name'])
+        replicaset_list=kube.run(['get','replicasets','-o','json'])
+        pod_list=kube.run(['get','pods','-o','json'])
+        slice_list=kube.run(['get','endpointslices','-o','json'])
+        account=gis_existing_update.service_account_preflight(kube,desired['spec']['template']['spec'])
+    lists=(replicaset_list,pod_list,slice_list)
+    for listing,limit in zip(lists,(2048,4096,2048)):
+        if (not isinstance(listing,dict) or not isinstance(listing.get('items'),list) or len(listing['items'])>limit
+            or not isinstance(listing.get('metadata',{}).get('resourceVersion'),str) or not listing['metadata']['resourceVersion']): raise ValueError()
+    replicasets,pods,slices=[listing['items'] for listing in lists]
+    rs_uid=deployment_successor(desired,deployment,replicasets)
+    address=publisher_endpoint(deployment,replicasets,pods,slices,node,node_ref['uid'],'sha256:'+record['manifest_sha256'],service)
+    pod=next(p for p in pods if p.get('metadata',{}).get('labels',{}).get('app')=='voice-p3-principal-jwks')
+    rs=next(r for r in replicasets if r.get('metadata',{}).get('uid')==rs_uid)
+    sl=next(s for s in slices if s.get('metadata',{}).get('labels',{}).get('kubernetes.io/service-name')=='voice-p3-principal-jwks')
+    if not sl.get('metadata',{}).get('uid'): raise ValueError()
+    gis_existing_update.verify_pod_spec(desired['spec']['template']['spec'],pod['spec'])
+    status=pod['status']['containerStatuses'][0]
+    proof={'schema':'voice-staging-p3-publisher-ready-v1',
+           'deployment':{'uid':deployment['metadata']['uid'],'generation':deployment['metadata']['generation'],
+                         'semantic_sha256':resource_claim.digest(private_semantic(deployment))},
+           'replicaset':{'uid':rs_uid,'template_sha256':resource_claim.digest(rs['spec']['template'])},
+           'pod':{'uid':pod['metadata']['uid'],'node':pod['spec']['nodeName'],'ip':address,
+                  'spec_sha256':resource_claim.digest(pod['spec']),'image_id':status['imageID']},
+           'node':{'name':node_ref['name'],'uid':node_ref['uid'],'os':node_ref['os'],'architecture':node_ref['architecture']},
+           'service':{'uid':service['metadata']['uid'],'semantic_sha256':resource_claim.digest(private_semantic(service))},
+           'endpoint_slice':{'uid':sl['metadata']['uid'],'semantic_sha256':resource_claim.digest(private_semantic(sl))},
+           'service_account':account}
+    session.check()
+    return proof
+
+
+def verify_complete(session):
+    """Requalify all owned resources and the publisher under the root session."""
+    import resource_claim
+    import staging_prerequisites as parent
+    import staging_p3_prerequisites_crypto as crypto
+    from stage_runtime import Kube
+    try:
+        if type(session) is not resource_claim.Session: raise ValueError()
+        session.check(); plan=validate_plan_shape(parent.require_child(session,'p3'))
+        if plan['operation']!=session.operation: raise ValueError()
+        publisher,record=_source_and_image(session,plan); issuer=parent.load_issuer(session,'p3')
+        effects={r['id']:r for r in plan['effects']}; done=parent.load_done(session,'p3')
+        if not isinstance(done,dict) or set(done)!=set(effects): raise ValueError()
+        for ident in effects:
+            if verify_effect(session,ident,done[ident])!=done[ident]: raise ValueError()
+        kube=Kube(); current={}; provenances={}; observations={}
+        with resource_claim.command_scope(session.check):
+            ns=kube.get('namespace',NAMESPACE)
+            for ident in inventory_intent():
+                kind,name=ident.split('/'); current[ident]=kube.get(kind.lower(),name)
+        if (ns.get('kind')!='Namespace' or ns.get('metadata',{}).get('name')!=NAMESPACE
+            or ns['metadata'].get('uid')!=plan['namespace_uid'] or ns['metadata'].get('deletionTimestamp')): raise ValueError()
+        for ident in inventory_intent():
+            kind,name=ident.split('/'); row=current[ident]; meta=row['metadata']; semantic=private_semantic(row)
+            if row.get('kind')!=kind or meta.get('name')!=name or meta.get('namespace')!=NAMESPACE: raise ValueError()
+            if ident in effects:
+                if meta.get('uid')!=done[ident]['uid']: raise ValueError()
+                observations[ident]=copy.deepcopy(done[ident])
+            else:
+                previous=parent.load_preserved(session,'p3',ident); old=plan['preserved'][ident]
+                if (not isinstance(previous,dict) or set(previous)!={'authority','semantic','uid'}
+                    or previous['authority']!=old['authority'] or previous['uid']!=old['observed']['uid']
+                    or meta.get('uid')!=previous['uid'] or semantic!=previous['semantic']
+                    or resource_claim.digest(semantic)!=old['observed']['semantic_sha256']
+                    or meta.get('annotations',{}).get('voice.poryadok.io/prerequisites-operation')!=previous['authority']['operation']): raise ValueError()
+                provenances[ident]=previous
+                obs={'kind':kind,'name':name,'namespace':NAMESPACE,'uid':meta['uid'],
+                     'resourceVersion':meta['resourceVersion'],'semantic_sha256':resource_claim.digest(semantic)}
+                if kind=='Deployment': obs['generation']=meta['generation']
+                observations[ident]=obs
+        values=_material_values(current); crypto.validate_issuer_materials(values,issuer)
+        dep_id='Deployment/voice-p3-principal-jwks'
+        if dep_id in effects:
+            raw=parent.load_payload(session,'p3',dep_id); desired=json.loads(raw,object_pairs_hook=_unique_json)
+        else: desired=copy.deepcopy(provenances[dep_id]['semantic'])
+        proof=_ready_snapshot(session,desired,record)
+        leaf=values['voice-p3-principal-jwks-tls']['tls.crt']
+        leaf_hash=hashlib.sha256(ssl.PEM_cert_to_DER_cert(leaf.decode('ascii'))).hexdigest()
+        body=values['voice-p3-principal-public']['realtime.json']
+        probe_jwks(proof['pod']['ip'],issuer['trust']['realtime-jwks-ca.crt'].encode('ascii'),body,leaf_hash)
+        after=_ready_snapshot(session,desired,record)
+        if after!=proof: raise ValueError()
+        proof['tls']={'leaf_der_sha256':leaf_hash,'jwks_sha256':hashlib.sha256(body).hexdigest()}
+        with resource_claim.command_scope(session.check):
+            ns2=kube.get('namespace',NAMESPACE)
+            fresh={ident:kube.get(ident.split('/')[0].lower(),ident.split('/')[1]) for ident in inventory_intent()}
+        if (ns2.get('metadata',{}).get('uid')!=plan['namespace_uid'] or ns2['metadata'].get('deletionTimestamp')): raise ValueError()
+        for ident,row in current.items():
+            again=fresh[ident]; kind=ident.split('/')[0]
+            if (again.get('metadata',{}).get('uid')!=row['metadata'].get('uid') or private_semantic(again)!=private_semantic(row)
+                or (kind!='Deployment' and again['metadata'].get('resourceVersion')!=row['metadata'].get('resourceVersion'))): raise ValueError()
+        for ident in effects:
+            if verify_effect(session,ident,done[ident])!=done[ident]: raise ValueError()
+        for ident,previous in provenances.items():
+            if parent.load_preserved(session,'p3',ident)!=previous: raise ValueError()
+        if (parent.load_done(session,'p3')!=done or parent.require_child(session,'p3')!=plan
+            or parent.load_issuer(session,'p3')!=issuer or _source_and_image(session,plan)!=(publisher,record)): raise ValueError()
+        session.check()
+        receipt={'schema':'voice-staging-p3-prerequisites-receipt-v1','operation':session.operation,
+                 'plan_sha256':resource_claim.digest(plan),'objects':observations,'publisher_ready_sha256':resource_claim.digest(proof)}
+        return {'receipt':receipt,'proof':proof}
+    except Exception: raise PrerequisiteError('staging P3 completion not qualified') from None
 
 
 def material_objects(values):
