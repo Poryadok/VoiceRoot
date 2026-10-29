@@ -73,6 +73,21 @@ class StageTest(unittest.TestCase):
         self.assertTrue((self.root/('space-creator-'+'a'*32+'.once')).exists())
         self.assertFalse((self.root/('space-creator-'+'a'*32)/'complete').exists())
 
+    def test_existing_complete_secret_is_not_reissued(self):
+        name='voice-gateway-principal-signing'
+        self.request['creator_secrets'][name]={'state':'present','uid':'old','resourceVersion':'5',
+                                              'keys':['active-kid','current.pem','next.pem']}
+        thread=self.serve('ok'); result=issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
+        thread.join(timeout=5)
+        self.assertNotIn(name,result['object_names']); self.assertEqual(len(result['object_names']),4)
+
+    def test_partial_existing_secret_never_starts_generation(self):
+        self.request['creator_secrets']['voice-role-media-server-tls']={'state':'present','uid':'old','resourceVersion':'5','keys':['tls.crt']}
+        thread=self.serve('ok')
+        with self.assertRaises(issuer.IssuerError): issuer.stage(self.op,'b'*40,os.getpid(),exporter.existing._start_ticks(os.getpid()))
+        thread.join(timeout=5); issuer._prepare.assert_not_called()
+        self.assertFalse((self.root/('space-creator-'+'a'*32+'.once')).exists())
+
 class GuardTest(unittest.TestCase):
     def test_actual_guard_rechecks_ca_and_exact_observation(self):
         metadata=types.ModuleType('space_p3_issuer_preflight_metadata_root')
