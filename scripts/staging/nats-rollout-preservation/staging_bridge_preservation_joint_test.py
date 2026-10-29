@@ -168,7 +168,7 @@ class BridgePreservationAdmission(unittest.TestCase):
             for path in workspace.rglob('*'):
                 path.chmod(0o700 if path.is_dir() else 0o600)
             script = r'''
-import base64, contextlib, copy, hashlib, http.client, io, json, os, re, subprocess, sys, zipfile
+import base64, contextlib, copy, hashlib, http.client, io, json, os, re, subprocess, sys, urllib.request, zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -373,15 +373,15 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
    def __init__(self,raw,headers):self.raw=raw;self.headers=headers
    def read(self,size):chunk=self.raw[:size];self.raw=self.raw[size:];return chunk
    def close(self):pass
+   def __enter__(self):return self
+   def __exit__(self,*args):self.close()
   github_calls=[]
   # Synthetic GitHub/registry transport, with real locally built image bytes
   # and real content, closure, source and compiled-gate proofs.
   if 'VOICE_TEST_SPACE_OCI' in os.environ:
-   sys.path.insert(0,str(workspace/'scripts/dev'))
-   import canonical_application_package as canonical, publish_candidate
    data=json.loads((Path(os.environ['VOICE_TEST_SPACE_OCI'])/'identity.json').read_bytes())
    identity=data['identity']; inventory=data['inventory']; proof=data['proof']
-   request=canonical.parse_request((workspace/canonical.REQUEST).read_bytes())
+   request=json.loads((workspace/'.github/ci/full-application-build-request.json').read_bytes())
    tag='ghcr.io/poryadok/voiceroot/space-native-installer:source-'+c['commit']+'-17-1'
    pub={'schema':'voice-space-native-tool-publication-v1','source_sha':c['commit'],'run_id':17,'run_attempt':1,
     'tag':tag,**identity,'source_inventory':inventory,'request':request,'content':proof,
@@ -394,7 +394,13 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     'path':'.github/workflows/ci.yml','status':'completed','conclusion':'success',
     'repository':repo,'head_repository':repo}
    jobs=[]
-   for number,(name,step) in enumerate(canonical.required_jobs().items(),1):
+   names='analytics bot chat file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice'.split()
+   required={'staging-images-push ('+name+')':'Build and push '+name+' image' for name in names}
+   required.update({'backend-auth':'Push auth image to GHCR','web':'Build and push DEV web image',
+    'admin':'Build and push admin image','developer-portal':'Build and push developer-portal image',
+    'nats-hub-config-renderer-image':'Build and push renderer image','staging-stack-lock':'Render stack lock',
+    'ci-gate':'Verify required jobs ran'})
+   for number,(name,step) in enumerate(required.items(),1):
     jobs.append({'id':number,'name':name,'run_id':17,'run_attempt':1,'head_sha':c['commit'],
      'status':'completed','conclusion':'success','steps':[{'name':step,'conclusion':'success'}]})
    jobs.append({'id':100,'name':'Space native tool image','run_id':17,'run_attempt':1,'head_sha':c['commit'],
@@ -418,14 +424,14 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
     elif suffix=='/actions/artifacts/109/zip':return archive
     else:raise AssertionError('unexpected synthetic Github endpoint '+suffix)
     return json.dumps(value).encode()
-   def registry_read(self,request,absent=False):
+   def registry_open(self,request,timeout=None):
     url=request.full_url
-    if url.startswith('https://ghcr.io/token?'):return b'{"token":"synthetic-token"}'
+    if url.startswith('https://ghcr.io/token?'):return RegistryResponse(b'{"token":"synthetic-token"}',{})
     tail=url.rsplit('/',1)[-1]
     name=('index' if tail in (identity['index_digest'],tag.rsplit(':',1)[1]) else
           'manifest' if tail==identity['platform_digest'] else 'config' if tail==identity['config_digest'] else None)
     if name is None:raise AssertionError('unexpected synthetic registry path')
-    return (Path(os.environ['VOICE_TEST_SPACE_OCI'])/(name+'.json')).read_bytes()
+    return RegistryResponse((Path(os.environ['VOICE_TEST_SPACE_OCI'])/(name+'.json')).read_bytes(),{})
   def story_request(url,headers,limit,deadline):
    if url.startswith('https://api.github.com/'):
     github_calls.append(url)
@@ -490,7 +496,7 @@ with patch.object(guard,'ROOT',root),patch.object(bridge_root,'INSTALLED',root/'
        patch.object(compiler,'capture',side_effect=capture), \
        patch.object(source_authority.transport,'_request',side_effect=story_request), \
        patch.object(http.client,'HTTPSConnection',Https), \
-       patch.object(publish_candidate.Registry,'_read',registry_read) if 'VOICE_TEST_SPACE_OCI' in os.environ else contextlib.nullcontext():
+       patch.object(urllib.request.OpenerDirector,'open',registry_open) if 'VOICE_TEST_SPACE_OCI' in os.environ else contextlib.nullcontext():
    try: producer.prepare(actions,{'mode':'app-only','token':'synthetic-ci-token','changed_services':['gameintegration'],
       'gis_first_install':True},approved,execution,workspace)
    except KeyError as exc:
