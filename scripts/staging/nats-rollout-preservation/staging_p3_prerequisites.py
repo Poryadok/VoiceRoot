@@ -1,6 +1,7 @@
 """Fixed STAGING P3 object contract; pure helpers do not grant authority."""
 import base64
 import copy
+import hashlib
 import ipaddress
 import re
 import socket
@@ -146,15 +147,17 @@ def publisher_endpoint(deployment,replicasets,pods,slices,node,node_uid,platform
     except Exception: raise PrerequisiteError('staging P3 publisher endpoint not qualified') from None
 
 
-def probe_jwks(address,ca,expected):
-    """Probe fixed HTTPS path; address/CA must already be authenticated by caller."""
+def probe_jwks(address,ca,expected,leaf_der_sha256):
+    """Probe fixed HTTPS path; inputs must already be authenticated by caller."""
     try:
         ipaddress.ip_address(address)
-        if not isinstance(ca,bytes) or not isinstance(expected,bytes) or not 0<len(expected)<=131072: raise ValueError()
+        if (not isinstance(ca,bytes) or not isinstance(expected,bytes) or not 0<len(expected)<=131072
+            or not isinstance(leaf_der_sha256,str) or not re.fullmatch(r'[0-9a-f]{64}',leaf_der_sha256)): raise ValueError()
         context=ssl.create_default_context(cadata=ca.decode('ascii'))
         host='voice-p3-principal-jwks.voice-staging.svc'
         with socket.create_connection((address,8443),timeout=5) as raw:
             with context.wrap_socket(raw,server_hostname=host) as tls:
+                if hashlib.sha256(tls.getpeercert(binary_form=True)).hexdigest()!=leaf_der_sha256: raise ValueError()
                 deadline=time.monotonic()+5
                 tls.sendall(('GET /realtime.json HTTP/1.0\r\nHost: '+host+'\r\nConnection: close\r\n\r\n').encode('ascii'))
                 data=bytearray()
