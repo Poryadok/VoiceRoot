@@ -342,4 +342,38 @@ class CatalogBracketTest(unittest.TestCase):
         self.assertEqual(affected.verify_migration_catalog.call_count, 4)
 
 
+class RealCatalogBracketTest(unittest.TestCase):
+    def setUp(self):
+        fixture.WriterCutTest.setUp(self)
+
+    def test_actual_catalog_wrapper_rejects_new_database_during_sample(self):
+        import full_cohort_affected_plan as affected
+        scope = {'engine': {'uid': 'pg'}, 'databases': ['auth_db'], 'database_oids': {'auth_db': 10}, 'server_start': 'start'}
+        self.admission['session_scope'] = copy.deepcopy(scope)
+        self.journal.intent['writer_cut'] = copy.deepcopy(self.admission)
+        self.journal.state['intent'] = copy.deepcopy(self.journal.intent)
+        baseline = {'engine': scope['engine'], 'server_start': 'start', 'all_databases': {'auth_db': 10},
+                    'excluded': {}, 'properties': {'auth_db': {'owner': 1}}}
+        class Catalog:
+            def verify_receipt(inner, token): return copy.deepcopy(baseline)
+        catalog = Catalog()
+        with mock.patch.object(affected, 'FullCatalogPhase', Catalog):
+            probe = affected.CatalogScopedProbe(catalog, 'token')
+        cut = writer_cut.WriterCut(self.journal, self.fence, self.client, self.lock, 'ns', self.admission, probe)
+        execution = {'database': 'realtime_db', 'database_oid': 13, 'role': 'realtime', 'application_name': 'fixture'}
+        state = {'execution': execution, 'stable': {'nonce': 'a' * 32}}
+        cut.migration = {'kind': 'realtime', 'phase': object(), 'root': '.',
+                         'plan': {'execution': execution, 'stable': state['stable']}}
+        current = {'all_databases': {'auth_db': 10, 'realtime_db': 13}, 'excluded': {},
+                   'properties': {'auth_db': {'owner': 1}}, 'databases': {'realtime_db': 13}}
+        changed = copy.deepcopy(current); changed['all_databases']['foreign_db'] = 14
+        receipt = {'scope': scope, 'active_sessions': 0, 'active_transactions': 0, 'attributed_sessions': []}
+        with mock.patch.object(migration, 'normalized', return_value=(None, state)), \
+             mock.patch.object(affected, '_full_catalog', side_effect=[copy.deepcopy(current), copy.deepcopy(current),
+                                                                        copy.deepcopy(current), changed]), \
+             mock.patch.object(writer_cut_pg_probe, 'inspect_migration', return_value=receipt):
+            self.assertEqual(migration.sessions(cut, state, None), receipt)
+            with self.assertRaises(affected.AffectedError): migration.sessions(cut, state, None)
+
+
 if __name__ == '__main__': unittest.main()
