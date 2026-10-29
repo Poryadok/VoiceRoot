@@ -32,7 +32,7 @@ def checked_base(base):
 
 class ExternalKube:
     """Raw synthetic Kubernetes results shared by inventory and engine probes."""
-    def __init__(self):
+    def __init__(self,images=None,platform_digests=None):
         self.apps=inventory_fixture.Client()
         self.runtime={}
         for deployment,rs,pod in zip(self.apps.deployments,self.apps.replicasets,self.apps.pods):
@@ -52,6 +52,12 @@ class ExternalKube:
             entries=[{'name':name,'value':value} for name,value in env.items()]
             pod['spec']['containers'][0]['env']=copy.deepcopy(entries)
             deployment['spec']['template']['spec']['containers'][0]['env']=copy.deepcopy(entries)
+            key=deployment['metadata']['name']+'/'+schema.CONTAINERS[workload]
+            image=(images or {}).get(key,'ghcr.io/poryadok/voiceroot/'+workload+'@sha256:'+'b'*64)
+            deployment['spec']['template']['spec']['containers'][0]['image']=image
+            pod['spec']['containers'][0]['image']=image
+            if platform_digests and key in platform_digests:
+                pod['status']['containerStatuses'][0]['imageID']='containerd://'+platform_digests[key]
             self.runtime[pod_name]=env
         self.objects={
             ('namespace','voice-dev'):{'metadata':{'name':'voice-dev','uid':'namespace'}},
