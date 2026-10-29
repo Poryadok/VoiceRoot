@@ -315,6 +315,24 @@ class ProtectedAnchorTests(unittest.TestCase):
         self._write(self.root / 'installed/active-release.json',
                     {'operation': op2, 'namespace_uid': 'ns', 'pvc_uid': 'nats-pvc', 'target_sha256': 'e' * 64})
         self.assertEqual(existing._anchor()[0]['anchor'], ancestry['anchor'])
+        import sys
+        from unittest.mock import Mock
+        parent={'fixture':'root historical capture'};loader=Mock();loader.validate_historical_capture.return_value=parent
+        parented=copy.deepcopy(record);parented.update(schema='voice-staging-realtime-bootstrap-existing-v2',
+            prerequisites_sha256=existing.digest(parent))
+        parent_state=copy.deepcopy(state);parent_state['realtime_bootstrap']=parented
+        parent_state['target']['realtime_bootstrap_sha256']=existing.digest(parented)
+        parent_state['target']['prerequisites_sha256']=existing.digest(parent)
+        parent_state['resource_fence']['target_sha256']=existing.digest(parent_state['target'])
+        self._write(self.root / ('rollout-' + op2) / 'checkpoint.json', parent_state)
+        self._write(self.root / 'installed/realtime-bootstrap' / op2 / 'existing.json', parented)
+        with patch.dict(sys.modules,{'staging_prerequisites':loader}):
+            self.assertEqual(existing._anchor()[0]['anchor'],ancestry['anchor'])
+            loader.validate_historical_capture.assert_called_with(op2)
+            loader.validate_historical_capture.return_value={'changed':True}
+            with self.assertRaisesRegex(existing.Blocked,'anchor_changed'):existing._anchor()
+        self._write(self.root / ('rollout-' + op2) / 'checkpoint.json', state)
+        self._write(self.root / 'installed/realtime-bootstrap' / op2 / 'existing.json', record)
         record['anchor']['receipt_sha256'] = '0' * 64
         state['realtime_bootstrap'] = record
         state['target']['realtime_bootstrap_sha256'] = existing.digest(record)
