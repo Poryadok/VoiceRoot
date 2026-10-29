@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import full_cohort_predecessor_phase as phase
 
@@ -78,6 +79,25 @@ class P3ReceiptTests(unittest.TestCase):
 
 
 class PreBeginTests(unittest.TestCase):
+    def test_history_transport_uses_fixed_resource_endpoint_and_bounds(self):
+        class Response:
+            def __init__(self, raw): self.raw = raw
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, limit): return self.raw[:limit]
+        class Opener:
+            def __init__(self, raw): self.raw = raw
+            def open(self, url, timeout):
+                self_url.append((url, timeout))
+                return Response(self.raw)
+        self_url = []
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'{"events":[]}')):
+            self.assertEqual(phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT)), {'events':[]})
+        self.assertEqual(self_url, [(phase.TT_ENDPOINT + '/api/projects/voice/resources/DEV', 10)])
+        with patch.object(phase.urllib.request, 'build_opener', return_value=Opener(b'x' * ((2 << 20) + 1))):
+            with self.assertRaises(phase.PredecessorError):
+                phase._read_history(SimpleNamespace(endpoint=phase.TT_ENDPOINT))
+
     def test_historical_deployment_matches_c1_not_c2(self):
         old = dict(actor='scheduled_devops', claim='old-claim', window='old-window', generation=3,
                    commit='a'*40, images={'app':'image'}, actual={'app':'image'})
