@@ -10,6 +10,7 @@ from unittest.mock import Mock,patch
 import commands
 import bridge_root
 import migrations
+import operator_retirement
 import resource_claim
 from resource_claim_test import context,card
 import staging_cohort_preservation
@@ -109,6 +110,12 @@ class ConsumerTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception,'cohort_preserved_authorization_already_started'):
                 actions.execute({'action':'authorize','operation':'a'*12})
             custody.assert_not_called();save.assert_not_called()
+
+    def test_legacy_retirement_does_not_accept_native_space_receipt(self):
+        with patch.object(operator_retirement,'private_bytes') as read:
+            with self.assertRaisesRegex(Exception,'operator_retirement_binding_invalid'):
+                operator_retirement.verify_terminal(Path('/unused'),{'native_space_migration':{'status':'COMPLETE'}})
+            read.assert_not_called()
 
     def test_historical_native_receipt_rejects_tampered_effect_and_rollout_event(self):
         operation='a'*12;ctx={'operation_id':'stg-run-17','commit':'c'*40};binding={'context':ctx,'operation':operation}

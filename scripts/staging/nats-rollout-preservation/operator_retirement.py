@@ -260,6 +260,10 @@ def verify_readonly_terminal(base,state):
 
 
 def verify_terminal(base,state):
+    # Existing retirement receipts predate native Space evidence. Until the
+    # typed native-retirement lineage is verified, never reinterpret them as
+    # proof that an operation containing that irreversible effect is safe.
+    if state.get('native_space_migration') is not None:fail()
     if 'operator_media_abort' in state:return verify_media_abort_terminal(base,state)
     if 'operator_reset' in state:
         from operator_reset import verify_terminal as verify_reset
@@ -651,6 +655,7 @@ def verify_postmigration_terminal(base,state):
     base=Path(base);operation=state.get('operation','')
     if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
     raw=private_bytes(base/'operator-postmigration-abort-snapshot.json');snapshot=json.loads(raw)
+    if snapshot.get('native_space_migration') is not None:fail()
     sha=hashlib.sha256(raw).hexdigest();receipt=document(base/'operator-postmigration-abort-receipt.json')
     reference={'schema':'voice-operator-postmigration-abort-reference-v1','snapshot_sha256':sha,'receipt_sha256':canonical(receipt)}
     if (state.get('operator_postmigration_abort')!=reference or snapshot.get('schema')!='nats-rollout-root-v1'
@@ -786,6 +791,7 @@ def verify_applied_terminal(base,state):
     base=Path(base);operation=state.get('operation','')
     if not re.fullmatch('[a-f0-9]{12}',operation) or base.name!='rollout-'+operation:fail()
     raw=private_bytes(base/'operator-applied-abort-snapshot.json');snapshot=json.loads(raw)
+    if snapshot.get('native_space_migration') is not None:fail()
     sha=hashlib.sha256(raw).hexdigest();receipt=document(base/'operator-applied-abort-receipt.json')
     reference={'schema':'voice-operator-applied-abort-reference-v1','snapshot_sha256':sha,'receipt_sha256':canonical(receipt)}
     if (state.get('operator_applied_abort')!=reference or snapshot.get('schema')!='nats-rollout-root-v1'
