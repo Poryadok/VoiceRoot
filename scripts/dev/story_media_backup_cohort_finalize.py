@@ -17,12 +17,11 @@ class CohortFinalizeError(Exception):
     pass
 
 
-def validate_binding(binding, databases):
-    """Reject malformed operation and restore identity before any dump."""
+def _validate_binding_shape(binding, databases):
+    """Shared structural checks; callers must separately establish authority."""
     members = cohort._members(binding, databases)
     expected_keys = BINDING_KEYS | ({'full_catalog'} if 'full_catalog' in binding else set())
-    if (set(binding) != expected_keys or (binding['project'], binding['resource'], binding['actor'])
-            != ('voice', 'DEV', 'scheduled_devops') or type(binding['generation']) is not int
+    if (set(binding) != expected_keys or type(binding['generation']) is not int
             or binding['generation'] <= 0 or type(binding['revision']) is not int or binding['revision'] <= 0):
         raise CohortFinalizeError('cohort binding invalid')
     for name in ('claim', 'window'):
@@ -46,6 +45,14 @@ def validate_binding(binding, databases):
             or not isinstance(inputs['migrate_image'], str) or not IMAGE.fullmatch(inputs['migrate_image'])
             or type(inputs['postgres_major']) is not int or inputs['postgres_major'] != 16):
         raise CohortFinalizeError('cohort restore binding invalid')
+    return members
+
+
+def validate_binding(binding, databases):
+    """Reject malformed or non-DEV authority before any dump."""
+    members = _validate_binding_shape(binding, databases)
+    if (binding['project'], binding['resource'], binding['actor']) != ('voice', 'DEV', 'scheduled_devops'):
+        raise CohortFinalizeError('cohort binding invalid')
     return members
 
 

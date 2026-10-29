@@ -40,6 +40,11 @@ class FinalizeCohortTest(unittest.TestCase):
                 'server_start': source['server_start'], 'database_oid': source.get('database_oid'),
                 'attempt_nonce': '%032x' % (index+1), 'exit': 0, 'scope': 'dump-terminal-only'}
 
+    def test_dev_validator_refuses_staging_binding_with_same_contents(self):
+        binding=copy.deepcopy(self.binding);binding['resource']='STAGING'
+        with self.assertRaises(finalize.CohortFinalizeError):
+            finalize.validate_binding(binding,self.databases)
+
     def test_exact_receipts_are_bound_without_mutating_inputs(self):
         original = copy.deepcopy((self.binding, self.manifest, self.receipts))
         binding, manifest = finalize.finalize(self.root, self.key, self.binding, self.databases, self.manifest, self.receipts)
