@@ -49,7 +49,7 @@ import writer_cut_test
 
 class RealPreflightTest(unittest.TestCase):
     @contextmanager
-    def phases(self, before_cut=None, after_cut=None, configure=None):
+    def phases(self, before_cut=None, after_cut=None, configure=None, before_supervisor=None):
         base=writer_cut_test.WriterCutTest('test_drain_and_resume_use_current_template_not_old')
         base.setUp();self.addCleanup(base.doCleanups)
         if configure is not None:configure(base)
@@ -91,6 +91,9 @@ class RealPreflightTest(unittest.TestCase):
              mock.patch.object(supervisor.media_backup_upload_runner,'TT','http://fixture'), \
              mock.patch.object(backup.cohort_backup_operation,'ROOT',root):
             j,c,f=facade('journal',{'cohort_route_mode':'full-cohort-v1','kube_lock':base.lock})
+            if before_supervisor is not None:
+                before_supervisor(SimpleNamespace(journal=j,client=c,fence=f,base=base,root=root,
+                                                   operation=op,namespace_uid=namespace_uid))
             owner=supervisor.Supervisor(j,f,c,base.lock,namespace_uid)
             pj,pc,pf=facade('package-journal',{'full_cohort_package':{'run_id':123,'run_attempt':1,
                 'nodes':[{'name':'node','uid':'uid','hostname':'node','architecture':'amd64'}]}})
@@ -122,6 +125,19 @@ class RealPreflightTest(unittest.TestCase):
             self.assertFalse((op/'backup.key').exists())
             self.assertNotIn('full_cohort_backup_route',base.ledger.row)
             self.assertEqual(base.ledger.row['status'],'active')
+
+    def test_pre_supervisor_hook_uses_the_real_root_facade(self):
+        seen=[]
+        def prepare(root):
+            self.assertIs(root.client.journal,root.journal)
+            self.assertIs(root.fence.ledger.client,root.client)
+            self.assertEqual(root.journal.intent['cohort_route_mode'],'full-cohort-v1')
+            seen.append((root.journal,root.client,root.fence))
+        with self.phases(before_supervisor=prepare) as work:
+            self.assertEqual(len(seen),1)
+            self.assertIs(work.owner.journal,seen[0][0])
+            self.assertIs(work.owner.client,seen[0][1])
+            self.assertIs(work.owner.fence,seen[0][2])
 
     def test_actual_guard_refuses_namespace_lock_and_tt_drift_before_effects(self):
         for fault in ('namespace','lock','tt'):
@@ -157,7 +173,7 @@ class RealPreflightTest(unittest.TestCase):
                              'full-cohort-private-backup-and-isolated-restore')
         self.scenario(True,seed=seed,after_restore=checked)
 
-    def scenario(self, succeed, seed=None, source_files=None, kube_setup=None, after_restore=None):
+    def scenario(self, succeed, seed=None, source_files=None, kube_setup=None, after_restore=None, before_supervisor=None):
         images={name:canonical.REGISTRY+'/'+name+'@sha256:'+'b'*64 for name in canonical.IMAGE_NAMES}
         mapped={'voice-'+name+'/'+container:images[name] for name,container in update_images.SERVICES.items()}
         engine={'namespace_uid':'00000000-0000-0000-0000-000000000001',
@@ -285,7 +301,7 @@ class RealPreflightTest(unittest.TestCase):
             state.update(owner=owner,cut=cut,source=source,storage=storage)
             if kube_setup is not None:kube_setup(state,self.enterContext)
             storage.run('fixture-token');source.run('fixture-token')
-        with self.phases(before_cut=before,after_cut=after,configure=configure) as work:
+        with self.phases(before_cut=before,after_cut=after,configure=configure,before_supervisor=before_supervisor) as work:
             self.enterContext(mock.patch.object(cohort_upload_phase,'ROOT',work.root))
             self.enterContext(mock.patch.object(backup.publish_candidate,'source_snapshot',return_value={}))
             original_run=subprocess.run
