@@ -55,7 +55,7 @@ def helper_binding(source, code):
     return binding
 
 
-def exercise_candidate_drift(test, *, accept_candidate=False, trace_after_capture=False):
+def exercise_bridge(test, *, accept_candidate=False, trace_after_capture=False):
     """Join real bridge/source/candidate admission; cluster and OCI are fixtures."""
     import copy
     from unittest.mock import patch
@@ -318,11 +318,21 @@ def exercise_candidate_drift(test, *, accept_candidate=False, trace_after_captur
                  resource_claim.command_scope(session.check):
                 if accept_candidate:
                     if trace_after_capture:
-                        try:actions._prepare(request)
+                        try:
+                            # This historical pre-guard case deliberately refuses
+                            # the synthetic marker CAS; it is not an apply PASS.
+                            with test.assertRaisesRegex(AssertionError,'0 != 1'):
+                                actions._prepare(request)
+                            from root_main import private_json
+                            base=root/('rollout-'+session.operation)
+                            failed=private_json(base/'checkpoint.json',limit=128<<20)
+                            test.assertEqual((failed['status'],failed['fence_status']),('BLOCKED','UNKNOWN'))
+                            test.assertFalse((base/'apply-authorization.json').exists())
+                            test.assertEqual(session.check()['phase'],'prepare')
                         finally:trace_stack.close()
                     else:
                         with test.assertRaises(ReachedPolicy):actions._prepare(request)
-                    test.assertEqual(session.check()['phase'],'prerequisites-captured')
+                    if not trace_after_capture:test.assertEqual(session.check()['phase'],'prerequisites-captured')
                     test.assertEqual(prerequisites._checkpoint(session)['status'],'COMPLETE')
                     test.assertEqual(len(submit.call_args_list),16)
                     bind.assert_called_once()

@@ -503,10 +503,16 @@ class RootCompositionContract(unittest.TestCase):
             with self.subTest(fault=fault):self._exercise_bridge(fault)
 
     def test_bridge_rejects_foreign_candidate_before_any_prerequisite_effect(self):
-        root_composition_fixture.exercise_candidate_drift(self)
+        root_composition_fixture.exercise_bridge(self)
 
     def test_bridge_captures_real_prerequisites_before_policy(self):
-        root_composition_fixture.exercise_candidate_drift(self,accept_candidate=True)
+        root_composition_fixture.exercise_bridge(self,accept_candidate=True)
+
+    def test_bridge_real_rt_and_compiler_fail_closed_on_fence_transport(self):
+        # Historical pre-preservation-guard route. The modeled transport refuses
+        # marker CAS; this proves the real typed handoff and blocked checkpoint,
+        # not a successful apply, preservation, or live STAGING state.
+        root_composition_fixture.exercise_bridge(self,accept_candidate=True,trace_after_capture=True)
 
     def test_bridge_existing_c2_anchor_reaches_prepare_and_authorize(self):
         self._exercise_bridge('c2')
