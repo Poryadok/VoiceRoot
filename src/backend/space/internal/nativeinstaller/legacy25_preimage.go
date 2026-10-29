@@ -148,26 +148,25 @@ func captureLegacy25ProjectionTx(ctx context.Context, tx pgx.Tx, original map[st
 // This is still not admission: the caller must qualify identity, permissions,
 // dependencies, state and maintenance authority before any effect.
 func captureLegacy25Snapshot(ctx context.Context, conn *pgx.Conn) (string, map[string]legacy25TableDigest, error) {
-	if ctx == nil || conn == nil {
-		return "", nil, errors.New("legacy25 source unavailable")
+	return captureLegacySourceSnapshot(ctx, conn, 25)
+}
+
+func captureLegacySourceSnapshot(ctx context.Context, conn *pgx.Conn, version int) (string, map[string]legacy25TableDigest, error) {
+	var expected string
+	switch version {
+	case 24:
+		expected = legacy24CatalogPG16SHA256
+	case 25:
+		expected = legacy25CatalogPG16SHA256
+	default:
+		return "", nil, errors.New("legacy source unavailable")
 	}
-	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	tx, err := beginLegacySourceRead(ctx, conn)
 	if err != nil {
-		return "", nil, errors.New("legacy25 source unavailable")
+		return "", nil, err
 	}
 	defer tx.Rollback(context.Background())
-	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`); err != nil {
-		return "", nil, errors.New("legacy25 source unavailable")
-	}
-	locked := make([]string, 0, len(legacy25DataTables)+1)
-	for _, table := range legacy25DataTables {
-		locked = append(locked, pgx.Identifier{"public", table}.Sanitize())
-	}
-	locked = append(locked, pgx.Identifier{"public", "schema_migrations"}.Sanitize())
-	if _, err = tx.Exec(ctx, `LOCK TABLE `+strings.Join(locked, ",")+` IN ACCESS SHARE MODE`); err != nil {
-		return "", nil, errors.New("legacy25 source unavailable")
-	}
-	digest, err := inspectLegacy25CatalogTx(ctx, tx)
+	digest, err := inspectLegacyCatalogTx(ctx, tx, version, expected)
 	if err != nil {
 		return "", nil, err
 	}
@@ -179,4 +178,28 @@ func captureLegacy25Snapshot(ctx context.Context, conn *pgx.Conn) (string, map[s
 		return "", nil, errors.New("legacy25 source unavailable")
 	}
 	return digest, rows, nil
+}
+
+func beginLegacySourceRead(ctx context.Context, conn *pgx.Conn) (pgx.Tx, error) {
+	if ctx == nil || conn == nil {
+		return nil, errors.New("legacy source unavailable")
+	}
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, errors.New("legacy source unavailable")
+	}
+	if _, err = tx.Exec(ctx, `SET LOCAL search_path=pg_catalog; SET LOCAL TIME ZONE 'UTC'; SET LOCAL DateStyle='ISO, YMD'`); err != nil {
+		_ = tx.Rollback(context.Background())
+		return nil, errors.New("legacy source unavailable")
+	}
+	locked := make([]string, 0, len(legacy25DataTables)+1)
+	for _, table := range legacy25DataTables {
+		locked = append(locked, pgx.Identifier{"public", table}.Sanitize())
+	}
+	locked = append(locked, pgx.Identifier{"public", "schema_migrations"}.Sanitize())
+	if _, err = tx.Exec(ctx, `LOCK TABLE `+strings.Join(locked, ",")+` IN ACCESS SHARE MODE`); err != nil {
+		_ = tx.Rollback(context.Background())
+		return nil, errors.New("legacy source unavailable")
+	}
+	return tx, nil
 }

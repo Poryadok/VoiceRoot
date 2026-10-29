@@ -45,6 +45,16 @@ func inspectLegacy25Catalog(ctx context.Context, conn *pgx.Conn) (string, error)
 }
 
 func inspectLegacy25CatalogTx(ctx context.Context, tx pgx.Tx) (string, error) {
+	return inspectLegacyCatalogTx(ctx, tx, 25, legacy25CatalogPG16SHA256)
+}
+
+// Only the two separately source-pinned legacy cuts are supported internally.
+// This does not expose arbitrary historical-version admission.
+func inspectLegacyCatalogTx(ctx context.Context, tx pgx.Tx, versionNumber int, expected string) (string, error) {
+	if !((versionNumber == 25 && expected == legacy25CatalogPG16SHA256) ||
+		(versionNumber == 24 && expected == legacy24CatalogPG16SHA256)) {
+		return "", errors.New("legacy catalog version unavailable")
+	}
 	queryHash := sha256.Sum256([]byte(legacy25CatalogSQL))
 	if hex.EncodeToString(queryHash[:]) != legacy25CatalogSQLSHA256 {
 		return "", errors.New("legacy25 catalog source changed")
@@ -58,7 +68,7 @@ func inspectLegacy25CatalogTx(ctx context.Context, tx pgx.Tx) (string, error) {
 		return "", errors.New("legacy25 catalog server unsupported")
 	}
 	var rows, clean int64
-	if err := tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE version=25 AND dirty=false) FROM public.schema_migrations`).Scan(&rows, &clean); err != nil || rows != 1 || clean != 1 {
+	if err := tx.QueryRow(ctx, `SELECT count(*),count(*) FILTER (WHERE version=$1 AND dirty=false) FROM public.schema_migrations`, versionNumber).Scan(&rows, &clean); err != nil || rows != 1 || clean != 1 {
 		return "", errors.New("legacy25 migration marker unavailable")
 	}
 	var catalog string
@@ -67,7 +77,7 @@ func inspectLegacy25CatalogTx(ctx context.Context, tx pgx.Tx) (string, error) {
 	}
 	sum := sha256.Sum256([]byte(catalog))
 	digest := hex.EncodeToString(sum[:])
-	if digest != legacy25CatalogPG16SHA256 {
+	if digest != expected {
 		return "", errors.New("legacy25 catalog differs")
 	}
 	return digest, nil
