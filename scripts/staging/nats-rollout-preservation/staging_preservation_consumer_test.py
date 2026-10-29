@@ -59,6 +59,33 @@ class ConsumerTests(unittest.TestCase):
                  patch.object(staging_cohort_preservation,'prepare',side_effect=producer):
                 self.assertEqual(actions._prepare(request),result)
 
+    def test_authorize_continues_only_after_fixed_offnode_qualification(self):
+        with tempfile.TemporaryDirectory(dir='/root') as path:
+            root=Path(path);(root/'installed').mkdir(mode=0o700)
+            c=context();session=resource_claim.Session(c,'a'*12,'b'*64,lambda:copy.deepcopy(card(c)),resource_claim.RootJournal(root))
+            session.admit(start=True);row=session.journal.read();row.update(phase='cohort-preservation',target_sha256='d'*64,cohort_preservation_sha256='d'*64)
+            session.journal.save(row);session.expected_target='d'*64;session._cohort_lineage='d'*64
+            actions=object.__new__(bridge_root.Actions);actions.tt_session=session
+            receipt={'qualified':'fixture'};loaded={'request':{'mode':'full','changed_services':[],'gis_first_install':True}}
+            state={'operation':session.operation,'phase':'PAUSED_APPLY','status':'WAITING','fence_status':'VERIFIED',
+                   'cut':{'manifest':{'archive_sha256':'f'*64},'manifest_sha256':'e'*64},'contract':{}}
+            actions._prepare=Mock(return_value=state);order=[]
+            def qualify(actual,request):order.append('qualified');return receipt
+            def authorize(*args):order.append('authorized')
+            with resource_claim.command_scope(session.check),patch.object(staging_cohort_preservation,'qualify_offnode',side_effect=qualify), \
+                 patch.object(staging_cohort_preservation,'load_prepared',return_value=loaded), \
+                 patch.object(bridge_root.root_cli,'operation_path',return_value=root),patch.object(bridge_root,'Kube'), \
+                 patch.object(transaction,'authorize',side_effect=authorize),patch.object(bridge_root.grp,'getgrnam',return_value=SimpleNamespace(gr_gid=1)), \
+                 patch.object(bridge_root.os,'chown'),patch.object(Path,'chmod'):
+                result=actions.execute({'action':'authorize','operation':session.operation,'artifact_id':42,'token':'fixture'})
+                self.assertEqual(order,['qualified','authorized']);self.assertEqual(result['phase'],'PAUSED_APPLY')
+                self.assertEqual(actions._prepare.call_args.kwargs,{'cohort_ref':receipt})
+            actions._prepare.reset_mock()
+            with resource_claim.command_scope(session.check),patch.object(staging_cohort_preservation,'qualify_offnode',side_effect=RuntimeError('offnode unqualified')):
+                with self.assertRaisesRegex(RuntimeError,'offnode unqualified'):
+                    actions.execute({'action':'authorize','operation':session.operation,'artifact_id':42,'token':'fixture'})
+            actions._prepare.assert_not_called()
+
     def test_space_uses_native_receipt_without_generic_job(self):
         with tempfile.TemporaryDirectory(dir='/root') as path:
             plan=[{'database':'space','image':migrations.IMAGE,'secret_key':'SPACE_DATABASE_URL',
