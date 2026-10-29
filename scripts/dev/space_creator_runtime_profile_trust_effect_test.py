@@ -16,7 +16,8 @@ import media_operation_journal as journals
 import resource_fencing
 import space_creator_runtime_profile_jdk as jdk
 import space_creator_runtime_profile_trust_effect as effect
-import space_p3_issuer_preflight as issuer
+import dev_peer_issuer_preflight as issuer
+import dev_peer_issuer_metadata as peer_metadata
 import writer_cut
 import writer_cut_test
 
@@ -74,26 +75,33 @@ class EffectStateTest(unittest.TestCase):
             client = client_type(base.lock, journal); client.workloads = base.client.workloads
             fence = resource_fencing.Fence(base.context, lambda: copy.deepcopy(base.card), Ledger(client))
             return journal, fence, client
+        self.facade = facade
 
         nodes = [{'name': 'node', 'uid': 'node', 'hostname': 'node', 'architecture': 'amd64'}]
         j, f, c = facade('effect-package', {'full_cohort_package': {'run_id': 1, 'run_attempt': 1, 'nodes': nodes}})
         pkg = package.PackagePhase(j, f, c, base.lock, 'ns')
         j, f, c = facade('effect-inventory'); inv = inventory.InventoryPhase(j, f, c, base.lock, 'ns', pkg)
         j, f, c = facade('effect-jdk'); actual_jdk = jdk.TargetJdkPhase(j, f, c, base.lock, 'ns', pkg, inv)
-        j, f, c = facade('effect-issuer', {'space_issuer_preflight': {'source_root': '/fixture', 'source_sha': base.context['commit']}})
-        actual_issuer = issuer.IssuerPreflightPhase(j, f, c, base.lock, 'ns', pkg, base.cut, '/fixture', 'token')
+        j, f, c = facade('effect-issuer', {'dev_peer_issuer_preflight': {'source_root': '/fixture', 'source_sha': base.context['commit'], 'profile': 'creator'}})
+        actual_issuer = issuer.PeerIssuerPreflightPhase(j, f, c, base.lock, 'ns', pkg, base.cut, '/fixture', 'token', 'creator')
         j, f, c = facade('effect-result')
         self.phase = effect.TrustEffectPhase(j, f, c, base.lock, 'ns', pkg, inv, actual_jdk, actual_issuer)
         self.roots = {'root_fingerprints': ['a' * 64], 'image': 'image', 'config_digest': 'sha256:' + 'd' * 64}
         self.ca_sha = hashlib.sha256(b'der').hexdigest()
-        self.source = {'ca': {'uid': 'ca', 'resourceVersion': '1', 'der_sha256': self.ca_sha}}
+        self.source = {'schema': 'voice-dev-peer-custody-v1', 'profile': 'creator',
+                       'scope': 'root-peer-custody-available-not-issued', 'operation_id': base.context['operation_id'],
+                       'source_sha': base.context['commit'], 'namespace_uid': 'ns',
+                       'nonce': 'f' * 32, 'context_sha256': writer_cut.digest(base.context),
+                       'lock': {key: base.lock['metadata'][key] for key in ('uid', 'resourceVersion')},
+                       'ca': {'uid': 'ca', 'resourceVersion': '1', 'der_sha256': self.ca_sha},
+                       'creator_secrets': {name: {'state': 'absent'} for name in peer_metadata.MEMBERS}}
         actual_jdk.record = {'status': 'done', 'receipt_sha256': writer_cut.digest(self.roots)}
         actual_jdk.journal.state['steps'][jdk.STEP] = copy.deepcopy(actual_jdk.record) | {'receipt': copy.deepcopy(self.roots)}
         actual_issuer.record = {'status': 'done', 'receipt_sha256': writer_cut.digest(self.source)}
-        actual_issuer.journal.state['steps'][issuer.STEP] = copy.deepcopy(actual_issuer.record) | {'receipt': copy.deepcopy(self.source)}
+        actual_issuer.journal.state['steps'][actual_issuer.step] = copy.deepcopy(actual_issuer.record) | {'receipt': copy.deepcopy(self.source)}
         actual_jdk.journal.save(); actual_issuer.journal.save()
         base.ledger.row[jdk.LEDGER] = copy.deepcopy(actual_jdk.record)
-        base.ledger.row[issuer.LEDGER] = copy.deepcopy(actual_issuer.record)
+        base.ledger.row[actual_issuer.ledger] = copy.deepcopy(actual_issuer.record)
         self.enterContext(mock.patch.object(jdk, 'verify_completed', return_value=self.roots))
         self.enterContext(mock.patch.object(issuer, 'verify_current', return_value=self.source))
         self.enterContext(mock.patch.object(effect.target.material, '_cert_der', return_value=b'der'))
@@ -205,6 +213,15 @@ class EffectStateTest(unittest.TestCase):
         replacement.write_bytes(b'x' * 32); replacement.chmod(0o600)
         os.replace(replacement, self.phase.journal.path / effect.KEY_FILE)
         with self.assertRaises(ValueError): self.phase._key()
+
+    def test_wrong_peer_profile_is_rejected_at_construction(self):
+        base = self.base; pkg = self.phase.package; inv = self.phase.inventory; peer = self.phase.preflight
+        intent = {'dev_peer_issuer_preflight': {'source_root': '/fixture', 'source_sha': base.context['commit'], 'profile': 'space'}}
+        j, f, c = self.facade('wrong-peer', intent)
+        foreign = issuer.PeerIssuerPreflightPhase(j, f, c, base.lock, 'ns', pkg, base.cut, '/fixture', 'token', 'space')
+        j, f, c = self.facade('wrong-effect')
+        with self.assertRaises(effect.TrustEffectError):
+            effect.TrustEffectPhase(j, f, c, base.lock, 'ns', pkg, inv, self.phase.jdk, foreign)
 
     def test_private_store_is_rejected_without_writing(self):
         self.existing(b'private')

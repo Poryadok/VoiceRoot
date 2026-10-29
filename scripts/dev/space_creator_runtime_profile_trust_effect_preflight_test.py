@@ -5,6 +5,7 @@ from unittest import mock
 
 import space_creator_runtime_profile_trust_effect as effect
 import space_creator_runtime_profile_trust_effect_test as fixture
+import writer_cut
 
 
 class PreflightTest(unittest.TestCase):
@@ -71,6 +72,16 @@ class PreflightTest(unittest.TestCase):
         with self.assertRaises(effect.TrustEffectError): self.phase.prepare('token')
         self.assertEqual(self.fixture.writes, [])
         self.assertFalse(self.fixture.base.cut.drained)
+
+    def test_missing_peer_identity_is_rejected_before_any_tool(self):
+        source = self.fixture.source
+        source['creator_secrets'].pop(next(iter(source['creator_secrets'])))
+        peer = self.phase.preflight
+        peer.record = {'status': 'done', 'receipt_sha256': writer_cut.digest(source)}
+        peer.journal.state['steps'][peer.step] = dict(peer.record, receipt=source.copy())
+        peer.journal.save(); self.fixture.base.ledger.row[peer.ledger] = peer.record.copy()
+        with self.assertRaises(effect.target.metadata.GuardLost): self.phase.prepare('token')
+        self.assertEqual(self.fixture.writes, []); self.phase._tool.assert_not_called()
 
     def test_compatible_preflight_preserves_secret_after_drain(self):
         self.fixture.existing(b'compatible')

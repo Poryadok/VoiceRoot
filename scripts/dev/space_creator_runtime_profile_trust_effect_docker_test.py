@@ -16,7 +16,7 @@ import space_creator_runtime_profile_trust as trust
 import space_creator_runtime_profile_trust_effect as effect
 import space_creator_runtime_profile_trust_effect_test as fixture
 import space_creator_runtime_profile_jdk as jdk
-import space_p3_issuer_preflight as issuer
+import dev_peer_issuer_preflight as issuer
 import writer_cut
 
 
@@ -85,8 +85,10 @@ class RealKeytoolTest(unittest.TestCase):
         for phase, module, receipt in ((phase_fixture.phase.jdk, jdk, phase_fixture.roots),
                                        (phase_fixture.phase.preflight, issuer, phase_fixture.source)):
             phase.record = {'status': 'done', 'receipt_sha256': writer_cut.digest(receipt)}
-            phase.journal.state['steps'][module.STEP] = copy.deepcopy(phase.record) | {'receipt': copy.deepcopy(receipt)}
-            phase.journal.save(); phase_fixture.base.ledger.row[module.LEDGER] = copy.deepcopy(phase.record)
+            step = module.STEP if module is jdk else phase.step
+            ledger = module.LEDGER if module is jdk else phase.ledger
+            phase.journal.state['steps'][step] = copy.deepcopy(phase.record) | {'receipt': copy.deepcopy(receipt)}
+            phase.journal.save(); phase_fixture.base.ledger.row[ledger] = copy.deepcopy(phase.record)
 
         def kube(args, payload=None):
             if args[:3] == ['get', 'secret', 'voice-media-ca']:
