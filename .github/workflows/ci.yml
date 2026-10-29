@@ -861,6 +861,7 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: src/backend/**/go.sum
       - name: Install golangci-lint
         run: go install ${{ env.GOLANGCI_LINT_MOD }}
       - name: Add GOBIN to PATH
