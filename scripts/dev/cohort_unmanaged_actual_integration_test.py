@@ -31,6 +31,10 @@ class UnmanagedIntegrationTest(unittest.TestCase):
         fixture=fixtures.PopulatedRestoreTest();self.addCleanup(cleanup_fixture,fixture);fixture.setUp()
         fixture.sql(fixture.source,'source_admin','postgres','CREATE ROLE app_writer LOGIN')
         fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE extra_db')
+        fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE gateway_db')
+        gateway_folder=Path('/work/src/backend/migrations/gateway_db')
+        for migration in sorted(gateway_folder.glob('*.up.sql')):
+            fixture.sql(fixture.source,'source_admin','gateway_db',migration.read_text())
         fixture.sql(fixture.source,'source_admin','postgres','CREATE DATABASE custom_template TEMPLATE template0')
         fixture.sql(fixture.source,'source_admin','postgres','ALTER DATABASE custom_template IS_TEMPLATE true')
         for db in ('extra_db','postgres','template1','custom_template'):
@@ -38,13 +42,16 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                 "CREATE SCHEMA tenant AUTHORIZATION app_writer; CREATE TABLE tenant.events(id bigint PRIMARY KEY, value text); "
                 "ALTER TABLE tenant.events OWNER TO app_writer; INSERT INTO tenant.events VALUES (7,'kept'); "
                 "CREATE TABLE public.schema_migrations(version bigint,dirty boolean); INSERT INTO public.schema_migrations VALUES (991,true)")
-        databases=sorted(('extra_db','postgres','template1','custom_template'))
-        catalogs={db:json.loads(fixture.sql(fixture.source,'source_admin',db,unmanaged.CATALOG_SQL)) for db in databases}
+        databases=sorted(('extra_db','postgres','template1','custom_template','gateway_db'))
+        catalogs={db:json.loads(fixture.sql(fixture.source,'source_admin',db,
+            restore.GATEWAY_CATALOG if db=='gateway_db' else unmanaged.CATALOG_SQL)) for db in databases}
         properties={}
         for db in databases:
-            value=catalogs[db]['database_properties']
+            source_catalog=(json.loads(fixture.sql(fixture.source,'source_admin',db,unmanaged.CATALOG_SQL))
+                            if db=='gateway_db' else catalogs[db])
+            value=source_catalog['database_properties']
             properties[db]={key:value[key] for key in ('template','allowconn','encoding','collate','ctype','locale_provider','icu_locale','connection_limit')}
-            properties[db].update(owner=catalogs[db]['database_owner'],acl=value['acl_raw'])
+            properties[db].update(owner=source_catalog['database_owner'],acl=value['acl_raw'])
         properties['template0']={'allowconn':False}
         oids={db:int(fixture.sql(fixture.source,'source_admin','postgres',
                               "SELECT oid FROM pg_database WHERE datname='"+db+"'")) for db in databases}
@@ -56,6 +63,7 @@ class UnmanagedIntegrationTest(unittest.TestCase):
         def digest(value):return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=True).encode()).hexdigest()
         roles=json.loads(fixture.sql(fixture.source,'source_admin','postgres',media.role_catalog_sql()))
         plans={db:{'engine':'unmanaged','from':None,'to':None,'files':{}} for db in databases}
+        plans['gateway_db']['files']={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in gateway_folder.glob('*.sql')}
         metadata={'catalog':catalogs,'roles':roles,'migrations':plans}
         binding={'operation_id':event['operation_id'],'snapshot_id':'capture-'+'c'*32,'source_sha':event['source_sha'],
                  'databases':databases,'sources':{db:{'engine':engine,'server_start':start,'database_oid':oids[db]} for db in databases},
@@ -82,9 +90,11 @@ class UnmanagedIntegrationTest(unittest.TestCase):
             stale=copy.deepcopy(event);stale['databases']['extra_db']+=1
             with patch.object(affected.FullCatalogPhase,'verify_current',return_value=stale),self.assertRaises(restore.CohortRestoreError):
                 restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
-            observed=[];original=media._psql
+            observed=[];events=[];original=media._psql
             def psql(cid,admin,db,sql,timeout=120):
                 result=original(cid,admin,db,sql,timeout=timeout)
+                if sql.startswith('CREATE DATABASE gateway_db '):events.append('gateway')
+                if sql=='ALTER DATABASE template0 WITH ALLOW_CONNECTIONS true':events.append('template')
                 if sql==unmanaged.CATALOG_SQL:
                     self.assertEqual(original(cid,admin,db,'SELECT id,value FROM tenant.events').strip(),b'7|kept')
                     self.assertEqual(original(cid,admin,db,'SELECT version,dirty FROM public.schema_migrations').strip(),b'991|t')
@@ -94,7 +104,10 @@ class UnmanagedIntegrationTest(unittest.TestCase):
                 receipt=restore.qualify(root,key,binding,databases,manifest,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')
             self.assertEqual(receipt['cleanup'],'verified')
             self.assertEqual(receipt['databases'],{db:{'mode':'restore-only','from':None,'to':None} for db in databases})
-            self.assertEqual(sorted(observed),sorted(databases*2))
+            extras=[db for db in databases if db!='gateway_db']
+            self.assertEqual(sorted(observed),sorted(extras*2))
+            self.assertIn('gateway',events);self.assertIn('template',events)
+            self.assertLess(events.index('gateway'),events.index('template'))
             damaged=copy.deepcopy(manifest);damaged['mac']='0'*64
             with patch.object(affected.FullCatalogPhase,'verify_current',return_value=event),self.assertRaises(restore.CohortRestoreError):
                 restore.qualify(root,key,binding,databases,damaged,metadata,Path('/work'),POSTGRES,MIGRATE,Journal(),phase,'synthetic')

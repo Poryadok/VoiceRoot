@@ -29,6 +29,11 @@ class CohortRestoreError(Exception):
     pass
 
 
+def restore_order(databases):
+    """Restore legacy service databases before changing disposable template0."""
+    return sorted(databases,key=lambda name:(name not in cohort.ALLOWED_DATABASES,name))
+
+
 def classify_plan(database, plan, full_catalog=False):
     if database not in cohort.ALLOWED_DATABASES and full_catalog:
         if (isinstance(plan,dict) and plan == {'engine':'unmanaged','from':None,'to':None,'files':{}}):
@@ -264,7 +269,7 @@ def qualify(root, key, binding, databases, manifest, source_metadata, source_roo
             if maintenance in binding['full_catalog']['properties']:
                 raise CohortRestoreError('maintenance database collides with source')
             media_restore._psql(postgres,admin,'postgres','CREATE DATABASE '+media_restore._quote_identifier(maintenance)+' TEMPLATE template0')
-        for db in databases:
+        for db in restore_order(databases):
             if full_catalog and db not in cohort.ALLOWED_DATABASES:
                 sql=lambda name,statement:media_restore._psql(postgres,admin,name,statement)
                 unmanaged.prepare_disposable_template(sql,source_metadata['catalog'][db],maintenance)

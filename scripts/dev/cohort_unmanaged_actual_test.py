@@ -92,5 +92,9 @@ class UnmanagedActualTest(unittest.TestCase):
             with self.subTest(change=change),self.assertRaises(restore.CohortRestoreError):
                 restore.classify_plan('extra_db',plan|change,True)
 
+    def test_service_databases_restore_before_mutating_disposable_template(self):
+        self.assertEqual(restore.restore_order(['extra_db','postgres','template1','voice_db']),
+                         ['voice_db','extra_db','postgres','template1'])
+
 
 if __name__=='__main__':unittest.main()
