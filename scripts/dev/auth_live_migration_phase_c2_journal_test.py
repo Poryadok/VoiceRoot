@@ -71,6 +71,10 @@ class C2JournalTest(unittest.TestCase):
         def setup(base):
             original(base)
             base.context['operation_id']='media-c2-'+'a'*32
+            base.context['images']['voice-auth/auth']='ghcr.io/poryadok/voiceroot/auth@sha256:'+'d'*64
+            base.intent['auth_live_candidate']={'platform_digest':'sha256:'+'e'*64,'deployment':{
+                'uid':'deployment-uid','resourceVersion':'1','generation':3,
+                'spec':{'replicas':0,'template':{'spec':{'containers':[{'name':'auth','image':'old'}]}}}}}
             base.ledger=base_fixture.Ledger(base.context)
             base.fence=resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),base.ledger)
             base.lock['data']['resource_context']=json.dumps(base.context,sort_keys=True,separators=(',',':'))
@@ -94,10 +98,17 @@ class C2JournalTest(unittest.TestCase):
             metadata={'migrations':{'auth_db':{'files':{}}},'catalog':{'auth_db':{'history':
                 [{k:r[k] for k in ('version','script','checksum','success')} for r in history]}}}
             observation={'history':history,'sessions':[],'prepared':0}
-            cut=SimpleNamespace(verify_drained=lambda:None)
+            cut=SimpleNamespace(verify_drained=lambda:None,_guard=lambda:None)
+            target=live.eligibility.candidate_target(work.media.intent['auth_live_candidate']['deployment']['spec'],work.base.context['images']['voice-auth/auth'])
+            candidate={'source_sha':binding['source_sha'],'image':work.base.context['images']['voice-auth/auth'],
+                'auth_tree':'a'*40,'platform_digest':'sha256:'+'e'*64,'target_spec_sha256':live._digest(target),
+                'deployment':{'uid':'deployment-uid','generation':3,'resourceVersion':'1'},
+                'policy':{'flyway':'disabled','persistence':'jdbc','selector':'absent'},
+                'route':{'host':'voice-postgres','database':'auth_db','role':'voice'}}
             with patch.object(live,'_cut_identity'),patch.object(live,'_bind_cut_scope'),patch.object(live,'_package_authority'),patch.object(live.restore,'_source'),patch.object(live,'source_catalog',return_value=({},{})), \
                  patch.object(live,'candidate_blob',return_value=b'{}'),patch.object(live,'expected_history',return_value=history), \
-                 patch.object(live.eligibility,'observe_candidate',return_value={'policy':'checked'}), \
+                 patch.object(live.eligibility,'observe_candidate',return_value=candidate), \
+                 patch.object(live.eligibility,'_source_tree',return_value='a'*40), \
                  patch.object(live.probe,'inspect',return_value=observation):
                 bad=copy.deepcopy(work.base.ledger.row['cohort_restore'])
                 work.base.ledger.row['cohort_restore']['receipt']['source_sha']='f'*40
@@ -108,6 +119,11 @@ class C2JournalTest(unittest.TestCase):
                 self.assertEqual(receipt['operation_id'],binding['operation_id'])
                 self.assertEqual(work.base.ledger.row['auth_live_c2']['status'],'done')
                 self.assertEqual(work.journal.state['steps']['auth-live-c2-private'],receipt)
+                with patch.object(cut,'verify_drained',side_effect=AssertionError('resume reader must not drain')):
+                    completed=live.verify_completed(work.phase,cut,'.',metadata)
+                self.assertEqual(completed['status'],'no-op')
+                work.journal.state['steps']['auth-live-c2-private']['candidate']['route']['database']='other_db'
+                with self.assertRaises(live.PhaseError): live.verify_completed(work.phase,cut,'.',metadata)
         finally:
             if not work.doCleanups(): raise RuntimeError('fixture cleanup failed')
 

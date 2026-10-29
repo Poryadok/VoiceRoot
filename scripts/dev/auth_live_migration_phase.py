@@ -806,6 +806,75 @@ def no_op_c2(phase, cut, source_root, actor, token, metadata):
         raise PhaseError('C2 Auth no-op unavailable; retain fence if outcome is uncertain') from None
 
 
+def verify_completed(phase, cut, source_root, metadata):
+    """Read protected terminal evidence without requiring writers to stay drained."""
+    try:
+        _cut_identity(phase,cut); p=phase.phases
+        if phase._guard() is False or cut._guard() is False: raise ValueError()
+        _package_authority(phase)
+        context=p.fence.context; operation=context['operation_id']; operation_name(operation)
+        steps=p.journal.state['steps']; row,_=p.fence.ledger.read()
+        if operation.startswith('media-c1-'):
+            inputs=steps['auth-live-c1-inputs']
+            if inputs['metadata']!=metadata: raise ValueError()
+            verified_sources(phase,metadata,26)
+            terminal=verify_writer_terminal(phase,source_root); cleanup=verify_writer_cleanup(phase,source_root)
+            record=steps['auth-live-c1']; candidates=[b for b in cut.migration_history
+                if b.get('kind')=='auth' and b.get('phase') is phase and b.get('root')==source_root
+                and b.get('terminal')==record['terminal_sha256']]
+            if len(candidates)!=1: raise ValueError()
+            binding=candidates[0]
+            import writer_cut_migration
+            writer_cut_migration.verify_cleaned(cut,binding)
+            step='writer-cut-migration-cleanup-'+record['nonce']
+            entry=cut.journal.state['steps'][step]
+            details={'plan_sha256':writer_cut.digest(binding['plan']),'job_uid':cleanup['job']['uid'],
+                     'config_uid':cleanup['configmap']['uid'],'terminal_sha256':record['terminal_sha256']}
+            if (entry.get('status')!='done' or entry.get('details')!=details
+                    or entry.get('receipt')!={'operation_id':operation,**details}): raise ValueError()
+            candidate=inputs['candidate']; receipt_sha=record['terminal_sha256']; snapshot=record['snapshot_id']
+            status='migrated'
+        else:
+            binding,provenance=c2_sources(phase,metadata); _bind_cut_scope(cut,binding)
+            record=steps['auth-live-c2']; receipt=steps['auth-live-c2-private']
+            if (not isinstance(record,dict) or set(record)!={'status','nonce','operation_id','snapshot_id','receipt_sha256'}
+                    or record!=row.get('auth_live_c2') or record['status']!='done'
+                    or record['operation_id']!=operation or record['snapshot_id']!=binding['snapshot_id']
+                    or not isinstance(record['nonce'],str) or not re.fullmatch(r'[0-9a-f]{32}',record['nonce'])
+                    or record['receipt_sha256']!=_digest(receipt) or receipt.get('status')!='no-op'
+                    or receipt.get('operation_id')!=operation or receipt.get('snapshot_id')!=binding['snapshot_id']
+                    or receipt.get('source_sha')!=context['commit'] or receipt.get('provenance')!=provenance): raise ValueError()
+            _,catalog=source_catalog(source_root,context['commit'])
+            profile=candidate_blob(source_root,context['commit'],
+                'src/backend/auth/src/main/resources/roleidentityauthority/migration-history-linked-oauth-v1.json')
+            auth=binding['sources']['auth_db']; databases=binding['databases']
+            scope={'engine':auth['engine'],'server_start':auth['server_start'],'databases':databases,
+                   'database_oids':{db:binding['sources'][db]['database_oid'] for db in databases}}
+            projected=[{k:r[k] for k in ('version','script','checksum','success')} for r in receipt['history']]
+            if (receipt.get('source_catalog')!=catalog or catalog!=metadata['migrations']['auth_db']['files']
+                    or receipt.get('engine')!=scope or projected!=metadata['catalog']['auth_db']['history']
+                    or not matches_expected_history(receipt['history'],expected_history(catalog,profile,32))): raise ValueError()
+            candidate=receipt['candidate']; receipt_sha=record['receipt_sha256']; snapshot=record['snapshot_id']
+            status='no-op'
+        plan=p.intent['auth_live_candidate']; target=eligibility.candidate_target(plan['deployment']['spec'],context['images']['voice-auth/auth'])
+        if (not isinstance(candidate,dict) or candidate.get('source_sha')!=context['commit']
+                or candidate.get('image')!=context['images']['voice-auth/auth']
+                or candidate.get('auth_tree')!=eligibility._source_tree(source_root,context['commit'])
+                or candidate.get('target_spec_sha256')!=_digest(target)
+                or candidate.get('platform_digest')!=plan['platform_digest']
+                or candidate.get('deployment',{}).get('uid')!=plan['deployment']['uid']
+                or candidate.get('deployment',{}).get('generation')!=plan['deployment']['generation']
+                or candidate.get('policy')!={'flyway':'disabled','persistence':'jdbc','selector':'absent'}
+                or candidate.get('route') not in ({'host':h,'database':'auth_db','role':'voice'} for h in
+                    ('voice-postgres','voice-postgres.voice-dev','voice-postgres.voice-dev.svc','voice-postgres.voice-dev.svc.cluster.local'))):
+            raise ValueError()
+        if phase._guard() is False or cut._guard() is False: raise ValueError()
+        return {'status':status,'operation_id':operation,'snapshot_id':snapshot,'source_sha':context['commit'],
+                'receipt_sha256':receipt_sha,'candidate':{k:copy.deepcopy(candidate[k]) for k in
+                    ('image','platform_digest','target_spec_sha256','auth_tree','policy','route')}}
+    except BaseException: raise PhaseError('completed Auth authority unavailable') from None
+
+
 def operation_name(operation):
     if not isinstance(operation,str) or not re.fullmatch(r'media-c[12]-[0-9a-f]{32}',operation):
         raise ValueError('invalid cohort operation')

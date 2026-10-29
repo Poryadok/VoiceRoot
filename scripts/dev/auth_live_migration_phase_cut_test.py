@@ -31,6 +31,9 @@ class TwoJournalTest(unittest.TestCase):
             original(base)
             base.context['images']['voice-auth/auth']='ghcr.io/poryadok/voiceroot/auth@sha256:'+'d'*64
             base.intent['auth_live_tool']=copy.deepcopy(tool)
+            base.intent['auth_live_candidate']={'platform_digest':'sha256:'+'e'*64,'deployment':{
+                'uid':'deployment-uid','resourceVersion':'1','generation':3,
+                'spec':{'replicas':0,'template':{'spec':{'containers':[{'name':'auth','image':'old'}]}}}}}
             base.ledger=base_fixture.Ledger(base.context)
             base.fence=resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),base.ledger)
             base.lock['data']['resource_context']=json.dumps(base.context,sort_keys=True,separators=(',',':'))
@@ -111,15 +114,19 @@ class TwoJournalTest(unittest.TestCase):
                 def read(self): return work.base.ledger.read()
                 def write(self,rev,row): return work.base.ledger.write(rev,row)
             fence=resource_fencing.Fence(work.base.context,lambda:copy.deepcopy(work.base.card),LedgerView(cut_client))
+            target=live.eligibility.candidate_target(work.media.intent['auth_live_candidate']['deployment']['spec'],work.base.context['images']['voice-auth/auth'])
             candidate={'source_sha':binding['source_sha'],'image':work.base.context['images']['voice-auth/auth'],
                        'policy':{'flyway':'disabled','persistence':'jdbc','selector':'absent'},
-                       'route':{'host':'voice-postgres','database':'auth_db','role':'voice'}}
+                       'route':{'host':'voice-postgres','database':'auth_db','role':'voice'},
+                       'platform_digest':'sha256:'+'e'*64,'target_spec_sha256':live._digest(target),'auth_tree':'a'*40,
+                       'deployment':{'uid':'deployment-uid','generation':3,'resourceVersion':'1'}}
             def observation(*args): return {'history':copy.deepcopy(after if state['migrated'] else history),'sessions':[],'prepared':0}
             with patch.object(writer_cut.frontend_runtime_executor,'KubectlTransport',Client), \
                  patch.object(live,'_phase_identity'),patch.object(live,'_package_authority'),patch.object(live.restore,'_source'), \
                  patch.object(live,'source_catalog',return_value=({'V26__x.sql':b'sql'},{})),patch.object(live,'candidate_blob',return_value=b'{}'), \
                  patch.object(live,'expected_history',return_value=history),patch.object(live,'validate_clone_receipt'), \
                  patch.object(live.eligibility,'observe_candidate',return_value=candidate),patch.object(live.probe,'inspect',side_effect=observation), \
+                 patch.object(live.eligibility,'_source_tree',return_value='a'*40), \
                  patch.object(live.probe,'verify_login',return_value={'uid':'secret','resourceVersion':'1'}), \
                  patch.object(live,'flyway_platform',return_value=tool['flyway_platform_digest']), \
                  patch.object(live,'observe_node',return_value={'name':'node-one','uid':'node-id'}), \
@@ -145,6 +152,9 @@ class TwoJournalTest(unittest.TestCase):
                 self.assertEqual(work.base.ledger.row['auth_live_c1']['status'],'done')
                 self.assertFalse(state['jobs'] or state['pods'] or state['configmaps'])
                 self.assertIsNone(cut.migration)
+                result=live.verify_completed(work.phase,cut,'.',metadata)
+                self.assertEqual(result['status'],'migrated')
+                self.assertEqual(result['candidate']['route']['database'],'auth_db')
         finally:
             if cut_journal is not None: cut_journal.close()
             if not work.doCleanups(): raise RuntimeError('fixture cleanup failed')
