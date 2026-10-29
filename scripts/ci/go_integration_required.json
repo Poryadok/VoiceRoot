@@ -730,6 +730,10 @@
     ["voice/backend/social/internal/store", "TestSendInvitationCheckedPersistsRequestOutboxForEverySend"]
   ],
   "space": [
+    ["voice/backend/space/internal/store", "TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove"],
+    ["voice/backend/space/internal/store", "TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove/add"],
+    ["voice/backend/space/internal/store", "TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove/remove_exact_installed_generation"],
+    ["voice/backend/space/internal/store", "TestBotInstallationScopeCancelBeforeAddPreservesTombstone"],
     ["voice/backend/space/internal/grpcsvc", "TestCompositePublicReplayCurrentSpaceMembershipAndGuestPG"],
     ["voice/backend/space/internal/grpcsvc", "TestCreateCategory_NonOwnerDenied"],
     ["voice/backend/space/internal/grpcsvc", "TestCreateInvite_DegradedWhenEventsFail"],

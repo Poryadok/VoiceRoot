@@ -17,6 +17,26 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_space_bot_native51_cases_and_subtests_are_required(self):
+        inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        package = 'voice/backend/space/internal/store'
+        parent = 'TestBotInstallationScopeTypedAddAndExactPriorInstallationRemove'
+        expected = {parent, parent + '/add', parent + '/remove_exact_installed_generation',
+                    'TestBotInstallationScopeCancelBeforeAddPreservesTombstone'}
+        self.assertTrue({(package, name) for name in expected}.issubset({tuple(c) for c in inventory['space']}))
+        source = (ROOT / 'src/backend/space/internal/store/bot_installation_scope_test.go').read_text(encoding='utf-8')
+        self.assertIn('name := "add"', source)
+        self.assertIn('name = "remove exact installed generation"', source)
+        self.assertIn('migrateBotFixture51', source)
+        events = [{'Package': package, 'Test': name, 'Action': action}
+                  for name in expected for action in ('run', 'pass')]
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertEqual(receipts.verify_required(events, [[package, name] for name in expected], 0), [])
+        for event in events:
+            if event.get('Test') == parent + '/remove_exact_installed_generation' and event['Action'] == 'pass':
+                event['Action'] = 'skip'
+        self.assertTrue(receipts.verify_required(events, [[package, name] for name in expected], 0))
+
     def test_integration_source_audit_rejects_unclassified_and_stale_cases(self):
         source = ROOT / 'scripts/ci/go_integration_source_audit.py'
         spec = importlib.util.spec_from_file_location('source_audit', source)
@@ -68,7 +88,7 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 if package not in by_package:
                     path = ROOT / 'src/backend' / package.removeprefix('voice/backend/')
                     by_package[package] = '\n'.join(f.read_text(encoding='utf-8') for f in path.glob('*_test.go'))
-                self.assertRegex(by_package[package], r'(?m)^func ' + re.escape(name) + r'\(t \*testing\.T\)')
+                self.assertRegex(by_package[package], r'(?m)^func ' + re.escape(name.split('/')[0]) + r'\(t \*testing\.T\)')
 
     def test_downloaded_matrix_requires_exact_members_and_bound_streams(self):
         with tempfile.TemporaryDirectory() as directory:

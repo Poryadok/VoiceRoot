@@ -31,7 +31,7 @@ def audit(root, inventory, exceptions):
                 raise ValueError('invalid inventory case')
             package, name = case
             prefix = 'voice/backend/' + service
-            if not (package == prefix or package.startswith(prefix + '/')) or not re.fullmatch(r'Test\w+', name):
+            if not (package == prefix or package.startswith(prefix + '/')) or not re.fullmatch(r'Test\w+(?:/[\w.-]+)*', name):
                 raise ValueError('inventory case outside service')
             key = (service, package, name)
             if key in included:

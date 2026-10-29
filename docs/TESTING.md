@@ -146,6 +146,10 @@ The source audit requires every `*_integration_test.go` entrypoint to appear
 in that baseline or in `scripts/ci/go_integration_exceptions.json`. An
 `unresolved` entry records a coverage gap and is never evidence that it ran;
 the audit does not discover native tests under other filename conventions.
+The baseline also names the Space Bot installation add, remove and tombstone
+proofs, including both add/remove subtests. Their fixture uses the qualified
+native 45, 50 and 51 migration transitions; this does not replace the separate
+tagged Space catalog and account-ban suite.
 
 The affected Story PR proof runs `go test -json -count=1 -p 1` for
 `./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an

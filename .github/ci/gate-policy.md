@@ -197,6 +197,9 @@ explicit evidence and cannot be inferred from this aggregate.
 The source audit fails on an unclassified or stale `*_integration_test.go`
 entrypoint. Its explicit unresolved exceptions report open coverage gaps; they
 do not make those tests pass and it does not cover other filename conventions.
+The baseline also requires the named Space Bot installation add/remove
+subtests and tombstone case using the qualified native 45/50/51 fixture; it
+does not claim coverage of the tagged Space account-ban suite.
 
 PR changes to Subscription source/migrations or protobufs also select Auth tests
 because Auth consumes Subscription events and compiles contracts. The separate
