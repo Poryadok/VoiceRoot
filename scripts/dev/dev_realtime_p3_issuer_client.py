@@ -84,12 +84,8 @@ def _trigger(value, token, action, session=None, control=None):
     finally:
         os.close(fd)
     if control is not None: control._check()
-    if action == 'p3-issue':
-        capability.verify_current(value, token)
-        session._guard()
-    else:
-        value._guard()
-    if control is not None: control._check()
+    # The typed receiver completes and rechecks its durable transition after
+    # joining this worker; reading its Journal here races that transition.
 
 
 def trigger_capability(value, token):

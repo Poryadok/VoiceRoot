@@ -1,4 +1,5 @@
 import socket
+import struct
 import threading
 import unittest
 from types import SimpleNamespace
@@ -78,6 +79,58 @@ class ClientCancellationTests(unittest.TestCase):
         self.assertEqual(left.fileno(), -1)
         with self.assertRaises(ValueError):
             control._register(right)
+
+    def test_worker_does_not_read_transitioning_journal_after_service_ok(self):
+        class Package:
+            def verify_current(self, token): return {'run_id': 1, 'run_attempt': 1}
+        class Phase:
+            def __init__(self):
+                self.record = {'status': 'ready'}
+                self.package = Package()
+                self.profile = 'creator'
+                self.fence = type('Fence', (), {'context': {'operation_id': 'media-c1-' + 'a' * 32, 'commit': 'b' * 40}})()
+                self.calls = 0
+            def _authority(self):
+                self.calls += 1
+                if self.calls > 1: raise ValueError('receiver is completing its ledger transition')
+        class Channel:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def settimeout(self, value): pass
+            def connect(self, path): pass
+            def getsockopt(self, *args): return struct.pack('3i', 1, 0, 0)
+            def sendmsg(self, data, ancillary): return len(data[0])
+            def recvmsg(self, *args): return b'OK\n', [], 0, None
+        phase = Phase()
+        with patch.object(peer.preflight, 'PeerIssuerPreflightPhase', Phase), patch.object(peer.socket, 'socket', return_value=Channel()):
+            peer.new_preflight_trigger(phase, 'token').run()
+        self.assertEqual(phase.calls, 1)
+
+    def test_realtime_capability_worker_leaves_final_guard_to_receiver(self):
+        class Package:
+            def verify_current(self, token): return {'run_id': 1, 'run_attempt': 1}
+        class Capability:
+            def __init__(self):
+                self.record = {'status': 'ready'}
+                self.token = 'token'
+                self.creator_preflight = SimpleNamespace(package=Package(), fence=SimpleNamespace(
+                    context={'operation_id': 'media-c1-' + 'a' * 32, 'commit': 'b' * 40}))
+                self.calls = 0
+            def _guard(self):
+                self.calls += 1
+                if self.calls > 1: raise ValueError('receiver is completing its ledger transition')
+        class Channel:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def settimeout(self, value): pass
+            def connect(self, path): pass
+            def getsockopt(self, *args): return struct.pack('3i', 1, 0, 0)
+            def sendmsg(self, data, ancillary): return len(data[0])
+            def recvmsg(self, *args): return b'OK\n', [], 0, None
+        value = Capability()
+        with patch.object(realtime.capability, 'RealtimeP3Capability', Capability), patch.object(realtime.socket, 'socket', return_value=Channel()):
+            realtime.new_capability_trigger(value, 'token').run()
+        self.assertEqual(value.calls, 1)
 
 
 if __name__ == '__main__':

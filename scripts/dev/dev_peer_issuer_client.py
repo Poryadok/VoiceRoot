@@ -125,8 +125,8 @@ def _trigger(phase, token, action, control=None):
     finally:
         os.close(fd)
     if control is not None: control._check()
-    phase._authority()
-    if control is not None: control._check()
+    # The receiver owns the durable transition and final authority recheck.
+    # A worker-side guard here can race that local-to-ledger transition.
 
 
 def trigger_preflight(phase, token):
