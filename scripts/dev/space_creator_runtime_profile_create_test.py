@@ -65,6 +65,19 @@ class CreateTest(unittest.TestCase):
             bad=copy.deepcopy(actual); bad['metadata'][key]=value
             with self.subTest(key=key):self.assertFalse(create._closed(bad,base))
 
+    @unittest.skipUnless(os.name=='posix','Linux Unix-socket fixture')
+    def test_socket_mode_and_directory_identity_are_bound(self):
+        with tempfile.TemporaryDirectory() as parent:
+            root=Path(parent); suffix='a'*32; directory=root/suffix; directory.mkdir(mode=0o700)
+            phase=create.Session.__new__(create.Session); phase.suffix=suffix; phase.dirfd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY)
+            self.addCleanup(os.close,phase.dirfd); phase.listener=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET); self.addCleanup(phase.listener.close)
+            phase.listener.bind(str(directory/'packet.sock')); os.chmod(directory/'packet.sock',0o600)
+            info=os.stat(directory/'packet.sock'); phase.inode=(info.st_dev,info.st_ino)
+            phase.record={'pid':os.getpid(),'start_ticks':create.common._ticks()}
+            with mock.patch.object(create,'ROOT',root):
+                phase._socket(); os.chmod(directory/'packet.sock',0o644)
+                with self.assertRaises(ValueError):phase._socket()
+
     def test_bad_dry_run_stops_before_any_create(self):
         phase=create.Session.__new__(create.Session); phase.exchanged=True; phase.listener=object(); phase.record={'status':'ready'}
         phase.pending=True; phase.completed=False; phase.initial={}; phase.media=b'ca'; phase.missing=['voice-auth-media-server-tls']
@@ -131,6 +144,18 @@ class CreateTest(unittest.TestCase):
         phase.preflight=SimpleNamespace(_ca=mock.Mock(side_effect=[ValueError('private'),{'uid':'ca'}]),_creator=mock.Mock(return_value={}))
         with self.assertRaises(create.schema.GuardLost):phase._check_current()
         phase._check_current()
+
+    def test_terminal_callback_cannot_replace_receipt(self):
+        phase=create.Session.__new__(create.Session); phase.token='token'; phase.completed=True; phase.pending=True
+        phase.proof={'scope':'original'}; phase.record={'status':'done','receipt':copy.deepcopy(phase.proof)}
+        phase.initial={}; phase.envelope={}; phase.objects={}; phase.missing=[]; phase.media=b'ca'; phase.namespace_uid='ns'; phase.effects={}
+        phase.fence=SimpleNamespace(context={'operation_id':'op','commit':'sha'}); phase.journal=SimpleNamespace(state={'steps':{create.STEP:phase.record}})
+        phase._check_current=mock.Mock(); phase._distinct_keys=mock.Mock(); phase._local=mock.Mock(); phase._uncertain=mock.Mock()
+        row={create.LEDGER:phase.record,create.EFFECTS:{}}
+        def last_guard():phase.proof={'scope':'replaced'}; return row,('uid','rv')
+        phase._guard=last_guard
+        with mock.patch.object(create.packet,'validate',return_value={}):
+            with self.assertRaises(create.CreateError):create.verify_completed(phase,'token')
 
     @unittest.skipUnless(os.name=='posix' and os.geteuid()==0 and hasattr(os,'memfd_create'),'requires disposable Linux root fixture')
     def test_sealed_fd_and_multi_fd_cleanup(self):

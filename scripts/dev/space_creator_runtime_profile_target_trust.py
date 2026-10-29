@@ -198,3 +198,38 @@ def verify_current(phase,token):
         return copy.deepcopy(receipt)
     except metadata.GuardLost: raise
     except BaseException: raise TargetTrustError('target Auth trust receipt unavailable') from None
+
+
+def verify_successor(phase,token,creator_session):
+    """Recheck trust after the exact guarded five-Secret creation successor."""
+    try:
+        import space_creator_runtime_profile_create as creator
+        import space_p3_issuer_preflight as preflight
+        if (type(phase) is not TargetTrustPhase or type(creator_session) is not creator.Session or
+                creator_session.preflight is not phase.preflight or creator_session.package is not phase.package or
+                creator_session.fence.context!=phase.fence.context or creator_session.lock!=phase.lock or
+                creator_session.namespace_uid!=phase.namespace_uid): raise ValueError()
+        phase._guard(); row,rev=phase._ledger(); local=copy.deepcopy(phase.journal.state['steps'][STEP]); receipt=local['receipt']
+        marker={k:v for k,v in local.items() if k!='receipt'}
+        if marker!=phase.record or marker.get('status')!='done' or marker.get('receipt_sha256')!=writer_cut.digest(receipt) or row.get(LEDGER)!=marker: raise ValueError()
+        original=copy.deepcopy(phase.preflight.journal.state['steps'][preflight.STEP]['receipt'])
+        try:roots=jdk.verify_completed(phase.jdk,token); issued=creator.verify_completed(creator_session,token)
+        except BaseException:raise metadata.GuardLost('target trust successor dependency unavailable') from None
+        if (writer_cut.digest(original)!=receipt['preflight_receipt_sha256'] or writer_cut.digest(roots)!=receipt['jdk_receipt_sha256'] or
+                issued.get('preflight_sha256')!=receipt['preflight_receipt_sha256'] or issued.get('operation_id')!=receipt['operation_id'] or
+                issued.get('source_sha')!=receipt['source_sha'] or issued.get('namespace_uid')!=receipt['namespace_uid']): raise ValueError()
+        trust_id,_=phase._secret('voice-media-jvm-trust','truststore.p12'); ca_id,ca=phase._secret('voice-media-ca','ca.crt')
+        ca_sha=hashlib.sha256(material._cert_der(ca)).hexdigest()
+        if (receipt['trust_secret']!=trust_id or receipt['media_ca']!=original['ca'] or
+                original['ca']!={'uid':ca_id['uid'],'resourceVersion':ca_id['resourceVersion'],'der_sha256':ca_sha}): raise ValueError()
+        phase._guard(); after,end=phase._ledger()
+        try:
+            if after!=row or end!=rev or creator_session.fence.ledger.read()!=(row,rev): raise ValueError()
+            phase._locals(after,receipt['jdk_receipt_sha256'],receipt['preflight_receipt_sha256']); creator_session._local()
+        except BaseException:raise metadata.GuardLost('target trust successor authority changed') from None
+        if (phase.record!=marker or phase.journal.state['steps'].get(STEP)!=local or
+                creator_session.record.get('receipt')!=issued or after.get(creator.LEDGER)!=creator_session.record or
+                after.get(creator.EFFECTS)!=creator_session.effects): raise metadata.GuardLost('target trust successor record changed')
+        return copy.deepcopy(receipt)
+    except metadata.GuardLost: raise
+    except BaseException: raise TargetTrustError('target Auth trust successor unavailable') from None

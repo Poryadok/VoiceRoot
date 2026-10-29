@@ -16,6 +16,7 @@ import media_operation_guard as guard
 import media_operation_journal as journals
 import resource_fencing
 import space_creator_runtime_profile_jdk as jdk
+import space_creator_runtime_profile_create as creator
 import space_creator_runtime_profile_target_trust as target
 
 
@@ -123,6 +124,26 @@ class TargetTrustTest(unittest.TestCase):
                 with mock.patch.object(target,'_input',return_value=listing), mock.patch.object(target.material,'_cert_der',return_value=b'der'):
                     receipt=phase.run('token'); self.assertNotIn('PRIVATE-SENTINEL',json.dumps(receipt))
                     self.assertEqual(target.verify_current(phase,'token'),receipt)
+                    successor=creator.Session.__new__(creator.Session); successor.preflight=pp; successor.package=pkg
+                    successor.fence=fence; successor.lock=lock; successor.namespace_uid='ns'; successor.effects={}; successor._local=mock.Mock()
+                    issued={'operation_id':context['operation_id'],'source_sha':context['commit'],'namespace_uid':'ns',
+                            'preflight_sha256':target.writer_cut.digest(source)}
+                    successor.record={'status':'done','receipt':issued}; backing.row[creator.LEDGER]=copy.deepcopy(successor.record)
+                    backing.row[creator.EFFECTS]={}
+                    with mock.patch.object(creator,'verify_completed',return_value=issued) as verify_creator, mock.patch.object(jdk,'verify_completed',return_value=roots):
+                        self.assertEqual(target.verify_successor(phase,'token',successor),receipt)
+                        verify_creator.side_effect=creator.CreateError('private')
+                        with self.assertRaises(target.metadata.GuardLost):target.verify_successor(phase,'token',successor)
+                        verify_creator.side_effect=None
+                        backing.row[creator.LEDGER]={'status':'tampered'}
+                        with self.assertRaises(target.metadata.GuardLost):target.verify_successor(phase,'token',successor)
+                        backing.row[creator.LEDGER]=copy.deepcopy(successor.record); original_fence=successor.fence; original_record=copy.deepcopy(successor.record)
+                        def late_mutation():
+                            answer=backing.read(); successor.record={'status':'tampered'}; return answer
+                        successor.fence=SimpleNamespace(context=context,ledger=SimpleNamespace(read=late_mutation))
+                        with self.assertRaises(target.metadata.GuardLost):target.verify_successor(phase,'token',successor)
+                        successor.fence=original_fence; successor.record=original_record
+                    backing.row[creator.LEDGER]=copy.deepcopy(successor.record)
                     pp._local.side_effect=[ValueError('private'),None]
                     with self.assertRaises(target.metadata.GuardLost): target.verify_current(phase,'token')
                     self.assertEqual(target.verify_current(phase,'token'),receipt)

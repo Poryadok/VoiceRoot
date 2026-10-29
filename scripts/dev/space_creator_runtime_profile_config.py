@@ -221,3 +221,21 @@ def verify_completed(phase,token):
     except BaseException: raise ConfigError('Creator config receipt unavailable') from None
     finally:
         if type(phase) is CreatorConfigPhase: phase._deadline=None
+
+
+def verify_receipt(phase,token):
+    """Authenticate the pre-drain observation without asserting current Pods."""
+    try:
+        if type(phase) is not CreatorConfigPhase: raise ValueError()
+        phase._guard(); row,rev=phase._ledger(); local=copy.deepcopy(phase.journal.state['steps'][STEP]); receipt=local['receipt']
+        marker={k:v for k,v in local.items() if k!='receipt'}
+        if (marker!=phase.record or marker.get('status')!='done' or marker.get('receipt_sha256')!=writer_cut.digest(receipt) or
+                row.get(LEDGER)!=marker or receipt.get('operation_id')!=phase.fence.context['operation_id'] or
+                receipt.get('source_sha')!=phase.fence.context['commit'] or receipt.get('namespace_uid')!=phase.namespace_uid): raise ValueError()
+        phase._package(token); phase._guard(); after,end=phase._ledger()
+        if after!=row or end!=rev: raise ValueError()
+        phase._local()
+        if phase.record!=marker or phase.journal.state['steps'].get(STEP)!=local: raise metadata.GuardLost('Creator config historical record changed')
+        return copy.deepcopy(receipt)
+    except metadata.GuardLost: raise
+    except BaseException: raise ConfigError('Creator config historical receipt unavailable') from None

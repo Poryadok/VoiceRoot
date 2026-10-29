@@ -214,7 +214,7 @@ class Session:
         if self.listener is None or self.dirfd is None or self.inode is None: raise ValueError()
         info=os.stat('packet.sock',dir_fd=self.dirfd,follow_symlinks=False)
         directory=os.fstat(self.dirfd); visible=os.stat(ROOT/self.suffix,follow_symlinks=False)
-        if ((info.st_dev,info.st_ino)!=self.inode or not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.geteuid() or
+        if ((info.st_dev,info.st_ino)!=self.inode or not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.geteuid() or stat.S_IMODE(info.st_mode)!=0o600 or
                 (directory.st_dev,directory.st_ino)!=(visible.st_dev,visible.st_ino) or not stat.S_ISDIR(visible.st_mode) or
                 directory.st_uid!=os.geteuid() or stat.S_IMODE(directory.st_mode)!=0o700 or
                 os.getpid()!=self.record['pid'] or common._ticks()!=self.record['start_ticks']): raise ValueError()
@@ -254,7 +254,7 @@ class Session:
             self.dirfd=_directory(self.suffix); self.listener=socket.socket(socket.AF_UNIX,socket.SOCK_SEQPACKET)
             self.listener.bind(str(ROOT/self.suffix/'packet.sock')); os.chmod('packet.sock',0o600,dir_fd=self.dirfd,follow_symlinks=False)
             info=os.stat('packet.sock',dir_fd=self.dirfd,follow_symlinks=False)
-            if not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.geteuid(): raise ValueError()
+            if not stat.S_ISSOCK(info.st_mode) or info.st_uid!=os.geteuid() or stat.S_IMODE(info.st_mode)!=0o600: raise ValueError()
             self.inode=(info.st_dev,info.st_ino); self.listener.listen(1); os.fsync(self.dirfd); self._check_current()
             ready=marker|{'status':'ready','socket_dev':info.st_dev,'socket_ino':info.st_ino}; self._write(record=ready)
             return copy.deepcopy(ready)
@@ -344,7 +344,8 @@ def verify_completed(phase,token):
                                 writer_cut.digest(phase.initial),phase.missing,phase.media)
         if objects!=phase.objects: raise ValueError()
         phase._distinct_keys(); phase._check_current(); row,_=phase._guard(); phase._local()
-        if row.get(LEDGER)!=phase.record or row.get(EFFECTS)!=phase.effects or phase.journal.state['steps'].get(STEP)!=phase.record: raise ValueError()
+        if (row.get(LEDGER)!=phase.record or row.get(EFFECTS)!=phase.effects or phase.journal.state['steps'].get(STEP)!=phase.record or
+                phase.record.get('receipt')!=phase.proof): raise ValueError()
         return copy.deepcopy(phase.proof)
     except BaseException as error:
         if type(phase) is Session and phase.pending:phase._uncertain()
