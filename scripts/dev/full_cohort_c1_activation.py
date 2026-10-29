@@ -291,7 +291,8 @@ def _recheck_realtime_node(supervisor,node):
 def _realtime_database(driver,preparation,token):
     """Create only an independently proven absent Realtime role/database and migrate it."""
     import full_cohort_c1_driver as driver_module
-    if type(driver) is not driver_module.C1Driver or type(preparation) is not RealtimePreparation or preparation.supervisor is not driver.supervisor:
+    if (type(driver) is not driver_module.C1Driver or not _dev(driver.supervisor) or
+            type(preparation) is not RealtimePreparation or preparation.supervisor is not driver.supervisor):
         raise ActivationError('Realtime admission unavailable')
     s=driver.supervisor; credential=None; attempted=False
     try:

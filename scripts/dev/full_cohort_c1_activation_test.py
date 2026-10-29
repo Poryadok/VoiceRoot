@@ -133,6 +133,7 @@ class RealtimePreparationTest(unittest.TestCase):
     def test_existing_realtime_role_stops_before_credential_or_secret(self):
         import full_cohort_c1_driver as driver_module
         s=activation.supervisor_module.Supervisor.__new__(activation.supervisor_module.Supervisor)
+        s.context={'project':'voice','resource':'DEV','operation_id':'media-c1-'+'a'*32}
         s.cut=SimpleNamespace(verify_drained=mock.Mock()); s._guard=mock.Mock(); s.physical=object(); s._open=mock.Mock()
         driver=driver_module.C1Driver.__new__(driver_module.C1Driver); driver.supervisor=s
         prep=activation.RealtimePreparation.__new__(activation.RealtimePreparation); prep.supervisor=s
