@@ -208,7 +208,8 @@ class Session:
                     return bool(re.fullmatch(r'/api/v1/namespaces/voice-staging/(?:configmaps|secrets|services)\?fieldSelector=metadata\.name%3D[a-z0-9][a-z0-9.-]{0,252}&limit=2',tail[1])
                         or re.fullmatch(r'/api/v1/namespaces/voice-staging/pods/voice-nats-pvc-candidate-[a-z0-9-]{1,100}:8222/proxy/jsz\?accounts=true&streams=true&consumers=true&config=true&limit=2048',tail[1]))
                 if len(tail)==5:
-                    return tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
+                    return (tail in ([kind,'-l','app=voice-nats-pvc-candidate','-o','json'] for kind in ('pods','replicasets'))
+                        or tail==['endpointslices','-l','kubernetes.io/service-name=voice-postgres','-o','json'])
                 if len(tail) not in (3,4) or tail[-2]!='-o':return False
                 if not re.fullmatch(r'[a-z0-9][a-z0-9.,-]{0,127}',tail[0]):return False
                 if len(tail)==4 and not re.fullmatch(r'[a-z0-9][a-z0-9.-]{0,252}',tail[1]):return False
@@ -227,11 +228,12 @@ class Session:
             if args not in postgres_reads and args[:len(prefixes[0])+3]==prefixes[0]+['exec','voice-postgres-0','-c']:
                 try:
                     import staging_cohort_preservation_pg
-                    identity_args=getattr(staging_cohort_preservation_pg,'IDENTITY_ARGS',None)
+                    identity_args=[getattr(staging_cohort_preservation_pg,name,None)
+                        for name in ('IDENTITY_ARGS','SPACE_IDENTITY_ARGS')]
                 except ModuleNotFoundError as error:
                     if error.name!='staging_cohort_preservation_pg':raise
-                    identity_args=None
-                identity_read=identity_args is not None and args==prefixes[0]+list(identity_args)
+                    identity_args=[]
+                identity_read=any(isinstance(value,(list,tuple)) and args==prefixes[0]+list(value) for value in identity_args)
             if args!=decode and args!=actor_read and args!=clickhouse_read and args not in postgres_reads and not identity_read and not is_dryrun and not is_get:
                 raise RuntimeError('staging_prerequisite_command_forbidden')
         # Read-only preflight may use exec for typed SQL observations. Existing
