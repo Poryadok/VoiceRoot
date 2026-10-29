@@ -244,6 +244,10 @@
     ["voice/backend/file", "TestAudioPreviewRequiresExactLiveReference"],
     ["voice/backend/file", "TestPreviewProducerAtomicReplayAndExactReferenceResolver"],
     ["voice/backend/file", "TestPreviewResolverConcurrentReferenceReleaseAndAcquire"],
+    ["voice/backend/file/internal/gifproc", "TestRealCodecAnimationTimingAndDisposal"],
+    ["voice/backend/file/internal/gifproc", "TestRealCodecOutputCapIsPermanent"],
+    ["voice/backend/file/internal/gifproc", "TestRealCodecRunningProcessCancellation"],
+    ["voice/backend/file/internal/gifproc", "TestRealCodecZeroDelayAndSingleFrame"],
     ["voice/backend/file/internal/grpcsvc", "TestMessageFileURLUsesRevocableProxyAndRechecksLiveReference"]
   ],
   "gameintegration": [

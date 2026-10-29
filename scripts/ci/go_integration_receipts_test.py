@@ -18,6 +18,26 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_file_matrix_requires_real_codec_cases(self):
+        import yaml
+        inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        package = 'voice/backend/file/internal/gifproc'
+        cases = ('TestRealCodecRunningProcessCancellation', 'TestRealCodecOutputCapIsPermanent',
+                 'TestRealCodecAnimationTimingAndDisposal', 'TestRealCodecZeroDelayAndSingleFrame')
+        for name in cases:
+            self.assertIn([package, name], inventory['file'])
+        skipped = [{'Package': package, 'Test': name, 'Action': action}
+                   for name in cases for action in ('run', 'skip')]
+        skipped.append({'Package': package, 'Action': 'pass'})
+        self.assertTrue(receipts.verify_required(skipped, [[package, name] for name in cases], 0))
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['backend-go-integration-pr']
+        install = next(step for step in job['steps'] if step.get('name') == 'Install File codec tools')
+        self.assertIn("matrix.service == 'file'", install['if'])
+        self.assertIn('ffmpeg', install['run'])
+        test = next(step for step in job['steps'] if step.get('name') == 'Go integration test (${{ matrix.service }})')
+        self.assertEqual(test['env']['GIFPROC_REAL_CODEC'], '1')
+
     def test_realtime_lifecycle_inventory_requires_both_tagged_proofs(self):
         inventory = json.loads((ROOT / 'scripts/ci/realtime_lifecycle_required.json').read_text(encoding='utf-8'))
         cases = [('lifecycle_fanout_integration_test.go', 'TestActualHubFanoutFreezeWaitsForEveryRecipientAndRejectsCapturedLateScope'),

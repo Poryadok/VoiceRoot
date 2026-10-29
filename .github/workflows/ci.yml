@@ -1236,10 +1236,16 @@ jobs:
         run: go mod tidy
       - name: Require Docker for Go integration
         run: docker info >/dev/null
+      - name: Install File codec tools
+        if: matrix.service == 'file'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
       - name: Go integration test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
           CGO_ENABLED: "0"
+          GIFPROC_REAL_CODEC: '1'
           SERVICE: ${{ matrix.service }}
           CANDIDATE_SHA: ${{ github.sha }}
         shell: bash
