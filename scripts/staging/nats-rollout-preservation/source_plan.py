@@ -315,6 +315,20 @@ def _ingress(builder, app_secret, row='ingress'):
             builder.add(row, obj, action=True)
 
 
+def frontend_objects(builder, *, deployments_only=False):
+    """Plan frontend objects using the same source and live comparison."""
+    for frontend, path, host in (('developer-portal', 'deploy/staging/developer-portal.yaml', 'developer_portal_host'),
+        ('web', 'deploy/staging/flutter-web.yaml', 'web_host'), ('admin', 'deploy/staging/admin.yaml', 'admin_host')):
+        if not (builder.root / path).exists(): continue
+        for obj in builder.documents(path, 'frontends'):
+            if deployments_only and obj['kind'] != 'Deployment': continue
+            if obj['kind'] == 'Deployment':
+                _pin_images(obj, builder.p)
+                if builder.p.get('image_pull_secret'):
+                    obj['spec']['template']['spec']['imagePullSecrets'] = [{'name': builder.p['image_pull_secret']}]
+            builder.add('frontends', obj, action=True)
+
+
 def _gateway_delegated_config(obj):
     """Validate the canonical staging delegation prerequisites before planning writes."""
     if obj['metadata']['name'] != 'voice-gateway':
@@ -499,15 +513,7 @@ def compile_plan(source, parameters, decoder, kube):
                 for obj in b.documents('deploy/livekit/ingress.yaml', 'livekit-ingress', {'__INGRESS_HOST__': b.p['livekit_host']}):
                     b.add('livekit-ingress', obj, action=True)
             else: b.skip('livekit-ingress')
-            for frontend, path, host in (('developer-portal', 'deploy/staging/developer-portal.yaml', 'developer_portal_host'),
-                ('web', 'deploy/staging/flutter-web.yaml', 'web_host'), ('admin', 'deploy/staging/admin.yaml', 'admin_host')):
-                if not (b.root / path).exists(): continue
-                for obj in b.documents(path, 'frontends'):
-                    if obj['kind'] == 'Deployment':
-                        _pin_images(obj, b.p)
-                        if b.p.get('image_pull_secret'):
-                            obj['spec']['template']['spec']['imagePullSecrets'] = [{'name': b.p['image_pull_secret']}]
-                    b.add('frontends', obj, action=True)
+            frontend_objects(b)
             if not b.rows['frontends']['objects']: b.skip('frontends')
             config = b.documents('deploy/staging/configmap-app.yaml', 'domains')[0]
             b.add('domains', config, action=p['mode'] == 'full')

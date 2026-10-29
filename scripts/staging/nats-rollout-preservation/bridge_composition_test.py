@@ -152,6 +152,9 @@ class CompositionTests(unittest.TestCase):
                     return {'operation':op,'target':value['target']}
                 actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={};actions.tt_session=Mock()
                 actions.tt_session.context={'images':{'voice-gateway/gateway':old['voice-gateway/gateway']}}
+                if mode=='full':
+                    actions.tt_session.context['images'].update({bridge_root.HUB+'/nats':snapshots[bridge_root.HUB]['spec']['template']['spec']['containers'][0]['image'],
+                        bridge_root.HUB+'/nats-config-renderer':approved['images']['nats-hub-config-renderer']})
                 bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
                 import realtime_bootstrap
                 from nats_contract_plan import digest
@@ -178,6 +181,9 @@ class CompositionTests(unittest.TestCase):
                     patches.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
                     patches.enter_context(patch('commands.capture',side_effect=capture))
                     patches.enter_context(patch.object(compiler,'capture',side_effect=capture))
+                    # This fixture tests compilation with its own producer; the
+                    # bridge Kube above only models marker reads.
+                    patches.enter_context(patch.object(compiler,'prebootstrap_image_inventory',return_value={'voice-gateway/gateway':old['voice-gateway/gateway']}))
                     patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
                     patches.enter_context(patch.object(actor_root,'preflight',return_value=None))
                     patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))

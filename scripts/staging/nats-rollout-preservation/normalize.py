@@ -63,6 +63,7 @@ def normalize_first_install(kube,stage,documents,target,plan,renderer_authority=
     updated_plan['spec_sha256']={f'{k}/{n}':digest(gis.semantic(o)) for o in normalized for k,n in [gis._identity(o)]}
     wanted=copy.deepcopy(target);wanted['input_template_hashes']=dict(target['template_hashes'])
     wanted['template_hashes']['voice-gameintegration']=digest(new_deployment['spec']['template'])
+    wanted['gis_first_install_normalized_sha256']=gis.normalized_binding(updated_plan)
     return wanted,updated_plan
 
 def image_only_documents(stage,documents,target,renderer_authority=None):

@@ -48,6 +48,14 @@ class NormalizeFirstInstallTests(unittest.TestCase):
     def test_create_only_normalized_pair_pins_actual_service_allocation(self):
         plan,target,stage=inputs();kube=Kube()
         result,owned=normalize.normalize_first_install(kube,stage,[],target,plan)
+        gis.validate_normalized_binding(result,owned)
+        for fault in ('service','deployment','allocation'):
+            changed=copy.deepcopy(owned)
+            if fault=='service':next(o for o in changed['objects'] if o['kind']=='Service')['spec']['selector']={'app':'other'}
+            if fault=='deployment':next(o for o in changed['objects'] if o['kind']=='Deployment')['spec']['replicas']=2
+            if fault=='allocation':changed['service_allocation']='other'
+            with self.subTest(fault=fault),self.assertRaisesRegex(gis.Blocked,'gis_first_install_normalized_binding_changed'):
+                gis.validate_normalized_binding(result,changed)
         self.assertEqual(result['input_template_hashes'],target['template_hashes'])
         self.assertEqual(result['template_hashes']['voice-gameintegration'],target['template_hashes']['voice-gameintegration'])
         self.assertEqual(owned['service_allocation'],'server')

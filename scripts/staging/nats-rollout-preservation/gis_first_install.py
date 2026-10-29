@@ -786,6 +786,19 @@ def _ready_service_endpoints(kube, service, deployment_uid, *, namespace=NS):
     return sorted(result, key=lambda row: (row['slice_uid'], row['pod_uid']))
 
 
+def normalized_binding(plan):
+    return digest({'objects':plan['objects'],'service_allocation':plan.get('service_allocation')})
+
+
+def validate_normalized_binding(target, plan):
+    try:
+        if (target.get('gis_first_install_normalized_sha256') != normalized_binding(plan)
+                or target.get('gis_first_install_sha256') != plan['source_plan_sha256']):
+            raise ValueError()
+    except (KeyError,TypeError,ValueError):
+        raise Blocked('gis_first_install_normalized_binding_changed') from None
+
+
 def transition_receipt(plan, ready, *, source_ci, custody, target_mode):
     """Bind the 22-to-23 addition to the database, NATS and workload proofs."""
     validate_prerequisite_receipt(plan.get('prerequisite_receipt'), plan)
@@ -852,8 +865,10 @@ def validate_transition_receipt(receipt, state):
     if custody['baseline_workload_count']==24:
         snapshots=gis_plan.get('baseline_snapshots')
         validate_baseline_snapshots(snapshots)
-        if digest(snapshots)!=custody['baseline_snapshots_sha256']:
+        if (snapshots!=state.get('context',{}).get('original_snapshots')
+                or digest(snapshots)!=custody['baseline_snapshots_sha256']):
             raise Blocked('gis_first_install_transition_custody_invalid')
+        validate_normalized_binding(state.get('target',{}),gis_plan)
     ready = receipt['ready']
     if (not isinstance(ready, dict) or set(ready) != {'schema', 'namespace', 'service_uid',
         'service_spec_sha256', 'deployment_uid', 'deployment_spec_sha256', 'endpoints'}

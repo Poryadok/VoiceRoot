@@ -492,6 +492,8 @@ def execute_gis_first_install(kube,base,state,stage,journal):
     """Collect prerequisites and create only the paused GIS pair before standard apply."""
     import gis_prerequisite
     import gis_first_install as gis
+    gis.validate_normalized_binding(state['target'],state['gis_first_install'])
+    baseline=state['context']['original_snapshots']
     custody=state.get('custody')
     if not isinstance(custody,dict) or custody.get('verified') is not True:
         raise Blocked('gis_first_install_preservation_custody_missing')
@@ -505,12 +507,12 @@ def execute_gis_first_install(kube,base,state,stage,journal):
         'archive_sha256':state['cut']['manifest']['archive_sha256'],
         'manifest_sha256':state['cut']['manifest_sha256'],
         'census_sha256':state['cut']['census_sha256'],
-        'baseline_workload_count':len(state['context']['snapshots']),
-        'baseline_snapshots_sha256':gis.digest(state['context']['snapshots']),
+        'baseline_workload_count':len(baseline),
+        'baseline_snapshots_sha256':gis.digest(baseline),
         'off_node_verified':True,
     }
-    gis.validate_baseline_snapshots(state['context']['snapshots'])
-    state['gis_first_install']['baseline_snapshots']=copy.deepcopy(state['context']['snapshots'])
+    gis.validate_baseline_snapshots(baseline)
+    state['gis_first_install']['baseline_snapshots']=copy.deepcopy(baseline)
     state['gis_first_install']['custody']=copy.deepcopy(custody_binding)
     state['gis_first_install']['custody_binding_sha256']=gis.digest(custody_binding)
     def save_gis_plan(value):
@@ -549,6 +551,9 @@ def rollback_gis_first_install(kube,base,state,journal):
 
 
 def authorize(kube,base,state,off_node_archive_sha,off_node_manifest_sha,contract,*,authorization_deadline=None,expired_authority=None):
+    if state.get('gis_first_install') is not None:
+        import gis_first_install as gis
+        gis.validate_normalized_binding(state['target'],state['gis_first_install'])
     if state.get('gis_binding') is not None and expired_authority is not None:
         raise Blocked('gis_existing_recovery_unsupported')
     def current_deadline():

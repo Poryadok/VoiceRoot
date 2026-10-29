@@ -81,7 +81,7 @@ def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
         return after
     except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_actor_changed') from None
 
-def verify_bootstrap_candidate_images(session,images,renderer_authority,first_install):
+def verify_bootstrap_candidate_images(session,images,renderer_authority,first_install,ordinary_target=None):
     """Reject candidate pins outside the independently selected source images."""
     allowed=dict(images);renderer={}
     if renderer_authority is not None:
@@ -102,6 +102,8 @@ def verify_bootstrap_candidate_images(session,images,renderer_authority,first_in
         expected.update(renderer)
         if not any(key.startswith('voice-gameintegration/') for key in expected) or candidate!=expected:
             raise Blocked('realtime_bootstrap_candidate_changed')
+    elif ordinary_target is not None:
+        if candidate!={**ordinary_target,**renderer}:raise Blocked('realtime_bootstrap_candidate_changed')
 
 class Actions:
     def resource_scope(self,request):
@@ -427,7 +429,9 @@ class Actions:
         if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
             import realtime_bootstrap
             if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
-            verify_bootstrap_candidate_images(self.tt_session,images,renderer_authority,request.get('gis_first_install') is True)
+            first_install=request.get('gis_first_install') is True
+            ordinary_target=None if first_install else compiler.prebootstrap_image_inventory(workspace,parameters,kube)
+            verify_bootstrap_candidate_images(self.tt_session,images,renderer_authority,first_install,ordinary_target)
             realtime_receipt=realtime_bootstrap.run_prepare(self,request,approved,execution,workspace,stage)
             if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
             if realtime_receipt is not None:
