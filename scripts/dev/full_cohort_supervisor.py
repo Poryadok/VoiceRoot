@@ -6,6 +6,7 @@ declares a rollout complete.  Later phases consume the verified objects, not
 an externally supplied description of package or database state.
 """
 import copy
+import os
 import re
 
 import frontend_runtime_executor
@@ -25,6 +26,44 @@ import story_media_backup
 
 class SupervisorError(RuntimeError):
     pass
+
+
+class OperationBootstrap:
+    """Own a new fixed private operation journal through its single begin attempt."""
+    def __init__(self,check,lock,namespace_uid):
+        if (type(check) is not resource_fencing.ResourceCheck or check.endpoint!=media_backup_upload_runner.TT or
+                not isinstance(namespace_uid,str) or not namespace_uid):
+            raise SupervisorError('bootstrap authority invalid')
+        context=copy.deepcopy(check.context);resource_fencing.validate_context(context)
+        operation=context['operation_id']
+        if (context['actor']!='scheduled_devops' or not re.fullmatch(r'media-c[12]-[a-f0-9]{32}',operation)):
+            raise SupervisorError('bootstrap operation invalid')
+        self.check,self.lock,self.namespace_uid=check,copy.deepcopy(lock),namespace_uid
+        self.context=context;self.started=False;self.supervisor=None
+        with story_media_backup.private_directory(media_backup_upload_runner.ROOT) as directory:
+            os.mkdir(operation,0o700,dir_fd=directory);os.fsync(directory)
+        root=media_backup_upload_runner.ROOT/operation
+        with story_media_backup.private_directory(root):
+            self.journal=media_operation_journal.Journal(root/'journal',{
+                'resource_context':copy.deepcopy(context),'namespace_uid':namespace_uid,
+                'kube_lock':copy.deepcopy(lock),'cohort_route_mode':'full-cohort-v1'})
+        self.client=frontend_runtime_executor.KubectlTransport(self.journal)
+        self.fence=resource_fencing.Fence(copy.deepcopy(context),check,resource_fencing.KubeLedger(self.client),check.mark_uncertain)
+        self._identity=(self.check,self.journal,self.client,self.fence,self.fence.ledger)
+        self._fixed=(copy.deepcopy(self.context),copy.deepcopy(self.lock),self.namespace_uid,copy.deepcopy(self.journal.intent))
+
+    def begin(self):
+        if self.started:raise SupervisorError('bootstrap already attempted; reconcile')
+        if (any(a is not b for a,b in zip((self.check,self.journal,self.client,self.fence,self.fence.ledger),self._identity)) or
+                (self.context,self.lock,self.namespace_uid,self.journal.intent)!=self._fixed or
+                self.journal.state.get('intent')!=self._fixed[3] or self.journal.poisoned or
+                self.journal.dirfd is None or self.journal.lockfd is None or self.check.context!=self.context or
+                self.fence.context!=self.context or self.fence.check is not self.check or
+                self.client.journal is not self.journal or self.fence.ledger.client is not self.client):
+            raise SupervisorError('bootstrap identity changed')
+        self.started=True
+        self.supervisor=begin_operation(self.journal,self.fence,self.client,self.lock,self.namespace_uid)
+        return self.supervisor
 
 
 def begin_operation(journal,fence,client,lock,namespace_uid):

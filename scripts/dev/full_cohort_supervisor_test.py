@@ -78,6 +78,28 @@ class SupervisorTest(unittest.TestCase):
         self.assertEqual(journal.path,self.operation/'go-migration-chat_db-journal')
         with self.assertRaises(supervisor.SupervisorError):subject._open_go('../foreign')
 
+    def test_bootstrap_creates_fixed_immutable_intent_and_never_replays(self):
+        other=copy.deepcopy(self.base.context);other['operation_id']='media-c1-'+'f'*32
+        check=type(self.fence.check)(other)
+        bootstrap=supervisor.OperationBootstrap(check,self.base.lock,'ns')
+        self.addCleanup(bootstrap.journal.close)
+        self.assertEqual(bootstrap.journal.path,self.root/other['operation_id']/'journal')
+        self.assertEqual(bootstrap.journal.intent['cohort_route_mode'],'full-cohort-v1')
+        self.assertEqual(bootstrap.journal.intent['kube_lock'],self.base.lock)
+        with mock.patch.object(supervisor,'begin_operation',side_effect=RuntimeError('unknown')) as begin:
+            with self.assertRaises(RuntimeError):bootstrap.begin()
+            with self.assertRaises(supervisor.SupervisorError):bootstrap.begin()
+            begin.assert_called_once()
+
+    def test_bootstrap_refuses_changed_lock_before_begin(self):
+        other=copy.deepcopy(self.base.context);other['operation_id']='media-c1-'+'e'*32
+        bootstrap=supervisor.OperationBootstrap(type(self.fence.check)(other),self.base.lock,'ns')
+        self.addCleanup(bootstrap.journal.close)
+        bootstrap.lock['metadata']['resourceVersion']='changed'
+        with mock.patch.object(supervisor,'begin_operation') as begin:
+            with self.assertRaises(supervisor.SupervisorError):bootstrap.begin()
+            begin.assert_not_called()
+
     def test_begin_routes_only_fixed_operation_and_requires_immutable_mode(self):
         with mock.patch.object(self.fence,'begin_image_only') as c1, \
              mock.patch.object(self.fence,'begin_with_predecessor') as c2:
