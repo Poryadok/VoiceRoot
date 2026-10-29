@@ -18,6 +18,11 @@ import full_cohort_go_migration as migration
 
 
 class RenderTest(unittest.TestCase):
+    def test_server_start_compares_aware_instants_not_session_timezone(self):
+        self.assertTrue(migration._same_start('2026-10-29T12:00:00+00:00', '2026-10-29T15:00:00+03:00'))
+        self.assertFalse(migration._same_start('2026-10-29T12:00:00+00:00', '2026-10-29T12:00:01+00:00'))
+        self.assertFalse(migration._same_start('2026-10-29T12:00:00', '2026-10-29T12:00:00+00:00'))
+
     def test_private_immutable_secret_contains_only_password_and_no_tls_downgrade(self):
         credential = {'role': 'voice', 'sslmode': 'disable', 'password': 'fixture-password'}
         obj = migration._secret('media-c1-' + 'a' * 32, 'chat_db', credential, '10.0.0.1')
@@ -268,6 +273,12 @@ class LoginTest(unittest.TestCase):
                 credential['password'] = 'incorrect'
                 with self.assertRaises(migration.MigrationError):
                     migration._login('postgres', credential, source, lambda: None)
+                subprocess.run(['docker', 'exec', name, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
+                                '-d', 'postgres', '-c', "CREATE ROLE chat_login LOGIN PASSWORD 'fixture-only'; "
+                                "ALTER ROLE chat_login SET timezone='Europe/Moscow'"], check=True,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                credential['role'] = 'chat_login'; credential['password'] = 'fixture-only'
+                self.assertEqual(migration._login('postgres', credential, source, lambda: None)['role'], 'chat_login')
         subprocess.run(['docker', 'exec', name, 'psql', '-X', '-q', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres',
                         '-d', 'postgres', '-c', 'CREATE TABLE public.schema_migrations(version bigint,dirty boolean); '
                         'INSERT INTO public.schema_migrations VALUES(1,false)'], check=True,
@@ -425,7 +436,7 @@ class SecretSnapshotTest(unittest.TestCase):
             job.input['files']['000001_init.up.sql'] = b'SELECT 2;'
             with self.assertRaises(migration.MigrationError): job._guard()
 
-    def _job_flow(self, lost_reply, dirty=False):
+    def _job_flow(self, lost_reply, dirty=False, pending_drift=False):
         files = {'000001_init.up.sql': b'SELECT 1;', '000002_next.up.sql': b'SELECT 2;'}
         source = self.proof['source']
         secret_receipt = {'name': 'voice-go-input-chat-' + 'a' * 32, 'uid': 'secret-uid', 'resourceVersion': '7'}
@@ -444,7 +455,7 @@ class SecretSnapshotTest(unittest.TestCase):
         before = {'history': [{'version': 1, 'dirty': False}]}
         observed = {'databases': ['chat_db'], 'metadata': {'catalog': {'chat_db': before},
                     'migrations': {'chat_db': plan}}}
-        state = {'cm': None, 'job': None, 'pod': None, 'bound': False, 'finished': False, 'posts': 0}
+        state = {'cm': None, 'job': None, 'pod': None, 'bound': False, 'finished': False, 'posts': 0, 'pending_checks': 0}
         def call(*args, body=None):
             if args[:2] in (('get', 'configmaps'), ('get', 'jobs')): return {'items': []}
             if args[:2] == ('get', 'configmap'): return state['cm']
@@ -478,7 +489,10 @@ class SecretSnapshotTest(unittest.TestCase):
             state['bound'] = True
         self.cut.bind_migration = bind
         self.cut.migration_history = []
-        self.cut.verify_migration_pending = lambda: self.assertTrue(state['bound'])
+        def pending_check():
+            self.assertTrue(state['bound']); state['pending_checks'] += 1
+            if pending_drift and state['pending_checks'] == 2: raise RuntimeError('writer appeared')
+        self.cut.verify_migration_pending = pending_check
         self.cut.verify_migration_running = lambda: self.assertTrue(state['bound'])
         self.cut.finish_migration = lambda: state.update(finished=True)
         def accept_cleanup():
@@ -497,11 +511,11 @@ class SecretSnapshotTest(unittest.TestCase):
              mock.patch.object(migration, 'verify_writer_pod', return_value={'uid': 'pod-uid', 'ip': '10.0.0.4'}), \
              mock.patch.object(migration, '_private_kube', return_value={}):
             phase = migration.Migration(self.phase)
-            if lost_reply or dirty:
+            if lost_reply or dirty or pending_drift:
                 with self.assertRaises(migration.MigrationError): phase.run()
                 self.assertEqual(self.base.ledger.row['status'], 'uncertain')
                 with self.assertRaises(migration.MigrationError): phase.run()
-                self.assertEqual(state['posts'], 1)
+                self.assertEqual(state['posts'], 0 if pending_drift else 1)
                 return
             result = phase.run()
             self.assertTrue(state['bound'] and state['finished'])
@@ -528,3 +542,6 @@ class SecretSnapshotTest(unittest.TestCase):
 
     def test_dirty_terminal_ledger_holds_and_never_retries(self):
         self._job_flow(False, dirty=True)
+
+    def test_second_pending_check_refuses_new_writer_before_post(self):
+        self._job_flow(False, pending_drift=True)
