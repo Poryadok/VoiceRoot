@@ -9,6 +9,17 @@ import staging_p3_prerequisites as p3
 
 
 class StagingP3Contract(unittest.TestCase):
+    def test_private_semantic_retains_payload_and_ownership_controls(self):
+        obj={'apiVersion':'v1','kind':'Secret','metadata':{'name':'voice-realtime-principal-signing',
+              'namespace':'voice-staging','uid':'first','resourceVersion':'1','creationTimestamp':'now',
+              'annotations':{'voice.poryadok.io/prerequisites-operation':'operation'}},'type':'Opaque','data':{'current.pem':'YWJj'}}
+        first=p3.private_semantic(obj)
+        changed=copy.deepcopy(obj); changed['metadata']['uid']='second'; changed['metadata']['resourceVersion']='2'
+        self.assertEqual(first,p3.private_semantic(changed))
+        changed['data']['current.pem']='eHl6'; self.assertNotEqual(first,p3.private_semantic(changed))
+        changed=copy.deepcopy(obj); changed['metadata']['finalizers']=['foreign']
+        self.assertNotEqual(first,p3.private_semantic(changed))
+
     def test_source_contract_binds_exact_approved_source_and_file(self):
         root=Path(__file__).resolve().parents[3]; raw=(root/'deploy/staging/services.yaml').read_bytes()
         approved={'source_sha':'a'*40,'source_files':{'deploy/staging/services.yaml':hashlib.sha256(raw).hexdigest()}}
@@ -128,6 +139,22 @@ class StagingP3Contract(unittest.TestCase):
              patch.object(parent,'submit_effect',side_effect=submit,create=True),patch.object(parent,'record_done',side_effect=done):
             p3.execute(session)
         self.assertEqual(events,[(action,'p3',ident) for ident in ids for action in ('pending','submit','done')])
+        import stage_runtime
+        payload={'apiVersion':'v1','kind':'Secret','metadata':{'name':ids[0].split('/')[1],'namespace':'voice-staging',
+                 'annotations':{'voice.poryadok.io/prerequisites-operation':session.operation}},'type':'Opaque','data':{'current.pem':'eA==','next.pem':'eQ=='}}
+        raw=json.dumps(payload,sort_keys=True,separators=(',',':')).encode()
+        plan['objects'][0]['payload_sha256']=hashlib.sha256(raw).hexdigest()
+        plan['objects'][0]['desired_sha256']=resource_claim.digest(p3.private_semantic(payload))
+        plan['effects'][0].update(plan['objects'][0]); current=copy.deepcopy(payload)
+        current['metadata'].update(uid='owned',resourceVersion='17')
+        observation={'kind':'Secret','name':payload['metadata']['name'],'namespace':'voice-staging','uid':'owned',
+                     'resourceVersion':'17','semantic_sha256':resource_claim.digest(p3.private_semantic(current))}
+        with patch.object(parent,'require_child',return_value=plan),patch.object(parent,'load_payload',return_value=raw), \
+             patch.object(stage_runtime.Kube,'get',return_value=current):
+            self.assertEqual(p3.verify_effect(session,ids[0],observation),observation)
+            wrong=copy.deepcopy(current); wrong['data']['current.pem']='eg=='
+            with patch.object(stage_runtime.Kube,'get',return_value=wrong),self.assertRaises(p3.PrerequisiteError):
+                p3.verify_effect(session,ids[0],observation)
         preserved=copy.deepcopy(plan); preserved['effects']=[]
         for obj in objects:
             observed={'kind':obj['kind'],'name':obj['name'],'namespace':obj['namespace'],

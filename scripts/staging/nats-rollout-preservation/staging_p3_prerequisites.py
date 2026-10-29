@@ -65,6 +65,19 @@ def source_contract(approved,raw):
     except Exception: raise PrerequisiteError('staging P3 source contract invalid') from None
 
 
+def private_semantic(obj):
+    """Retain full private object semantics while removing only server identity."""
+    try:
+        row=copy.deepcopy(obj)
+        if not isinstance(row,dict) or not isinstance(row.get('metadata'),dict): raise ValueError()
+        if row['metadata'].get('deletionTimestamp') is not None: raise ValueError()
+        row.pop('status',None)
+        for key in ('uid','resourceVersion','generation','creationTimestamp','managedFields'):
+            row['metadata'].pop(key,None)
+        return row
+    except Exception: raise PrerequisiteError('staging P3 object invalid') from None
+
+
 def mark_operation(objects,operation):
     """Build private payloads; caller must derive operation from the root session."""
     try:
@@ -260,6 +273,53 @@ def execute(session):
         observation=parent.submit_effect(session,'p3',ident)
         parent.record_done(session,'p3',ident,observation)
         session.check()
+
+
+def verify_effect(session,effect_id,observation):
+    """Freshly verify one parent-owned create response against private intent."""
+    import resource_claim
+    import staging_prerequisites as parent
+    from stage_runtime import Kube
+    try:
+        if type(session) is not resource_claim.Session: raise ValueError()
+        plan=validate_plan_shape(parent.require_child(session,'p3'))
+        if plan['operation']!=session.operation: raise ValueError()
+        effects=[row for row in plan['effects'] if row['id']==effect_id]
+        if len(effects)!=1: raise ValueError()
+        effect=effects[0]; kind=effect['kind']; name=effect['name']
+        fields={'kind','name','namespace','uid','resourceVersion','semantic_sha256'}|({'generation'} if kind=='Deployment' else set())
+        if (not isinstance(observation,dict) or set(observation)!=fields
+            or (observation['kind'],observation['name'],observation['namespace'])!=(kind,name,NAMESPACE)
+            or not all(isinstance(observation[k],str) and observation[k] for k in ('uid','resourceVersion'))): raise ValueError()
+        raw=parent.load_payload(session,'p3',effect_id)
+        if hashlib.sha256(raw).hexdigest()!=effect['payload_sha256']: raise ValueError()
+        def unique(pairs):
+            result={}
+            for key,value in pairs:
+                if key in result: raise ValueError()
+                result[key]=value
+            return result
+        desired=json.loads(raw,object_pairs_hook=unique)
+        if json.dumps(desired,sort_keys=True,separators=(',',':'),allow_nan=False).encode()!=raw: raise ValueError()
+        expected=private_semantic(desired)
+        if resource_claim.digest(expected)!=effect['desired_sha256']: raise ValueError()
+        session.check()
+        with resource_claim.command_scope(session.check): actual=Kube().get(kind.lower(),name)
+        meta=actual['metadata']; observed=private_semantic(actual)
+        if (actual.get('kind')!=kind or meta.get('name')!=name or meta.get('namespace')!=NAMESPACE
+            or meta.get('uid')!=observation['uid'] or resource_claim.digest(observed)!=observation['semantic_sha256']): raise ValueError()
+        if kind=='Deployment':
+            if (type(observation['generation']) is not int or observation['generation']<1
+                or meta.get('generation')!=observation['generation']): raise ValueError()
+        elif meta.get('resourceVersion')!=observation['resourceVersion']: raise ValueError()
+        if kind=='Service':
+            service_allocation(desired,actual)
+            observed['spec'].pop('clusterIP'); observed['spec'].pop('clusterIPs')
+        if observed!=expected: raise ValueError()
+        session.check()
+        if parent.require_child(session,'p3')!=plan: raise ValueError()
+        return copy.deepcopy(observation)
+    except Exception: raise PrerequisiteError('staging P3 effect readback invalid') from None
 
 
 def material_objects(values):
