@@ -210,6 +210,54 @@ class NativeSpaceTests(unittest.TestCase):
                         owner.save(effect,original)
                         self.assertEqual(owner.load_native_space_rehearsal(session),record)
                         with self.assertRaisesRegex(Exception,'attempt_invalid'):owner.native_space_rehearsal(session)
+                        # Real CMS and a second native clone from its extracted
+                        # archive. Only remote retrieval/NATS/paused admission
+                        # remain external fixtures; retained native proof is real.
+                        import bridge_root
+                        import github_custody
+                        import staging_cohort_preservation_auxiliary as auxiliary
+                        runtime=owner._runtime_base(session);owner.private._private_directory(runtime)
+                        recovery=root/'installed'/'recovery';owner.private._private_directory(recovery)
+                        generated=original_run(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-nodes',
+                            '-keyout',str(recovery/'recovery-key.pem'),'-out',str(recovery/'recovery-cert.pem'),
+                            '-subj','/CN=isolated-native-cohort-test','-days','1'],
+                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+                        self.assertEqual(generated.returncode,0)
+                        for filename in ('recovery-key.pem','recovery-cert.pem'):(recovery/filename).chmod(0o600)
+                        owner.private._private_write(runtime/'rollout-before.tar',b'native-nats-fixture-only')
+                        manifest={'archive_sha256':hashlib.sha256(b'native-nats-fixture-only').hexdigest()}
+                        owner._write(runtime/'rollout-before-manifest.json',manifest)
+                        cut={'manifest':manifest,'manifest_sha256':owner._file_identity(runtime/'rollout-before-manifest.json')['sha256'],
+                            'census_sha256':'f'*64}
+                        binding=owner._encrypt(session,{'dispatcher_run_id':123,'head_sha':revision},cut)
+                        owner._write(base/'native-cut.json',cut);owner._write(base/'paused.json',{'external_paused_fixture':True,'events':[]})
+                        state=owner._state(session);state.update(status='AWAITING_OFF_NODE',cipher_binding=binding,
+                            initial_resource_fence=session.binding(),cut=cut,events=[],contract={},
+                            provenance={'external_nats_source_fixture':True})
+                        owner._save_state(session,state)
+                        with patch.object(bridge_root.root_cli,'code_binding',return_value={}):
+                            actions=bridge_root.Actions(source/'scripts'/'staging')
+                        actions.tt_session=session
+                        request={'operation':session.operation,'action':'authorize','token':'fixture-only','artifact_id':42}
+                        custody={'schema':'voice-nats-custody-v1','destination':'github:Poryadok/VoiceRoot',
+                            **{key:binding[key] for key in ('operation','challenge','run_id','head_sha','cipher_sha256','cipher_bytes')},
+                            'artifact_id':42,'verified':True}
+                        with patch.object(github_custody,'verify_artifact',return_value=custody) as remote,\
+                            patch.object(owner,'_native_readback',return_value={'external_nats_fixture':True}),\
+                            patch.object(auxiliary,'resume',return_value=None):
+                            qualified=owner.qualify_offnode(actions,request)
+                            self.assertEqual(owner.qualify_offnode(actions,request),qualified)
+                            self.assertEqual(remote.call_count,1)
+                        authority=owner.load_native_authority(session)
+                        self.assertEqual(authority['original'],original_identity)
+                        self.assertEqual(authority['preservation_sha256'],owner.digest(qualified))
+                        self.assertNotEqual(authority['rehearsal']['attempt'],record['attempt'])
+                        self.assertNotEqual(authority['rehearsal']['clone_identity']['system_identifier'],original_identity['engine']['system_identifier'])
+                        offnode=owner._read(base/'offnode-restore.json')
+                        self.assertEqual(authority['rehearsal'],offnode['proof']['native_space'])
+                        owner.save(base/'offnode-restore.json',{**offnode,'status':'PENDING'})
+                        with self.assertRaisesRegex(Exception,'cohort_qualification_changed'):owner.load_native_authority(session)
+                        owner.save(base/'offnode-restore.json',offnode)
                     live=docker('exec',cid,'psql','-X','-qAt','-U','postgres','-d','space_db','-c',
                         "SELECT version FROM public.schema_migrations; SELECT name FROM public.spaces")
                     self.assertEqual(live.splitlines(),[b'24',b'original'])

@@ -172,3 +172,14 @@ Build and final logs are retained under tmp/preservation-native. The image is
 test-owned, not a CI publication. Source/Kubernetes/CI admission boundaries are
 still explicit fixtures; off-node-native/live Job composition and independent
 review of the native producer remain required before activation.
+
+The same immutable image now also passes the real off-node-native composition
+(2/2, 74.167s): CMS encryption/decryption, extracted archive, a distinct second
+native PostgreSQL clone, original verifier and cleanup, then the actual
+load_native_authority with fresh original database identity. No native retained
+proof or qualified loader is mocked in this path. Repeated qualification does
+not repeat remote/restore work; a PENDING off-node record is refused. GitHub
+retrieval, native NATS bytes, source/Kubernetes/paused admission and absence of
+an auxiliary remain explicit external fixtures. The final retained log is
+tmp/preservation-native/native-25bd-offnode.log. Whole Stage inspect-before-cut
+and live Job integration remain separate and are not asserted by this result.
