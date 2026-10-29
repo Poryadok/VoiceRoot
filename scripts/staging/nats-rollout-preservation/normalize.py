@@ -97,11 +97,26 @@ def image_only_documents(stage,documents,target,renderer_authority=None):
     updated['manifest_sha256']=digest(rows)
     return rows,updated
 
+def _verify_gis_normalization(kube,stage,binding):
+    import commands,resource_claim,gis_existing_update
+    session=getattr(commands.authority_guard,'__self__',None)
+    if isinstance(session,resource_claim.Session) and session.check().get('cohort_preservation_sha256') is not None:
+        import realtime_bootstrap,staging_cohort_preservation,staging_prerequisites
+        protected=staging_cohort_preservation.capture_final_stage(session)
+        if (staging_prerequisites.load_gis_authority(session)!=binding
+            or realtime_bootstrap._stage_view(stage)!=realtime_bootstrap._stage_view(protected)
+            or stage.original_snapshots!=protected.original_snapshots):
+            raise Blocked('gis_existing_normalization_binding_changed')
+        gis_existing_update.verify_phase(binding,kube,'paused-old')
+        return True
+    gis_existing_update.verify_phase(binding,kube,'active')
+    return False
+
+
 def normalize_target(kube,stage,documents,target,renderer_authority=None,*,gis_target_sink=None,gis_binding=None):
     if gis_target_sink is not None:
         if gis_binding is None:raise Blocked('gis_existing_normalization_binding_required')
-        import gis_existing_update
-        gis_existing_update.verify_phase(gis_binding,kube,'active')
+        gis_paused=_verify_gis_normalization(kube,stage,gis_binding)
     receipt={'target':target,'pvc':{'name':stage.expected['source_claim']}}
     rows=paused_documents(documents,receipt)
     names={(r['kind'],r['metadata']['name']) for r in rows}
@@ -146,7 +161,8 @@ def normalize_target(kube,stage,documents,target,renderer_authority=None,*,gis_t
         dep_rows=[row for row in normalized if row.get('kind')=='Deployment' and row.get('metadata',{}).get('name')=='voice-gameintegration']
         service_rows=[row for row in normalized if row.get('kind')=='Service' and row.get('metadata',{}).get('name')=='voice-gameintegration']
         if len(dep_rows)>1 or len(service_rows)>1:raise Blocked('gis_existing_normalization_scope_invalid')
-        deployment=dep_rows[0] if dep_rows else copy.deepcopy(stage.snapshots['voice-gameintegration'])
+        deployment=dep_rows[0] if dep_rows else copy.deepcopy(
+            stage.original_snapshots['voice-gameintegration'] if gis_paused else stage.snapshots['voice-gameintegration'])
         service_live=kube.get('service','voice-gameintegration')
         service=service_rows[0] if service_rows else service_live
         if (deployment.get('metadata',{}).get('uid')!=stage.snapshots['voice-gameintegration']['metadata']['uid']
@@ -156,7 +172,7 @@ def normalize_target(kube,stage,documents,target,renderer_authority=None,*,gis_t
                 or service_live.get('metadata',{}).get('uid')!=gis_binding['service_uid']
                 or gis.semantic(service_live)!=gis_binding['service']):
             raise Blocked('gis_existing_normalization_identity_changed')
-        gis_existing_update.verify_phase(gis_binding,kube,'active')
+        _verify_gis_normalization(kube,stage,gis_binding)
         pair={'deployment_mode':'selected-paused' if dep_rows else 'preserved-active',
               'deployment_uid':deployment['metadata']['uid'],'service_uid':service['metadata']['uid'],
               'deployment':gis.semantic(deployment),'service':gis.semantic(service)}
