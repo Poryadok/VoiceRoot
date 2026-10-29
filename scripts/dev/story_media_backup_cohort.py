@@ -23,7 +23,8 @@ def _canonical(value):
                       allow_nan=False).encode('ascii')
 
 
-def _members(binding, databases):
+def _members_shape(binding, databases):
+    """Validate archive structure; fixed callers must separately bind authority."""
     full = binding.get('full_catalog') if isinstance(binding,dict) else None
     if full is not None:
         if (not isinstance(full,dict) or set(full)!={'receipt_sha256','properties'} or
@@ -38,7 +39,6 @@ def _members(binding, databases):
             or any(not isinstance(db, str) or (full is None and db not in ALLOWED_DATABASES) for db in databases)
             or databases != sorted(set(databases)) or binding.get('databases') != databases
             or not isinstance(binding.get('operation_id'), str)
-            or not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', binding['operation_id'])
             or not isinstance(binding.get('snapshot_id'), str)
             or not re.fullmatch(r'capture-[0-9a-f]{32}', binding['snapshot_id'])
             or not isinstance(binding.get('source_sha'), str) or not re.fullmatch(r'[0-9a-f]{40}', binding['source_sha'])):
@@ -62,18 +62,25 @@ def _members(binding, databases):
     return members
 
 
+def _members(binding, databases):
+    members = _members_shape(binding, databases)
+    if not re.fullmatch(r'media-c[12]-[0-9a-f]{32}', binding['operation_id']):
+        raise CohortError('cohort binding invalid')
+    return members
+
+
 def _mac(key, manifest):
     raw = _canonical(manifest)
     return hmac.new(key, DOMAIN + raw, hashlib.sha256).hexdigest()
 
 
-def export(root, key, binding, databases, producer):
-    """Stream the externally selected set; selection completeness is external."""
+def _export_validated(root, key, binding, databases, producer, expected_members):
     try:
         frozen = json.loads(json.dumps({'binding': binding, 'databases': databases},
                                        sort_keys=True, separators=(',', ':'), allow_nan=False))
         binding, databases = frozen['binding'], frozen['databases']
-        members = _members(binding, databases)
+        members = _members_shape(binding, databases)
+        if members != expected_members: raise CohortError('cohort member set changed')
         if not isinstance(key, bytes) or len(key) != 32 or not callable(producer):
             raise CohortError('cohort input invalid')
         files = {}; inodes = {}
@@ -124,12 +131,38 @@ def export(root, key, binding, databases, producer):
         raise CohortError('cohort export rejected') from None
 
 
-def verify(root, key, binding, databases, manifest):
+def export(root, key, binding, databases, producer):
+    """Stream the DEV-selected set; selection completeness is external."""
+    try:
+        frozen=json.loads(_canonical({'binding':binding,'databases':databases}))
+        binding,databases=frozen['binding'],frozen['databases']
+        return _export_validated(root,key,binding,databases,producer,_members(binding,databases))
+    except Exception:raise CohortError('cohort export rejected') from None
+
+
+def export_staging(session, binding, databases, catalog_ref, metadata_ref):
+    """Use only the fixed STAGING producer after root-loaded authority validation."""
+    try:
+        import staging_cohort_preservation as staging
+        frozen=json.loads(_canonical({'binding':binding,'databases':databases,'catalog_ref':catalog_ref,'metadata_ref':metadata_ref}))
+        binding,databases,catalog_ref,metadata_ref=(frozen[k] for k in ('binding','databases','catalog_ref','metadata_ref'))
+        members=staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+        root,key=staging.backup_custody(session)
+        result=_export_validated(root,key,binding,databases,
+            lambda member,stream:staging.produce_dump(session,member,stream),members)
+        if staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)!=members:
+            raise CohortError('staging cohort authority changed')
+        return result
+    except Exception:raise CohortError('staging cohort export rejected') from None
+
+
+def _verify_validated(root, key, binding, databases, manifest, expected_members):
     try:
         snapshot = json.loads(json.dumps({'binding': binding, 'databases': databases, 'manifest': manifest},
                                          sort_keys=True, separators=(',', ':'), allow_nan=False))
         binding, databases, manifest = snapshot['binding'], snapshot['databases'], snapshot['manifest']
-        members = _members(binding, databases)
+        members = _members_shape(binding, databases)
+        if members != expected_members: raise CohortError('cohort member set changed')
         if (not isinstance(key, bytes) or len(key) != 32 or not isinstance(manifest, dict)
                 or set(manifest) != {'format', 'binding', 'files', 'mac'}
                 or type(manifest['format']) is not int or manifest['format'] != 1
@@ -147,6 +180,28 @@ def verify(root, key, binding, databases, manifest):
         return set(members)
     except Exception:
         raise CohortError('cohort verification rejected') from None
+
+
+def verify(root, key, binding, databases, manifest):
+    try:
+        frozen=json.loads(_canonical({'binding':binding,'databases':databases,'manifest':manifest}))
+        binding,databases,manifest=(frozen[k] for k in ('binding','databases','manifest'))
+        return _verify_validated(root,key,binding,databases,manifest,_members(binding,databases))
+    except Exception:raise CohortError('cohort verification rejected') from None
+
+
+def verify_staging(session, binding, databases, manifest, catalog_ref, metadata_ref):
+    try:
+        import staging_cohort_preservation as staging
+        frozen=json.loads(_canonical({'binding':binding,'databases':databases,'catalog_ref':catalog_ref,'metadata_ref':metadata_ref,'manifest':manifest}))
+        binding,databases,catalog_ref,metadata_ref,manifest=(frozen[k] for k in ('binding','databases','catalog_ref','metadata_ref','manifest'))
+        members=staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)
+        root,key=staging.backup_custody(session)
+        result=_verify_validated(root,key,binding,databases,manifest,members)
+        if staging.validate_backup_binding(session,binding,databases,catalog_ref,metadata_ref)!=members:
+            raise CohortError('staging cohort authority changed')
+        return result
+    except Exception:raise CohortError('staging cohort verification rejected') from None
 
 
 def decrypt(root, key, binding, databases, manifest, member, destination):
