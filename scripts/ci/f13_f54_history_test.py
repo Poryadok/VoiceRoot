@@ -1331,6 +1331,108 @@ class ReplayConservationContract(unittest.TestCase):
             with self.assertRaises(used.Rejected): used.bind_verified_replay_root(repo, source, hashes)
 
 
+
+class ConservationDigestContract(unittest.TestCase):
+    """Changed-block differential; the three complete replay calls stay required."""
+
+    def block(self, oracle=False):
+        validator=next(n for n in ast.parse(HELPER.read_text()).body
+            if isinstance(n,ast.FunctionDef) and n.name=='validate_trace')
+        branch=next(n for n in ast.walk(validator) if isinstance(n,ast.If)
+            and isinstance(n.test,ast.Compare) and isinstance(n.test.left,ast.Name)
+            and n.test.left.id=='kind' and isinstance(n.test.comparators[0],ast.Tuple)
+            and any(isinstance(x,ast.Constant) and x.value=='complete_ledger_conserved'
+                for x in n.test.comparators[0].elts))
+        body=copy.deepcopy(branch.body)
+        self.assertIsInstance(body.pop(),ast.Continue)
+        if oracle:
+            body=[n for n in body if not (
+                isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='digest_key' for t in n.targets)
+                or isinstance(n,ast.If) and isinstance(n.test,ast.Compare)
+                and isinstance(n.test.left,ast.Name) and n.test.left.id=='digest_key')]
+            class OriginalDigest(ast.NodeTransformer):
+                def visit_Subscript(self, node):
+                    if isinstance(node.value,ast.Name) and node.value.id=='ready_digests':
+                        return ast.parse('sha(canonical(ready_table[op]))',mode='eval').body
+                    return self.generic_visit(node)
+            body=[OriginalDigest().visit(n) for n in body]
+        return compile(ast.fix_missing_locations(ast.Module(body=body,type_ignores=[])),'conservation-block','exec')
+
+    def fixture(self, m, kind):
+        path='docs/preserved.md';op='frame/operation/2';frame='frame';key=(frame,path)
+        incoming=[path,'false','owner','parent','boundary','source','content','bases']
+        raw='\t'.join(incoming);binding=m.file_digest((raw+'\n').encode())
+        ready=dict(required_qualification={path:dict(aggregate=False,evidence=[dict(retained=True)])},
+            retained=dict(nested=[1,True,'full ledger bytes']))
+        receipt=dict(path=path,incoming=m.raw_binding(raw),after_gate_row=m.raw_binding(raw),
+            ledger_sha256=m.sha(m.canonical(ready)),prior_rows=[m.raw_binding(raw)],
+            obligations=ready['required_qualification'][path],admission=False,map_before=binding,
+            transition='append',aggregate=False,policy_result=None,expected_post_map=binding)
+        return dict(m.__dict__,kind=kind,op=op,frame=frame,key=key,
+            pending={key:dict(op=op,incoming=incoming,prior=incoming,removed=False)},
+            v=dict(path=path,receipt=receipt,admission=False,policy_result=None),
+            maps={frame:[incoming]},cumulative={key:False},
+            M_consumed={},I_consumed={},J_consumed={},ready_digests={},
+            map_binding=lambda frame:binding,
+            **{k:{op:copy.deepcopy(ready)} for k in ('M_ready','I_ready','J_ready')})
+
+    def outcome(self, block, state):
+        try:
+            exec(block,state);error=None
+        except Exception as e:
+            error=(type(e).__name__,str(e))
+        return error,{name:state[name] for name in ('pending','M_consumed','I_consumed','J_consumed')}
+
+    def test_full_changed_block_state_and_first_rejection_match_original(self):
+        m=module();fast=self.block();old=self.block(oracle=True)
+        for kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
+            for mutation in ('valid','missing_ready','wrong_pending','path','incoming','after_identity',
+                'raw_flag','hash','missing_hash','prior_rows','obligations','admission','map','transition',
+                'aggregate_type','aggregate_value','policy','two_faults'):
+                def setup():
+                    state=self.fixture(m,kind);r=state['v']['receipt'];v=state['v']
+                    if mutation=='missing_ready':
+                        for name in ('M_ready','I_ready','J_ready'):state[name].clear()
+                    elif mutation=='wrong_pending':state['pending'][state['key']]['op']='foreign'
+                    elif mutation=='path':r['path']='foreign'
+                    elif mutation=='incoming':r['incoming']=m.raw_binding('foreign')
+                    elif mutation in ('after_identity','raw_flag'):
+                        parts=m.row(r['after_gate_row']);parts[2 if mutation=='after_identity' else 1]='foreign' if mutation=='after_identity' else 'true'
+                        r['after_gate_row']=m.raw_binding('\t'.join(parts))
+                    elif mutation in ('hash','two_faults'):r['ledger_sha256']='0'*64
+                    elif mutation=='missing_hash':r.pop('ledger_sha256')
+                    elif mutation=='prior_rows':r['prior_rows']=[]
+                    elif mutation=='obligations':r['obligations']={}
+                    elif mutation=='admission':v['admission']=True
+                    elif mutation=='map':r['map_before']={}
+                    elif mutation=='transition':r['transition']='erase'
+                    elif mutation=='aggregate_type':r['aggregate']=0
+                    elif mutation=='aggregate_value':r['aggregate']=True
+                    elif mutation=='policy':r['policy_result']=True
+                    if mutation=='two_faults':r['map_before']={}
+                    return state
+                with self.subTest(kind=kind,mutation=mutation):
+                    self.assertEqual(self.outcome(fast,setup()),self.outcome(old,setup()))
+
+    def test_digest_stays_local_and_each_receipt_is_checked(self):
+        m=module();fast=self.block()
+        for kind in ('complete_ledger_conserved','range_I_ledger_conserved','range_J_ledger_conserved'):
+            state=self.fixture(m,kind);calls=[]
+            def observed(value):
+                calls.append(value);return m.canonical(value)
+            state['canonical']=observed
+            self.assertIsNone(self.outcome(fast,state)[0])
+            self.assertIsNone(self.outcome(fast,state)[0])
+            self.assertEqual(len(calls),1)
+            state['v']['receipt']['ledger_sha256']='0'*64
+            self.assertEqual(self.outcome(fast,state)[0],('Rejected','complete_typed_consumer_prior_ledger'))
+            # A new fold must recompute from a different, privately parsed ledger.
+            fresh=self.fixture(m,kind)
+            for table in ('M_ready','I_ready','J_ready'):
+                fresh[table][fresh['op']]['retained']['nested'][0]=9
+            self.assertEqual(self.outcome(fast,fresh)[0],('Rejected','complete_typed_consumer_prior_ledger'))
+
+
 class ProducerTrace(unittest.TestCase):
     def current_author_J_fixture(self, native_only=False):
         # Complete private historical DAG plus genuine old/current native
