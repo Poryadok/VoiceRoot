@@ -366,7 +366,10 @@ class ChatHealthPhase:
                     item.namespace_uid != self.namespace_uid or item.fence.ledger.client is not item.client):
                 raise HealthError('Chat health fence differs')
         media_operation_guard.verify(self.fence, self.client, self.lock, self.namespace_uid)
-        cut._guard(); _authority_call(self.image_phase.verify_activation_lineage); self.package_phase._guard()
+        cut._guard(); self.image_phase._identity()
+        media_operation_guard.verify(self.image_phase.fence, self.image_phase.client,
+                                     self.image_phase.lock, self.image_phase.namespace_uid)
+        self.package_phase._guard()
         row, rev = self.fence.ledger.read()
         for item in (cut, self.image_phase, self.package_phase):
             if item.fence.ledger.read() != (row, rev): raise HealthError('Chat health ledger differs')
