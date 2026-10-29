@@ -45,6 +45,7 @@ class BackupPhase:
         self.supervisor,self.cut,self.physical,self.metadata=supervisor,cut,physical,metadata
         self._dependencies=(supervisor,cut,physical,metadata,supervisor.package,supervisor.inventory,supervisor.catalog,supervisor.census)
         self.journal=self.cohort=self._bound_journal=self._bound_cohort=None
+        self._route=None
         self._started=False
         self._guard()
 
@@ -60,6 +61,9 @@ class BackupPhase:
             if (phase.fence.context!=s.fence.context or phase.lock!=s.lock or phase.namespace_uid!=s.namespace_uid
                     or phase.fence.ledger.read()!=(row,revision)):
                 raise BackupError('full cohort ledger identity changed')
+        if self._route is not None and (row.get('full_cohort_backup_route')!=self._route
+                or self.journal.state['steps'].get('full-cohort-backup-route')!={'status':'done','route':self._route}):
+            raise BackupError('full cohort route changed')
         self.cut.verify_drained()
         return row,revision
 
@@ -136,6 +140,7 @@ class BackupPhase:
             intent={'resource_context':copy.deepcopy(context),'namespace_uid':s.namespace_uid,'kube_lock':copy.deepcopy(s.lock),
                     'cohort_binding':binding,'backup_capture':capture,'cohort_source':expected,
                     'cohort_admin_role':admin,'upload_workflow_sha':context['commit']}
+            pending=True
             with story_media_backup.private_directory(root):
                 self.journal=media_operation_journal.Journal(root/'backup-journal',intent)
             self._bound_journal=self.journal
@@ -149,30 +154,31 @@ class BackupPhase:
             row,revision=self._guard()
             if 'full_cohort_backup_route' in row:raise BackupError('backup route already exists')
             route=cohort_upload_runner.route_marker(binding,s.namespace_uid)
-            pending=True;self.journal.state['steps']['full-cohort-backup-route']={'status':'pending','route':route};self.journal.save()
+            self.journal.state['steps']['full-cohort-backup-route']={'status':'pending','route':route};self.journal.save()
             if self._guard()!=(row,revision):raise BackupError('backup route fence changed')
             row['full_cohort_backup_route']=route;row['step']='full-cohort-backup-route';fence.ledger.write(revision,row)
             self._guard();current,_=fence.ledger.read()
             if current.get('full_cohort_backup_route')!=route:raise BackupError('backup route changed')
             self.journal.state['steps']['full-cohort-backup-route']={'status':'done','route':route};self.journal.save()
+            self._route=copy.deepcopy(route);self._guard()
             key=self._write_key(root)
             with story_media_backup.private_directory(root) as directory:
                 os.mkdir('cohort-backup',0o700,dir_fd=directory);os.fsync(directory)
             if self._source(token)!=original:raise BackupError('backup source changed')
-            bundle,final_binding,manifest=cohort_backup_operation.run(self.cohort,root/'cohort-backup',key,expected,admin,self.cut.verify_drained)
+            bundle,final_binding,manifest=cohort_backup_operation.run(self.cohort,root/'cohort-backup',key,expected,admin,self._guard)
             if self._source(token)!=original:raise BackupError('backup source changed')
             planned=cohort_upload_phase.prepare(self.cohort,key,bundle)
             def source_authority(sha):
                 if sha!=context['commit']:return False
                 publish_candidate.source_snapshot(self.metadata.source_root,sha);self._guard();return True
-            submitted=cohort_dispatch.submit(self.cohort,planned,self.cut.verify_drained,source_authority)
+            submitted=cohort_dispatch.submit(self.cohort,planned,self._guard,source_authority)
             running=self._wait(token,planned,submitted['run_id_hint'])
             destination=root/('cohort-readback-'+running['run_id']+'-'+planned['challenge'])
-            custody,restored_manifest=cohort_readback.run(self.cohort,token,key,bundle,destination,self.cut.verify_drained)
+            custody,restored_manifest=cohort_readback.run(self.cohort,token,key,bundle,destination,self._guard)
             if restored_manifest!=manifest or self._source(token)!=original:raise BackupError('readback or source changed')
             receipt=cohort_restore_journal.run(self.cohort,key,destination,restored_manifest,source['metadata'],
                 self.metadata.source_root,source['restore_inputs']['postgres_image'],source['restore_inputs']['migrate_image'],
-                self.cut.verify_drained,metadata_phase=self.metadata if source['migration_roles'] else None,
+                self._guard,metadata_phase=self.metadata if source['migration_roles'] else None,
                 metadata_token=token if source['migration_roles'] else None)
             if self._source(token)!=original:raise BackupError('backup source changed')
             return verify_completed(self,token)
