@@ -12,6 +12,10 @@ For the fixed source-derived release, capture and Notification provider keys,
 the probe emits only fixed presence/profile/toggle categories and literal or
 Secret/ConfigMap source identities (UID, resourceVersion and referenced key).
 Secret and ConfigMap listing requests expose key names only, never values.
+The ordered `env_sources` list includes every envFrom object's identity and
+prefix, even when none of the selected keys exists, with only the selected
+field names that exist. This allows later checks to detect changes to sources
+that initially contributed no selected field.
 These are current API object identities observed around the probe; they do not
 prove which object version supplied a running process at its startup.
 Explicit env overrides envFrom, and later envFrom sources override earlier

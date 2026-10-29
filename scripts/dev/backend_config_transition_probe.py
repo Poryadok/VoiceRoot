@@ -59,7 +59,7 @@ def inspect(workload, pod_name, run_bytes, guard):
                 if len(rows) < 2 or not rows[0] or not rows[1] or len(rows[2:]) != len(set(rows[2:])): raise ValueError()
                 objects[key] = {'kind':kind,'name':name,'uid':rows[0],'resource_version':rows[1],'keys':set(rows[2:])}
             return objects[key]
-        origins = {name:None for name in fields}
+        origins = {name:None for name in fields}; env_sources = []
         for item in before['envFrom']:
             if not isinstance(item,dict) or set(item)-{'prefix','secretRef','configMapRef'}: raise ValueError()
             prefix = item.get('prefix','')
@@ -69,6 +69,9 @@ def inspect(workload, pod_name, run_bytes, guard):
             typ, ref = refs[0]
             if not isinstance(ref,dict) or set(ref)-{'name','optional'} or ref.get('optional',False) is not False: raise ValueError()
             obj = reference('secret' if typ == 'secretRef' else 'configmap',ref['name'])
+            selected = sorted(name for name in fields if name.startswith(prefix) and name[len(prefix):] in obj['keys'])
+            env_sources.append({'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
+                                'resource_version':obj['resource_version'],'prefix':prefix,'fields':selected})
             for name in fields:
                 if name.startswith(prefix) and name[len(prefix):] in obj['keys']:
                     origins[name] = {'kind':obj['kind'],'name':obj['name'],'uid':obj['uid'],
@@ -109,7 +112,7 @@ def inspect(workload, pod_name, run_bytes, guard):
         if before != after or expected_objects != objects: raise ValueError()
         identity = {k:before[k] for k in ('namespace','namespace_uid','deployment','deployment_uid','deployment_rv',
                     'pod_name','pod_uid','pod_rv','container_name','container_id','restart_count')}
-        return {'status':'observed','identity':identity,'fields':observed,
+        return {'status':'observed','identity':identity,'fields':observed,'env_sources':env_sources,
                 'scope':'runtime-config-metadata-only-no-provider-validation'}
     except BaseException:
         raise ProbeError('runtime configuration observation unavailable') from None

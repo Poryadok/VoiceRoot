@@ -51,7 +51,15 @@ class ProbeTest(unittest.TestCase):
         self.assertEqual(fields['FCM_CREDENTIALS_JSON']['origin']['source'],'explicit')
         self.assertEqual(fields['APNS_KEY_ID']['origin']['name'],'secrets')
         self.assertEqual(fields['APNS_KEY_ID']['origin']['source'],'envFrom')
+        self.assertEqual([x['name'] for x in value['env_sources']],['config','secrets'])
+        self.assertEqual(value['env_sources'][0]['fields'],['APNS_KEY_ID','VOICE_RELEASE_PROFILE'])
         self.assertNotIn('private-credential',json.dumps(value)); self.assertEqual(value['status'],'observed')
+
+    def test_empty_envfrom_is_still_bound(self):
+        self.keys['config'] = []
+        value = self.inspect()
+        self.assertEqual(value['env_sources'][0]['fields'],[])
+        self.assertEqual(value['env_sources'][0]['resource_version'],'9')
 
     def test_identity_ref_and_runtime_drift_hold_without_private_diagnostics(self):
         for fault in ('container_drift','ref_drift','secret_return','unexpected_env'):
