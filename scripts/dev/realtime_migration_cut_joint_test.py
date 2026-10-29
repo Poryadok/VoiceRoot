@@ -74,9 +74,10 @@ class JointTest(unittest.TestCase):
             def __init__(inner, client): inner.client=client
             def read(inner): return backing.read()
             def write(inner, revision, row): return backing.write(revision,row)
+        check=lambda:copy.deepcopy(base.card)
         def facade(journal):
             client=Client(base.lock,journal)
-            return client,resource_fencing.Fence(base.context,lambda:copy.deepcopy(base.card),LedgerView(client))
+            return client,resource_fencing.Fence(base.context,check,LedgerView(client))
         def journal(name, extra):
             value=journals.Journal(Path(base.temp.name)/name,{'resource_context':base.context,'namespace_uid':'ns',**extra})
             self.addCleanup(value.close); return value
@@ -84,7 +85,6 @@ class JointTest(unittest.TestCase):
         self.enterContext(mock.patch.object(resource_fencing,'KubeLedger',LedgerView))
         secret_j=journal('secret',{}); secret_client,secret_fence=facade(secret_j)
         secret=secret_phase.SecretPhase(secret_j,secret_fence,secret_client,base.lock,'ns')
-        credential=secret.run(password)
         engine={'namespace_uid':'ns','pod_uid':'p','pvc_uid':'pvc','pv_uid':'pv',
                 'container_id':'containerd://'+'c'*64,'restart_count':1}
         scope={'engine':engine,'server_start':'start','databases':['auth_db'],'database_oids':{'auth_db':10}}
@@ -137,6 +137,8 @@ class JointTest(unittest.TestCase):
         self.enterContext(mock.patch.object(affected.pg,'inspect',side_effect=lambda scope,guard:{
             'scope':copy.deepcopy(scope),'active_sessions':0,'active_transactions':0}))
         cut.drain()
+        secret.bind_cut(cut)
+        credential=secret.run(password)
         catalog_hash=hashlib.sha256(json.dumps(baseline,sort_keys=True,separators=(',',':'),ensure_ascii=True,allow_nan=False).encode('ascii')).hexdigest()
         binding={'operation_id':base.context['operation_id'],'source_sha':base.context['commit'],
                  'snapshot_id':'capture-'+'b'*32,'databases':['auth_db'],
@@ -152,7 +154,7 @@ class JointTest(unittest.TestCase):
         cohort.bind_catalog_cut(cut)
         provision_j=journal('provision',{'postgres':engine,'realtime_credential':credential})
         provision_client,provision_fence=facade(provision_j)
-        worker,receipt=bridge.run_owned(secret,provision_j,provision_client,provision_fence,base.lock,'ns',password)
+        worker,receipt=bridge.run_owned(secret,provision_j,provision_client,provision_fence,base.lock,'ns',password,cut=cut)
         self.assertEqual(receipt['database_oid'],13)
         cut.bind_provision_scope(worker)
         cohort._guard()

@@ -13,6 +13,7 @@ import secrets
 import socket
 import stat
 import struct
+import sys
 import threading
 import time
 
@@ -362,12 +363,19 @@ class Session:
                 try: self.issue_result.append(('ok',self.issue_control.run()))
                 except BaseException: self.issue_result.append(('error',None))
                 finally: self.issue_done.set()
-            self.issue_thread=threading.Thread(target=trigger,daemon=True); self.issue_thread.start()
+            self.issue_thread=threading.Thread(target=trigger,daemon=False); self.issue_thread.start()
             self.serve_preflight(); return self.finish()
         except BaseException as error:
             if self.pending and not self.completed: self._uncertain()
-            if self.issue_control is not None:self.issue_control.cancel()
-            if self.issue_thread is not None and self.issue_thread.ident is not None:self.issue_thread.join(2)
+            if self.issue_control is not None:
+                try:self.issue_control.cancel()
+                except BaseException:pass
+            warning=time.monotonic()+30
+            while self.issue_thread is not None and self.issue_thread.ident is not None and self.issue_thread.is_alive():
+                self.issue_thread.join(1)
+                if self.issue_thread.is_alive() and time.monotonic()>=warning:
+                    print('DEV_RESOURCE_RECOVERY_REQUIRED Role issuer trigger still active; retain claim',file=sys.stderr,flush=True)
+                    warning=time.monotonic()+30
             self.close()
             if isinstance(error,schema.GuardLost):raise
             raise CreateError('Role peer issue unavailable; reconcile') from None

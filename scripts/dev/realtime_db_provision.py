@@ -45,6 +45,56 @@ class Provision:
         self.intent = copy.deepcopy(journal.intent)
         self.nonce = secrets.token_hex(16)
         self.poisoned = False
+        self.cut = None
+        self._cut_refs = None
+        self._cut_custody = None
+
+    def bind_cut(self, cut):
+        import writer_cut
+        import space_native_tool_identity as custody
+        if (self.cut is not None or type(cut) is not writer_cut.WriterCut or
+                cut.fence.context != self.fence.context or cut.lock != self.lock or
+                cut.namespace_uid != self.namespace_uid or cut.fence.check is not self.fence.check or
+                cut.fence.on_uncertain is not self.fence.on_uncertain):
+            raise RecoveryRequired('writer cut identity differs')
+        self._guard()
+        cut.verify_drained()
+        if cut.fence.ledger.read() != self.fence.ledger.read():
+            raise RecoveryRequired('writer cut ledger differs')
+        self.cut = cut
+        self._cut_refs = (cut, cut.journal, cut.fence, cut.client, cut.fence.ledger,
+                          self.journal,self.fence,self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain)
+        self._cut_custody = (custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal))
+        self._before_effect()
+
+    def _before_effect(self):
+        import writer_cut
+        import space_native_tool_identity as custody
+        if self.fence.context['operation_id'].startswith('media-c1-') or self.cut is not None:
+            cut = self.cut
+            if (type(cut) is not writer_cut.WriterCut or self._cut_refs is None or
+                    any(a is not b for a,b in zip(self._cut_refs,
+                        (cut, cut.journal, cut.fence, cut.client, cut.fence.ledger,self.journal,self.fence,
+                         self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
+                    cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                    self._cut_custody != (custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal)) or
+                    cut.fence.context != self.fence.context or cut.lock != self.lock or
+                    cut.namespace_uid != self.namespace_uid):
+                raise RecoveryRequired('writer cut identity changed')
+            own = copy.deepcopy(self.journal.state)
+            self._guard()
+            cut.verify_drained()
+            cut_state = copy.deepcopy(cut.journal.state)
+            if cut.fence.ledger.read() != self.fence.ledger.read():
+                raise RecoveryRequired('writer cut ledger differs')
+            self._guard()
+            if (self.cut is not cut or any(a is not b for a,b in zip(self._cut_refs,
+                    (cut, cut.journal, cut.fence, cut.client, cut.fence.ledger,self.journal,self.fence,
+                     self.client,self.fence.ledger,self.fence.check,self.fence.on_uncertain))) or
+                    cut.fence.check is not self.fence.check or cut.fence.on_uncertain is not self.fence.on_uncertain or
+                    self._cut_custody != (custody.SpaceNativeToolPhase._custody(self.journal),custody.SpaceNativeToolPhase._custody(cut.journal)) or
+                    self.journal.state != own or cut.journal.state != cut_state):
+                raise RecoveryRequired('writer cut evidence changed')
 
     def _guard(self):
         if (self.poisoned or self.journal.poisoned or self.journal.intent != self.intent or
@@ -132,6 +182,7 @@ class Provision:
             raise RecoveryRequired('provision effect reservation changed')
         if self.pg.catalog() != before:
             raise RecoveryRequired('catalog changed at submission')
+        self._before_effect()
         self.pg.execute(sql)
         self._guard()
         self._secret()
@@ -153,6 +204,7 @@ class Provision:
         pending = False
         try:
             self._guard()
+            self._before_effect()
             self._secret()
             initial = self.pg.catalog()
             if initial != {'role': None, 'database': None}:
