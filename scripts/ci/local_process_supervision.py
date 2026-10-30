@@ -10,8 +10,10 @@ import ctypes
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
+import threading
 import time
 
 
@@ -128,6 +130,135 @@ def _resume_windows(process):
 
 def _wait_windows(process, timeout):
     process.wait(timeout=timeout)
+
+
+def _atomic_created_hook(info):
+    """Test seam immediately after CreateProcessW returns."""
+
+
+def _atomic_command_line(command, env):
+    """Limit batch arguments to characters that cmd.exe cannot interpret."""
+    executable = shutil.which(str(command[0]), path=(env or os.environ).get('PATH'))
+    if not executable:
+        raise SupervisionError('executable not found')
+    args = [str(arg) for arg in command]
+    if executable.lower().endswith(('.bat', '.cmd')):
+        args[0] = executable
+        if any(not arg or any(not (ch.isalnum() or ch in ' ._:-=/\\') for ch in arg) for arg in args):
+            raise SupervisionError('unsafe batch argument')
+        shell = (env or os.environ).get('COMSPEC')
+        if not shell or not Path(shell).is_file():
+            raise SupervisionError('cmd.exe unavailable')
+        line = subprocess.list2cmdline([shell, '/d', '/s', '/c']) + ' "' + ' '.join('"' + arg + '"' for arg in args) + '"'
+        return shell, line
+    if not executable.lower().endswith('.exe'):
+        raise SupervisionError('atomic launcher requires an executable path')
+    return executable, subprocess.list2cmdline(args)
+
+
+def _launch_atomic_windows(kernel, job, accounting, command, cwd, env, stdout, stderr):
+    """Experimental only: requires no concurrent handle-inheriting launchers.
+
+    Python cannot prove the absence of unmanaged native threads; this must run
+    in a dedicated single-purpose broker before it is connected to run().
+    """
+    import msvcrt
+    from ctypes import wintypes
+    class StartupInfo(ctypes.Structure):
+        _fields_ = [('cb', wintypes.DWORD), ('lpReserved', wintypes.LPWSTR), ('lpDesktop', wintypes.LPWSTR),
+                    ('lpTitle', wintypes.LPWSTR), ('dwX', wintypes.DWORD), ('dwY', wintypes.DWORD),
+                    ('dwXSize', wintypes.DWORD), ('dwYSize', wintypes.DWORD), ('dwXCountChars', wintypes.DWORD),
+                    ('dwYCountChars', wintypes.DWORD), ('dwFillAttribute', wintypes.DWORD), ('dwFlags', wintypes.DWORD),
+                    ('wShowWindow', wintypes.WORD), ('cbReserved2', wintypes.WORD), ('lpReserved2', ctypes.c_void_p),
+                    ('hStdInput', wintypes.HANDLE), ('hStdOutput', wintypes.HANDLE), ('hStdError', wintypes.HANDLE)]
+    class StartupInfoEx(ctypes.Structure):
+        _fields_ = [('StartupInfo', StartupInfo), ('lpAttributeList', ctypes.c_void_p)]
+    class ProcessInfo(ctypes.Structure):
+        _fields_ = [('hProcess', wintypes.HANDLE), ('hThread', wintypes.HANDLE),
+                    ('dwProcessId', wintypes.DWORD), ('dwThreadId', wintypes.DWORD)]
+    class Process:
+        def __init__(self, handle):
+            self.handle, self.returncode = handle, None
+        def wait(self, timeout):
+            code = kernel.WaitForSingleObject(self.handle, min(int(timeout * 1000), 0xfffffffe))
+            if code == 258:
+                raise subprocess.TimeoutExpired(command, timeout)
+            if code != 0:
+                raise SupervisionError('process wait failed')
+            result = wintypes.DWORD()
+            if not kernel.GetExitCodeProcess(self.handle, ctypes.byref(result)):
+                raise SupervisionError('process exit status unavailable')
+            self.returncode = result.value
+            return self.returncode
+        def close(self):
+            kernel.CloseHandle(self.handle)
+    if threading.active_count() != 1:
+        raise SupervisionError('atomic launcher requires an isolated single-threaded broker')
+    exe, command_line = _atomic_command_line(command, env)
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel.DuplicateHandle.argtypes = [wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE,
+                                       ctypes.POINTER(wintypes.HANDLE), wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.InitializeProcThreadAttributeList.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(ctypes.c_size_t)]
+    kernel.UpdateProcThreadAttribute.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.c_size_t,
+                                                 ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_void_p]
+    kernel.DeleteProcThreadAttributeList.argtypes = [ctypes.c_void_p]
+    kernel.CreateProcessW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, ctypes.c_void_p, ctypes.c_void_p,
+                                      wintypes.BOOL, wintypes.DWORD, ctypes.c_void_p, wintypes.LPCWSTR,
+                                      ctypes.POINTER(StartupInfoEx), ctypes.POINTER(ProcessInfo)]
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    size = ctypes.c_size_t()
+    kernel.InitializeProcThreadAttributeList(None, 2, 0, ctypes.byref(size))
+    if not size.value:
+        raise SupervisionError('attribute list size unavailable')
+    buffer = ctypes.create_string_buffer(size.value)
+    if not kernel.InitializeProcThreadAttributeList(buffer, 2, 0, ctypes.byref(size)):
+        raise SupervisionError('attribute list initialization failed')
+    handles = []
+    try:
+        with open(os.devnull, 'r+b') as null:
+            for file in (null, stdout or null, stderr or null):
+                handle = wintypes.HANDLE()
+                if not kernel.DuplicateHandle(kernel.GetCurrentProcess(), msvcrt.get_osfhandle(file.fileno()),
+                                              kernel.GetCurrentProcess(), ctypes.byref(handle), 0, True, 2):
+                    raise SupervisionError('stdio handle duplication failed')
+                handles.append(handle)
+            handle_list = (wintypes.HANDLE * 3)(*(h.value for h in handles))
+            job_list = (wintypes.HANDLE * 1)(job)
+            if not kernel.UpdateProcThreadAttribute(buffer, 0, 0x20002, handle_list, ctypes.sizeof(handle_list), None, None):
+                raise SupervisionError('stdio allowlist setup failed')
+            if not kernel.UpdateProcThreadAttribute(buffer, 0, 0x2000d, job_list, ctypes.sizeof(job_list), None, None):
+                raise SupervisionError('atomic job assignment unavailable')
+            startup = StartupInfoEx()
+            startup.StartupInfo.cb = ctypes.sizeof(startup)
+            startup.StartupInfo.dwFlags = 0x100
+            startup.StartupInfo.hStdInput, startup.StartupInfo.hStdOutput, startup.StartupInfo.hStdError = (h.value for h in handles)
+            startup.lpAttributeList = ctypes.cast(buffer, ctypes.c_void_p)
+            args = ctypes.create_unicode_buffer(command_line)
+            environment = None if env is None else ctypes.create_unicode_buffer(
+                '\0'.join(key + '=' + value for key, value in sorted(env.items(), key=lambda item: item[0].upper())) + '\0\0')
+            info = ProcessInfo()
+            if not kernel.CreateProcessW(exe, args, None, None, True, 0x80000 | 0x400,
+                                         environment, str(cwd) if cwd is not None else None,
+                                         ctypes.byref(startup), ctypes.byref(info)):
+                raise SupervisionError('atomic process creation failed')
+            try:
+                _atomic_created_hook(info)
+                kernel.CloseHandle(info.hThread)
+                return Process(info.hProcess)
+            except BaseException as original:
+                try:
+                    _settle_windows(kernel, job, accounting, time.monotonic() + 10)
+                except BaseException as cleanup:
+                    raise BaseExceptionGroup('atomic launch and cleanup failed', [original, cleanup])
+                finally:
+                    kernel.CloseHandle(info.hThread)
+                    kernel.CloseHandle(info.hProcess)
+                raise
+    finally:
+        for handle in handles:
+            kernel.CloseHandle(handle)
+        kernel.DeleteProcThreadAttributeList(buffer)
 
 
 def _run_windows(command, timeout, cleanup_timeout, cwd, env, stdout, stderr, capture, check):
