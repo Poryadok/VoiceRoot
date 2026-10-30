@@ -287,6 +287,7 @@ def _run_windows(command, timeout, cleanup_timeout, cwd, env, stdout, stderr, ca
         _wait_windows(process, timeout)
     except BaseException as error:
         failure = error
+    cleanup_error = None
     try:
         if assigned:
             _settle_windows(kernel, job, Accounting, time.monotonic() + cleanup_timeout)
@@ -294,12 +295,22 @@ def _run_windows(command, timeout, cleanup_timeout, cwd, env, stdout, stderr, ca
             process.terminate()
         if process is not None:
             process.wait(timeout=cleanup_timeout)
-    except BaseException as cleanup_error:
+    except BaseException as error:
+        cleanup_error = error
+    finally:
+        if not kernel.CloseHandle(job):
+            close_error = SupervisionError('cannot close owned job')
+            cleanup_error = (BaseExceptionGroup('job cleanup and close failed', [cleanup_error, close_error])
+                             if cleanup_error is not None else close_error)
+    if cleanup_error is not None and process is not None and process.returncode is None:
+        try:
+            process.wait(timeout=cleanup_timeout)
+        except BaseException as reap_error:
+            cleanup_error = BaseExceptionGroup('cleanup and child reap failed', [cleanup_error, reap_error])
+    if cleanup_error is not None:
         if failure is not None:
             raise BaseExceptionGroup('process execution and cleanup failed', [failure, cleanup_error])
         raise SupervisionError('process cleanup failed') from cleanup_error
-    finally:
-        kernel.CloseHandle(job)
     if failure is not None:
         raise failure
     if process is not None:

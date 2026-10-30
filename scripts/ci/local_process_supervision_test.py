@@ -493,13 +493,49 @@ class SupervisionTest(unittest.TestCase):
 
     @unittest.skipUnless(os.name == 'nt', 'Windows Job Object acceptance')
     def test_execution_and_cleanup_failures_are_both_preserved(self):
-        with patch.object(supervision, '_wait_windows', side_effect=KeyboardInterrupt()), \
-             patch.object(supervision, '_settle_windows', side_effect=supervision.SupervisionError('cleanup evidence missing')):
-            with self.assertRaises(BaseExceptionGroup) as caught:
-                supervision.run([sys.executable, '-c', 'import time; time.sleep(8)'], timeout=2,
-                                allow_unverified_crash_window=True)
-        self.assertIsInstance(caught.exception.exceptions[0], KeyboardInterrupt)
-        self.assertIn('cleanup evidence missing', str(caught.exception.exceptions[1]))
+        seen = []
+        real_assign = supervision._assign_windows
+        def assign(kernel, job, process):
+            seen.append(process)
+            return real_assign(kernel, job, process)
+        try:
+            with patch.object(supervision, '_assign_windows', side_effect=assign), \
+                 patch.object(supervision, '_wait_windows', side_effect=KeyboardInterrupt()), \
+                 patch.object(supervision, '_settle_windows', side_effect=supervision.SupervisionError('cleanup evidence missing')):
+                with self.assertRaises(BaseExceptionGroup) as caught:
+                    supervision.run([sys.executable, '-c', 'import time; time.sleep(8)'], timeout=2,
+                                    allow_unverified_crash_window=True)
+            self.assertIsInstance(caught.exception.exceptions[0], KeyboardInterrupt)
+            self.assertIn('cleanup evidence missing', str(caught.exception.exceptions[1]))
+            self.assertEqual(len(seen), 1)
+            self.assertIsNotNone(seen[0].returncode, 'owned child must be reaped even when job verification fails')
+        finally:
+            for process in seen:
+                process.wait(timeout=5)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Job Object acceptance')
+    def test_reap_failure_preserves_execution_and_cleanup_uncertainty(self):
+        seen = []
+        real_assign = supervision._assign_windows
+        def assign(kernel, job, process):
+            seen.append((process, process.wait))
+            process.wait = lambda timeout: (_ for _ in ()).throw(subprocess.TimeoutExpired('reap', timeout))
+            return real_assign(kernel, job, process)
+        try:
+            with patch.object(supervision, '_assign_windows', side_effect=assign), \
+                 patch.object(supervision, '_wait_windows', side_effect=KeyboardInterrupt()), \
+                 patch.object(supervision, '_settle_windows', side_effect=supervision.SupervisionError('job uncertain')):
+                with self.assertRaises(BaseExceptionGroup) as caught:
+                    supervision.run([sys.executable, '-c', 'import time; time.sleep(8)'], timeout=2,
+                                    allow_unverified_crash_window=True)
+            self.assertIsInstance(caught.exception.exceptions[0], KeyboardInterrupt)
+            cleanup_group = caught.exception.exceptions[1]
+            self.assertIn('job uncertain', str(cleanup_group.exceptions[0]))
+            self.assertIsInstance(cleanup_group.exceptions[1], subprocess.TimeoutExpired)
+        finally:
+            for process, wait in seen:
+                process.wait = wait
+                wait(timeout=5)
 
     @unittest.skipUnless(os.name == 'nt', 'Windows Job Object acceptance')
     def test_timeout_kills_child_and_grandchild_without_touching_sentinel(self):
