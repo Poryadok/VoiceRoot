@@ -23,15 +23,21 @@
 - [ ] **[Protos/Pkg] Split NATS wire format vs `jetstream_events.proto`** — `protos/voice/events/v1/jetstream_events.proto` defines protobuf envelopes, but publishers diverge:
 ### Space
 
-- [ ] **[User/Space / A2-USER-SPACE-CAPTURE-RUNTIME] Define known-live source
-  custody and reopen contract** — the capture runtime lacks an accepted issuer
-  and invalidation protocol for independent User H/U lineage and current-source
-  qualification. Select bounded custodian-attested continuity with restore/clone
-  closed (explicit undeclared-rollback limitation), or a specified independent
-  anti-rollback witness. Name actual creation/migration caller, mount custodian,
+- [ ] **[User/Space / A2-USER-SPACE-CAPTURE-RUNTIME] Implement known-live source
+  custody and reopen contract** — the selected model is bounded custodian-attested
+  continuity. Before restore, clone promotion or source replacement, stop
+  admission and drain or fence all participating writers and in-flight database
+  sessions. Admission remains closed throughout the transition and afterwards
+  until separately specified source creation or requalification and continuity
+  binding succeed; closed state must survive controller restart.
+  An undeclared rollback under failed custody is outside this model's guarantee.
+  A static source receipt or a request-time check alone does not establish
+  currentness or fence a transaction across invalidation. Implement the actual
+  creation/migration caller, independently retained lineage and key custodian,
   physical source binding and restart/replacement invalidation. Reconcile the
-  current documented exact21 qualification with generated exact22 identity
-  catalog using real writer/catalog/baseline evidence; do not relax either gate.
+  exact22 identity schema and writer qualification with real catalog, writer
+  and baseline evidence; the authority reader's version22 check does not
+  establish that qualification. Do not relax either gate.
   Existing production key parsing and private fresh receipt do not qualify
   currentness. Retained-NOW does not require full Auth history repair, but guard
   activation requires complete participating-writer proof. Configuration denial
