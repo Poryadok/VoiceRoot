@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 KNOWN_FILTERS = frozenset('''global ci_global ci_scripts local_docker_isolation go_build_shared nats_renderer t31
-    history_audit match_squad_overlay a1_t106_live a1_e2e a1_multi_account_pr a1_attachment_restart
+    history_audit match_squad_overlay a1_t106_live a1_e2e a1_multi_account_pr a1_attachment_restart flutter_live_suite
     staging_infra analytics_integration_inputs protos pkg frontend music_inputs help_inputs startup_inputs dev_web_publish windows_desktop auth auth_test_impact
     developer-portal admin compose full_application_request'''.split()) | frozenset(
         'svc_' + name for name in '''analytics bot chat controlledgame federation file
@@ -242,7 +242,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
     selected('a1-e2e', broad + ('a1_multi_account_pr',))
     selected('a1-flutter-profile-handoff', broad + ('a1_t106_live',))
     selected('a1-attachment-restart-proof', broad + ('a1_attachment_restart',))
-    selected('compose-e2e', broad)
+    selected('compose-e2e', broad + ('flutter_live_suite',))
     selected('t31-critical', broad + ('t31',))
     selected('analytics-clickhouse-integration', ('analytics_integration_inputs',), enabled='analytics' in integration)
     if flags.get('code'):

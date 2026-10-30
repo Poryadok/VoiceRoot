@@ -541,6 +541,20 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertTrue(planner.effective_filters(planner.match_filters(
             rules, [unrelated, 'scripts/ci/new_unknown_tool.py']))['ci_global'])
 
+    def test_every_catalogued_live_flutter_suite_has_premerge_coverage_for_its_own_input(self):
+        import yaml
+        catalog = yaml.safe_load((ROOT / '.github/ci/e2e-features.yml').read_text(encoding='utf-8'))
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': [],
+                  'run_go': False, 'run_pkg': False}
+        for suite in catalog['full_flutter']:
+            with self.subTest(suite=suite):
+                matched = planner.match_filters(rules, ['src/frontend/' + suite])
+                checks = planner.make_plan(matched, matrix)['checks']
+                self.assertTrue('compose-e2e' in checks or
+                                (suite in catalog['a1_flutter_profile_handoff'] and
+                                 'a1-flutter-profile-handoff' in checks), suite)
+
     def test_a1_workflow_and_gate_consume_shared_selectors(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))

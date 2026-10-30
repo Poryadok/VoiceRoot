@@ -141,6 +141,9 @@ a1_t106_live:
   - src/backend/migrations/social_db/**
   - src/backend/migrations/realtime_db/**
 
+flutter_live_suite:
+  - src/frontend/test/**/*live*test.dart
+
 a1_multi_account_pr:
   - src/backend/auth/**
   - src/backend/user/**

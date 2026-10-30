@@ -94,6 +94,15 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
+    def test_changed_live_flutter_suite_requires_compose_proof(self):
+        values = context('pull_request', code='true', frontend='true', flutter_live_suite='true')
+        self.assertTrue(evaluate(job_condition('compose-e2e'), values))
+        self.assertTrue(evaluate(ENV['RUN_COMPOSE_E2E'], values))
+        self.assertEqual(run_gate(values).returncode, 0)
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            with self.subTest(outcome=outcome):
+                self.assertNotEqual(run_gate(values, 'compose-e2e', outcome).returncode, 0)
+
     def test_independent_go_jobs_stop_on_cancellation_and_pkg_failure_still_blocks_gate(self):
         values = context('pull_request', code='true', run_go='true')
         values['needs.backend-go-pkg.result'] = 'skipped'
