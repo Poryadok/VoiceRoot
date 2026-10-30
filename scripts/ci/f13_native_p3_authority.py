@@ -21,6 +21,14 @@ entry, rows, load_record = legacy.entry, legacy.rows, legacy.load_record
 
 
 def qualify(*args):
+    try:
+        import f13_release_source as release
+    except ModuleNotFoundError as error:
+        if error.name != 'f13_release_source':
+            raise
+        release = None
+    if release is not None and release.applicable(args[0], args[3]):
+        return release.native_qualify(*args)
     if documentation is not None:
         import f13_production_source as production
         if production.bootstrap_applicable(args[0]) or production.fixture_applicable(args[0]):
@@ -45,6 +53,9 @@ def qualify(*args):
 
 def verified_record(repo, binding):
     """Choose only a fixed tuple, and independently reconstruct its full record."""
+    if binding.get('version') == 'NATIVE-P3-SOURCE-v5':
+        import f13_release_source as release
+        return release, release.verified_record(repo, binding)
     key = tuple(binding.get(k) for k in ('version', 'content_base', 'snapshot', 'record', 'record_sha256'))
     old_key = ('NATIVE-P3-SOURCE-v1', legacy.PINNED_BASE, legacy.PINNED_SOURCE,
                legacy.PINNED_RECORD_COMMIT, legacy.PINNED_RECORD_SHA256)
