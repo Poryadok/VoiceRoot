@@ -191,6 +191,42 @@ class RootlessEndpointTests(unittest.TestCase):
 
 
 class OwnedRunTests(unittest.TestCase):
+    def test_canonical_image_load_discards_output_on_success_and_failure(self):
+        from unittest.mock import patch
+        from local_image_archive_test import oci_fixture
+        raw, digest, image_id = oci_fixture(extra_blob=True, pax=True)
+        with tempfile.TemporaryDirectory() as directory:
+            owner = OwnedRun.create(Path(directory), FakeEngine())
+            try:
+                archive = owner.directory / 'image.tar'
+                archive.write_bytes(raw)
+                def load(name, path, expected, expected_id, stdout, stderr, timeout):
+                    self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), expected)
+                    self.assertEqual(expected_id, image_id)
+                    self.assertNotEqual(path.read_bytes(), raw)
+                with patch.object(owner, 'load_rootless_image', side_effect=load) as operation:
+                    owner.load_canonical_rootless_image('daemon', archive, digest, image_id,
+                                                        'alpine:3.17', None, None)
+                    self.assertEqual(operation.call_count, 1)
+                    with self.assertRaises(OwnershipError):
+                        owner.load_canonical_rootless_image('daemon', archive, '0' * 64, image_id,
+                                                            'alpine:3.17', None, None)
+                    self.assertEqual(operation.call_count, 1)
+                self.assertEqual(list(owner.directory.glob('canonical-*.tar')), [])
+                with patch.object(owner, 'load_rootless_image', side_effect=OwnershipError('load failed')):
+                    with self.assertRaisesRegex(OwnershipError, 'load failed'):
+                        owner.load_canonical_rootless_image('daemon', archive, digest, image_id,
+                                                            'alpine:3.17', None, None)
+                self.assertEqual(list(owner.directory.glob('canonical-*.tar')), [])
+                with patch.object(owner, 'load_rootless_image', side_effect=OwnershipError('load failed')):
+                    with patch.object(Path, 'unlink', side_effect=OSError('locked')):
+                        with self.assertRaisesRegex(OwnershipError, 'load failed') as error:
+                            owner.load_canonical_rootless_image('daemon', archive, digest, image_id,
+                                                                'alpine:3.17', None, None)
+                self.assertIn('cleanup failed', error.exception.__notes__[0])
+            finally:
+                owner.close()
+
     def test_rootless_image_load_rejects_preexisting_hidden_parent_image(self):
         class HiddenParentEngine(FakeEngine):
             def execute(self, identifier, command, stdout, stderr, timeout, stdin=None):

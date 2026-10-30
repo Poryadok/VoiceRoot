@@ -11,6 +11,7 @@ import posixpath
 import re
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -18,6 +19,7 @@ import uuid
 
 from local_heavy_slots import _try_lock
 import local_rootless_profile as rootless
+import local_image_archive
 
 
 class OwnershipError(Exception):
@@ -646,6 +648,42 @@ class OwnedRun:
         item['state'] = 'ready'
         self._save()
         return result
+
+    def load_canonical_rootless_image(self, name, archive_path, archive_sha256, image_id, image_tag,
+                                      stdout, stderr, timeout=300):
+        """Canonicalize a verified OCI archive before loading into the private daemon.
+
+        The caller must authenticate the identities and control the daemon socket.
+        The owned directory must not have concurrent or untrusted writers.
+        """
+        path = Path(archive_path)
+        if not path.is_absolute() or path.resolve() != path or path.parent != self.directory or path.is_symlink():
+            raise OwnershipError('image archive must be a regular file in the owned run directory')
+        canonical_path = None
+        try:
+            with path.open('rb') as source:
+                before, current = os.fstat(source.fileno()), path.lstat()
+                if (not stat.S_ISREG(before.st_mode) or not stat.S_ISREG(current.st_mode) or
+                        (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino)):
+                    raise OwnershipError('image archive identity differs')
+                with tempfile.NamedTemporaryFile(mode='w+b', prefix='canonical-', suffix='.tar',
+                                                 dir=self.directory, delete=False) as output:
+                    canonical_path = Path(output.name)
+                    identity = local_image_archive.sanitize_archive(source, output, archive_sha256,
+                                                                    image_id, image_tag)
+            self.load_rootless_image(name, canonical_path, identity['archive_sha256'], image_id,
+                                     stdout, stderr, timeout)
+        except (OSError, ValueError) as exc:
+            raise OwnershipError('image canonicalization failed') from exc
+        finally:
+            if canonical_path is not None:
+                active_error = sys.exception()
+                try:
+                    canonical_path.unlink(missing_ok=True)
+                except OSError as cleanup_error:
+                    if active_error is None:
+                        raise OwnershipError('canonical image archive cleanup failed') from cleanup_error
+                    active_error.add_note('Canonical image archive cleanup failed: ' + str(canonical_path))
 
     def load_rootless_image(self, name, archive_path, archive_sha256, image_id, stdout, stderr, timeout=300):
         """Load an archive into an owned daemon; caller identities are not provenance proof.

@@ -144,6 +144,10 @@ it can issue a handoff receipt.
   exactly inspected Unix-profile container after a simulated lost response.
 - [x] Recover an already-visible, exactly verified resource after a lost create
   response; a real-Docker check preserved another fixture and a sentinel.
+- [x] Canonicalize a single verified OCI archive before loading it into a
+  journalled private daemon. A real Go Testcontainers client completed and the
+  journalled resources were removed. This does not authenticate the caller's
+  image identity or establish exclusive socket and directory access.
 - [ ] Generic private-daemon ownership, client execution and recovery.
 - [ ] Complete local preflight and representative no-skip receipts.
 
