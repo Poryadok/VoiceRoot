@@ -71,7 +71,7 @@ jobs:
       compose: ${{ steps.filter.outputs.compose }}
       staging_infra: ${{ steps.filter.outputs.staging_infra }}
       svc_analytics: ${{ steps.filter.outputs.svc_analytics }}
-      code: ${{ steps.filter.outputs.code == 'true' || steps.affected_scope.outputs.unresolved == 'true' || steps.fullrequest.outputs.requested == 'true' }}
+      code: ${{ steps.filter.outputs.code == 'true' || steps.affected_scope.outputs.unresolved == 'true' || steps.fullrequest.outputs.requested == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') }}
       full_application_request: ${{ steps.fullrequest.outputs.requested }}
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       docker_go_services: ${{ steps.gomatrix.outputs.docker_go_services }}
@@ -166,7 +166,7 @@ jobs:
           CI_GLOBAL: ${{ steps.scope.outputs.ci_global }}
           GO_SERVICES_JSON: ${{ steps.gomatrix.outputs.go_services }}
           FORCE_FULL: ${{ (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || steps.fullrequest.outputs.requested == 'true' }}
-          FILTER_CODE: ${{ steps.filter.outputs.code == 'true' || steps.affected_scope.outputs.unresolved == 'true' || steps.fullrequest.outputs.requested == 'true' }}
+          FILTER_CODE: ${{ steps.filter.outputs.code == 'true' || steps.affected_scope.outputs.unresolved == 'true' || steps.fullrequest.outputs.requested == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full') }}
           BASE_SHA: ${{ github.event.before }}
           HEAD_SHA: ${{ github.sha }}
           STAGING_FORCE_FULL_ROLLOUT: ${{ vars.STAGING_FORCE_FULL_ROLLOUT }}
@@ -1105,6 +1105,8 @@ jobs:
        needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
@@ -1113,10 +1115,12 @@ jobs:
           cache: true
           cache-dependency-path: src/backend/**/go.sum
       - name: Install golangci-lint
+        env:
+          GOFLAGS: ''
         run: go install ${{ env.GOLANGCI_LINT_MOD }}
       - name: Add GOBIN to PATH
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Go mod tidy (affected modules)
+      - name: Resolve Go test dependencies (affected modules)
         run: |
           set -e
           mapfile -t modules < <(echo '${{ needs.changes.outputs.go_services }}' | jq -r '.[]')
@@ -1125,8 +1129,8 @@ jobs:
           for m in "${modules[@]}"; do
             [[ -n "${m}" && -z "${seen[$m]:-}" ]] || continue
             seen[$m]=1
-            echo "== tidy ${m} =="
-            (cd "src/backend/${m}" && go mod tidy)
+            echo "== resolve ${m} =="
+            (cd "src/backend/${m}" && go list -test ./... >/dev/null)
           done
       - name: Lint affected Go modules
         run: |
@@ -1141,6 +1145,10 @@ jobs:
             (cd "src/backend/${m}" && golangci-lint run ./...)
           done
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   backend-go-pkg:
     needs: changes
     if: >-
@@ -1151,17 +1159,23 @@ jobs:
        needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (pkg)
+      - name: Resolve Go test dependencies (pkg)
         working-directory: src/backend/pkg
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Go test shared pkg
         working-directory: src/backend/pkg
         run: go test ./...
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
 
   nats-hub-config-renderer-image:
     needs: changes
@@ -1170,7 +1184,8 @@ jobs:
       needs.changes.result == 'success' &&
       ((github.event_name == 'pull_request' &&
         (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
-       (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true'))
+       (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true') ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -1182,7 +1197,7 @@ jobs:
         id: image
         run: echo "base=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - name: Build renderer image (PR verify)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -1256,6 +1271,8 @@ jobs:
        needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     permissions:
       actions: write
       contents: read
@@ -1269,9 +1286,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (${{ matrix.service }})
+      - name: Resolve Go test dependencies (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Go test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
@@ -1349,14 +1366,20 @@ jobs:
           cache-from: type=gha,scope=backend-${{ matrix.service }}
           cache-to: type=gha,scope=backend-${{ matrix.service }},mode=max,ignore-error=true
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   backend-go-integration-pr:
     needs: changes
     if: >-
       !cancelled() &&
-      github.event_name == 'pull_request' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.integration_go_services != '[]'
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -1367,9 +1390,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (${{ matrix.service }})
+      - name: Resolve Go test dependencies (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Require Docker for Go integration
         run: docker info >/dev/null
       - name: Install File codec tools
@@ -1405,10 +1428,14 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   backend-go-integration-evidence:
     needs: [changes, backend-go-integration-pr]
     if: >-
-      !cancelled() && github.event_name == 'pull_request' &&
+      !cancelled() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.integration_go_services != '[]' &&
       needs.backend-go-integration-pr.result == 'success'
@@ -1651,13 +1678,14 @@ jobs:
   backend-auth-image:
     needs: changes
     if: >-
-      !cancelled() && github.event_name == 'pull_request' &&
+      !cancelled() && (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
       (needs.changes.outputs.run_auth == 'true' ||
        needs.changes.outputs.auth == 'true' ||
        needs.changes.outputs.global == 'true' ||
-       needs.changes.outputs.ci_global == 'true')
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -2235,9 +2263,11 @@ jobs:
   t31-critical:
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       (needs.changes.outputs.t31 == 'true' || needs.changes.outputs.global == 'true' ||
-       needs.changes.outputs.ci_global == 'true')
+       needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     permissions:
       contents: read
       packages: read
@@ -2399,9 +2429,12 @@ jobs:
         run: bash .github/ci/verify-required-jobs.sh "${{ github.event_name }}" "${{ needs.changes.outputs.code }}" auto
 
   story-lfp-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'story')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -2450,10 +2483,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   user-association-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'user')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -2568,10 +2608,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   notification-quota-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'notification')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2616,10 +2663,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   role-space-receipt-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -2658,10 +2712,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   realtime-lifecycle-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'realtime')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2710,10 +2771,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   chat-lifecycle-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'chat')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2762,12 +2830,20 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   local-docker-isolation:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       (needs.changes.outputs.local_docker_isolation == 'true' ||
-       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -2790,10 +2866,17 @@ jobs:
           python3 scripts/ci/local_docker_scheduled_integration_test.py
           python3 scripts/ci/local_docker_owned_cancel_test.py
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   space-native-installer-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -2898,10 +2981,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   space-autovacuum-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'space')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2971,10 +3061,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   messaging-threadlist-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'messaging')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -3023,10 +3120,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   voice-ledger-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'voice')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -3071,10 +3175,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   bot-membership-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'bot')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -3123,10 +3234,17 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
   role-migration-integration:
+    env:
+      GOFLAGS: -mod=readonly
     needs: changes
     if: >-
-      github.event_name == 'pull_request' && needs.changes.result == 'success' &&
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) &&
+      needs.changes.result == 'success' &&
       contains(fromJSON(needs.changes.outputs.integration_go_services), 'role')
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -3223,6 +3341,10 @@ jobs:
             ${{ runner.temp }}/role-bootstrap-receipt.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
 
   compose-e2e:
     needs: changes
@@ -3639,6 +3761,8 @@ jobs:
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -3670,9 +3794,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Go mod tidy (${{ matrix.service }})
+      - name: Resolve Go test dependencies (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
-        run: go mod tidy
+        run: go list -test ./... >/dev/null
       - name: Go integration test (${{ matrix.service }})
         working-directory: src/backend/${{ matrix.service }}
         env:
@@ -3682,6 +3806,10 @@ jobs:
         if: matrix.service == 'gateway'
         working-directory: src/backend/gateway
         run: CGO_ENABLED=1 go test -race ./...
+
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
 
   analytics-clickhouse-integration:
     needs: changes
@@ -3761,6 +3889,8 @@ jobs:
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.profile != 'auto')
     runs-on: ubuntu-latest
+    env:
+      GOFLAGS: -mod=readonly
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
@@ -3779,6 +3909,8 @@ jobs:
           channel: stable
           cache: true
       - name: Install buf CLI and golangci-lint
+        env:
+          GOFLAGS: ''
         run: |
           go install github.com/bufbuild/buf/cmd/buf@${{ env.BUF_VERSION }}
           go install ${{ env.GOLANGCI_LINT_MOD }}
@@ -3788,11 +3920,11 @@ jobs:
         run: |
           dart pub global activate protoc_plugin 25.0.0
           echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
-      - name: Go mod tidy (all Go modules)
+      - name: Resolve Go test dependencies (all Go modules)
         run: |
           set -e
           for m in pkg analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice; do
-            (cd "src/backend/$m" && go mod tidy)
+            (cd "src/backend/$m" && go list -test ./... >/dev/null)
           done
       - name: Prefetch sqlite3mc native assets
         run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
@@ -3800,6 +3932,77 @@ jobs:
         run: make build-all
       - name: make flutter-ci
         run: make flutter-ci
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  # Full validation is fail-closed while required full-profile routing and
+  # integration inventory gaps are being completed. It does not yet authorize
+  # promotion or staging deployment.
+  full-validation-aggregation:
+    needs:
+      - changes
+      - protobuf
+      - compose-config
+      - ci-script-tests
+      - voice-history-audit
+      - match-squad-overlay
+      - local-docker-isolation
+      - flutter-unit-plan
+      - flutter-unit-tests
+      - flutter-unit-receipts
+      - flutter
+      - flutter-music-proof
+      - flutter-help-comparison
+      - flutter-startup-comparison
+      - flutter-device-driver
+      - flutter-key-backup-goldens
+      - flutter-windows
+      - flutter-android-smoke
+      - flutter-web-integration
+      - flutter-ios
+      - golangci
+      - backend-go-pkg
+      - backend-go
+      - backend-go-integration-pr
+      - backend-go-integration-evidence
+      - backend-go-integration
+      - nats-hub-config-renderer-image
+      - story-lfp-integration
+      - user-association-integration
+      - notification-quota-integration
+      - role-migration-integration
+      - role-space-receipt-integration
+      - bot-membership-integration
+      - voice-ledger-integration
+      - messaging-threadlist-integration
+      - space-autovacuum-integration
+      - space-native-installer-integration
+      - chat-lifecycle-integration
+      - realtime-lifecycle-integration
+      - backend-auth
+      - backend-auth-image
+      - developer-portal
+      - web
+      - admin
+      - t31-critical
+      - compose-e2e
+      - a1-e2e
+      - a1-flutter-profile-handoff
+      - a1-attachment-restart-proof
+      - analytics-clickhouse-integration
+      - grafana-analytics-smoke
+      - local-ci-parity
+    if: >-
+      always() && github.event_name == 'workflow_dispatch' && inputs.profile == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Aggregate full validation
+        env:
+          FULL_PROFILE: ${{ inputs.profile }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci/full_validation_gate.py
 
   deploy-staging:
     needs:

@@ -13,16 +13,16 @@ ROOT := $(CURDIR)
 
 ifeq ($(OS),Windows_NT)
 BASH ?= "C:/Program Files/Git/bin/bash.exe"
-GO_TEST_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_FLAGS)
-GO_TEST_SHORT_RUN = set CGO_ENABLED=0&& go test $(GO_TEST_SHORT_FLAGS)
+GO_TEST_RUN = set CGO_ENABLED=0&& go test -mod=readonly $(GO_TEST_FLAGS)
+GO_TEST_SHORT_RUN = set CGO_ENABLED=0&& go test -mod=readonly $(GO_TEST_SHORT_FLAGS)
 # Host gcc is often missing on Windows; run -race in Docker (parity with Linux CI).
 GATEWAY_RACE_RUN = docker run --rm -v "$(ROOT):/workspace" -w /workspace/src/backend/gateway $(GO_IMAGE) \
-	bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config >/dev/null 2>&1 && CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)"
+	bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config >/dev/null 2>&1 && CGO_ENABLED=1 go test -mod=readonly -race $(GO_TEST_FLAGS)"
 else
 BASH ?= bash
-GO_TEST_RUN = CGO_ENABLED=0 go test $(GO_TEST_FLAGS)
-GO_TEST_SHORT_RUN = CGO_ENABLED=0 go test $(GO_TEST_SHORT_FLAGS)
-GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -race $(GO_TEST_FLAGS)
+GO_TEST_RUN = CGO_ENABLED=0 go test -mod=readonly $(GO_TEST_FLAGS)
+GO_TEST_SHORT_RUN = CGO_ENABLED=0 go test -mod=readonly $(GO_TEST_SHORT_FLAGS)
+GATEWAY_RACE_RUN = CGO_ENABLED=1 go test -mod=readonly -race $(GO_TEST_FLAGS)
 endif
 GO_SERVICES := analytics bot chat controlledgame federation file gameintegration gateway matchmaking messaging moderation notification realtime role search social space story subscription user voice
 # Dockerfiles with context=src/backend (sync scripts/ci/backend-docker-context.txt and ci.yml dockerctx).
@@ -35,7 +35,7 @@ GO_IMAGE_TARGETS := $(GO_SERVICES:%=go-image-%)
 .PHONY: buf-lint buf-format buf-breaking buf-generate buf-generate-dart buf-dart-check buf-go-pb-check check-auth-proto-sync r23-contract-ci r23-p2-generated-parity sync-pb-from-gen buf-generate-all compose-up compose-app-up compose-down compose-logs-collect compose-observability-up \
 	compose-migrate-all compose-migrate-e2e compose-migrate-bot compose-migrate-story compose-migrate-voice compose-e2e-smoke compose-e2e-live compose-e2e-full compose-e2e-voice-live compose-file-attachment-restart-proof compose-a1-multi-account-proof compose-a1-flutter-profile-handoff \
 	build-all build-all-breaking check-toolchain compose-config-ci buf-ci backend-test-ci backend-test-ci-short backend-image-ci \
-	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all auth-test-ci auth-image-ci buf-breaking-ci \
+	gateway-test-ci gateway-image-ci go-test-pkg go-mod-tidy-all go-mod-resolve-all auth-test-ci auth-image-ci buf-breaking-ci \
 	golangci-ci gateway-test-race-ci design-tokens-check penpot-tokens-export penpot-tokens-export-check flutter-ui-color-gate flutter-ci flutter-windows-prefetch-sqlite3 flutter-linux-prefetch-sqlite3 prekey-golden-check coverage-report testcontainers-prune buf-generate-ci-local-template-check \
 	staging-matrix-test go-matrix-test verify-required-jobs-test image-catalog-drift-check e2e-manifest-helper-test rollout-app-tier-order-test staging-kubectl-configmap-test staging-app-secrets-test ci-script-tests generate-staging-services a11y-web-axe contrast-tokens-check complete-match-pki-test
 
@@ -188,9 +188,15 @@ buf-ci:
 	docker run --rm --entrypoint sh -v "$(ROOT):/workspace" -w /workspace $(BUF_IMAGE) \
 		-c "buf lint && buf format -d --exit-code"
 
-backend-test-ci: go-mod-tidy-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci
+backend-test-ci: go-mod-resolve-all go-test-pkg $(GO_TEST_TARGETS) auth-test-ci
 
-backend-test-ci-short: go-mod-tidy-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci
+backend-test-ci-short: go-mod-resolve-all go-test-pkg $(GO_TEST_SHORT_TARGETS) auth-test-ci
+
+go-mod-resolve-all:
+	$(BASH) -c 'set -e; for m in $(GO_MODULES_LINT); do \
+		echo "== resolve $$m without module writes =="; \
+		(cd src/backend/$$m && go list -mod=readonly -test ./... >/dev/null); \
+	done'
 
 go-mod-tidy-all:
 	$(BASH) -c 'for m in $(GO_MODULES_LINT); do \
@@ -327,6 +333,8 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/full_application_request_test.py"
 	python3 "$(ROOT)/scripts/ci/current-diff-contract_test.py"
 	python3 "$(ROOT)/scripts/ci/affected_check_plan_test.py"
+	python3 "$(ROOT)/scripts/ci/full_validation_gate_test.py"
+	python3 "$(ROOT)/scripts/ci/check_go_modules_clean_test.py"
 	python3 "$(ROOT)/scripts/ci/local_source_snapshot_test.py"
 	python3 "$(ROOT)/scripts/ci/flutter_test_events_test.py"
 	python3 "$(ROOT)/scripts/ci/local_flutter_execution_test.py"

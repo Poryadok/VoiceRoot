@@ -648,6 +648,21 @@ Flutter selector. Both original checks remain in `flutter` until the hosted
 comparison has been reviewed; each comparison builds the same Help launcher
 fixture independently and retains its own evidence.
 
+A manual CI dispatch with `profile=full` forces the code scope even when the
+last diff contains only documentation. `full-validation-aggregation` rejects a
+non-master or mismatched checkout, non-successful required jobs, and unresolved
+Go integration source inventory. Full-profile routing, matrix completeness and
+promotion gating are still incomplete; this aggregation does not authorize a
+deployment and will fail while the unresolved inventory remains.
+
+The main Go CI jobs and dedicated Go integration proofs resolve and test with
+`-mod=readonly`, then reject changes to backend `go.mod` or `go.sum` files,
+including ignored newly created sums.
+`make backend-test-ci` uses the same read-only resolution; the explicit
+`make go-mod-tidy-all` target remains available for intentional maintenance.
+Other proof jobs and generated or external inputs still require source-binding
+review before the full run can qualify promotion.
+
 ### Локальные грабли (Windows, compose E2E)
 
 Типичные сбои при `make build-all` / `make compose-e2e-smoke` на **Windows** (PowerShell). В цепочках команд используй **`;`**, не `&&`.

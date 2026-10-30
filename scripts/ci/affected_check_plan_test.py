@@ -517,6 +517,16 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 plan = planner.make_plan(planner.match_filters(rules, paths), matrix)
                 self.assertIn('flutter-music-proof', plan['checks'])
 
+    def test_full_dispatch_forces_code_even_after_docs_only_changes(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        changes = workflow['jobs']['changes']
+        required = "github.event_name == 'workflow_dispatch' && inputs.profile == 'full'"
+        self.assertIn(required, changes['outputs']['code'])
+        matrix = next(step for step in changes['steps'] if step.get('id') == 'stagingmatrix')
+        self.assertIn(required, matrix['env']['FILTER_CODE'])
+        self.assertIn(required, matrix['env']['FORCE_FULL'])
+
     def test_help_and_startup_comparisons_preserve_original_checks_and_are_required(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
