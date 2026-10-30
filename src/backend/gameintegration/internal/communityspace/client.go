@@ -78,14 +78,14 @@ func (c *Client) AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID,
 		return false, err
 	}
 	if response == nil {
-		return false, fmt.Errorf("Space co-membership response is empty")
+		return false, fmt.Errorf("space co-membership response is empty")
 	}
 	return response.GetCoMembers(), nil
 }
 
 func (c *Client) ProvisionCommunityBootstrap(ctx context.Context, op registry.CommunityBootstrapOperation) (uuid.UUID, error) {
 	if c == nil || c.service == nil || c.token == "" {
-		return uuid.Nil, fmt.Errorf("Space bootstrap client unavailable")
+		return uuid.Nil, fmt.Errorf("space bootstrap client unavailable")
 	}
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+c.token)
 	response, err := c.service.CreateCommunityBootstrap(ctx, &spacev1.CreateCommunityBootstrapRequest{
@@ -96,11 +96,11 @@ func (c *Client) ProvisionCommunityBootstrap(ctx context.Context, op registry.Co
 		return uuid.Nil, err
 	}
 	if response.GetSpace() == nil {
-		return uuid.Nil, fmt.Errorf("Space bootstrap returned no Space")
+		return uuid.Nil, fmt.Errorf("space bootstrap returned no Space")
 	}
 	spaceID, err := uuid.Parse(response.GetSpace().GetId())
 	if err != nil || spaceID == uuid.Nil {
-		return uuid.Nil, fmt.Errorf("Space bootstrap returned invalid Space identity")
+		return uuid.Nil, fmt.Errorf("space bootstrap returned invalid Space identity")
 	}
 	return spaceID, nil
 }
@@ -112,7 +112,7 @@ type OwnerRecoveryReceipt struct {
 
 func (c *Client) ProvisionCommunityOwnerRecovery(ctx context.Context, op registry.OwnerRecoveryOperation) (OwnerRecoveryReceipt, error) {
 	if c == nil || c.service == nil || c.token == "" || op.TargetSpaceID == uuid.Nil {
-		return OwnerRecoveryReceipt{}, fmt.Errorf("Space owner recovery client unavailable")
+		return OwnerRecoveryReceipt{}, fmt.Errorf("space owner recovery client unavailable")
 	}
 	ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+c.token)
 	response, err := c.service.RecoverCommunityOwner(ctx, &spacev1.RecoverCommunityOwnerRequest{
@@ -127,7 +127,7 @@ func (c *Client) ProvisionCommunityOwnerRecovery(ctx context.Context, op registr
 	}
 	spaceID, err := uuid.Parse(response.GetSpaceId())
 	if err != nil || spaceID == uuid.Nil || spaceID != op.TargetSpaceID || response.GetOwnerGeneration() != op.ExpectedGeneration+1 {
-		return OwnerRecoveryReceipt{}, fmt.Errorf("Space owner recovery returned a mismatched receipt")
+		return OwnerRecoveryReceipt{}, fmt.Errorf("space owner recovery returned a mismatched receipt")
 	}
 	return OwnerRecoveryReceipt{SpaceID: spaceID, Generation: response.GetOwnerGeneration()}, nil
 }
@@ -135,7 +135,7 @@ func (c *Client) ProvisionCommunityOwnerRecovery(ctx context.Context, op registr
 func (c *Client) ProjectCommunityRoster(ctx context.Context, in registry.CommunityRosterProjection) (registry.CommunityRosterSpaceReceipt, error) {
 	if c == nil || c.service == nil || c.token == "" || in.OperationID == uuid.Nil || in.SpaceID == uuid.Nil ||
 		in.LeaseExpiresAt.IsZero() || len(in.SnapshotSHA256) != 32 {
-		return registry.CommunityRosterSpaceReceipt{}, fmt.Errorf("Space community roster client unavailable")
+		return registry.CommunityRosterSpaceReceipt{}, fmt.Errorf("space community roster client unavailable")
 	}
 	profileIDs := make([]string, len(in.ProfileIDs))
 	for i, id := range in.ProfileIDs {
@@ -156,7 +156,7 @@ func (c *Client) ProjectCommunityRoster(ctx context.Context, in registry.Communi
 		response.GetSpaceId() != in.SpaceID.String() || response.GetOwnerGeneration() != in.OwnerGeneration ||
 		response.GetSourceRevision() != in.SourceRevision || string(response.GetSnapshotSha256()) != string(in.SnapshotSHA256) ||
 		response.GetMemberCount() != int32(len(in.ProfileIDs)) || len(response.GetRequestSha256()) != 32 {
-		return registry.CommunityRosterSpaceReceipt{}, fmt.Errorf("Space community roster returned a mismatched receipt")
+		return registry.CommunityRosterSpaceReceipt{}, fmt.Errorf("space community roster returned a mismatched receipt")
 	}
 	return registry.CommunityRosterSpaceReceipt{OperationID: in.OperationID, SpaceID: in.SpaceID,
 		ReceiptID: receiptID, RequestHash: append([]byte(nil), response.GetRequestSha256()...), MemberCount: response.GetMemberCount()}, nil
