@@ -1,0 +1,14 @@
+{"space": [
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift"],
+  ["voice/backend/space/internal/store", "TestNative51RawCompositeSessionStability"],
+  ["voice/backend/space/internal/store", "TestNative51ClassifierRejectsUnclassifiedMissingDatum"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/function_cost"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/function_ACL"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/function_owner"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/escaped_Unicode_body"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/unexpected_function"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/private_index_attributes"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/column"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/constraint"],
+  ["voice/backend/space/internal/store", "TestNativeCatalog50LiteralProjectionAndDrift/trigger_disabled"]
+]}

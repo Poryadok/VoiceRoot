@@ -96,6 +96,37 @@ class GoIntegrationReceiptTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 audit(ROOT, full, broken)
 
+    def test_space_trusted50_real_boundary_and_required_catalog_cases(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        catalog = 'TestNativeCatalog50LiteralProjectionAndDrift'
+        roots = (catalog, 'TestNative51RawCompositeSessionStability',
+                 'TestNative51ClassifierRejectsUnclassifiedMissingDatum')
+        cases = ('function_cost', 'function_ACL', 'function_owner', 'escaped_Unicode_body',
+                 'unexpected_function', 'private_index_attributes', 'column', 'constraint', 'trigger_disabled')
+        inventory = json.loads((ROOT / 'scripts/ci/space_trusted50_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['space'], [[package, name] for name in roots] +
+                         [[package, catalog + '/' + name] for name in cases])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for name in roots:
+            entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        steps = jobs['space-native-installer-integration']['steps']
+        step = next(item for item in steps if item.get('name') == 'Run trusted Space native50 catalog proofs')
+        self.assertIn('-at trusted50', step['run'])
+        self.assertIn('controlled deployment evidence persistence failure', step['run'])
+        self.assertIn('space_trusted50_required.json', step['run'])
+        self.assertIn('--reject-skips', step['run'])
+        self.assertLess(steps.index(step), next(i for i, item in enumerate(steps)
+                                               if item.get('name') == 'Run Space account-ban capture guard'))
+        events = [{'Package': package, 'Test': test, 'Action': action}
+                  for _, test in inventory['space'] for action in ('run', 'pass')]
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertFalse(receipts.verify_required(events, inventory['space'], 0))
+        events[-2]['Action'] = 'skip'
+        self.assertTrue(receipts.verify_required(events, inventory['space'], 0))
+
     def test_file_matrix_requires_pdf_runtime_and_real_renderer(self):
         import yaml
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))

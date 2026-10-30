@@ -669,6 +669,12 @@ The Gateway integration matrix also runs the Linux `live`-tagged leave diagnosti
 parent and requires its 204 and 503 subtests without skips. The child probe is
 an explicitly mapped subprocess helper: its 503 path intentionally fails inside
 the subprocess and the parent verifies that failure and redacted diagnostic.
+The Space native-installer job also checks the real trusted-50 catalog boundary.
+A source-bound test helper interrupts evidence writing after the trusted-50
+transition, and the job requires the three catalog tests and nine drift
+subtests without skips. It removes only the database it just created in its
+disposable PostgreSQL service before provisioning the separate current-51
+fixture. The interrupted receipt is test input, not deployment evidence.
 `make backend-test-ci` uses the same read-only resolution; the explicit
 `make go-mod-tidy-all` target remains available for intentional maintenance.
 Other proof jobs and generated or external inputs still require source-binding
