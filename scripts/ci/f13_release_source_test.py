@@ -7,6 +7,9 @@ import hashlib
 import io
 import os
 import sys
+import re
+import signal
+import time
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
@@ -680,6 +683,221 @@ class MapTest(unittest.TestCase):
                 with self.assertRaises(release.Rejected): release.audit_map(repo,binding,map_path,history_path)
                 with patch.object(release,'COLLECTION_BASE',source):
                     with self.assertRaises(release.Rejected): audit(row)
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'full-history child lifecycle runs on Linux CI/Docker')
+class StandaloneSuiteLifecycleTest(unittest.TestCase):
+    """Execute the real shell launcher with small disposable suite programs."""
+    names = ['f13_space_audit_test.py', 'f13_production_source_test.py',
+             'f13_release_source_test.py', 'f13_native_p3_documentation_test.py']
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory(prefix='f13-suite-lifecycle-')
+        self.addCleanup(self.directory.cleanup)
+        self.folder = Path(self.directory.name)
+        self.repo = self.folder / 'repo'
+        (self.repo / 'scripts/ci').mkdir(parents=True)
+        self.inputs = self.folder / 'inputs'
+        self.inputs.mkdir()
+        self.source = (Path(__file__).resolve().parent /
+                       'voice-db-runtime-provisioning-contract_test.sh').read_text()
+        functions = {m.group(1): m.group(0) for m in re.finditer(
+            r'(?ms)^([A-Za-z_][A-Za-z0-9_]*)\(\) \{\n.*?^\}\n', self.source)}
+        self.functions = '\n'.join(functions[name] for name in (
+            'f13_cleanup', 'f13_standalone_suites', 'f13_start_standalone_suites',
+            'f13_wait_standalone_suites'))
+        for index, name in enumerate(self.names):
+            self.write_suite(index, f"with open({str(self.folder/'order')!r}, 'a') as out: out.write({name!r}+'\\n')\n")
+
+    def write_suite(self, index, body):
+        (self.repo / 'scripts/ci' / self.names[index]).write_text(body)
+
+    def launch(self, producer=':', prelude=''):
+        import shlex
+        program = 'set -euo pipefail\n' + self.functions + '\n'
+        program += 'ROOT=' + shlex.quote(str(self.repo)) + '\nTMP_DIR=' + shlex.quote(str(self.inputs)) + '\n'
+        program += "trap f13_cleanup EXIT\ntrap 'exit 130' INT\ntrap 'exit 143' TERM\n"
+        program += prelude + '\nf13_start_standalone_suites\n' + producer + '\n'
+        program += 'f13_wait_standalone_suites\necho FULL_PASS\n'
+        process = subprocess.Popen(['/bin/bash', '-c', program], stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, start_new_session=True)
+        self.addCleanup(self.settle_harness, process)
+        return process
+
+    @staticmethod
+    def settle_harness(process):
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+
+    def result(self, process, expected):
+        out, err = process.communicate(timeout=10)
+        self.assertEqual(process.returncode, expected, out + err)
+        self.assertEqual('FULL_PASS' in out, expected == 0, out + err)
+        self.assertFalse(self.inputs.exists(), 'inputs removed only after owned children settle')
+        return out, err
+
+    def wait_path(self, path):
+        deadline = time.monotonic() + 5
+        while not path.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(path.exists(), str(path))
+
+    def assert_no_descendants(self):
+        for name in ('suite.pid', 'grandchild.pid'):
+            path = self.folder / name
+            self.wait_path(path)
+            self.assertFalse(Path('/proc', path.read_text()).exists(), name + ' survived cleanup')
+
+    def long_suite(self):
+        self.write_suite(0, 'import os, pathlib, signal, subprocess, sys, time\n'
+            'signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
+            f'pathlib.Path({str(self.folder/"suite.pid")!r}).write_text(str(os.getpid()))\n'
+            'child = subprocess.Popen([sys.executable, "-c", '
+            f'{("import os,pathlib,signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); pathlib.Path(" + repr(str(self.folder/"grandchild.pid")) + ").write_text(str(os.getpid())); time.sleep(60)")!r}])\n'
+            'time.sleep(60)\n')
+
+    def test_exact_inventory_conditions_order_and_unchanged_whole_producer(self):
+        prefix = self.source[self.source.index('printf \'%s\\n\' \'== F13/G7:'):self.source.index('f13_start_standalone_suites\nbase_sha=')]
+        tail = re.search(r'(?ms)^f13_standalone_suites\(\) \{\n(.*?)^\}\n', self.source).group(1)
+        names = re.findall(r'python3 "\$\{ROOT\}/scripts/ci/([^" ]+)"', prefix + tail)
+        self.assertEqual(names, ['f13_native_p3_source_test.py', 'f13_native_p3_source_history_test.py',
+            'f13_native_p3_successor_test.py', 'f13_native_p3_successor_integration_test.py',
+            'f13_guarded_merge_test.py', 'f13_reviewed_test_merge_test.py',
+            'f13_historical_composition_test.py', 'f13_role_conditional_test.py',
+            'f13_role_conditional_successor_test.py'] + self.names)
+        for name in self.names[1:]:
+            self.assertIn('if [[ -f "${ROOT}/scripts/ci/' + name + '" ]]; then', tail)
+        producer = self.source[self.source.index('\nbase_sha="${VOICE_R22') + 1:self.source.rindex('f13_wait_standalone_suites\n')]
+        self.assertEqual(hashlib.sha256(producer.encode()).hexdigest(),
+                         'a71b4dd2fdd1775285dc19de82992b0360fcd420fdc4166acd21e188e513ee7c')
+        self.assertTrue(self.source.rstrip().endswith("f13_wait_standalone_suites\necho 'Voice DB RED-F runtime/provisioning/docs contract: PASS'"))
+
+    def test_success_requires_actual_ordered_suites_and_overlaps_producer(self):
+        gate = self.folder / 'producer'
+        self.write_suite(0, 'import pathlib,time\np=' + repr(str(gate)) + '\n'
+            'end=time.monotonic()+4\n'
+            'while not pathlib.Path(p).exists() and time.monotonic()<end: time.sleep(.01)\n'
+            'assert pathlib.Path(p).exists(), "producer did not overlap"\n' +
+            f'open({str(self.folder/"order")!r}, "a").write({self.names[0]!r}+"\\n")\n')
+        self.result(self.launch('touch "' + str(gate) + '"'), 0)
+        self.assertEqual((self.folder / 'order').read_text().splitlines(), self.names)
+
+    def test_optional_conditions_still_control_discovery(self):
+        for name in self.names[1:]:
+            (self.repo / 'scripts/ci' / name).unlink()
+        self.result(self.launch(), 0)
+        self.assertEqual((self.folder / 'order').read_text().splitlines(), self.names[:1])
+
+    def test_suite_failure_is_mandatory_and_stops_later_suite_commands(self):
+        self.write_suite(1, 'raise SystemExit(37)\n')
+        self.result(self.launch(), 37)
+        self.assertEqual((self.folder / 'order').read_text().splitlines(), self.names[:1])
+
+    def test_producer_failure_preserved_and_owned_descendants_reaped(self):
+        self.long_suite()
+        gate = str(self.folder / 'grandchild.pid')
+        self.result(self.launch('while [[ ! -f "' + gate + '" ]]; do sleep .01; done\nexit 41'), 41)
+        self.assert_no_descendants()
+
+    def test_parent_signals_join_owned_descendants_before_input_cleanup(self):
+        for received in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=received):
+                self.inputs.mkdir(exist_ok=True)
+                for name in ('suite.pid', 'grandchild.pid'):
+                    (self.folder / name).unlink(missing_ok=True)
+                self.long_suite()
+                process = self.launch('while :; do sleep .02; done')
+                self.wait_path(self.folder / 'grandchild.pid')
+                process.send_signal(received)
+                self.result(process, 128 + received)
+                self.assert_no_descendants()
+
+    def test_supervisor_launch_failure_cannot_print_pass(self):
+        self.result(self.launch(prelude='python3() { return 73; }'), 73)
+
+    def test_suite_shell_spawn_failure_cannot_print_pass(self):
+        self.functions = self.functions.replace("['/bin/bash', '-c'", "['/missing-f13-bash', '-c'")
+        self.result(self.launch(), 1)
+
+    def test_escaped_double_fork_is_reaped_without_signalling_foreign_process(self):
+        foreign = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+        self.addCleanup(self.settle_harness, foreign)
+        escaped = self.folder / 'escaped.pid'
+        self.write_suite(0, 'import os,pathlib,signal,time\n'
+            'if os.fork(): os._exit(0)\n'
+            'os.setsid()\n'
+            'if os.fork(): os._exit(0)\n'
+            'signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
+            f'pathlib.Path({str(escaped)!r}).write_text(str(os.getpid()))\n'
+            'time.sleep(60)\n')
+        self.result(self.launch('while [[ ! -f "' + str(escaped) + '" ]]; do sleep .01; done\nexit 41'), 41)
+        self.assertFalse(Path('/proc', escaped.read_text()).exists())
+        self.assertIsNone(foreign.poll())
+
+    def test_signal_in_launch_capture_gap_is_deferred_and_joined(self):
+        marker = self.folder / 'launch-gap'
+        self.functions = self.functions.replace('  f13_standalone_pid=$!',
+            '  touch "' + str(marker) + '"\n  sleep .5 || true\n  f13_standalone_pid=$!')
+        self.long_suite()
+        process = self.launch('exit 99')
+        self.wait_path(marker)
+        process.send_signal(signal.SIGTERM)
+        self.result(process, 143)
+        # A suite may be cancelled before it starts; any recorded children must be gone.
+        for name in ('suite.pid', 'grandchild.pid'):
+            path = self.folder / name
+            if path.exists():
+                self.assertFalse(Path('/proc', path.read_text()).exists())
+
+    def test_repeated_signal_during_cleanup_keeps_join(self):
+        self.long_suite()
+        process = self.launch('while :; do sleep .02; done')
+        self.wait_path(self.folder / 'grandchild.pid')
+        process.send_signal(signal.SIGTERM)
+        time.sleep(.05)
+        process.send_signal(signal.SIGTERM)
+        self.result(process, 143)
+        self.assert_no_descendants()
+
+    def test_signals_interrupt_actual_join_but_inputs_survive_until_settlement(self):
+        for received in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=received):
+                self.inputs.mkdir(exist_ok=True)
+                for name in ('suite.pid', 'grandchild.pid'):
+                    (self.folder / name).unlink(missing_ok=True)
+                self.long_suite()
+                # The producer finishes immediately; the shell is inside the
+                # actual f13_wait_standalone_suites while the suite is alive.
+                process = self.launch(':')
+                self.wait_path(self.folder / 'grandchild.pid')
+                process.send_signal(received)
+                time.sleep(.05)
+                self.assertTrue(self.inputs.exists(), 'inputs removed before settlement')
+                self.assertTrue(Path('/proc', (self.folder / 'grandchild.pid').read_text()).exists())
+                process.send_signal(received)
+                self.result(process, 128 + received)
+                self.assert_no_descendants()
+
+    def test_descendant_forked_during_term_is_reaped(self):
+        ready, escaped = self.folder / 'ready', self.folder / 'term-fork.pid'
+        self.write_suite(0, 'import os,pathlib,signal,time\n'
+            'def on_term(sig, frame):\n'
+            '    if os.fork() == 0:\n'
+            '        os.setsid()\n'
+            '        signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
+            f'        pathlib.Path({str(escaped)!r}).write_text(str(os.getpid()))\n'
+            '        time.sleep(60)\n'
+            'signal.signal(signal.SIGTERM, on_term)\n'
+            f'pathlib.Path({str(ready)!r}).touch()\n'
+            'time.sleep(60)\n')
+        self.result(self.launch('while [[ ! -f "' + str(ready) + '" ]]; do sleep .01; done\nexit 41'), 41)
+        self.wait_path(escaped)
+        self.assertFalse(Path('/proc', escaped.read_text()).exists())
 
 
 if __name__ == '__main__':

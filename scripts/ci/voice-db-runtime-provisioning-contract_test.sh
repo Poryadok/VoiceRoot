@@ -7,6 +7,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 TMP_DIR="$(mktemp -d)"
 f13_cleanup() {
   local status=$? child worker
+  trap '' INT TERM
+  if [[ -n "${f13_standalone_pid:-}" ]]; then
+    # If cancellation cannot be published, still wait for the real suite rather
+    # than removing inputs while its supervisor may be using them.
+    : > "${TMP_DIR}/f13-standalone-cancel" || true
+    wait "${f13_standalone_pid}" 2>/dev/null || true
+    f13_standalone_pid=''
+  fi
   for worker in "${f13_router_worker_pid:-}" "${f13_finite_J_worker_pid:-}"; do
   if [[ -n "${worker}" ]]; then
     # Signal only our still-running shell job; never a recycled numeric PID.
@@ -466,6 +474,91 @@ case "${VOICE_CONTRACT_PROFILE:-full}" in
   *) echo 'Unknown VOICE_CONTRACT_PROFILE (expected current or full)' >&2; exit 2 ;;
 esac
 
+f13_standalone_suites() {
+  python3 "${ROOT}/scripts/ci/f13_space_audit_test.py"
+  if [[ -f "${ROOT}/scripts/ci/f13_production_source_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_production_source_test.py"
+  fi
+  if [[ -f "${ROOT}/scripts/ci/f13_release_source_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_release_source_test.py"
+  fi
+  if [[ -f "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py" ]]; then
+    python3 "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py"
+  fi
+}
+
+f13_start_standalone_suites() {
+  local deferred=0
+  trap 'deferred=130' INT
+  trap 'deferred=143' TERM
+  mkdir "${TMP_DIR}/f13-standalone"
+  F13_SUITE_ROOT="${ROOT}" F13_SUITE_TMP="${TMP_DIR}" \
+    python3 - "$(declare -f f13_standalone_suites)" <<'PY' &
+import ctypes, os, signal, subprocess, sys, time
+
+cancel = os.path.join(os.environ['F13_SUITE_TMP'], 'f13-standalone-cancel')
+received = 0
+def remember(sig, frame):
+    global received
+    received = received or sig
+signal.signal(signal.SIGINT, remember)
+signal.signal(signal.SIGTERM, remember)
+if ctypes.CDLL(None, use_errno=True).prctl(36, 1, 0, 0, 0) != 0:
+    raise OSError(ctypes.get_errno(), 'PR_SET_CHILD_SUBREAPER')
+env = dict(os.environ, ROOT=os.environ['F13_SUITE_ROOT'], TMPDIR=os.path.join(os.environ['F13_SUITE_TMP'], 'f13-standalone'))
+child = None
+result = 1
+try:
+    child = subprocess.Popen(['/bin/bash', '-c', 'set -euo pipefail\n' + sys.argv[1] + '\nf13_standalone_suites'], env=env, start_new_session=True)
+    observed = None
+    while not received and not os.path.exists(cancel):
+        observed = os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+        if observed is not None:
+            break
+        time.sleep(.05)
+    if observed is not None:
+        result = observed.si_status if observed.si_code == os.CLD_EXITED else 128 + observed.si_status
+    elif received:
+        result = 128 + received
+finally:
+    if child is not None:
+        # The unreaped leader reserves the process group identity throughout.
+        for sig, delay in ((signal.SIGTERM, .2), (signal.SIGKILL, 0)):
+            try:
+                os.killpg(child.pid, sig)
+            except ProcessLookupError:
+                pass
+            if delay:
+                time.sleep(delay)
+        while True:
+            with open('/proc/self/task/%d/children' % os.getpid()) as stream:
+                children = [int(pid) for pid in stream.read().split()]
+            for pid in children:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            try:
+                while os.waitpid(-1, os.WNOHANG)[0]:
+                    pass
+            except ChildProcessError:
+                break
+            time.sleep(.01)
+sys.exit(result)
+PY
+  f13_standalone_pid=$!
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  ((deferred == 0)) || exit "${deferred}"
+}
+
+f13_wait_standalone_suites() {
+  local status=0
+  wait "${f13_standalone_pid}" || status=$?
+  f13_standalone_pid=''
+  return "${status}"
+}
+
 printf '%s\n' '== F13/G7: source-disabled scope boundary =='
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_test.py"
 python3 "${ROOT}/scripts/ci/f13_native_p3_source_history_test.py"
@@ -480,16 +573,7 @@ python3 "${ROOT}/scripts/ci/f13_role_conditional_test.py"
 if [[ -f "${ROOT}/scripts/ci/f13_role_conditional_successor_test.py" ]]; then
   python3 "${ROOT}/scripts/ci/f13_role_conditional_successor_test.py"
 fi
-python3 "${ROOT}/scripts/ci/f13_space_audit_test.py"
-if [[ -f "${ROOT}/scripts/ci/f13_production_source_test.py" ]]; then
-  python3 "${ROOT}/scripts/ci/f13_production_source_test.py"
-fi
-if [[ -f "${ROOT}/scripts/ci/f13_release_source_test.py" ]]; then
-  python3 "${ROOT}/scripts/ci/f13_release_source_test.py"
-fi
-if [[ -f "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py" ]]; then
-  python3 "${ROOT}/scripts/ci/f13_native_p3_documentation_test.py"
-fi
+f13_start_standalone_suites
 base_sha="${VOICE_R22_BASE_SHA:-$(git -C "${ROOT}" merge-base HEAD origin/master)}"
 # The later Game sprint authorizes the verified opt-in runtime checkpoint, not
 # arbitrary future runtime or deployment changes. Exempt only its exact paths
@@ -7144,4 +7228,5 @@ if ((failures > 0)); then
   exit 1
 fi
 
+f13_wait_standalone_suites
 echo 'Voice DB RED-F runtime/provisioning/docs contract: PASS'
