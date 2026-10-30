@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -156,13 +157,69 @@ def qualify(repo,target,prior_raw,incoming_raw):
                 **{key:False for key in FALSE_FLAGS})
 
 
+def qualify_release(repo,target,prior_raw,incoming_raw):
+    import f13_release_source as release
+    legacy.oid(target)
+    legacy.require(Path(repo).resolve() == release.ROOT.resolve(), 'role_release_actual_root')
+    legacy.require(legacy.git(repo,'rev-parse','HEAD').decode().strip() == target, 'role_release_actual_head')
+    historical = legacy.qualify(repo,HISTORICAL_CARRIER,prior_raw,incoming_raw)
+    # The actual event also validates every continuation commit in the Role unit.
+    release.production_qualify(repo)
+    record = release.load_role(repo)
+    for revision in (release.RECORD_COMMIT, ORIGINAL_CORRECTION, HISTORICAL_CARRIER):
+        legacy.git(repo,'merge-base','--is-ancestor',revision,target)
+    legacy.require(target != release.RECORD_COMMIT, 'role_release_later_carrier')
+    for name in (VERIFIER_PATH, legacy.VERIFIER_PATH, 'scripts/ci/f13_release_source.py'):
+        meta = legacy.entry(repo,target,name)
+        legacy.require(meta is not None and meta['mode']=='100644' and meta['type']=='blob' and
+            legacy.git(repo,'cat-file','blob',meta['oid']) == (release.ROOT/name).read_bytes(),
+            'role_release_executed_carrier')
+    for group in ('required_current_source','context'):
+        for row in record[group]: legacy.actual_entry(repo,target,row['path'],row['entry'])
+    target_tree = release.documentation.tree_entries(repo,target)
+    target_dirs = release.documentation.immediate_directory_entries(target_tree)
+    for item in record['closure']['directory_inventories']:
+        legacy.require(target_dirs.get(item['directory'],{}) == item['entries'], 'role_release_target_package_drift')
+    source_tree = release.documentation.tree_entries(repo,release.FOUNDATION_BASE)
+    recorded = release.documentation.tree_entries(repo,release.RECORD_COMMIT)
+    protected = {p for p in source_tree if p.startswith(('docs/testing/role-checkpermission',
+        'docs/testing/role-source-v1-evidence/','docs/testing/role-source-v2-evidence/'))}
+    protected |= {release.ROLE_RECORD_PATH, release.ROLE_CLOSURE_PATH, *[x['path'] for x in record['evidence']]}
+    legacy.require(all(target_tree.get(p) == (recorded.get(p) if p not in source_tree else source_tree[p])
+                       for p in protected), 'role_release_artifact_drift')
+    return dict(version=release.ROLE_VERSION,record=release.RECORD_COMMIT,record_sha256=release.ROLE_SHA256,
+        source_boundary=record['source'],evidence_source=record['evidence_source'],actual_target=target,
+        historical_validation_target=HISTORICAL_CARRIER,historical=historical,
+        prior_row=legacy.row(prior_raw),incoming_row=legacy.row(incoming_raw),
+        historical_runtime_gap=record['historical_runtime_gap'],retain_runtime_and_content_taint=True,
+        **{key:False for key in FALSE_FLAGS})
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for key in ('repo','target','prior-row','incoming-row'):parser.add_argument('--'+key,required=True)
     args=parser.parse_args()
     try:
-        try: result=legacy.qualify(args.repo,args.target,args.prior_row,args.incoming_row)
-        except legacy.Rejected: result=qualify(args.repo,args.target,args.prior_row,args.incoming_row)
+        try:
+            import f13_release_source as release
+        except ModuleNotFoundError as error:
+            if error.name != 'f13_release_source': raise
+            release = None
+        current = release is not None and release.FOUNDATION_BASE is not None and \
+            Path(args.repo).resolve() == release.ROOT.resolve() and \
+            legacy.git(args.repo,'rev-parse','HEAD').decode().strip() == args.target
+        admitted = False
+        if current:
+            ancestry = subprocess.run(['git','--no-replace-objects','-C',str(args.repo),'merge-base',
+                '--is-ancestor',release.FOUNDATION_BASE,args.target],capture_output=True).returncode
+            legacy.require(ancestry in (0,1), 'role_release_ancestry')
+            admitted = ancestry == 0
+        if admitted:
+            try: result=qualify_release(args.repo,args.target,args.prior_row,args.incoming_row)
+            except release.Rejected as error: raise legacy.Rejected(str(error)) from error
+        else:
+            try: result=legacy.qualify(args.repo,args.target,args.prior_row,args.incoming_row)
+            except legacy.Rejected: result=qualify(args.repo,args.target,args.prior_row,args.incoming_row)
         print(json.dumps(result,sort_keys=True))
     except (legacy.Rejected,ValueError,KeyError,TypeError,AttributeError,OSError) as exc:
         print('Conditional Role successor rejected: '+str(exc),file=sys.stderr);return 1

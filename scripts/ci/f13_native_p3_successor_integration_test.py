@@ -13,6 +13,8 @@ import sys
 import tempfile
 import unittest
 import importlib.util
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import f13_native_p3_authority as authority
 import f13_native_p3_source as legacy
@@ -108,6 +110,42 @@ def reviewed_cold_start_document(source):
     return False
 
 
+def release_source_module():
+    try:
+        import f13_release_source as release
+    except ModuleNotFoundError as error:
+        if error.name != 'f13_release_source':
+            raise
+        return None
+    return release
+
+
+def reviewed_v5_source(source):
+    """Return source-only reviewed facts, never an event or admission grant."""
+    release=release_source_module()
+    if release is None or not release.applicable(ROOT,source):
+        return None
+    production=release.production_record(ROOT)
+    native=release.load_native(ROOT)
+    reviewed=release.FOUNDATION_BASE
+    legacy.require(native['version']==release.NATIVE_VERSION
+        and production['source']==native['source']==reviewed,'v2_fixture_v5_source_binding')
+    legacy.require(subprocess.run(['git','-C',str(ROOT),'merge-base','--is-ancestor',reviewed,source],
+        capture_output=True).returncode==0,'v2_fixture_v5_source_ancestry')
+    return reviewed,native
+
+
+def reviewed_v5_stores_entry(reviewed,native):
+    stores='docs/DATA_STORES.md'
+    rows=[row for row in native['projection'] if row['path']==stores]
+    legacy.require(len(rows)==1,'v2_fixture_v5_exact_stores_projection')
+    expected=rows[0]['after']
+    legacy.require(isinstance(expected,dict) and set(expected)=={'mode','type','oid'}
+        and expected['mode']=='100644' and expected['type']=='blob'
+        and legacy.entry(ROOT,reviewed,stores)==expected,'v2_fixture_v5_reviewed_stores_entry')
+    return expected
+
+
 def reviewed_stores_source(source):
     stores = 'docs/DATA_STORES.md'
     actual = legacy.entry(ROOT, source, stores)
@@ -140,8 +178,16 @@ def reviewed_stores_source(source):
     ancestor = subprocess.run(
         ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor', C2_DATA_STORES_COMMIT, source],
         capture_output=True).returncode == 0
-    return (ancestor and actual == C2_DATA_STORES_ENTRY
-            and legacy.entry(ROOT, C2_DATA_STORES_COMMIT, stores) == C2_DATA_STORES_ENTRY)
+    if (ancestor and actual == C2_DATA_STORES_ENTRY
+            and legacy.entry(ROOT, C2_DATA_STORES_COMMIT, stores) == C2_DATA_STORES_ENTRY):
+        return True
+    verified=reviewed_v5_source(source)
+    if verified is None:
+        return False
+    reviewed,native=verified
+    expected=reviewed_v5_stores_entry(reviewed,native)
+    return actual==expected and subprocess.run(
+        ['git','-C',str(ROOT),'merge-base','--is-ancestor',reviewed,source],capture_output=True).returncode==0
 
 
 def reviewed_catalog_voice_additions(source, record):
@@ -150,6 +196,17 @@ def reviewed_catalog_voice_additions(source, record):
     actual = {name for name in legacy.tree(str(ROOT), source) if name.startswith(prefix)}
     added = actual - expected
     legacy.require(not expected - actual, 'v2_fixture_unreviewed_voice_source')
+    verified=reviewed_v5_source(source)
+    if verified is not None:
+        reviewed,_=verified
+        reviewed_tree=legacy.tree(str(ROOT),reviewed)
+        source_tree=legacy.tree(str(ROOT),source)
+        reviewed_paths={name for name in reviewed_tree if name.startswith(prefix)}
+        legacy.require(not expected-reviewed_paths and added==reviewed_paths-expected,
+            'v2_fixture_unreviewed_voice_source')
+        legacy.require(all(reviewed_tree[name]['mode']=='100644' and reviewed_tree[name]['type']=='blob'
+            and source_tree[name]==reviewed_tree[name] for name in added),'v2_fixture_unreviewed_voice_source')
+        return added
     if not added:
         catalog_ancestor = subprocess.run(
             ['git', '-C', str(ROOT), 'merge-base', '--is-ancestor',
@@ -238,6 +295,94 @@ class ReviewedJWKSFixtureTest(unittest.TestCase):
 
 
 class C2ReviewedStoresSourceTest(unittest.TestCase):
+    def test_v5_voice_additions_come_from_complete_reviewed_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo=Path(directory);prefix='src/backend/voice/'
+            def g(*args, data=None):
+                return subprocess.check_output(['git','-C',str(repo),*args],input=data).decode().strip()
+            g('init','-q');g('config','user.name','fixture');g('config','user.email','fixture@example.invalid')
+            old=prefix+'old.go';(repo/old).parent.mkdir(parents=True);(repo/old).write_text('old\n')
+            g('add','.');g('commit','-qm','old unit');base=g('rev-parse','HEAD')
+            names=[prefix+'new'+str(i)+'.go' for i in range(9)]
+            for name in names:(repo/name).write_text(name+'\n')
+            g('add','.');g('commit','-qm','reviewed source');h=g('rev-parse','HEAD')
+            native=dict(version='NATIVE-P3-SOURCE-v5',source=h,projection=[])
+            release=SimpleNamespace(FOUNDATION_BASE=h,NATIVE_VERSION='NATIVE-P3-SOURCE-v5',
+                applicable=lambda r,s:subprocess.run(['git','-C',str(r),'merge-base','--is-ancestor',h,s],capture_output=True).returncode==0,
+                production_record=lambda r:dict(source=h),load_native=lambda r:native)
+            with patch(__name__+'.ROOT',repo),patch.dict(sys.modules,{'f13_release_source':release}):
+                self.assertEqual(reviewed_catalog_voice_additions(h,dict(source=base)),set(names))
+                for kind in ('unknown','deleted','content','mode','type','disconnected'):
+                    index=repo/('voice-index-'+kind);env=dict(os.environ,GIT_INDEX_FILE=str(index))
+                    subprocess.check_call(['git','-C',str(repo),'read-tree',h],env=env)
+                    if kind=='deleted':
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--force-remove','--',old],env=env)
+                    elif kind=='unknown':
+                        oid=g('hash-object','-w','--stdin',data=b'unknown\n')
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--add','--cacheinfo','100644,'+oid+','+prefix+'unknown.go'],env=env)
+                    elif kind in ('content','mode','type'):
+                        oid=legacy.entry(repo,h,names[0])['oid'] if kind!='content' else g('hash-object','-w','--stdin',data=b'changed\n')
+                        mode='100755' if kind=='mode' else '120000' if kind=='type' else '100644'
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--cacheinfo',mode+','+oid+','+names[0]],env=env)
+                    tree=subprocess.check_output(['git','-C',str(repo),'write-tree'],env=env).decode().strip()
+                    child=g('commit-tree',tree,*([] if kind=='disconnected' else ['-p',h]),'-m','fixture')
+                    with self.subTest(kind=kind),self.assertRaises(legacy.Rejected):
+                        reviewed_catalog_voice_additions(child,dict(source=base))
+                for invalid in (dict(native,version='NATIVE-P3-SOURCE-v4'),dict(native,source='0'*40)):
+                    with patch.object(release,'load_native',return_value=invalid),self.assertRaises(legacy.Rejected):
+                        reviewed_catalog_voice_additions(h,dict(source=base))
+                with patch.object(release,'production_record',side_effect=legacy.Rejected('unreviewed')):
+                    with self.assertRaisesRegex(legacy.Rejected,'unreviewed'):
+                        reviewed_catalog_voice_additions(h,dict(source=base))
+
+    def test_v5_reviewed_fixture_requires_checked_exact_projection_and_ancestry(self):
+        # Only qualification is a test seam; entries and ancestry are real Git.
+        with tempfile.TemporaryDirectory() as directory:
+            repo=Path(directory)
+            def g(*args, data=None):
+                return subprocess.check_output(['git','-C',str(repo),*args],input=data).decode().strip()
+            g('init','-q');g('config','user.name','fixture');g('config','user.email','fixture@example.invalid')
+            stores='docs/DATA_STORES.md';(repo/'docs').mkdir();(repo/stores).write_text('reviewed\n')
+            g('add','.');g('commit','-qm','reviewed source');h=g('rev-parse','HEAD')
+            entry=legacy.entry(repo,h,stores)
+            record=dict(version='NATIVE-P3-SOURCE-v5',source=h,projection=[dict(path=stores,after=entry)])
+            release=SimpleNamespace(FOUNDATION_BASE=h,NATIVE_VERSION='NATIVE-P3-SOURCE-v5',applicable=lambda r,s: subprocess.run(
+                ['git','-C',str(r),'merge-base','--is-ancestor',h,s],capture_output=True).returncode==0,
+                production_record=lambda r:dict(source=h),load_native=lambda r:record)
+            with patch(__name__+'.ROOT',repo),patch.dict(sys.modules,{'f13_release_source':release}):
+                self.assertTrue(reviewed_stores_source(h))
+                for kind in ('content','mode','type','missing','disconnected'):
+                    index=repo/('index-'+kind);env=dict(os.environ,GIT_INDEX_FILE=str(index))
+                    subprocess.check_call(['git','-C',str(repo),'read-tree',h],env=env)
+                    if kind=='missing':
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--force-remove','--',stores],env=env)
+                    elif kind in ('content','mode','type'):
+                        oid=entry['oid'] if kind in ('mode','type') else g('hash-object','-w','--stdin',data=b'unreviewed\n')
+                        subprocess.check_call(['git','-C',str(repo),'update-index','--cacheinfo',
+                            ('100755' if kind=='mode' else '120000' if kind=='type' else '100644')+','+oid+','+stores],env=env)
+                    tree=subprocess.check_output(['git','-C',str(repo),'write-tree'],env=env).decode().strip()
+                    parent=[] if kind=='disconnected' else ['-p',h]
+                    child=g('commit-tree',tree,*parent,'-m','fixture')
+                    with self.subTest(kind=kind):self.assertFalse(reviewed_stores_source(child))
+                for invalid in (dict(record,projection=[]),dict(record,projection=record['projection']*2),
+                                dict(record,source='0'*40),dict(record,version='NATIVE-P3-SOURCE-v4')):
+                    with patch.object(release,'load_native',return_value=invalid),self.assertRaises(legacy.Rejected):
+                        reviewed_stores_source(h)
+                with patch.object(release,'production_record',side_effect=legacy.Rejected('unreviewed')):
+                    with self.assertRaisesRegex(legacy.Rejected,'unreviewed'):reviewed_stores_source(h)
+
+    def test_public_fixture_requires_specific_current_authority_failure(self):
+        fixture=RealGitSuccessorTest('test_public_current_authority_rejects_historical_fixture')
+        fixture.source='fixture-source';fixture.target='fixture-target'
+        for v5,reason in ((True,'release_actual_head'),(False,'context_bootstrap_actual_head')):
+            release=SimpleNamespace(applicable=lambda repo,target:v5)
+            with self.subTest(v5=v5),patch(__name__+'.release_source_module',return_value=release):
+                with patch.object(authority,'qualify',side_effect=legacy.Rejected(reason)):
+                    fixture.test_public_current_authority_rejects_historical_fixture()
+                with patch.object(authority,'qualify',side_effect=legacy.Rejected('unrelated_error')):
+                    with self.assertRaises(AssertionError):
+                        fixture.test_public_current_authority_rejects_historical_fixture()
+
     def test_reviewed_audio_source_and_descendant_are_exact(self):
         source = '1c3c9630b2f61e22c6e8579290b3443f0425eaa1'
         expected = {'mode': '100644', 'type': 'blob',
@@ -500,7 +645,9 @@ class RealGitSuccessorTest(unittest.TestCase):
                                  'refs/pull/875/merge', target, '', 'master')
 
     def test_public_current_authority_rejects_historical_fixture(self):
-        with self.assertRaisesRegex(legacy.Rejected, '^context_bootstrap_actual_head$'):
+        release=release_source_module()
+        reason='release_actual_head' if release is not None and release.applicable(ROOT,self.target) else 'context_bootstrap_actual_head'
+        with self.assertRaisesRegex(legacy.Rejected, '^'+reason+'$'):
             authority.qualify(ROOT, BASE, self.source, self.target, 'pull_request',
                               'refs/pull/875/merge', self.target, '', 'master')
 
@@ -572,8 +719,10 @@ class RealGitSuccessorTest(unittest.TestCase):
     def test_d1_c2_union_and_current_inventory_entries_are_exact(self):
         self.assertEqual(legacy.entry(ROOT, D1_C2_DATA_STORES_COMMIT,
                                       'docs/DATA_STORES.md'), D1_C2_DATA_STORES_ENTRY)
-        self.assertEqual(legacy.entry(ROOT, git('rev-parse', 'HEAD'),
-                                      'docs/DATA_STORES.md'), AUDIO_DATA_STORES_ENTRY)
+        current=git('rev-parse','HEAD')
+        verified=reviewed_v5_source(current)
+        expected=(reviewed_v5_stores_entry(*verified) if verified is not None else AUDIO_DATA_STORES_ENTRY)
+        self.assertEqual(legacy.entry(ROOT,current,'docs/DATA_STORES.md'),expected)
         self.assertTrue(reviewed_stores_source(D1_C2_DATA_STORES_COMMIT))
         self.assertTrue(reviewed_stores_source(git('rev-parse', 'HEAD')))
 
@@ -610,8 +759,11 @@ class RealGitSuccessorTest(unittest.TestCase):
         expected = {name for name in legacy.tree(str(ROOT), self.record['source']) if name.startswith(prefix)}
         actual = {name for name in legacy.tree(str(ROOT), self.source) if name.startswith(prefix)}
         self.assertEqual(actual, expected)
-        self.assertEqual(reviewed_catalog_voice_additions(git('rev-parse', 'HEAD'), self.record),
-                         CATALOG_VOICE_PATHS | MULTI_OWNER_INVENTORY_VOICE_PATHS)
+        current=git('rev-parse', 'HEAD')
+        verified=reviewed_v5_source(current)
+        reviewed_additions=({name for name in legacy.tree(str(ROOT),verified[0]) if name.startswith(prefix)}-expected
+                            if verified is not None else CATALOG_VOICE_PATHS | MULTI_OWNER_INVENTORY_VOICE_PATHS)
+        self.assertEqual(reviewed_catalog_voice_additions(current,self.record),reviewed_additions)
         unknown, _ = self.changed('src/backend/voice/unreviewed-fixture.go')
         with self.assertRaisesRegex(legacy.Rejected, 'v2_fixture_unreviewed_voice_source'):
             reviewed_catalog_voice_additions(unknown, self.record)
