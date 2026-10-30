@@ -6,8 +6,10 @@ import hashlib
 import inspect
 import json
 import os
+import shutil
 from pathlib import Path
 import tempfile
+import tarfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -28,6 +30,8 @@ import source_plan
 import source_plan_test
 import source_authority
 import transaction
+import bundle
+import root_cli
 
 
 class AdmissionKube(fixtures.CaptureKube):
@@ -50,8 +54,167 @@ class AdmissionKube(fixtures.CaptureKube):
 
 
 class GISLifecycleContract(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
+        # Real complete captured helpers and the unchanged qualified Linux
+        # binaries. This component fixture never executes a public rollout.
+        cls.capture_temp = tempfile.TemporaryDirectory(dir='/fixture')
+        cls.addClassCleanup(cls.capture_temp.cleanup)
+        folder = Path(cls.capture_temp.name)
+        binaries = Path('/fixture/qualified-binaries')
+        bundle.build(binaries / 'kernel', folder / 'bundle',
+                     binaries / 'bootstrap-renewer', binaries / 'story-current4-probe')
+        cls.captured_code = folder / 'code'
+        cls.captured_code.mkdir(mode=0o700)
+        with tarfile.open(folder / 'bundle' / 'rollout-bundle.tar') as archive:
+            archive.extractall(cls.captured_code, filter='data')
+        cls.helper_binding = root_cli.code_binding(cls.captured_code)
+        cls.installation = resource_claim.production_installation()
+        # Native Linux bytes avoid short single-read results from the Windows
+        # bind mount while keeping the exact immutable source content.
+        cls.compiler_source = folder / 'source'
+        original = Path(__file__).resolve().parents[3]
+        for relative in ('scripts', 'deploy', 'docker', 'src/backend/migrations',
+                         'src/backend/auth/src/main/resources/db/migration'):
+            shutil.copytree(original / relative, cls.compiler_source / relative)
+
+    def active_reference(self, state, receipt):
+        """Closed reference to the explicitly modeled historical first PASS."""
+        return {'schema': 'voice-active-release-v1',
+            'installation_sha256': self.installation.sha256,
+            'operation': state['operation'], 'namespace_uid': receipt['namespace_uid'],
+            'pvc_uid': state['gis_first_install']['custody']['claim_uid'],
+            'target_sha256': state['target']['manifest_sha256'],
+            'gis_first_install_transition': {'operation': state['operation'],
+                'receipt_sha256': receipt['receipt_sha256']}}
+
+    def admitted_session(self, target, operation, old_images=None, helper=None):
+        target['installation_sha256'] = self.installation.sha256
+        candidate = resource_claim_test.context()
+        candidate.update(commit=target['tag'], images=copy.deepcopy(target['images']))
+        card = resource_claim_test.card(candidate)
+        if old_images is not None:
+            card['observed']['images'] = copy.deepcopy(old_images)
+        session = resource_claim.Session(candidate, operation,
+            gis.digest(self.helper_binding if helper is None else helper),
+            lambda: copy.deepcopy(card), resource_claim_test.MemoryJournal(),
+            installation=self.installation)
+        session.admit(start=True)
+        return session
+
+    def bind_component_state(self, state):
+        """Bind modeled component state, never a real transaction PASS result."""
+        target = state.setdefault('target', {})
+        target.setdefault('tag', 'a' * 40)
+        if 'images' not in target:
+            target['images'] = {'voice-gameintegration/gameintegration': self.new_image}
+        state.update(schema='nats-rollout-root-v2',
+                     installation_sha256=self.installation.sha256,
+                     code_capture=copy.deepcopy(self.helper_binding))
+        session = self.admitted_session(target, state['operation'])
+        session.bind_target(target['tag'], target['images'],
+                           session.authority()['observed']['images'], gis.digest(target))
+        state['resource_fence'] = session.binding()
+        self.enterContext(resource_claim.command_scope(session.check))
+        return session
+
+    def modeled_first_install(self):
+        """Shared historical fixture with exact modeled target and helper closure."""
         kube, state, receipt = fixtures.first_install()
+        state['target']['manifest_sha256'] = gis.digest(state['gis_first_install']['objects'])
+        self.bind_component_state(state)
+        return kube, state, receipt
+
+    def component_actions(self, state):
+        session = self.bind_component_state(state)
+        # These historical PASS fixtures explicitly model completed publication.
+        state.setdefault('phase', 'POST_RESTART')
+        state.setdefault('fence_status', 'RELEASED')
+        actions = bridge_root.Actions(self.captured_code, installation=self.installation)
+        actions.tt_session = session
+        return actions
+
+    def component_call(self, method, kube, base, state, *args, **kwargs):
+        """Existing external-I/O seams with an actual current parent Session."""
+        import commands
+        parent = getattr(commands.authority_guard, '__self__', None)
+        old_target = copy.deepcopy(state.get('target'))
+        if (state.get('resource_fence') is None or
+                type(parent) is not resource_claim.Session or
+                parent.expected_target is None or
+                state.get('resource_fence') != parent.binding()):
+            self.bind_component_state(state)
+        for receipt in (state.get('authorization'), args[0] if args else None):
+            if isinstance(receipt, dict) and receipt.get('target') == old_target:
+                receipt['target'] = copy.deepcopy(state['target'])
+        return method(kube, base, state, *args,
+                      installation=self.installation, **kwargs)
+
+    def component_prepare(self, kube, base, code, target, contract, operation,
+                          helper, migration_plan, nonnats, **kwargs):
+        """Actual compiler packet and Session; existing external-I/O seams remain."""
+        target['installation_sha256'] = self.installation.sha256
+        session = kwargs.get('resource_session')
+        if session is None and 'resource_session' not in kwargs:
+            session = self.admitted_session(target, operation, self.baseline_images)
+            kwargs['resource_session'] = session
+        if type(session) is resource_claim.Session:
+            self.enterContext(resource_claim.command_scope(session.check))
+        elif session is None:
+            # Preserve the old missing-session case as a failing regression;
+            # never inherit a previous subcase's admitted parent by accident.
+            self.enterContext(resource_claim.command_scope(None))
+        # This packet is produced by the actual compiler in each caller.
+        pack = {'target': target, 'contract': contract, 'migrations': migration_plan,
+                'nonnats': nonnats,
+                'manifests': json.loads((Path(base) / 'apply-manifests.json').read_text())}
+        bridge_root.save(Path(base) / 'compiler-input.json', pack)
+        if type(session) is resource_claim.Session:
+            self.capture_component_source(Path(guard.ROOT), session, pack,
+                                          kwargs.get('gis_source_authority'))
+        return transaction.prepare(kube, base, self.captured_code / 'nats-known-baseline', target, contract,
+            operation, self.helper_binding, migration_plan, nonnats, **kwargs)
+
+    def capture_component_source(self, root, session, pack, approved):
+        """Real protected source/helper producer over synthetic CI metadata."""
+        import staging_prerequisites
+        installed = root / 'installed'
+        installed.mkdir(exist_ok=True, mode=0o700)
+        code = installed / 'code'
+        if not code.exists():
+            shutil.copytree(self.captured_code, code)
+        source = installed / 'sources' / session.operation
+        source.mkdir(parents=True, exist_ok=True, mode=0o700)
+        files = {}
+        for relative, wanted in self.helper_binding.items():
+            if relative in staging_prerequisites.BINARY_PINS:
+                continue
+            name = 'scripts/staging/' + relative
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.write_bytes((code / relative).read_bytes())
+            path.chmod(0o400)
+            files[name] = wanted
+        for name, wanted in pack['target']['source_hashes'].items():
+            path = source / name
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            path.write_bytes((self.compiler_source / name).read_bytes())
+            path.chmod(0o400)
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), wanted)
+            files[name] = wanted
+        if approved is None:
+            approved = self.source_fixture()
+        approved['source_files'] = files
+        execution = {'dispatcher_run_id': 1, 'run_attempt': 1,
+            'head_sha': session.context['commit'], 'event': 'push',
+            'workflow_id': source_authority.WORKFLOW, 'path': '.github/workflows/ci.yml',
+            'repository': source_authority.REPO}
+        with patch.object(bridge_root, 'INSTALLED', installed):
+            bridge_root.record_source_authority(session, approved, execution,
+                                                code=code, binding=self.helper_binding)
+
+    def setUp(self):
+        kube, state, receipt = self.modeled_first_install()
         self.binding = existing.enroll_first_install(receipt, state, kube)
         self.kube = AdmissionKube(kube)
         self.kube.target_account = {'metadata': {'name': 'gis-target', 'namespace': gis.NS,
@@ -59,6 +222,7 @@ class GISLifecycleContract(unittest.TestCase):
         self.old = copy.deepcopy(self.kube.deployments['voice-gameintegration'])
         self.old_image = self.old['spec']['template']['spec']['containers'][0]['image']
         self.new_image = 'ghcr.io/poryadok/voiceroot/gameintegration@sha256:' + 'b' * 64
+        self.baseline_images = self.capture().old_images
 
     def capture(self):
         return runtime_stage.RolloutStage.capture(self.kube, '123456abcdef', lambda _: None,
@@ -75,7 +239,7 @@ class GISLifecycleContract(unittest.TestCase):
             'image_provenance': 'independently resolved trusted CI tag', 'verified': True}
 
     def compiled_target(self, stage, target_sa=False):
-        source = Path(__file__).resolve().parents[3]
+        source = self.compiler_source
         desired = copy.deepcopy(self.old)
         desired['spec']['template']['spec']['containers'][0]['image'] = self.new_image
         if target_sa:
@@ -83,7 +247,7 @@ class GISLifecycleContract(unittest.TestCase):
         return compiler.compile_target(source, [desired], 'ghcr.io/poryadok/voiceroot',
             'a' * 40, 'images-only', ['gameintegration'],
             {'voice-gameintegration/gameintegration': self.new_image}, {},
-            set(stage.snapshots), ())
+            set(stage.snapshots), ('deploy/staging/services.yaml',))
 
     def test_two_real_captures_and_compiler_bind_paused_pair_before_mutation(self):
         first, second = self.capture(), self.capture()
@@ -131,7 +295,7 @@ class GISLifecycleContract(unittest.TestCase):
                 self.kube = saved
 
     def ready_fixture(self):
-        kube, state, receipt = fixtures.first_install()
+        kube, state, receipt = self.modeled_first_install()
         binding = existing.enroll_first_install(receipt, state, kube)
         deployment = copy.deepcopy(kube.objects[gis.DEPLOYMENT])
         deployment['spec']['template']['spec']['containers'][0]['image'] = self.new_image
@@ -175,7 +339,7 @@ class GISLifecycleContract(unittest.TestCase):
         # Existing retirement CAS fixture models the core workloads; GIS owned
         # readiness comes from ReadyKube. Storage sealing and pod drain are I/O seams.
         import operator_retirement_test as retirement_fixture
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory(dir='/fixture') as folder:
             fixture = retirement_fixture.RetirementActionTests().fixture(folder)
             context = fixture[2]['context']
             objects = copy.deepcopy(fixture[4])
@@ -326,11 +490,12 @@ class GISLifecycleContract(unittest.TestCase):
                     stage.kube.cas.assert_not_called()
 
     def test_unproved_wiring_finish_cannot_destroy_first_install_anchor(self):
-        kube, state, receipt = fixtures.first_install()
+        kube, state, receipt = self.modeled_first_install()
         state['context'] = {'expected': {'namespace_uid': receipt['namespace_uid'],
             'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
         state['target']['manifest_sha256'] = '9' * 64
-        with tempfile.TemporaryDirectory() as tmp:
+        actions = self.component_actions(state)
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             installed = root / 'installed'
             installed.mkdir()
@@ -341,7 +506,6 @@ class GISLifecycleContract(unittest.TestCase):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             def save(path, value):
                 Path(path).write_text(json.dumps(value), encoding='utf-8')
-            actions = object.__new__(bridge_root.Actions)
             with patch.object(bridge_root, 'INSTALLED', installed), patch.object(guard, 'ROOT', root), \
                     patch.object(bridge_root, 'private_json', side_effect=read), \
                     patch.object(bridge_root, 'save', side_effect=save):
@@ -350,6 +514,8 @@ class GISLifecycleContract(unittest.TestCase):
                 binding = actions._previous_gis_transition(kube)
                 incomplete = {'operation': 'b' * 12, 'status': 'PASS', 'context': state['context'],
                     'target': {'manifest_sha256': 'a' * 64}, 'gis_transition': binding}
+                incomplete.update(phase='POST_RESTART', fence_status='RELEASED')
+                self.bind_component_state(incomplete)
                 try:
                     actions._active_release(incomplete)
                 except (bridge_root.Blocked, gis.Blocked):
@@ -359,13 +525,14 @@ class GISLifecycleContract(unittest.TestCase):
                 self.assertEqual(active['gis_first_install_transition'], anchor)
 
     def test_replaying_old_finish_does_not_replace_later_active_release(self):
-        _, first, receipt = fixtures.first_install()
+        _, first, receipt = self.modeled_first_install()
         first['context'] = {'expected': {'namespace_uid': receipt['namespace_uid'],
             'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
         first['target']['manifest_sha256'] = '9' * 64
+        actions = self.component_actions(first)
         later = {'operation': 'c' * 12, 'status': 'PASS', 'context': first['context'],
             'target': {'mode': 'images-only', 'manifest_sha256': '8' * 64}}
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             installed = root / 'installed'
             installed.mkdir()
@@ -377,7 +544,6 @@ class GISLifecycleContract(unittest.TestCase):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             def save(path, value):
                 Path(path).write_text(json.dumps(value), encoding='utf-8')
-            actions = object.__new__(bridge_root.Actions)
             with patch.object(bridge_root, 'INSTALLED', installed), patch.object(guard, 'ROOT', root), \
                     patch.object(bridge_root, 'private_json', side_effect=read), \
                     patch.object(bridge_root, 'save', side_effect=save):
@@ -396,11 +562,12 @@ class GISLifecycleContract(unittest.TestCase):
                 self.assertEqual(read(installed / 'active-release.json'), active)
 
     def test_same_operation_replay_is_noop_only_for_exact_release(self):
-        _, state, receipt = fixtures.first_install()
+        _, state, receipt = self.modeled_first_install()
         state['context'] = {'expected': {'namespace_uid': receipt['namespace_uid'],
             'source_claim_uid': '00000000-0000-0000-0000-000000000012'}}
         state['target']['manifest_sha256'] = '9' * 64
-        with tempfile.TemporaryDirectory() as tmp:
+        actions = self.component_actions(state)
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             installed = root / 'installed'
             installed.mkdir()
@@ -411,7 +578,6 @@ class GISLifecycleContract(unittest.TestCase):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             def save(path, value):
                 Path(path).write_text(json.dumps(value), encoding='utf-8')
-            actions = object.__new__(bridge_root.Actions)
             with patch.object(bridge_root, 'INSTALLED', installed), patch.object(guard, 'ROOT', root), \
                     patch.object(bridge_root, 'private_json', side_effect=read), \
                     patch.object(bridge_root, 'save', side_effect=save) as save_mock:
@@ -430,6 +596,7 @@ class GISLifecycleContract(unittest.TestCase):
                             altered['context']['expected']['source_claim_uid'] = '00000000-0000-0000-0000-000000000099'
                         else:
                             altered['target']['manifest_sha256'] = '8' * 64
+                        self.bind_component_state(altered)
                         with self.assertRaises((bridge_root.Blocked, gis.Blocked)):
                             actions._active_release(altered)
                         self.assertEqual(read(installed / 'active-release.json'), active)
@@ -440,16 +607,15 @@ class GISLifecycleContract(unittest.TestCase):
         # normalizer. The fake API never sends a mutating Kubernetes request.
         class ReachedPrerequisite(Exception):
             pass
-        _, first, receipt = fixtures.first_install()
-        with tempfile.TemporaryDirectory() as tmp:
+        _, first, receipt = self.modeled_first_install()
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             (root / 'installed').mkdir()
             original = root / ('rollout-' + first['operation'])
             original.mkdir()
             (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
-            (root / 'installed' / 'active-release.json').write_text(json.dumps({
-                'gis_first_install_transition': {'operation': first['operation'],
-                    'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+            (root / 'installed' / 'active-release.json').write_text(
+                json.dumps(self.active_reference(first, receipt)), encoding='utf-8')
             def read(path, **kwargs):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             with patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read):
@@ -458,10 +624,12 @@ class GISLifecycleContract(unittest.TestCase):
                 pack = self.compiled_target(stage, target_sa=target_sa)
                 pack['target']['mode'] = mode
                 base = root / 'rollout-123456abcdef'
-                base.mkdir()
+                base.mkdir(mode=0o700)
                 (base / 'apply-manifests.json').write_text(json.dumps(pack['manifests']), encoding='utf-8')
                 authority = self.source_fixture()
-                kw = {'gis_source_authority': authority}
+                session = self.admitted_session(pack['target'], '123456abcdef', stage.old_images)
+                bridge_root.save(base / 'compiler-input.json', pack)
+                kw = {'gis_source_authority': authority, 'resource_session': session}
                 if 'gis_binding' in inspect.signature(transaction.prepare).parameters:
                     kw['gis_binding'] = binding
                 if fault == 'missing':
@@ -478,7 +646,8 @@ class GISLifecycleContract(unittest.TestCase):
                 def save_snapshot(path, value):
                     if Path(path).name == 'checkpoint.json':
                         checkpoints.append(copy.deepcopy(value))
-                with patch.object(transaction, 'private_json', side_effect=read), \
+                with resource_claim.command_scope(session.check), \
+                        patch.object(transaction, 'private_json', side_effect=read), \
                         patch.object(transaction, 'save', side_effect=save_snapshot), \
                         patch.object(transaction.migrations, 'preflight', side_effect=ReachedPrerequisite) as preflight, \
                         patch.object(runtime_stage.RolloutStage, 'fence') as fence, \
@@ -486,8 +655,8 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'normalize_target', wraps=normalize.normalize_target) as normalizer:
                     if reject_target_sa:
                         with self.assertRaisesRegex(gis.Blocked, 'gis_existing_service_account_unsupported'):
-                            transaction.prepare(self.kube, base, root, pack['target'], {},
-                                '123456abcdef', {}, [], {'actions': []}, **kw)
+                            self.component_prepare(self.kube, base, self.captured_code, pack['target'], {},
+                                '123456abcdef', self.helper_binding, [], {'actions': []}, **kw)
                         preflight.assert_not_called()
                         fence.assert_not_called()
                         return
@@ -495,14 +664,14 @@ class GISLifecycleContract(unittest.TestCase):
                         expected_error = ('gis_existing_source_image_changed' if fault == 'image'
                                           else 'gis_existing_source_authority_invalid')
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected_error):
-                            transaction.prepare(self.kube, base, root, pack['target'], {},
-                                '123456abcdef', {}, [], {'actions': []}, **kw)
+                            self.component_prepare(self.kube, base, self.captured_code, pack['target'], {},
+                                '123456abcdef', self.helper_binding, [], {'actions': []}, **kw)
                         preflight.assert_not_called()
                         fence.assert_not_called()
                         return
                     with self.assertRaises(ReachedPrerequisite):
-                        transaction.prepare(self.kube, base, root, pack['target'], {},
-                            '123456abcdef', {}, [], {'actions': []}, **kw)
+                        self.component_prepare(self.kube, base, self.captured_code, pack['target'], {},
+                            '123456abcdef', self.helper_binding, [], {'actions': []}, **kw)
                     self.assertEqual(normalizer.call_args.kwargs['gis_binding'], binding)
                     self.assertTrue(callable(normalizer.call_args.kwargs['gis_target_sink']))
                     recorded = checkpoints[-1]
@@ -539,17 +708,15 @@ class GISLifecycleContract(unittest.TestCase):
     def test_pre_fence_rechecks_target_service_account_after_capture(self):
         class ReachedFence(Exception):
             pass
-        _, first, receipt = fixtures.first_install()
+        _, first, receipt = self.modeled_first_install()
         for fault in ('none', 'uid', 'resourceVersion'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 root = Path(tmp)
                 (root / 'installed').mkdir()
                 original = root / ('rollout-' + first['operation'])
                 original.mkdir()
                 (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
-                (root / 'installed' / 'active-release.json').write_text(json.dumps({
-                    'gis_first_install_transition': {'operation': first['operation'],
-                        'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+                (root / 'installed' / 'active-release.json').write_text(json.dumps(self.active_reference(first, receipt)), encoding='utf-8')
                 def read(path, **kwargs):
                     return json.loads(Path(path).read_text(encoding='utf-8'))
                 kube = copy.deepcopy(self.kube)
@@ -575,8 +742,7 @@ class GISLifecycleContract(unittest.TestCase):
                     elif fault == 'resourceVersion':
                         kube.service_account['metadata']['resourceVersion'] = '2'
                     return {}
-                resource = Mock()
-                resource.binding.return_value = {'fixture': 'tt-bound'}
+                resource = self.admitted_session(pack['target'], '123456abcdef', stage.old_images)
                 with patch.object(guard, 'ROOT', root), patch.object(existing, 'private_json', side_effect=read), \
                         patch.object(transaction, 'private_json', side_effect=read), \
                         patch.object(transaction.migrations, 'preflight', return_value={}), \
@@ -591,14 +757,14 @@ class GISLifecycleContract(unittest.TestCase):
                         patch('operator_retirement.record_readonly_failure', side_effect=lambda _b, value, _e: value):
                     if fault == 'none':
                         with self.assertRaises(ReachedFence):
-                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                            self.component_prepare(kube, base, root, pack['target'], {}, '123456abcdef',
                                 {}, [], nonnats, gis_binding=self.binding, gis_source_authority=self.source_fixture(),
                                 resource_session=resource)
                         fence.assert_called_once()
                     else:
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked),
                                 'gis_existing_service_account_changed'):
-                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                            self.component_prepare(kube, base, root, pack['target'], {}, '123456abcdef',
                                 {}, [], nonnats, gis_binding=self.binding, gis_source_authority=self.source_fixture(),
                                 resource_session=resource)
                         fence.assert_not_called()
@@ -606,18 +772,16 @@ class GISLifecycleContract(unittest.TestCase):
     def test_transaction_rechecks_pair_and_sa_after_authority_and_tt_bind(self):
         class ReachedFence(Exception):
             pass
-        _, first, receipt = fixtures.first_install()
+        _, first, receipt = self.modeled_first_install()
         for fault in ('none', 'missing_tt', 'before_sa', 'before_service', 'before_active',
                       'after_sa', 'after_deployment', 'after_active'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 root = Path(tmp)
                 (root / 'installed').mkdir()
                 original = root / ('rollout-' + first['operation'])
                 original.mkdir()
                 (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
-                (root / 'installed' / 'active-release.json').write_text(json.dumps({
-                    'gis_first_install_transition': {'operation': first['operation'],
-                        'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+                (root / 'installed' / 'active-release.json').write_text(json.dumps(self.active_reference(first, receipt)), encoding='utf-8')
                 def read(path, **kwargs):
                     return json.loads(Path(path).read_text(encoding='utf-8'))
                 kube = copy.deepcopy(self.kube)
@@ -651,7 +815,7 @@ class GISLifecycleContract(unittest.TestCase):
                 card = resource_claim_test.card(context)
                 card['observed']['images'] = copy.deepcopy(stage.old_images)
                 journal = resource_claim_test.MemoryJournal()
-                resource = resource_claim.Session(context, '123456abcdef', 'a' * 64,
+                resource = resource_claim.Session(context, '123456abcdef', gis.digest(self.helper_binding),
                     lambda: copy.deepcopy(card), journal)
                 resource.admit(start=True)
                 bind_target = resource.bind_target
@@ -683,7 +847,7 @@ class GISLifecycleContract(unittest.TestCase):
                         patch('operator_retirement.record_readonly_failure', side_effect=lambda _b, value, _e: value):
                     if fault == 'none':
                         with self.assertRaises(ReachedFence):
-                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                            self.component_prepare(kube, base, root, pack['target'], {}, '123456abcdef',
                                 {}, [], nonnats, before_fence=before_fence, resource_session=resource,
                                 gis_binding=self.binding, gis_source_authority=self.source_fixture())
                         self.assertEqual(order, ['authority', 'tt-bind', 'fence'])
@@ -701,7 +865,7 @@ class GISLifecycleContract(unittest.TestCase):
                             else 'gis_existing_authority_changed' if fault.endswith('_active')
                             else 'gis_existing_identity_changed')
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
-                            transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                            self.component_prepare(kube, base, root, pack['target'], {}, '123456abcdef',
                                 {}, [], nonnats, before_fence=before_fence,
                                 resource_session=None if fault == 'missing_tt' else resource,
                                 gis_binding=self.binding, gis_source_authority=self.source_fixture())
@@ -719,16 +883,14 @@ class GISLifecycleContract(unittest.TestCase):
     def test_prepare_and_authorize_share_qualified_binding_and_tt_target(self):
         # Actual capture, normalization, TT Session and authorization. Fence,
         # prepared and storage guards plus archive/migration I/O are simulated.
-        _, first, receipt = fixtures.first_install()
-        with tempfile.TemporaryDirectory() as tmp:
+        _, first, receipt = self.modeled_first_install()
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             (root / 'installed').mkdir()
             original = root / ('rollout-' + first['operation'])
             original.mkdir()
             (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
-            (root / 'installed' / 'active-release.json').write_text(json.dumps({
-                'gis_first_install_transition': {'operation': first['operation'],
-                    'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+            (root / 'installed' / 'active-release.json').write_text(json.dumps(self.active_reference(first, receipt)), encoding='utf-8')
             def read(path, **_kwargs):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             kube = copy.deepcopy(self.kube)
@@ -751,7 +913,7 @@ class GISLifecycleContract(unittest.TestCase):
             ctx.update(commit=pack['target']['tag'], images=copy.deepcopy(pack['target']['images']))
             card = resource_claim_test.card(ctx)
             card['observed']['images'] = copy.deepcopy(captured.old_images)
-            helper = {'nats-rollout-preservation/resource_claim.py': 'e' * 64}
+            helper = copy.deepcopy(self.helper_binding)
             session = resource_claim.Session(ctx, '123456abcdef', gis.digest(helper),
                 lambda: copy.deepcopy(card), resource_claim_test.MemoryJournal())
             session.admit(start=True)
@@ -783,7 +945,7 @@ class GISLifecycleContract(unittest.TestCase):
                     patch.object(runtime_stage.RolloutStage, 'verify_final_storage'),
                     patch.object(runtime_stage.RolloutStage, 'prepared')):
                     stack.enter_context(seam)
-                state = transaction.prepare(kube, base, root, pack['target'], {}, '123456abcdef',
+                state = self.component_prepare(kube, base, root, pack['target'], {}, '123456abcdef',
                     helper, [], nonnats, resource_session=session, gis_binding=self.binding,
                     gis_source_authority=self.source_fixture())
                 self.assertEqual((state['phase'], state['status']), ('AWAITING_OFF_NODE', 'WAITING'))
@@ -792,7 +954,7 @@ class GISLifecycleContract(unittest.TestCase):
                 self.assertEqual(state['resource_fence'], session.binding())
                 self.assertEqual(session.binding()['target_sha256'], gis.digest(state['target']))
                 existing.verify_phase(bound, kube, 'paused-old')
-                authorization = transaction.authorize(kube, base, state, cut['manifest']['archive_sha256'],
+                authorization = self.component_call(transaction.authorize, kube, base, state, cut['manifest']['archive_sha256'],
                     state['cut']['manifest_sha256'], {})
                 self.assertEqual((state['phase'], state['status']), ('PAUSED_APPLY', 'WAITING'))
                 self.assertEqual(state['gis_binding'], bound)
@@ -814,9 +976,9 @@ class GISLifecycleContract(unittest.TestCase):
             'full', target_sa=True, reject_target_sa=True)
 
     def test_full_and_app_only_compile_real_source_plan_with_gis_and_callers(self):
-        source = Path(os.environ.get('VOICE_TEST_SOURCE_ROOT', Path(__file__).resolve().parents[3]))
+        source = self.compiler_source
         for mode in ('full', 'app-only'):
-            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp, \
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                     patch.object(source_plan_test, 'SOURCE', source):
                 kube, params = source_plan_test.SourceTests().canonical_fixture(mode)
                 params.update(generation='r20260930a4', dataPVC='voice-nats-jsdata-d202610040049430b',
@@ -883,11 +1045,11 @@ class GISLifecycleContract(unittest.TestCase):
     def test_transaction_blocks_drift_between_real_captures_before_fence(self):
         class ReachedPrerequisite(Exception):
             pass
-        _, state, receipt = fixtures.first_install()
+        _, state, receipt = self.modeled_first_install()
         first = self.capture()
         pack = self.compiled_target(first)
         for failure in ('service_uid', 'deployment_uid', 'runtime_image', 'detached_binding'):
-            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 kube = copy.deepcopy(self.kube)
                 binding = copy.deepcopy(self.binding)
                 if failure == 'service_uid':
@@ -904,9 +1066,7 @@ class GISLifecycleContract(unittest.TestCase):
                 original = root / ('rollout-' + state['operation'])
                 original.mkdir()
                 (original / 'checkpoint.json').write_text(json.dumps(state), encoding='utf-8')
-                (root / 'installed' / 'active-release.json').write_text(json.dumps({
-                    'gis_first_install_transition': {'operation': state['operation'],
-                        'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+                (root / 'installed' / 'active-release.json').write_text(json.dumps(self.active_reference(state, receipt)), encoding='utf-8')
                 def read(path, **kwargs):
                     return json.loads(Path(path).read_text(encoding='utf-8'))
                 (root / 'apply-manifests.json').write_text(json.dumps(pack['manifests']), encoding='utf-8')
@@ -916,27 +1076,25 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(runtime_stage.RolloutStage, 'fence') as fence, \
                         patch('operator_retirement.record_readonly_failure', side_effect=lambda _b, state, _e: state):
                     with self.assertRaises((gis.Blocked, runtime_stage.Blocked)):
-                        transaction.prepare(kube, root, root, pack['target'], {},
+                        self.component_prepare(kube, root, root, pack['target'], {},
                             '123456abcdef', {}, [], {'actions': []}, gis_binding=binding,
                             gis_source_authority=self.source_fixture())
                     preflight.assert_not_called()
                     fence.assert_not_called()
 
     def test_conflicting_or_invalid_binding_never_reaches_capture_or_fence(self):
-        _, state, receipt = fixtures.first_install()
+        _, state, receipt = self.modeled_first_install()
         legacy = {'operation': state['operation'], 'receipt_sha256': receipt['receipt_sha256'],
             'receipt': receipt}
         self.assertTrue(gis.validate_transition_binding(legacy, self.kube))
         for failure in ('conflicting_legacy', 'invalid_binding'):
-            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 root = Path(tmp)
                 (root / 'installed').mkdir()
                 original = root / ('rollout-' + state['operation'])
                 original.mkdir()
                 (original / 'checkpoint.json').write_text(json.dumps(state), encoding='utf-8')
-                (root / 'installed' / 'active-release.json').write_text(json.dumps({
-                    'gis_first_install_transition': {'operation': state['operation'],
-                        'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+                (root / 'installed' / 'active-release.json').write_text(json.dumps(self.active_reference(state, receipt)), encoding='utf-8')
                 def read(path, **kwargs):
                     return json.loads(Path(path).read_text(encoding='utf-8'))
                 first = self.capture()
@@ -956,7 +1114,7 @@ class GISLifecycleContract(unittest.TestCase):
                     expected = ('gis_existing_admission_conflict' if failure == 'conflicting_legacy'
                                 else 'gis_existing_authority_changed')
                     with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
-                        transaction.prepare(self.kube, root, root, pack['target'], {},
+                        self.component_prepare(self.kube, root, root, pack['target'], {},
                             '123456abcdef', {}, [], {'actions': []}, **options)
                     capture.assert_not_called()
                     fence.assert_not_called()
@@ -968,7 +1126,7 @@ class GISLifecycleContract(unittest.TestCase):
         target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
         binding = existing.bind_target(self.binding, target)
         for fault in ('none', 'active_replicas', 'deployment_uid', 'service_drift'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 kube = copy.deepcopy(self.kube)
                 kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
                 if fault == 'active_replicas':
@@ -989,13 +1147,13 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'save') as save:
                     if fault == 'none':
                         with self.assertRaises(ReachedPrerequisite):
-                            transaction.authorize(kube, Path(tmp), state, '6' * 64, '7' * 64, {})
+                            self.component_call(transaction.authorize, kube, Path(tmp), state, '6' * 64, '7' * 64, {})
                         preflight.assert_called_once()
                     else:
                         expected = ('gis_existing_deployment_changed' if fault == 'active_replicas'
                                     else 'gis_existing_identity_changed')
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
-                            transaction.authorize(kube, Path(tmp), state, '6' * 64, '7' * 64, {})
+                            self.component_call(transaction.authorize, kube, Path(tmp), state, '6' * 64, '7' * 64, {})
                         preflight.assert_not_called()
                         save.assert_not_called()
 
@@ -1006,7 +1164,7 @@ class GISLifecycleContract(unittest.TestCase):
         target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
         binding = existing.bind_target(self.binding, target)
         for fault in ('none', 'active_replicas', 'deployment_uid', 'service_drift', 'wrong_image'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 kube = copy.deepcopy(self.kube)
                 kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
                 kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
@@ -1030,13 +1188,13 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'save') as save:
                     if fault == 'none':
                         with self.assertRaises(ReachedAdoption):
-                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                            self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
                         stage.adopt_applied_target.assert_called_once()
                     else:
                         expected = ('gis_existing_identity_changed' if fault in ('deployment_uid', 'service_drift')
                                     else 'gis_existing_deployment_changed')
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), expected):
-                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                            self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
                         stage.adopt_applied_target.assert_not_called()
                         stage.restart.assert_not_called()
                         save.assert_not_called()
@@ -1048,7 +1206,7 @@ class GISLifecycleContract(unittest.TestCase):
         target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
         binding = existing.bind_target(self.binding, target)
         for fault in ('none', 'uid', 'resourceVersion'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 kube = copy.deepcopy(self.kube)
                 kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
                 kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
@@ -1082,11 +1240,11 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'save'):
                     if fault == 'none':
                         with self.assertRaises(ReachedRestart):
-                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                            self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
                     else:
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked),
                                 'gis_existing_service_account_changed'):
-                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                            self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
 
     def test_finish_installs_start_guard_for_late_service_account_drift(self):
         class ReachedScale(Exception):
@@ -1095,7 +1253,7 @@ class GISLifecycleContract(unittest.TestCase):
         target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
         binding = existing.bind_target(self.binding, target)
         for fault in ('none', 'uid', 'resourceVersion'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 kube = copy.deepcopy(self.kube)
                 kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
                 kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
@@ -1131,11 +1289,11 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'save'):
                     if fault == 'none':
                         with self.assertRaises(ReachedScale):
-                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                            self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
                     else:
                         with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked),
                                 'gis_existing_service_account_changed'):
-                            transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                            self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
 
     def test_finish_installs_real_ready_proof_and_persists_it_before_release(self):
         class BeforeRelease(Exception):
@@ -1180,7 +1338,7 @@ class GISLifecycleContract(unittest.TestCase):
         self_test = self
         stage = Stage()
         stage.kube = kube
-        with tempfile.TemporaryDirectory() as tmp, \
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                 patch.object(transaction, 'reconstruct', return_value=stage), \
                 patch.object(transaction, 'revalidate_inputs'), \
                 patch.object(transaction, 'context', return_value={}), \
@@ -1190,7 +1348,7 @@ class GISLifecycleContract(unittest.TestCase):
                 patch.object(transaction, 'save', side_effect=save), \
                 patch.object(existing, 'verify_ready', side_effect=record_ready) as ready:
             with self.assertRaises(gis.Blocked):
-                transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {})
             ready.assert_called_once_with(binding, kube, account)
             self.assertEqual(saved[-1]['gis_ready_proof'], observed[-1])
             self.assertFalse(any(row.get('status') in ('PASS', 'PROVISIONAL_READY') for row in saved))
@@ -1222,7 +1380,7 @@ class GISLifecycleContract(unittest.TestCase):
                 release()
         stage = Stage()
         stage.kube = kube
-        with tempfile.TemporaryDirectory() as tmp, \
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                 patch.object(transaction, 'reconstruct', return_value=stage), \
                 patch.object(transaction, 'revalidate_inputs'), \
                 patch.object(transaction, 'context', return_value={}), \
@@ -1232,7 +1390,7 @@ class GISLifecycleContract(unittest.TestCase):
                 patch.object(transaction, 'save', side_effect=save), \
                 patch.object(existing, 'verify_ready', wraps=existing.verify_ready) as ready:
             with self.assertRaises((gis.Blocked, runtime_stage.Blocked)):
-                transaction.finish(kube, Path(tmp), state, receipt, 'claim-rv', {}, publication=publication)
+                self.component_call(transaction.finish, kube, Path(tmp), state, receipt, 'claim-rv', {}, publication=publication)
             ready.assert_called_once_with(binding, kube, account)
             release.assert_not_called()
             publication.assert_not_called()
@@ -1245,16 +1403,16 @@ class GISLifecycleContract(unittest.TestCase):
         state = {'operation': receipt['operation'], 'target': receipt['target'],
             'authorization': receipt, 'gis_binding': self.binding, 'events': []}
         for entry in ('direct', 'finish_dispatch'):
-            with self.subTest(entry=entry), tempfile.TemporaryDirectory() as tmp, \
+            with self.subTest(entry=entry), tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                     patch.object(transaction, 'reconstruct', side_effect=ReachedReconstruction) as reconstruct, \
                     patch.object(transaction, 'save') as save:
                 publication = Mock()
                 with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), 'gis_existing_finish_only_unsupported'):
                     if entry == 'direct':
-                        transaction.finish_only(self.kube, Path(tmp), copy.deepcopy(state),
+                        self.component_call(transaction.finish_only, self.kube, Path(tmp), copy.deepcopy(state),
                             receipt, {}, {}, publication=publication)
                     else:
-                        transaction.finish(self.kube, Path(tmp), copy.deepcopy(state),
+                        self.component_call(transaction.finish, self.kube, Path(tmp), copy.deepcopy(state),
                             receipt, 'rv', {}, finish_authority={}, publication=publication)
                 reconstruct.assert_not_called()
                 save.assert_not_called()
@@ -1267,7 +1425,7 @@ class GISLifecycleContract(unittest.TestCase):
         target['spec']['template']['spec']['containers'][0]['image'] = self.new_image
         binding = existing.bind_target(self.binding, target)
         for fault in ('third_image', 'deployment_uid', 'service_drift'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory(dir='/fixture') as tmp:
                 kube = copy.deepcopy(self.kube)
                 kube.deployments['voice-gameintegration'] = copy.deepcopy(target)
                 kube.deployments['voice-gameintegration']['spec']['replicas'] = 0
@@ -1292,14 +1450,14 @@ class GISLifecycleContract(unittest.TestCase):
                         patch.object(transaction, 'context', return_value={}), \
                         patch.object(transaction, 'save'):
                     with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), 'gis_existing_rollback_pair_changed'):
-                        transaction.rollback(kube, Path(tmp), state, receipt, 'claim-rv', {})
+                        self.component_call(transaction.rollback, kube, Path(tmp), state, receipt, 'claim-rv', {})
                     stage.adopt_rollback_target.assert_not_called()
                     stage.restore_original_templates.assert_not_called()
                     stage.restart.assert_not_called()
 
     def test_root_authority_rejects_dangling_or_nonpass_successor(self):
-        _, first, receipt = fixtures.first_install()
-        with tempfile.TemporaryDirectory() as tmp:
+        _, first, receipt = self.modeled_first_install()
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             installed = root / 'installed'
             installed.mkdir()
@@ -1307,8 +1465,7 @@ class GISLifecycleContract(unittest.TestCase):
             original.mkdir()
             (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
             active_path = installed / 'active-release.json'
-            active = {'gis_first_install_transition': {'operation': first['operation'],
-                'receipt_sha256': receipt['receipt_sha256']}}
+            active = self.active_reference(first, receipt)
             def read(path, **kwargs):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             active_path.write_text(json.dumps(active), encoding='utf-8')
@@ -1321,8 +1478,10 @@ class GISLifecycleContract(unittest.TestCase):
                         successor = root / ('rollout-' + 'b' * 12)
                         if status != 'missing':
                             successor.mkdir(exist_ok=True)
-                            (successor / 'checkpoint.json').write_text(json.dumps({
-                                'operation': 'b' * 12, 'status': status}), encoding='utf-8')
+                            candidate = {'operation': 'b' * 12, 'status': status,
+                                'gis_expected_active': self.active_reference(first, receipt)}
+                            self.bind_component_state(candidate)
+                            (successor / 'checkpoint.json').write_text(json.dumps(candidate), encoding='utf-8')
                         before = active_path.read_bytes()
                         with self.assertRaises(gis.Blocked):
                             existing.load_authority(self.kube)
@@ -1334,9 +1493,9 @@ class GISLifecycleContract(unittest.TestCase):
         state = {'operation': paused_recovery.OPERATION, 'gis_binding': self.binding}
         request = {'operation': paused_recovery.OPERATION, 'nonce': 'a' * 64,
             'token': 'fixture', 'run_id': 1}
-        actions = object.__new__(bridge_root.Actions)
+        actions = bridge_root.Actions(self.captured_code, installation=self.installation)
         for method in ('_expired_source_admission', '_finish_source_admission'):
-            with self.subTest(method=method), tempfile.TemporaryDirectory() as tmp, \
+            with self.subTest(method=method), tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                     patch.object(actions, 'state', return_value=(Path(tmp), copy.deepcopy(state))), \
                     patch.object(actions, '_dispatcher', side_effect=ReachedBoundary) as dispatcher, \
                     patch.object(bridge_root.source_authority, 'capture_source') as source:
@@ -1344,12 +1503,12 @@ class GISLifecycleContract(unittest.TestCase):
                     getattr(actions, method)(request)
                 dispatcher.assert_not_called()
                 source.assert_not_called()
-        with tempfile.TemporaryDirectory() as tmp, \
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                 patch.object(expired_recovery, 'runtime_authority', side_effect=ReachedBoundary) as authority, \
                 patch.object(transaction, 'reconstruct') as reconstruct, \
                 patch.object(transaction, 'save') as save:
             with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), 'gis_existing_recovery_unsupported'):
-                transaction.authorize(self.kube, Path(tmp), copy.deepcopy(state), '6' * 64, '7' * 64, {},
+                self.component_call(transaction.authorize, self.kube, Path(tmp), copy.deepcopy(state), '6' * 64, '7' * 64, {},
                     expired_authority={'fixture': True},
                     authorization_deadline=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=1))
             authority.assert_not_called()
@@ -1360,12 +1519,12 @@ class GISLifecycleContract(unittest.TestCase):
         finish_state = {**state, 'phase': 'PAUSED_APPLY', 'status': 'WAITING',
             'target': receipt['target'], 'authorization': receipt,
             'expired_recovery_authority': {'fixture': True}, 'events': []}
-        with tempfile.TemporaryDirectory() as tmp, \
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp, \
                 patch.object(transaction, 'reconstruct', side_effect=ReachedBoundary) as reconstruct, \
                 patch.object(transaction, 'save') as save:
             publication = Mock()
             with self.assertRaisesRegex((gis.Blocked, runtime_stage.Blocked), 'gis_existing_recovery_unsupported'):
-                transaction.finish(self.kube, Path(tmp), finish_state, receipt, 'rv', {},
+                self.component_call(transaction.finish, self.kube, Path(tmp), finish_state, receipt, 'rv', {},
                     publication=publication)
             reconstruct.assert_not_called()
             save.assert_not_called()
@@ -1376,7 +1535,7 @@ class GISLifecycleContract(unittest.TestCase):
         # I/O is simulated: this fixture does not prove off-node custody.
         from types import SimpleNamespace
         import root_cli
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             base = Path(tmp) / 'rollout-123456abcdef'
             base.mkdir()
             census = {'fixture': 'cold-state'}
@@ -1408,12 +1567,14 @@ class GISLifecycleContract(unittest.TestCase):
             restore_path.chmod(0o600)
             proof = {'archive': 'synthetic.tar', 'archive_sha256': 'd' * 64,
                 'native_files_verified': True, 'census_verified': True, 'census_sha256': cut['census_sha256']}
-            helper = {'nats-rollout-preservation/resource_claim.py': 'e' * 64}
+            helper = copy.deepcopy(self.helper_binding)
             context = resource_claim_test.context()
             context.update(commit=target['tag'], images=copy.deepcopy(target['images']))
-            fence = {'schema': 'voice-staging-resource-fence-v1', 'context': context,
-                'operation': binding['operation'], 'helper_sha256': gis.digest(helper),
-                'target_sha256': gis.digest(target)}
+            session = self.admitted_session(target, binding['operation'])
+            session.bind_target(target['tag'], target['images'],
+                session.authority()['observed']['images'], gis.digest(target))
+            fence = session.binding()
+            self.enterContext(resource_claim.command_scope(session.check))
             authorization = {'operation': binding['operation'], 'target': target, 'backup': backup,
                 'namespace_uid': self.binding['namespace_uid']}
             nonce = 'f' * 64
@@ -1426,6 +1587,7 @@ class GISLifecycleContract(unittest.TestCase):
                 'gis_normalized_pair': pair, 'events': [], 'closed_preservation_attempt_nonce': nonce,
                 'closed_preservation_attempts': {nonce: {'nonce': nonce,
                     'authorization_sha256': gis.digest(authorization), 'admitted_cut_sha256': gis.digest(cut)}}}
+            state.update(schema='nats-rollout-root-v2', installation_sha256=self.installation.sha256)
             stage = SimpleNamespace(final_path=base, verify_final_storage=lambda: None)
             stage.save = lambda event: state['events'].append(copy.deepcopy(event))
             runtime = preserve.ColdRelease(base, state, stage, lambda: None, cut, nonce,
@@ -1487,7 +1649,7 @@ class GISLifecycleContract(unittest.TestCase):
 
                 # Genesis uses real first-install receipt, live-ready fixture
                 # and an actual cold intent; only native archive I/O is mocked.
-                first_kube, first_state, first_receipt = fixtures.first_install()
+                first_kube, first_state, first_receipt = self.modeled_first_install()
                 ready_kube, ready_binding, account = self.ready_fixture()
                 deployment = copy.deepcopy(ready_kube.objects[gis.DEPLOYMENT])
                 service = copy.deepcopy(ready_kube.objects[gis.SERVICE])
@@ -1512,7 +1674,7 @@ class GISLifecycleContract(unittest.TestCase):
                 state['closed_preservation_attempts'][nonce]['authorization_sha256'] = gis.digest(state['authorization'])
                 state.update(phase='PAUSED_APPLY', status='WAITING', fence_status='VERIFIED', provenance={})
                 anchor = {'operation': first_state['operation'], 'receipt_sha256': first_receipt['receipt_sha256']}
-                active = {'gis_first_install_transition': anchor}
+                active = self.active_reference(first_state, first_receipt)
                 state['gis_expected_active'] = copy.deepcopy(active)
                 root = Path(tmp)
                 original_dir = root / ('rollout-' + first_state['operation'])
@@ -1582,7 +1744,7 @@ class GISLifecycleContract(unittest.TestCase):
                             failure.update(point=fault, marker_applied=False)
                             first_snapshot = len(snapshots)
                             with self.assertRaisesRegex(RuntimeError, 'injected'):
-                                transaction.finish(ready_kube, base, state, state['authorization'], 'fixture-rv', {})
+                                self.component_call(transaction.finish, ready_kube, base, state, state['authorization'], 'fixture-rv', {})
                             saved = json.loads(durable.read_text(encoding='utf-8'))
                             self.assertEqual(saved['status'], 'BLOCKED')
                             self.assertEqual(saved['fence_status'], 'UNKNOWN')
@@ -1597,7 +1759,7 @@ class GISLifecycleContract(unittest.TestCase):
                                 del stage.marker
                             ready_kube.cas.reset_mock()
                     failure.update(point=None, marker_applied=False)
-                    transaction.finish(ready_kube, base, state, state['authorization'], 'fixture-rv', {})
+                    self.component_call(transaction.finish, ready_kube, base, state, state['authorization'], 'fixture-rv', {})
                     receipt = state['gis_existing_update']['receipt']
                     self.assertEqual(receipt['anchor'], anchor)
                     self.assertEqual(receipt['predecessor'], anchor)
@@ -1616,8 +1778,7 @@ class GISLifecycleContract(unittest.TestCase):
                     ready_kube.cas.assert_called_once()
                 # Finish executed with controlled external Kube/NATS/storage seams.
                 self.assertEqual(json.loads(durable.read_text(encoding='utf-8')), state)
-                actions = object.__new__(bridge_root.Actions)
-                actions.binding = copy.deepcopy(helper)
+                actions = bridge_root.Actions(self.captured_code, installation=self.installation)
                 with patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
                         patch.object(root_cli, 'ROOT', root), patch.object(bridge_root, 'Kube', return_value=ready_kube):
                     # TT transport and journal storage are simulated, but the
@@ -1627,8 +1788,7 @@ class GISLifecycleContract(unittest.TestCase):
                     journal.save(dict(state['resource_fence'], status='active', phase='apply-ready'))
                     check = Mock(return_value=resource_claim_test.card(tt_context))
                     request = {'action': 'finish', 'operation': state['operation'], 'resource_context': tt_context}
-                    with patch.object(resource_claim, 'require_helper'), \
-                            patch.object(resource_claim, 'RootJournal', return_value=journal), \
+                    with patch.object(resource_claim, 'RootJournal', return_value=journal), \
                             patch.object(resource_claim, 'Check', return_value=check):
                         with self.assertRaisesRegex(OSError, 'publication unavailable'):
                             with resource_claim.root_scope(actions, request) as session:
@@ -1687,6 +1847,8 @@ class GISLifecycleContract(unittest.TestCase):
                     active_path.write_text(json.dumps(published), encoding='utf-8')
                     legacy = {'operation': 'c' * 12, 'status': 'PASS', 'context': state['context'],
                         'target': {'mode': 'images-only', 'manifest_sha256': '8' * 64}}
+                    legacy.update(phase='POST_RESTART', fence_status='RELEASED')
+                    self.bind_component_state(legacy)
                     legacy_dir = root / ('rollout-' + legacy['operation'])
                     legacy_dir.mkdir()
                     legacy_checkpoint = legacy_dir / 'checkpoint.json'
@@ -1752,6 +1914,7 @@ class GISLifecycleContract(unittest.TestCase):
                     second_stage = SimpleNamespace(final_path=second_base, kube=ready_kube,
                         verify_final_storage=lambda: None)
                     second_stage.save = lambda event: second['events'].append(copy.deepcopy(event))
+                    self.bind_component_state(second)
                     second_runtime = preserve.ColdRelease(second_base, second, second_stage, lambda: None, cut, nonce,
                         dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5))
                     second_stage.closed_preservation_runtime = second_runtime
@@ -1869,17 +2032,15 @@ class GISLifecycleContract(unittest.TestCase):
     def test_bridge_qualifies_gis_before_real_workload_capture(self):
         class Captured(Exception):
             pass
-        _, first, receipt = fixtures.first_install()
-        with tempfile.TemporaryDirectory() as tmp:
+        _, first, receipt = self.modeled_first_install()
+        with tempfile.TemporaryDirectory(dir='/fixture') as tmp:
             root = Path(tmp)
             installed = root / 'installed'
             (installed / 'sources').mkdir(parents=True)
             original = root / ('rollout-' + first['operation'])
             original.mkdir()
             (original / 'checkpoint.json').write_text(json.dumps(first), encoding='utf-8')
-            (installed / 'active-release.json').write_text(json.dumps({
-                'gis_first_install_transition': {'operation': first['operation'],
-                    'receipt_sha256': receipt['receipt_sha256']}}), encoding='utf-8')
+            (installed / 'active-release.json').write_text(json.dumps(self.active_reference(first, receipt)), encoding='utf-8')
             def read(path, **kwargs):
                 return json.loads(Path(path).read_text(encoding='utf-8'))
             actual_capture = runtime_stage.RolloutStage.capture
@@ -1888,15 +2049,29 @@ class GISLifecycleContract(unittest.TestCase):
                 stage = actual_capture(*args, **kwargs)
                 captures.append((copy.deepcopy(kwargs), stage))
                 raise Captured()
-            actions = object.__new__(bridge_root.Actions)
-            actions.binding = {}
+            actions = bridge_root.Actions(self.captured_code, installation=self.installation)
+            import source_authority_test
+            transport = source_authority_test.SourceTests()
+            transport.setUp()
+            self.addCleanup(transport.doCleanups)
+            import staging_prerequisites
+            for relative in self.helper_binding:
+                if relative not in staging_prerequisites.BINARY_PINS:
+                    transport.files['scripts/staging/' + relative] = (self.captured_code / relative).read_bytes()
+            target = {'tag': 'a' * 40, 'images': {'voice-gameintegration/gameintegration':
+                source_authority.REGISTRY + '/gameintegration@' + transport.manifest_digest}}
+            session = self.admitted_session(target, 'a' * 12, self.baseline_images)
+            actions.tt_session = session
             request = {'nonce': 'a' * 64, 'token': 'fixture', 'mode': 'images-only',
                 'changed_services': ['gameintegration']}
-            execution = {'head_sha': 'a' * 40}
-            with patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
+            execution = {'head_sha': 'a' * 40, 'dispatcher_run_id': 123, 'run_attempt': 1,
+                'event': 'push', 'workflow_id': source_authority.WORKFLOW,
+                'path': '.github/workflows/ci.yml', 'repository': source_authority.REPO}
+            with resource_claim.command_scope(session.check), \
+                    patch.object(guard, 'ROOT', root), patch.object(bridge_root, 'INSTALLED', installed), \
                     patch.object(existing, 'private_json', side_effect=read), \
-                    patch.object(actions, '_idle'), patch.object(actions, '_dispatcher', return_value=(1, execution)), \
-                    patch.object(bridge_root.source_authority, 'capture_source', return_value={}), \
+                    patch.object(actions, '_idle'), patch.object(actions, '_dispatcher', return_value=(123, execution)), \
+                    patch.object(source_authority, '_fetch', side_effect=transport.fetch), \
                     patch.object(bridge_root, 'Kube', return_value=self.kube), \
                     patch.object(runtime_stage.RolloutStage, 'capture', side_effect=observe):
                 with self.assertRaises(Captured):
