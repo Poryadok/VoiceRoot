@@ -115,9 +115,48 @@ match_squad_overlay:
   - deploy/dev/match-squad-trust-overlay/**
 
 a1_t106_live:
-  # Retain the existing output name; both targeted live test edits require A1.
+  # The four manifest journeys and shared client/test inputs require the proof.
   - src/frontend/test/t055_profile_switch_reconnect_inbox_e2e_live_test.dart
   - src/frontend/test/t106_account_soft_delete_e2e_live_test.dart
+  - src/frontend/test/t107_folders_quick_access_e2e_live_test.dart
+  - src/frontend/test/a1_pending_email_reentry_e2e_live_test.dart
+  - src/frontend/test/support/**
+  - src/frontend/lib/**
+  - src/frontend/assets/**
+  - src/frontend/pubspec.yaml
+  - src/frontend/pubspec.lock
+  - protos/**
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/backend/migrations/auth_db/**
+  - src/backend/migrations/user_db/**
+  - src/backend/migrations/chat_db/**
+  - src/backend/migrations/messaging_db/**
+  - src/backend/migrations/social_db/**
+  - src/backend/migrations/realtime_db/**
+
+a1_multi_account_pr:
+  - src/backend/auth/**
+  - src/backend/user/**
+  - src/backend/chat/**
+  - src/backend/messaging/**
+  - src/backend/social/**
+  - src/backend/gateway/**
+  - src/backend/realtime/**
+  - src/backend/pkg/**
+  - src/backend/migrations/auth_db/**
+  - src/backend/migrations/user_db/**
+  - src/backend/migrations/chat_db/**
+  - src/backend/migrations/messaging_db/**
+  - src/backend/migrations/social_db/**
+  - src/backend/migrations/realtime_db/**
+  - protos/**
 
 a1_e2e:
   - Makefile

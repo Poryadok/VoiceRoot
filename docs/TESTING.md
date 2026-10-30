@@ -675,6 +675,14 @@ deployments remain blocked until the missing proofs are implemented and pass.
 The source audit is limited to `*_integration_test.go`; other test files and
 generated or external inputs still require source-binding review.
 
+For PRs, the A1 multi-account proof follows its Auth, User, Chat, Messaging,
+Social, Gateway, Realtime, shared-package and protocol inputs. The Flutter
+profile-handoff proof follows all four manifest tests, shared frontend source
+and test support, package inputs, and the same relevant backend boundaries.
+Global and unknown CI changes select both proofs. An unrelated standalone
+frontend test does not select either A1 journey by itself; master full
+validation remains separate.
+
 The main Go CI jobs and dedicated Go integration proofs resolve and test with
 `-mod=readonly`, then reject changes to backend `go.mod` or `go.sum` files,
 including ignored newly created sums.

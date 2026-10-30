@@ -499,6 +499,69 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('--allow-skips', step['run'])
         self.assertNotIn('--concurrency', step['run'])
 
+    def test_a1_proofs_select_their_inputs_without_widening_unrelated_frontend_tests(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': [],
+                  'run_go': False, 'run_pkg': False}
+        def checks(path):
+            return planner.make_plan(planner.match_filters(rules, [path]), matrix)['checks']
+        for file in ('compose_a1_multi_account_live_test.go', 'compose_session_epoch_live_test.go',
+                     'compose_threads_e2e_live_test.go', 'compose_live_helpers_test.go',
+                     'compose_users_search_live_test.go', 'compose_auth_guest_nats_sessions_live_test.go'):
+            with self.subTest(file=file):
+                self.assertIn('a1-e2e', checks('src/backend/gateway/' + file))
+        for file in ('t055_profile_switch_reconnect_inbox_e2e_live_test.dart',
+                     't106_account_soft_delete_e2e_live_test.dart',
+                     't107_folders_quick_access_e2e_live_test.dart',
+                     'a1_pending_email_reentry_e2e_live_test.dart'):
+            with self.subTest(file=file):
+                self.assertIn('a1-flutter-profile-handoff', checks('src/frontend/test/' + file))
+        for path in ('src/frontend/lib/backend/auth_client.dart',
+                     'src/frontend/lib/state/profile_switch_coordinator.dart',
+                     'src/frontend/lib/ui/chat/chat_room_panel.dart',
+                     'src/frontend/test/support/live_gateway_harness.dart', 'src/frontend/pubspec.lock'):
+            with self.subTest(path=path):
+                self.assertIn('a1-flutter-profile-handoff', checks(path))
+        for path in ('src/backend/auth/src/main/Auth.java', 'src/backend/user/main.go',
+                     'src/backend/chat/main.go', 'src/backend/messaging/main.go',
+                     'src/backend/social/main.go', 'src/backend/gateway/main.go',
+                     'src/backend/realtime/main.go', 'src/backend/pkg/principal/verifier.go',
+                     'src/backend/migrations/messaging_db/000001_initial.up.sql',
+                     'protos/voice/chat/v1/chat.proto'):
+            with self.subTest(path=path):
+                self.assertIn('a1-e2e', checks(path))
+                self.assertIn('a1-flutter-profile-handoff', checks(path))
+        unrelated = 'src/frontend/test/bot_install_page_test.dart'
+        matched = planner.match_filters(rules, [unrelated])
+        self.assertEqual(planner.unclassified_paths(matched), [])
+        self.assertFalse(planner.effective_filters(matched)['ci_global'])
+        self.assertNotIn('a1-e2e', checks(unrelated))
+        self.assertNotIn('a1-flutter-profile-handoff', checks(unrelated))
+        self.assertIn('a1-flutter-profile-handoff', checks('scripts/ci/new_unknown_tool.py'))
+        self.assertTrue(planner.effective_filters(planner.match_filters(
+            rules, [unrelated, 'scripts/ci/new_unknown_tool.py']))['ci_global'])
+
+    def test_a1_workflow_and_gate_consume_shared_selectors(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        jobs = workflow['jobs']
+        self.assertIn('a1_multi_account_pr', jobs['changes']['outputs'])
+        self.assertIn('a1_multi_account_pr', jobs['a1-e2e']['if'])
+        self.assertIn('a1_t106_live', jobs['a1-flutter-profile-handoff']['if'])
+        self.assertIn('ci_global', jobs['a1-flutter-profile-handoff']['if'])
+        gate = next(step for step in jobs['ci-gate']['steps'] if 'RUN_A1_E2E' in step.get('env', {}))
+        self.assertIn('a1_multi_account_pr', gate['env']['RUN_A1_E2E'])
+        self.assertIn('ci_global', gate['env']['RUN_A1_FLUTTER_PROFILE_HANDOFF'])
+        bash = 'C:/Program Files/Git/bin/bash.exe' if os.name == 'nt' else 'bash'
+        for selector, result in (('RUN_A1_E2E', 'JOB_A1_E2E'),
+                                 ('RUN_A1_FLUTTER_PROFILE_HANDOFF', 'JOB_A1_FLUTTER_PROFILE_HANDOFF')):
+            for outcome, expected in (('success', 0), ('skipped', 1), ('failure', 1), ('cancelled', 1)):
+                env = {'PATH': os.environ['PATH'], 'JOB_CURRENT_DIFF_CONTRACT': 'success',
+                       selector: 'true', result: outcome}
+                run = subprocess.run([bash, str(ROOT / '.github/ci/verify-required-jobs.sh'), 'pull_request', 'false'],
+                                     env=env, capture_output=True)
+                self.assertEqual(run.returncode, expected, (selector, outcome, run.stderr))
+
     def test_music_selector_keeps_shared_and_unknown_inputs_but_excludes_independent_browser_tests(self):
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': [], 'docker_go_services': [],

@@ -58,6 +58,7 @@ jobs:
       match_squad_overlay: ${{ steps.filter.outputs.match_squad_overlay }}
       dev_web_publish: ${{ steps.filter.outputs.dev_web_publish }}
       a1_e2e: ${{ steps.filter.outputs.a1_e2e }}
+      a1_multi_account_pr: ${{ steps.filter.outputs.a1_multi_account_pr }}
       a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
@@ -2382,8 +2383,8 @@ jobs:
           RUN_FLUTTER_ANDROID_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_WEB_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_IOS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
-          RUN_A1_E2E: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_E2E: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_multi_account_pr == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
           RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
           RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && needs.changes.outputs.integration_analytics == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true'))) }}
           RUN_GRAFANA_ANALYTICS_SMOKE: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.compose == 'true')) }}
@@ -3668,7 +3669,7 @@ jobs:
         (
           github.event_name == 'pull_request' &&
           needs.changes.result == 'success' &&
-          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')
+          (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.a1_multi_account_pr == 'true')
         ) ||
         (
           github.event_name == 'push' &&
@@ -3721,6 +3722,7 @@ jobs:
           needs.changes.result == 'success' &&
           (
             needs.changes.outputs.global == 'true' ||
+            needs.changes.outputs.ci_global == 'true' ||
             needs.changes.outputs.a1_t106_live == 'true'
           )
         ) ||
