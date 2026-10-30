@@ -2883,6 +2883,7 @@ jobs:
           BE131_AUTH_JDBC_URL: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports[5432] }}/test
           BE131_AUTH_REDIS_HOST: 127.0.0.1
           BE131_AUTH_REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+          BE131_AUTH_PROOF_DIR: ${{ runner.temp }}/chat-auth-java-proof
           CANDIDATE_SHA: ${{ github.sha }}
         shell: bash
         run: |
@@ -2904,6 +2905,7 @@ jobs:
           path: |
             ${{ runner.temp }}/chat-auth-java-events.jsonl
             ${{ runner.temp }}/chat-auth-java-receipt.json
+            ${{ runner.temp }}/chat-auth-java-proof/
             src/backend/auth/target/surefire-reports/TEST-voice.backend.auth.sessionepoch.AuthChatFloorInteropFixtureTest.xml
           if-no-files-found: warn
           retention-days: 14

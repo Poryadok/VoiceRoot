@@ -85,6 +85,13 @@ def _tool(value, name):
     return path
 
 
+def maven_options(repository):
+    path = Path(repository).as_posix()
+    if any(ord(character) < 32 or character in ('"', '\\') for character in path):
+        raise ValueError('unsupported private Maven repository path')
+    return '-Dmaven.repo.local="' + path + '"'
+
+
 def run(root, source, base, output, go_binary='go', buf_binary='buf'):
     root, output = Path(root).resolve(), Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -109,8 +116,6 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
         bash = _tool(git_bash, 'Bash')
         if java.parent != javac.parent:
             raise ValueError('Java and javac must use the same JDK')
-        if any(char.isspace() for char in str(output)):
-            raise ValueError('protobuf output path must not contain whitespace for the private Maven repository')
         hashes = {name: _sha256(path) for name, path in
                   (('go', go), ('buf', buf), ('maven', maven), ('java', java), ('javac', javac),
                    ('plugin', plugin), ('grpc', grpc), ('bash', bash), ('git', git))}
@@ -124,7 +129,7 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
                    GOCACHE=str(output / 'gocache'), BUF_CACHE_DIR=str(output / 'buf-cache'),
                    GOPROXY='https://proxy.golang.org,direct', GOSUMDB='sum.golang.org',
                    PYTHONDONTWRITEBYTECODE='1', JAVA_HOME=str(java.parent.parent),
-                   MAVEN_OPTS='-Dmaven.repo.local=' + str(output / 'maven-repository'),
+                   JAVA_TOOL_OPTIONS=maven_options(output / 'maven-repository'),
                    R23_CHECK_UNCOMMITTED_JAVA='1',
                    PATH=os.pathsep.join((str(go.parent), str(buf.parent), str(plugin.parent), str(grpc.parent),
                                          str(bash.parent), str(git.parent), str(maven.parent),

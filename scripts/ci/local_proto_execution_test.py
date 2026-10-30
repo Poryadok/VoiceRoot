@@ -8,6 +8,16 @@ import local_proto_execution as proto
 
 
 class LocalProtoExecutionTests(unittest.TestCase):
+    def test_private_maven_options_allow_spaces_but_reject_unsafe_characters(self):
+        options = proto.maven_options(Path('directory with spaces') / 'repository')
+        self.assertIn('directory with spaces', options)
+        self.assertTrue(options.startswith('-Dmaven.repo.local="'))
+        self.assertTrue(options.endswith('"'))
+        with self.assertRaises(ValueError):
+            proto.maven_options('invalid"path')
+        with self.assertRaises(ValueError):
+            proto.maven_options('invalid\npath')
+
     def test_java_consumer_requires_named_pass_and_no_skips(self):
         package = 'voice/r23-contract-test'
         name = 'TestR23GeneratedRuntimeConsumers/Java'

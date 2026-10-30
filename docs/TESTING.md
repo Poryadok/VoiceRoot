@@ -666,8 +666,8 @@ breaking against the captured immutable base, verifies Go generated-code drift
 with a private Git index, checks the Auth proto copy, compiles Auth with a private Maven
 repository, and runs the R23 contract suite including its Java generated
 consumer on an isolated source snapshot. It records tool versions, binary hashes,
-command logs and test counts, and requires no skipped R23 tests. The output
-directory must not contain whitespace. It requires Go 1.26.10, Buf 1.50.0,
+command logs and test counts, and requires no skipped R23 tests. It requires
+Go 1.26.10, Buf 1.50.0,
 JDK 25, Maven 3.9, and the CI-pinned Go protobuf generators on `PATH`. This
 diagnostic is still incomplete:
 dependency provenance and other consumer compilation are not yet complete

@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
@@ -40,6 +41,27 @@ import (
 )
 
 const authJavaFixturePin = "908ac14261dea22fc570ff114dffdea27dcffb97"
+
+// Wait for the positive control's new transport before starting its RPC deadline.
+// Negative TLS controls must not use this helper because they cannot become ready.
+func waitForChatAuthControlConnection(ctx context.Context, conn *grpc.ClientConn) error {
+	conn.Connect()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.Shutdown {
+			return fmt.Errorf("Chat/Auth control connection shut down")
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return fmt.Errorf("Chat/Auth control connection did not become ready")
+		}
+	}
+}
 
 // Candidate mode is only meaningful when the CI job builds the classpath from
 // this clean checkout. Legacy component proofs keep their original fixed pin.
@@ -308,9 +330,15 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 		conn, e := grpc.NewClient(fmt.Sprintf("localhost:%d", ready.Port), grpc.WithTransportCredentials(credentials.NewTLS(cfg)))
 		require.NoError(t, e)
 		t.Cleanup(func() { _ = conn.Close() })
+		if withCert {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			require.NoError(t, waitForChatAuthControlConnection(ctx, conn), "Chat/Auth control transport must become ready")
+		}
 		return conn
 	}
-	client := authv1.NewAuthServiceClient(dial(true))
+	controlConnection := dial(true)
+	client := authv1.NewAuthServiceClient(controlConnection)
 	req := &authv1.GetChatSessionEpochFloorRequest{AccountId: ready.Account}
 	signBinding := func(i *principal.Issuer, r *authv1.GetChatSessionEpochFloorRequest, rpc string) context.Context {
 		hash, e := principal.RequestHash(r)
@@ -326,6 +354,9 @@ func TestChatAuthActualJavaInteroperability(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 		defer cancel()
 		_, e := client.GetChatSessionEpochFloor(ctx, r)
+		if status.Code(e) == codes.DeadlineExceeded {
+			t.Logf("Chat/Auth control deadline: gRPC state=%s, JWKS fetches=%d", controlConnection.GetState(), fetches.Load())
+		}
 		return e
 	}
 	checkClosed := func() {

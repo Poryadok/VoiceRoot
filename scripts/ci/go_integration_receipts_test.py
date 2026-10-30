@@ -135,6 +135,9 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         self.assertIn('--reject-skips', proof['run'])
         self.assertIn('chat_auth_java_required.json', proof['run'])
         self.assertEqual(proof['env']['BE131_AUTH_CANDIDATE_SHA'], '${{ github.sha }}')
+        self.assertEqual(proof['env']['BE131_AUTH_PROOF_DIR'], '${{ runner.temp }}/chat-auth-java-proof')
+        artifact = next(x for x in job['steps'] if x.get('name') == 'Upload Chat to Auth proof')
+        self.assertIn('${{ runner.temp }}/chat-auth-java-proof/', artifact['with']['path'])
 
     def test_gateway_live_leave_diagnostic_has_required_parent_and_subprocess_disposition(self):
         import yaml
