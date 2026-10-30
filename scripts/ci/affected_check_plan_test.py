@@ -492,6 +492,14 @@ class AffectedCheckPlanTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn('f13-historical-replay', checks(path))
         self.assertNotIn('f13-historical-replay', checks('scripts/ci/local_flutter_execution.py'))
+        for name in ('local_go_dependencies.py', 'local_go_dependencies_test.py',
+                     'local_go_execution.py', 'local_go_execution_test.py', 'local_source_snapshot.py'):
+            with self.subTest(local_go=name):
+                self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
+                self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
+        for name in ('local_go_execution.py', 'local_source_snapshot.py'):
+            with self.subTest(docker_consumer=name):
+                self.assertIn('local-docker-isolation', checks('scripts/ci/' + name))
         for name in ('local_docker_owned.py', 'local_docker_owned_test.py',
                      'local_docker_scheduled.py', 'local_docker_scheduled_test.py',
                      'local_docker_scheduled_exec_integration_test.py'):

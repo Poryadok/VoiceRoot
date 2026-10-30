@@ -45,6 +45,10 @@ ci_global:
   # Local planning stays narrow; the Flutter event parser selects frontend below.
   - '!scripts/ci/local_source_snapshot.py'
   - '!scripts/ci/local_source_snapshot_test.py'
+  - '!scripts/ci/local_go_execution.py'
+  - '!scripts/ci/local_go_execution_test.py'
+  - '!scripts/ci/local_go_dependencies.py'
+  - '!scripts/ci/local_go_dependencies_test.py'
   - '!scripts/ci/local_flutter_execution.py'
   - '!scripts/ci/local_flutter_execution_test.py'
   - '!scripts/ci/flutter_test_events.py'
@@ -80,6 +84,8 @@ ci_scripts:
 
 # Explicit inputs to the local Docker ownership and bounded-slot proofs.
 local_docker_isolation:
+  - scripts/ci/local_source_snapshot.py
+  - scripts/ci/local_go_execution.py
   - scripts/ci/local_docker_owned.py
   - scripts/ci/local_docker_owned_test.py
   - scripts/ci/local_docker_owned_integration_test.py
