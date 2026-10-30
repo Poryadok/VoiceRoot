@@ -114,6 +114,28 @@ class GoIntegrationReceiptTests(unittest.TestCase):
             self.assertEqual((entry['status'], entry['reason']),
                              ('dedicated', 'space-native-installer-integration'))
 
+    def test_chat_auth_java_candidate_proof_has_required_no_skip_receipt(self):
+        import yaml
+        case = 'TestChatAuthActualJavaInteroperability'
+        inventory = json.loads((ROOT / 'scripts/ci/chat_auth_java_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(inventory['chat'], [['voice/backend/chat', case]])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        entry = next(x for x in exceptions if x['service'] == 'chat' and x['test'] == case)
+        self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'chat-auth-java-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        selector = jobs['changes']['outputs']['chat_auth_java']
+        for field in ('chat_auth_java_inputs', 'auth', 'protos', 'run_pkg', 'integration_go_services'):
+            self.assertIn(field, selector)
+        self.assertIn('chat-auth-java-integration', jobs['ci-gate']['needs'])
+        self.assertIn('chat-auth-java-integration', jobs['full-validation-aggregation']['needs'])
+        job = jobs['chat-auth-java-integration']
+        build = next(x for x in job['steps'] if x.get('name') == 'Build candidate Auth fixture')
+        self.assertIn('clean test', build['run'])
+        proof = next(x for x in job['steps'] if x.get('name') == 'Run candidate Chat to Auth proof')
+        self.assertIn('--reject-skips', proof['run'])
+        self.assertIn('chat_auth_java_required.json', proof['run'])
+        self.assertEqual(proof['env']['BE131_AUTH_CANDIDATE_SHA'], '${{ github.sha }}')
+
     def test_gateway_live_leave_diagnostic_has_required_parent_and_subprocess_disposition(self):
         import yaml
         name = 'TestComposeSpaceLeaveDiagnosticPreservesStrictStatus'

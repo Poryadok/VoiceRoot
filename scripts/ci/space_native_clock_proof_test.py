@@ -1,5 +1,6 @@
 """Fail closed when a clock fixture name or cleanup inventory is uncertain."""
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -13,6 +14,27 @@ ID = 'a' * 64
 
 
 class ClockFixtureCleanupTests(unittest.TestCase):
+    def test_account_ban_proofs_use_fresh_ordered_database_and_receipts(self):
+        text = SCRIPT.read_text(encoding='utf-8')
+        start = text.index("DROP DATABASE space_db'")
+        created = text.index("CREATE DATABASE space_ban_db'", start)
+        transition45 = text.index("receipt account-ban-transition45", created)
+        transition50 = text.index("receipt account-ban-transition50", transition45)
+        ordered = [
+            ('account-ban-native', 'space_account_ban_native50_required.json', 'TestAccountBanNative50'),
+            ('account-ban-ledger', 'space_account_ban_ledger50_required.json', 'TestAccountBanLedgerGuards50'),
+            ('account-ban-expiry', 'space_account_ban_expiry_required.json', 'TestAccountBanFixtureClockExpiry'),
+        ]
+        positions = []
+        for label, inventory, case in ordered:
+            positions.append(text.index("receipt " + label + " " + inventory + " '^" + case + "$'", created))
+            self.assertEqual(json.loads((ROOT / 'scripts/ci' / inventory).read_text(encoding='utf-8')),
+                             {'space': [['voice/backend/space/internal/store', case]]})
+        self.assertEqual(positions, sorted(positions))
+        self.assertLess(transition50, positions[0])
+        self.assertGreater(text.index("DROP DATABASE space_ban_db'"), positions[-1])
+        self.assertIn('--reject-skips', text)
+
     def run_case(self, mode):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

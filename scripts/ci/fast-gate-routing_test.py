@@ -264,6 +264,12 @@ class FastGateRoutingTests(unittest.TestCase):
             for result in ('skipped', 'failure', 'cancelled'):
                 self.assertNotEqual(policy.run_gate(values, 'current-diff-contract', result).returncode, 0)
 
+    def test_selected_chat_auth_java_proof_cannot_be_skipped(self):
+        values = policy.context('pull_request', code='true', chat_auth_java='true')
+        self.assertTrue(policy.evaluate(policy.job_condition('chat-auth-java-integration'), values))
+        for result in ('skipped', 'failure', 'cancelled'):
+            self.assertNotEqual(policy.run_gate(values, 'chat-auth-java-integration', result).returncode, 0)
+
     def test_history_audit_is_scheduled_and_excluded_from_fast_gate(self):
         values = policy.context('pull_request')
         values['github.head_ref'] = 'codex/ordinary'

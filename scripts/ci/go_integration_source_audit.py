@@ -23,6 +23,8 @@ DEDICATED = {
         'realtime-lifecycle-integration',
     ('chat', 'voice/backend/chat/internal/store', 'TestRealtimeNativeLifecycleReadsOnlyActualChatAndFailsClosedWithoutSchema'):
         'chat-lifecycle-integration',
+    ('chat', 'voice/backend/chat', 'TestChatAuthActualJavaInteroperability'):
+        'chat-auth-java-integration',
     ('analytics', 'voice/backend/analytics/internal/store', 'TestClickHouseInsertBatch'):
         'analytics-clickhouse-integration',
     ('role', 'voice/backend/role', 'TestBootstrapActualRole20PG'):
@@ -78,6 +80,12 @@ DEDICATED = {
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanGIS50'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanGISExpiry50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanNative50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanLedgerGuards50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureClockExpiry'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
         'space-native-installer-integration',

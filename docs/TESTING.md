@@ -797,6 +797,15 @@ PR, включая docs-only: проверяет точные event base/head, �
 исторической цепочки или семантической безопасности произвольного Go-кода.
 Auth/ACL, protobuf, migration/runtime tests и выбранные E2E остаются в gate.
 
+`chat-auth-java-integration` runs for affected Auth, Chat, shared Go and
+protobuf inputs. It compiles the candidate Auth fixture from a clean checkout,
+checks the Maven test report and classpath, then runs the actual Go-to-Java
+interoperability case against fresh PostgreSQL and Redis with no skips. Its
+candidate mode verifies the full checkout identity and preserves the existing
+fixed-pin mode for historical component proofs. The receipt binds the result
+to the CI candidate and attempt; the case uses a synthetic ingress peer and
+does not claim a public end-to-end flow.
+
 `flutter` сохраняет analyze, codegen, a11y, browser proofs и captures.
 Полный unit/widget discovery выполняется в четырёх `flutter-unit-tests`
 через встроенные `--total-shards=4 --shard-index=0..3`; внутри каждого runner

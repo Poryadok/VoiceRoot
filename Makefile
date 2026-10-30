@@ -335,6 +335,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/affected_check_plan_test.py"
 	python3 "$(ROOT)/scripts/ci/full_validation_gate_test.py"
 	python3 "$(ROOT)/scripts/ci/voice_history_baseline_test.py"
+	python3 "$(ROOT)/scripts/ci/auth_candidate_classpath_test.py"
 	python3 "$(ROOT)/scripts/ci/check_go_modules_clean_test.py"
 	python3 "$(ROOT)/scripts/ci/local_source_snapshot_test.py"
 	python3 "$(ROOT)/scripts/ci/flutter_test_events_test.py"

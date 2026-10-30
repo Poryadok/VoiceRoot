@@ -484,6 +484,27 @@ class AffectedCheckPlanTests(unittest.TestCase):
                                               'scripts/ci/new_unclassified_helper.py'])
         self.assertTrue(planner.effective_filters(mixed)['ci_global'])
 
+    def test_chat_auth_java_proof_follows_auth_chat_shared_and_contract_inputs(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        for path, integration, run_pkg in (
+                ('src/backend/auth/pom.xml', [], False),
+                ('src/backend/chat/main.go', ['chat'], False),
+                ('src/backend/pkg/go.mod', ['chat'], True),
+                ('protos/voice/auth/v1/auth.proto', ['chat'], True),
+                ('scripts/ci/auth_candidate_classpath.py', [], False)):
+            matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': integration,
+                      'run_go': bool(integration), 'run_pkg': run_pkg}
+            with self.subTest(path=path):
+                plan = planner.make_plan(planner.match_filters(rules, [path]), matrix)
+                self.assertIn('chat-auth-java-integration', plan['checks'])
+                if path.startswith('scripts/ci/auth_candidate_'):
+                    self.assertFalse(plan['filters']['ci_global'])
+                    self.assertNotIn('f13-historical-replay', plan['checks'])
+        matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': [],
+                  'run_go': False, 'run_pkg': False}
+        plan = planner.make_plan(planner.match_filters(rules, ['src/frontend/lib/main.dart']), matrix)
+        self.assertNotIn('chat-auth-java-integration', plan['checks'])
+
     def test_f13_replay_is_selected_for_its_inputs_and_unknowns_only(self):
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': [],
@@ -1103,6 +1124,9 @@ class AffectedCheckPlanTests(unittest.TestCase):
                           'integration_go_services': integration,
                           'run_go': run_go, 'run_pkg': run_pkg}
                 flags = {k: str(v).lower() for k, v in planner.effective_filters(matched).items()}
+                flags['chat_auth_java'] = str(
+                    flags.get('chat_auth_java_inputs') == 'true' or flags.get('auth') == 'true'
+                    or flags.get('protos') == 'true' or run_pkg or 'chat' in integration).lower()
                 flags.update(run_go=str(run_go).lower(), run_pkg=str(run_pkg).lower(),
                              run_auth=flags['auth'], run_web=flags['frontend'],
                              run_admin=flags['admin'], run_developer_portal=flags['developer-portal'],

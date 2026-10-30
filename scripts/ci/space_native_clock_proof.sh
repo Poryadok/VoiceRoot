@@ -124,3 +124,48 @@ receipt roster-expiry space_gis_expiry_required.json '^TestAccountBanGISExpiry50
 [[ "$(tr -d '\r\n' < "$clock_dir/walltime-us")" == 0 ]]
 [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$admin" -c "SELECT oid FROM pg_database WHERE datname='space_db'")" == "$oid" ]]
 psql -X -v ON_ERROR_STOP=1 "$admin" -c 'DROP DATABASE space_db'
+
+# The native ban scenario mutates several spaces and intentionally leaves a
+# CAPTURING operation. Give its ordered ledger/expiry proofs a fresh database
+# so they cannot alter the observer fixture or depend on its prior state.
+psql -X -v ON_ERROR_STOP=1 "$admin" -c 'CREATE DATABASE space_ban_db'
+ban_oid="$(psql -XAt -v ON_ERROR_STOP=1 "$admin" -c "SELECT oid FROM pg_database WHERE datname='space_ban_db'")"
+[[ "$ban_oid" =~ ^[1-9][0-9]*$ ]]
+export SPACE_BAN_TEST_DATABASE_URL="postgres://voice:voice-clock-fixture@127.0.0.1:${port}/space_ban_db?sslmode=disable"
+migrate 34
+psql -X -v ON_ERROR_STOP=1 "$SPACE_BAN_TEST_DATABASE_URL" <<'SQL'
+INSERT INTO spaces(id,name,owner_profile_id,member_count,visibility)
+ SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(n),12,'0'))::uuid,
+        'account-ban-fixture','10000000-0000-0000-0000-000000000001',5,'public'
+ FROM generate_series(1,24) n;
+INSERT INTO space_members(space_id,profile_id)
+ SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(n),12,'0'))::uuid,
+        format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
+ FROM generate_series(1,24) n CROSS JOIN (VALUES (1),(2),(3),(6)) AS profiles(p);
+INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at)
+ SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(n),12,'0'))::uuid,
+        '40000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000002',
+        'account-ban-fixture-' || n,'20000000-0000-0000-0000-000000000001',
+        '10000000-0000-0000-0000-000000000001',1,'active',1,decode(repeat('aa',32),'hex'),now()+interval '1 day'
+ FROM generate_series(1,24) n;
+INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at)
+ SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(n),12,'0'))::uuid,
+        format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid,
+        'member',ARRAY['membership'],1,1,now()+interval '1 day'
+ FROM generate_series(1,24) n CROSS JOIN (VALUES (2),(5)) AS profiles(p);
+INSERT INTO space_bans(space_id,account_id,banned_by_profile_id)
+ VALUES ('30000000-0000-0000-0000-000000000005','20000000-0000-0000-0000-000000000002',
+         '10000000-0000-0000-0000-000000000001');
+SQL
+migrate 44
+migrate 45
+receipt account-ban-transition45 space_transition45_required.json '^TestAccountBanFixtureTrusted45Transition$'
+migrate 50
+receipt account-ban-transition50 space_transition50_required.json '^TestAccountBanFixtureTrusted50Transition$'
+receipt account-ban-native space_account_ban_native50_required.json '^TestAccountBanNative50$'
+receipt account-ban-ledger space_account_ban_ledger50_required.json '^TestAccountBanLedgerGuards50$'
+receipt account-ban-expiry space_account_ban_expiry_required.json '^TestAccountBanFixtureClockExpiry$'
+[[ "$(sha256sum "$clock_dir/fixture-clock.so" | cut -d' ' -f1)" == "$clock_sha" ]]
+[[ "$(tr -d '\r\n' < "$clock_dir/walltime-us")" == 0 ]]
+[[ "$(psql -XAt -v ON_ERROR_STOP=1 "$admin" -c "SELECT oid FROM pg_database WHERE datname='space_ban_db'")" == "$ban_oid" ]]
+psql -X -v ON_ERROR_STOP=1 "$admin" -c 'DROP DATABASE space_ban_db'

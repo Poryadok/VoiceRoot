@@ -11,7 +11,7 @@ import re
 import subprocess
 import tempfile
 
-KNOWN_FILTERS = frozenset('''global ci_global ci_scripts local_docker_isolation go_build_shared nats_renderer t31
+KNOWN_FILTERS = frozenset('''global ci_global ci_scripts chat_auth_java_inputs local_docker_isolation go_build_shared nats_renderer t31
     history_audit f13_replay match_squad_overlay a1_t106_live a1_e2e a1_multi_account_pr a1_attachment_restart flutter_live_suite
     staging_infra analytics_integration_inputs protos pkg frontend music_inputs help_inputs startup_inputs dev_web_publish windows_desktop auth auth_test_impact
     developer-portal admin compose full_application_request'''.split()) | frozenset(
@@ -270,6 +270,7 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('space-autovacuum-integration', enabled='space' in integration)
         selected('space-native-installer-integration', enabled='space' in integration)
         selected('chat-lifecycle-integration', enabled='chat' in integration)
+        selected('chat-auth-java-integration', broad + ('auth', 'protos', 'pkg', 'chat_auth_java_inputs'), enabled='chat' in integration or matrix['run_pkg'])
         selected('realtime-lifecycle-integration', enabled='realtime' in integration)
         selected('backend-auth', broad + ('auth', 'auth_test_impact'))
         selected('backend-auth-image', broad + ('auth',))
@@ -327,7 +328,7 @@ def plan_paths(root, paths, head_ref=''):
         unresolved = str(exc)
         keys = set(re.findall(r'^([A-Za-z0-9_-]+):\s*$',
                               filter_path.read_text(encoding='utf-8'), re.M))
-        keys.update(('code', 'global', 'ci_global', 'ci_scripts', 'protos', 'pkg',
+        keys.update(('code', 'global', 'ci_global', 'ci_scripts', 'chat_auth_java_inputs', 'protos', 'pkg',
                      'go_build_shared', 'frontend', 'music_inputs', 'help_inputs', 'startup_inputs', 'auth', 'auth_test_impact', 'admin', 'developer-portal',
                      'compose', 'windows_desktop', 'history_audit', 'a1_t106_live',
                      'a1_attachment_restart', 'nats_renderer', 'match_squad_overlay'))

@@ -70,6 +70,9 @@ ci_global:
   - '!scripts/ci/local_compose_audit_test.py'
   - '!scripts/ci/testcontainers-prune.sh'
   - '!scripts/ci/testcontainers-prune_test.sh'
+  - '!scripts/ci/auth_candidate_classpath.py'
+  - '!scripts/ci/auth_candidate_classpath_test.py'
+  - '!scripts/ci/chat_auth_java_required.json'
 
 ci_scripts:
   # Complete chain fixture imports plus its actual restore-only SQL inputs.
@@ -83,6 +86,11 @@ ci_scripts:
   - .golangci.yml
   - .github/workflows/**
   - .github/ci/**
+
+chat_auth_java_inputs:
+  - scripts/ci/auth_candidate_classpath.py
+  - scripts/ci/auth_candidate_classpath_test.py
+  - scripts/ci/chat_auth_java_required.json
 
 # Explicit inputs to the local Docker ownership and bounded-slot proofs.
 local_docker_isolation:

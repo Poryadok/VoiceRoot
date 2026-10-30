@@ -83,6 +83,7 @@ jobs:
       go_services: ${{ steps.gomatrix.outputs.go_services }}
       docker_go_services: ${{ steps.gomatrix.outputs.docker_go_services }}
       integration_go_services: ${{ steps.gomatrix.outputs.integration_go_services }}
+      chat_auth_java: ${{ steps.filter.outputs.chat_auth_java_inputs == 'true' || steps.filter.outputs.auth == 'true' || steps.filter.outputs.protos == 'true' || steps.gomatrix.outputs.run_pkg == 'true' || contains(fromJSON(steps.gomatrix.outputs.integration_go_services), 'chat') }}
       integration_analytics: ${{ steps.gomatrix.outputs.integration_analytics == 'true' || steps.filter.outputs.analytics_integration_inputs == 'true' }}
       run_pkg: ${{ steps.gomatrix.outputs.run_pkg }}
       run_go: ${{ steps.gomatrix.outputs.run_go }}
@@ -2358,6 +2359,7 @@ jobs:
       - space-autovacuum-integration
       - space-native-installer-integration
       - chat-lifecycle-integration
+      - chat-auth-java-integration
       - realtime-lifecycle-integration
       - backend-auth
       - backend-auth-image
@@ -2456,6 +2458,8 @@ jobs:
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
           RUN_F13_HISTORICAL_REPLAY: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.f13_replay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.history_audit == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
           JOB_F13_HISTORICAL_REPLAY: ${{ needs.f13-historical-replay.result }}
+          RUN_CHAT_AUTH_JAVA: ${{ needs.changes.outputs.code == 'true' && (needs.changes.outputs.full_validation == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.chat_auth_java == 'true') }}
+          JOB_CHAT_AUTH_JAVA_INTEGRATION: ${{ needs.chat-auth-java-integration.result }}
           JOB_CURRENT_DIFF_CONTRACT: ${{ needs.current-diff-contract.result }}
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
@@ -2820,6 +2824,89 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: Verify Go module source inputs
+        if: always() && !cancelled()
+        run: python3 scripts/ci/check_go_modules_clean.py
+
+  chat-auth-java-integration:
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.full_validation == 'true' || needs.changes.outputs.global == 'true' ||
+       needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.chat_auth_java == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build candidate Auth fixture
+        working-directory: src/backend/auth
+        run: mvn -B -ntp -Dtest=AuthChatFloorInteropFixtureTest clean test
+      - name: Verify candidate Auth classpath
+        run: >-
+          python3 scripts/ci/auth_candidate_classpath.py
+          --report src/backend/auth/target/surefire-reports/TEST-voice.backend.auth.sessionepoch.AuthChatFloorInteropFixtureTest.xml
+          --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/chat-auth-java-classpath"
+      - name: Run candidate Chat to Auth proof
+        working-directory: src/backend/chat
+        env:
+          GOFLAGS: -mod=readonly
+          BE131_AUTH_CANDIDATE_SHA: ${{ github.sha }}
+          BE131_AUTH_JAVA_SOURCE: ${{ github.sha }}
+          BE131_AUTH_JDBC_URL: jdbc:postgresql://127.0.0.1:${{ job.services.postgres.ports[5432] }}/test
+          BE131_AUTH_REDIS_HOST: 127.0.0.1
+          BE131_AUTH_REDIS_PORT: ${{ job.services.redis.ports[6379] }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          export BE131_AUTH_JAVA_CLASSPATH="$(cat "$RUNNER_TEMP/chat-auth-java-classpath")"
+          set +e
+          go test -json -count=1 -timeout 5m -run '^TestChatAuthActualJavaInteroperability$' . > "$RUNNER_TEMP/chat-auth-java-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/chat_auth_java_required.json --service chat \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/chat-auth-java-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/chat-auth-java-receipt.json" --reject-skips
+      - name: Upload Chat to Auth proof
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: chat-auth-java-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/chat-auth-java-events.jsonl
+            ${{ runner.temp }}/chat-auth-java-receipt.json
+            src/backend/auth/target/surefire-reports/TEST-voice.backend.auth.sessionepoch.AuthChatFloorInteropFixtureTest.xml
+          if-no-files-found: warn
+          retention-days: 14
       - name: Verify Go module source inputs
         if: always() && !cancelled()
         run: python3 scripts/ci/check_go_modules_clean.py
@@ -4291,6 +4378,7 @@ jobs:
       - space-autovacuum-integration
       - space-native-installer-integration
       - chat-lifecycle-integration
+      - chat-auth-java-integration
       - realtime-lifecycle-integration
       - backend-auth
       - backend-auth-image
