@@ -67,21 +67,21 @@ inputs расширяют проверку. Правила PR/master и сохр
 
 ### Help: реальный browser handoff
 
-Обычный Flutter job CI собирает `test/fixtures/settings_help_web_launcher_smoke.dart`
-и запускает `node scripts/ci/settings-help-browser-handoff.mjs
-src/frontend/build/help-launcher-web <evidence-dir>` из корня (Node.js 24,
-`CHROME_BIN=google-chrome`, `GITHUB_SHA` — полный SHA проверяемого checkout).
-Перед отдельным запуском из `src/frontend` нужны `flutter pub get` и
+The `flutter-help-proof` CI job builds `test/fixtures/settings_help_web_launcher_smoke.dart`
+and runs `node scripts/ci/settings-help-browser-handoff.mjs
+src/frontend/build/help-launcher-web <evidence-dir>` from the root (Node.js 24,
+`CHROME_BIN=google-chrome`, and `GITHUB_SHA` identifying the checkout).
+For a separate run, first run `flutter pub get` and the following from `src/frontend`:
 `flutter build web --release --no-pub --no-web-resources-cdn --target
 test/fixtures/settings_help_web_launcher_smoke.dart --output build/help-launcher-web`.
-Fixture использует настоящий `HelpSheet` и `url_launcher`; mock HTTP изолирует
-только посторонние backend-запросы. В H/V доверенные pointer clicks проходят
-Settings → Help → README / Issues; проверяются `Page.windowOpen.userGesture`,
-точный URL нового target, ровно одна новая вкладка и сохранение Help без ошибки.
-Artifact `settings-help-browser-<run_id>` содержит head SHA (`VOICE_SOURCE_SHA`,
-если задан) и SHA checkout (`GITHUB_SHA`), JSON событий/targets,
-версию Chrome и шесть PNG. Это доказательство передачи ссылки браузеру;
-загрузка содержимого внешнего GitHub и привязка к deployed SHA проверяются отдельно.
+The fixture uses the real `HelpSheet` and `url_launcher`; mock HTTP isolates
+unrelated backend requests. Trusted pointer clicks navigate Settings → Help →
+README / Issues in both orientations, checking `Page.windowOpen.userGesture`,
+the exact new target URL, exactly one new tab, and Help remaining error-free.
+The `settings-help-browser-<run_id>` artifact contains the head SHA
+(`VOICE_SOURCE_SHA` when set), checkout SHA, event and target JSON, Chrome
+version, and six PNGs. It proves browser handoff; external GitHub content and
+binding to the deployed SHA require separate checks.
 
 ### Web cold startup
 
@@ -103,15 +103,15 @@ must produce no API calls or first frame. External network is blocked; bundled
 CanvasKit bytes satisfy the renderer request. This does not qualify a live
 environment, its endpoint tuple, or a coherent backend image bundle.
 
-`node --test scripts/ci/web-startup.test.mjs` проверяет ранний HTML loader,
-RU/EN, ошибки bootstrap/engine/runApp, зависший запуск и снятие loader только
-по `flutter-first-frame`. В Flutter CI после уже существующей сборки Help fixture
+`node --test scripts/ci/web-startup.test.mjs` checks the early HTML loader,
+RU/EN, bootstrap/engine/runApp errors, stalled startup, and loader removal only
+on `flutter-first-frame`. The `flutter-startup-proof` job builds the Help fixture and
 `node scripts/ci/web-startup-browser.mjs src/frontend/build/help-launcher-web <output>`
-проверяет настоящий Flutter engine: main.dart.js удерживается HTTP fixture,
-видны текущий Voice icon и статус до запуска Flutter; затем первый кадр снимает
-loader. Отдельный 503 для bootstrap и доверенный pointer click проверяют reload/retry.
-Используются fresh pages, отключённый browser cache, desktop и mobile viewport.
-Для проверки полной production-сборки передайте `src/frontend/build/web` после
+checks the real Flutter engine: the HTTP fixture holds main.dart.js, the current
+Voice icon and status appear before Flutter starts, and the first frame removes
+the loader. A separate bootstrap 503 and trusted pointer click test reload/retry.
+The check uses fresh pages, a disabled browser cache, and desktop and mobile viewports.
+To check a full production build, pass `src/frontend/build/web` after
 `flutter build web --release --no-pub --no-web-resources-cdn`.
 
 Node.js 24, Chrome/Chromium (`CHROME_BIN`) и полный `VOICE_SOURCE_SHA` обязательны.
@@ -643,10 +643,12 @@ dependency files, design inputs, protobufs, and global or unknown CI changes.
 Only the four independent browser suite files named above are excluded when
 they are the sole changes; mixed changes still select Music. The required-jobs
 gate rejects a missing, skipped, cancelled, or failing selected Music proof.
-Help handoff and web startup also run in separate comparison jobs on the broad
-Flutter selector. Both original checks remain in `flutter` until the hosted
-comparison has been reviewed; each comparison builds the same Help launcher
-fixture independently and retains its own evidence.
+Help handoff and web startup run as separate required proof jobs. They use the
+same conservative selection as Music, including shared frontend, design and
+protocol changes; only the four independent browser suite files are excluded
+when they are the sole changes. Each job builds the Help launcher fixture and
+retains the original evidence artifact name. A hosted same-candidate comparison
+passed both checks; two startup loading screenshots differed between runs.
 
 A manual CI dispatch with `profile=full` forces the code scope even when the
 last diff contains only documentation. `full-validation-aggregation` rejects a

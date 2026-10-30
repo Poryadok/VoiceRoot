@@ -16,7 +16,7 @@ run_gate() {
   local out
   out="$(mktemp)"
   set +e
-  env JOB_CURRENT_DIFF_CONTRACT=success JOB_FLUTTER_UNIT_TESTS=success JOB_FLUTTER_MUSIC_PROOF=success JOB_FLUTTER_HELP_COMPARISON=success JOB_FLUTTER_STARTUP_COMPARISON=success JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=success JOB_BACKEND_AUTH_IMAGE=success "$@" bash "${SCRIPT}" pull_request true auto >"${out}" 2>&1
+  env JOB_CURRENT_DIFF_CONTRACT=success JOB_FLUTTER_UNIT_TESTS=success JOB_FLUTTER_MUSIC_PROOF=success JOB_FLUTTER_HELP_PROOF=success JOB_FLUTTER_STARTUP_PROOF=success JOB_NATS_HUB_CONFIG_RENDERER_IMAGE=success JOB_BACKEND_AUTH_IMAGE=success "$@" bash "${SCRIPT}" pull_request true auto >"${out}" 2>&1
   local rc=$?
   set -e
   if [[ "${rc}" -ne "${expect_rc}" ]]; then
@@ -101,17 +101,16 @@ for result in skipped cancelled failure; do
     JOB_WEB=success JOB_FLUTTER_MUSIC_PROOF="${result}"
 done
 
-echo "== selected Help and startup comparison jobs must succeed =="
+echo "== selected Help and startup proof jobs must succeed =="
 for result in skipped cancelled failure; do
-  run_gate 1 RUN_FLUTTER=true JOB_FLUTTER=success JOB_FLUTTER_DEVICE_DRIVER=success \
-    JOB_WEB=success JOB_FLUTTER_HELP_COMPARISON="${result}"
-  run_gate 1 RUN_FLUTTER=true JOB_FLUTTER=success JOB_FLUTTER_DEVICE_DRIVER=success \
-    JOB_WEB=success JOB_FLUTTER_STARTUP_COMPARISON="${result}"
+  run_gate 1 RUN_FLUTTER_HELP=true JOB_FLUTTER_HELP_PROOF="${result}"
+  run_gate 1 RUN_FLUTTER_STARTUP=true JOB_FLUTTER_STARTUP_PROOF="${result}"
 done
 
 echo "== independent Flutter tests do not require Music =="
 run_gate 0 RUN_FLUTTER=true RUN_FLUTTER_MUSIC=false JOB_FLUTTER=success \
-  JOB_FLUTTER_DEVICE_DRIVER=success JOB_WEB=success JOB_FLUTTER_MUSIC_PROOF=skipped
+  RUN_FLUTTER_HELP=false RUN_FLUTTER_STARTUP=false JOB_FLUTTER_DEVICE_DRIVER=success JOB_WEB=success \
+  JOB_FLUTTER_MUSIC_PROOF=skipped JOB_FLUTTER_HELP_PROOF=skipped JOB_FLUTTER_STARTUP_PROOF=skipped
 
 echo "== selected Flutter device-driver abandoned result fails =="
 run_gate 1 \

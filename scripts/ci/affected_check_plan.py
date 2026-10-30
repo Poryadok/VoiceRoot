@@ -250,10 +250,11 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
         selected('compose-config', broad + ('compose',))
         selected('match-squad-overlay', broad + ('match_squad_overlay',))
         for name in ('flutter', 'flutter-unit-tests', 'flutter-device-driver',
-                     'flutter-key-backup-goldens', 'flutter-help-comparison',
-                     'flutter-startup-comparison'):
+                     'flutter-key-backup-goldens'):
             selected(name, broad + ('frontend', 'protos'))
         selected('flutter-music-proof', broad + ('music_inputs', 'protos'))
+        selected('flutter-help-proof', broad + ('help_inputs', 'protos'))
+        selected('flutter-startup-proof', broad + ('startup_inputs', 'protos'))
         selected('flutter-windows', ('windows_desktop',))
         selected('web', broad + ('frontend',))
         selected('backend-go-integration-pr', enabled=bool(integration))
@@ -327,7 +328,7 @@ def plan_paths(root, paths, head_ref=''):
         keys = set(re.findall(r'^([A-Za-z0-9_-]+):\s*$',
                               filter_path.read_text(encoding='utf-8'), re.M))
         keys.update(('code', 'global', 'ci_global', 'ci_scripts', 'protos', 'pkg',
-                     'go_build_shared', 'frontend', 'music_inputs', 'auth', 'auth_test_impact', 'admin', 'developer-portal',
+                     'go_build_shared', 'frontend', 'music_inputs', 'help_inputs', 'startup_inputs', 'auth', 'auth_test_impact', 'admin', 'developer-portal',
                      'compose', 'windows_desktop', 'history_audit', 'a1_t106_live',
                      'a1_attachment_restart', 'nats_renderer', 'match_squad_overlay'))
         matched = {key: paths or ['unresolved filter configuration'] for key in keys}

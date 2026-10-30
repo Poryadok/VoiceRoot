@@ -488,6 +488,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
             self.assertIn('ci-script-tests', plan['checks'])
             self.assertNotIn('backend-go', plan['checks'])
             self.assertNotIn('flutter-music-proof', plan['checks'])
+            self.assertNotIn('flutter-help-proof', plan['checks'])
+            self.assertNotIn('flutter-startup-proof', plan['checks'])
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
         step = next(s for s in workflow['jobs']['flutter']['steps'] if s.get('name') == 'Run browser-only Flutter tests')
         for name in ('app_shell_icon_web_test.dart', 'linked_oauth_browser_web_test.dart',
@@ -508,6 +510,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
             plan = planner.make_plan(planner.match_filters(rules, [path]), matrix)
             self.assertIn('flutter', plan['checks'])
             self.assertNotIn('flutter-music-proof', plan['checks'])
+            self.assertNotIn('flutter-help-proof', plan['checks'])
+            self.assertNotIn('flutter-startup-proof', plan['checks'])
         for paths in (['src/frontend/lib/ui/chat/music_playback.dart'],
                       ['src/frontend/test/support/e2e_attachment_test_fixture.dart'],
                       ['src/frontend/pubspec.lock'], ['protos/voice/message/v1/message.proto'],
@@ -516,6 +520,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
             with self.subTest(paths=paths):
                 plan = planner.make_plan(planner.match_filters(rules, paths), matrix)
                 self.assertIn('flutter-music-proof', plan['checks'])
+                self.assertIn('flutter-help-proof', plan['checks'])
+                self.assertIn('flutter-startup-proof', plan['checks'])
 
     def test_full_dispatch_forces_code_even_after_docs_only_changes(self):
         import yaml
@@ -527,12 +533,12 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn(required, matrix['env']['FILTER_CODE'])
         self.assertIn(required, matrix['env']['FORCE_FULL'])
 
-    def test_help_and_startup_comparisons_preserve_original_checks_and_are_required(self):
+    def test_help_and_startup_proofs_preserve_checks_and_are_required(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
         original = workflow['jobs']['flutter']
-        names = (('flutter-help-comparison', 'Help real Chrome external handoff (H/V)'),
-                 ('flutter-startup-comparison', 'Web startup lifecycle and real browser retry (H/V)'))
+        names = (('flutter-help-proof', 'Help real Chrome external handoff (H/V)'),
+                 ('flutter-startup-proof', 'Web startup lifecycle and real browser retry (H/V)'))
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': [], 'docker_go_services': [],
                   'integration_go_services': [], 'run_go': False, 'run_pkg': False}
@@ -540,11 +546,10 @@ class AffectedCheckPlanTests(unittest.TestCase):
         identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
         plan.update(schema='voice-affected-check-plan-v1', identity=identity)
         for job_name, step_name in names:
-            self.assertTrue(any(step.get('name') == step_name for step in original['steps']))
+            self.assertFalse(any(step.get('name') == step_name for step in original['steps']))
             comparison = workflow['jobs'][job_name]
-            old_step = next(step for step in original['steps'] if step.get('name') == step_name)
             new_step = next(step for step in comparison['steps'] if step.get('name') == step_name)
-            self.assertEqual(new_step, old_step)
+            self.assertEqual(new_step['env']['CHROME_BIN'], 'google-chrome')
             self.assertIn(job_name, workflow['jobs']['ci-gate']['needs'])
             self.assertIn(job_name, plan['checks'])
             needs = {name: {'result': 'success'} for name in plan['checks']}
@@ -553,16 +558,25 @@ class AffectedCheckPlanTests(unittest.TestCase):
                 self.assertIn(job_name, planner.verify_gate(plan, needs, identity))
             del needs[job_name]
             self.assertIn(job_name, planner.verify_gate(plan, needs, identity))
-        startup = workflow['jobs']['flutter-startup-comparison']
+        startup = workflow['jobs']['flutter-startup-proof']
         build = next(step['run'] for step in startup['steps']
                      if step.get('name') == 'Build the Help launcher fixture for startup')
-        help_step = next(step['run'] for step in workflow['jobs']['flutter-help-comparison']['steps']
+        help_step = next(step['run'] for step in workflow['jobs']['flutter-help-proof']['steps']
                          if step.get('name') == 'Help real Chrome external handoff (H/V)')
         for source in (build, help_step):
             self.assertIn('--target test/fixtures/settings_help_web_launcher_smoke.dart', source)
             self.assertIn('--output build/help-launcher-web', source)
             self.assertIn('--no-web-resources-cdn', source)
         self.assertIn('flutter pub get', build)
+        self.assertIn('scripts/ci/settings-help-browser-handoff.mjs', help_step)
+        startup_step = next(step['run'] for step in startup['steps']
+                            if step.get('name') == 'Web startup lifecycle and real browser retry (H/V)')
+        self.assertIn('node --test scripts/ci/web-startup.test.mjs', startup_step)
+        self.assertIn('scripts/ci/web-startup-browser.mjs', startup_step)
+        for name, artifact in (('flutter-help-proof', 'settings-help-browser-${{ github.run_id }}'),
+                               ('flutter-startup-proof', 'web-startup-browser-${{ github.run_id }}')):
+            self.assertTrue(any(step.get('with', {}).get('name') == artifact
+                                for step in workflow['jobs'][name]['steps']))
 
     def test_isolated_music_proof_preserves_steps_and_is_required(self):
         import yaml

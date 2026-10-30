@@ -213,6 +213,24 @@ music_inputs:
   - '!src/frontend/test/linked_oauth_browser_web_test.dart'
   - '!src/frontend/test/presigned_upload_web_test.dart'
 
+help_inputs:
+  - src/frontend/**
+  - design/**
+  - scripts/design/**
+  - '!src/frontend/test/app_shell_icon_web_test.dart'
+  - '!src/frontend/test/chat_draft_browser_storage_test.dart'
+  - '!src/frontend/test/linked_oauth_browser_web_test.dart'
+  - '!src/frontend/test/presigned_upload_web_test.dart'
+
+startup_inputs:
+  - src/frontend/**
+  - design/**
+  - scripts/design/**
+  - '!src/frontend/test/app_shell_icon_web_test.dart'
+  - '!src/frontend/test/chat_draft_browser_storage_test.dart'
+  - '!src/frontend/test/linked_oauth_browser_web_test.dart'
+  - '!src/frontend/test/presigned_upload_web_test.dart'
+
 # Workflow/publisher contract changes validate and publish the DEV Flutter image.
 dev_web_publish:
   - .github/workflows/ci.yml

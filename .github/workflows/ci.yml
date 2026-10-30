@@ -63,6 +63,8 @@ jobs:
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
       music_inputs: ${{ steps.filter.outputs.music_inputs }}
+      help_inputs: ${{ steps.filter.outputs.help_inputs }}
+      startup_inputs: ${{ steps.filter.outputs.startup_inputs }}
       windows_desktop: ${{ steps.filter.outputs.windows_desktop == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       auth: ${{ steps.filter.outputs.auth }}
       auth_test_impact: ${{ steps.filter.outputs.auth_test_impact }}
@@ -628,13 +630,12 @@ jobs:
           path: src/frontend/pubspec.lock
           if-no-files-found: error
 
-  # Additive comparisons retain both original checks until hosted results match.
-  flutter-help-comparison:
+  flutter-help-proof:
     needs: changes
     if: >-
       !cancelled() && needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' ||
+      (needs.changes.outputs.help_inputs == 'true' || needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
@@ -671,17 +672,17 @@ jobs:
         if: always() && steps.help_browser_handoff.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
-          name: settings-help-browser-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          name: settings-help-browser-${{ github.run_id }}
           path: ${{ runner.temp }}/settings-help-browser
           if-no-files-found: error
           retention-days: 14
 
-  flutter-startup-comparison:
+  flutter-startup-proof:
     needs: changes
     if: >-
       !cancelled() && needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' ||
+      (needs.changes.outputs.startup_inputs == 'true' || needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
        (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
     runs-on: ubuntu-latest
@@ -718,7 +719,7 @@ jobs:
         if: always() && steps.web_startup_browser.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
-          name: web-startup-browser-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          name: web-startup-browser-${{ github.run_id }}
           path: ${{ runner.temp }}/web-startup-browser
           if-no-files-found: error
           retention-days: 14
@@ -784,46 +785,6 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '24'
-      - name: Help real Chrome external handoff (H/V)
-        id: help_browser_handoff
-        timeout-minutes: 8
-        env:
-          CHROME_BIN: google-chrome
-          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          cd src/frontend
-          flutter build web --release --no-pub --no-web-resources-cdn \
-            --target test/fixtures/settings_help_web_launcher_smoke.dart \
-            --output build/help-launcher-web
-          cd ../..
-          node scripts/ci/settings-help-browser-handoff.mjs \
-            src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
-      - name: Web startup lifecycle and real browser retry (H/V)
-        id: web_startup_browser
-        timeout-minutes: 5
-        env:
-          CHROME_BIN: google-chrome
-          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: |
-          node --test scripts/ci/web-startup.test.mjs
-          node scripts/ci/web-startup-browser.mjs \
-            src/frontend/build/help-launcher-web "$RUNNER_TEMP/web-startup-browser"
-      - name: Upload Web startup browser evidence
-        if: always() && steps.web_startup_browser.outcome != 'skipped'
-        uses: actions/upload-artifact@v6
-        with:
-          name: web-startup-browser-${{ github.run_id }}
-          path: ${{ runner.temp }}/web-startup-browser
-          if-no-files-found: error
-          retention-days: 14
-      - name: Upload Help real browser handoff evidence
-        if: always() && steps.help_browser_handoff.outcome != 'skipped'
-        uses: actions/upload-artifact@v6
-        with:
-          name: settings-help-browser-${{ github.run_id }}
-          path: ${{ runner.temp }}/settings-help-browser
-          if-no-files-found: error
-          retention-days: 14
       - name: Capture NetworkOffline banner reference (PR or manual full profile)
         id: network_offline_capture
         if: >-
@@ -2288,8 +2249,8 @@ jobs:
       - match-squad-overlay
       - flutter
       - flutter-music-proof
-      - flutter-help-comparison
-      - flutter-startup-comparison
+      - flutter-help-proof
+      - flutter-startup-proof
       - flutter-unit-tests
       - flutter-unit-receipts
       - flutter-device-driver
@@ -2355,6 +2316,8 @@ jobs:
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
           RUN_FLUTTER_MUSIC: ${{ needs.changes.outputs.music_inputs }}
+          RUN_FLUTTER_HELP: ${{ needs.changes.outputs.help_inputs }}
+          RUN_FLUTTER_STARTUP: ${{ needs.changes.outputs.startup_inputs }}
           RUN_WINDOWS_DESKTOP: ${{ (github.event_name == 'pull_request' && needs.changes.outputs.windows_desktop == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true') }}
           RUN_WEB: ${{ needs.changes.outputs.run_web }}
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
@@ -2411,8 +2374,8 @@ jobs:
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
           JOB_FLUTTER_MUSIC_PROOF: ${{ needs.flutter-music-proof.result }}
-          JOB_FLUTTER_HELP_COMPARISON: ${{ needs.flutter-help-comparison.result }}
-          JOB_FLUTTER_STARTUP_COMPARISON: ${{ needs.flutter-startup-comparison.result }}
+          JOB_FLUTTER_HELP_PROOF: ${{ needs.flutter-help-proof.result }}
+          JOB_FLUTTER_STARTUP_PROOF: ${{ needs.flutter-startup-proof.result }}
           JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-receipts.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
@@ -3953,8 +3916,8 @@ jobs:
       - flutter-unit-receipts
       - flutter
       - flutter-music-proof
-      - flutter-help-comparison
-      - flutter-startup-comparison
+      - flutter-help-proof
+      - flutter-startup-proof
       - flutter-device-driver
       - flutter-key-backup-goldens
       - flutter-windows
