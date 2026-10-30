@@ -643,10 +643,23 @@ jobs:
           name: music-dependency-lock-${{ github.run_id }}
           path: src/frontend/pubspec.lock
           if-no-files-found: error
-      - name: AppIcon Chrome favicon DOM regression
-        if: hashFiles('src/frontend/test/app_shell_icon_web_test.dart') != ''
+      - name: Run browser-only Flutter tests
         working-directory: src/frontend
-        run: flutter test --no-pub --platform chrome --reporter expanded --concurrency=1 test/app_shell_icon_web_test.dart
+        run: |
+          set -euo pipefail
+          suites=(test/app_shell_icon_web_test.dart test/chat_draft_browser_storage_test.dart
+                  test/linked_oauth_browser_web_test.dart test/presigned_upload_web_test.dart)
+          flutter test --no-pub --platform chrome --reporter json "${suites[@]}" > "$RUNNER_TEMP/flutter-browser-events.jsonl"
+          args=()
+          for suite in "${suites[@]}"; do args+=(--suite "$PWD/$suite"); done
+          python3 ../../scripts/ci/flutter_test_events.py --events "$RUNNER_TEMP/flutter-browser-events.jsonl" "${args[@]}"
+      - name: Retain browser-only Flutter events
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-browser-events-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/flutter-browser-events.jsonl
+          if-no-files-found: warn
       - uses: actions/setup-node@v5
         with:
           node-version: '24'

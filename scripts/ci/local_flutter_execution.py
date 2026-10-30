@@ -98,7 +98,7 @@ def run(root, head, output, flutter, selected=None):
                                   '--concurrency=1', *vm_args], profiles['vm']))
     if profiles['chrome']:
         tests.append(('test-chrome', [flutter, 'test', '--no-pub', '--platform', 'chrome',
-                                      '--reporter', 'json', '--concurrency=1',
+                                      '--reporter', 'json',
                                       *('test/' + name for name in profiles['chrome'])], profiles['chrome']))
     # Captures and live-test switches are caller data, not this run's outputs.
     env = {key: value for key, value in os.environ.items()

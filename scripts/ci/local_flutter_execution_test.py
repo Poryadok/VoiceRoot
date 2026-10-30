@@ -135,6 +135,7 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         command = result['commands'][-1]['argv']
         self.assertIn('chrome', command)
         self.assertIn('test/browser_test.dart', command)
+        self.assertNotIn('--concurrency=1', command)
 
     def test_full_inventory_runs_both_platforms_before_rejecting_skips(self):
         (self.root / 'src/frontend/test/browser_test.dart').write_text("@TestOn('browser')\nlibrary;\n")

@@ -629,6 +629,12 @@ Promtail ставит label **`namespace`** из pod metadata; **`request_id`** 
 
 Additionally, `make build-all-breaking` runs `buf breaking` against local `master`; PR CI uses its configured base. Host buf commands are `make buf-lint`, `make buf-format`, and `make buf-breaking`. `make testcontainers-prune` deliberately refuses unscoped cleanup. Run `make -j4 ci-script-tests-pr` for current path-filter, promotion-matrix and gate inputs; `make ci-script-tests` includes the historical audit. Exact current-merge verification is separate, as described below.
 
+The hosted Flutter job runs the AppIcon, draft storage, linked OAuth and
+presigned-upload browser suites in Chrome. It validates the JSON event stream
+against all four files and rejects skipped tests. The draft storage suite is
+browser-only; a VM run cannot prove it. The local isolated Flutter runner is
+still diagnostic and does not issue a complete preflight receipt.
+
 ### Локальные грабли (Windows, compose E2E)
 
 Типичные сбои при `make build-all` / `make compose-e2e-smoke` на **Windows** (PowerShell). В цепочках команд используй **`;`**, не `&&`.

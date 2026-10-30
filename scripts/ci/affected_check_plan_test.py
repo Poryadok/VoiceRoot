@@ -465,9 +465,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
         for path in ('scripts/ci/local_source_snapshot.py',
                      'scripts/ci/local_source_snapshot_test.py',
                      'scripts/ci/local_flutter_execution.py',
-                     'scripts/ci/local_flutter_execution_test.py',
-                     'scripts/ci/flutter_test_events.py',
-                     'scripts/ci/flutter_test_events_test.py'):
+                     'scripts/ci/local_flutter_execution_test.py'):
             with self.subTest(path=path):
                 matched = planner.match_filters(rules, [path])
                 plan = planner.make_plan(matched, matrix)
@@ -478,6 +476,25 @@ class AffectedCheckPlanTests(unittest.TestCase):
         mixed = planner.match_filters(rules, ['scripts/ci/local_flutter_execution.py',
                                               'scripts/ci/new_unclassified_helper.py'])
         self.assertTrue(planner.effective_filters(mixed)['ci_global'])
+
+    def test_browser_event_parser_selects_hosted_flutter_checks(self):
+        import yaml
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [],
+                  'integration_go_services': [], 'run_go': False, 'run_pkg': False}
+        for path in ('scripts/ci/flutter_test_events.py', 'scripts/ci/flutter_test_events_test.py'):
+            plan = planner.make_plan(planner.match_filters(rules, [path]), matrix)
+            self.assertIn('flutter', plan['checks'])
+            self.assertIn('ci-script-tests', plan['checks'])
+            self.assertNotIn('backend-go', plan['checks'])
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        step = next(s for s in workflow['jobs']['flutter']['steps'] if s.get('name') == 'Run browser-only Flutter tests')
+        for name in ('app_shell_icon_web_test.dart', 'linked_oauth_browser_web_test.dart',
+                     'presigned_upload_web_test.dart', 'chat_draft_browser_storage_test.dart'):
+            self.assertIn(name, step['run'])
+        self.assertIn('flutter_test_events.py', step['run'])
+        self.assertNotIn('--allow-skips', step['run'])
+        self.assertNotIn('--concurrency', step['run'])
 
     def test_realtime_lifecycle_proof_follows_affected_integration(self):
         import yaml
