@@ -3059,6 +3059,17 @@ jobs:
           [[ "$owned_oid" =~ ^[1-9][0-9]*$ ]]
           set +e
           go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNativeObserver50DefinitionAndPreimage$' ./internal/store \
+            > "$RUNNER_TEMP/space-observer50-events.jsonl"
+          observer_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_observer50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-observer50-events.jsonl" --exit-code "$observer_result" \
+            --output "$RUNNER_TEMP/space-observer50-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
             -run '^TestAccountBanFixtureTrusted50Transition$' ./internal/store \
             > "$RUNNER_TEMP/space-transition50-events.jsonl"
           transition_result=$?
@@ -3130,6 +3141,8 @@ jobs:
             ${{ runner.temp }}/space-transition45-receipt.json
             ${{ runner.temp }}/space-trusted50-provision.jsonl
             ${{ runner.temp }}/space-trusted50-provision.stderr
+            ${{ runner.temp }}/space-observer50-events.jsonl
+            ${{ runner.temp }}/space-observer50-receipt.json
             ${{ runner.temp }}/space-transition50-events.jsonl
             ${{ runner.temp }}/space-transition50-receipt.json
             ${{ runner.temp }}/space-trusted50-events.jsonl

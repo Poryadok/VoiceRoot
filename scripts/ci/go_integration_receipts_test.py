@@ -188,6 +188,36 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         events[-2]['Action'] = 'skip'
         self.assertTrue(receipts.verify_required(events, inventory['space'], 0))
 
+    def test_space_observer_proof_runs_before_trusted50_transition(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        name = 'TestNativeObserver50DefinitionAndPreimage'
+        cases = ('old_body_at50', 'prior_body_at50', 'old_catalog_at50',
+                 'catalog_cost_drift', 'catalog_ACL_drift', 'cost_drift',
+                 'definer_drift', 'search_path_drift', 'ACL_drift')
+        inventory = json.loads((ROOT / 'scripts/ci/space_observer50_required.json').read_text(encoding='utf-8'))['space']
+        self.assertEqual(inventory, [[package, name]] + [[package, name + '/' + case] for case in cases])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+        self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        steps = jobs['space-native-installer-integration']['steps']
+        step = next(item for item in steps if item.get('name') == 'Run trusted Space native50 catalog proofs')
+        run = step['run']
+        self.assertLess(run.index('-at migrated50'), run.index(name))
+        self.assertLess(run.index(name), run.index('TestAccountBanFixtureTrusted50Transition'))
+        self.assertIn('space_observer50_required.json', run)
+        self.assertIn('--output "$RUNNER_TEMP/space-observer50-receipt.json" --reject-skips', run)
+        events = [{'Package': package, 'Test': test, 'Action': action}
+                  for _, test in inventory for action in ('run', 'pass')]
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertFalse(receipts.verify_required(events, inventory, 0))
+        for _, case in inventory:
+            missing = [event for event in events if not (event.get('Test') == case and event['Action'] == 'pass')]
+            self.assertIn((package, case), receipts.verify_required(missing, inventory, 0))
+        events[-2]['Action'] = 'skip'
+        self.assertTrue(receipts.verify_required(events, inventory, 0))
+
     def test_space_real_native_transition_proofs_precede_current_catalog(self):
         import yaml
         package = 'voice/backend/space/internal/store'

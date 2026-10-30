@@ -51,6 +51,8 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureTrusted50Transition'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNativeObserver50DefinitionAndPreimage'):
+        'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory'):
