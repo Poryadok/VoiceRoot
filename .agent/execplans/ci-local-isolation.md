@@ -36,8 +36,13 @@ it can issue a handoff receipt.
   feasibility, not a journaled lifecycle or an exclusive-access guarantee.
 - A separate owned client also used testcontainers-go v0.35.0 to create, execute
   in, and remove an inner container over that socket. Its image was preloaded
-  and Ryuk was disabled for the disposable inner daemon; Java, Compose,
-  concurrency and crash recovery remain unverified for this profile.
+  and Ryuk was disabled for the disposable inner daemon. A separate journaled
+  Maven client also ran a standalone Java Testcontainers 1.21.0 case against
+  the socket, with all outer resources removed. A private source snapshot also
+  ran the real Auth `AccountDeletionEpochFloorJdbcIntegrationTest` with one
+  pass and zero skips. These are feasibility probes: Auth was compiled on the
+  host, its dependency seed lacks receipt-grade provenance, and concurrency and
+  crash recovery remain unverified for this profile.
 - The Unix daemon profile now has an ownership-journal creation primitive. A
   real Docker probe recovered an already-created daemon after a simulated lost
   response, started it, and served an owned client running a Go Testcontainers
@@ -45,9 +50,27 @@ it can issue a handoff receipt.
   experimental exec; creator authentication, socket access, other interruption
   states and a fully journaled workload remain separate requirements. This
   primitive is not preflight proof.
+- A source-built Chat `TestSpaceMembersStore_IsAndList` passed without skips
+  against two real PostgreSQL Testcontainers, including mapped-port access, on
+  the journaled Unix daemon. Image loading used experimental direct exec and
+  dependency/tool provenance is not yet bound to a preflight receipt.
+- The daemon now has a journaled image-load primitive that hashes transmitted
+  bytes, checks the complete image inventory and expected image ID, and keeps
+  uncertain operations unresolved. Recovery stops and quarantines the daemon
+  and its volumes before cleanup. Real valid and invalid archive probes passed;
+  caller-supplied digests and socket access are not provenance proof.
 - A synthetic Compose project also started and removed one network-disabled
   service on the journaled private daemon. Compose ran via direct experimental
   exec, so this does not establish the Voice Compose runner or its recovery.
+- Two separately journaled Unix daemons occupied both host slots and had their
+  synthetic Go Testcontainers workloads observed running simultaneously. Both
+  cleaned up while an independent sentinel survived. In a second probe, one
+  exact client was stopped and its run recovered while the other workload and
+  sentinel remained live. A third Windows-only probe killed one worker and its
+  Docker client descendants through a preassigned Job Object during execution;
+  recovery removed its exact run while the peer and sentinel stayed live. Linux
+  supervision, uncertain daemon-side create and source-bound workload inputs
+  remain unproven.
 - The tracker records one Windows bind/volume read measurement and one
   network-isolated Go compilation comparison in comments c63–c64. They are
   single paired measurements, not general performance guarantees.

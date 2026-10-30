@@ -3,6 +3,7 @@
 This primitive does not intercept Testcontainers or Compose and must not be used
 as evidence that those workloads are isolated. Uncertain operations fail closed.
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,9 @@ import posixpath
 import re
 import stat
 import subprocess
+import tempfile
+import threading
+import time
 import uuid
 
 from local_heavy_slots import _try_lock
@@ -171,8 +175,11 @@ class DockerCLI:
         except (ValueError, KeyError, TypeError, AttributeError):
             raise OwnershipError('rootless container profile differs') from None
 
-    def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None):
+    def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
+                         clear_entrypoint=False):
         options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
+        if clear_entrypoint:
+            options.extend(('--entrypoint', ''))
         for target, volume in sorted(mounts.items()):
             options.extend(('--mount', 'type=volume,source=' + volume + ',target=' + target))
         return self._call('container', 'create', '--name', name, '--network', network_id, *options,
@@ -194,6 +201,65 @@ class DockerCLI:
         if result.returncode < 0 or result.returncode == 125:
             raise OwnershipError('Docker execution outcome uncertain')
         return result.returncode
+
+    def execute_verified_stream(self, identifier, command, stdout, stderr, timeout, stdin, expected):
+        """Hash the exact bytes sent to the owned Docker exec process."""
+        expired = threading.Event()
+        process = None
+        def expire():
+            expired.set()
+            try:
+                if process.poll() is None:
+                    process.kill()
+            except OSError:
+                pass
+        try:
+            watchdog = threading.Timer(timeout, expire)
+            watchdog.daemon = True
+        except Exception:
+            raise OwnershipError('Docker watchdog unavailable') from None
+        deadline = time.monotonic() + timeout
+        watchdog_started = False
+        close_failed = False
+        try:
+            process = subprocess.Popen(['docker', 'container', 'exec', '--interactive', identifier, *command],
+                                       env=self._env, stdin=subprocess.PIPE, stdout=stdout, stderr=stderr, bufsize=0)
+            watchdog.start()
+            watchdog_started = True
+            digest = hashlib.sha256()
+            for block in iter(lambda: stdin.read(1024 * 1024), b''):
+                view = memoryview(block)
+                while view:
+                    written = process.stdin.write(view)
+                    if not written:
+                        raise OSError('short Docker input write')
+                    digest.update(view[:written])
+                    view = view[written:]
+            process.stdin.close()
+            result = process.wait(timeout=max(.001, deadline - time.monotonic()))
+        except BaseException as error:
+            if process is not None:
+                try:
+                    if process.poll() is None:
+                        process.kill()
+                    process.wait(timeout=30)
+                except (OSError, subprocess.TimeoutExpired):
+                    raise OwnershipError('Docker client termination is uncertain') from None
+            if not isinstance(error, Exception):
+                raise
+            raise OwnershipError('Docker execution outcome uncertain') from None
+        finally:
+            watchdog.cancel()
+            if watchdog_started:
+                watchdog.join(timeout=5)
+            if process is not None and not process.stdin.closed:
+                try:
+                    process.stdin.close()
+                except OSError:
+                    close_failed = True
+        if (close_failed or watchdog.is_alive() or expired.is_set() or digest.hexdigest() != expected or result < 0 or result == 125):
+            raise OwnershipError('Docker image stream outcome uncertain')
+        return result
 
 
 class OwnedRun:
@@ -291,13 +357,16 @@ class OwnedRun:
                 if 'profile' in item:
                     keys.add('profile')
             if (set(item) != keys
-                    or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'removing', 'removed')
+                    or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'quarantined', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
                     or item['name'] != self.run_id + '-' + item['kind'] + '-' + item['nonce']
                     or item['name'] in names or not isinstance(item['id'], str)):
                 raise OwnershipError('invalid ownership record')
             if item['state'] in ('starting', 'executing', 'stopping') and kind != 'container':
                 raise OwnershipError('invalid resource state')
+            if item['state'] == 'quarantined' and (kind not in ('container', 'volume') or
+                    (kind == 'container' and item.get('profile') != 'rootless-unix-v1')):
+                raise OwnershipError('invalid quarantined resource')
             if item['state'] == 'creating':
                 if item['id']:
                     raise OwnershipError('invalid creating resource identity')
@@ -323,6 +392,10 @@ class OwnedRun:
             if item['kind'] == 'container' and (item['network'] not in networks or
                                                 any(name not in volumes for name in item['mounts'].values())):
                 raise OwnershipError('container references a foreign resource')
+            if item['kind'] == 'volume' and item['state'] == 'quarantined' and not any(
+                    r.get('profile') == 'rootless-unix-v1' and r['state'] in ('quarantined', 'removing', 'removed')
+                    and item['name'] in r['mounts'].values() for r in state['resources']):
+                raise OwnershipError('quarantined volume has no matching daemon')
 
     @staticmethod
     def _validate_command(command):
@@ -428,17 +501,17 @@ class OwnedRun:
                 (kind == 'network' and not re.fullmatch(r'[0-9a-f]{64}', identifier))
                 or (kind == 'volume' and identifier != item['name'])):
             raise OwnershipError('Docker creation identity is invalid')
-        item['id'] = identifier
-        self._inspect(item)
-        item['state'] = 'ready'
+        self._inspect(dict(item, id=identifier))
+        item['id'], item['state'] = identifier, 'ready'
         self._save()
         return item['name']
 
-    def create_container(self, image_id, network_name, mounts, ports, command=None):
+    def create_container(self, image_id, network_name, mounts, ports, command=None, *, clear_entrypoint=False):
         self._validate()
         self._check_daemon()
         if (not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id)
                 or not isinstance(mounts, dict) or not isinstance(ports, list)
+                or type(clear_entrypoint) is not bool or (clear_entrypoint and command is None)
                 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for r in self.state['resources'])):
             raise OwnershipError('invalid image or unresolved operation')
         self._validate_mounts_ports(mounts, ports)
@@ -452,7 +525,7 @@ class OwnedRun:
         if (not isinstance(image, dict) or image.get('id') != image_id or not isinstance(image.get('volumes'), list)
                 or not set(image['volumes']).issubset(mounts)):
             raise OwnershipError('all declared image volumes must be owned and mounted')
-        if command is not None and image.get('entrypoint') != []:
+        if command is not None and image.get('entrypoint') != [] and not clear_entrypoint:
             raise OwnershipError('explicit commands require an image without an entrypoint')
         self._inspect(networks[0])
         for name in mounts.values():
@@ -468,14 +541,16 @@ class OwnedRun:
         labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': nonce, 'voice.ci.kind': 'container'}
         if command is None:
             identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'])
+        elif clear_entrypoint:
+            identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts,
+                                                      item['ports'], command=list(command), clear_entrypoint=True)
         else:
             identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'], command=list(command))
         self._check_daemon()
         if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
             raise OwnershipError('Docker container identity is invalid')
-        item['id'] = identifier
-        self._inspect(item)
-        item['state'] = 'ready'
+        self._inspect(dict(item, id=identifier))
+        item['id'], item['state'] = identifier, 'ready'
         self._save()
         return item['name']
 
@@ -498,6 +573,9 @@ class OwnedRun:
         volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
         if len(networks) != 1 or any(name not in volumes for name in mounts.values()):
             raise OwnershipError('rootless network or volumes are not owned by this run')
+        if any(r.get('profile') == 'rootless-unix-v1' and r['state'] != 'removed' and
+               set(r['mounts'].values()) & set(mounts.values()) for r in self.state['resources']):
+            raise OwnershipError('rootless daemon volumes are already in use')
         image = self.engine.image(rootless.IMAGE)
         if (not isinstance(image, dict) or image.get('id') != rootless.IMAGE
                 or image.get('entrypoint') != ['dockerd-entrypoint.sh']
@@ -569,12 +647,88 @@ class OwnedRun:
         self._save()
         return result
 
+    def load_rootless_image(self, name, archive_path, archive_sha256, image_id, stdout, stderr, timeout=300):
+        """Load an archive into an owned daemon; caller identities are not provenance proof.
+
+        Any uncertainty after the operation starts leaves it executing. Recovery
+        stops and quarantines the daemon before it can be removed, never reused.
+        The caller must control access to the daemon socket during the operation.
+        The timeout bounds Docker execution, not a stalled filesystem read.
+        """
+        if (not isinstance(archive_sha256, str) or not re.fullmatch(r'[0-9a-f]{64}', archive_sha256)
+                or not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id)
+                or type(timeout) not in (int, float) or not 0 < timeout <= 86400):
+            raise OwnershipError('invalid rootless image identity')
+        path = Path(archive_path)
+        if not path.is_absolute() or path.resolve() != path or path.parent != self.directory or path.is_symlink():
+            raise OwnershipError('image archive must be a regular file in the owned run directory')
+        def digest(stream):
+            stream.seek(0)
+            value = hashlib.sha256()
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                value.update(block)
+            return value.hexdigest()
+        with path.open('rb') as archive:
+            before, current = os.fstat(archive.fileno()), path.lstat()
+            if (not stat.S_ISREG(before.st_mode) or not stat.S_ISREG(current.st_mode)
+                    or (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino)
+                    or digest(archive) != archive_sha256):
+                raise OwnershipError('image archive identity differs')
+            self._validate()
+            self._check_daemon()
+            matches = [r for r in self.state['resources'] if r['kind'] == 'container' and r['name'] == name
+                       and r.get('profile') == 'rootless-unix-v1' and r['state'] == 'ready']
+            if (len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
+                                         for r in self.state['resources'])):
+                raise OwnershipError('rootless daemon is not ready or an operation is unresolved')
+            item = matches[0]
+            if not self._inspect(item).get('running'):
+                raise OwnershipError('rootless daemon is not running')
+            item['state'] = 'executing'
+            self._save()
+            archive.seek(0)
+            prefix = ['docker', '--host', 'unix:///run/user/1000/docker.sock']
+            inspect_command = prefix + ['image', 'inspect', image_id, '--format', '{{.Id}}']
+            with tempfile.TemporaryFile() as inspected:
+                before_load = self.engine.execute(item['id'], prefix + ['image', 'ls', '--all', '--no-trunc',
+                                                  '--format', '{{.ID}}'], inspected, stderr, timeout)
+                inspected.seek(0)
+                inventory = inspected.read(8 * 1024 * 1024 + 1)
+            if type(before_load) is not int or before_load != 0 or len(inventory) > 8 * 1024 * 1024:
+                raise OwnershipError('rootless image inventory is unavailable')
+            try:
+                images = inventory.decode('ascii').splitlines()
+            except UnicodeDecodeError:
+                raise OwnershipError('rootless image inventory is invalid') from None
+            if any(not re.fullmatch(r'sha256:[0-9a-f]{64}', value) for value in images) or image_id in images:
+                raise OwnershipError('image must be absent before loading')
+            if self.engine.execute_verified_stream(item['id'], prefix + ['load'], stdout, stderr, timeout,
+                                                   archive, archive_sha256):
+                raise OwnershipError('rootless image load failed')
+            after, current = os.fstat(archive.fileno()), path.lstat()
+            if (not stat.S_ISREG(current.st_mode) or (after.st_dev, after.st_ino) != (current.st_dev, current.st_ino)
+                    or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns)
+                    or digest(archive) != archive_sha256):
+                raise OwnershipError('image archive changed during load')
+        with tempfile.TemporaryFile() as inspected:
+            if self.engine.execute(item['id'], inspect_command, inspected, stderr, timeout):
+                raise OwnershipError('loaded image is unavailable')
+            inspected.seek(0)
+            if inspected.read() != (image_id + '\n').encode('ascii'):
+                raise OwnershipError('loaded image identity differs')
+        self._check_daemon()
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('rootless daemon stopped during image load')
+        item['state'] = 'ready'
+        self._save()
+
     def cancel_execution(self, name):
         """Stop the exact owned container before reconciling an uncertain exec."""
         self._validate()
         self._check_daemon()
         matches = [r for r in self.state['resources'] if r['kind'] == 'container' and
-                   r['name'] == name and r['state'] in ('executing', 'stopping') and 'command' in r]
+                   r['name'] == name and r['state'] in ('executing', 'stopping') and
+                   ('command' in r or r.get('profile') == 'rootless-unix-v1')]
         if len(matches) != 1:
             raise OwnershipError('no matching uncertain owned execution')
         item = matches[0]
@@ -588,7 +742,16 @@ class OwnedRun:
         self._check_daemon()
         if self._inspect(item).get('running') is not False:
             raise OwnershipError('owned container did not stop')
-        item['state'] = 'ready'
+        if item.get('profile') == 'rootless-unix-v1':
+            volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume'}
+            if any(name not in volumes or volumes[name]['state'] not in ('ready', 'quarantined')
+                   for name in item['mounts'].values()):
+                raise OwnershipError('rootless daemon volume state changed')
+            item['state'] = 'quarantined'
+            for name in item['mounts'].values():
+                volumes[name]['state'] = 'quarantined'
+        else:
+            item['state'] = 'ready'
         self._save()
 
     def cleanup(self):
@@ -597,7 +760,7 @@ class OwnedRun:
         if any(item['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for item in self.state['resources']):
             raise OwnershipError('uncertain operation requires reconciliation')
         order = {'container': 0, 'volume': 1, 'network': 2}
-        ready = sorted((item for item in reversed(self.state['resources']) if item['state'] == 'ready'),
+        ready = sorted((item for item in reversed(self.state['resources']) if item['state'] in ('ready', 'quarantined')),
                        key=lambda item: order[item['kind']])
         for item in ready:
             self._inspect(item)

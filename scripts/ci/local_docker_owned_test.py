@@ -1,8 +1,11 @@
 """Ownership and cleanup invariants for local disposable Docker fixtures."""
 from pathlib import Path
+import hashlib
+import io
 import json
 import tempfile
 import unittest
+from unittest import mock
 
 from local_docker_owned import DockerCLI, OwnedRun, OwnershipError
 import local_rootless_profile as rootless
@@ -88,6 +91,70 @@ class FakeEngine:
 
 
 class RootlessEndpointTests(unittest.TestCase):
+    def test_verified_stream_hashes_exact_partial_pipe_writes(self):
+        class Sink:
+            def __init__(self):
+                self.data = bytearray()
+                self.closed = False
+            def write(self, data):
+                amount = min(3, len(data))
+                self.data.extend(data[:amount])
+                return amount
+            def close(self):
+                self.closed = True
+        class Process:
+            def __init__(self):
+                self.stdin = Sink()
+            def wait(self, timeout=None):
+                return 0
+            def poll(self):
+                return 0
+        engine = DockerCLI.__new__(DockerCLI)
+        engine._env = {}
+        payload = b'exact bytes across partial writes'
+        process = Process()
+        with mock.patch('local_docker_owned.subprocess.Popen', return_value=process):
+            self.assertEqual(engine.execute_verified_stream('id', ['load'], None, None, 10,
+                                                            io.BytesIO(payload), hashlib.sha256(payload).hexdigest()), 0)
+        self.assertEqual(bytes(process.stdin.data), payload)
+        process = Process()
+        with mock.patch('local_docker_owned.subprocess.Popen', return_value=process), self.assertRaises(OwnershipError):
+            engine.execute_verified_stream('id', ['load'], None, None, 10, io.BytesIO(payload), '0' * 64)
+
+    def test_verified_stream_reaps_client_on_interruption_and_watchdog_start_failure(self):
+        class InterruptedInput:
+            def read(self, size):
+                raise KeyboardInterrupt()
+        class Process:
+            def __init__(self):
+                self.stdin = io.BytesIO()
+                self.killed = False
+                self.waited = False
+            def poll(self):
+                return -9 if self.killed else None
+            def kill(self):
+                self.killed = True
+            def wait(self, timeout=None):
+                self.waited = True
+                return -9
+        engine = DockerCLI.__new__(DockerCLI)
+        engine._env = {}
+        process = Process()
+        with mock.patch('local_docker_owned.subprocess.Popen', return_value=process), self.assertRaises(KeyboardInterrupt):
+            engine.execute_verified_stream('id', ['load'], None, None, 10, InterruptedInput(), '0' * 64)
+        self.assertTrue(process.killed and process.waited)
+        process = Process()
+        with mock.patch('local_docker_owned.subprocess.Popen', return_value=process), \
+                mock.patch('local_docker_owned.threading.Timer.start', side_effect=RuntimeError('unavailable')), \
+                self.assertRaises(OwnershipError):
+            engine.execute_verified_stream('id', ['load'], None, None, 10, io.BytesIO(b''), '0' * 64)
+        self.assertTrue(process.killed and process.waited)
+        with mock.patch('local_docker_owned.subprocess.Popen') as popen, \
+                mock.patch('local_docker_owned.threading.Timer', side_effect=RuntimeError('unavailable')), \
+                self.assertRaises(OwnershipError):
+            engine.execute_verified_stream('id', ['load'], None, None, 10, io.BytesIO(b''), '0' * 64)
+        popen.assert_not_called()
+
     def engine(self, env, context=None):
         engine = DockerCLI.__new__(DockerCLI)
         engine._env = dict(env)
@@ -124,6 +191,231 @@ class RootlessEndpointTests(unittest.TestCase):
 
 
 class OwnedRunTests(unittest.TestCase):
+    def test_rootless_image_load_rejects_preexisting_hidden_parent_image(self):
+        class HiddenParentEngine(FakeEngine):
+            def execute(self, identifier, command, stdout, stderr, timeout, stdin=None):
+                if 'ls' not in command:
+                    raise AssertionError('unexpected image operation')
+                if '--all' in command:
+                    stdout.write(('sha256:' + 'e' * 64 + '\n').encode())
+                return 0
+
+            def execute_verified_stream(self, *args):
+                raise AssertionError('preexisting image must not be loaded')
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = HiddenParentEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+                def creator(request):
+                    item = owner.state['resources'][-1]
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'],
+                              'voice.ci.kind': 'container'}
+                    return engine.create_container(item['name'], labels, rootless.IMAGE, item['network'], mounts, [])
+                name = owner.create_rootless_container(network, mounts, creator)
+                owner.start_container(name)
+                archive = owner.directory / 'image.tar'
+                archive.write_bytes(b'archive')
+                with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err, self.assertRaises(OwnershipError):
+                    owner.load_rootless_image(name, archive, hashlib.sha256(b'archive').hexdigest(),
+                                              'sha256:' + 'e' * 64, out, err)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'executing')
+                owner.cancel_execution(name)
+                self.assertTrue(all(item['state'] == 'quarantined' for item in owner.state['resources']
+                                    if item['kind'] == 'volume'))
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_rootless_image_load_is_journaled_and_verifies_content_and_image(self):
+        class LoadEngine(FakeEngine):
+            def __init__(self):
+                super().__init__()
+                self.calls = []
+                self.loaded = None
+
+            def execute(self, identifier, command, stdout, stderr, timeout, stdin=None):
+                self.calls.append(command)
+                if self.uncertain_exec:
+                    raise OwnershipError('execution outcome unknown')
+                if 'ls' in command:
+                    if self.loaded is not None:
+                        stdout.write(('sha256:' + 'e' * 64 + '\n').encode())
+                    return 0
+                if self.loaded is None:
+                    return 1
+                stdout.write(('sha256:' + 'e' * 64 + '\n').encode())
+                return 0
+
+            def execute_verified_stream(self, identifier, command, stdout, stderr, timeout, stdin, expected):
+                self.calls.append(command)
+                if self.uncertain_exec:
+                    raise OwnershipError('execution outcome unknown')
+                data = stdin.read()
+                if hashlib.sha256(data).hexdigest() != expected:
+                    raise OwnershipError('streamed image archive differs')
+                self.loaded = data
+                return 0
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = LoadEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+                def creator(request):
+                    item = owner.state['resources'][-1]
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'],
+                              'voice.ci.kind': 'container'}
+                    return engine.create_container(item['name'], labels, rootless.IMAGE, item['network'], mounts, [])
+                name = owner.create_rootless_container(network, mounts, creator)
+                owner.start_container(name)
+                archive = owner.directory / 'image.tar'
+                archive.write_bytes(b'owned image archive')
+                digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+                with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+                    with self.assertRaises(OwnershipError):
+                        owner.load_rootless_image(name, archive, '0' * 64, 'sha256:' + 'e' * 64, out, err)
+                    self.assertEqual(engine.calls, [])
+                    owner.load_rootless_image(name, archive, digest, 'sha256:' + 'e' * 64, out, err)
+                    self.assertEqual(engine.loaded, b'owned image archive')
+                    engine.loaded = None
+                    engine.uncertain_exec = True
+                    with self.assertRaises(OwnershipError):
+                        owner.load_rootless_image(name, archive, digest, 'sha256:' + 'e' * 64, out, err)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'executing')
+                engine.uncertain_exec = False
+                owner.cancel_execution(name)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'quarantined')
+                self.assertTrue(all(item['state'] == 'quarantined' for item in owner.state['resources']
+                                    if item['kind'] == 'volume'))
+                with self.assertRaises(OwnershipError):
+                    owner.start_container(name)
+                with self.assertRaises(OwnershipError):
+                    owner.create_rootless_container(network, mounts, creator)
+                with self.assertRaises(OwnershipError):
+                    owner.create_container('sha256:' + 'd' * 64, network,
+                                           {'/data': mounts['/run/user/1000']}, [], command=['sleep', '120'])
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_failed_resource_inspection_keeps_reconcilable_creation(self):
+        class ChangedNetworkEngine(FakeEngine):
+            def create(self, kind, name, labels):
+                identifier = super().create(kind, name, labels)
+                self.resources[(kind, name)]['internal'] = False
+                return identifier
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = ChangedNetworkEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                with self.assertRaises(OwnershipError):
+                    owner.create_resource('network')
+                item = owner.state['resources'][-1]
+                self.assertEqual((item['state'], item['id']), ('creating', ''))
+                engine.resources[('network', item['name'])]['internal'] = True
+                owner.reconcile_creation(item['name'])
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_explicit_entrypoint_override_is_verified_before_start(self):
+        class EntrypointEngine(FakeEngine):
+            def image(self, identifier):
+                return {'id': identifier, 'volumes': [], 'entrypoint': ['/original-entrypoint']}
+
+            def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
+                                 clear_entrypoint=False):
+                self.assert_override = clear_entrypoint
+                return super().create_container(name, labels, image_id, network_id, mounts, ports, command)
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = EntrypointEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                image = 'sha256:' + 'd' * 64
+                with self.assertRaises(OwnershipError):
+                    owner.create_container(image, network, {}, [], clear_entrypoint=True)
+                with self.assertRaises(OwnershipError):
+                    owner.create_container(image, network, {}, [], command=['sleep', '120'],
+                                           clear_entrypoint='yes')
+                with self.assertRaises(OwnershipError):
+                    owner.create_container(image, network, {}, [], command=['sleep', '120'])
+                name = owner.create_container(image, network, {}, [], command=['sleep', '120'],
+                                              clear_entrypoint=True)
+                self.assertTrue(engine.assert_override)
+                engine.resources[('container', name)]['entrypoint'] = ['/unexpected']
+                with self.assertRaises(OwnershipError):
+                    owner.start_container(name)
+                engine.resources[('container', name)]['entrypoint'] = []
+                owner.start_container(name)
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_entrypoint_override_recovery_rejects_unexpected_entrypoint(self):
+        class EntrypointEngine(FakeEngine):
+            def image(self, identifier):
+                return {'id': identifier, 'volumes': [], 'entrypoint': ['/original-entrypoint']}
+
+            def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
+                                 clear_entrypoint=False):
+                if not clear_entrypoint:
+                    raise AssertionError('explicit override was not requested')
+                return super().create_container(name, labels, image_id, network_id, mounts, ports, command)
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = EntrypointEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                engine.uncertain_container_create = True
+                with self.assertRaises(OwnershipError):
+                    owner.create_container('sha256:' + 'd' * 64, network, {}, [],
+                                           command=['sleep', '120'], clear_entrypoint=True)
+                name = owner.state['resources'][-1]['name']
+                engine.resources[('container', name)]['entrypoint'] = ['/unexpected']
+                with self.assertRaises(OwnershipError):
+                    owner.reconcile_creation(name)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'creating')
+                engine.resources[('container', name)]['entrypoint'] = []
+                owner.reconcile_creation(name)
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_entrypoint_inspection_failure_keeps_reconcilable_creation(self):
+        class EntrypointEngine(FakeEngine):
+            def image(self, identifier):
+                return {'id': identifier, 'volumes': [], 'entrypoint': ['/original-entrypoint']}
+
+            def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None,
+                                 clear_entrypoint=False):
+                identifier = super().create_container(name, labels, image_id, network_id, mounts, ports, command)
+                self.resources[('container', name)]['entrypoint'] = ['/unexpected']
+                return identifier
+
+        with tempfile.TemporaryDirectory() as directory:
+            engine = EntrypointEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                with self.assertRaises(OwnershipError):
+                    owner.create_container('sha256:' + 'd' * 64, network, {}, [],
+                                           command=['sleep', '120'], clear_entrypoint=True)
+                item = owner.state['resources'][-1]
+                self.assertEqual((item['state'], item['id']), ('creating', ''))
+                engine.resources[('container', item['name'])]['entrypoint'] = []
+                owner.reconcile_creation(item['name'])
+                owner.cleanup()
+            finally:
+                owner.close()
+
     def test_rootless_rejects_foreign_or_aliased_volumes_before_creator(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = FakeEngine()
@@ -168,6 +460,9 @@ class OwnedRunTests(unittest.TestCase):
 
                 name = owner.create_rootless_container(network, mounts, creator)
                 self.assertEqual(owner.state['resources'][-1]['state'], 'ready')
+                with self.assertRaises(OwnershipError):
+                    owner.create_rootless_container(network, mounts,
+                                                   lambda request: self.fail('shared daemon volumes must be rejected'))
                 owner.start_container(name)
                 self.assertGreaterEqual(engine.rootless_verifications, 3)
                 owner.cleanup()
