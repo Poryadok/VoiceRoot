@@ -23,6 +23,18 @@ class FullValidationGateTests(unittest.TestCase):
         self.assertEqual(result['jobs'], list(gate.REQUIRED_JOBS))
         self.assertEqual(result['identity']['run'], '123')
 
+    def test_master_push_requires_the_same_complete_exact_sha(self):
+        context = dict(self.context, event='push', profile='full')
+        result = gate.qualify(context, self.needs, self.audit, self.services)
+        self.assertEqual(result['identity']['sha'], self.sha)
+        for changes in ({'checkout': 'b' * 40}, {'ref': 'refs/heads/develop'},
+                        {'profile': 'auto'}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                gate.qualify(dict(context, **changes), self.needs, self.audit, self.services)
+        needs = dict(self.needs, protobuf={'result': 'skipped'})
+        with self.assertRaises(ValueError):
+            gate.qualify(context, needs, self.audit, self.services)
+
     def test_missing_and_non_success_jobs_fail(self):
         for name in gate.REQUIRED_JOBS:
             for status in ('skipped', 'failure', 'cancelled', None):
@@ -77,12 +89,67 @@ class FullValidationGateTests(unittest.TestCase):
         self.assertEqual(set(job['needs']), set(gate.REQUIRED_JOBS))
         self.assertEqual(len(job['needs']), len(gate.REQUIRED_JOBS))
         self.assertIn('always()', job['if'])
-        self.assertIn("github.event_name == 'workflow_dispatch'", job['if'])
-        self.assertIn("inputs.profile == 'full'", job['if'])
+        selection = workflow['jobs']['changes']['outputs']['full_validation']
+        self.assertIn("github.event_name == 'workflow_dispatch'", selection)
+        self.assertIn("inputs.profile == 'full'", selection)
+        self.assertIn("github.event_name == 'push'", selection)
+        self.assertIn("github.ref == 'refs/heads/master'", selection)
         step = next(step for step in job['steps'] if step.get('name') == 'Aggregate full validation')
         self.assertIn('full_validation_gate.py', step['run'])
         self.assertEqual(step['env']['NEEDS_JSON'], '${{ toJSON(needs) }}')
         self.assertIn('full_validation_gate_test.py', (root / 'Makefile').read_text(encoding='utf-8'))
+
+    def test_master_promotion_and_deployment_require_full_aggregation(self):
+        import yaml
+        root = Path(__file__).resolve().parents[2]
+        jobs = yaml.safe_load((root / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        aggregate = jobs['full-validation-aggregation']
+        self.assertIn("needs.changes.outputs.full_validation == 'true'", aggregate['if'])
+        for name in ('staging-images-promote', 'deploy-staging'):
+            with self.subTest(job=name):
+                self.assertIn('full-validation-aggregation', jobs[name]['needs'])
+                self.assertIn("needs.full-validation-aggregation.result == 'success'", jobs[name]['if'])
+        self.assertIn('staging-go-matrix', [step.get('id') for step in jobs['changes']['steps']])
+        staging = next(step for step in jobs['changes']['steps'] if step.get('id') == 'stagingmatrix')
+        self.assertEqual(staging['env']['GO_SERVICES_JSON'], '${{ steps.staging-go-matrix.outputs.go_services }}')
+
+    def test_full_master_routing_covers_the_required_jobs_without_a_cycle(self):
+        import yaml
+        root = Path(__file__).resolve().parents[2]
+        jobs = yaml.safe_load((root / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        already_selected_on_master = {'changes', 'voice-history-audit', 'flutter-unit-receipts',
+                                      'flutter-windows', 'flutter-android-smoke',
+                                      'flutter-web-integration', 'flutter-ios'}
+        for name in set(gate.REQUIRED_JOBS) - already_selected_on_master:
+            with self.subTest(job=name):
+                self.assertIn("needs.changes.outputs.full_validation == 'true'", jobs[name]['if'])
+        self.assertIn("github.event_name == 'push'", jobs['voice-history-audit']['if'])
+        for name in ('flutter-windows', 'flutter-android-smoke', 'flutter-web-integration', 'flutter-ios'):
+            self.assertIn("github.event_name == 'push'", jobs[name]['if'])
+            self.assertIn("needs.changes.outputs.run_flutter_tier2 == 'true'", jobs[name]['if'])
+        self.assertIn("github.event_name == 'push'", jobs['changes']['outputs']['run_flutter_tier2'])
+        for name in ('web', 'admin', 'developer-portal'):
+            step = next(step for step in jobs[name]['steps']
+                        if step.get('name') == 'Build ' + name + ' image (PR verify)')
+            self.assertIn("needs.changes.outputs.full_validation == 'true'", step['if'])
+            self.assertIs(step['with']['push'], False)
+        active, done = set(), set()
+        def visit(name):
+            if name in active:
+                self.fail('workflow dependency cycle involving ' + name)
+            if name in done:
+                return
+            active.add(name)
+            dependencies = jobs[name].get('needs', [])
+            if isinstance(dependencies, str):
+                dependencies = [dependencies]
+            for dependency in dependencies:
+                self.assertIn(dependency, jobs)
+                visit(dependency)
+            active.remove(name)
+            done.add(name)
+        for name in jobs:
+            visit(name)
 
     def test_duplicate_json_keys_are_rejected(self):
         import json

@@ -18,6 +18,67 @@ spec.loader.exec_module(policy)
 
 
 class FastGateRoutingTests(unittest.TestCase):
+    def test_full_validation_scope_distinguishes_master_code_and_docs(self):
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        expression = workflow['jobs']['changes']['outputs']['full_validation']
+        for event, ref, code, request, profile, expected in (
+                ('push', 'refs/heads/master', 'true', 'false', 'auto', True),
+                ('push', 'refs/heads/master', 'false', 'false', 'auto', False),
+                ('push', 'refs/heads/master', 'false', 'true', 'auto', True),
+                ('push', 'refs/heads/develop', 'true', 'false', 'auto', False),
+                ('pull_request', 'refs/heads/master', 'true', 'false', 'auto', False),
+                ('workflow_dispatch', 'refs/heads/master', 'false', 'false', 'full', True),
+                ('workflow_dispatch', 'refs/heads/master', 'true', 'false', 'auto', False)):
+            values = {'github.event_name': event, 'github.ref': ref, 'inputs.profile': profile,
+                      'steps.filter.outputs.code': code, 'steps.fullrequest.outputs.requested': request}
+            with self.subTest(event=event, ref=ref, code=code, request=request, profile=profile):
+                self.assertEqual(policy.evaluate(expression, values), expected)
+
+    def test_master_full_validation_actually_selects_required_jobs(self):
+        import full_validation_gate
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        values = policy.context('push', code='true', full_validation='true',
+                                run_go='true', run_pkg='true', run_flutter_tier2='true',
+                                integration_go_services='["analytics","bot","chat","controlledgame","federation","file","gameintegration","gateway","matchmaking","messaging","moderation","notification","realtime","role","search","social","space","story","subscription","user","voice"]')
+        for name in workflow['jobs']:
+            values['needs.' + name + '.result'] = 'success'
+        for name in full_validation_gate.REQUIRED_JOBS:
+            if name == 'changes':
+                continue
+            expression = workflow['jobs'][name]['if']
+            expression = re.sub(
+                r"contains\(fromJSON\(needs\.changes\.outputs\.integration_go_services\), '([a-z]+)'\)",
+                lambda match: 'true' if match.group(1) in json.loads(values['needs.changes.outputs.integration_go_services']) else 'false',
+                expression)
+            with self.subTest(job=name):
+                self.assertTrue(policy.evaluate(expression, values), expression)
+
+    def test_master_promotion_and_deployment_reject_incomplete_prerequisites(self):
+        workflow = yaml.safe_load(policy.WORKFLOW)
+        values = policy.context('push', code='true', full_validation='true',
+                                build_go_services='["chat"]', promote_services='["space"]',
+                                ci_only_change='false', full_application_request='false')
+        values['vars.STAGING_DEPLOY_ENABLED'] = 'true'
+        for name in workflow['jobs']:
+            values['needs.' + name + '.result'] = 'success'
+        for name in ('staging-images-promote', 'deploy-staging'):
+            condition = workflow['jobs'][name]['if']
+            self.assertTrue(policy.evaluate(condition, values), name)
+            for status in ('failure', 'cancelled', 'skipped'):
+                changed = dict(values, **{'needs.full-validation-aggregation.result': status})
+                self.assertFalse(policy.evaluate(condition, changed), (name, status))
+                changed = dict(values, **{'needs.staging-images-push.result': status})
+                self.assertFalse(policy.evaluate(condition, changed), (name, status))
+            if name == 'deploy-staging':
+                for status in ('failure', 'cancelled', 'skipped'):
+                    changed = dict(values, **{'needs.staging-images-promote.result': status})
+                    self.assertFalse(policy.evaluate(condition, changed), (name, status))
+        empty = dict(values, **{'needs.changes.outputs.build_go_services': '[]',
+                                'needs.staging-images-push.result': 'skipped',
+                                'needs.changes.outputs.promote_services': '[]',
+                                'needs.staging-images-promote.result': 'skipped'})
+        self.assertTrue(policy.evaluate(workflow['jobs']['deploy-staging']['if'], empty))
+
     def test_actual_scope_step_preserves_master_breadth(self):
         workflow = yaml.safe_load(policy.WORKFLOW)
         changes = workflow['jobs']['changes']

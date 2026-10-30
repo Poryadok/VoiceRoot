@@ -651,11 +651,16 @@ retains the original evidence artifact name. A hosted same-candidate comparison
 passed both checks; two startup loading screenshots differed between runs.
 
 A manual CI dispatch with `profile=full` forces the code scope even when the
-last diff contains only documentation. `full-validation-aggregation` rejects a
-non-master or mismatched checkout, non-successful required jobs, and unresolved
-Go integration source inventory. Full-profile routing, matrix completeness and
-promotion gating are still incomplete; this aggregation does not authorize a
-deployment and will fail while the unresolved inventory remains.
+last diff contains only documentation. A code push to `master` also selects the
+full validation jobs while retaining the independently resolved staging image
+build matrix. `full-validation-aggregation` rejects a non-master or mismatched
+checkout, non-successful required jobs, incomplete Go service matrices, and
+unresolved Go integration source inventory. Image promotion and staging deploy
+depend on that aggregation in the same workflow run. The gate currently fails
+because the integration inventory remains unresolved, so these promotions and
+deployments remain blocked until the missing proofs are implemented and pass.
+The source audit is limited to `*_integration_test.go`; other test files and
+generated or external inputs still require source-binding review.
 
 The main Go CI jobs and dedicated Go integration proofs resolve and test with
 `-mod=readonly`, then reject changes to backend `go.mod` or `go.sum` files,

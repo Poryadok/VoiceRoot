@@ -1,8 +1,8 @@
 """Fail closed when an exact-SHA full CI run has incomplete check results.
 
-This is an aggregation primitive, not a promotion authorization. A consuming
-workflow must bind every required job to the same immutable checkout and prove
-its matrices and no-skip inventories before using its receipt for promotion.
+Promotion requires this aggregation in its own workflow run. Job checkout,
+matrix and no-skip bindings must also be reviewed before unresolved inventory
+can be cleared; aggregation alone does not establish those properties.
 """
 import json
 import os
@@ -41,7 +41,7 @@ def qualify(context, needs, audit, services):
     if not isinstance(context, dict) or set(context) != {
             'event', 'profile', 'ref', 'sha', 'checkout', 'run', 'attempt'}:
         raise ValueError('invalid full-validation context')
-    if (context['event'] != 'workflow_dispatch' or context['profile'] != 'full'
+    if (context['event'] not in ('workflow_dispatch', 'push') or context['profile'] != 'full'
             or context['ref'] != 'refs/heads/master'
             or not isinstance(context['sha'], str)
             or not re.fullmatch(r'[0-9a-f]{40}', context['sha'])
