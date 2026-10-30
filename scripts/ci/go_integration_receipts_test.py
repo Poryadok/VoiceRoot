@@ -18,6 +18,48 @@ spec.loader.exec_module(receipts)
 
 
 class GoIntegrationReceiptTests(unittest.TestCase):
+    def test_space_over100_requires_real_ordered_fixture_and_consumer(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        cases = (('space_over100_fixture_required.json', 'TestAccountBanFixtureOver100Cohort34'),
+                 ('space_over100_consumer_required.json', 'TestAccountBanOver100Cohort50'))
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for filename, name in cases:
+            inventory = json.loads((ROOT / 'scripts/ci' / filename).read_text(encoding='utf-8'))['space']
+            self.assertEqual(inventory, [[package, name]])
+            entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+            events = [{'Package': package, 'Test': name, 'Action': 'run'},
+                      {'Package': package, 'Test': name, 'Action': 'pass'}, {'Package': package, 'Action': 'pass'}]
+            self.assertFalse(receipts.verify_required(events, inventory, 0))
+            for mutation in ('skip', 'missing'):
+                broken = [event for event in events if mutation != 'missing' or event.get('Action') != 'pass' or event.get('Test') != name]
+                if mutation == 'skip':
+                    broken = [dict(event, Action='skip') if event.get('Test') == name and event['Action'] == 'pass' else event for event in broken]
+                self.assertIn((package, name), receipts.verify_required(broken, inventory, 0))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        job = jobs['space-native-installer-integration']
+        step = next(item for item in job['steps'] if item.get('name') == 'Run Space over100 legacy cohort and native Ban proof')
+        self.assertIn('space_over100_proof.sh', step['run'])
+        self.assertIn('/space_over100?', step['env']['SPACE_BAN_TEST_DATABASE_URL'])
+        self.assertIn('space-native-installer-integration', jobs['ci-gate']['needs'])
+        script = (ROOT / 'scripts/ci/space_over100_proof.sh').read_text(encoding='utf-8')
+        phases = ('goto 34', 'INSERT INTO spaces', 'INSERT INTO community_owner_authority',
+                  'INSERT INTO community_roster_members', 'receipt fixture', 'goto 44', 'goto 45',
+                  'receipt transition45', 'goto 50', 'receipt transition50', 'receipt consumer')
+        positions = [script.index(value) for value in phases]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn("00000000000d", script)
+        self.assertIn('FROM (VALUES (1),(2),(3),(6))', script)
+        self.assertIn('FROM (VALUES (2),(5))', script)
+        self.assertIn('-timeout 5m', script)
+        self.assertIn('--reject-skips', script)
+        self.assertIn('"$actual" != "$owned_oid"', script)
+        self.assertIn('trap cleanup EXIT', script)
+        self.assertLess(script.index('trap cleanup EXIT'), script.index("-c 'CREATE DATABASE space_over100'"))
+        for filename, name in cases:
+            self.assertIn(filename + ' ' + name, script)
+
     def test_no_test_package_requires_discovery_and_real_no_test_marker(self):
         events = [{'Package': 'example/p', 'Action': 'start'},
                   {'Package': 'example/p', 'Action': 'output', 'Output': '?  \texample/p\t[no test files]\n'},

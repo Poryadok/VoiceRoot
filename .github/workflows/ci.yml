@@ -3334,6 +3334,14 @@ jobs:
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --events "$RUNNER_TEMP/space-account-ban-events.jsonl" --exit-code "$result" \
             --output "$RUNNER_TEMP/space-account-ban-receipt.json" --reject-skips
+      - name: Run Space over100 legacy cohort and native Ban proof
+        working-directory: src/backend/space
+        env:
+          CGO_ENABLED: '0'
+          SPACE_NATIVE_ADMIN_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/postgres?sslmode=disable
+          SPACE_BAN_TEST_DATABASE_URL: postgres://voice:voice-native-installer-ci@127.0.0.1:${{ job.services.postgres.ports[5432] }}/space_over100?sslmode=disable
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash ../../../scripts/ci/space_over100_proof.sh
       - name: Upload Space native installer evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -3342,6 +3350,9 @@ jobs:
           path: |
             ${{ runner.temp }}/space-native-installer-events.jsonl
             ${{ runner.temp }}/space-native-installer-receipt.json
+            ${{ runner.temp }}/space-over100-*-events.jsonl
+            ${{ runner.temp }}/space-over100-*-receipt.json
+            ${{ runner.temp }}/space-over100-cleanup.txt
             ${{ runner.temp }}/space-transition45-provision.jsonl
             ${{ runner.temp }}/space-transition45-provision.stderr
             ${{ runner.temp }}/space-transition45-events.jsonl

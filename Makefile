@@ -352,6 +352,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	python3 "$(ROOT)/scripts/ci/local_docker_scheduled_test.py"
 	python3 "$(ROOT)/scripts/ci/go_integration_receipts_test.py"
 	python3 "$(ROOT)/scripts/ci/space_native_clock_proof_test.py"
+	python3 "$(ROOT)/scripts/ci/space_over100_proof_test.py"
 	python3 "$(ROOT)/scripts/ci/verify_go_verbose_test.py"
 	python3 "$(ROOT)/scripts/ci/t31-session-event-compose-bootstrap_test.py"
 	python3 "$(ROOT)/scripts/ci/fast-gate-routing_test.py"
