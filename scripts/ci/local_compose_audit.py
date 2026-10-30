@@ -80,9 +80,18 @@ def audit(config, project, checkout, scratch):
             if (not isinstance(build, dict) or not isinstance(build.get('context'), str)
                     or not Path(build['context']).is_absolute() or not _inside(build['context'], checkout)
                     or build.get('additional_contexts') or build.get('cache_to')
+                    or build.get('network') not in (None, 'default', 'none')
+                    or build.get('privileged') or build.get('entitlements') or build.get('ssh')
+                    or build.get('secrets')
                     or any(not isinstance(tag, str) or not tag.endswith(':' + project)
                            for tag in build.get('tags', []))):
                 reject('build context or output is not scoped to this run')
+            elif build.get('dockerfile') is not None:
+                dockerfile = build['dockerfile']
+                context = Path(build['context']).resolve()
+                if (not isinstance(dockerfile, str) or not dockerfile or
+                        not _inside(context / dockerfile, context)):
+                    reject('Dockerfile is outside the build context')
         ports = value.get('ports', [])
         mounts = value.get('volumes', [])
         if not isinstance(ports, list) or not isinstance(mounts, list):

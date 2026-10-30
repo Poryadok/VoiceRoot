@@ -34,6 +34,8 @@ class ComposeAuditTests(unittest.TestCase):
             built = copy.deepcopy(config)
             built['services']['db'].update(build={'context': str(checkout)}, image='voice-db:' + project)
             self.assertEqual(audit(built, project, checkout, scratch), [])
+            built['services']['db']['build'].update(dockerfile='docker/Dockerfile', network='none')
+            self.assertEqual(audit(built, project, checkout, scratch), [])
             variants = []
             def variant(change):
                 candidate = copy.deepcopy(config)
@@ -59,6 +61,12 @@ class ComposeAuditTests(unittest.TestCase):
             variant(lambda c: c['services']['db'].update(build={'context': str(checkout)}, image='voice-db:local'))
             variant(lambda c: c['services']['db'].update(build={'context': str(root)}, image='voice-db:' + project))
             variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'cache_to': ['type=registry,ref=shared']}, image='voice-db:' + project))
+            variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'network': 'host'}, image='voice-db:' + project))
+            variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'privileged': True}, image='voice-db:' + project))
+            variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'entitlements': ['security.insecure']}, image='voice-db:' + project))
+            variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'ssh': ['default']}, image='voice-db:' + project))
+            variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'secrets': ['credentials']}, image='voice-db:' + project))
+            variant(lambda c: c['services']['db'].update(build={'context': str(checkout), 'dockerfile': '../outside/Dockerfile'}, image='voice-db:' + project))
             variant(lambda c: c['services']['db'].update(image='voice-db:local'))
             variant(lambda c: c.update(name='another-project'))
             for candidate in variants:
