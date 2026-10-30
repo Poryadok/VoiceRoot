@@ -726,6 +726,10 @@ class AffectedCheckPlanTests(unittest.TestCase):
         for phase in ('after_dirty_marker', 'after_body', 'after_CAS_and_clean_marker',
                       'engine_unlock_error', 'outer_window_failure'):
             self.assertIn(root + '/' + phase, required)
+        stale = 'TestNative51StaleExpectedParentCannotCommit'
+        self.assertIn(stale, step['run'])
+        for name in (stale, stale + '/epoch', stale + '/seal'):
+            self.assertIn(name, required)
         self.assertIn('--reject-skips', step['run'])
 
     def test_space_native_installer_runs_missing_capture_guard(self):
