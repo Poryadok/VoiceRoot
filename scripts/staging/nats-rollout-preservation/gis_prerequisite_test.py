@@ -218,6 +218,20 @@ class ReadyKube:
 
 
 class Tests(unittest.TestCase):
+    def test_unqualified_new_migration_cannot_use_historical_verifier(self):
+        inputs={'migrations':[{'name':'000031_previous.up.sql','sha256':'a'*64}],
+                'verifier_sql_sha256':prerequisite.VERIFIER_V1_SHA256}
+        prerequisite.validate_source_revision(inputs)
+        current = {**inputs, 'migrations': inputs['migrations'] + [
+            {'name': '000032_next.up.sql', 'sha256': 'b' * 64}],
+            'verifier_sql_sha256': prerequisite.VERIFIER_V2_SHA256}
+        self.assertEqual(prerequisite.validate_source_revision(current), 32)
+        for changed in ({**inputs,'migrations':inputs['migrations']+[{'name':'000032_next.up.sql','sha256':'b'*64}]},
+                        {**inputs,'verifier_sql_sha256':'0'*64},
+                        {**inputs,'verifier_sql_sha256':prerequisite.VERIFIER_V2_SHA256},
+                        {**current,'migrations':current['migrations']+[{'name':'000032_duplicate.up.sql','sha256':'c'*64}]}):
+            with self.subTest(inputs=changed),self.assertRaisesRegex(prerequisite.Blocked,'source_revision_unsupported'):
+                prerequisite.validate_source_revision(changed)
     def test_producer_metadata_and_all_file_hashes_are_bound_to_captured_source(self):
         bound = capture(ROOT)
         inputs = prerequisite.source_inputs(ROOT, bound)
