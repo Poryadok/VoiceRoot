@@ -74,6 +74,17 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'failed')
         self.assertIn('snapshot changed', result['error'])
 
+    def test_new_test_source_during_command_is_rejected(self):
+        def mutate(command, **kwargs):
+            result = self.fake_flutter(command, **kwargs)
+            if 'analyze' in command:
+                (Path(kwargs['cwd']) / 'test/injected_test.dart').write_text('injected')
+            return result
+        with mock.patch.object(execution, '_invoke', side_effect=mutate):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'failed')
+        self.assertIn('unexpected', result['error'])
+
     def test_dependency_cache_change_during_command_is_rejected(self):
         def mutate(command, **kwargs):
             result = self.fake_flutter(command, **kwargs)

@@ -17,6 +17,23 @@ import flutter_test_shards
 import local_source_snapshot
 
 
+# These Flutter-generated outputs remain explicitly unbound diagnostic inputs.
+# Source files outside these exact paths may not appear during a run.
+FLUTTER_OUTPUTS = (
+    'src/frontend/.dart_tool/', 'src/frontend/build/',
+    'src/frontend/linux/flutter/ephemeral/', 'src/frontend/windows/flutter/ephemeral/',
+    'src/frontend/macos/Flutter/ephemeral/', 'src/frontend/ios/Flutter/ephemeral/',
+    'src/frontend/.flutter-plugins', 'src/frontend/.flutter-plugins-dependencies',
+    'src/frontend/android/local.properties',
+    'src/frontend/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java',
+    'src/frontend/ios/Flutter/Generated.xcconfig', 'src/frontend/ios/Flutter/flutter_export_environment.sh',
+    'src/frontend/ios/Runner/GeneratedPluginRegistrant.h', 'src/frontend/ios/Runner/GeneratedPluginRegistrant.m',
+    'src/frontend/sqlite3mc.x64.windows.dll', 'src/frontend/libsqlite3mc.x64.linux.so',
+    'src/frontend/libsqlite3mc.arm64.linux.so', 'src/frontend/libsqlite3mc.arm64.macos.dylib',
+    'src/frontend/libsqlite3mc.x64.macos.dylib',
+)
+
+
 def _invoke(command, **kwargs):
     return subprocess.run(command, **kwargs)
 
@@ -137,7 +154,7 @@ def run(root, head, output, flutter, selected=None):
                                        'stdout': out.name, 'stderr': err.name})
             if completed.returncode != 0:
                 raise ValueError(label + ' failed')
-            local_source_snapshot.verify_materialized(root, source, checkout)
+            local_source_snapshot.verify_materialized(root, source, checkout, allowed_extra=FLUTTER_OUTPUTS)
             if label == 'sqlite-prefetch':
                 result['pub_cache_sha256'] = directory_digest(env['PUB_CACHE'])
             elif (label == 'analyze' or label.startswith('test-')) and directory_digest(env['PUB_CACHE']) != result['pub_cache_sha256']:

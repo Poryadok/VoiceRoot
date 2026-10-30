@@ -101,6 +101,24 @@ class LocalSourceSnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'snapshot changed'):
                 snapshot.verify_materialized(self.root, source, destination)
 
+    def test_materialized_source_rejects_added_files_except_declared_outputs(self):
+        source = snapshot.capture(self.root, self.head)
+        with tempfile.TemporaryDirectory() as external:
+            destination = Path(external) / 'source'
+            snapshot.materialize(self.root, source, destination)
+            generated = destination / 'generated'
+            generated.mkdir()
+            (generated / 'tool-output.txt').write_text('derived')
+            with self.assertRaisesRegex(ValueError, 'unexpected'):
+                snapshot.verify_materialized(self.root, source, destination)
+            snapshot.verify_materialized(self.root, source, destination, allowed_extra=('generated/',))
+            (destination / 'injected.go').write_text('package injected')
+            with self.assertRaisesRegex(ValueError, 'unexpected'):
+                snapshot.verify_materialized(self.root, source, destination, allowed_extra=('generated/',))
+            for name in ('../generated/', '/generated/', './', 'generated/../other/'):
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'invalid'):
+                    snapshot.verify_materialized(self.root, source, destination, allowed_extra=(name,))
+
     def test_tracked_gitlinks_are_rejected(self):
         self.git('update-index', '--add', '--cacheinfo', '160000,' + self.head + ',submodule')
         with self.assertRaisesRegex(ValueError, 'gitlink'):

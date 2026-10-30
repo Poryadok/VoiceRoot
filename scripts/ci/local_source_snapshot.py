@@ -7,7 +7,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
@@ -114,12 +114,30 @@ def _snapshot_entries(root, source):
         yield raw_name, parts
 
 
-def verify_materialized(root, source, destination):
-    """Check captured files after execution; generated inputs remain unaccounted for."""
+def verify_materialized(root, source, destination, allowed_extra=()):
+    """Check captured files and reject extra files outside declared outputs.
+
+    Allowed output paths are not bound by this check and cannot by themselves
+    support a complete preflight receipt.
+    """
     root = Path(root).resolve()
     destination = Path(destination).resolve()
+    if not isinstance(allowed_extra, (list, tuple)):
+        raise ValueError('invalid declared output paths')
+    files, directories = set(), set()
+    for name in allowed_extra:
+        if not isinstance(name, str) or not name or '\\' in name or ':' in name:
+            raise ValueError('invalid declared output path')
+        value = name[:-1] if name.endswith('/') else name
+        path = PurePosixPath(value)
+        if (not value or value in ('.', '..') or path.is_absolute() or str(path) != value or
+                any(part in ('', '.', '..', '.git') for part in path.parts)):
+            raise ValueError('invalid declared output path')
+        (directories if name.endswith('/') else files).add(value)
+    entries = list(_snapshot_entries(root, source))
+    tracked = {raw_name.decode('utf-8') for raw_name, _ in entries}
     digest = hashlib.sha256()
-    for raw_name, parts in _snapshot_entries(root, source):
+    for raw_name, parts in entries:
         path = destination.joinpath(*parts)
         try:
             info = path.lstat()
@@ -136,6 +154,22 @@ def verify_materialized(root, source, destination):
             raise ValueError('snapshot changed: missing file') from error
     if digest.hexdigest() != source['worktree_sha256']:
         raise ValueError('snapshot changed: captured bytes or mode differ')
+    def fail_walk(error):
+        raise ValueError('snapshot changed: directory cannot be inspected') from error
+    for parent, child_dirs, child_files in os.walk(destination, followlinks=False, onerror=fail_walk):
+        parent_path = Path(parent)
+        for name in list(child_dirs):
+            path = parent_path / name
+            relative = path.relative_to(destination).as_posix()
+            if path.is_symlink() or getattr(path, 'is_junction', lambda: False)():
+                raise ValueError('snapshot changed: unexpected link ' + relative)
+            if relative in directories:
+                child_dirs.remove(name)
+        for name in child_files:
+            path = parent_path / name
+            relative = path.relative_to(destination).as_posix()
+            if not stat.S_ISREG(path.lstat().st_mode) or (relative not in tracked and relative not in files):
+                raise ValueError('snapshot changed: unexpected file ' + relative)
 
 
 def materialize(root, source, destination):

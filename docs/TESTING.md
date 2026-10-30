@@ -635,7 +635,11 @@ The hosted Flutter job runs the AppIcon, draft storage, linked OAuth and
 presigned-upload browser suites in Chrome. It validates the JSON event stream
 against all four files and rejects skipped tests. The draft storage suite is
 browser-only; a VM run cannot prove it. The local isolated Flutter runner is
-still diagnostic and does not issue a complete preflight receipt.
+still diagnostic and does not issue a complete preflight receipt. It checks
+captured source files and rejects added files or links outside its declared
+Flutter output paths after each command. Those output paths, the SDK and
+external package provenance remain unbound inputs; a successful diagnostic
+therefore cannot authorize a PR handoff.
 
 The separate `flutter-music-proof` job retains the Music capture and playback
 artifacts. Its selector includes frontend sources, shared test support, assets,
