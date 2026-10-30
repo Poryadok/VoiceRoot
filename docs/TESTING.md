@@ -665,6 +665,10 @@ generated or external inputs still require source-binding review.
 The main Go CI jobs and dedicated Go integration proofs resolve and test with
 `-mod=readonly`, then reject changes to backend `go.mod` or `go.sum` files,
 including ignored newly created sums.
+The Gateway integration matrix also runs the Linux `live`-tagged leave diagnostic
+parent and requires its 204 and 503 subtests without skips. The child probe is
+an explicitly mapped subprocess helper: its 503 path intentionally fails inside
+the subprocess and the parent verifies that failure and redacted diagnostic.
 `make backend-test-ci` uses the same read-only resolution; the explicit
 `make go-mod-tidy-all` target remains available for intentional maintenance.
 Other proof jobs and generated or external inputs still require source-binding

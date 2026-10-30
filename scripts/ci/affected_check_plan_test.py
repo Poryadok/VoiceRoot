@@ -722,6 +722,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture', test['run'])
         self.assertIn('TestNative51CreatorBornCurrentSchema', test['run'])
         self.assertIn('TestAccountBanCatalogRejectsSemanticDrift', test['run'])
+        self.assertIn('TestNative51ProofDiagnosticEnums', test['run'])
         self.assertIn('space_account_ban_guard_required.json', test['run'])
         self.assertIn('--reject-skips', test['run'])
         self.assertIn('SPACE_NATIVE_ADMIN_URL', test['env'])

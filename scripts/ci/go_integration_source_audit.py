@@ -1,7 +1,9 @@
 """Require an explicit disposition for Go *_integration_test.go entrypoints.
 
-Unresolved exceptions are inventory gaps, not execution evidence. This audit is
-limited to that filename convention and does not certify other test files.
+Unresolved exceptions are inventory gaps, not execution evidence. A subprocess
+helper is classified only under its specifically mapped, required parent proof.
+This audit is limited to that filename convention and does not certify other
+test files.
 """
 from pathlib import Path
 import re
@@ -9,6 +11,8 @@ import re
 
 TEST = re.compile(r'(?m)^func\s+(Test\w+)\s*\(\s*\w+\s+\*testing\.T\s*\)')
 DEDICATED = {
+    ('gateway', 'voice/backend/gateway', 'TestComposeSpaceLeaveDiagnosticPreservesStrictStatus'):
+        'backend-go-integration-pr',
     ('role', 'voice/backend/role', 'TestMemberAdmissionPositiveProtectedReceipt'):
         'role-space-receipt-integration',
     ('role', 'voice/backend/role', 'TestMemberAdmissionRole25ProtectedReceipt'):
@@ -35,6 +39,15 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51CreatorBornCurrentSchema'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNative51ProofDiagnosticEnums'):
+        'space-native-installer-integration',
+}
+
+# This entrypoint is deliberately invoked in child processes by the required
+# parent: mode 204 succeeds and mode 503 fails as part of the parent's oracle.
+SUBPROCESS_HELPERS = {
+    ('gateway', 'voice/backend/gateway', 'TestComposeSpaceLeaveDiagnosticProbe'):
+        ('gateway', 'voice/backend/gateway', 'TestComposeSpaceLeaveDiagnosticPreservesStrictStatus'),
 }
 
 
@@ -60,10 +73,11 @@ def audit(root, inventory, exceptions):
                 raise ValueError('duplicate inventory case')
             included.add(key)
     omitted = {}
+    dispositions = {}
     for item in exceptions:
         if not isinstance(item, dict) or set(item) != {'service', 'package', 'test', 'source', 'status', 'reason'}:
             raise ValueError('invalid source exception')
-        if (item['status'] not in ('dedicated', 'unresolved') or
+        if (item['status'] not in ('dedicated', 'subprocess', 'unresolved') or
                 not isinstance(item['reason'], str) or not item['reason'].strip() or
                 not all(isinstance(item[k], str) for k in ('service', 'package', 'test', 'source'))):
             raise ValueError('invalid source exception disposition')
@@ -72,7 +86,19 @@ def audit(root, inventory, exceptions):
             raise ValueError('duplicate or conflicting source exception')
         if item['status'] == 'dedicated' and DEDICATED.get(key) != item['reason']:
             raise ValueError('dedicated source exception lacks a reviewed proof mapping')
+        if item['status'] == 'subprocess':
+            parent = SUBPROCESS_HELPERS.get(key)
+            if parent is None or item['reason'] != parent[2]:
+                raise ValueError('subprocess source exception lacks a reviewed parent mapping')
         omitted[key] = item['source']
+        dispositions[key] = item
+    for key, item in dispositions.items():
+        if item['status'] == 'subprocess':
+            parent = SUBPROCESS_HELPERS[key]
+            proof = dispositions.get(parent)
+            if (not proof or proof['status'] != 'dedicated' or
+                    proof['reason'] != DEDICATED.get(parent) or proof['source'] != item['source']):
+                raise ValueError('subprocess parent lacks its dedicated proof')
     seen = {}
     for service in inventory:
         service_dir = root / 'src/backend' / service

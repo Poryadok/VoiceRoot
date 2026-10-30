@@ -1389,6 +1389,40 @@ jobs:
             --events "$RUNNER_TEMP/go-integration-events.jsonl" --exit-code "$result" \
             --summary "$RUNNER_TEMP/go-integration-summary.json" --service "$SERVICE" \
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Install Gateway live test libraries
+        if: matrix.service == 'gateway'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libopus-dev libopusfile-dev libsoxr-dev pkg-config
+      - name: Gateway live leave diagnostic
+        if: matrix.service == 'gateway'
+        working-directory: src/backend/gateway
+        env:
+          CGO_ENABLED: '1'
+          CANDIDATE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set +e
+          go test -json -count=1 -timeout 5m -tags=live \
+            -run '^TestComposeSpaceLeaveDiagnosticPreservesStrictStatus$' . \
+            > "$RUNNER_TEMP/gateway-leave-diagnostic-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/gateway_leave_diagnostic_required.json --service gateway \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/gateway-leave-diagnostic-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/gateway-leave-diagnostic-receipt.json" --reject-skips
+      - name: Upload Gateway live diagnostic evidence
+        if: always() && matrix.service == 'gateway'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gateway-leave-diagnostic-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/gateway-leave-diagnostic-events.jsonl
+            ${{ runner.temp }}/gateway-leave-diagnostic-receipt.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload Go integration diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -2935,7 +2969,7 @@ jobs:
             > "$RUNNER_TEMP/space-account-ban-provision.jsonl"
           set +e
           go test -json -count=1 -timeout 5m -tags=spacebanintegration \
-            -run '^(TestAccountBanCannotSucceedWithoutCompleteOwnerCapture|TestNative51CreatorBornCurrentSchema|TestAccountBanCatalogRejectsSemanticDrift)$' ./internal/store \
+            -run '^(TestAccountBanCannotSucceedWithoutCompleteOwnerCapture|TestNative51CreatorBornCurrentSchema|TestAccountBanCatalogRejectsSemanticDrift|TestNative51ProofDiagnosticEnums)$' ./internal/store \
             > "$RUNNER_TEMP/space-account-ban-events.jsonl"
           result=$?
           set -e

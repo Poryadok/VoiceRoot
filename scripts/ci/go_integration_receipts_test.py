@@ -54,11 +54,47 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
         for name in ('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture',
                      'TestNative51CreatorBornCurrentSchema',
-                     'TestAccountBanCatalogRejectsSemanticDrift'):
+                     'TestAccountBanCatalogRejectsSemanticDrift',
+                     'TestNative51ProofDiagnosticEnums'):
             self.assertIn(['voice/backend/space/internal/store', name], inventory['space'])
             entry = next(x for x in exceptions if x['service'] == 'space' and x['test'] == name)
             self.assertEqual((entry['status'], entry['reason']),
                              ('dedicated', 'space-native-installer-integration'))
+
+    def test_gateway_live_leave_diagnostic_has_required_parent_and_subprocess_disposition(self):
+        import yaml
+        name = 'TestComposeSpaceLeaveDiagnosticPreservesStrictStatus'
+        helper = 'TestComposeSpaceLeaveDiagnosticProbe'
+        inventory = json.loads((ROOT / 'scripts/ci/gateway_leave_diagnostic_required.json').read_text(encoding='utf-8'))
+        package = 'voice/backend/gateway'
+        self.assertEqual(inventory['gateway'], [[package, name], [package, name + '/204'],
+                                                [package, name + '/503']])
+        events = [{'Package': package, 'Test': test, 'Action': action}
+                  for _, test in inventory['gateway'] for action in ('run', 'pass')]
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertFalse(receipts.verify_required(events, inventory['gateway'], 0))
+        events[-2]['Action'] = 'skip'
+        self.assertTrue(receipts.verify_required(events, inventory['gateway'], 0))
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        parent = next(x for x in exceptions if x['service'] == 'gateway' and x['test'] == name)
+        child = next(x for x in exceptions if x['service'] == 'gateway' and x['test'] == helper)
+        self.assertEqual((parent['status'], parent['reason']), ('dedicated', 'backend-go-integration-pr'))
+        self.assertEqual((child['status'], child['reason']), ('subprocess', name))
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        steps = workflow['jobs']['backend-go-integration-pr']['steps']
+        test = next(step for step in steps if step.get('name') == 'Gateway live leave diagnostic')
+        self.assertIn("matrix.service == 'gateway'", test['if'])
+        self.assertIn(name, test['run'])
+        self.assertIn('gateway_leave_diagnostic_required.json', test['run'])
+        self.assertIn('--reject-skips', test['run'])
+        from go_integration_source_audit import audit
+        full = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))
+        for broken in ([x for x in exceptions if x is not parent],
+                       [dict(x, status='unresolved', reason='missing proof') if x is parent else x
+                        for x in exceptions],
+                       [dict(x, reason='TestUnrelated') if x is child else x for x in exceptions]):
+            with self.assertRaises(ValueError):
+                audit(ROOT, full, broken)
 
     def test_file_matrix_requires_pdf_runtime_and_real_renderer(self):
         import yaml
@@ -170,6 +206,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 audit.audit(root, inventory, [dict(exceptions[0], source='wrong.go')])
             with self.assertRaises(ValueError):
                 audit.audit(root, inventory, [dict(exceptions[0], status='dedicated', reason='made-up-job')])
+            with self.assertRaises(ValueError):
+                audit.audit(root, inventory, [dict(exceptions[0], status='subprocess', reason='TestCovered')])
             path.write_text(path.read_text(encoding='utf-8') + 'func TestNew(t *testing.T) {}\n', encoding='utf-8')
             with self.assertRaises(ValueError):
                 audit.audit(root, inventory, exceptions)

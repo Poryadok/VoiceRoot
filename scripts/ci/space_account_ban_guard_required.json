@@ -2,6 +2,7 @@
   "space": [
     ["voice/backend/space/internal/store", "TestAccountBanCannotSucceedWithoutCompleteOwnerCapture"],
     ["voice/backend/space/internal/store", "TestNative51CreatorBornCurrentSchema"],
+    ["voice/backend/space/internal/store", "TestNative51ProofDiagnosticEnums"],
     ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift"],
     ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/serving_login_needs_no_private_schema_access"],
     ["voice/backend/space/internal/store", "TestAccountBanCatalogRejectsSemanticDrift/guard_predicate"],
