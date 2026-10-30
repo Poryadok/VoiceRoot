@@ -26,7 +26,8 @@ class GoAcquisitionTests(unittest.TestCase):
         fixture_mod.write_bytes(b'fixture')
         self.mod_sum = dependencies._gomod_sum(fixture_mod)
         self.sums.write_text('example.test/dependency v1.0.0 h1:zip\n'
-                             'example.test/dependency v1.0.0/go.mod ' + self.mod_sum + '\n', encoding='utf-8')
+                             'example.test/dependency v1.0.0/go.mod ' + self.mod_sum + '\n'
+                             'example.test/Extra v1.0.0/go.mod ' + self.mod_sum + '\n', encoding='utf-8')
         self.source = {'head': 'a' * 40}
         self.verify_status = 0
 
@@ -36,6 +37,11 @@ class GoAcquisitionTests(unittest.TestCase):
         if command[-1] == 'verify':
             return SimpleNamespace(returncode=self.verify_status, stdout=b'all modules verified\n', stderr=b'')
         if command[-5:] == ['list', '-deps', '-test', '-json', './...']:
+            graph = Path(kwargs['env']['GOMODCACHE']) / 'cache/download/example.test/!extra/@v'
+            graph.mkdir(parents=True)
+            (graph / 'v1.0.0.mod').write_bytes(b'fixture')
+            (graph / 'v1.0.0.info').write_bytes(b'info')
+            (graph / 'v2.0.0.mod').write_bytes(b'unbound')
             module = {'Path': 'example.test/dependency', 'Version': 'v1.0.0',
                       'Sum': 'h1:zip', 'GoModSum': self.mod_sum}
             kwargs['stdout'].write((json.dumps({'ImportPath': 'example.test/dependency', 'Module': module}) + '\n').encode())
@@ -63,8 +69,10 @@ class GoAcquisitionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'incomplete')
         self.assertEqual(result['module_count'], 1)
         with tarfile.open(self.base / 'output/download-cache.tar') as archive:
-            self.assertEqual(len(archive.getmembers()), 4)
+            self.assertEqual(len(archive.getmembers()), 6)
             self.assertTrue(all(member.name.startswith('cache/download/') for member in archive.getmembers()))
+            self.assertIn('cache/download/example.test/!extra/@v/v1.0.0.mod', archive.getnames())
+            self.assertNotIn('cache/download/example.test/!extra/@v/v2.0.0.mod', archive.getnames())
 
     def test_rejects_download_missing_from_captured_go_sum(self):
         self.sums.write_text('example.test/dependency v1.0.0 h1:wrong\n'

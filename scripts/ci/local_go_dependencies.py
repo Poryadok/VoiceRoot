@@ -27,6 +27,21 @@ def _gomod_sum(path):
     return 'h1:' + base64.b64encode(hashlib.sha256(line).digest()).decode('ascii')
 
 
+def _unescape_go_cache(value):
+    result = []
+    index = 0
+    while index < len(value):
+        if value[index] == '!':
+            index += 1
+            if index == len(value) or not 'a' <= value[index] <= 'z':
+                raise ValueError('invalid escaped Go cache path')
+            result.append(value[index].upper())
+        else:
+            result.append(value[index])
+        index += 1
+    return ''.join(result)
+
+
 def _json_stream(raw):
     text = raw.decode('utf-8')
     decoder = json.JSONDecoder()
@@ -182,6 +197,32 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
             entries[relative] = path
     if versions != set(required):
         raise ValueError('Go dependency download inventory is incomplete')
+    # Go's pruned module graph may still require go.mod files for modules whose
+    # packages are not selected. Preserve only graph metadata authenticated by
+    # this module's captured go.sum; never copy arbitrary host cache entries.
+    if download_root.exists():
+        for path in sorted(download_root.rglob('*.mod')):
+            relative_path = path.relative_to(download_root)
+            parts = relative_path.parts
+            if len(parts) < 3 or parts[-2] != '@v':
+                continue
+            if not stat.S_ISREG(path.lstat().st_mode) or download_root not in path.resolve().parents:
+                raise ValueError('invalid Go module graph metadata')
+            module_name = _unescape_go_cache('/'.join(parts[:-2]))
+            version_name = _unescape_go_cache(parts[-1][:-4])
+            value = _gomod_sum(path)
+            if (module_name, version_name + '/go.mod', value) not in sums:
+                continue
+            relative = relative_path.as_posix()
+            if relative in entries and entries[relative] != path:
+                raise ValueError('duplicate Go module graph metadata')
+            entries[relative] = path
+            mod_sums[path] = value
+            info = path.with_suffix('.info')
+            if info.exists():
+                if not stat.S_ISREG(info.lstat().st_mode) or download_root not in info.resolve().parents:
+                    raise ValueError('invalid Go module graph information')
+                entries[info.relative_to(download_root).as_posix()] = info
     archive_path = output / 'download-cache.tar'
     with archive_path.open('xb') as raw, tarfile.open(fileobj=raw, mode='w') as tar:
         for relative, path in sorted(entries.items()):
