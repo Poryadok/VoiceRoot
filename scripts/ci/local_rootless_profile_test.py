@@ -38,14 +38,19 @@ class RootlessProfileTests(unittest.TestCase):
 
     def fixture(self):
         labels = {'voice.ci.run': 'voiceci-' + 'a' * 32, 'voice.ci.kind': 'container'}
-        volumes = {'/home/rootless/.local/share/docker': 'data-volume', '/var/lib/docker': 'legacy-volume'}
+        volumes = {'/home/rootless/.local/share/docker': 'data-volume', '/var/lib/docker': 'legacy-volume',
+                   '/run/user/1000': 'socket-volume'}
         host = copy.deepcopy(profile.HOST_DEFAULTS)
         host.update({'NetworkMode': 'owned-network', 'MaskedPaths': list(profile.MASKED_PATHS),
                      'ReadonlyPaths': list(profile.READONLY_PATHS),
                      'Mounts': [{'Type': 'volume', 'Source': value, 'Target': key} for key, value in volumes.items()]})
         config = copy.deepcopy(profile.CONFIG_DEFAULTS)
-        config.update({'Hostname': 'b' * 12, 'Image': profile.IMAGE, 'User': 'rootless', 'Env': list(profile.ENV),
-                       'Cmd': list(profile.COMMAND), 'Entrypoint': ['dockerd-entrypoint.sh'], 'Labels': labels})
+        env = [entry for entry in profile.ENV if not entry.startswith('DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=')]
+        env.append('DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=')
+        config.update({'Hostname': 'b' * 12, 'Image': profile.IMAGE, 'User': 'rootless', 'Env': env,
+                       'Cmd': ['dockerd', '--storage-driver=vfs', '--iptables=false', '--ip-masq=false',
+                               '--host=unix:///run/user/1000/docker.sock'],
+                       'Entrypoint': ['dockerd-entrypoint.sh'], 'Labels': labels})
         item = {'Id': 'b' * 64, 'Name': '/owned-daemon', 'Image': profile.IMAGE,
                 'Config': config,
                 'HostConfig': host,

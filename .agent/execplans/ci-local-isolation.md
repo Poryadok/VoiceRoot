@@ -29,6 +29,25 @@ it can issue a handoff receipt.
 - A bounded endpoint resolver rejects remote or ambiguous Docker contexts; a
   real wrong-daemon creator request was rejected before container creation.
   The resolver does not establish helper provenance or complete admission.
+- The current unintegrated creator uses only a Unix socket in an owned volume.
+  Its freshly built binary and selected-field validator passed a private probe:
+  a separate owned client reached the socket, TCP ports 2375 and 2376 refused
+  connections, and all exact owned resources were absent after cleanup. This is
+  feasibility, not a journaled lifecycle or an exclusive-access guarantee.
+- A separate owned client also used testcontainers-go v0.35.0 to create, execute
+  in, and remove an inner container over that socket. Its image was preloaded
+  and Ryuk was disabled for the disposable inner daemon; Java, Compose,
+  concurrency and crash recovery remain unverified for this profile.
+- The Unix daemon profile now has an ownership-journal creation primitive. A
+  real Docker probe recovered an already-created daemon after a simulated lost
+  response, started it, and served an owned client running a Go Testcontainers
+  probe. All six journaled resources were removed. The image load used a direct
+  experimental exec; creator authentication, socket access, other interruption
+  states and a fully journaled workload remain separate requirements. This
+  primitive is not preflight proof.
+- A synthetic Compose project also started and removed one network-disabled
+  service on the journaled private daemon. Compose ran via direct experimental
+  exec, so this does not establish the Voice Compose runner or its recovery.
 - The tracker records one Windows bind/volume read measurement and one
   network-isolated Go compilation comparison in comments c63–c64. They are
   single paired measurements, not general performance guarantees.
@@ -96,6 +115,10 @@ it can issue a handoff receipt.
 - [x] Real private-daemon feasibility and storage benchmarks recorded.
 - [x] Build and exercise a bounded rootless creator with private cgroup
   namespace and selected-field inspection.
+- [x] Exercise a Unix-socket-only private daemon with a separate owned client
+  and confirm the Docker API is not listening on TCP 2375 or 2376.
+- [x] Journal the daemon creation intent and reconcile an already-visible,
+  exactly inspected Unix-profile container after a simulated lost response.
 - [x] Recover an already-visible, exactly verified resource after a lost create
   response; a real-Docker check preserved another fixture and a sentinel.
 - [ ] Generic private-daemon ownership, client execution and recovery.
@@ -107,6 +130,9 @@ it can issue a handoff receipt.
   Testcontainers resources cannot be reliably attributed to the parent run by
   labels alone. Its narrow Docker host profile and recovery still require
   implementation and review.
+- Prefer the Unix-socket-only profile for further integration. The owned socket
+  volume and its clients need source-bound identity, lifecycle journaling, and
+  access controls; a Docker host administrator can still access host resources.
 - A local diagnostic is always incomplete until the complete selected plan is
   executed and its evidence is bound; GitHub merge-candidate checks remain
   mandatory.
@@ -115,13 +141,13 @@ it can issue a handoff receipt.
 
 - Rootless daemon confinement and host Docker API configuration require an
   independent security review and failure injection before use as a scheduler.
-- The daemon's TCP endpoint is unauthenticated on its internal network. Safe
-  use requires exclusive daemon/network control or equivalent enforcement
-  throughout each operation; a cooperative lock and repeated inspections do
-  not prevent an outside client attaching temporarily. The scheduler must also
-  derive peer identities from the locked journal, verify the actual peers, and
-  bind the daemon's network endpoint and IP. Current snapshots do not establish
-  these properties.
+- The earlier TCP profile exposed an unauthenticated endpoint to network peers.
+  The Unix-only profile removes that listener but its shared socket volume is
+  still accessible to an authorized Docker host administrator. A cooperative
+  lock and repeated snapshots cannot exclude other Docker clients. The
+  scheduler must derive resource and peer identities from its locked journal,
+  verify the actual peers, and bind the socket volume and daemon identity;
+  current snapshots do not establish those properties.
 - Existing experiments use private dependency seeds whose provenance is not
   sufficient for a complete preflight receipt.
 - Some selected integration tests need owner-provided fixture or authority

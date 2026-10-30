@@ -13,6 +13,7 @@ import subprocess
 import uuid
 
 from local_heavy_slots import _try_lock
+import local_rootless_profile as rootless
 
 
 class OwnershipError(Exception):
@@ -156,6 +157,20 @@ class DockerCLI:
         except (ValueError, KeyError, TypeError, AttributeError):
             raise OwnershipError('Docker image inspection was invalid') from None
 
+    def verify_rootless(self, item, labels, running):
+        try:
+            rows = json.loads(self._call('container', 'inspect', item['id']))
+            if not isinstance(rows, list) or len(rows) != 1:
+                raise ValueError('invalid inspection inventory')
+            raw = rows[0]
+            rootless.verify_selected_fields(raw, item['id'], item['name'], item['network'], item['mounts'], labels)
+            if raw['State']['Running'] is not running:
+                raise ValueError('container state changed during inspection')
+            if running:
+                rootless.verify_runtime_network(raw, item['network'])
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise OwnershipError('rootless container profile differs') from None
+
     def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None):
         options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
         for target, volume in sorted(mounts.items()):
@@ -273,6 +288,8 @@ class OwnedRun:
                 keys |= {'image', 'network', 'mounts', 'ports'}
                 if 'command' in item:
                     keys.add('command')
+                if 'profile' in item:
+                    keys.add('profile')
             if (set(item) != keys
                     or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
@@ -295,6 +312,10 @@ class OwnedRun:
                 self._validate_mounts_ports(item['mounts'], item['ports'])
                 if 'command' in item:
                     self._validate_command(item['command'])
+                if 'profile' in item and (item['profile'] != 'rootless-unix-v1' or 'command' in item
+                        or item['image'] != rootless.IMAGE or set(item['mounts']) != rootless.TARGETS
+                        or len(set(item['mounts'].values())) != 3 or item['ports']):
+                    raise OwnershipError('invalid rootless container profile')
             names.add(item['name'])
         networks = {item['id'] for item in state['resources'] if item['kind'] == 'network' and item['id']}
         volumes = {item['name'] for item in state['resources'] if item['kind'] == 'volume'}
@@ -358,6 +379,8 @@ class OwnedRun:
         if item['kind'] == 'container' and 'command' in item and (
                 observed.get('command') != item['command'] or observed.get('entrypoint') != []):
             raise OwnershipError('Docker container command changed')
+        if item['kind'] == 'container' and item.get('profile') == 'rootless-unix-v1':
+            self.engine.verify_rootless(item, labels, observed.get('running'))
         return observed
 
     def reconcile_creation(self, name):
@@ -453,6 +476,51 @@ class OwnedRun:
         item['id'] = identifier
         self._inspect(item)
         item['state'] = 'ready'
+        self._save()
+        return item['name']
+
+    def create_rootless_container(self, network_name, mounts, creator):
+        """Journal a narrow profile; caller must authenticate creator and socket access.
+
+        This primitive alone is not a preflight receipt or complete isolation.
+        """
+        self._validate()
+        self._check_daemon()
+        if (not callable(creator) or not isinstance(mounts, dict) or set(mounts) != rootless.TARGETS
+                or any(not isinstance(value, str) for value in mounts.values())
+                or len(set(mounts.values())) != 3
+                or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
+                       for r in self.state['resources'])):
+            raise OwnershipError('invalid rootless request or unresolved operation')
+        self._validate_mounts_ports(mounts, [])
+        networks = [r for r in self.state['resources'] if r['kind'] == 'network'
+                    and r['name'] == network_name and r['state'] == 'ready']
+        volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
+        if len(networks) != 1 or any(name not in volumes for name in mounts.values()):
+            raise OwnershipError('rootless network or volumes are not owned by this run')
+        image = self.engine.image(rootless.IMAGE)
+        if (not isinstance(image, dict) or image.get('id') != rootless.IMAGE
+                or image.get('entrypoint') != ['dockerd-entrypoint.sh']
+                or not isinstance(image.get('volumes'), list) or not set(image['volumes']).issubset(mounts)):
+            raise OwnershipError('rootless image differs or declares foreign volumes')
+        self._inspect(networks[0])
+        for name in mounts.values():
+            self._inspect(volumes[name])
+        nonce = uuid.uuid4().hex
+        item = {'kind': 'container', 'name': self.run_id + '-container-' + nonce, 'nonce': nonce,
+                'id': '', 'state': 'creating', 'image': rootless.IMAGE, 'network': networks[0]['id'],
+                'mounts': dict(mounts), 'ports': [], 'profile': 'rootless-unix-v1'}
+        self.state['resources'].append(item)
+        self._save()
+        request = {'name': item['name'], 'run_id': self.run_id, 'nonce': nonce, 'daemon': self.state['daemon'],
+                   'network': item['network'], 'data_volume': mounts['/home/rootless/.local/share/docker'],
+                   'legacy_volume': mounts['/var/lib/docker'], 'socket_volume': mounts['/run/user/1000']}
+        identifier = creator(request)
+        self._check_daemon()
+        if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
+            raise OwnershipError('rootless container identity is invalid')
+        self._inspect(dict(item, id=identifier))
+        item['id'], item['state'] = identifier, 'ready'
         self._save()
         return item['name']
 

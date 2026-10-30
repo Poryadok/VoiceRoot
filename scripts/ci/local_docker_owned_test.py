@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from local_docker_owned import DockerCLI, OwnedRun, OwnershipError
+import local_rootless_profile as rootless
 
 
 class FakeEngine:
@@ -18,6 +19,8 @@ class FakeEngine:
         self.uncertain_start = False
         self.uncertain_exec = False
         self.uncertain_stop = False
+        self.rootless_profile_valid = True
+        self.rootless_verifications = 0
 
     def daemon(self):
         return self.identity
@@ -44,7 +47,15 @@ class FakeEngine:
         return any(key[0] == kind and value['id'] == identifier for key, value in self.resources.items())
 
     def image(self, identifier):
+        if identifier == rootless.IMAGE:
+            return {'id': identifier, 'volumes': ['/home/rootless/.local/share/docker', '/var/lib/docker'],
+                    'entrypoint': ['dockerd-entrypoint.sh']}
         return {'id': identifier, 'volumes': ['/data'], 'entrypoint': []}
+
+    def verify_rootless(self, item, labels, running):
+        self.rootless_verifications += 1
+        if not self.rootless_profile_valid:
+            raise OwnershipError('rootless profile differs')
 
     def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None):
         identifier = 'c' + name.encode().hex().ljust(63, '0')[:63]
@@ -113,6 +124,109 @@ class RootlessEndpointTests(unittest.TestCase):
 
 
 class OwnedRunTests(unittest.TestCase):
+    def test_rootless_rejects_foreign_or_aliased_volumes_before_creator(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+                variants = []
+                foreign = dict(mounts)
+                foreign['/run/user/1000'] = 'foreign-volume'
+                variants.append(foreign)
+                aliased = dict(mounts)
+                aliased['/run/user/1000'] = aliased['/var/lib/docker']
+                variants.append(aliased)
+                for variant in variants:
+                    with self.subTest(mounts=variant), self.assertRaises(OwnershipError):
+                        owner.create_rootless_container(network, variant,
+                                                       lambda request: self.fail('creator must not run'))
+                self.assertEqual(len(owner.state['resources']), 4)
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_rootless_creation_is_journaled_and_profile_checked_before_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+
+                def creator(request):
+                    persisted = json.loads((owner.directory / 'ownership.json').read_text())
+                    entry = persisted['resources'][-1]
+                    self.assertEqual((entry['state'], entry['id'], entry['profile']),
+                                     ('creating', '', 'rootless-unix-v1'))
+                    self.assertEqual(request['daemon'], owner.state['daemon'])
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': entry['nonce'],
+                              'voice.ci.kind': 'container'}
+                    return engine.create_container(entry['name'], labels, rootless.IMAGE,
+                                                   entry['network'], mounts, [])
+
+                name = owner.create_rootless_container(network, mounts, creator)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'ready')
+                owner.start_container(name)
+                self.assertGreaterEqual(engine.rootless_verifications, 3)
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_rootless_lost_create_response_recovery_requires_exact_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+
+                def lost_response(request):
+                    entry = owner.state['resources'][-1]
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': entry['nonce'],
+                              'voice.ci.kind': 'container'}
+                    engine.create_container(entry['name'], labels, rootless.IMAGE, entry['network'], mounts, [])
+                    raise OwnershipError('response lost')
+
+                with self.assertRaises(OwnershipError):
+                    owner.create_rootless_container(network, mounts, lost_response)
+                name = owner.state['resources'][-1]['name']
+                engine.rootless_profile_valid = False
+                with self.assertRaises(OwnershipError):
+                    owner.reconcile_creation(name)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'creating')
+                engine.rootless_profile_valid = True
+                owner.reconcile_creation(name)
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_rootless_failed_post_create_inspection_keeps_reconcilable_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                mounts = {target: owner.create_resource('volume') for target in sorted(rootless.TARGETS)}
+
+                def creator(request):
+                    item = owner.state['resources'][-1]
+                    labels = {'voice.ci.run': owner.run_id, 'voice.ci.resource': item['nonce'],
+                              'voice.ci.kind': 'container'}
+                    return engine.create_container(item['name'], labels, rootless.IMAGE,
+                                                   item['network'], mounts, [])
+
+                engine.rootless_profile_valid = False
+                with self.assertRaises(OwnershipError):
+                    owner.create_rootless_container(network, mounts, creator)
+                item = owner.state['resources'][-1]
+                self.assertEqual((item['state'], item['id']), ('creating', ''))
+                engine.rootless_profile_valid = True
+                owner.reconcile_creation(item['name'])
+                owner.cleanup()
+            finally:
+                owner.close()
     def test_owned_execution_can_stream_input_without_a_host_bind_mount(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = FakeEngine()

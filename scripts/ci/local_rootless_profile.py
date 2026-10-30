@@ -21,14 +21,14 @@ READONLY_PATHS = frozenset({
 })
 ENV = frozenset({
     'DOCKERD_ROOTLESS_ROOTLESSKIT_NET=none', 'DOCKER_TLS_CERTDIR=',
-    'DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=-p 0.0.0.0:2375:2375/tcp',
+    'DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=',
     'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
     'DOCKER_VERSION=27.5.1', 'DOCKER_BUILDX_VERSION=0.20.1', 'DOCKER_COMPOSE_VERSION=2.33.0',
     'DIND_COMMIT=c43aa0b6aa7c88343f0951ba9a39c69aa51c54ef',
 })
 COMMAND = ('dockerd', '--storage-driver=vfs', '--iptables=false', '--ip-masq=false',
-           '--host=unix:///run/user/1000/docker.sock', '--host=tcp://0.0.0.0:2375', '--tls=false')
-TARGETS = frozenset({'/home/rootless/.local/share/docker', '/var/lib/docker'})
+           '--host=unix:///run/user/1000/docker.sock')
+TARGETS = frozenset({'/home/rootless/.local/share/docker', '/var/lib/docker', '/run/user/1000'})
 CONFIG_DEFAULTS = {
     'Domainname': '', 'AttachStdin': False, 'AttachStdout': False, 'AttachStderr': False,
     'ExposedPorts': {'2375/tcp': {}, '2376/tcp': {}}, 'Tty': False,
@@ -77,7 +77,7 @@ def verify_selected_fields(item, identifier, name, network, volumes, labels):
         if (not isinstance(item, dict) or not isinstance(identifier, str) or
                 not re.fullmatch(r'[0-9a-f]{64}', identifier) or not isinstance(name, str) or not name or
                 not isinstance(network, str) or not network or not isinstance(volumes, dict) or
-                set(volumes) != TARGETS or len(set(volumes.values())) != 2 or
+                set(volumes) != TARGETS or len(set(volumes.values())) != 3 or
                 any(not isinstance(v, str) or not v for v in volumes.values()) or
                 not isinstance(labels, dict) or not labels or
                 item['Id'] != identifier or item['Name'] != '/' + name or item['Image'] != IMAGE):
@@ -104,7 +104,7 @@ def verify_selected_fields(item, identifier, name, network, volumes, labels):
             raise ValueError('rootless resource or system path profile differs')
         configured = host['Mounts']
         mounts = item['Mounts']
-        if not isinstance(configured, list) or not isinstance(mounts, list) or len(configured) != 2 or len(mounts) != 2:
+        if not isinstance(configured, list) or not isinstance(mounts, list) or len(configured) != 3 or len(mounts) != 3:
             raise ValueError('rootless volume inventory differs')
         expected = {(target, volume) for target, volume in volumes.items()}
         config_mounts = {(entry['Target'], entry['Source']) for entry in configured

@@ -44,6 +44,7 @@ type spec struct {
 	Network string `json:"network"`
 	Data    string `json:"data_volume"`
 	Legacy  string `json:"legacy_volume"`
+	Socket  string `json:"socket_volume"`
 }
 
 func (s spec) validate() error {
@@ -53,7 +54,8 @@ func (s spec) validate() error {
 		return errors.New("invalid rootless identity")
 	}
 	volume := regexp.MustCompile(`^` + regexp.QuoteMeta(s.RunID) + `-volume-[0-9a-f]{32}$`)
-	if !volume.MatchString(s.Data) || !volume.MatchString(s.Legacy) || s.Data == s.Legacy {
+	if !volume.MatchString(s.Data) || !volume.MatchString(s.Legacy) || !volume.MatchString(s.Socket) ||
+		s.Data == s.Legacy || s.Socket == s.Data || s.Socket == s.Legacy {
 		return errors.New("invalid rootless volume identities")
 	}
 	return nil
@@ -64,9 +66,9 @@ func buildConfig(s spec) (*container.Config, *container.HostConfig) {
 	config := &container.Config{
 		Image: rootlessImage, User: "rootless", Entrypoint: []string{"dockerd-entrypoint.sh"},
 		Env: []string{"DOCKERD_ROOTLESS_ROOTLESSKIT_NET=none", "DOCKER_TLS_CERTDIR=",
-			"DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=-p 0.0.0.0:2375:2375/tcp"},
+			"DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS="},
 		Cmd: []string{"dockerd", "--storage-driver=vfs", "--iptables=false", "--ip-masq=false",
-			"--host=unix:///run/user/1000/docker.sock", "--host=tcp://0.0.0.0:2375", "--tls=false"},
+			"--host=unix:///run/user/1000/docker.sock"},
 		Labels: map[string]string{"voice.ci.run": s.RunID, "voice.ci.resource": s.Nonce, "voice.ci.kind": "container"},
 	}
 	host := &container.HostConfig{
@@ -76,6 +78,7 @@ func buildConfig(s spec) (*container.Config, *container.HostConfig) {
 		Mounts: []mount.Mount{
 			{Type: mount.TypeVolume, Source: s.Data, Target: "/home/rootless/.local/share/docker"},
 			{Type: mount.TypeVolume, Source: s.Legacy, Target: "/var/lib/docker"},
+			{Type: mount.TypeVolume, Source: s.Socket, Target: "/run/user/1000"},
 		},
 	}
 	return config, host
@@ -101,7 +104,7 @@ func parseSpec(input io.Reader) (spec, error) {
 		return s, errors.New("invalid rootless request")
 	}
 	fields := map[string]*string{"name": &s.Name, "run_id": &s.RunID, "nonce": &s.Nonce, "daemon": &s.Daemon,
-		"network": &s.Network, "data_volume": &s.Data, "legacy_volume": &s.Legacy}
+		"network": &s.Network, "data_volume": &s.Data, "legacy_volume": &s.Legacy, "socket_volume": &s.Socket}
 	seen := make(map[string]bool, len(fields))
 	for decoder.More() {
 		key, err := decoder.Token()
@@ -128,7 +131,7 @@ func parseSpec(input io.Reader) (spec, error) {
 	return s, nil
 }
 
-func run(input io.Reader, output io.Writer) error {
+func run(input io.Reader, output io.Writer) (resultErr error) {
 	if !localDockerHost(os.Getenv("DOCKER_HOST")) || os.Getenv("DOCKER_CONTEXT") != "" ||
 		os.Getenv("DOCKER_TLS_VERIFY") != "" || os.Getenv("DOCKER_CERT_PATH") != "" || os.Getenv("DOCKER_API_VERSION") != "" {
 		return errors.New("explicit local Docker socket is required")
@@ -139,19 +142,23 @@ func run(input io.Reader, output io.Writer) error {
 	}
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		return errors.New("Docker client unavailable")
+		return errors.New("docker client unavailable")
 	}
-	defer cli.Close()
+	defer func() {
+		if err := cli.Close(); err != nil && resultErr == nil {
+			resultErr = errors.New("docker client close failed")
+		}
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	info, err := cli.Info(ctx)
 	if err != nil || info.ID != s.Daemon || info.OSType != "linux" {
-		return errors.New("Docker daemon identity differs")
+		return errors.New("docker daemon identity differs")
 	}
 	config, host := buildConfig(s)
 	created, err := cli.ContainerCreate(ctx, config, host, nil, nil, s.Name)
 	if err != nil || !hex64.MatchString(created.ID) {
-		return errors.New("Docker create outcome uncertain")
+		return errors.New("docker create outcome uncertain")
 	}
 	_, err = fmt.Fprintln(output, created.ID)
 	return err
