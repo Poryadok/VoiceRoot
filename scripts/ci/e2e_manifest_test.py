@@ -14,6 +14,10 @@ SCRIPT = ROOT / 'scripts/ci/e2e-manifest.sh'
 
 
 class ManifestTest(unittest.TestCase):
+    def test_compose_flutter_json_is_not_contaminated_by_dependency_resolution(self):
+        script = (ROOT / 'scripts/ci/compose-e2e-smoke.sh').read_text(encoding='utf-8')
+        self.assertLess(script.index('flutter pub get'), script.index('flutter test --no-pub --reporter json'))
+
     def test_changed_live_flutter_suites_are_selected_in_manifest_order(self):
         import e2e_manifest
         with tempfile.TemporaryDirectory() as directory:

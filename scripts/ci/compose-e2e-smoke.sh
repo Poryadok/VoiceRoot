@@ -87,6 +87,7 @@ for pattern in \
 done
 
 cd "${ROOT}/src/frontend"
+flutter pub get
 ARGS=()
 for f in "${FLUTTER_TESTS[@]}"; do
   ARGS+=("${f}")
@@ -212,7 +213,7 @@ mm_accept_game_id="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 python3 "${ROOT}/scripts/ci/compose_mm_accept_fixture.py" create "${mm_accept_game_id}"
 flutter_events="$(mktemp)"
 set +e
-flutter test --reporter json --concurrency=1 "${ARGS[@]}" \
+flutter test --no-pub --reporter json --concurrency=1 "${ARGS[@]}" \
   --dart-define=VOICE_RUN_LIVE_INTEGRATION=true \
   --dart-define=VOICE_COMPOSE_MM_ACCEPT_GAME_ID="${mm_accept_game_id}" \
   --dart-define=VOICE_API_BASE_URL="${VOICE_API_BASE_URL}" \
