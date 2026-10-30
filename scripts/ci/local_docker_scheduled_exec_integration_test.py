@@ -15,6 +15,8 @@ GO_IMAGE = 'golang@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae
 sys.path.insert(0, str(ROOT / 'scripts/ci'))
 from local_docker_owned import DockerCLI, OwnedRun
 from local_docker_scheduled import ScheduledRun
+import local_go_execution
+import local_source_snapshot
 
 
 def setup(owner, image):
@@ -106,6 +108,39 @@ def main():
             with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
                 if other.run.execute(other_name, ['go', 'version'], out, err, 30) != 0:
                     raise RuntimeError('other run cannot execute after recovery')
+            fixture = base / 'source-repository'
+            fixture.mkdir()
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(fixture), *args], stderr=subprocess.PIPE)
+            git('init', '-q')
+            git('config', 'user.name', 'CI Fixture')
+            git('config', 'user.email', 'ci-fixture@example.invalid')
+            (fixture / 'module').mkdir()
+            (fixture / 'module/go.mod').write_text('module example.test/module\n\ngo 1.26\n', encoding='utf-8')
+            (fixture / 'module/probe_test.go').write_text(
+                'package probe\nimport "testing"\nfunc TestOwnedGoDiagnostic(t *testing.T) {}\n', encoding='utf-8')
+            git('add', '.')
+            git('commit', '-qm', 'fixture')
+            head = git('rev-parse', 'HEAD').decode('ascii').strip()
+            (fixture / 'module/dirty.txt').write_bytes(b'captured dirty source\r\n')
+            source = local_source_snapshot.capture(fixture, head)
+            source_copy = local_source_snapshot.materialize(fixture, source, base / 'source-copy')
+            digest = local_go_execution.transfer_source(other.run, other_name, fixture, source, source_copy,
+                                                        base / 'source.tar')
+            report = local_go_execution.run_package_diagnostic(other.run, other_name, fixture, source, source_copy,
+                digest, 'module', ['example.test/module'], base / 'go-diagnostic')
+            if report['status'] != 'incomplete' or report['tests']['passed'] != 1 or report['tests']['skipped']:
+                raise RuntimeError('unexpected owned Go diagnostic result')
+            with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+                if other.run.execute(other_name, ['touch', '/workspace/source/module/injected.go'], out, err, 30) != 0:
+                    raise RuntimeError('cannot inject extra source')
+            try:
+                local_go_execution._verify_workspace(other.run, other_name, fixture, source, digest)
+            except ValueError as error:
+                if 'workspace changed' not in str(error):
+                    raise
+            else:
+                raise RuntimeError('extra container source was not rejected')
             for item in other.run.state['resources']:
                 other.run._inspect(item)
             for item in sentinel.state['resources']:
