@@ -522,7 +522,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('f13-historical-replay', checks('scripts/ci/local_flutter_execution.py'))
         for name in ('local_go_dependencies.py', 'local_go_dependencies_test.py',
                      'local_go_execution.py', 'local_go_execution_test.py',
-                     'local_go_plan.py', 'local_go_plan_test.py', 'local_source_snapshot.py'):
+                     'local_go_plan.py', 'local_go_plan_test.py', 'local_source_snapshot.py',
+                     'local_current_diff.py', 'local_current_diff_test.py'):
             with self.subTest(local_go=name):
                 self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
                 self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
@@ -850,6 +851,21 @@ class AffectedCheckPlanTests(unittest.TestCase):
                       'migrated50', 'trusted50', 'trusted51', 'complete'):
             self.assertIn('TestCommittedPhaseFailureNeverAutoResumes/' + phase, required)
         self.assertIn('job.services.postgres.ports', test['env']['NATIVE_INSTALLER_TEST_ADMIN_URL'])
+
+    def test_over100_proof_inputs_select_the_gated_space_job(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        for path in ('src/backend/space/internal/store/account_ban.go',
+                     'src/backend/migrations/space_db/000044_native_membership_readiness.up.sql',
+                     'src/backend/pkg/spaceaccountcapture/capture.go',
+                     'protos/voice/space/v1/space.proto',
+                     'scripts/ci/space_over100_proof.sh',
+                     'scripts/ci/space_over100_consumer_required.json'):
+            with self.subTest(path=path):
+                matched = planner.match_filters(rules, [path])
+                matrix = planner.resolve_go_matrix(ROOT, planner.effective_filters(matched))
+                selected = planner.make_plan(matched, matrix)
+                self.assertIn('space-native-installer-integration', selected['checks'])
+                self.assertIn('space', selected['components']['go_integration'])
 
     def test_space_trusted50_requires_atomic_rollback_and_fences(self):
         import yaml

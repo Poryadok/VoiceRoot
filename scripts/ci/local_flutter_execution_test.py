@@ -58,6 +58,56 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'incomplete')
         self.assertTrue(result['unbound_inputs'])
 
+    def test_full_inventory_runs_browser_suites_only_in_chrome(self):
+        browser = self.root / 'src/frontend/test/browser_test.dart'
+        browser.write_text("@TestOn('browser')\nlibrary;\n", encoding='utf-8')
+        with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+            result = execution.run(self.root, self.head, self.output, 'flutter')
+        commands = [item['argv'] for item in result['commands'] if 'test' in item['argv']]
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertTrue(result['full_inventory'])
+        self.assertEqual(result['tests']['passed'], 2)
+        self.assertEqual(len(commands), 2)
+        self.assertIn('test/example_test.dart', commands[0])
+        self.assertNotIn('test/browser_test.dart', commands[0])
+        self.assertIn('test/browser_test.dart', commands[1])
+        self.assertIn('chrome', commands[1])
+
+    def test_large_inventory_is_batched_without_losing_or_repeating_suites(self):
+        suites = ['suite_' + str(index).zfill(4) + '_' + 'x' * 60 + '_test.dart'
+                  for index in range(300)]
+        batches = execution.suite_batches(r'C:\Flutter SDK\bin\flutter.bat', suites, 'vm')
+        self.assertGreater(len(batches), 1)
+        self.assertEqual([suite for _, _, batch in batches for suite in batch], suites)
+        self.assertEqual(len({label for label, _, _ in batches}), len(batches))
+        for _, command, batch in batches:
+            self.assertLessEqual(len(subprocess.list2cmdline(command).encode('utf-16-le')) // 2, 6000)
+            self.assertEqual([value for value in command if value.startswith('test/')],
+                             ['test/' + suite for suite in batch])
+        with self.assertRaises(ValueError):
+            execution.suite_batches('flutter', ['x' * 6000 + '_test.dart'], 'vm')
+
+    def test_multiple_batches_aggregate_events_and_fail_on_later_error(self):
+        other = 'another_' + 'x' * 45 + '_test.dart'
+        (self.root / 'src/frontend/test' / other).write_text('test source')
+        with mock.patch.object(execution, 'FLUTTER_COMMAND_LIMIT', 135):
+            with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+                result = execution.run(self.root, self.head, self.output, 'flutter')
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(result['tests']['passed'], 2)
+        self.assertEqual(len(result['tests']['suites']), 2)
+        self.assertEqual(set(result['tests']['event_sha256']), {'test-vm-001', 'test-vm-002'})
+
+        def fail_second(command, **kwargs):
+            if 'test' in command and 'test/example_test.dart' in command:
+                return subprocess.CompletedProcess(command, 2)
+            return self.fake_flutter(command, **kwargs)
+        with mock.patch.object(execution, 'FLUTTER_COMMAND_LIMIT', 135):
+            with mock.patch.object(execution, '_invoke', side_effect=fail_second):
+                failed = execution.run(self.root, self.head, self.output.parent / 'failed', 'flutter')
+        self.assertEqual(failed['status'], 'failed')
+        self.assertIn('test-vm-002 failed', failed['error'])
+
     def test_accessibility_capture_is_enabled_and_requires_both_owned_images(self):
         suite = 'accessibility_settings_capture_test.dart'
         (self.root / 'src/frontend/test' / suite).write_text('capture test')
@@ -83,6 +133,27 @@ class LocalFlutterExecutionTests(unittest.TestCase):
             missing = execution.run(self.root, self.head, self.output, 'flutter', selected=[suite])
         self.assertEqual(missing['status'], 'failed')
         self.assertNotIn('accessibility_captures', missing)
+
+    def test_accessibility_capture_is_validated_in_numbered_batch(self):
+        suite = 'accessibility_settings_capture_test.dart'
+        other = 'z' * 45 + '_test.dart'
+        for name in (suite, other):
+            (self.root / 'src/frontend/test' / name).write_text('test source')
+        def invoke(command, **kwargs):
+            result = self.fake_flutter(command, **kwargs)
+            if 'test/' + suite in command:
+                self.assertIn('--dart-define=VOICE_ACCESSIBILITY_CAPTURE=true', command)
+                directory = Path(kwargs['cwd']).parents[1] / 'tmp/anton122-accessibility'
+                directory.mkdir(parents=True)
+                for orientation in ('H', 'V'):
+                    (directory / ('accessibility-' + orientation + '.png')).write_bytes(b'\x89PNG\r\n\x1a\nfixture')
+            return result
+        with mock.patch.object(execution, 'FLUTTER_COMMAND_LIMIT', 160):
+            with mock.patch.object(execution, '_invoke', side_effect=invoke):
+                result = execution.run(self.root, self.head, self.output, 'flutter', selected=[suite, other])
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(len(result['accessibility_captures']), 2)
+        self.assertEqual(set(result['tests']['event_sha256']), {'test-vm-001', 'test-vm-002'})
 
     def test_failed_command_and_source_mutation_cannot_report_success(self):
         def fail(command, **kwargs):

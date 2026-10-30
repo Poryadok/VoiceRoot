@@ -61,7 +61,12 @@ gate. When the event base is stale, its ancestry and the candidate's actual
 parents and merge tree are checked before using the actual base. Job-level
 success does not prove every required Go matrix case ran; the inventory and
 member receipts described below are still required. Neither the comparison nor
-this gate is a local preflight receipt or release qualification. For a clean
+this gate is a local preflight receipt or release qualification. The local
+preflight runs the snapshot's current-diff validator against a synthetic commit
+with the captured HEAD as parent and records its output and source identity.
+That diagnostic checks the local tree against the requested base; it does not
+establish GitHub merge-candidate parents or merge-tree parity and cannot make
+the preflight pass. For a clean
 checkout of the exact candidate with Git, Bash, jq and Python available:
 
 ```bash

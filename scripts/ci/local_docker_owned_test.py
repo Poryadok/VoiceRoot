@@ -212,6 +212,23 @@ class OwnedRunTests(unittest.TestCase):
                         owner.load_canonical_rootless_image('daemon', archive, '0' * 64, image_id,
                                                             'alpine:3.17', None, None)
                     self.assertEqual(operation.call_count, 1)
+                    foreign, foreign_digest, foreign_id = oci_fixture(bad_tag=True)
+                    archive.write_bytes(foreign)
+                    with self.assertRaises(OwnershipError):
+                        owner.load_canonical_rootless_image('daemon', archive, foreign_digest, foreign_id,
+                                                            'alpine:3.17', None, None)
+                    self.assertEqual(operation.call_count, 1)
+                archive.write_bytes(raw)
+                self.assertEqual(list(owner.directory.glob('canonical-*.tar')), [])
+                def partial_failure(source, output, *args):
+                    output.write(b'partial archive')
+                    raise ValueError('source changed')
+                with patch('local_image_archive.sanitize_archive', side_effect=partial_failure):
+                    with patch.object(owner, 'load_rootless_image') as operation:
+                        with self.assertRaises(OwnershipError):
+                            owner.load_canonical_rootless_image('daemon', archive, digest, image_id,
+                                                                'alpine:3.17', None, None)
+                        operation.assert_not_called()
                 self.assertEqual(list(owner.directory.glob('canonical-*.tar')), [])
                 with patch.object(owner, 'load_rootless_image', side_effect=OwnershipError('load failed')):
                     with self.assertRaisesRegex(OwnershipError, 'load failed'):

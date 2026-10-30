@@ -641,6 +641,9 @@ captured source files and rejects added files or links outside its declared
 Flutter output paths after each command. Those output paths, the SDK and
 external package provenance remain unbound inputs; a successful diagnostic
 therefore cannot authorize a PR handoff.
+The full discovered inventory is divided into bounded VM and Chrome commands;
+each batch has its own event stream, and every required suite must appear in its
+assigned platform's results. This avoids Windows batch-command length limits.
 When tests skip, the diagnostic records each skipped identity and its matching
 sections in the captured E2E catalog; an empty section list remains unmapped.
 Catalog membership is not execution evidence and does not waive a skip.

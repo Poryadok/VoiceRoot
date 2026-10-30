@@ -62,6 +62,39 @@ def classify_suites(test_root, selected):
     return profiles
 
 
+FLUTTER_COMMAND_LIMIT = 6000
+
+
+def suite_batches(flutter, suites, platform):
+    """Keep explicit suite invocations below the Windows batch-command limit."""
+    if platform not in ('vm', 'chrome') or not suites:
+        raise ValueError('invalid Flutter suite batch')
+    batches, pending = [], []
+    def command(names):
+        prefix = [flutter, 'test', '--no-pub']
+        if platform == 'chrome':
+            prefix += ['--platform', 'chrome']
+        prefix += ['--reporter', 'json']
+        if platform == 'vm':
+            prefix += ['--concurrency=1']
+            if 'accessibility_settings_capture_test.dart' in names:
+                prefix += ['--dart-define=VOICE_ACCESSIBILITY_CAPTURE=true']
+        return prefix + ['test/' + name for name in names]
+    def fits(names):
+        return len(subprocess.list2cmdline(command(names)).encode('utf-16-le')) // 2 <= FLUTTER_COMMAND_LIMIT
+    for name in suites:
+        if not fits(pending + [name]):
+            if not pending or not fits([name]):
+                raise ValueError('Flutter suite path exceeds command limit')
+            batches.append(pending)
+            pending = []
+        pending.append(name)
+    if pending:
+        batches.append(pending)
+    return [('test-' + platform + (('-' + str(index + 1).zfill(3)) if len(batches) > 1 else ''),
+             command(batch), batch) for index, batch in enumerate(batches)]
+
+
 def directory_digest(root):
     """Hash all regular files in a private dependency cache, refusing links."""
     root = Path(root)
@@ -148,15 +181,9 @@ def run(root, head, output, flutter, selected=None):
               'unbound_inputs': ['Flutter SDK and external package provenance', 'generated and ambient inputs']}
     tests = []
     if profiles['vm']:
-        vm_args = [] if result['full_inventory'] else ['test/' + name for name in profiles['vm']]
-        capture_args = (['--dart-define=VOICE_ACCESSIBILITY_CAPTURE=true']
-                        if 'accessibility_settings_capture_test.dart' in profiles['vm'] else [])
-        tests.append(('test-vm', [flutter, 'test', '--no-pub', '--reporter', 'json',
-                                  '--concurrency=1', *capture_args, *vm_args], profiles['vm']))
+        tests.extend(suite_batches(flutter, profiles['vm'], 'vm'))
     if profiles['chrome']:
-        tests.append(('test-chrome', [flutter, 'test', '--no-pub', '--platform', 'chrome',
-                                      '--reporter', 'json',
-                                      *('test/' + name for name in profiles['chrome'])], profiles['chrome']))
+        tests.extend(suite_batches(flutter, profiles['chrome'], 'chrome'))
     # Captures and live-test switches are caller data, not this run's outputs.
     env = {key: value for key, value in os.environ.items()
            if not key.upper().startswith('VOICE_') and not key.upper().endswith('_CAPTURE_DIR')}
@@ -212,7 +239,7 @@ def run(root, head, output, flutter, selected=None):
                 result['tests']['skipped'].extend(summary['skipped'])
                 result['tests']['suites'].extend(summary['suites'])
                 result['tests']['event_sha256'][label] = hashlib.sha256(raw).hexdigest()
-                if label == 'test-vm' and 'accessibility_settings_capture_test.dart' in selected_suites:
+                if label.startswith('test-vm') and 'accessibility_settings_capture_test.dart' in selected_suites:
                     images = {}
                     for orientation in ('H', 'V'):
                         name = 'tmp/anton122-accessibility/accessibility-' + orientation + '.png'

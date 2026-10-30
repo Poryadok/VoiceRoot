@@ -53,6 +53,10 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureTrusted50Transition'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureOver100Cohort34'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanOver100Cohort50'):
+        'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNativeObserver50DefinitionAndPreimage'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNativeCatalogConcurrentRowDrift'):

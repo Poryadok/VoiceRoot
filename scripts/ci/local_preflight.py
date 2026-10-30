@@ -10,6 +10,7 @@ import re
 import subprocess
 
 import affected_check_plan
+import local_current_diff
 from local_docker_owned import OwnershipError
 import local_flutter_execution
 import local_go_plan
@@ -28,6 +29,13 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if 'current-diff-contract' in plan['checks']:
+            diagnostic = local_current_diff.run(root, plan['source'], base, output / 'current-diff')
+            if (diagnostic.get('status') != 'diagnostic' or diagnostic.get('source') != plan['source'] or
+                    diagnostic.get('base') != base):
+                raise ValueError('current-diff diagnostic did not match the planned source and base')
+            report['checks']['current-diff-contract'] = {'status': 'diagnostic',
+                                                         'report': 'current-diff/diagnostic.json'}
         if 'protobuf' in plan['checks']:
             diagnostic = local_proto_execution.run(root, plan['source'], base, output / 'protobuf',
                                                    go_binary, buf_binary)

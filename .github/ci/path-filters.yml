@@ -45,6 +45,8 @@ ci_global:
   # Local planning stays narrow; the Flutter event parser selects frontend below.
   - '!scripts/ci/local_source_snapshot.py'
   - '!scripts/ci/local_source_snapshot_test.py'
+  - '!scripts/ci/local_current_diff.py'
+  - '!scripts/ci/local_current_diff_test.py'
   - '!scripts/ci/local_go_execution.py'
   - '!scripts/ci/local_go_execution_test.py'
   - '!scripts/ci/local_go_dependencies.py'
