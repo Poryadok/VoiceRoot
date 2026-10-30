@@ -13,10 +13,11 @@ import affected_check_plan
 from local_docker_owned import OwnershipError
 import local_flutter_execution
 import local_go_plan
+import local_proto_execution
 import local_source_snapshot
 
 
-def run(root, base, head, output, flutter, head_ref='', go_binary='go'):
+def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_binary='buf'):
     root = Path(root).resolve()
     output = Path(output).resolve()
     if output == root or root in output.parents or output.exists():
@@ -27,6 +28,20 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go'):
         plan = affected_check_plan.build_local_plan(root, base, head, head_ref)
         report['plan'] = plan
         report['checks'] = {name: {'status': 'not_run'} for name in plan['checks']}
+        if 'protobuf' in plan['checks']:
+            diagnostic = local_proto_execution.run(root, plan['source'], base, output / 'protobuf',
+                                                   go_binary, buf_binary)
+            commands = diagnostic.get('commands')
+            if (diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
+                    diagnostic.get('base') != base or not isinstance(commands, list) or
+                    [item.get('name') for item in commands if isinstance(item, dict)] !=
+                    ['buf-lint', 'buf-format', 'buf-breaking', 'r23-contract'] or
+                    any(item.get('exit_code') != 0 for item in commands) or
+                    not isinstance(diagnostic.get('r23'), dict) or
+                    type(diagnostic['r23'].get('passed')) is not int or diagnostic['r23']['passed'] < 1 or
+                    not isinstance(diagnostic['r23'].get('skipped'), list)):
+                raise ValueError('protobuf diagnostic failed or does not match the planned source and base')
+            report['checks']['protobuf'] = {'status': 'diagnostic', 'report': 'protobuf/diagnostic.json'}
         if 'backend-go' in plan['checks']:
             services = plan['components']['go']
             diagnostic = local_go_plan.run(root, plan['source'], services, output / 'go', go_binary)
@@ -107,9 +122,10 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--flutter', default='flutter')
     parser.add_argument('--go', default='go', help='Go executable matching the pinned diagnostic image')
+    parser.add_argument('--buf', default='buf', help='Buf executable for protobuf diagnostics')
     parser.add_argument('--head-ref', required=True, help='PR head branch for branch-specific checks')
     args = parser.parse_args()
-    report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter, args.head_ref, args.go)
+    report = run(Path(__file__).resolve().parents[2], args.base, args.head, args.output, args.flutter, args.head_ref, args.go, args.buf)
     print(json.dumps(report, sort_keys=True))
     return 1 if report['status'] == 'failed' else 2
 

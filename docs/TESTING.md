@@ -661,6 +661,13 @@ pkg non-short job, integrations, lint and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
+When the plan selects `protobuf`, the local diagnostic runs Buf lint, format,
+breaking against the captured immutable base, and the R23 Go contract suite on
+an isolated source snapshot. It records tool versions, binary hashes, command
+logs and skipped tests. This diagnostic is still incomplete: Java generated
+consumers, generated-code drift, Auth proto sync, dependency provenance and
+consumer compilation are not yet complete preflight evidence.
+
 The separate `flutter-music-proof` job retains the Music capture and playback
 artifacts. Its selector includes frontend sources, shared test support, assets,
 dependency files, design inputs, protobufs, and global or unknown CI changes.

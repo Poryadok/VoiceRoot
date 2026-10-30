@@ -43,6 +43,30 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
 
+    def test_selected_protobuf_runs_but_cannot_pass_preflight(self):
+        plan = {'source': self.source, 'checks': {'protobuf': ['contract changed']}}
+        diagnostic = {'status': 'incomplete', 'source': self.source, 'base': 'c' * 40,
+                      'commands': [{'name': name, 'exit_code': 0} for name in
+                                   ('buf-lint', 'buf-format', 'buf-breaking', 'r23-contract')],
+                      'r23': {'passed': 1, 'skipped': [['package', 'Java']]}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_proto_execution, 'run', return_value=diagnostic) as proto:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output,
+                                         'flutter', 'feature/example', 'go-executable', 'buf-executable')
+        proto.assert_called_once_with(self.root, self.source, 'c' * 40, self.output / 'protobuf',
+                                      'go-executable', 'buf-executable')
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['protobuf']['status'], 'diagnostic')
+
+    def test_failed_or_mismatched_protobuf_diagnostic_fails_preflight(self):
+        plan = {'source': self.source, 'checks': {'protobuf': ['contract changed']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_proto_execution, 'run', return_value={'status': 'failed'}):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertEqual(report['checks']['protobuf']['status'], 'not_run')
+
     def test_selected_go_services_run_without_claiming_pkg_or_preflight_pass(self):
         plan = {'source': self.source, 'components': {'go': ['chat', 'voice']},
                 'checks': {'backend-go': ['affected service'], 'backend-go-pkg': ['shared package']}}
