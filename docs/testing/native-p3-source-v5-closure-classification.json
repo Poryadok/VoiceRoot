@@ -1,0 +1,150 @@
+{
+  "source": "b2b566f1103e29058da0e8b786cbd8f0dd028d83",
+  "tree": "17fd016468515ed564ab995c5e81267474bf9473",
+  "classification": "CONTEXT_ONLY_NO_PATH_AUTHORITY",
+  "derived_sha256": "8a330449f033b58859a9cd0887a7c28ab26a7e703fa320c99a9f2553750a33f7",
+  "raw_go_list_sha256": "a8a2c23dca83739378902fb9842d2baa04b6db60a3882abcd62817332a2c2f8d",
+  "directory_inventory_sha256": "72b8a2cc397a455c3d449801b4f9a4a30234e69be04c254947bea7f981b9d6d1",
+  "rows": [
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/catalog_assets.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "177ba1a42bcdbbea42d85a197a3629895835a4b7",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/chat/pb/voice/chat/v1/catalog_assets_grpc.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "0c92f11dddc1269a776add9d8d25b16589c0f55b",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/file/pb/voice/file/v1/catalog_assets.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "f3d69bb739a9ba441ecd73421d37d0f61c161820",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/file/pb/voice/file/v1/catalog_assets_grpc.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "1e27e62e9ba46624a0a408649eea5d269c548509",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/gis_state.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "a6a632d712abcca5af13ff518bdb93f79d7bae79",
+      "classification": "GIS-specific authority decoder or its test; compiled shared package, source review finds no Voice caller; context only"
+    },
+    {
+      "path": "src/backend/pkg/authoritysource/gis_state_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "40f5f314950459c8988e8ffa8805be08a7039375",
+      "classification": "GIS-specific authority decoder or its test; compiled shared package, source review finds no Voice caller; context only"
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/catalog_actor_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "fc2449e8437245725228050b93b650b0f7fe585e",
+      "classification": "test for separate catalog/deletion/notification/account-capture capabilities; shared package test context only"
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/deletion_states_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "79075c0435faed6b547561d68d393d17f7cf5a33",
+      "classification": "test for separate catalog/deletion/notification/account-capture capabilities; shared package test context only"
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/notification_primary_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "e33a2779e3fb411a94a5da035b0ee025c291c316",
+      "classification": "test for separate catalog/deletion/notification/account-capture capabilities; shared package test context only"
+    },
+    {
+      "path": "src/backend/pkg/socialprincipal/space_account_capture_test.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "7df91cd9b14b81747775bac4d87006fd09c90b0b",
+      "classification": "test for separate catalog/deletion/notification/account-capture capabilities; shared package test context only"
+    },
+    {
+      "path": "src/backend/user/pb/voice/common/v1/reference_inventory.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "3d8918d448ab7c7c50e798f689fdb4862944ebaa",
+      "classification": "generated common/Messaging/Story reference-inventory declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/catalog_assets.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "177ba1a42bcdbbea42d85a197a3629895835a4b7",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/chat/v1/catalog_assets_grpc.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "0c92f11dddc1269a776add9d8d25b16589c0f55b",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/common/v1/reference_inventory.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "3d8918d448ab7c7c50e798f689fdb4862944ebaa",
+      "classification": "generated common/Messaging/Story reference-inventory declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/file/v1/catalog_assets.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "f3d69bb739a9ba441ecd73421d37d0f61c161820",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/file/v1/catalog_assets_grpc.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "1e27e62e9ba46624a0a408649eea5d269c548509",
+      "classification": "generated catalog File/Chat declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/messaging/v1/reference_inventory.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "9c80d62ca8592f302d50ba638037665d35264e07",
+      "classification": "generated common/Messaging/Story reference-inventory declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/messaging/v1/reference_inventory_grpc.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "ebb0f17c392ede2d83407b94deaf68495919578c",
+      "classification": "generated common/Messaging/Story reference-inventory declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/reference_inventory.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "b505d59b968af59177acd22ad5161a748d48efcc",
+      "classification": "generated common/Messaging/Story reference-inventory declarations and RPC descriptors; native generated dependency context only"
+    },
+    {
+      "path": "src/backend/voice/pb/voice/story/v1/reference_inventory_grpc.pb.go",
+      "mode": "100644",
+      "type": "blob",
+      "oid": "06656fe9cd9478cbacde07b63eacb6b32bef5035",
+      "classification": "generated common/Messaging/Story reference-inventory declarations and RPC descriptors; native generated dependency context only"
+    }
+  ]
+}
