@@ -56,6 +56,8 @@ ci_global:
   - '!scripts/ci/flutter_test_events.py'
   - '!scripts/ci/flutter_test_events_test.py'
   # These isolated local-Docker helpers do not feed the historical F13 replay.
+  - '!scripts/ci/local_rootless_profile.py'
+  - '!scripts/ci/local_rootless_profile_test.py'
   - '!scripts/ci/local_docker_owned.py'
   - '!scripts/ci/local_docker_owned_test.py'
   - '!scripts/ci/local_docker_owned_integration_test.py'
@@ -94,6 +96,8 @@ chat_auth_java_inputs:
 
 # Explicit inputs to the local Docker ownership and bounded-slot proofs.
 local_docker_isolation:
+  - scripts/ci/local_rootless_profile.py
+  - scripts/ci/local_rootless_profile_test.py
   - scripts/ci/local_source_snapshot.py
   - scripts/ci/local_go_execution.py
   - scripts/ci/local_go_dependencies.py
@@ -115,6 +119,7 @@ local_docker_isolation:
   - scripts/ci/testcontainers-prune.sh
   - scripts/ci/testcontainers-prune_test.sh
   - src/backend/pkg/cmd/ci-go-session/**
+  - src/backend/pkg/cmd/ci-rootless-create/**
   - src/backend/pkg/go.mod
   - src/backend/pkg/go.sum
 

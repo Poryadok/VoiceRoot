@@ -22,6 +22,13 @@ it can issue a handoff receipt.
   separate daemons ran real Go and Java Testcontainers and a synthetic Compose
   workload. These experiments are not a production scheduler or security
   review.
+- A later startup probe used a private cgroup namespace. The new
+  `src/backend/pkg/cmd/ci-rootless-create` helper and selected-field inspection
+  check have been exercised against an owned daemon; the container itself is
+  not yet journaled or connected to the scheduler.
+- A bounded endpoint resolver rejects remote or ambiguous Docker contexts; a
+  real wrong-daemon creator request was rejected before container creation.
+  The resolver does not establish helper provenance or complete admission.
 - The tracker records one Windows bind/volume read measurement and one
   network-isolated Go compilation comparison in comments c63–c64. They are
   single paired measurements, not general performance guarantees.
@@ -87,6 +94,10 @@ it can issue a handoff receipt.
 
 - [x] Explicit fixture ownership and host-wide slot foundation implemented.
 - [x] Real private-daemon feasibility and storage benchmarks recorded.
+- [x] Build and exercise a bounded rootless creator with private cgroup
+  namespace and selected-field inspection.
+- [x] Recover an already-visible, exactly verified resource after a lost create
+  response; a real-Docker check preserved another fixture and a sentinel.
 - [ ] Generic private-daemon ownership, client execution and recovery.
 - [ ] Complete local preflight and representative no-skip receipts.
 
@@ -104,6 +115,13 @@ it can issue a handoff receipt.
 
 - Rootless daemon confinement and host Docker API configuration require an
   independent security review and failure injection before use as a scheduler.
+- The daemon's TCP endpoint is unauthenticated on its internal network. Safe
+  use requires exclusive daemon/network control or equivalent enforcement
+  throughout each operation; a cooperative lock and repeated inspections do
+  not prevent an outside client attaching temporarily. The scheduler must also
+  derive peer identities from the locked journal, verify the actual peers, and
+  bind the daemon's network endpoint and IP. Current snapshots do not establish
+  these properties.
 - Existing experiments use private dependency seeds whose provenance is not
   sufficient for a complete preflight receipt.
 - Some selected integration tests need owner-provided fixture or authority

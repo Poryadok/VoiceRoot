@@ -6,7 +6,7 @@ import subprocess
 import sys
 import uuid
 
-from local_docker_owned import DockerCLI, OwnedRun
+from local_docker_owned import DockerCLI, OwnedRun, OwnershipError
 from local_docker_scheduled import ScheduledRun
 
 
@@ -84,6 +84,76 @@ def verify_host_slots(checkout, engine, image):
     if any(engine.exists(kind, identifier) for kind, identifier in records):
         raise RuntimeError('host-wide fixture left owned resources')
     print('host-wide scheduler preserved the other checkout and sentinel; journals:', checkout)
+
+
+def verify_lost_create_response(checkout, engine, image):
+    """Recover a real created volume without touching a live peer or sentinel."""
+    class LostResponse:
+        def __init__(self, underlying):
+            self.underlying = underlying
+
+        def __getattr__(self, name):
+            return getattr(self.underlying, name)
+
+        def create(self, kind, name, labels):
+            self.underlying.create(kind, name, labels)
+            raise OwnershipError('simulated lost create response')
+
+    slots = checkout / 'lost-create-slots'
+    first = second = sentinel = None
+    directory = slot = None
+    recovered = False
+    try:
+        sentinel = OwnedRun.create(checkout, engine)
+        fixture(sentinel, image)
+        second = ScheduledRun.start(checkout, slots, engine, 0)
+        fixture(second.run, image)
+        first = ScheduledRun.start(checkout, slots, LostResponse(engine), 0)
+        try:
+            first.run.create_resource('volume')
+        except OwnershipError:
+            pass
+        else:
+            raise RuntimeError('lost response was not simulated')
+        item = first.run.state['resources'][-1]
+        if item['kind'] != 'volume' or item['state'] != 'creating' or item['id']:
+            raise RuntimeError('create intent was not retained')
+        name, directory, slot = item['name'], first.run.directory, first.slot
+        first.abandon()
+        first = None
+        ScheduledRun.recover(directory, slots, engine, slot)
+        recovered = True
+        if engine.exists('volume', name):
+            raise RuntimeError('recovered volume remains')
+        verify_live(second.run)
+        verify_live(sentinel)
+        print('lost create response recovered; other fixture and sentinel remained live')
+    finally:
+        errors = []
+        if first is not None:
+            try:
+                first.close()
+            except Exception as error:
+                errors.append(error)
+        if directory is not None and not recovered:
+            try:
+                ScheduledRun.recover(directory, slots, engine, slot)
+            except Exception as error:
+                errors.append(error)
+        if second is not None:
+            try:
+                second.close()
+            except Exception as error:
+                errors.append(error)
+        if sentinel is not None:
+            try:
+                sentinel.cleanup()
+            except Exception as error:
+                errors.append(error)
+            finally:
+                sentinel.close()
+        if errors:
+            raise RuntimeError('lost-create fixture cleanup requires reconciliation') from errors[0]
 
 
 def main():
@@ -212,6 +282,7 @@ def main():
         if errors:
             raise RuntimeError('fixture cleanup requires reconciliation') from errors[0]
     verify_host_slots(checkout, engine, image)
+    verify_lost_create_response(checkout, engine, image)
     return 0
 
 

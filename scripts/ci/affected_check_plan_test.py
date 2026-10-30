@@ -526,10 +526,12 @@ class AffectedCheckPlanTests(unittest.TestCase):
             with self.subTest(local_go=name):
                 self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
                 self.assertIn('ci-script-tests', checks('scripts/ci/' + name))
-        for name in ('local_go_execution.py', 'local_go_dependencies.py', 'local_go_plan.py', 'local_source_snapshot.py'):
+        for name in ('local_go_execution.py', 'local_go_dependencies.py', 'local_go_plan.py', 'local_source_snapshot.py',
+                     'local_rootless_profile.py', 'local_rootless_profile_test.py'):
             with self.subTest(docker_consumer=name):
                 self.assertIn('local-docker-isolation', checks('scripts/ci/' + name))
-        for name in ('local_docker_owned.py', 'local_docker_owned_test.py',
+        for name in ('local_rootless_profile.py', 'local_rootless_profile_test.py',
+                     'local_docker_owned.py', 'local_docker_owned_test.py',
                      'local_docker_scheduled.py', 'local_docker_scheduled_test.py',
                      'local_docker_scheduled_exec_integration_test.py'):
             with self.subTest(unrelated=name):
@@ -932,6 +934,8 @@ class AffectedCheckPlanTests(unittest.TestCase):
                   'integration_go_services': [], 'run_go': False, 'run_pkg': False}
         matched = planner.match_filters(rules, ['scripts/ci/local_docker_scheduled.py'])
         self.assertEqual(matched['local_docker_isolation'], ['scripts/ci/local_docker_scheduled.py'])
+        creator = 'src/backend/pkg/cmd/ci-rootless-create/main.go'
+        self.assertEqual(planner.match_filters(rules, [creator])['local_docker_isolation'], [creator])
         selected = planner.make_plan(matched, matrix)
         self.assertIn('local-docker-isolation', selected['checks'])
         identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}

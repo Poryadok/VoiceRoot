@@ -13,6 +13,7 @@ class FakeEngine:
         self.resources = {}
         self.removed = []
         self.uncertain_create = False
+        self.uncertain_container_create = False
         self.uncertain_remove = False
         self.uncertain_start = False
         self.uncertain_exec = False
@@ -51,6 +52,8 @@ class FakeEngine:
                                                'labels': dict(labels), 'image': image_id, 'network': network_id,
                                                'mounts': dict(mounts), 'ports': list(ports), 'running': False,
                                                'command': command, 'entrypoint': []}
+        if self.uncertain_container_create:
+            raise OwnershipError('container create outcome unknown')
         return identifier
 
     def start(self, identifier):
@@ -71,6 +74,42 @@ class FakeEngine:
         value['running'] = False
         if self.uncertain_stop:
             raise OwnershipError('stop outcome unknown')
+
+
+class RootlessEndpointTests(unittest.TestCase):
+    def engine(self, env, context=None):
+        engine = DockerCLI.__new__(DockerCLI)
+        engine._env = dict(env)
+        engine._call = lambda *args: json.dumps(context)
+        return engine
+
+    def test_context_is_resolved_to_explicit_local_socket(self):
+        endpoint = 'npipe:////./pipe/dockerDesktopLinuxEngine'
+        context = [{'Name': 'desktop-linux', 'Endpoints': {'docker': {'Host': endpoint, 'SkipTLSVerify': False}},
+                    'TLSMaterial': {}}]
+        env = self.engine({'DOCKER_CONTEXT': 'desktop-linux', 'PATH': 'keep'}, context).rootless_creator_env()
+        self.assertEqual(env['DOCKER_HOST'], endpoint)
+        self.assertNotIn('DOCKER_CONTEXT', env)
+        self.assertEqual(env['PATH'], 'keep')
+
+    def test_rejects_remote_tls_ambiguous_and_invalid_contexts(self):
+        local = 'npipe:////./pipe/dockerDesktopLinuxEngine'
+        cases = [
+            ({'DOCKER_HOST': 'tcp://127.0.0.1:2375'}, None),
+            ({'DOCKER_HOST': local, 'DOCKER_CONTEXT': 'desktop-linux'}, None),
+            ({'DOCKER_HOST': local, 'DOCKER_TLS_VERIFY': '1'}, None),
+            ({'DOCKER_HOST': 'unix:///tmp/../docker.sock'}, None),
+            ({'DOCKER_CONTEXT': 'desktop-linux'}, [{'Name': 'other', 'Endpoints': {'docker': {'Host': local}}, 'TLSMaterial': {}}]),
+            ({'DOCKER_CONTEXT': 'desktop-linux'}, [{'Name': 'desktop-linux', 'Endpoints': {'docker': {'Host': local, 'SkipTLSVerify': True}}, 'TLSMaterial': {}}]),
+            ({'DOCKER_CONTEXT': 'desktop-linux'}, [{'Name': 'desktop-linux', 'Endpoints': {'docker': {'Host': local}}, 'TLSMaterial': {'docker': ['cert.pem']}}]),
+        ]
+        for env, context in cases:
+            with self.subTest(env=env, context=context), self.assertRaises(OwnershipError):
+                self.engine(env, context).rootless_creator_env()
+
+    def test_explicit_local_unix_socket_is_retained(self):
+        env = self.engine({'DOCKER_HOST': 'unix:///var/run/docker.sock'}).rootless_creator_env()
+        self.assertEqual(env['DOCKER_HOST'], 'unix:///var/run/docker.sock')
 
 
 class OwnedRunTests(unittest.TestCase):

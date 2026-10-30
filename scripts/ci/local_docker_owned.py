@@ -43,6 +43,39 @@ class DockerCLI:
             raise OwnershipError('a Linux Docker daemon identity is required')
         return fields[0]
 
+    def rootless_creator_env(self):
+        """Resolve one local endpoint; the creator must still verify daemon ID."""
+        env = dict(self._env)
+        if any(env.get(key) for key in ('DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_API_VERSION')):
+            raise OwnershipError('Docker TLS or API override is unavailable for rootless creation')
+        host, context = env.get('DOCKER_HOST', ''), env.get('DOCKER_CONTEXT', '')
+        if bool(host) == bool(context):
+            raise OwnershipError('exactly one Docker endpoint or context is required')
+        if context:
+            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', context):
+                raise OwnershipError('Docker context identity is invalid')
+            try:
+                rows = json.loads(self._call('context', 'inspect', context))
+                if not isinstance(rows, list) or len(rows) != 1 or rows[0]['Name'] != context:
+                    raise ValueError()
+                endpoint = rows[0]['Endpoints']['docker']
+                if endpoint.get('SkipTLSVerify', False) is not False or rows[0].get('TLSMaterial') not in (None, {}):
+                    raise ValueError()
+                host = endpoint['Host']
+            except (ValueError, KeyError, TypeError, AttributeError):
+                raise OwnershipError('Docker context endpoint is invalid') from None
+        pipes = ('npipe:////./pipe/dockerDesktopLinuxEngine', 'npipe:////./pipe/docker_engine')
+        unix = isinstance(host, str) and re.fullmatch(r'unix:///[A-Za-z0-9._/-]+', host)
+        if unix:
+            path = host[len('unix://'):]
+            unix = posixpath.normpath(path) == path and path != '/'
+        if host not in pipes and not unix:
+            raise OwnershipError('rootless creator requires an explicit local Docker socket')
+        for key in ('DOCKER_CONTEXT', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH', 'DOCKER_API_VERSION'):
+            env.pop(key, None)
+        env['DOCKER_HOST'] = host
+        return env
+
     def create(self, kind, name, labels):
         options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
         if kind == 'network':
@@ -326,6 +359,34 @@ class OwnedRun:
                 observed.get('command') != item['command'] or observed.get('entrypoint') != []):
             raise OwnershipError('Docker container command changed')
         return observed
+
+    def reconcile_creation(self, name):
+        """Adopt only an already visible, exact owned resource after a lost response.
+
+        Absence is intentionally not considered proof that an in-flight create
+        cannot still complete; callers must retain the journal and slot then.
+        """
+        self._validate()
+        self._check_daemon()
+        matches = [item for item in self.state['resources'] if item['name'] == name and item['state'] == 'creating']
+        if len(matches) != 1 or sum(item['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')
+                                    for item in self.state['resources']) != 1:
+            raise OwnershipError('creation is not uniquely reconcilable')
+        item = matches[0]
+        try:
+            observed = self.engine.inspect(item['kind'], item['name'])
+        except (KeyError, OSError, ValueError, TypeError) as error:
+            raise OwnershipError('created resource is unavailable or uncertain') from error
+        identifier = observed.get('id') if isinstance(observed, dict) else None
+        if (not isinstance(identifier, str) or
+                (item['kind'] in ('network', 'container') and not re.fullmatch(r'[0-9a-f]{64}', identifier)) or
+                (item['kind'] == 'volume' and identifier != item['name'])):
+            raise OwnershipError('created resource identity is invalid')
+        candidate = dict(item, id=identifier, state='ready')
+        self._inspect(candidate)
+        self._check_daemon()
+        item['id'], item['state'] = identifier, 'ready'
+        self._save()
 
     def create_resource(self, kind):
         self._validate()

@@ -33,6 +33,116 @@ class ScheduledRunTests(unittest.TestCase):
             later = ScheduledRun.start_host(other_checkout, self.engine, 0, capacity=1)
             later.close()
 
+    def test_recovers_a_created_resource_after_lost_create_response(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        directory, slot = one.run.directory, one.slot
+        self.engine.uncertain_create = True
+        with self.assertRaises(OwnershipError):
+            one.run.create_resource('volume')
+        item = dict(one.run.state['resources'][-1])
+        one.abandon()
+        self.engine.uncertain_create = False
+        ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertNotIn(('volume', item['name']), self.engine.resources)
+        later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        later.close()
+
+    def test_uncertain_create_with_foreign_or_missing_resource_keeps_slot(self):
+        for change in ('foreign', 'missing'):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                slots = root / 'slots'
+                engine = FakeEngine()
+                one = ScheduledRun.start(root, slots, engine, 0, capacity=1)
+                engine.uncertain_create = True
+                with self.assertRaises(OwnershipError):
+                    one.run.create_resource('volume')
+                item = dict(one.run.state['resources'][-1])
+                run_directory, slot = one.run.directory, one.slot
+                one.abandon()
+                key = ('volume', item['name'])
+                if change == 'foreign':
+                    engine.resources[key]['labels']['voice.ci.run'] = 'foreign'
+                else:
+                    del engine.resources[key]
+                with self.assertRaises(OwnershipError):
+                    ScheduledRun.recover(run_directory, slots, engine, slot, capacity=1)
+                self.assertEqual(engine.removed, [])
+                with self.assertRaises(TimeoutError):
+                    ScheduledRun.start(root, slots, engine, 0, capacity=1)
+
+    def test_lost_create_recovery_preserves_another_run_and_foreign_resource(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        other = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        self.addCleanup(one.abandon)
+        self.addCleanup(other.abandon)
+        other_network = other.run.create_resource('network')
+        foreign_key = ('volume', 'foreign-sentinel')
+        self.engine.resources[foreign_key] = {'id': 'foreign-sentinel', 'name': 'foreign-sentinel',
+                                              'kind': 'volume', 'labels': {'owner': 'other'}}
+        self.engine.uncertain_create = True
+        with self.assertRaises(OwnershipError):
+            one.run.create_resource('volume')
+        name = one.run.state['resources'][-1]['name']
+        directory, slot = one.run.directory, one.slot
+        one.abandon()
+        self.engine.uncertain_create = False
+        ScheduledRun.recover(directory, self.slots, self.engine, slot)
+        self.assertNotIn(('volume', name), self.engine.resources)
+        self.assertIn(('network', other_network), self.engine.resources)
+        self.assertIn(foreign_key, self.engine.resources)
+        other.close()
+        self.assertIn(foreign_key, self.engine.resources)
+
+    def test_lost_container_create_requires_exact_inspected_specification(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        network = one.run.create_resource('network')
+        volume = one.run.create_resource('volume')
+        self.engine.uncertain_container_create = True
+        with self.assertRaises(OwnershipError):
+            one.run.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                     command=['sleep', 'infinity'])
+        name = one.run.state['resources'][-1]['name']
+        directory, slot = one.run.directory, one.slot
+        one.abandon()
+        self.engine.uncertain_container_create = False
+        container = self.engine.resources[('container', name)]
+        container['image'] = 'sha256:' + 'e' * 64
+        with self.assertRaises(OwnershipError):
+            ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertEqual(self.engine.removed, [])
+        container['image'] = 'sha256:' + 'd' * 64
+        ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertNotIn(('container', name), self.engine.resources)
+
+    def test_lost_create_recovery_refuses_daemon_change_during_inspection(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        self.engine.uncertain_create = True
+        with self.assertRaises(OwnershipError):
+            one.run.create_resource('volume')
+        item = dict(one.run.state['resources'][-1])
+        directory, slot = one.run.directory, one.slot
+        one.abandon()
+        original = self.engine.inspect
+        def changed_daemon(kind, name):
+            result = original(kind, name)
+            self.engine.identity = 'different-daemon'
+            return result
+        self.engine.inspect = changed_daemon
+        with self.assertRaises(OwnershipError):
+            ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertEqual(self.engine.removed, [])
+        self.assertIn(('volume', item['name']), self.engine.resources)
+        with self.assertRaises(TimeoutError):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.engine.identity = 'daemon-a'
+        self.engine.inspect = original
+        self.engine.uncertain_create = False
+        ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+
     def test_two_runs_hold_slots_until_own_cleanup(self):
         one = ScheduledRun.start(self.root, self.slots, self.engine, 0)
         two = ScheduledRun.start(self.root, self.slots, self.engine, 0)

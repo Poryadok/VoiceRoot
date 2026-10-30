@@ -11,9 +11,11 @@ from local_heavy_slots import acquire, host_slot_directory, recover_bound
 def _reconcile_execution(run):
     uncertain = [item for item in run.state['resources']
                  if item['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')]
-    if len(uncertain) > 1 or (uncertain and uncertain[0]['state'] not in ('executing', 'stopping')):
+    if len(uncertain) > 1 or (uncertain and uncertain[0]['state'] not in ('creating', 'executing', 'stopping')):
         raise OwnershipError('uncertain resource requires separate reconciliation')
-    if uncertain:
+    if uncertain and uncertain[0]['state'] == 'creating':
+        run.reconcile_creation(uncertain[0]['name'])
+    elif uncertain:
         run.cancel_execution(uncertain[0]['name'])
 
 
