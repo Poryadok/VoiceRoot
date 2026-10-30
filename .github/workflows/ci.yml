@@ -62,6 +62,7 @@ jobs:
       protos: ${{ steps.filter.outputs.protos }}
       pkg: ${{ steps.filter.outputs.pkg }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      music_inputs: ${{ steps.filter.outputs.music_inputs }}
       windows_desktop: ${{ steps.filter.outputs.windows_desktop == 'true' || steps.affected_scope.outputs.unresolved == 'true' }}
       auth: ${{ steps.filter.outputs.auth }}
       auth_test_impact: ${{ steps.filter.outputs.auth_test_impact }}
@@ -562,15 +563,14 @@ jobs:
       - name: Verify complete Flutter file partition
         run: python3 scripts/ci/flutter_test_shards.py verify --plan "$RUNNER_TEMP/flutter-plan/plan.json" --receipts "$RUNNER_TEMP/flutter-receipts"
 
-  # Additive comparison: the original Flutter job retains the same Music proof
-  # until equivalent hosted execution is verified and narrower inputs reviewed.
+  # Shared frontend inputs remain included; four independent browser tests are excluded.
   flutter-music-proof:
     needs: changes
     if: >-
       !cancelled() &&
       needs.changes.result == 'success' &&
       needs.changes.outputs.code == 'true' &&
-      (needs.changes.outputs.frontend == 'true' ||
+      (needs.changes.outputs.music_inputs == 'true' ||
        needs.changes.outputs.protos == 'true' ||
        needs.changes.outputs.global == 'true' ||
        needs.changes.outputs.ci_global == 'true' ||
@@ -600,7 +600,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: music-controls-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          name: music-controls-${{ github.run_id }}
           path: ${{ runner.temp }}/music-capture/*.png
           if-no-files-found: error
       - name: Install FFmpeg for Music probe fixtures
@@ -614,9 +614,114 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: music-playback-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          name: music-playback-${{ github.run_id }}
           path: src/frontend/build/web/music-playback-result.json
           if-no-files-found: warn
+      - name: Retain hosted Music dependency resolution
+        if: >-
+          always() &&
+          (github.head_ref == 'feature/attach-menu-music' ||
+           github.ref == 'refs/heads/feature/attach-menu-music')
+        uses: actions/upload-artifact@v4
+        with:
+          name: music-dependency-lock-${{ github.run_id }}
+          path: src/frontend/pubspec.lock
+          if-no-files-found: error
+
+  # Additive comparisons retain both original checks until hosted results match.
+  flutter-help-comparison:
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Resolve Flutter dependencies
+        working-directory: src/frontend
+        run: flutter pub get
+      - name: Help real Chrome external handoff (H/V)
+        id: help_browser_handoff
+        timeout-minutes: 8
+        env:
+          CHROME_BIN: google-chrome
+          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          cd src/frontend
+          flutter build web --release --no-pub --no-web-resources-cdn \
+            --target test/fixtures/settings_help_web_launcher_smoke.dart \
+            --output build/help-launcher-web
+          cd ../..
+          node scripts/ci/settings-help-browser-handoff.mjs \
+            src/frontend/build/help-launcher-web "$RUNNER_TEMP/settings-help-browser"
+      - name: Retain Help comparison evidence
+        if: always() && steps.help_browser_handoff.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: settings-help-browser-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/settings-help-browser
+          if-no-files-found: error
+          retention-days: 14
+
+  flutter-startup-comparison:
+    needs: changes
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      needs.changes.outputs.code == 'true' &&
+      (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' ||
+       needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' ||
+       (github.event_name == 'workflow_dispatch' && inputs.profile == 'full'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      - name: Prefetch sqlite3mc native assets (host)
+        run: bash scripts/ci/flutter-linux-prefetch-sqlite3.sh host
+      - name: Build the Help launcher fixture for startup
+        working-directory: src/frontend
+        run: |
+          flutter pub get
+          flutter build web --release --no-pub --no-web-resources-cdn \
+            --target test/fixtures/settings_help_web_launcher_smoke.dart \
+            --output build/help-launcher-web
+      - name: Web startup lifecycle and real browser retry (H/V)
+        id: web_startup_browser
+        timeout-minutes: 5
+        env:
+          CHROME_BIN: google-chrome
+          VOICE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          node --test scripts/ci/web-startup.test.mjs
+          node scripts/ci/web-startup-browser.mjs \
+            src/frontend/build/help-launcher-web "$RUNNER_TEMP/web-startup-browser"
+      - name: Retain startup comparison evidence
+        if: always() && steps.web_startup_browser.outcome != 'skipped'
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-startup-browser-comparison-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/web-startup-browser
+          if-no-files-found: error
+          retention-days: 14
 
   flutter:
     needs: changes
@@ -659,46 +764,6 @@ jobs:
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos
-      - name: Set up Node for Music decoder browser check
-        uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Capture Music inline controls
-        working-directory: src/frontend
-        env:
-          VOICE_MUSIC_CAPTURE_DIR: ${{ runner.temp }}/music-capture
-        run: timeout 180s flutter test --no-pub --reporter expanded --concurrency=1 test/music_attachment_player_test.dart
-      - name: Retain Music inline controls
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: music-controls-${{ github.run_id }}
-          path: ${{ runner.temp }}/music-capture/*.png
-          if-no-files-found: error
-      - name: Install FFmpeg for Music probe fixtures
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
-      - name: Verify Music codecs and E2E local playback in Chrome
-        timeout-minutes: 10
-        run: timeout 540s bash scripts/ci/music-playback-web.sh
-      - name: Retain Music decoder result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: music-playback-${{ github.run_id }}
-          path: src/frontend/build/web/music-playback-result.json
-          if-no-files-found: warn
-      - name: Retain hosted Music dependency resolution
-        if: >-
-          always() &&
-          (github.head_ref == 'feature/attach-menu-music' ||
-           github.ref == 'refs/heads/feature/attach-menu-music')
-        uses: actions/upload-artifact@v4
-        with:
-          name: music-dependency-lock-${{ github.run_id }}
-          path: src/frontend/pubspec.lock
-          if-no-files-found: error
       - name: Run browser-only Flutter tests
         working-directory: src/frontend
         run: |
@@ -2193,6 +2258,8 @@ jobs:
       - match-squad-overlay
       - flutter
       - flutter-music-proof
+      - flutter-help-comparison
+      - flutter-startup-comparison
       - flutter-unit-tests
       - flutter-unit-receipts
       - flutter-device-driver
@@ -2257,6 +2324,7 @@ jobs:
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
+          RUN_FLUTTER_MUSIC: ${{ needs.changes.outputs.music_inputs }}
           RUN_WINDOWS_DESKTOP: ${{ (github.event_name == 'pull_request' && needs.changes.outputs.windows_desktop == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true') }}
           RUN_WEB: ${{ needs.changes.outputs.run_web }}
           RUN_ADMIN: ${{ needs.changes.outputs.run_admin }}
@@ -2313,6 +2381,8 @@ jobs:
           JOB_MATCH_SQUAD_OVERLAY: ${{ needs.match-squad-overlay.result }}
           JOB_FLUTTER: ${{ needs.flutter.result }}
           JOB_FLUTTER_MUSIC_PROOF: ${{ needs.flutter-music-proof.result }}
+          JOB_FLUTTER_HELP_COMPARISON: ${{ needs.flutter-help-comparison.result }}
+          JOB_FLUTTER_STARTUP_COMPARISON: ${{ needs.flutter-startup-comparison.result }}
           JOB_FLUTTER_UNIT_TESTS: ${{ needs.flutter-unit-receipts.result }}
           JOB_FLUTTER_WINDOWS: ${{ needs.flutter-windows.result }}
           JOB_FLUTTER_DEVICE_DRIVER: ${{ needs.flutter-device-driver.result }}
@@ -2805,7 +2875,7 @@ jobs:
             > "$RUNNER_TEMP/space-account-ban-provision.jsonl"
           set +e
           go test -json -count=1 -timeout 5m -tags=spacebanintegration \
-            -run '^(TestAccountBanCannotSucceedWithoutCompleteOwnerCapture|TestNative51CreatorBornCurrentSchema)$' ./internal/store \
+            -run '^(TestAccountBanCannotSucceedWithoutCompleteOwnerCapture|TestNative51CreatorBornCurrentSchema|TestAccountBanCatalogRejectsSemanticDrift)$' ./internal/store \
             > "$RUNNER_TEMP/space-account-ban-events.jsonl"
           result=$?
           set -e

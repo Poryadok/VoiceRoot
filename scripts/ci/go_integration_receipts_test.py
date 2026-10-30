@@ -49,6 +49,17 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         self.assertEqual(interactive['status'], 'unresolved')
         self.assertNotIn(['voice/backend/role', interactive['test']], inventory['role'])
 
+    def test_space_current_schema_cases_are_classified_by_their_required_receipt(self):
+        inventory = json.loads((ROOT / 'scripts/ci/space_account_ban_guard_required.json').read_text(encoding='utf-8'))
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for name in ('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture',
+                     'TestNative51CreatorBornCurrentSchema',
+                     'TestAccountBanCatalogRejectsSemanticDrift'):
+            self.assertIn(['voice/backend/space/internal/store', name], inventory['space'])
+            entry = next(x for x in exceptions if x['service'] == 'space' and x['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']),
+                             ('dedicated', 'space-native-installer-integration'))
+
     def test_file_matrix_requires_pdf_runtime_and_real_renderer(self):
         import yaml
         inventory = json.loads((ROOT / 'scripts/ci/go_integration_required.json').read_text(encoding='utf-8'))

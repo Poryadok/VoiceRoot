@@ -108,7 +108,9 @@ check_if "$(or_true "${PROTOS}" "${GLOBAL}")" protobuf
 check_if "$(or_true "${COMPOSE}" "${GLOBAL}")" compose-config
 check_if "${RUN_MATCH_SQUAD_OVERLAY:-false}" match-squad-overlay
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter
-check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-music-proof
+check_if "$(or_true "${RUN_FLUTTER_MUSIC:-false}" "${PROTOS}" "${GLOBAL}")" flutter-music-proof
+check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-help-comparison
+check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-startup-comparison
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-unit-tests
 check_if "$(or_true "${RUN_FLUTTER}" "${PROTOS}" "${GLOBAL}")" flutter-device-driver
 check_if "${RUN_WINDOWS_DESKTOP}" flutter-windows

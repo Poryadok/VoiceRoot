@@ -487,6 +487,7 @@ class AffectedCheckPlanTests(unittest.TestCase):
             self.assertIn('flutter', plan['checks'])
             self.assertIn('ci-script-tests', plan['checks'])
             self.assertNotIn('backend-go', plan['checks'])
+            self.assertNotIn('flutter-music-proof', plan['checks'])
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
         step = next(s for s in workflow['jobs']['flutter']['steps'] if s.get('name') == 'Run browser-only Flutter tests')
         for name in ('app_shell_icon_web_test.dart', 'linked_oauth_browser_web_test.dart',
@@ -496,7 +497,64 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertNotIn('--allow-skips', step['run'])
         self.assertNotIn('--concurrency', step['run'])
 
-    def test_music_comparison_preserves_existing_proof_and_is_required(self):
+    def test_music_selector_keeps_shared_and_unknown_inputs_but_excludes_independent_browser_tests(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [],
+                  'integration_go_services': [], 'run_go': False, 'run_pkg': False}
+        browser_tests = ['src/frontend/test/' + name for name in
+                         ('app_shell_icon_web_test.dart', 'chat_draft_browser_storage_test.dart',
+                          'linked_oauth_browser_web_test.dart', 'presigned_upload_web_test.dart')]
+        for path in browser_tests:
+            plan = planner.make_plan(planner.match_filters(rules, [path]), matrix)
+            self.assertIn('flutter', plan['checks'])
+            self.assertNotIn('flutter-music-proof', plan['checks'])
+        for paths in (['src/frontend/lib/ui/chat/music_playback.dart'],
+                      ['src/frontend/test/support/e2e_attachment_test_fixture.dart'],
+                      ['src/frontend/pubspec.lock'], ['protos/voice/message/v1/message.proto'],
+                      ['src/frontend/test/new_unknown_test.dart'], ['scripts/ci/new_unknown_helper.py'],
+                      [browser_tests[0], 'src/frontend/lib/ui/chat/music_playback.dart']):
+            with self.subTest(paths=paths):
+                plan = planner.make_plan(planner.match_filters(rules, paths), matrix)
+                self.assertIn('flutter-music-proof', plan['checks'])
+
+    def test_help_and_startup_comparisons_preserve_original_checks_and_are_required(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        original = workflow['jobs']['flutter']
+        names = (('flutter-help-comparison', 'Help real Chrome external handoff (H/V)'),
+                 ('flutter-startup-comparison', 'Web startup lifecycle and real browser retry (H/V)'))
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [],
+                  'integration_go_services': [], 'run_go': False, 'run_pkg': False}
+        plan = planner.make_plan(planner.match_filters(rules, ['src/frontend/lib/main.dart']), matrix)
+        identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
+        plan.update(schema='voice-affected-check-plan-v1', identity=identity)
+        for job_name, step_name in names:
+            self.assertTrue(any(step.get('name') == step_name for step in original['steps']))
+            comparison = workflow['jobs'][job_name]
+            old_step = next(step for step in original['steps'] if step.get('name') == step_name)
+            new_step = next(step for step in comparison['steps'] if step.get('name') == step_name)
+            self.assertEqual(new_step, old_step)
+            self.assertIn(job_name, workflow['jobs']['ci-gate']['needs'])
+            self.assertIn(job_name, plan['checks'])
+            needs = {name: {'result': 'success'} for name in plan['checks']}
+            for result in ('failure', 'skipped', 'cancelled'):
+                needs[job_name] = {'result': result}
+                self.assertIn(job_name, planner.verify_gate(plan, needs, identity))
+            del needs[job_name]
+            self.assertIn(job_name, planner.verify_gate(plan, needs, identity))
+        startup = workflow['jobs']['flutter-startup-comparison']
+        build = next(step['run'] for step in startup['steps']
+                     if step.get('name') == 'Build the Help launcher fixture for startup')
+        help_step = next(step['run'] for step in workflow['jobs']['flutter-help-comparison']['steps']
+                         if step.get('name') == 'Help real Chrome external handoff (H/V)')
+        for source in (build, help_step):
+            self.assertIn('--target test/fixtures/settings_help_web_launcher_smoke.dart', source)
+            self.assertIn('--output build/help-launcher-web', source)
+            self.assertIn('--no-web-resources-cdn', source)
+        self.assertIn('flutter pub get', build)
+
+    def test_isolated_music_proof_preserves_steps_and_is_required(self):
         import yaml
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': [], 'docker_go_services': [],
@@ -508,8 +566,10 @@ class AffectedCheckPlanTests(unittest.TestCase):
         original = workflow['jobs']['flutter']
         comparison = workflow['jobs']['flutter-music-proof']
         for name in ('Capture Music inline controls', 'Verify Music codecs and E2E local playback in Chrome'):
-            self.assertTrue(any(step.get('name') == name for step in original['steps']))
+            self.assertFalse(any(step.get('name') == name for step in original['steps']))
             self.assertTrue(any(step.get('name') == name for step in comparison['steps']))
+        self.assertTrue(any(step.get('name') == 'Retain hosted Music dependency resolution'
+                            for step in comparison['steps']))
         self.assertIn('flutter-music-proof', workflow['jobs']['ci-gate']['needs'])
         identity = {'base': 'a' * 40, 'head': 'b' * 40, 'candidate': 'c' * 40}
         plan.update(schema='voice-affected-check-plan-v1', identity=identity)
@@ -637,15 +697,23 @@ class AffectedCheckPlanTests(unittest.TestCase):
         self.assertIn('-tags=spacebanintegration', test['run'])
         self.assertIn('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture', test['run'])
         self.assertIn('TestNative51CreatorBornCurrentSchema', test['run'])
+        self.assertIn('TestAccountBanCatalogRejectsSemanticDrift', test['run'])
         self.assertIn('space_account_ban_guard_required.json', test['run'])
         self.assertIn('--reject-skips', test['run'])
         self.assertIn('SPACE_NATIVE_ADMIN_URL', test['env'])
         self.assertIn('SPACE_BAN_TEST_DATABASE_URL', test['env'])
         inventory = json.loads((ROOT / 'scripts/ci/space_account_ban_guard_required.json').read_text(encoding='utf-8'))
-        self.assertEqual(inventory['space'], [['voice/backend/space/internal/store',
-                                               'TestAccountBanCannotSucceedWithoutCompleteOwnerCapture'],
-                                              ['voice/backend/space/internal/store',
-                                               'TestNative51CreatorBornCurrentSchema']])
+        required = {name for package, name in inventory['space']
+                    if package == 'voice/backend/space/internal/store'}
+        self.assertIn('TestAccountBanCannotSucceedWithoutCompleteOwnerCapture', required)
+        self.assertIn('TestNative51CreatorBornCurrentSchema', required)
+        root = 'TestAccountBanCatalogRejectsSemanticDrift'
+        self.assertIn(root, required)
+        for case in ('serving_login_needs_no_private_schema_access', 'guard_predicate',
+                     'guard_event_columns', 'internal_foreign_key_disabled',
+                     'column_public_privilege', 'table_public_privilege',
+                     'private_schema_relation', 'unexpected_prefixed_relation'):
+            self.assertIn(root + '/' + case, required)
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
         matrix = {'go_services': ['space'], 'docker_go_services': [],
                   'integration_go_services': ['space'], 'run_go': True, 'run_pkg': True}

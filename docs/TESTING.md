@@ -160,9 +160,11 @@ tagged Space catalog and account-ban suite.
 The affected Space native-installer job also provisions a separate fresh
 current-schema database with the source-bound installer and runs the tagged
 account-ban missing-capture guard through a signed native creator and the
-authenticated ban path. Its receipt requires the named case and rejects skips.
-This one guard does not cover the other tagged cases that require populated
-historical 34, qualified 50, or separately qualified 51 fixtures.
+authenticated ban path, the native creator proof, and the account-ban catalog
+drift proof. The receipt requires all three cases and the eight catalog drift
+subtests, and rejects skips. These checks do not cover the other tagged cases
+that require populated historical 34, qualified 50, or separately qualified 51
+fixtures.
 
 The affected Story PR proof runs `go test -json -count=1 -p 1` for
 `./internal/lfpconsentstore` and `./internal/lfpconsenttransport` against an
@@ -634,6 +636,17 @@ presigned-upload browser suites in Chrome. It validates the JSON event stream
 against all four files and rejects skipped tests. The draft storage suite is
 browser-only; a VM run cannot prove it. The local isolated Flutter runner is
 still diagnostic and does not issue a complete preflight receipt.
+
+The separate `flutter-music-proof` job retains the Music capture and playback
+artifacts. Its selector includes frontend sources, shared test support, assets,
+dependency files, design inputs, protobufs, and global or unknown CI changes.
+Only the four independent browser suite files named above are excluded when
+they are the sole changes; mixed changes still select Music. The required-jobs
+gate rejects a missing, skipped, cancelled, or failing selected Music proof.
+Help handoff and web startup also run in separate comparison jobs on the broad
+Flutter selector. Both original checks remain in `flutter` until the hosted
+comparison has been reviewed; each comparison builds the same Help launcher
+fixture independently and retains its own evidence.
 
 ### Локальные грабли (Windows, compose E2E)
 

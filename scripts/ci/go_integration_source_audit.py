@@ -29,6 +29,12 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/nativeinstaller', 'TestCommittedPhaseFailureNeverAutoResumes'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanCatalogRejectsSemanticDrift'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanCannotSucceedWithoutCompleteOwnerCapture'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNative51CreatorBornCurrentSchema'):
+        'space-native-installer-integration',
 }
 
 
