@@ -203,7 +203,7 @@ func (c *PublicSessionClient) doStatuses(ctx context.Context, method, path, bear
 	if err != nil {
 		return fmt.Errorf("public session client: request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	wanted := false
 	for _, status := range wantStatuses {
 		if resp.StatusCode == status {
@@ -236,7 +236,7 @@ func validPublicErrorCode(value string) bool {
 		return false
 	}
 	for _, char := range value {
-		if !((char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_') {
+		if (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '_' {
 			return false
 		}
 	}

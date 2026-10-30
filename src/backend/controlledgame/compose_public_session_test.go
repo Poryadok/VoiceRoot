@@ -44,12 +44,12 @@ func TestT40ComposePublicClientPartyThreeMatchesAndChatMembership(t *testing.T) 
 	sort.Strings(profiles)
 	partyKey := "t40-party-" + uuid.NewString()
 	partyOpID := uuid.NewString()
-	party, err := client.CreateSession(ctx, gameCredential, PublicSessionRequest{
+	_, err = client.CreateSession(ctx, gameCredential, PublicSessionRequest{
 		OperationID: partyOpID, Kind: "party", ExternalKey: partyKey, DisplayName: "T40 acceptance party",
 		RosterRevision: 1, RosterComplete: true, Members: profiles,
 	})
 	require.NoError(t, err)
-	party = waitT40Operation(t, ctx, client, gameCredential, partyOpID, "active")
+	party := waitT40Operation(t, ctx, client, gameCredential, partyOpID, "active")
 	require.NotEmpty(t, party.ChatID)
 	require.NotEmpty(t, party.ChatCreateReceiptID)
 	require.NotEmpty(t, party.ChatRosterReceiptID)
@@ -61,12 +61,12 @@ func TestT40ComposePublicClientPartyThreeMatchesAndChatMembership(t *testing.T) 
 	firstChildSessionID := ""
 	for i := 1; i <= 3; i++ {
 		operationID := uuid.NewString()
-		child, createErr := client.CreateSession(ctx, gameCredential, PublicSessionRequest{
+		_, createErr := client.CreateSession(ctx, gameCredential, PublicSessionRequest{
 			OperationID: operationID, Kind: "match", ExternalKey: fmt.Sprintf("t40-match-%d-%s", i, uuid.NewString()),
 			ParentPartyKey: partyKey, RosterRevision: 1, RosterComplete: true, Members: profiles,
 		})
 		require.NoError(t, createErr)
-		child = waitT40Operation(t, ctx, client, gameCredential, operationID, "active")
+		child := waitT40Operation(t, ctx, client, gameCredential, operationID, "active")
 		require.Equal(t, party.ChatID, child.ChatID)
 		require.Equal(t, party.ChatOwnerSessionID, child.ChatOwnerSessionID)
 		require.Equal(t, party.ChatCreateReceiptID, child.ChatCreateReceiptID)
@@ -78,7 +78,8 @@ func TestT40ComposePublicClientPartyThreeMatchesAndChatMembership(t *testing.T) 
 			t.Fatalf("two matches reused Voice room %s", child.VoiceRoomID)
 		}
 		seenRooms[child.VoiceRoomID] = struct{}{}
-		if i == 1 {
+		switch i {
+		case 1:
 			firstChildSessionID = child.SessionID
 			consentErr := client.ConsentToKeepGroup(ctx, playerOneToken, child.SessionID, PublicConsentRequest{
 				OperationID: uuid.NewString(), RosterRevision: 1,
@@ -92,7 +93,7 @@ func TestT40ComposePublicClientPartyThreeMatchesAndChatMembership(t *testing.T) 
 			require.Equal(t, party.ChatID, keepGroup.ChatID)
 			require.Equal(t, []string{profileOne.String()}, keepGroup.AddedProfiles, "only the participant who consented is newly authorized")
 			require.False(t, keepGroup.Replayed)
-		} else if i == 2 {
+		case 2:
 			require.NoError(t, client.ConsentToKeepGroup(ctx, playerTwoToken, child.SessionID, PublicConsentRequest{
 				OperationID: uuid.NewString(), RosterRevision: 1,
 			}), "a different authenticated participant can independently consent")
