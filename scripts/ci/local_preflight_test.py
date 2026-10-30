@@ -43,6 +43,34 @@ class LocalPreflightTests(unittest.TestCase):
         self.assertEqual(report['status'], 'incomplete')
         self.assertEqual(report['checks']['backend-auth']['status'], 'not_run')
 
+    def test_selected_current_diff_is_source_bound_and_stays_diagnostic(self):
+        plan = {'source': self.source, 'checks': {'current-diff-contract': ['every pull request']}}
+        diagnostic = {'status': 'diagnostic', 'source': self.source, 'base': 'c' * 40}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(local_preflight.local_current_diff, 'run', return_value=diagnostic) as current:
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        current.assert_called_once_with(self.root, self.source, 'c' * 40, self.output / 'current-diff')
+        self.assertEqual(report['status'], 'incomplete')
+        self.assertEqual(report['checks']['current-diff-contract']['status'], 'diagnostic')
+
+    def test_current_diff_failure_or_wrong_base_fails_preflight(self):
+        plan = {'source': self.source, 'checks': {'current-diff-contract': ['every pull request']}}
+        diagnostic = {'status': 'diagnostic', 'source': self.source, 'base': 'd' * 40}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_current_diff, 'run', return_value=diagnostic):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertEqual(report['checks']['current-diff-contract']['status'], 'not_run')
+
+    def test_current_diff_refusal_fails_preflight(self):
+        plan = {'source': self.source, 'checks': {'current-diff-contract': ['every pull request']}}
+        with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
+             patch.object(local_preflight.local_current_diff, 'run', side_effect=ValueError('contract refused')):
+            report = local_preflight.run(self.root, 'c' * 40, self.source['head'], self.output, 'flutter')
+        self.assertEqual(report['status'], 'failed')
+        self.assertIn('contract refused', report['error'])
+
     def test_selected_protobuf_runs_but_cannot_pass_preflight(self):
         plan = {'source': self.source, 'checks': {'protobuf': ['contract changed']}}
         diagnostic = {'status': 'incomplete', 'source': self.source, 'base': 'c' * 40,
@@ -173,6 +201,9 @@ class LocalPreflightTests(unittest.TestCase):
         git('config', 'user.name', 'Test')
         git('config', 'user.email', 'test@example.invalid')
         (self.root / '.github/ci').mkdir(parents=True)
+        (self.root / 'scripts/ci').mkdir(parents=True)
+        (self.root / 'scripts/ci/current-diff-contract.py').write_bytes(
+            (Path(__file__).parent / 'current-diff-contract.py').read_bytes())
         (self.root / '.github/ci/path-filters.yml').write_text('code:\n  - "src/**"\ndocs:\n  - "docs/**"\n')
         (self.root / 'docs').mkdir()
         (self.root / 'docs/readme.md').write_text('before\n')
@@ -197,6 +228,9 @@ class LocalPreflightTests(unittest.TestCase):
         git('config', 'user.name', 'Test')
         git('config', 'user.email', 'test@example.invalid')
         (self.root / '.github/ci').mkdir(parents=True)
+        (self.root / 'scripts/ci').mkdir(parents=True)
+        (self.root / 'scripts/ci/current-diff-contract.py').write_bytes(
+            (Path(__file__).parent / 'current-diff-contract.py').read_bytes())
         (self.root / '.github/ci/path-filters.yml').write_text('code:\n  - "src/**"\nfrontend:\n  - "src/frontend/**"\n')
         test_dir = self.root / 'src/frontend/test'
         test_dir.mkdir(parents=True)
