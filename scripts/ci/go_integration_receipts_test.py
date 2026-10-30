@@ -265,7 +265,8 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         import yaml
         package = 'voice/backend/space/internal/store'
         enrollment = 'TestAccountBanFixtureConcurrencyEnrollment50'
-        cases = ('TestAccountBanIntentConcurrency50', 'TestAccountBanLockWaitExhaustsOriginalBudget50')
+        cases = ('TestAccountBanIntentConcurrency50', 'TestAccountBanLockWaitExhaustsOriginalBudget50',
+                 'TestAccountBanLateCaptureCannotCommitOrSplice50')
         first = json.loads((ROOT / 'scripts/ci/space_concurrency_enrollment_required.json').read_text(encoding='utf-8'))['space']
         second = json.loads((ROOT / 'scripts/ci/space_concurrency_required.json').read_text(encoding='utf-8'))['space']
         self.assertEqual(first, [[package, enrollment]])
@@ -278,7 +279,7 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         step = next(item for item in jobs['space-native-installer-integration']['steps']
                     if item.get('name') == 'Run seeded Space native50 observer proofs')
         run = step['run']
-        positions = [run.index(value) for value in ('VALUES (9),(11)', 'goto 44', 'goto 50', enrollment, *cases)]
+        positions = [run.index(value) for value in ('VALUES (9),(11),(12)', 'goto 44', 'goto 50', enrollment, *cases)]
         self.assertEqual(positions, sorted(positions))
         for inventory in (first, second):
             events = [{'Package': package, 'Test': name, 'Action': action}

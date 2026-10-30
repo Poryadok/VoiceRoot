@@ -7,38 +7,49 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root/src/backend/space"
 clock_dir="$RUNNER_TEMP/space-clock-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 container="voice-ci-space-clock-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+compiler="${container}-compiler"
 owner="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 mkdir "$clock_dir"
 chmod 777 "$clock_dir"
-cc -shared -fPIC -O2 -o "$clock_dir/fixture-clock.so" internal/store/testdata/account_ban_wall_clock.c -ldl
-chmod 755 "$clock_dir/fixture-clock.so"
-clock_sha="$(sha256sum "$clock_dir/fixture-clock.so" | cut -d' ' -f1)"
-printf '%s\n' 0 > "$clock_dir/walltime-us"
-chmod 666 "$clock_dir/walltime-us"
 cleanup() {
-  local result=$? id label remaining
+  local result=$? id label remaining name
   trap - EXIT
-  if ! id="$(docker container ls -a --no-trunc --filter "name=^/${container}$" --format '{{.ID}}')"; then
-    echo 'clock fixture cleanup inventory failed' >&2
-    exit 1
-  fi
-  if [[ -n "$id" ]]; then
-    [[ "$id" =~ ^[0-9a-f]{64}$ ]] || exit 1
-    label="$(docker container inspect "$id" --format '{{index .Config.Labels "voice.ci.fixture"}}')" || result=1
-    if [[ "$label" != "$owner" ]] || ! docker container rm -f "$id" >/dev/null; then result=1; fi
-    if ! remaining="$(docker container ls -a --no-trunc --filter "id=$id" --format '{{.ID}}')" || [[ -n "$remaining" ]]; then result=1; fi
-  fi
+  for name in "$container" "$compiler"; do
+    if ! id="$(docker container ls -a --no-trunc --filter "name=^/${name}$" --format '{{.ID}}')"; then
+      echo 'clock fixture cleanup inventory failed' >&2
+      result=1
+      continue
+    fi
+    if [[ -n "$id" ]]; then
+      if [[ ! "$id" =~ ^[0-9a-f]{64}$ ]]; then result=1; continue; fi
+      label="$(docker container inspect "$id" --format '{{index .Config.Labels "voice.ci.fixture"}}')" || result=1
+      if [[ "$label" != "$owner" ]] || ! docker container rm -f "$id" >/dev/null; then result=1; fi
+      if ! remaining="$(docker container ls -a --no-trunc --filter "id=$id" --format '{{.ID}}')" || [[ -n "$remaining" ]]; then result=1; fi
+    fi
+  done
   exit "$result"
 }
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-existing="$(docker container ls -a --no-trunc --filter "name=^/${container}$" --format '{{.ID}}')"
-if [[ -n "$existing" ]]; then
-  echo 'clock fixture name already exists' >&2
-  trap - EXIT
-  exit 1
-fi
+for name in "$container" "$compiler"; do
+  existing="$(docker container ls -a --no-trunc --filter "name=^/${name}$" --format '{{.ID}}')"
+  if [[ -n "$existing" ]]; then
+    echo 'clock fixture name already exists' >&2
+    trap - EXIT
+    exit 1
+  fi
+done
+docker create --name "$compiler" --network none --label "voice.ci.fixture=$owner" \
+  --mount "type=bind,source=$clock_dir,target=/fixture-clock" \
+  --mount "type=bind,source=$root/src/backend/space/internal/store/testdata/account_ban_wall_clock.c,target=/fixture-clock.c,readonly" \
+  golang@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb \
+  cc -shared -fPIC -O2 -o /fixture-clock/fixture-clock.so /fixture-clock.c -ldl >/dev/null
+docker start -a "$compiler"
+chmod 755 "$clock_dir/fixture-clock.so"
+clock_sha="$(sha256sum "$clock_dir/fixture-clock.so" | cut -d' ' -f1)"
+printf '%s\n' 0 > "$clock_dir/walltime-us"
+chmod 666 "$clock_dir/walltime-us"
 docker create --name "$container" --label "voice.ci.fixture=$owner" \
   --mount "type=bind,source=$clock_dir,target=/fixture-clock" \
   -e LD_PRELOAD=/fixture-clock/fixture-clock.so -e POSTGRES_USER=voice \
@@ -50,7 +61,11 @@ for _ in $(seq 1 90); do
   if docker exec "$container" pg_isready -U voice -d postgres >/dev/null 2>&1; then ready=true; break; fi
   sleep 1
 done
-[[ "$ready" == true ]]
+if [[ "$ready" != true ]]; then
+  docker logs "$container" >&2 || true
+  echo 'private PostgreSQL clock fixture did not become ready' >&2
+  exit 1
+fi
 port="$(docker inspect "$container" --format '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}')"
 [[ "$port" =~ ^[0-9]+$ ]]
 admin="postgres://voice:voice-clock-fixture@127.0.0.1:${port}/postgres?sslmode=disable"

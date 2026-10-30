@@ -3127,11 +3127,11 @@ jobs:
             ('30000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000003');
           INSERT INTO spaces(id,name,owner_profile_id,member_count)
             SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(n),12,'0'))::uuid,'concurrency fixture',
-                   '10000000-0000-0000-0000-000000000001'::uuid,3 FROM (VALUES (9),(11)) AS v(n);
+                   '10000000-0000-0000-0000-000000000001'::uuid,3 FROM (VALUES (9),(11),(12)) AS v(n);
           INSERT INTO space_members(space_id,profile_id)
             SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(s),12,'0'))::uuid,
                    format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
-            FROM (VALUES (9),(11)) AS spaces(s) CROSS JOIN (VALUES (1),(2),(3)) AS profiles(p);
+            FROM (VALUES (9),(11),(12)) AS spaces(s) CROSS JOIN (VALUES (1),(2),(3)) AS profiles(p);
           SQL
           "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 44
           "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 45
@@ -3189,7 +3189,7 @@ jobs:
             --output "$RUNNER_TEMP/space-concurrency-enrollment-receipt.json" --reject-skips
           set +e
           go test -json -count=1 -timeout 5m -tags=spacebanintegration \
-            -run '^(TestAccountBanIntentConcurrency50|TestAccountBanLockWaitExhaustsOriginalBudget50)$' ./internal/store \
+            -run '^(TestAccountBanIntentConcurrency50|TestAccountBanLockWaitExhaustsOriginalBudget50|TestAccountBanLateCaptureCannotCommitOrSplice50)$' ./internal/store \
             > "$RUNNER_TEMP/space-concurrency-events.jsonl"
           result=$?
           set -e

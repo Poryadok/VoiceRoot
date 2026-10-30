@@ -18,8 +18,8 @@ import (
 	userv1 "voice.app/voice/user/v1"
 )
 
-// This fixture initializes only the two seeded legacy spaces used by the
-// following concurrency proofs, after the real native50 transition.
+// This fixture initializes only the seeded legacy spaces used by the
+// concurrency and delayed-capture proofs, after the real native50 transition.
 func TestAccountBanFixtureConcurrencyEnrollment50(t *testing.T) {
 	ctx := context.Background()
 	dsn := os.Getenv("SPACE_BAN_TEST_DATABASE_URL")
@@ -30,7 +30,7 @@ func TestAccountBanFixtureConcurrencyEnrollment50(t *testing.T) {
 	st := &SpaceStore{Pool: owner}
 	before, err := st.InspectNativeInstallerSource(ctx, 50)
 	require.NoError(t, err)
-	for _, n := range []int{9, 11} {
+	for _, n := range []int{9, 11, 12} {
 		space := nativeBanSpace(n)
 		var count int
 		require.NoError(t, owner.QueryRow(ctx, `SELECT count(*) FROM space_members WHERE space_id=$1 AND profile_id=ANY($2::uuid[])`, space, []uuid.UUID{nativeBanProfile(1), nativeBanProfile(2), nativeBanProfile(3)}).Scan(&count))

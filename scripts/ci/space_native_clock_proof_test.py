@@ -18,23 +18,25 @@ class ClockFixtureCleanupTests(unittest.TestCase):
             root = Path(directory)
             tools = root / 'tools'
             tools.mkdir()
-            (tools / 'cc').write_text('''#!/usr/bin/env bash
-while [[ "$1" != -o ]]; do shift; done
-printf fixture > "$2"
-''', encoding='utf-8')
             (tools / 'docker').write_text('''#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$SIM_LOG"
 if [[ "$1 $2" == 'container ls' ]]; then
   if [[ "$SIM_MODE" == foreign ]]; then printf '%s\\n' "$SIM_ID"; exit 0; fi
   if [[ -f "$SIM_STATE" ]]; then
     [[ "$SIM_MODE" != uncertain ]] || exit 1
-    printf '%s\\n' "$SIM_ID"
+    name="$(cat "$SIM_STATE")"
+    if [[ "$*" == *"name=^/${name}$"* || "$*" == *"id=$SIM_ID"* ]]; then printf '%s\\n' "$SIM_ID"; fi
   fi
   exit 0
 fi
 if [[ "$1 $2" == 'container inspect' ]]; then printf '%s\\n' '123-1'; exit 0; fi
 if [[ "$1 $2" == 'container rm' ]]; then rm -f "$SIM_STATE"; exit 0; fi
-if [[ "$1" == create ]]; then : > "$SIM_STATE"; exit 1; fi
+if [[ "$1" == create ]]; then
+  shift
+  while [[ "$1" != --name ]]; do shift; done
+  printf '%s' "$2" > "$SIM_STATE"
+  exit 1
+fi
 exit 2
 ''', encoding='utf-8')
             for executable in tools.iterdir():

@@ -71,6 +71,8 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestAccountBanLockWaitExhaustsOriginalBudget50'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanLateCaptureCannotCommitOrSplice50'):
+        'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory'):
