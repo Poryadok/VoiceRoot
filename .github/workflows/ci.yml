@@ -3033,6 +3033,17 @@ jobs:
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --events "$RUNNER_TEMP/space-trusted50-events.jsonl" --exit-code "$result" \
             --output "$RUNNER_TEMP/space-trusted50-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestNative51FixtureCommitTrusted50$' ./internal/store \
+            > "$RUNNER_TEMP/space-native51-commit-events.jsonl"
+          commit_result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_native51_commit_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-native51-commit-events.jsonl" --exit-code "$commit_result" \
+            --output "$RUNNER_TEMP/space-native51-commit-receipt.json" --reject-skips
           [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
           psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
       - name: Run Space account-ban capture guard
@@ -3077,6 +3088,8 @@ jobs:
             ${{ runner.temp }}/space-transition50-receipt.json
             ${{ runner.temp }}/space-trusted50-events.jsonl
             ${{ runner.temp }}/space-trusted50-receipt.json
+            ${{ runner.temp }}/space-native51-commit-events.jsonl
+            ${{ runner.temp }}/space-native51-commit-receipt.json
             ${{ runner.temp }}/space-account-ban-provision.jsonl
             ${{ runner.temp }}/space-account-ban-events.jsonl
             ${{ runner.temp }}/space-account-ban-receipt.json

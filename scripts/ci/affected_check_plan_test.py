@@ -731,6 +731,13 @@ class AffectedCheckPlanTests(unittest.TestCase):
         for name in (stale, stale + '/epoch', stale + '/seal'):
             self.assertIn(name, required)
         self.assertIn('--reject-skips', step['run'])
+        commit = 'TestNative51FixtureCommitTrusted50'
+        self.assertIn(commit, step['run'])
+        self.assertIn('space_native51_commit_required.json', step['run'])
+        self.assertLess(step['run'].index('--output "$RUNNER_TEMP/space-trusted50-receipt.json"'),
+                        step['run'].index(commit))
+        commit_inventory = json.loads((ROOT / 'scripts/ci/space_native51_commit_required.json').read_text(encoding='utf-8'))
+        self.assertEqual(commit_inventory['space'], [['voice/backend/space/internal/store', commit]])
 
     def test_space_native_installer_runs_missing_capture_guard(self):
         import yaml
