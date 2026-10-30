@@ -641,6 +641,15 @@ Flutter output paths after each command. Those output paths, the SDK and
 external package provenance remain unbound inputs; a successful diagnostic
 therefore cannot authorize a PR handoff.
 
+`python3 scripts/ci/local_preflight.py --base <full-base-sha> --head
+<full-head-sha> --head-ref <branch> --output <new-directory-outside-checkout>
+--flutter <flutter>`
+uses the shared local plan and runs the full Flutter diagnostic when selected.
+Its report lists all selected checks and marks unimplemented checks `not_run`.
+It exits nonzero even after a successful diagnostic: the mandatory local
+preflight, including Docker scheduling and the remaining checks, is not yet
+implemented.
+
 The separate `flutter-music-proof` job retains the Music capture and playback
 artifacts. Its selector includes frontend sources, shared test support, assets,
 dependency files, design inputs, protobufs, and global or unknown CI changes.
