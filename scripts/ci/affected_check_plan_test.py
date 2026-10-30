@@ -712,6 +712,22 @@ class AffectedCheckPlanTests(unittest.TestCase):
             self.assertIn('TestCommittedPhaseFailureNeverAutoResumes/' + phase, required)
         self.assertIn('job.services.postgres.ports', test['env']['NATIVE_INSTALLER_TEST_ADMIN_URL'])
 
+    def test_space_trusted50_requires_atomic_rollback_and_fences(self):
+        import yaml
+        workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))
+        job = workflow['jobs']['space-native-installer-integration']
+        step = next(step for step in job['steps'] if step.get('name') == 'Run trusted Space native50 catalog proofs')
+        inventory = json.loads((ROOT / 'scripts/ci/space_trusted50_required.json').read_text(encoding='utf-8'))
+        required = {name for package, name in inventory['space'] if package == 'voice/backend/space/internal/store'}
+        root = 'TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory'
+        for name in (root, 'TestNative51FrameworkUnlockRetainsTransactionFences'):
+            self.assertIn(name, step['run'])
+            self.assertIn(name, required)
+        for phase in ('after_dirty_marker', 'after_body', 'after_CAS_and_clean_marker',
+                      'engine_unlock_error', 'outer_window_failure'):
+            self.assertIn(root + '/' + phase, required)
+        self.assertIn('--reject-skips', step['run'])
+
     def test_space_native_installer_runs_missing_capture_guard(self):
         import yaml
         workflow = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))

@@ -3024,7 +3024,7 @@ jobs:
             --output "$RUNNER_TEMP/space-transition50-receipt.json" --reject-skips
           set +e
           go test -json -count=1 -timeout 5m -tags=spacebanintegration \
-            -run '^(TestNativeCatalog50LiteralProjectionAndDrift|TestNative51RawCompositeSessionStability|TestNative51ClassifierRejectsUnclassifiedMissingDatum|TestNative50CreatorBornCurrentSchema)$' ./internal/store \
+            -run '^(TestNativeCatalog50LiteralProjectionAndDrift|TestNative51RawCompositeSessionStability|TestNative51ClassifierRejectsUnclassifiedMissingDatum|TestNative50CreatorBornCurrentSchema|TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory|TestNative51FrameworkUnlockRetainsTransactionFences)$' ./internal/store \
             > "$RUNNER_TEMP/space-trusted50-events.jsonl"
           result=$?
           set -e

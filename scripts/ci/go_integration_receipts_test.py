@@ -100,13 +100,18 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         import yaml
         package = 'voice/backend/space/internal/store'
         catalog = 'TestNativeCatalog50LiteralProjectionAndDrift'
+        atomic = 'TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory'
         roots = (catalog, 'TestNative51RawCompositeSessionStability',
                  'TestNative51ClassifierRejectsUnclassifiedMissingDatum',
-                 'TestNative50CreatorBornCurrentSchema')
+                 'TestNative50CreatorBornCurrentSchema', atomic,
+                 'TestNative51FrameworkUnlockRetainsTransactionFences')
+        phases = ('after_dirty_marker', 'after_body', 'after_CAS_and_clean_marker',
+                  'engine_unlock_error', 'outer_window_failure')
         cases = ('function_cost', 'function_ACL', 'function_owner', 'escaped_Unicode_body',
                  'unexpected_function', 'private_index_attributes', 'column', 'constraint', 'trigger_disabled')
         inventory = json.loads((ROOT / 'scripts/ci/space_trusted50_required.json').read_text(encoding='utf-8'))
         self.assertEqual(inventory['space'], [[package, name] for name in roots] +
+                         [[package, atomic + '/' + name] for name in phases] +
                          [[package, catalog + '/' + name] for name in cases])
         exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
         for name in roots:
