@@ -1,5 +1,6 @@
 """Source transfer into an owned Go runner must fail closed on drift."""
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -31,6 +32,73 @@ class FakeOwner:
 
 
 class TransferTests(unittest.TestCase):
+    def test_go_diagnostic_records_skips_and_offline_command_without_pass(self):
+        source = {'head': 'a' * 40}
+        events = [{'Action': 'start', 'Package': 'example.test/module'},
+                  {'Action': 'run', 'Package': 'example.test/module', 'Test': 'TestPass'},
+                  {'Action': 'pass', 'Package': 'example.test/module', 'Test': 'TestPass'},
+                  {'Action': 'run', 'Package': 'example.test/module', 'Test': 'TestSkip'},
+                  {'Action': 'skip', 'Package': 'example.test/module', 'Test': 'TestSkip'},
+                  {'Action': 'pass', 'Package': 'example.test/module'}]
+        class GoOwner:
+            def execute(self, name, command, stdout, stderr, timeout):
+                self.command = command
+                stdout.write(('\n'.join(json.dumps(event) for event in events) + '\n').encode())
+                return 0
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            owner = GoOwner()
+            with patch.object(runner.snapshot, 'capture', return_value=source), \
+                 patch.object(runner.snapshot, 'verify_materialized'), \
+                 patch.object(runner, '_verify_workspace') as verify_workspace:
+                report = runner.run_package_diagnostic(owner, 'owned', root, source, root / 'copy',
+                    'a' * 64, 'src/backend', ['example.test/module'], Path(directory) / 'output')
+            self.assertEqual(report['status'], 'incomplete')
+            self.assertEqual(report['tests']['skipped'], [['example.test/module', 'TestSkip']])
+            self.assertIn('GOPROXY=off', owner.command[2])
+            self.assertIn('example.test/module', owner.command)
+            self.assertEqual(verify_workspace.call_count, 2)
+
+    def test_go_diagnostic_rejects_changed_source_and_invalid_package(self):
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            owner = FakeOwner()
+            with patch.object(runner.snapshot, 'capture', return_value={'head': 'b' * 40}), \
+                 patch.object(runner.snapshot, 'verify_materialized'):
+                with self.assertRaisesRegex(ValueError, 'source changed'):
+                    runner.run_package_diagnostic(owner, 'owned', root, source, root / 'copy',
+                        'a' * 64, 'src/backend', ['example.test/module'], Path(directory) / 'output')
+            with self.assertRaisesRegex(ValueError, 'package inventory'):
+                runner.run_package_diagnostic(owner, 'owned', root, source, root / 'copy',
+                    'a' * 64, 'src/backend', ['example.test/../escape'], Path(directory) / 'output')
+
+    def test_workspace_rejects_extra_file(self):
+        class WorkspaceOwner:
+            def execute(self, name, command, stdout, stderr, timeout):
+                if command[0] == 'sha256sum':
+                    stdout.write((('a' * 64) + '  /workspace/candidate.tar\n').encode())
+                elif command[0] == 'sh' and 'sort -z' in command[2]:
+                    stdout.write(b'./known.go\0./unexpected.go\0')
+                return 0
+        with patch.object(runner.snapshot, '_snapshot_entries', return_value=[(b'known.go', ['known.go'])]):
+            with self.assertRaisesRegex(ValueError, 'workspace changed'):
+                runner._verify_workspace(WorkspaceOwner(), 'owned', Path('.'), {}, 'a' * 64)
+
+    def test_go_diagnostic_rejects_source_change_during_command(self):
+        source = {'head': 'a' * 40}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'root'
+            root.mkdir()
+            with patch.object(runner.snapshot, 'capture', side_effect=[source, {'head': 'b' * 40}]), \
+                 patch.object(runner.snapshot, 'verify_materialized'), \
+                 patch.object(runner, '_verify_workspace'):
+                with self.assertRaisesRegex(ValueError, 'source changed during'):
+                    runner.run_package_diagnostic(FakeOwner(), 'owned', root, source, root / 'copy',
+                        'a' * 64, 'src/backend', ['example.test/module'], Path(directory) / 'output')
+
     def test_replaced_archive_path_prevents_remote_extraction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
