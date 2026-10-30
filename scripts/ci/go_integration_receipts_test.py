@@ -247,7 +247,7 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                   'TestAccountBanFixtureTrusted50Transition', drift, *observers)
         positions = [run.index(value) for value in phases]
         self.assertEqual(positions, sorted(positions))
-        self.assertEqual(run.count('--reject-skips'), 6)
+        self.assertEqual(run.count('--reject-skips'), 7)
         self.assertIn('owned_oid', run)
         self.assertIn('DROP DATABASE space_db', run)
         for inventory in inventories:
@@ -260,6 +260,28 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                 self.assertIn((package, name), receipts.verify_required(missing, inventory, 0))
                 skipped = [dict(event, Action='skip') if event.get('Test') == name and event['Action'] == 'pass' else event for event in events]
                 self.assertIn((package, name), receipts.verify_required(skipped, inventory, 0))
+
+    def test_space_roster_requires_seeded_enrollment_and_component_proof(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        name = 'TestAccountBanGIS50'
+        inventory = json.loads((ROOT / 'scripts/ci/space_gis50_required.json').read_text(encoding='utf-8'))['space']
+        self.assertEqual(inventory, [[package, name]])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+        self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        step = next(item for item in jobs['space-native-installer-integration']['steps']
+                    if item.get('name') == 'Run seeded Space native50 observer proofs')
+        run = step['run']
+        positions = [run.index(value) for value in ('native7-fixture-8', 'goto 44', 'goto 50',
+                                                     'TestAccountBanFixtureConcurrencyEnrollment50', name)]
+        self.assertEqual(positions, sorted(positions))
+        events = [{'Package': package, 'Test': name, 'Action': 'run'},
+                  {'Package': package, 'Test': name, 'Action': 'pass'}, {'Package': package, 'Action': 'pass'}]
+        self.assertFalse(receipts.verify_required(events, inventory, 0))
+        events[1]['Action'] = 'skip'
+        self.assertIn((package, name), receipts.verify_required(events, inventory, 0))
 
     def test_space_concurrency_requires_seeded_enrollment_and_both_proofs(self):
         import yaml

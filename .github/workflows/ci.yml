@@ -3132,6 +3132,18 @@ jobs:
             SELECT format('30000000-0000-0000-0000-%s',lpad(to_hex(s),12,'0'))::uuid,
                    format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
             FROM (VALUES (9),(11),(12)) AS spaces(s) CROSS JOIN (VALUES (1),(2),(3)) AS profiles(p);
+          INSERT INTO spaces(id,name,owner_profile_id,member_count) VALUES
+            ('30000000-0000-0000-0000-000000000008','roster fixture','10000000-0000-0000-0000-000000000001',5);
+          INSERT INTO space_members(space_id,profile_id)
+            SELECT '30000000-0000-0000-0000-000000000008'::uuid,
+                   format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid
+            FROM (VALUES (1),(2),(3),(6)) AS profiles(p);
+          INSERT INTO community_owner_authority(space_id,application_id,environment_id,corporation_key,owner_account_id,owner_profile_id,owner_generation,status,roster_source_revision,roster_sha256,roster_lease_expires_at) VALUES
+            ('30000000-0000-0000-0000-000000000008','40000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000002','native7-fixture-8','20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',1,'active',1,decode(repeat('aa',32),'hex'),now()+interval '1 day');
+          INSERT INTO community_roster_members(space_id,profile_id,source_rank,source_reasons,source_revision,owner_generation,lease_expires_at)
+            SELECT '30000000-0000-0000-0000-000000000008'::uuid,
+                   format('10000000-0000-0000-0000-%s',lpad(to_hex(p),12,'0'))::uuid,
+                   'member',ARRAY['membership'],1,1,now()+interval '1 day' FROM (VALUES (2),(5)) AS profiles(p);
           SQL
           "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 44
           "$RUNNER_TEMP/native-migrate-driver" -path ../migrations/space_db -database "$SPACE_BAN_TEST_DATABASE_URL" goto 45
@@ -3198,6 +3210,16 @@ jobs:
             --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --events "$RUNNER_TEMP/space-concurrency-events.jsonl" --exit-code "$result" \
             --output "$RUNNER_TEMP/space-concurrency-receipt.json" --reject-skips
+          set +e
+          go test -json -count=1 -timeout 5m -tags=spacebanintegration \
+            -run '^TestAccountBanGIS50$' ./internal/store > "$RUNNER_TEMP/space-gis50-events.jsonl"
+          result=$?
+          set -e
+          python3 ../../../scripts/ci/go_integration_matrix.py produce \
+            --inventory ../../../scripts/ci/space_gis50_required.json --service space \
+            --candidate "$CANDIDATE_SHA" --run "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --events "$RUNNER_TEMP/space-gis50-events.jsonl" --exit-code "$result" \
+            --output "$RUNNER_TEMP/space-gis50-receipt.json" --reject-skips
           [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
           psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
       - name: Run Space clock-sensitive observer proofs
@@ -3262,6 +3284,8 @@ jobs:
             ${{ runner.temp }}/space-concurrency-enrollment-receipt.json
             ${{ runner.temp }}/space-concurrency-events.jsonl
             ${{ runner.temp }}/space-concurrency-receipt.json
+            ${{ runner.temp }}/space-gis50-events.jsonl
+            ${{ runner.temp }}/space-gis50-receipt.json
             ${{ runner.temp }}/space-clock-*-events.jsonl
             ${{ runner.temp }}/space-clock-*-receipt.json
             ${{ runner.temp }}/space-account-ban-provision.jsonl
