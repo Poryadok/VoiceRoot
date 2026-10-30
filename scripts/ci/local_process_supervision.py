@@ -7,11 +7,13 @@ process creation and job assignment can leave that process uncontained; this
 window is not crash-safe and the caller must not claim crash-safe execution.
 """
 import ctypes
+import io
 import math
 import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import tempfile
 import threading
@@ -22,6 +24,9 @@ import sys
 
 class SupervisionError(RuntimeError):
     pass
+
+
+MAX_CAPTURE_BYTES = 64 * 1024 * 1024
 
 
 def _windows_job():
@@ -442,6 +447,65 @@ def _run_broker_experimental(command, *, timeout, cwd, env, stdout, stderr, clea
     if failure is not None:
         raise failure
     return result
+
+
+def run_diagnostic(command, *, timeout, cwd=None, env=None, stdout=None, stderr=None,
+                   capture_output=False, check=False):
+    """Run a Windows-only diagnostic with caller-owned binary output streams.
+
+    This does not establish complete preflight or generic daemon cancellation.
+    Capture is limited to 64 MiB per stream. Explicit outputs must be fresh,
+    distinct binary files exclusively owned by the caller for the run; external
+    sharing cannot be verified. Pipe and process waits are bounded; OS process creation, handle duplication,
+    filesystem operations and the same-user host trust boundary remain separate.
+    """
+    if os.name != 'nt':
+        raise SupervisionError('Windows diagnostic broker required; Linux is unsupported')
+    if (not isinstance(command, (list, tuple)) or not command or
+            any(not isinstance(arg, str) or not arg or '\0' in arg for arg in command)):
+        raise ValueError('command must contain nonempty string arguments')
+    if (isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or
+            not math.isfinite(timeout) or timeout <= 0):
+        raise ValueError('positive finite timeout required')
+    if check is not False or type(capture_output) is not bool:
+        raise ValueError('unsupported subprocess options')
+    if env is not None and (not isinstance(env, dict) or
+                            any(not isinstance(k, str) or not isinstance(v, str) or
+                                not k or '\0' in k or '=' in k or '\0' in v for k, v in env.items())):
+        raise ValueError('environment must contain valid string entries')
+    if capture_output:
+        if stdout is not None or stderr is not None:
+            raise ValueError('capture_output cannot be combined with explicit streams')
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            _validate_output_files(out, err)
+            result = _run_broker_experimental(command, timeout=timeout, cwd=cwd, env=env,
+                                              stdout=out, stderr=err)
+            out.seek(0); err.seek(0)
+            output, errors = out.read(MAX_CAPTURE_BYTES + 1), err.read(MAX_CAPTURE_BYTES + 1)
+            if len(output) > MAX_CAPTURE_BYTES or len(errors) > MAX_CAPTURE_BYTES:
+                raise ValueError('capture exceeds per-stream limit')
+            return subprocess.CompletedProcess(command, result.returncode, output, errors)
+    if stdout is None or stderr is None:
+        raise ValueError('explicit stdout and stderr are required')
+    _validate_output_files(stdout, stderr)
+    return _run_broker_experimental(command, timeout=timeout, cwd=cwd, env=env,
+                                    stdout=stdout, stderr=stderr)
+
+
+def _validate_output_files(stdout, stderr):
+    identities = []
+    for stream in (stdout, stderr):
+        if isinstance(stream, io.TextIOBase) or not stream.writable() or not stream.seekable():
+            raise ValueError('fresh writable binary output files are required')
+        stream.flush()
+        info = os.fstat(stream.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size != 0 or stream.tell() != 0:
+            raise ValueError('fresh writable binary output files are required')
+        if not info.st_ino:
+            raise ValueError('output identity unavailable')
+        identities.append((info.st_dev, info.st_ino))
+    if identities[0] == identities[1]:
+        raise ValueError('output files must be distinct')
 
 
 if __name__ == '__main__' and len(sys.argv) == 3 and sys.argv[1] == '--broker':

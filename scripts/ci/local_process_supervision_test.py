@@ -15,6 +15,70 @@ import local_process_supervision as supervision
 
 
 class SupervisionTest(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_public_diagnostic_capture_returns_bytes_and_exit_code(self):
+        result = supervision.run_diagnostic([sys.executable, '-c',
+            'import sys; sys.stdout.buffer.write(b"out"); sys.stderr.buffer.write(b"err"); sys.exit(7)'],
+            timeout=5, cwd=None, env=dict(os.environ), capture_output=True, check=False)
+        self.assertIsInstance(result, subprocess.CompletedProcess)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (7, b'out', b'err'))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_public_diagnostic_keeps_caller_output_files_open(self):
+        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+            result = supervision.run_diagnostic([sys.executable, '-c', 'print("owned")'],
+                timeout=5, cwd=None, env=dict(os.environ), stdout=out, stderr=err, check=False)
+            self.assertEqual(result.returncode, 0)
+            self.assertIsNone(result.stdout)
+            self.assertFalse(out.closed)
+            out.seek(0)
+            self.assertEqual(out.read().strip(), b'owned')
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_public_diagnostic_rejects_buffered_existing_output_and_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'output'
+            with path.open('w+b') as out, tempfile.TemporaryFile() as err:
+                out.write(b'pending')
+                with self.assertRaisesRegex(ValueError, 'fresh'):
+                    supervision.run_diagnostic([sys.executable, '-c', 'print("unsafe")'], timeout=5, stdout=out, stderr=err)
+                self.assertFalse(out.closed)
+            path.write_bytes(b'')
+            with path.open('r+b') as out, path.open('r+b') as alias:
+                with self.assertRaisesRegex(ValueError, 'distinct'):
+                    supervision.run_diagnostic([sys.executable, '-c', 'print("unsafe")'], timeout=5, stdout=out, stderr=alias)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_public_diagnostic_rejects_capture_above_limit(self):
+        with patch.object(supervision, 'MAX_CAPTURE_BYTES', 32):
+            with self.assertRaisesRegex(ValueError, 'capture exceeds'):
+                supervision.run_diagnostic([sys.executable, '-c', 'print("x" * 33)'],
+                                           timeout=5, capture_output=True)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows broker acceptance')
+    def test_public_diagnostic_times_out(self):
+        with self.assertRaises(subprocess.TimeoutExpired):
+            supervision.run_diagnostic([sys.executable, '-c', 'import time; time.sleep(10)'],
+                                      timeout=.3, capture_output=True)
+
+    def test_public_diagnostic_refuses_unsupported_arguments_and_platform(self):
+        with self.assertRaises((ValueError, supervision.SupervisionError)):
+            supervision.run_diagnostic([sys.executable], timeout=1, capture_output=True, check=True)
+        with self.assertRaises((ValueError, supervision.SupervisionError)):
+            supervision.run_diagnostic([sys.executable], timeout=0, capture_output=True)
+        with self.assertRaises(TypeError):
+            supervision.run_diagnostic([sys.executable], timeout=1, capture_output=True, shell=True)
+        if os.name == 'nt':
+            with tempfile.TemporaryFile() as out:
+                with self.assertRaises(ValueError):
+                    supervision.run_diagnostic([sys.executable], timeout=1, capture_output=True, stdout=out)
+            with self.assertRaises(ValueError):
+                supervision.run_diagnostic([sys.executable], timeout=1)
+            with self.assertRaises(ValueError):
+                supervision.run_diagnostic([], timeout=1, capture_output=True)
+        with patch.object(supervision.os, 'name', 'posix'):
+            with self.assertRaises(supervision.SupervisionError):
+                supervision.run_diagnostic([sys.executable], timeout=1, capture_output=True)
     @unittest.skipUnless(os.name == 'nt', 'Windows named-pipe acceptance')
     def test_pipe_timeout_partial_message_disconnect_and_wrong_pid(self):
         import ctypes
