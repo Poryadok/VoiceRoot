@@ -61,6 +61,10 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNativeObserverPrivateClosureAndLock'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNativeObserverOtherProfileCommunityGap'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestNativeObserverNoopLeaseGapTuple'):
+        'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory'):

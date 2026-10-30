@@ -188,6 +188,43 @@ class GoIntegrationReceiptTests(unittest.TestCase):
         events[-2]['Action'] = 'skip'
         self.assertTrue(receipts.verify_required(events, inventory['space'], 0))
 
+    def test_clock_space_observers_require_real_seed_and_no_skips(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        parent = 'TestNativeObserverOtherProfileCommunityGap'
+        cases = (parent, parent + '/time_gap_cannot_preserve_old_history',
+                 parent + '/continuous_unrelated_write_preserves_history',
+                 'TestNativeObserverNoopLeaseGapTuple')
+        inventory = json.loads((ROOT / 'scripts/ci/space_clock50_observer_required.json').read_text(encoding='utf-8'))['space']
+        self.assertEqual(inventory, [[package, name] for name in cases])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for name in (parent, cases[-1]):
+            entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        steps = jobs['space-native-installer-integration']['steps']
+        step = next(item for item in steps if item.get('name') == 'Run Space clock-sensitive observer proofs')
+        self.assertIn('scripts/ci/space_native_clock_proof.sh', step['run'])
+        script = (ROOT / 'scripts/ci/space_native_clock_proof.sh').read_text(encoding='utf-8')
+        phases = ('migrate 34', 'INSERT INTO spaces', 'INSERT INTO community_owner_authority',
+                  'migrate 44', 'migrate 45', 'receipt transition45', 'migrate 50',
+                  'receipt transition50', 'receipt enrollment', 'receipt observer')
+        positions = [script.index(value) for value in phases]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn('--reject-skips', script)
+        self.assertIn('account_ban_wall_clock.c', script)
+        self.assertIn('voice.ci.fixture', script)
+        self.assertIn('docker container rm -f "$id"', script)
+        events = [{'Package': package, 'Test': name, 'Action': action}
+                  for _, name in inventory for action in ('run', 'pass')]
+        events.append({'Package': package, 'Action': 'pass'})
+        self.assertFalse(receipts.verify_required(events, inventory, 0))
+        for _, name in inventory:
+            missing = [event for event in events if not (event.get('Test') == name and event['Action'] == 'pass')]
+            self.assertIn((package, name), receipts.verify_required(missing, inventory, 0))
+            skipped = [dict(event, Action='skip') if event.get('Test') == name and event['Action'] == 'pass' else event for event in events]
+            self.assertIn((package, name), receipts.verify_required(skipped, inventory, 0))
+
     def test_seeded_space_observers_require_real_transition_and_enrollment(self):
         import yaml
         package = 'voice/backend/space/internal/store'

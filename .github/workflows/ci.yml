@@ -3172,6 +3172,10 @@ jobs:
             --output "$RUNNER_TEMP/space-seeded50-observer-receipt.json" --reject-skips
           [[ "$(psql -XAt -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c "$query")" == "$owned_oid" ]]
           psql -X -v ON_ERROR_STOP=1 "$SPACE_NATIVE_ADMIN_URL" -c 'DROP DATABASE space_db'
+      - name: Run Space clock-sensitive observer proofs
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: bash scripts/ci/space_native_clock_proof.sh
       - name: Run Space account-ban capture guard
         working-directory: src/backend/space
         env:
@@ -3226,6 +3230,8 @@ jobs:
             ${{ runner.temp }}/space-seeded50-drift-receipt.json
             ${{ runner.temp }}/space-seeded50-observer-events.jsonl
             ${{ runner.temp }}/space-seeded50-observer-receipt.json
+            ${{ runner.temp }}/space-clock-*-events.jsonl
+            ${{ runner.temp }}/space-clock-*-receipt.json
             ${{ runner.temp }}/space-account-ban-provision.jsonl
             ${{ runner.temp }}/space-account-ban-events.jsonl
             ${{ runner.temp }}/space-account-ban-receipt.json
