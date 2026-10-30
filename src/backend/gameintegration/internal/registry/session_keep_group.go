@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"google.golang.org/protobuf/proto"
 	"voice/backend/pkg/principal"
 )
 
@@ -335,10 +334,6 @@ func nilString(value string) any {
 		return nil
 	}
 	return value
-}
-
-func marshalOwnerProto(message proto.Message) (string, error) {
-	return principal.RequestHash(message)
 }
 
 func (w sessionKeepGroupWork) String() string {

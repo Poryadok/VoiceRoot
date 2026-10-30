@@ -195,7 +195,7 @@ func TestCommunityOwnerRecoveryFreezesReopensAndFencesStaleGenerations(t *testin
 	require.Equal(t, 2, oldGenerationRevocations, "owner takeover durably revokes every old-generation reason")
 	require.ErrorIs(t, func() error { _, err := store.GetCommunityRosterSnapshot(ctx, principal, "corp-recovery"); return err }(),
 		ErrStaleCommunityRoster, "new Owner generation must publish a fresh complete roster")
-	replay, err = store.OpenCommunityOwnerRecovery(ctx, second)
+	_, err = store.OpenCommunityOwnerRecovery(ctx, second)
 	require.ErrorIs(t, err, ErrOwnerRecoveryConflict, "stale generation cannot begin a second takeover after completion")
 	_, err = store.ApproveCommunityOwnerRecovery(ctx, principal.ApplicationID, secondID, operator)
 	require.ErrorIs(t, err, ErrOwnerRecoveryConflict, "old approval cannot act after authority generation advanced")

@@ -26,7 +26,7 @@ type Client struct {
 func New(target, token string) (*Client, error) {
 	target, token = strings.TrimSpace(target), strings.TrimSpace(token)
 	if target == "" || token == "" {
-		return nil, fmt.Errorf("Space bootstrap target and service token are required")
+		return nil, fmt.Errorf("space bootstrap target and service token are required")
 	}
 	conn, err := grpc.NewClient(target, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -52,12 +52,12 @@ func (c *Client) SetPrincipalIssuer(issuer *principal.Issuer) {
 // app-scoped profile read. The request is signed for the exact RPC and bytes.
 func (c *Client) AreCoMembers(ctx context.Context, profileA, profileB uuid.UUID, spaceIDs []uuid.UUID) (bool, error) {
 	if c == nil || c.service == nil || c.issuer == nil || profileA == uuid.Nil || profileB == uuid.Nil || len(spaceIDs) == 0 {
-		return false, fmt.Errorf("Space co-membership client unavailable")
+		return false, fmt.Errorf("space co-membership client unavailable")
 	}
 	ids := make([]string, len(spaceIDs))
 	for i, id := range spaceIDs {
 		if id == uuid.Nil {
-			return false, fmt.Errorf("Space co-membership scope is invalid")
+			return false, fmt.Errorf("space co-membership scope is invalid")
 		}
 		ids[i] = id.String()
 	}
