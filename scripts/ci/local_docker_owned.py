@@ -78,14 +78,17 @@ class DockerCLI:
                 bindings = host.get('PortBindings') or {}
                 if bindings:
                     raise ValueError()
-                running = value.get('State', {}).get('Running') is True
+                running = value.get('State', {}).get('Running')
+                if type(running) is not bool:
+                    raise ValueError()
                 if running:
                     actual = value.get('NetworkSettings', {}).get('Ports') or {}
                     if not isinstance(actual, dict) or any(entries not in (None, []) for entries in actual.values()):
                         raise ValueError()
                 return {'id': identifier, 'name': value['Name'].removeprefix('/'), 'kind': kind,
                         'labels': value['Config'].get('Labels') or {}, 'image': value['Image'],
-                        'network': host['NetworkMode'], 'mounts': mounts, 'ports': [], 'running': running}
+                         'network': host['NetworkMode'], 'mounts': mounts, 'ports': [], 'running': running,
+                         'command': value['Config'].get('Cmd'), 'entrypoint': value['Config'].get('Entrypoint') or []}
             else:
                 raise ValueError()
             return {'id': identifier, 'name': value['Name'], 'labels': value.get('Labels') or {}, 'kind': kind,
@@ -116,18 +119,33 @@ class DockerCLI:
             volumes = image['Config'].get('Volumes') or {}
             if image.get('Os') != 'linux' or image.get('Id') != identifier or not isinstance(volumes, dict):
                 raise ValueError()
-            return {'id': identifier, 'volumes': sorted(volumes)}
+            return {'id': identifier, 'volumes': sorted(volumes), 'entrypoint': image['Config'].get('Entrypoint') or []}
         except (ValueError, KeyError, TypeError, AttributeError):
             raise OwnershipError('Docker image inspection was invalid') from None
 
-    def create_container(self, name, labels, image_id, network_id, mounts, ports):
+    def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None):
         options = [part for key, value in sorted(labels.items()) for part in ('--label', key + '=' + value)]
         for target, volume in sorted(mounts.items()):
             options.extend(('--mount', 'type=volume,source=' + volume + ',target=' + target))
-        return self._call('container', 'create', '--name', name, '--network', network_id, *options, image_id)
+        return self._call('container', 'create', '--name', name, '--network', network_id, *options,
+                          image_id, *(command or []))
 
     def start(self, identifier):
         self._call('container', 'start', identifier)
+
+    def stop(self, identifier):
+        self._call('container', 'stop', '--time', '5', identifier)
+
+    def execute(self, identifier, command, stdout, stderr, timeout, stdin=None):
+        try:
+            result = subprocess.run(['docker', 'container', 'exec', *(['--interactive'] if stdin is not None else []), identifier, *command],
+                                    env=self._env, stdin=stdin, stdout=stdout, stderr=stderr,
+                                    timeout=timeout, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            raise OwnershipError('Docker execution outcome uncertain') from None
+        if result.returncode < 0 or result.returncode == 125:
+            raise OwnershipError('Docker execution outcome uncertain')
+        return result.returncode
 
 
 class OwnedRun:
@@ -220,13 +238,15 @@ class OwnedRun:
             keys = {'kind', 'name', 'nonce', 'id', 'state'}
             if kind == 'container':
                 keys |= {'image', 'network', 'mounts', 'ports'}
+                if 'command' in item:
+                    keys.add('command')
             if (set(item) != keys
-                    or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'ready', 'removing', 'removed')
+                    or kind not in ('network', 'volume', 'container') or item['state'] not in ('creating', 'starting', 'executing', 'stopping', 'ready', 'removing', 'removed')
                     or not isinstance(item['nonce'], str) or not re.fullmatch(r'[0-9a-f]{32}', item['nonce'])
                     or item['name'] != self.run_id + '-' + item['kind'] + '-' + item['nonce']
                     or item['name'] in names or not isinstance(item['id'], str)):
                 raise OwnershipError('invalid ownership record')
-            if item['state'] == 'starting' and kind != 'container':
+            if item['state'] in ('starting', 'executing', 'stopping') and kind != 'container':
                 raise OwnershipError('invalid resource state')
             if item['state'] == 'creating':
                 if item['id']:
@@ -240,6 +260,8 @@ class OwnedRun:
                         or not isinstance(item['mounts'], dict) or not isinstance(item['ports'], list)):
                     raise OwnershipError('invalid container specification')
                 self._validate_mounts_ports(item['mounts'], item['ports'])
+                if 'command' in item:
+                    self._validate_command(item['command'])
             names.add(item['name'])
         networks = {item['id'] for item in state['resources'] if item['kind'] == 'network' and item['id']}
         volumes = {item['name'] for item in state['resources'] if item['kind'] == 'volume'}
@@ -247,6 +269,13 @@ class OwnedRun:
             if item['kind'] == 'container' and (item['network'] not in networks or
                                                 any(name not in volumes for name in item['mounts'].values())):
                 raise OwnershipError('container references a foreign resource')
+
+    @staticmethod
+    def _validate_command(command):
+        if (type(command) is not list or not 1 <= len(command) <= 64 or
+                any(type(part) is not str or not part or len(part) > 4096 or
+                    any(ord(ch) < 32 or ord(ch) == 127 for ch in part) for part in command)):
+            raise OwnershipError('invalid container command')
 
     @staticmethod
     def _validate_mounts_ports(mounts, ports):
@@ -293,12 +322,15 @@ class OwnedRun:
         if item['kind'] == 'container' and any(observed.get(key) != item[key]
                                                for key in ('image', 'network', 'mounts', 'ports')):
             raise OwnershipError('Docker container specification changed')
+        if item['kind'] == 'container' and 'command' in item and (
+                observed.get('command') != item['command'] or observed.get('entrypoint') != []):
+            raise OwnershipError('Docker container command changed')
         return observed
 
     def create_resource(self, kind):
         self._validate()
         self._check_daemon()
-        if kind not in ('network', 'volume') or any(r['state'] in ('creating', 'starting', 'removing') for r in self.state['resources']):
+        if kind not in ('network', 'volume') or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for r in self.state['resources']):
             raise OwnershipError('unsupported resource or unresolved operation')
         nonce = uuid.uuid4().hex
         item = {'kind': kind, 'name': self.run_id + '-' + kind + '-' + nonce,
@@ -318,22 +350,26 @@ class OwnedRun:
         self._save()
         return item['name']
 
-    def create_container(self, image_id, network_name, mounts, ports):
+    def create_container(self, image_id, network_name, mounts, ports, command=None):
         self._validate()
         self._check_daemon()
         if (not isinstance(image_id, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id)
                 or not isinstance(mounts, dict) or not isinstance(ports, list)
-                or any(r['state'] in ('creating', 'starting', 'removing') for r in self.state['resources'])):
+                or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for r in self.state['resources'])):
             raise OwnershipError('invalid image or unresolved operation')
         self._validate_mounts_ports(mounts, ports)
+        if command is not None:
+            self._validate_command(command)
         networks = [r for r in self.state['resources'] if r['kind'] == 'network' and r['name'] == network_name and r['state'] == 'ready']
         volumes = {r['name']: r for r in self.state['resources'] if r['kind'] == 'volume' and r['state'] == 'ready'}
         if len(networks) != 1 or any(name not in volumes for name in mounts.values()):
             raise OwnershipError('container network or volumes are not owned by this run')
         image = self.engine.image(image_id)
         if (not isinstance(image, dict) or image.get('id') != image_id or not isinstance(image.get('volumes'), list)
-                or set(image['volumes']) != set(mounts)):
+                or not set(image['volumes']).issubset(mounts)):
             raise OwnershipError('all declared image volumes must be owned and mounted')
+        if command is not None and image.get('entrypoint') != []:
+            raise OwnershipError('explicit commands require an image without an entrypoint')
         self._inspect(networks[0])
         for name in mounts.values():
             self._inspect(volumes[name])
@@ -341,10 +377,15 @@ class OwnedRun:
         item = {'kind': 'container', 'name': self.run_id + '-container-' + nonce, 'nonce': nonce,
                 'id': '', 'state': 'creating', 'image': image_id, 'network': networks[0]['id'],
                 'mounts': dict(mounts), 'ports': sorted(ports)}
+        if command is not None:
+            item['command'] = list(command)
         self.state['resources'].append(item)
         self._save()
         labels = {'voice.ci.run': self.run_id, 'voice.ci.resource': nonce, 'voice.ci.kind': 'container'}
-        identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'])
+        if command is None:
+            identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'])
+        else:
+            identifier = self.engine.create_container(item['name'], labels, image_id, item['network'], mounts, item['ports'], command=list(command))
         self._check_daemon()
         if not isinstance(identifier, str) or not re.fullmatch(r'[0-9a-f]{64}', identifier):
             raise OwnershipError('Docker container identity is invalid')
@@ -358,7 +399,7 @@ class OwnedRun:
         self._validate()
         self._check_daemon()
         matches = [r for r in self.state['resources'] if r['kind'] == 'container' and r['name'] == name and r['state'] == 'ready']
-        if len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'removing') for r in self.state['resources']):
+        if len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for r in self.state['resources']):
             raise OwnershipError('container is not ready or an operation is unresolved')
         item = matches[0]
         self._inspect(item)
@@ -371,10 +412,60 @@ class OwnedRun:
         item['state'] = 'ready'
         self._save()
 
+    def execute(self, name, command, stdout, stderr, timeout, stdin=None):
+        self._validate()
+        self._validate_command(command)
+        if type(timeout) not in (int, float) or not 0 < timeout <= 86400:
+            raise OwnershipError('invalid command timeout')
+        self._check_daemon()
+        matches = [r for r in self.state['resources'] if r['kind'] == 'container' and
+                   r['name'] == name and r['state'] == 'ready' and 'command' in r]
+        if len(matches) != 1 or any(r['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for r in self.state['resources']):
+            raise OwnershipError('container is not ready or an operation is unresolved')
+        item = matches[0]
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('owned container is not running')
+        item['state'] = 'executing'
+        self._save()
+        if stdin is None:
+            result = self.engine.execute(item['id'], command, stdout, stderr, timeout)
+        else:
+            result = self.engine.execute(item['id'], command, stdout, stderr, timeout, stdin=stdin)
+        if type(result) is not int or not 0 <= result <= 255 or result == 125:
+            raise OwnershipError('invalid execution result')
+        self._check_daemon()
+        if not self._inspect(item).get('running'):
+            raise OwnershipError('owned container stopped during execution')
+        item['state'] = 'ready'
+        self._save()
+        return result
+
+    def cancel_execution(self, name):
+        """Stop the exact owned container before reconciling an uncertain exec."""
+        self._validate()
+        self._check_daemon()
+        matches = [r for r in self.state['resources'] if r['kind'] == 'container' and
+                   r['name'] == name and r['state'] in ('executing', 'stopping') and 'command' in r]
+        if len(matches) != 1:
+            raise OwnershipError('no matching uncertain owned execution')
+        item = matches[0]
+        observed = self._inspect(item)
+        if type(observed.get('running')) is not bool:
+            raise OwnershipError('owned container running state is unknown')
+        item['state'] = 'stopping'
+        self._save()
+        if observed.get('running'):
+            self.engine.stop(item['id'])
+        self._check_daemon()
+        if self._inspect(item).get('running') is not False:
+            raise OwnershipError('owned container did not stop')
+        item['state'] = 'ready'
+        self._save()
+
     def cleanup(self):
         self._validate()
         self._check_daemon()
-        if any(item['state'] in ('creating', 'starting', 'removing') for item in self.state['resources']):
+        if any(item['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing') for item in self.state['resources']):
             raise OwnershipError('uncertain operation requires reconciliation')
         order = {'container': 0, 'volume': 1, 'network': 2}
         ready = sorted((item for item in reversed(self.state['resources']) if item['state'] == 'ready'),

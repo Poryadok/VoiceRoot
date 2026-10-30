@@ -72,6 +72,7 @@ local_docker_isolation:
   - scripts/ci/local_docker_scheduled.py
   - scripts/ci/local_docker_scheduled_test.py
   - scripts/ci/local_docker_scheduled_integration_test.py
+  - scripts/ci/local_docker_scheduled_exec_integration_test.py
   - scripts/ci/local_heavy_slots.py
   - scripts/ci/local_heavy_slots_test.py
   - scripts/ci/local_compose_audit.py

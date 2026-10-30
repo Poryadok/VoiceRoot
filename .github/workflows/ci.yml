@@ -2880,6 +2880,8 @@ jobs:
           docker tag "$image" redis:7-alpine
           python3 scripts/ci/local_docker_scheduled_integration_test.py
           python3 scripts/ci/local_docker_owned_cancel_test.py
+          docker pull 'golang@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb'
+          python3 scripts/ci/local_docker_scheduled_exec_integration_test.py
 
       - name: Verify Go module source inputs
         if: always() && !cancelled()

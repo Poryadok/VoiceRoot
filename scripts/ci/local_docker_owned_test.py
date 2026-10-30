@@ -1,9 +1,10 @@
 """Ownership and cleanup invariants for local disposable Docker fixtures."""
 from pathlib import Path
+import json
 import tempfile
 import unittest
 
-from local_docker_owned import OwnedRun, OwnershipError
+from local_docker_owned import DockerCLI, OwnedRun, OwnershipError
 
 
 class FakeEngine:
@@ -14,6 +15,8 @@ class FakeEngine:
         self.uncertain_create = False
         self.uncertain_remove = False
         self.uncertain_start = False
+        self.uncertain_exec = False
+        self.uncertain_stop = False
 
     def daemon(self):
         return self.identity
@@ -40,13 +43,14 @@ class FakeEngine:
         return any(key[0] == kind and value['id'] == identifier for key, value in self.resources.items())
 
     def image(self, identifier):
-        return {'id': identifier, 'volumes': ['/data']}
+        return {'id': identifier, 'volumes': ['/data'], 'entrypoint': []}
 
-    def create_container(self, name, labels, image_id, network_id, mounts, ports):
+    def create_container(self, name, labels, image_id, network_id, mounts, ports, command=None):
         identifier = 'c' + name.encode().hex().ljust(63, '0')[:63]
         self.resources[('container', name)] = {'id': identifier, 'name': name, 'kind': 'container',
                                                'labels': dict(labels), 'image': image_id, 'network': network_id,
-                                               'mounts': dict(mounts), 'ports': list(ports), 'running': False}
+                                               'mounts': dict(mounts), 'ports': list(ports), 'running': False,
+                                               'command': command, 'entrypoint': []}
         return identifier
 
     def start(self, identifier):
@@ -55,8 +59,178 @@ class FakeEngine:
         if self.uncertain_start:
             raise OwnershipError('start outcome unknown')
 
+    def execute(self, identifier, command, stdout, stderr, timeout, stdin=None):
+        if self.uncertain_exec:
+            raise OwnershipError('execution outcome unknown')
+        if stdin is not None:
+            self.last_input = stdin.read()
+        return 7
+
+    def stop(self, identifier):
+        value = next(value for key, value in self.resources.items() if key[0] == 'container' and value['id'] == identifier)
+        value['running'] = False
+        if self.uncertain_stop:
+            raise OwnershipError('stop outcome unknown')
+
 
 class OwnedRunTests(unittest.TestCase):
+    def test_owned_execution_can_stream_input_without_a_host_bind_mount(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                              command=['sleep', 'infinity'])
+                owner.start_container(name)
+                with tempfile.TemporaryFile() as source:
+                    source.write(b'snapshot bytes')
+                    source.seek(0)
+                    self.assertEqual(owner.execute(name, ['tar', '-x'], None, None, 30, stdin=source), 7)
+                self.assertEqual(engine.last_input, b'snapshot bytes')
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_ambiguous_exec_status_does_not_release_execution(self):
+        for status in (-1, 125, 256, True):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                engine = FakeEngine()
+                owner = OwnedRun.create(Path(directory), engine)
+                try:
+                    network = owner.create_resource('network')
+                    volume = owner.create_resource('volume')
+                    name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                                  command=['sleep', 'infinity'])
+                    owner.start_container(name)
+                    engine.execute = lambda *args: status
+                    with self.assertRaises(OwnershipError):
+                        owner.execute(name, ['go', 'version'], None, None, 30)
+                    self.assertEqual(owner.state['resources'][-1]['state'], 'executing')
+                    owner.cancel_execution(name)
+                    owner.cleanup()
+                finally:
+                    owner.close()
+
+    def test_container_inspection_rejects_unknown_running_state(self):
+        engine = DockerCLI.__new__(DockerCLI)
+        container = {'Id': 'a' * 64, 'Name': '/fixture', 'Image': 'sha256:' + 'b' * 64,
+                     'HostConfig': {'NetworkMode': 'c' * 64}, 'Config': {}, 'State': {}}
+        engine._call = lambda *args: json.dumps([container])
+        with self.assertRaises(OwnershipError):
+            engine.inspect('container', 'fixture')
+        container['State']['Running'] = False
+        self.assertIs(engine.inspect('container', 'fixture')['running'], False)
+
+    def test_cancel_uncertain_execution_rechecks_exact_identity_and_stopped_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                              command=['sleep', 'infinity'])
+                owner.start_container(name)
+                engine.uncertain_exec = True
+                with self.assertRaises(OwnershipError):
+                    owner.execute(name, ['sleep', '30'], None, None, 1)
+                engine.uncertain_stop = True
+                with self.assertRaises(OwnershipError):
+                    owner.cancel_execution(name)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'stopping')
+                with self.assertRaises(OwnershipError):
+                    owner.cleanup()
+                engine.uncertain_stop = False
+                owner.cancel_execution(name)
+                self.assertFalse(engine.resources[('container', name)]['running'])
+                self.assertEqual(owner.state['resources'][-1]['state'], 'ready')
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_execution_is_journaled_and_uncertain_exit_blocks_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                              command=['sleep', 'infinity'])
+                owner.start_container(name)
+                self.assertEqual(owner.execute(name, ['go', 'version'], None, None, 30), 7)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'ready')
+                engine.uncertain_exec = True
+                with self.assertRaises(OwnershipError):
+                    owner.execute(name, ['go', 'version'], None, None, 30)
+                self.assertEqual(owner.state['resources'][-1]['state'], 'executing')
+                with self.assertRaises(OwnershipError):
+                    owner.cleanup()
+                self.assertEqual(engine.removed, [])
+            finally:
+                owner.close()
+
+    def test_container_can_add_an_owned_workspace_volume(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                image_volume = owner.create_resource('volume')
+                workspace = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network,
+                                              {'/data': image_volume, '/workspace': workspace}, [],
+                                              command=['sleep', 'infinity'])
+                self.assertEqual(owner._inspect(owner.state['resources'][-1])['name'], name)
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_explicit_command_rejects_invalid_input_and_image_entrypoint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                for command in ([], [''], ['sleep\nother'], ['x'] * 65):
+                    with self.subTest(command=command), self.assertRaises(OwnershipError):
+                        owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [], command=command)
+                engine.image = lambda identifier: {'id': identifier, 'volumes': ['/data'], 'entrypoint': ['sh']}
+                with self.assertRaises(OwnershipError):
+                    owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [], command=['sleep'])
+                self.assertFalse(any(kind == 'container' for kind, _ in engine.resources))
+                owner.cleanup()
+            finally:
+                owner.close()
+
+    def test_explicit_container_command_is_bound_before_cleanup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            engine = FakeEngine()
+            owner = OwnedRun.create(Path(directory), engine)
+            try:
+                network = owner.create_resource('network')
+                volume = owner.create_resource('volume')
+                name = owner.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                              command=['sleep', 'infinity'])
+                container = engine.resources[('container', name)]
+                self.assertEqual(owner.state['resources'][-1]['command'], ['sleep', 'infinity'])
+                container['command'] = ['sleep', '10']
+                with self.assertRaises(OwnershipError):
+                    owner.cleanup()
+                self.assertEqual(engine.removed, [])
+                container['command'] = ['sleep', 'infinity']
+                container['entrypoint'] = ['unexpected']
+                with self.assertRaises(OwnershipError):
+                    owner.cleanup()
+                self.assertEqual(engine.removed, [])
+                container['entrypoint'] = []
+                owner.cleanup()
+            finally:
+                owner.close()
+
     def test_changed_container_spec_and_external_network_fail_before_deletion(self):
         with tempfile.TemporaryDirectory() as directory:
             engine = FakeEngine()

@@ -8,6 +8,15 @@ from local_docker_owned import OwnedRun, OwnershipError
 from local_heavy_slots import acquire, recover_bound
 
 
+def _reconcile_execution(run):
+    uncertain = [item for item in run.state['resources']
+                 if item['state'] in ('creating', 'starting', 'executing', 'stopping', 'removing')]
+    if len(uncertain) > 1 or (uncertain and uncertain[0]['state'] not in ('executing', 'stopping')):
+        raise OwnershipError('uncertain resource requires separate reconciliation')
+    if uncertain:
+        run.cancel_execution(uncertain[0]['name'])
+
+
 class ScheduledRun:
     @classmethod
     def start(cls, checkout, slot_directory, engine, timeout, capacity=2):
@@ -32,6 +41,7 @@ class ScheduledRun:
         run = None
         try:
             run = OwnedRun.load(directory, engine)
+            _reconcile_execution(run)
             run.cleanup()
             run._check_daemon()
             if any(engine.exists(item['kind'], item['id']) for item in run.state['resources']):
@@ -55,6 +65,7 @@ class ScheduledRun:
             return
         lease, self._lease = self._lease, None
         try:
+            _reconcile_execution(self.run)
             self.run.cleanup()
         except BaseException:
             lease.abandon()

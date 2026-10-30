@@ -60,6 +60,66 @@ class ScheduledRunTests(unittest.TestCase):
         later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
         later.close()
 
+    def test_recovery_stops_abandoned_execution_without_touching_other_run(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        other = ScheduledRun.start(self.root, self.slots, self.engine, 0)
+        self.addCleanup(one.abandon)
+        self.addCleanup(other.abandon)
+        network = one.run.create_resource('network')
+        volume = one.run.create_resource('volume')
+        name = one.run.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                        command=['sleep', 'infinity'])
+        one.run.start_container(name)
+        sentinel = other.run.create_resource('volume')
+        self.engine.uncertain_exec = True
+        with self.assertRaises(OwnershipError):
+            one.run.execute(name, ['sleep', '30'], None, None, 1)
+        directory, slot = one.run.directory, one.slot
+        one.abandon()
+        ScheduledRun.recover(directory, self.slots, self.engine, slot)
+        self.assertNotIn(('container', name), self.engine.resources)
+        self.assertIn(('volume', sentinel), self.engine.resources)
+        other.close()
+
+    def test_uncertain_stop_keeps_slot_until_reconciled(self):
+        one = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.addCleanup(one.abandon)
+        network = one.run.create_resource('network')
+        volume = one.run.create_resource('volume')
+        name = one.run.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                        command=['sleep', 'infinity'])
+        one.run.start_container(name)
+        self.engine.uncertain_exec = True
+        with self.assertRaises(OwnershipError):
+            one.run.execute(name, ['sleep', '30'], None, None, 1)
+        directory, slot = one.run.directory, one.slot
+        one.abandon()
+        self.engine.uncertain_stop = True
+        with self.assertRaises(OwnershipError):
+            ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        with self.assertRaises(TimeoutError):
+            ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        self.assertIn(('container', name), self.engine.resources)
+        self.engine.uncertain_stop = False
+        ScheduledRun.recover(directory, self.slots, self.engine, slot, capacity=1)
+        self.assertNotIn(('container', name), self.engine.resources)
+        later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        later.close()
+
+    def test_body_timeout_stops_owned_container_before_releasing_slot(self):
+        with self.assertRaises(OwnershipError):
+            with ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1) as run:
+                network = run.create_resource('network')
+                volume = run.create_resource('volume')
+                name = run.create_container('sha256:' + 'd' * 64, network, {'/data': volume}, [],
+                                            command=['sleep', 'infinity'])
+                run.start_container(name)
+                self.engine.uncertain_exec = True
+                run.execute(name, ['sleep', '30'], None, None, 1)
+        self.assertNotIn(('container', name), self.engine.resources)
+        later = ScheduledRun.start(self.root, self.slots, self.engine, 0, capacity=1)
+        later.close()
+
     def test_recovery_refuses_a_live_owner_or_different_run(self):
         one = ScheduledRun.start(self.root, self.slots, self.engine, 0)
         other = ScheduledRun.start(self.root, self.slots, self.engine, 0)
