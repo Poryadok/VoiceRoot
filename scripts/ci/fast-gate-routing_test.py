@@ -18,6 +18,17 @@ spec.loader.exec_module(policy)
 
 
 class FastGateRoutingTests(unittest.TestCase):
+    def test_historical_replay_is_separate_but_retained_in_full_local_suite(self):
+        def commands(target):
+            return subprocess.run(['make', '-n', target], cwd=ROOT, capture_output=True,
+                                  text=True, check=True).stdout
+        runtime = commands('ci-script-tests-runtime')
+        full = commands('ci-script-tests')
+        name = 'f13_exact_j_historical_red_test.py'
+        self.assertNotIn(name, runtime)
+        self.assertEqual(full.count(name), 1)
+        self.assertIn('voice-db-runtime-provisioning-contract_test.sh', runtime)
+
     def test_full_validation_scope_distinguishes_master_code_and_docs(self):
         workflow = yaml.safe_load(policy.WORKFLOW)
         expression = workflow['jobs']['changes']['outputs']['full_validation']

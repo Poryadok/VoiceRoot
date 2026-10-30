@@ -357,7 +357,7 @@ ci-script-tests-policy: release-policy-wiring-test staging-matrix-test go-matrix
 	$(BASH) "$(ROOT)/scripts/ci/minio-compose-image-override-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/ci/staging-minio-bucket-job-lifecycle-contract_test.sh"
 
-ci-script-tests-runtime: voice-db-runtime-provisioning-contract-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
+ci-script-tests-runtime: voice-db-runtime-provisioning-fast-test a4-disposable-recovery-harness-test phase0-fixture-test matchmaking-source-authority-test complete-match-pki-test
 	$(BASH) "$(ROOT)/scripts/ci/story-media-cohort-chain.sh"
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p capability_manifest_test.py
 	python3 -m unittest discover -s "$(ROOT)/scripts/release" -p client_compatibility_test.py
@@ -456,11 +456,13 @@ staging-app-secrets-test:
 	$(BASH) "$(ROOT)/scripts/staging/restore-nats-secrets_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/ensure-user-search-projection-secret_test.sh"
 
-.PHONY: voice-db-runtime-provisioning-contract-test
-voice-db-runtime-provisioning-contract-test:
+.PHONY: voice-db-runtime-provisioning-contract-test voice-db-runtime-provisioning-fast-test
+voice-db-runtime-provisioning-contract-test: voice-db-runtime-provisioning-fast-test
+	python3 "$(ROOT)/scripts/ci/f13_exact_j_historical_red_test.py"
+
+voice-db-runtime-provisioning-fast-test:
 	$(BASH) "$(ROOT)/scripts/ci/voice-r22-runtime-scope_test.sh"
 	python3 "$(ROOT)/scripts/ci/f13_guarded_correction_test.py"
-	python3 "$(ROOT)/scripts/ci/f13_exact_j_historical_red_test.py"
 	$(BASH) "$(ROOT)/scripts/ci/voice-db-runtime-provisioning-contract_test.sh"
 	$(BASH) "$(ROOT)/scripts/staging/apply-migrate-jobs_test.sh"
 

@@ -49,6 +49,21 @@ ci_global:
   - '!scripts/ci/local_flutter_execution_test.py'
   - '!scripts/ci/flutter_test_events.py'
   - '!scripts/ci/flutter_test_events_test.py'
+  # These isolated local-Docker helpers do not feed the historical F13 replay.
+  - '!scripts/ci/local_docker_owned.py'
+  - '!scripts/ci/local_docker_owned_test.py'
+  - '!scripts/ci/local_docker_owned_integration_test.py'
+  - '!scripts/ci/local_docker_owned_cancel_test.py'
+  - '!scripts/ci/local_docker_scheduled.py'
+  - '!scripts/ci/local_docker_scheduled_test.py'
+  - '!scripts/ci/local_docker_scheduled_integration_test.py'
+  - '!scripts/ci/local_docker_scheduled_exec_integration_test.py'
+  - '!scripts/ci/local_heavy_slots.py'
+  - '!scripts/ci/local_heavy_slots_test.py'
+  - '!scripts/ci/local_compose_audit.py'
+  - '!scripts/ci/local_compose_audit_test.py'
+  - '!scripts/ci/testcontainers-prune.sh'
+  - '!scripts/ci/testcontainers-prune_test.sh'
 
 ci_scripts:
   # Complete chain fixture imports plus its actual restore-only SQL inputs.
@@ -99,6 +114,22 @@ nats_renderer:
   - src/backend/messaging/pb/**
   - src/backend/chat/pb/**
   - .dockerignore
+
+# Exact historical replay inputs and the policy that selects them.
+f13_replay:
+  - scripts/ci/f13*
+  - scripts/ci/testdata/f13-exact-j-547/**
+  - scripts/ci/voice-db-runtime-provisioning-contract_test.sh
+  - scripts/ci/voice-r22-runtime-scope*
+  - scripts/ci/resolve-voice-r22-base.sh
+  - scripts/ci/affected_check_plan*
+  - scripts/ci/fast-gate-routing*
+  - scripts/staging/apply-migrate-jobs*
+  - src/backend/space/internal/grpcsvc/audit.go
+  - .agent/execplans/native-p3-master-source.md
+  - .github/ci/**
+  - .github/workflows/ci.yml
+  - Makefile
 
 # Changes to the historical validator require its complete fixtures on the PR.
 # The full audit is also mandatory for release branches and master pushes.

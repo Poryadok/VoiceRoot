@@ -477,6 +477,28 @@ class AffectedCheckPlanTests(unittest.TestCase):
                                               'scripts/ci/new_unclassified_helper.py'])
         self.assertTrue(planner.effective_filters(mixed)['ci_global'])
 
+    def test_f13_replay_is_selected_for_its_inputs_and_unknowns_only(self):
+        rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')
+        matrix = {'go_services': [], 'docker_go_services': [], 'integration_go_services': [],
+                  'run_go': False, 'run_pkg': False}
+        def checks(path):
+            return planner.make_plan(planner.match_filters(rules, [path]), matrix)['checks']
+        for path in ('scripts/ci/f13_exact_j_historical_red_test.py',
+                     'scripts/ci/f13_f54_history.py',
+                     'scripts/ci/testdata/f13-exact-j-547/source-unit.json',
+                     'scripts/ci/voice-db-runtime-provisioning-contract_test.sh',
+                     '.agent/execplans/native-p3-master-source.md', 'Makefile',
+                     '.github/workflows/ci.yml', 'scripts/ci/new_unknown_tool.py'):
+            with self.subTest(path=path):
+                self.assertIn('f13-historical-replay', checks(path))
+        self.assertNotIn('f13-historical-replay', checks('scripts/ci/local_flutter_execution.py'))
+        for name in ('local_docker_owned.py', 'local_docker_owned_test.py',
+                     'local_docker_scheduled.py', 'local_docker_scheduled_test.py',
+                     'local_docker_scheduled_exec_integration_test.py'):
+            with self.subTest(unrelated=name):
+                self.assertNotIn('f13-historical-replay', checks('scripts/ci/' + name))
+                self.assertIn('local-docker-isolation', checks('scripts/ci/' + name))
+
     def test_browser_event_parser_selects_hosted_flutter_checks(self):
         import yaml
         rules = planner.load_filters(ROOT / '.github/ci/path-filters.yml')

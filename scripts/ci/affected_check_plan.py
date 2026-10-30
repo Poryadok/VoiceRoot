@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 KNOWN_FILTERS = frozenset('''global ci_global ci_scripts local_docker_isolation go_build_shared nats_renderer t31
-    history_audit match_squad_overlay a1_t106_live a1_e2e a1_multi_account_pr a1_attachment_restart flutter_live_suite
+    history_audit f13_replay match_squad_overlay a1_t106_live a1_e2e a1_multi_account_pr a1_attachment_restart flutter_live_suite
     staging_infra analytics_integration_inputs protos pkg frontend music_inputs help_inputs startup_inputs dev_web_publish windows_desktop auth auth_test_impact
     developer-portal admin compose full_application_request'''.split()) | frozenset(
         'svc_' + name for name in '''analytics bot chat controlledgame federation file
@@ -231,6 +231,9 @@ def make_plan(matched, matrix, head_ref='', widen_unknown=True):
 
     broad = ('global', 'ci_global')
     selected('ci-script-tests', ('global', 'ci_global', 'ci_scripts'))
+    selected('f13-historical-replay', broad + ('f13_replay',),
+             head_ref.startswith('codex/voice-master-release-') or
+             head_ref == 'codex/game-sdk-federation-docs')
     selected('local-docker-isolation', ('global', 'ci_global', 'local_docker_isolation'))
     selected('voice-history-audit', ('history_audit',),
              head_ref.startswith('codex/voice-master-release-') or

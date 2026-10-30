@@ -51,6 +51,7 @@ jobs:
       ci_global: ${{ steps.scope.outputs.ci_global }}
       ci_scripts: ${{ steps.filter.outputs.ci_scripts }}
       local_docker_isolation: ${{ steps.filter.outputs.local_docker_isolation }}
+      f13_replay: ${{ steps.filter.outputs.f13_replay }}
       t31: ${{ steps.filter.outputs.t31 }}
       nats_renderer: ${{ steps.filter.outputs.nats_renderer }}
       a1_attachment_restart: ${{ steps.filter.outputs.a1_attachment_restart }}
@@ -344,6 +345,41 @@ jobs:
         run: bash scripts/ci/social-principal-bootstrap-check.sh
       - name: Staging image matrix unit tests
         run: bash scripts/ci/resolve-staging-matrix_test.sh
+
+  f13-historical-replay:
+    needs: changes
+    env:
+      VOICE_CONTRACT_PROFILE: current
+    if: >-
+      !cancelled() && needs.changes.result == 'success' &&
+      (
+        (github.event_name == 'pull_request' &&
+         (needs.changes.outputs.f13_replay == 'true' || needs.changes.outputs.global == 'true' ||
+          needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.history_audit == 'true')) ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true') ||
+        ((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install PyYAML==6.0.3
+      - name: Resolve Voice R22 scope base
+        env:
+          VOICE_CI_EVENT_NAME: ${{ github.event_name }}
+          VOICE_CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          VOICE_CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          base_sha="$(bash scripts/ci/resolve-voice-r22-base.sh)"
+          echo "VOICE_R22_BASE_SHA=${base_sha}" >> "${GITHUB_ENV}"
+          echo "VOICE_CI_PUSH_BEFORE_SHA=${VOICE_CI_PUSH_BEFORE_SHA}" >> "${GITHUB_ENV}"
+      - name: Replay exact historical F13 proof
+        run: python3 scripts/ci/f13_exact_j_historical_red_test.py
 
   ci-script-tests:
     needs: changes
@@ -2294,6 +2330,7 @@ jobs:
       - protobuf
       - compose-config
       - ci-script-tests
+      - f13-historical-replay
       - local-docker-isolation
       - current-diff-contract
       - voice-history-audit
@@ -2420,6 +2457,8 @@ jobs:
           JOB_COMPOSE_E2E: ${{ needs.compose-e2e.result }}
           JOB_COMPOSE_CONFIG: ${{ needs.compose-config.result }}
           JOB_CI_SCRIPT_TESTS: ${{ needs.ci-script-tests.result }}
+          RUN_F13_HISTORICAL_REPLAY: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.f13_replay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.history_audit == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
+          JOB_F13_HISTORICAL_REPLAY: ${{ needs.f13-historical-replay.result }}
           RUN_HISTORY_AUDIT: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master') || (github.event_name == 'pull_request' && needs.changes.outputs.history_audit == 'true') }}
           JOB_CURRENT_DIFF_CONTRACT: ${{ needs.current-diff-contract.result }}
           JOB_VOICE_HISTORY_AUDIT: ${{ needs.voice-history-audit.result }}
@@ -4070,6 +4109,7 @@ jobs:
       - protobuf
       - compose-config
       - ci-script-tests
+      - f13-historical-replay
       - voice-history-audit
       - match-squad-overlay
       - local-docker-isolation

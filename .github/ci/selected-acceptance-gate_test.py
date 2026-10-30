@@ -14,7 +14,7 @@ JOBS = (
     'flutter-web-integration', 'flutter-ios', 'a1-e2e',
     'a1-flutter-profile-handoff', 'a1-attachment-restart-proof',
     'analytics-clickhouse-integration', 'grafana-analytics-smoke',
-    'nats-hub-config-renderer-image',
+    'nats-hub-config-renderer-image', 'f13-historical-replay',
 )
 
 
@@ -94,6 +94,18 @@ def run_gate(values, job=None, result=None):
 
 
 class SelectedAcceptanceGateTests(unittest.TestCase):
+    def test_f13_selected_result_cannot_be_skipped(self):
+        values = context('pull_request', code='true', ci_scripts='true', f13_replay='true')
+        self.assertTrue(evaluate(job_condition('f13-historical-replay'), values))
+        self.assertTrue(evaluate(ENV['RUN_F13_HISTORICAL_REPLAY'], values))
+        self.assertEqual(run_gate(values).returncode, 0)
+        for outcome in ('skipped', 'failure', 'cancelled'):
+            with self.subTest(outcome=outcome):
+                self.assertNotEqual(run_gate(values, 'f13-historical-replay', outcome).returncode, 0)
+        unrelated = context('pull_request', code='true', ci_scripts='true')
+        self.assertFalse(evaluate(job_condition('f13-historical-replay'), unrelated))
+        self.assertFalse(evaluate(ENV['RUN_F13_HISTORICAL_REPLAY'], unrelated))
+
     def test_changed_live_flutter_suite_requires_compose_proof(self):
         values = context('pull_request', code='true', frontend='true', flutter_live_suite='true')
         self.assertTrue(evaluate(job_condition('compose-e2e'), values))
