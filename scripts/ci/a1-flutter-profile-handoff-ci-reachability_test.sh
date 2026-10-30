@@ -46,10 +46,10 @@ target_count="$(grep -Ec 'make[[:space:]]+compose-a1-flutter-profile-handoff([^[
 [[ "$target_count" -eq 1 ]] || fail "${JOB} must contain exactly one profile-handoff target occurrence, got ${target_count}"
 grep -Eq "VOICE_A1_FLUTTER_PROFILE_HANDOFF_CLEANUP:[[:space:]]*[\"']?true[\"']?[[:space:]]*$" "$job_file" || fail "${JOB} must set cleanup=true"
 
-trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|a1_t106_live|global)" "$job_file" | sed -E 's/^[[:space:]]*//')"
+trigger_terms="$(grep -E "github.event_name|github.ref|inputs.profile|needs.changes.outputs.(a1_e2e|a1_t106_live|global|full_validation)" "$job_file" | sed -E 's/^[[:space:]]*//')"
 expected_trigger_terms="$(printf '%s\n' \
   "github.event_name == 'schedule' ||" \
-  "(github.event_name == 'workflow_dispatch' && inputs.profile == 'full') ||" \
+  "((github.event_name == 'workflow_dispatch' && inputs.profile == 'full') || needs.changes.outputs.full_validation == 'true') ||" \
   "github.event_name == 'pull_request' &&" \
   "needs.changes.outputs.global == 'true' ||" \
   "needs.changes.outputs.a1_t106_live == 'true'" \
@@ -57,7 +57,7 @@ expected_trigger_terms="$(printf '%s\n' \
   "github.ref == 'refs/heads/master' &&" \
   "needs.changes.outputs.a1_e2e == 'true'")"
 [[ "$trigger_terms" == "$expected_trigger_terms" ]] || \
-  fail "${JOB} trigger terms must be exactly schedule, full dispatch, or filtered master push"
+  fail "${JOB} trigger terms must preserve filtered PR routing and select full master validation"
 grep -Fq "needs.changes.result == 'success' || needs.changes.result == 'skipped'" "$job_file" || fail "${JOB} must tolerate skipped changes on schedule/manual runs"
 
 grep -Fq 'a1_t106_live: ${{ steps.filter.outputs.a1_t106_live }}' "$WORKFLOW" || \

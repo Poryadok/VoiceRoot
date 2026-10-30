@@ -2324,7 +2324,7 @@ jobs:
       - name: Verify required jobs ran
         env:
           RUN_GO: ${{ needs.changes.outputs.run_go }}
-          RUN_GO_INTEGRATION: ${{ github.event_name == 'pull_request' && needs.changes.outputs.integration_go_services != '[]' }}
+          RUN_GO_INTEGRATION: ${{ (github.event_name == 'pull_request' || needs.changes.outputs.full_validation == 'true') && needs.changes.outputs.integration_go_services != '[]' }}
           RUN_PKG: ${{ needs.changes.outputs.run_pkg }}
           RUN_AUTH: ${{ needs.changes.outputs.run_auth }}
           RUN_FLUTTER: ${{ needs.changes.outputs.frontend }}
@@ -2341,19 +2341,19 @@ jobs:
           FILTER_PORTAL: ${{ needs.changes.outputs.developer-portal }}
           PROTOS: ${{ needs.changes.outputs.protos }}
           COMPOSE: ${{ needs.changes.outputs.compose }}
-          GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' }}
+          GLOBAL: ${{ needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.full_validation == 'true' }}
           RUN_CI_SCRIPTS: ${{ needs.changes.outputs.ci_scripts }}
-          RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
-          RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true') }}
+          RUN_MATCH_SQUAD_OVERLAY: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (needs.changes.outputs.match_squad_overlay == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.full_validation == 'true' || (github.event_name == 'workflow_dispatch' && inputs.profile == 'full')) }}
+          RUN_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/master')) && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.protos == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true' || needs.changes.outputs.full_validation == 'true') }}
           RUN_FLUTTER_ANDROID_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_WEB_INTEGRATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
           RUN_FLUTTER_IOS: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.code == 'true' && needs.changes.outputs.run_flutter_tier2 == 'true' }}
-          RUN_A1_E2E: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
-          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && needs.changes.outputs.integration_analytics == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true'))) }}
-          RUN_GRAFANA_ANALYTICS_SMOKE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.result == 'success' && needs.changes.outputs.compose == 'true' }}
-          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && ((github.event_name == 'pull_request' && (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
+          RUN_A1_E2E: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_FLUTTER_PROFILE_HANDOFF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.global == 'true' || needs.changes.outputs.a1_t106_live == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_A1_ATTACHMENT_RESTART_PROOF: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.a1_attachment_restart == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.a1_e2e == 'true')) }}
+          RUN_ANALYTICS_CLICKHOUSE_INTEGRATION: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && needs.changes.outputs.integration_analytics == 'true') || (github.event_name == 'push' && github.ref == 'refs/heads/master' && (needs.changes.outputs.svc_analytics == 'true' || needs.changes.outputs.compose == 'true'))) }}
+          RUN_GRAFANA_ANALYTICS_SMOKE: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.compose == 'true')) }}
+          RUN_NATS_HUB_CONFIG_RENDERER_IMAGE: ${{ needs.changes.result == 'success' && (needs.changes.outputs.full_validation == 'true' || (github.event_name == 'pull_request' && (needs.changes.outputs.nats_renderer == 'true' || needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) || (github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.changes.outputs.code == 'true')) }}
           JOB_FLUTTER_KEY_BACKUP_GOLDENS: ${{ needs.flutter-key-backup-goldens.result }}
           JOB_FLUTTER_ANDROID_SMOKE: ${{ needs.flutter-android-smoke.result }}
           JOB_FLUTTER_WEB_INTEGRATION: ${{ needs.flutter-web-integration.result }}
@@ -2365,6 +2365,7 @@ jobs:
           JOB_GRAFANA_ANALYTICS_SMOKE: ${{ needs.grafana-analytics-smoke.result }}
           RUN_COMPOSE_E2E: >-
             ${{
+              needs.changes.outputs.full_validation == 'true' ||
               (github.event_name == 'pull_request' &&
                (needs.changes.outputs.global == 'true' || needs.changes.outputs.ci_global == 'true')) ||
               (github.event_name == 'push' &&
