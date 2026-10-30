@@ -158,6 +158,8 @@ class TransferTests(unittest.TestCase):
             self.assertEqual(report['status'], 'incomplete')
             self.assertEqual(report['tests']['skipped'], [['example.test/module', 'TestSkip']])
             self.assertIn('GOPROXY=off', owner.command[2])
+            self.assertIn('GOMAXPROCS=2', owner.command[2])
+            self.assertIn('go test -short -json -count=1 -p 2', owner.command[2])
             self.assertIn('example.test/module', owner.command)
             self.assertEqual(verify_workspace.call_count, 2)
             self.assertEqual(verify_modules.call_count, 2)

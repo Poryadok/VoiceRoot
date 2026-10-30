@@ -649,7 +649,8 @@ uses the shared local plan, runs selected Go service short-test diagnostics and
 the full Flutter diagnostic when selected. The Go executable must match the
 version of the digest-pinned Go image, which must already be present locally;
 the shared planner also requires `jq`. Go runs use host-wide slots, isolated
-source and Docker resources, and report individual skipped tests. The shared
+source and Docker resources, limit Go runtime and package parallelism to two,
+and report individual skipped tests. The shared
 pkg non-short job, integrations, lint and other unimplemented checks remain
 `not_run`. The report remains incomplete and the command exits nonzero even
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.

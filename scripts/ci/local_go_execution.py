@@ -111,7 +111,7 @@ def _verify_modules(owner, name, module_dir):
     """
     _module_path(module_dir)
     command = ['sh', '-c', 'cd "/workspace/source/$1" && '
-               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 '
+               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
                'GOMODCACHE=/workspace/go-mod go mod verify', 'voice-go-verify', module_dir]
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         if owner.execute(name, command, stdout, stderr, 1800) != 0:
@@ -214,7 +214,7 @@ def discover_packages(owner, name, root, source, source_copy, archive_digest, mo
     _verify_workspace(owner, name, root, source, archive_digest)
     output.mkdir(parents=True)
     command = ['sh', '-c', 'cd "/workspace/source/$1" && '
-               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 '
+               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
                'GOCACHE=/workspace/go-build GOMODCACHE=/workspace/go-mod go list -json ./...',
                'voice-go-discovery', module_dir]
     with (output / 'packages.json').open('xb') as stdout, (output / 'stderr.log').open('xb') as stderr:
@@ -289,9 +289,9 @@ def run_package_diagnostic(owner, name, root, source, source_copy, archive_diges
     output.mkdir(parents=True)
     command = ['sh', '-c',
                'cd "/workspace/source/$1" && shift && '
-               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 '
+               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
                'GOCACHE=/workspace/go-build GOMODCACHE=/workspace/go-mod '
-               'go test -short -json -count=1 "$@"', 'voice-go-diagnostic', module_dir, *packages]
+               'go test -short -json -count=1 -p 2 "$@"', 'voice-go-diagnostic', module_dir, *packages]
     with (output / 'events.jsonl').open('xb') as stdout, (output / 'stderr.log').open('xb') as stderr:
         result = owner.execute(name, command, stdout, stderr, 1800)
     if snapshot.capture(root, source['head']) != source:

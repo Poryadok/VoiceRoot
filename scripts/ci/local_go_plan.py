@@ -1,9 +1,12 @@
 """Run planner-selected Go service short-test diagnostics; never issue PASS."""
 import json
+import os
 from pathlib import Path
 import re
+import shutil
+import subprocess
 
-from local_docker_owned import DockerCLI
+from local_docker_owned import DockerCLI, OwnershipError
 from local_docker_scheduled import ScheduledRun
 import local_go_dependencies
 import local_go_execution
@@ -11,6 +14,20 @@ import local_source_snapshot
 
 
 GO_IMAGE = 'golang@sha256:23ce71337b726608afb1bc00986e630a05034a87a87ea1fc2cd1ae5cf33387eb'
+GO_VERSION = 'go1.26.10'
+
+
+def _check_go_toolchain(go_binary):
+    executable = shutil.which(go_binary)
+    if not executable:
+        raise ValueError('Go executable is unavailable; provide --go with ' + GO_VERSION)
+    environment = {key: value for key, value in os.environ.items() if not key.upper().startswith('GO')}
+    environment.update(GOENV='off', GOTOOLCHAIN='local')
+    result = subprocess.run([executable, 'version'], env=environment, capture_output=True, timeout=30, check=False)
+    version = result.stdout.decode('utf-8', errors='replace').strip()
+    if result.returncode != 0 or not re.fullmatch(r'go version ' + GO_VERSION.replace('.', r'\.') + r' [a-z0-9]+/[a-z0-9]+', version):
+        raise ValueError('Go executable must be ' + GO_VERSION + ' to match the pinned image; provide --go')
+    return executable
 
 
 def run(root, source, services, output, go_binary='go'):
@@ -29,9 +46,13 @@ def run(root, source, services, output, go_binary='go'):
     if local_source_snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed before Go diagnostics')
     output.mkdir(parents=True)
+    try:
+        engine = DockerCLI()
+        image = engine._call('image', 'inspect', GO_IMAGE, '--format', '{{.Id}}')
+    except OwnershipError as error:
+        raise OwnershipError('Cannot inspect the pinned Go image; ensure Docker is reachable and pull ' + GO_IMAGE) from error
+    go_binary = _check_go_toolchain(go_binary)
     source_copy = local_source_snapshot.materialize(root, source, output / 'source')
-    engine = DockerCLI()
-    image = engine._call('image', 'inspect', GO_IMAGE, '--format', '{{.Id}}')
     results = {}
     for service in services:
         module_dir = 'src/backend/' + service

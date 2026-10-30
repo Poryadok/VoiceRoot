@@ -126,7 +126,8 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     environment.update(GOENV='off', GOWORK='off', GOFLAGS='-mod=readonly', GOTOOLCHAIN='local',
                        GOPROXY='https://proxy.golang.org', GOSUMDB='sum.golang.org', GOPRIVATE='',
                        GONOSUMDB='', GONOPROXY='', GOMODCACHE=str(cache), GOPATH=str(output / 'gopath'),
-                       GOCACHE=str(output / 'build-cache'), GOOS='linux', GOARCH='amd64', CGO_ENABLED='0')
+                       GOCACHE=str(output / 'build-cache'), GOOS='linux', GOARCH='amd64', CGO_ENABLED='0',
+                       GOMAXPROCS='2')
     version = subprocess.run([str(executable), 'version'], env=environment, stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, timeout=30, check=True).stdout.decode('utf-8').strip()
     command = [str(executable), 'list', '-deps', '-test', '-json', './...']

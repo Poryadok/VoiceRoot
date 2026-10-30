@@ -1,6 +1,7 @@
 """Planner-selected Go services must execute under owned host slots."""
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -47,6 +48,7 @@ class GoPlanTests(unittest.TestCase):
         with patch.object(runner.local_source_snapshot, 'capture', return_value=self.source), \
              patch.object(runner.local_source_snapshot, 'materialize', return_value=self.base / 'copy'), \
              patch.object(runner, 'DockerCLI', return_value=Engine()), \
+             patch.object(runner, '_check_go_toolchain', return_value='go-executable'), \
              patch.object(runner.ScheduledRun, 'start_host', side_effect=start), \
              patch.object(runner.local_go_dependencies, 'acquire', side_effect=acquire) as acquisition, \
              patch.object(runner.local_go_execution, 'transfer_source', return_value='a' * 64), \
@@ -69,6 +71,21 @@ class GoPlanTests(unittest.TestCase):
                 runner.run(self.root, self.source, ['../escape'], self.base / 'out')
         start.assert_not_called()
 
+    def test_missing_docker_reports_the_required_image(self):
+        with patch.object(runner.local_source_snapshot, 'capture', return_value=self.source), \
+             patch.object(runner.local_source_snapshot, 'materialize', return_value=self.base / 'copy'), \
+             patch.object(runner, 'DockerCLI', side_effect=runner.OwnershipError('unavailable')):
+            with self.assertRaisesRegex(runner.OwnershipError, 'ensure Docker is reachable and pull') as caught:
+                runner.run(self.root, self.source, ['chat'], self.base / 'out')
+        self.assertIn(runner.GO_IMAGE, str(caught.exception))
+
+    def test_mismatched_go_toolchain_fails_before_acquisition(self):
+        with patch.object(runner.shutil, 'which', return_value='go'), \
+             patch.object(runner.subprocess, 'run', return_value=SimpleNamespace(
+                 returncode=0, stdout=b'go version go1.26.2 windows/amd64\n')):
+            with self.assertRaisesRegex(ValueError, 'go1.26.10'):
+                runner._check_go_toolchain('go')
+
     def test_acquisition_failure_closes_the_owned_run(self):
         class Owner:
             def create_resource(self, kind): return kind
@@ -82,6 +99,7 @@ class GoPlanTests(unittest.TestCase):
         with patch.object(runner.local_source_snapshot, 'capture', return_value=self.source), \
              patch.object(runner.local_source_snapshot, 'materialize', return_value=self.base / 'copy'), \
              patch.object(runner, 'DockerCLI') as engine, \
+             patch.object(runner, '_check_go_toolchain', return_value='go'), \
              patch.object(runner.ScheduledRun, 'start_host', return_value=scheduled), \
              patch.object(runner.local_go_dependencies, 'acquire', side_effect=ValueError('download failed')):
             engine.return_value._call.return_value = 'sha256:' + 'a' * 64

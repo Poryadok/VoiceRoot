@@ -37,6 +37,7 @@ class GoAcquisitionTests(unittest.TestCase):
         if command[-1] == 'verify':
             return SimpleNamespace(returncode=self.verify_status, stdout=b'all modules verified\n', stderr=b'')
         if command[-5:] == ['list', '-deps', '-test', '-json', './...']:
+            self.assertEqual(kwargs['env']['GOMAXPROCS'], '2')
             graph = Path(kwargs['env']['GOMODCACHE']) / 'cache/download/example.test/!extra/@v'
             graph.mkdir(parents=True)
             (graph / 'v1.0.0.mod').write_bytes(b'fixture')
