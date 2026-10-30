@@ -213,7 +213,7 @@ class TransferTests(unittest.TestCase):
         runner._verify_modules(VerifyOwner(0, b'all modules verified\n'), 'owned', 'module')
         with self.assertRaisesRegex(ValueError, 'verification failed'):
             runner._verify_modules(VerifyOwner(1, b''), 'owned', 'module')
-        with self.assertRaisesRegex(ValueError, 'unexpected'):
+        with self.assertRaisesRegex(ValueError, 'verification failed'):
             runner._verify_modules(VerifyOwner(0, b''), 'owned', 'module')
 
     def test_replaced_archive_path_prevents_remote_extraction(self):

@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 
 import go_integration_receipts as receipts
+import local_go_verify
 import local_source_snapshot as snapshot
 
 
@@ -114,11 +115,25 @@ def _verify_modules(owner, name, module_dir):
                'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
                'GOMODCACHE=/workspace/go-mod go mod verify', 'voice-go-verify', module_dir]
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        if owner.execute(name, command, stdout, stderr, 1800) != 0:
-            raise ValueError('Go module cache verification failed')
+        result = owner.execute(name, command, stdout, stderr, 1800)
         stdout.seek(0)
-        if stdout.read() != b'all modules verified\n':
-            raise ValueError('unexpected Go module cache verification result')
+        out = stdout.read()
+        stderr.seek(0)
+        err = stderr.read()
+        local_module = b''
+        if local_go_verify.is_local_failure(result, out, err):
+            stdout.seek(0)
+            stdout.truncate()
+            stderr.seek(0)
+            stderr.truncate()
+            command = ['sh', '-c', 'cd "/workspace/source/$1" && '
+                       'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly GOOS=linux GOARCH=amd64 CGO_ENABLED=0 GOMAXPROCS=2 '
+                       'GOMODCACHE=/workspace/go-mod go list -m -json voice/backend/pkg', 'voice-go-local-module', module_dir]
+            if owner.execute(name, command, stdout, stderr, 300) != 0:
+                raise ValueError('Go local replacement inspection failed')
+            stdout.seek(0)
+            local_module = stdout.read()
+        local_go_verify.verify_result(result, out, err, local_module, '/workspace/source/src/backend/pkg')
 
 
 def transfer_dependencies(owner, name, root, source, source_copy, source_archive_digest, acquisition, archive_path):

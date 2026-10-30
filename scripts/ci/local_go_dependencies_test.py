@@ -30,12 +30,16 @@ class GoAcquisitionTests(unittest.TestCase):
                              'example.test/Extra v1.0.0/go.mod ' + self.mod_sum + '\n', encoding='utf-8')
         self.source = {'head': 'a' * 40}
         self.verify_status = 0
+        self.verify_calls = 0
+        self.fail_second_verify = False
 
     def run_go(self, command, **kwargs):
         if command[-1] == 'version':
             return SimpleNamespace(returncode=0, stdout=b'go version go1.26.2 test/amd64\n')
         if command[-1] == 'verify':
-            return SimpleNamespace(returncode=self.verify_status, stdout=b'all modules verified\n', stderr=b'')
+            self.verify_calls += 1
+            code = 1 if self.fail_second_verify and self.verify_calls == 2 else self.verify_status
+            return SimpleNamespace(returncode=code, stdout=b'all modules verified\n', stderr=b'')
         if command[-5:] == ['list', '-deps', '-test', '-json', './...']:
             self.assertEqual(kwargs['env']['GOMAXPROCS'], '2')
             graph = Path(kwargs['env']['GOMODCACHE']) / 'cache/download/example.test/!extra/@v'
@@ -69,6 +73,7 @@ class GoAcquisitionTests(unittest.TestCase):
         result = self.acquire()
         self.assertEqual(result['status'], 'incomplete')
         self.assertEqual(result['module_count'], 1)
+        self.assertEqual(self.verify_calls, 2)
         with tarfile.open(self.base / 'output/download-cache.tar') as archive:
             self.assertEqual(len(archive.getmembers()), 6)
             self.assertTrue(all(member.name.startswith('cache/download/') for member in archive.getmembers()))
@@ -83,8 +88,14 @@ class GoAcquisitionTests(unittest.TestCase):
 
     def test_rejects_failed_module_verification(self):
         self.verify_status = 1
-        with self.assertRaisesRegex(ValueError, 'failed verification'):
+        with self.assertRaisesRegex(ValueError, 'verification failed'):
             self.acquire()
+
+    def test_rejects_failed_post_archive_verification(self):
+        self.fail_second_verify = True
+        with self.assertRaisesRegex(ValueError, 'verification failed'):
+            self.acquire()
+        self.assertEqual(self.verify_calls, 2)
 
     def test_rejects_transient_cache_change_during_archival(self):
         original_add = tarfile.TarFile.add

@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 
 import local_go_execution
+import local_go_verify
 import local_source_snapshot as snapshot
 
 
@@ -158,10 +159,23 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
                                     timeout=1800, check=False)
             if result.returncode != 0:
                 raise ValueError('Go dependency acquisition failed')
-    verify = subprocess.run([str(executable), 'mod', 'verify'], cwd=module, env=environment,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800, check=False)
-    if verify.returncode != 0 or verify.stdout.strip() != b'all modules verified':
-        raise ValueError('downloaded Go module cache failed verification')
+    def verify_cache(stage):
+        verify = subprocess.run([str(executable), 'mod', 'verify'], cwd=module, env=environment,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800, check=False)
+        (output / ('verify-' + stage + '.stdout')).write_bytes(verify.stdout)
+        (output / ('verify-' + stage + '.stderr')).write_bytes(verify.stderr)
+        local_module = b''
+        if local_go_verify.is_local_failure(verify.returncode, verify.stdout, verify.stderr, windows=os.name == 'nt'):
+            local = subprocess.run([str(executable), 'list', '-m', '-json', 'voice/backend/pkg'],
+                                   cwd=module, env=environment, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, timeout=300, check=False)
+            if local.returncode:
+                raise ValueError('Go local replacement inspection failed')
+            local_module = local.stdout
+            (output / ('local-module-' + stage + '.json')).write_bytes(local_module)
+        local_go_verify.verify_result(verify.returncode, verify.stdout, verify.stderr, local_module,
+                                      source_copy / 'src/backend/pkg', windows=os.name == 'nt')
+    verify_cache('before-archive')
     if _sha256(executable) != toolchain_digest:
         raise ValueError('Go toolchain changed during dependency acquisition')
     snapshot.verify_materialized(root, source, source_copy)
@@ -228,10 +242,7 @@ def acquire(root, source, source_copy, module_dir, output, go_binary='go'):
     with archive_path.open('xb') as raw, tarfile.open(fileobj=raw, mode='w') as tar:
         for relative, path in sorted(entries.items()):
             tar.add(path, arcname='cache/download/' + relative, recursive=False)
-    verify = subprocess.run([str(executable), 'mod', 'verify'], cwd=module, env=environment,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=1800, check=False)
-    if verify.returncode != 0 or verify.stdout.strip() != b'all modules verified':
-        raise ValueError('downloaded Go module cache changed during archival')
+    verify_cache('after-archive')
     if (any(_gomod_sum(path) != value for path, value in mod_sums.items()) or
             any(path.read_text(encoding='utf-8').strip() != value for path, value in zip_sums.items())):
         raise ValueError('downloaded Go module hashes changed during archival')
