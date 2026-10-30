@@ -21,6 +21,11 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.git('config', 'user.email', 'test@example.invalid')
         (self.root / 'src/frontend/test').mkdir(parents=True)
         (self.root / 'src/frontend/test/example_test.dart').write_text('test source')
+        (self.root / '.github/ci').mkdir(parents=True)
+        (self.root / '.github/ci/e2e-features.yml').write_text(
+            'smoke_flutter: [test/example_test.dart]\n'
+            'full_flutter: [test/example_test.dart, test/other_test.dart]\n'
+            'a1_flutter_profile_handoff: [test/a1_test.dart]\n', encoding='utf-8')
         self.git('add', '.')
         self.git('commit', '-qm', 'test')
         self.head = self.git('rev-parse', 'HEAD').stdout.decode().strip()
@@ -52,6 +57,32 @@ class LocalFlutterExecutionTests(unittest.TestCase):
         self.assertIn('--no-pub', result['commands'][2]['argv'])
         self.assertEqual(result['status'], 'incomplete')
         self.assertTrue(result['unbound_inputs'])
+
+    def test_accessibility_capture_is_enabled_and_requires_both_owned_images(self):
+        suite = 'accessibility_settings_capture_test.dart'
+        (self.root / 'src/frontend/test' / suite).write_text('capture test')
+
+        def run_with_captures(command, **kwargs):
+            result = self.fake_flutter(command, **kwargs)
+            if 'test' in command:
+                self.assertIn('--dart-define=VOICE_ACCESSIBILITY_CAPTURE=true', command)
+                directory = Path(kwargs['cwd']).parents[1] / 'tmp/anton122-accessibility'
+                directory.mkdir(parents=True)
+                for orientation in ('H', 'V'):
+                    (directory / ('accessibility-' + orientation + '.png')).write_bytes(b'\x89PNG\r\n\x1a\nfixture')
+            return result
+
+        with mock.patch.object(execution, '_invoke', side_effect=run_with_captures):
+            result = execution.run(self.root, self.head, self.output, 'flutter', selected=[suite])
+        self.assertEqual(result['status'], 'incomplete')
+        self.assertEqual(len(result['accessibility_captures']), 2)
+        self.assertFalse((self.root / 'tmp/anton122-accessibility').exists())
+
+        self.output = Path(self.tmp.name) / 'missing-captures'
+        with mock.patch.object(execution, '_invoke', side_effect=self.fake_flutter):
+            missing = execution.run(self.root, self.head, self.output, 'flutter', selected=[suite])
+        self.assertEqual(missing['status'], 'failed')
+        self.assertNotIn('accessibility_captures', missing)
 
     def test_failed_command_and_source_mutation_cannot_report_success(self):
         def fail(command, **kwargs):
@@ -125,6 +156,22 @@ class LocalFlutterExecutionTests(unittest.TestCase):
             result = execution.run(self.root, self.head, self.output, 'flutter')
         self.assertEqual(result['status'], 'failed')
         self.assertEqual(result['tests']['skipped'][0]['name'], 'example')
+        self.assertEqual(result['skip_classification'], [{
+            'suite': 'test/example_test.dart', 'name': 'example',
+            'catalog_sections': ['smoke_flutter', 'full_flutter']}])
+
+    def test_skip_catalog_association_is_not_a_waiver_and_rejects_foreign_paths(self):
+        frontend = self.root / 'src/frontend/test'
+        skipped = [{'suite': str(frontend / 'other_test.dart'), 'name': 'live case'},
+                   {'suite': str(frontend / 'uncatalogued_test.dart'), 'name': 'unknown case'}]
+        self.assertEqual(execution.classify_skips(self.root, skipped), [
+            {'suite': 'test/other_test.dart', 'name': 'live case', 'catalog_sections': ['full_flutter']},
+            {'suite': 'test/uncatalogued_test.dart', 'name': 'unknown case', 'catalog_sections': []}])
+        with self.assertRaisesRegex(ValueError, 'outside the source snapshot'):
+            execution.classify_skips(self.root, [{'suite': str(self.root / 'foreign.dart'), 'name': 'case'}])
+        (self.root / '.github/ci/e2e-features.yml').write_text('smoke_flutter: [broken\n', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'invalid source E2E catalog'):
+            execution.classify_skips(self.root, skipped)
 
     def test_foreign_capture_and_voice_environment_are_not_inherited(self):
         with mock.patch.dict(os.environ, {'VOICE_UI_CAPTURE_DIR': 'foreign',

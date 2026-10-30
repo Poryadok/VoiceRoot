@@ -641,6 +641,12 @@ captured source files and rejects added files or links outside its declared
 Flutter output paths after each command. Those output paths, the SDK and
 external package provenance remain unbound inputs; a successful diagnostic
 therefore cannot authorize a PR handoff.
+When tests skip, the diagnostic records each skipped identity and its matching
+sections in the captured E2E catalog; an empty section list remains unmapped.
+Catalog membership is not execution evidence and does not waive a skip.
+When the accessibility capture suite is selected, the runner enables its
+capture switch and requires both H/V PNGs inside the isolated snapshot; their
+hashes are recorded as diagnostic artifacts.
 
 `python3 scripts/ci/local_preflight.py --base <full-base-sha> --head
 <full-head-sha> --head-ref <branch> --output <new-directory-outside-checkout>

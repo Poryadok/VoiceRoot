@@ -37,6 +37,8 @@ FLUTTER_OUTPUTS = (
     'src/frontend/test/failures/e2e_key_backup_h_maskedDiff.png',
     'src/frontend/test/failures/e2e_key_backup_h_masterImage.png',
     'src/frontend/test/failures/e2e_key_backup_h_testImage.png',
+    'tmp/anton122-accessibility/accessibility-H.png',
+    'tmp/anton122-accessibility/accessibility-V.png',
 )
 
 
@@ -93,6 +95,36 @@ def directory_digest(root):
     return digest.hexdigest()
 
 
+def classify_skips(checkout, skipped):
+    """Record catalog associations; they never waive a skipped test."""
+    try:
+        import e2e_manifest
+    except SystemExit as error:
+        raise ValueError('E2E catalog parser dependency is unavailable') from error
+
+    checkout = Path(checkout).resolve()
+    frontend = checkout / 'src/frontend'
+    catalog = checkout / '.github/ci/e2e-features.yml'
+    sections = ('smoke_flutter', 'full_flutter', 'a1_flutter_profile_handoff')
+    try:
+        selections = {section: set(e2e_manifest.selection(catalog, section)) for section in sections}
+    except (OSError, UnicodeError, ValueError, TypeError, RecursionError, e2e_manifest.yaml.YAMLError) as error:
+        raise ValueError('invalid source E2E catalog: ' + str(error)) from error
+    classified = []
+    for item in skipped:
+        if not isinstance(item, dict) or set(item) != {'suite', 'name'} or not isinstance(item['name'], str):
+            raise ValueError('invalid skipped Flutter test identity')
+        try:
+            suite = Path(item['suite']).resolve().relative_to(frontend).as_posix()
+        except (KeyError, TypeError, ValueError):
+            raise ValueError('skipped Flutter suite is outside the source snapshot') from None
+        if not suite.startswith('test/'):
+            raise ValueError('skipped Flutter suite is outside the test inventory')
+        classified.append({'suite': suite, 'name': item['name'],
+                           'catalog_sections': [section for section in sections if suite in selections[section]]})
+    return sorted(classified, key=lambda item: (item['suite'], item['name']))
+
+
 def run(root, head, output, flutter, selected=None):
     root = Path(root).resolve()
     output = Path(output).resolve()
@@ -117,8 +149,10 @@ def run(root, head, output, flutter, selected=None):
     tests = []
     if profiles['vm']:
         vm_args = [] if result['full_inventory'] else ['test/' + name for name in profiles['vm']]
+        capture_args = (['--dart-define=VOICE_ACCESSIBILITY_CAPTURE=true']
+                        if 'accessibility_settings_capture_test.dart' in profiles['vm'] else [])
         tests.append(('test-vm', [flutter, 'test', '--no-pub', '--reporter', 'json',
-                                  '--concurrency=1', *vm_args], profiles['vm']))
+                                  '--concurrency=1', *capture_args, *vm_args], profiles['vm']))
     if profiles['chrome']:
         tests.append(('test-chrome', [flutter, 'test', '--no-pub', '--platform', 'chrome',
                                       '--reporter', 'json',
@@ -178,9 +212,19 @@ def run(root, head, output, flutter, selected=None):
                 result['tests']['skipped'].extend(summary['skipped'])
                 result['tests']['suites'].extend(summary['suites'])
                 result['tests']['event_sha256'][label] = hashlib.sha256(raw).hexdigest()
+                if label == 'test-vm' and 'accessibility_settings_capture_test.dart' in selected_suites:
+                    images = {}
+                    for orientation in ('H', 'V'):
+                        name = 'tmp/anton122-accessibility/accessibility-' + orientation + '.png'
+                        raw_image = (checkout / name).read_bytes()
+                        if not raw_image.startswith(b'\x89PNG\r\n\x1a\n'):
+                            raise ValueError('accessibility capture is missing or invalid')
+                        images[name] = hashlib.sha256(raw_image).hexdigest()
+                    result['accessibility_captures'] = images
         if local_source_snapshot.capture(root, head) != source:
             raise ValueError('source changed during execution')
         if result['tests']['skipped']:
+            result['skip_classification'] = classify_skips(checkout, result['tests']['skipped'])
             raise ValueError('required Flutter tests were skipped')
     except (OSError, ValueError, json.JSONDecodeError) as error:
         result['status'] = 'failed'
