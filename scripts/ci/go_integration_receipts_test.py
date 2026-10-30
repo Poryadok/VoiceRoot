@@ -247,10 +247,40 @@ class GoIntegrationReceiptTests(unittest.TestCase):
                   'TestAccountBanFixtureTrusted50Transition', drift, *observers)
         positions = [run.index(value) for value in phases]
         self.assertEqual(positions, sorted(positions))
-        self.assertEqual(run.count('--reject-skips'), 4)
+        self.assertEqual(run.count('--reject-skips'), 6)
         self.assertIn('owned_oid', run)
         self.assertIn('DROP DATABASE space_db', run)
         for inventory in inventories:
+            events = [{'Package': package, 'Test': name, 'Action': action}
+                      for _, name in inventory for action in ('run', 'pass')]
+            events.append({'Package': package, 'Action': 'pass'})
+            self.assertFalse(receipts.verify_required(events, inventory, 0))
+            for _, name in inventory:
+                missing = [event for event in events if not (event.get('Test') == name and event['Action'] == 'pass')]
+                self.assertIn((package, name), receipts.verify_required(missing, inventory, 0))
+                skipped = [dict(event, Action='skip') if event.get('Test') == name and event['Action'] == 'pass' else event for event in events]
+                self.assertIn((package, name), receipts.verify_required(skipped, inventory, 0))
+
+    def test_space_concurrency_requires_seeded_enrollment_and_both_proofs(self):
+        import yaml
+        package = 'voice/backend/space/internal/store'
+        enrollment = 'TestAccountBanFixtureConcurrencyEnrollment50'
+        cases = ('TestAccountBanIntentConcurrency50', 'TestAccountBanLockWaitExhaustsOriginalBudget50')
+        first = json.loads((ROOT / 'scripts/ci/space_concurrency_enrollment_required.json').read_text(encoding='utf-8'))['space']
+        second = json.loads((ROOT / 'scripts/ci/space_concurrency_required.json').read_text(encoding='utf-8'))['space']
+        self.assertEqual(first, [[package, enrollment]])
+        self.assertEqual(second, [[package, case] for case in cases])
+        exceptions = json.loads((ROOT / 'scripts/ci/go_integration_exceptions.json').read_text(encoding='utf-8'))
+        for name in (enrollment, *cases):
+            entry = next(item for item in exceptions if item['service'] == 'space' and item['test'] == name)
+            self.assertEqual((entry['status'], entry['reason']), ('dedicated', 'space-native-installer-integration'))
+        jobs = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text(encoding='utf-8'))['jobs']
+        step = next(item for item in jobs['space-native-installer-integration']['steps']
+                    if item.get('name') == 'Run seeded Space native50 observer proofs')
+        run = step['run']
+        positions = [run.index(value) for value in ('VALUES (9),(11)', 'goto 44', 'goto 50', enrollment, *cases)]
+        self.assertEqual(positions, sorted(positions))
+        for inventory in (first, second):
             events = [{'Package': package, 'Test': name, 'Action': action}
                       for _, name in inventory for action in ('run', 'pass')]
             events.append({'Package': package, 'Action': 'pass'})

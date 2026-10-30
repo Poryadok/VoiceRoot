@@ -65,6 +65,12 @@ DEDICATED = {
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNativeObserverNoopLeaseGapTuple'):
         'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanFixtureConcurrencyEnrollment50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanIntentConcurrency50'):
+        'space-native-installer-integration',
+    ('space', 'voice/backend/space/internal/store', 'TestAccountBanLockWaitExhaustsOriginalBudget50'):
+        'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative50CreatorBornCurrentSchema'):
         'space-native-installer-integration',
     ('space', 'voice/backend/space/internal/store', 'TestNative51AtomicMigrationFailureRollsBackBodySealAndHistory'):
