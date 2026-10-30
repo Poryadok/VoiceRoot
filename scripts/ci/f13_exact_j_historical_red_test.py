@@ -5,6 +5,8 @@ provenance failure has exit2 and can never stand in for the assertion RED(exit1)
 Execution requires independent CODE review and the caller's explicit test stage.
 """
 import hashlib
+from contextlib import contextmanager
+import time
 import errno
 import importlib.util
 import json
@@ -69,6 +71,84 @@ UTILITY_DIAGNOSTIC_ENTRIES = 32
 
 class SetupFailure(Exception):
     pass
+
+
+# Advisory durations only: never receipt authority, provenance or a clock proof.
+PHASE_LABELS = ('prepare', 'namespace_setup', 'pinned_git', 'clone',
+                'validator_j', 'validator_terminal', 'validator_pending', 'guard', 'cleanup')
+PHASE_MAX_NS = 7 * 24 * 60 * 60 * 1_000_000_000
+PHASE_NAMESPACE = b'F13_PHASE'
+
+
+def phase_record(label, elapsed):
+    if label in PHASE_LABELS and type(elapsed) is int and 0 <= elapsed <= PHASE_MAX_NS:
+        return 'F13_PHASE_v1 ' + label + ' ' + str(elapsed) + '\n'
+    return ''
+
+
+@contextmanager
+def phase_duration(label):
+    started = None
+    try:
+        started = time.monotonic_ns()
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        try:
+            if type(started) is int and started >= 0:
+                finished = time.monotonic_ns()
+                if type(finished) is int:
+                    sys.stderr.write(phase_record(label, finished - started))
+        except Exception:
+            pass  # Optional clock/output failure cannot replace body outcome.
+
+
+class PhaseTemporaryDirectory(tempfile.TemporaryDirectory):
+    def __exit__(self, *args):
+        with phase_duration('cleanup'):
+            return super().__exit__(*args)
+
+
+def extract_phase_output(stdout, stderr):
+    """Strip reserved child lines; re-encode bounded singleton advisory values."""
+    values, counts = {}, {}
+    def suppress(raw):
+        kept = []
+        for line in raw.splitlines(keepends=True):
+            if not line.startswith(PHASE_NAMESPACE):
+                kept.append(line)
+                continue
+            parts = line.split(b' ')
+            if len(parts) >= 2 and parts[1] in [label.encode('ascii') for label in PHASE_LABELS]:
+                label = parts[1].decode('ascii')
+                counts[label] = counts.get(label, 0) + 1
+                if len(line) <= 96 and re.fullmatch(rb'F13_PHASE_v1 [a-z_]+ (0|[1-9][0-9]{0,14})\n', line):
+                    value = int(parts[2])
+                    if phase_record(label, value).encode('ascii') == line:
+                        values[label] = value
+        return b''.join(kept)
+    stdout, stderr = suppress(stdout), suppress(stderr)
+    records = ''.join(phase_record(label, values[label]) for label in PHASE_LABELS
+                      if counts.get(label) == 1 and label in values).encode('ascii')
+    return stdout, stderr, records
+
+
+def namespace_setup_script(body):
+    """Keep set -eu and original setup status even when either clock fails."""
+    python = shlex.quote(sys.executable)
+    clock = python + ' -c ' + shlex.quote('import time; print(time.monotonic_ns())')
+    finish = ("import sys,time\ntry:\n raw=sys.argv[1]\n"
+              " if raw.isascii() and raw.isdecimal() and len(raw)<=20:\n"
+              "  elapsed=time.monotonic_ns()-int(raw)\n"
+              "  if 0<=elapsed<=" + str(PHASE_MAX_NS) + ": print('F13_PHASE_v1 namespace_setup '+str(elapsed))\n"
+              "except Exception: pass\n")
+    emit = python + ' -c ' + shlex.quote(finish) + ' "$f13_phase_start" 2>/dev/null || :\n'
+    return ('set -eu\nf13_phase_start=\nf13_phase_start=$(' + clock + ' 2>/dev/null) || f13_phase_start=\n'
+            + 'f13_phase_finish() {\n' + emit + '}\n'
+            + "trap 'f13_phase_status=$?; f13_phase_finish; exit $f13_phase_status' EXIT\n"
+            + body + 'f13_phase_finish\ntrap - EXIT\n')
 
 
 def require(value, reason):
@@ -1264,7 +1344,7 @@ def namespace_main(live=False):
         require(run(['git', '-C', str(ROOT), 'show', head + ':' + name]) == data, 'immutable_testhead_source:' + name)
         source_bindings[name] = sha(data)
     harness_identity = json.dumps(dict(commit=head, files=source_bindings), sort_keys=True)
-    with tempfile.TemporaryDirectory(prefix='f13-exact-j-') as folder:
+    with PhaseTemporaryDirectory(prefix='f13-exact-j-') as folder:
         root = Path(folder) / 'root'
         root.mkdir()
         # Deferred preparation occurs only after the final fixed roots are mounted.
@@ -1283,7 +1363,7 @@ def namespace_main(live=False):
                 (root / name).mkdir(exist_ok=True)
                 mounts.append((str(source), str(root / name)))
         mounts.append((str(ROOT), str(root / 'harness')))
-        script = 'set -eu\nmount --make-rprivate /\n'
+        script = 'mount --make-rprivate /\n'
         for source, target in mounts:
             script += 'mount --bind ' + shlex.quote(source) + ' ' + shlex.quote(target) + '\n'
             script += 'mount -o remount,bind,ro ' + shlex.quote(target) + '\n'
@@ -1298,6 +1378,7 @@ def namespace_main(live=False):
         script += 'mount --bind /dev/null ' + null + '\n'
         script += '/usr/bin/mount -o remount,ro,nosuid,noexec,dev ' + devices + '\n'
         script += 'mount -t proc proc ' + shlex.quote(str(root / 'proc')) + '\n'
+        script = namespace_setup_script(script)
         executable = '/harness/scripts/ci/f13_exact_j_historical_red_test.py'
         invocation = 'chroot --userspec=' + str(os.getuid()) + ':' + str(os.getgid()) + ' ' + shlex.quote(str(root))
         invocation += ' /usr/bin/env -i PATH=/historical-git/launch:/historical-git/util GIT_EXEC_PATH=/historical-git/exec GIT_TEMPLATE_DIR=/historical-git/templates GIT_ALLOW_PROTOCOL=file HOME=/tmp PYTHONDONTWRITEBYTECODE=1 GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null '
@@ -1312,10 +1393,15 @@ def namespace_main(live=False):
         # User/mount/network/pid isolation is fixture infrastructure only. There
         # is no listener, published port, engine start, DEV or STAGING operation.
         result = subprocess.run(['sudo', '-n', 'unshare', '--mount', '--net', '--pid', '--fork', 'bash', '-c', script], capture_output=True)
-        paired_stdout, paired_stderr, paired_receipt = resolve_owned_paired_output(result.stdout, result.stderr, paired_context)
+        phase_stdout, phase_stderr, phases = extract_phase_output(result.stdout, result.stderr)
+        paired_stdout, paired_stderr, paired_receipt = resolve_owned_paired_output(phase_stdout, phase_stderr, paired_context)
         stdout, stderr, public_receipt = resolve_owned_utility_output(paired_stdout, paired_stderr, diagnostic_context)
         sys.stdout.buffer.write(stdout)
         sys.stderr.buffer.write(stderr)
+        try:
+            sys.stderr.buffer.write(phases)
+        except Exception:
+            pass  # Advisory output cannot alter the guard receipt/exit contract.
         if public_receipt is not None:
             try:
                 sys.stderr.buffer.write(diagnostic_json(public_receipt) + b'\n')
@@ -1390,9 +1476,11 @@ def inside(live=False):
     require(all(sha((ROOT / name).read_bytes()) == digest for name, digest in harness_identity['files'].items()), 'mounted_testhead_same_bytes')
     repo = Path('/repo')
     # Validate the complete read-only pinned closure before the first inner Git.
-    pinned_git_environment(Path('/'))
+    with phase_duration('pinned_git'):
+        pinned_git_environment(Path('/'))
     bundle = '/out/prelaunch/private-target.bundle'
-    run(['git', 'clone', '--no-checkout', bundle, str(repo)])
+    with phase_duration('clone'):
+        run(['git', 'clone', '--no-checkout', bundle, str(repo)])
     verify_checkout_inputs(repo, TARGET)
     run(['git', '-C', str(repo), 'checkout', '--detach', TARGET])
     git = lambda *args: run(['git', '--no-replace-objects', '-C', str(repo), *args])
@@ -1437,12 +1525,14 @@ def inside(live=False):
                               actual_sha256=sha(h.canonical(actual_cap)), actual_bytes=len(h.canonical(actual_cap)))))
     require(cap == actual_cap and not differences, 'fixed3071_complete_current_capability_binding')
     replay, replay_provenance = successor_replay_module(repo, harness_identity)
-    checked = replay.validate_trace(repo, trace, prefix['sha256'], J_checkpoint=OPERATION, sealed_prefix=prefix)
+    with phase_duration('validator_j'):
+        checked = replay.validate_trace(repo, trace, prefix['sha256'], J_checkpoint=OPERATION, sealed_prefix=prefix)
     reconstructed = h.build_3071_J_ready(checked['J_checkpoint'], prefix)
     require(h.canonical(reconstructed) == h.canonical(captured), 'independent_complete_J_not_trusted_import')
     # Fold the complete original failed trace to prove all prior transitions and
     # the exact final map, not just the old J checkpoint or its selected row.
-    terminal = replay.validate_trace(repo, trace, TRACE_SHA)
+    with phase_duration('validator_terminal'):
+        terminal = replay.validate_trace(repo, trace, TRACE_SHA)
     require(terminal['failures'] and terminal['master_wrapper'] is None, 'old_failure_not_success')
     folded = terminal['ledger']['F5']
     map_raw = ''.join(row + '\n' for row in folded['rows']).encode()
@@ -1536,9 +1626,10 @@ def inside(live=False):
     # production semantic constructor at the exact pending boundary, not an
     # invented live frame or a caller-supplied qualification bit.
     pending_prefix = b''.join(raw.splitlines(keepends=True)[:10645])
-    permission = replay.validate_trace(repo, trace, PENDING_SHA,
-        sealed_prefix=dict(bytes=len(pending_prefix), sha256=PENDING_SHA),
-        exact_J_checkpoint='pending')['exact_J_permission']
+    with phase_duration('validator_pending'):
+        permission = replay.validate_trace(repo, trace, PENDING_SHA,
+            sealed_prefix=dict(bytes=len(pending_prefix), sha256=PENDING_SHA),
+            exact_J_checkpoint='pending')['exact_J_permission']
     require(permission['type'] == 'F54_EXACT_J_AUDIT_OWNER_TRANSITION_AUTHOR_v1'
         and permission['operation'] == OPERATION and permission['incoming'] == pending['payload']['incoming']
         and permission['map_before'] == h.file_digest(map_raw) and permission['source_rebind'] is False
@@ -1551,7 +1642,8 @@ def inside(live=False):
     script = script.replace(original_call, original_call +
         '[[ "$status" == 1 ]] || return 93\n' +
         'status=0; f13_guarded_owner_transition_allowed "$guarded_correction_allowed" "$role_duplicate_allowed" "$space_audit_allowed" "$exact_unit_supersession" "$allow_direct_followup" "$is_direct" "$incremental_merge" true || status=$?\n')
-    result = subprocess.run(['bash'], input=script.encode(), capture_output=True)
+    with phase_duration('guard'):
+        result = subprocess.run(['bash'], input=script.encode(), capture_output=True)
     require(result.returncode == 0 and not Path(values['diagnostic_file']).exists(), 'shared_dispatch_setup:' + result.stderr.decode(errors='replace')[-2000:])
     require(all(sha((OBSERVED / name).read_bytes()) == digest for name, digest in before.items()), 'no_trace_ledger_map_write')
     require(before_files == {str(p):sha(p.read_bytes()) for p in OBSERVED.rglob('*') if p.is_file()}, 'unexpected_native_or_other_side_effect_is_setup_failure')
@@ -1670,8 +1762,9 @@ def main():
     arguments = sys.argv[1:]
     require(arguments in ([], ['--prepare'], ['--inside'], ['--live'], ['--inside-live']), 'explicit_harness_mode')
     if arguments == ['--prepare']:
-        verify_private_devices()
-        return prepare()
+        with phase_duration('prepare'):
+            verify_private_devices()
+            return prepare()
     if arguments == ['--inside']:
         verify_private_devices()
         return inside()

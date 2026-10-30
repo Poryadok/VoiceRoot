@@ -13,6 +13,14 @@ def plan():
              'hashes':{'000001_example.up.sql':hashlib.sha256(sql.encode()).hexdigest()}}]
 
 class MigrationPlanTest(unittest.TestCase):
+    def test_realtime_uses_its_existing_secret_and_source_pinned_sql(self):
+        row=plan();row[0]['database']='realtime';row[0]['secret_key']='REALTIME_DATABASE_URL'
+        cm,job=migrations.documents(migrations.validate_plan(row,'full'),'123456abcdef')
+        self.assertEqual(cm['data'],row[0]['files'])
+        self.assertEqual(job['spec']['template']['spec']['containers'][0]['env'][0]['valueFrom']['secretKeyRef'],
+                         {'name':'voice-app-secrets','key':'REALTIME_DATABASE_URL'})
+        with self.assertRaises(Blocked):migrations.validate_plan(row,'images-only')
+
     def test_emits_only_nonce_database_job_and_sql_configmap(self):
         rows=migrations.documents(migrations.validate_plan(plan(),'app-only'),'123456abcdef')
         self.assertEqual([r['kind'] for r in rows],['ConfigMap','Job'])

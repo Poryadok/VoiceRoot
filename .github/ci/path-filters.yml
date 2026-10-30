@@ -1,6 +1,9 @@
 # Path filters for CI tier 1 (PR / push). Sync service paths with Makefile GO_SERVICES.
 # Global / shared paths widen blast radius (run all Go services, full flutter, etc.).
 
+full_application_request:
+  - .github/ci/full-application-build-request.json
+
 global:
   - scripts/dev/generate-phase0-fixture.py
   - docker/phase0/**
@@ -41,6 +44,10 @@ ci_global:
   - '!scripts/ci/gate-latency_test.py'
 
 ci_scripts:
+  # Complete chain fixture imports plus its actual restore-only SQL inputs.
+  - scripts/dev/story_media_backup*.py
+  - scripts/staging/nats-rollout-preservation/github_custody.py
+  - src/backend/migrations/voice_db/**
   - scripts/ci/**
   - scripts/release/capability_manifest*.py
   - scripts/release/client_compatibility*.py

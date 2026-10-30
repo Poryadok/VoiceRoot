@@ -4,6 +4,68 @@ import guard
 from apply import paused_documents,digest
 from controller import Blocked
 
+def _contains_requested(requested,actual):
+    if isinstance(requested,dict):
+        return isinstance(actual,dict) and all(key in actual and _contains_requested(value,actual[key]) for key,value in requested.items())
+    if isinstance(requested,list):
+        return isinstance(actual,list) and len(requested)==len(actual) and all(_contains_requested(a,b) for a,b in zip(requested,actual))
+    return type(requested) is type(actual) and requested==actual
+
+def normalize_first_install(kube,stage,documents,target,plan,renderer_authority=None):
+    """Normalize the isolated create-only GIS pair without generic apply."""
+    import gis_first_install as gis
+    if (documents!=[] or target.get('manifest_sha256')!=digest([])
+        or plan.get('operation')!=stage.operation
+        or target.get('gis_first_install_sha256')!=plan.get('source_plan_sha256')):
+        raise Blocked('gis_first_install_normalization_binding_invalid')
+    objects=plan.get('objects')
+    if not isinstance(objects,list) or len(objects)!=2 or {gis._identity(o) for o in objects}!=set(gis.IDENTITIES):
+        raise Blocked('gis_first_install_source_pair_invalid')
+    deployment=next(o for o in objects if gis._identity(o)==gis.DEPLOYMENT)
+    original_template=deployment['spec']['template']
+    original_hash=target.get('template_hashes',{}).get('voice-gameintegration')
+    if original_hash!=digest(original_template):raise Blocked('gis_first_install_template_changed')
+    expected_images={}
+    for container in original_template['spec'].get('initContainers',[])+original_template['spec'].get('containers',[]):
+        key='voice-gameintegration/'+container['name'];expected_images[key]=container['image']
+    renderer_images={}
+    if renderer_authority is not None:
+        import renderer_root
+        renderer_images=renderer_root.validate_target(target,renderer_authority,stage)
+    if expected_images|renderer_images!=target.get('images'):
+        raise Blocked('gis_first_install_image_changed')
+    expected_names={'voice-gameintegration'}|({renderer_root.HUB} if renderer_authority is not None else set())
+    if set(target['template_hashes'])!=expected_names:raise Blocked('gis_first_install_template_inventory_invalid')
+    gis.preflight(kube,plan)
+    normalized=[]
+    for obj in objects:
+        result=kube.run(['create','--dry-run=server','-f','/dev/stdin','-o','json'],body=obj)
+        if (not isinstance(result,dict) or gis._identity(result)!=gis._identity(obj)
+            or result.get('metadata',{}).get('namespace')!=guard.NS
+            or result.get('metadata',{}).get('annotations',{}).get(gis.MARKER)!=plan['operation']):
+            raise Blocked('gis_first_install_normalization_identity_changed')
+        actual=gis.semantic(result)
+        if not _contains_requested(gis.semantic(obj),actual):raise Blocked('gis_first_install_source_fields_changed')
+        normalized.append(actual)
+    gis.preflight(kube,plan)
+    service=next(o for o in normalized if gis._identity(o)==gis.SERVICE)
+    requested_service=next(o for o in objects if gis._identity(o)==gis.SERVICE)
+    if 'clusterIP' not in requested_service['spec'] and 'clusterIPs' not in requested_service['spec']:
+        service['spec'].pop('clusterIP',None);service['spec'].pop('clusterIPs',None)
+    new_deployment=next(o for o in normalized if gis._identity(o)==gis.DEPLOYMENT)
+    if new_deployment['spec'].get('replicas')!=0:raise Blocked('gis_first_install_normalization_unpaused')
+    spec=new_deployment['spec']['template']['spec']
+    normalized_images={'voice-gameintegration/'+c['name']:c['image'] for c in spec.get('initContainers',[])+spec.get('containers',[])}
+    if normalized_images!=expected_images:raise Blocked('gis_first_install_image_changed')
+    updated_plan=copy.deepcopy(plan);updated_plan['objects']=normalized
+    if 'clusterIP' not in requested_service['spec'] and 'clusterIPs' not in requested_service['spec']:
+        updated_plan['service_allocation']='server'
+    updated_plan['spec_sha256']={f'{k}/{n}':digest(gis.semantic(o)) for o in normalized for k,n in [gis._identity(o)]}
+    wanted=copy.deepcopy(target);wanted['input_template_hashes']=dict(target['template_hashes'])
+    wanted['template_hashes']['voice-gameintegration']=digest(new_deployment['spec']['template'])
+    wanted['gis_first_install_normalized_sha256']=gis.normalized_binding(updated_plan)
+    return wanted,updated_plan
+
 def image_only_documents(stage,documents,target,renderer_authority=None):
     # Validate the compiled input before transforming it. Image-only mode
     # preserves current environment, mounts, identity refs and strategies.
@@ -35,7 +97,11 @@ def image_only_documents(stage,documents,target,renderer_authority=None):
     updated['manifest_sha256']=digest(rows)
     return rows,updated
 
-def normalize_target(kube,stage,documents,target,renderer_authority=None):
+def normalize_target(kube,stage,documents,target,renderer_authority=None,*,gis_target_sink=None,gis_binding=None):
+    if gis_target_sink is not None:
+        if gis_binding is None:raise Blocked('gis_existing_normalization_binding_required')
+        import gis_existing_update
+        gis_existing_update.verify_phase(gis_binding,kube,'active')
     receipt={'target':target,'pvc':{'name':stage.expected['source_claim']}}
     rows=paused_documents(documents,receipt)
     names={(r['kind'],r['metadata']['name']) for r in rows}
@@ -73,4 +139,27 @@ def normalize_target(kube,stage,documents,target,renderer_authority=None):
         templates[renderer_root.HUB]=target['template_hashes'][renderer_root.HUB]
     if identities or set(templates)!=set(target['template_hashes']):raise Blocked('rollout_target_normalization_inventory_changed')
     wanted['template_hashes']=templates
+    if gis_target_sink is not None:
+        if not callable(gis_target_sink) or 'voice-gameintegration' not in stage.snapshots:
+            raise Blocked('gis_existing_normalization_scope_invalid')
+        import gis_first_install as gis
+        dep_rows=[row for row in normalized if row.get('kind')=='Deployment' and row.get('metadata',{}).get('name')=='voice-gameintegration']
+        service_rows=[row for row in normalized if row.get('kind')=='Service' and row.get('metadata',{}).get('name')=='voice-gameintegration']
+        if len(dep_rows)>1 or len(service_rows)>1:raise Blocked('gis_existing_normalization_scope_invalid')
+        deployment=dep_rows[0] if dep_rows else copy.deepcopy(stage.snapshots['voice-gameintegration'])
+        service_live=kube.get('service','voice-gameintegration')
+        service=service_rows[0] if service_rows else service_live
+        if (deployment.get('metadata',{}).get('uid')!=stage.snapshots['voice-gameintegration']['metadata']['uid']
+                or not guard.UUID.fullmatch(str(service.get('metadata',{}).get('uid','')))
+                or service.get('metadata',{}).get('uid')!=service_live.get('metadata',{}).get('uid')
+                or service.get('metadata',{}).get('namespace')!=guard.NS
+                or service_live.get('metadata',{}).get('uid')!=gis_binding['service_uid']
+                or gis.semantic(service_live)!=gis_binding['service']):
+            raise Blocked('gis_existing_normalization_identity_changed')
+        gis_existing_update.verify_phase(gis_binding,kube,'active')
+        pair={'deployment_mode':'selected-paused' if dep_rows else 'preserved-active',
+              'deployment_uid':deployment['metadata']['uid'],'service_uid':service['metadata']['uid'],
+              'deployment':gis.semantic(deployment),'service':gis.semantic(service)}
+        wanted['gis_existing_normalized_sha256']=digest(pair)
+        gis_target_sink(copy.deepcopy(deployment),copy.deepcopy(service),bool(dep_rows))
     return wanted

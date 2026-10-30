@@ -171,7 +171,7 @@ def stream_identity(stream, key):
 
 def identity_at(dirfd, filename, key):
     try:
-        fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+        fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
         with os.fdopen(fd, 'rb') as stream:
             return stream_identity(stream, key)
     except OSError:
@@ -189,7 +189,7 @@ def decrypt(root, key, binding, manifest, member, destination):
         if member not in manifest['files']:
             raise BackupError('backup member missing')
         try:
-            source_fd = os.open(member + '.enc', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=dirfd)
+            source_fd = os.open(member + '.enc', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
         except OSError:
             raise BackupError('backup member unavailable') from None
     _decrypt_snapshot(source_fd, key, manifest['files'][member], destination)

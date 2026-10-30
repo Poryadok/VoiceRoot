@@ -27,6 +27,21 @@ V5_BINDING='23b26ad5478e01d4b00abf171d29a5d210c6c2fbf6284826cf9e3a84cfd73a9a'
 CECCB_INSTALLED_BINDING='ceccb8a607957d9c436247fb183d8467d48ac33ece8b3e6c70850404c569e032'
 SOURCE_CAPTURE_INSTALLED_BINDING='65717bd51213624f7c0890e97b2cdf1ef9149f57fb27f22f3bdbebca5fb963e5'
 SEARCH_BOOTSTRAP_INSTALLED_BINDING='a025ffb62b4c0716a44611c4ac00fe9cae60b8bcb5e8b48204b44a62dc541749'
+INSTALLED_COHORT_BINDING='78f5532cfc06766e5482caf402a6a0d30c7d47255f1fc441a43149132859546b'
+# Source tree 9aa2e4d17beec62c5a853437e48b65239538a856 with the three
+# observed installed binary bytes; the executing installer is bound separately.
+INSTALLED_COHORT_TARGET_PROJECTION='d4c2c9f639975f66c6cc2caeac713d3e447d76cebf7f7d3b1edb5673f5da884a'
+INSTALLED_COHORT_TT_PREDECESSOR='0a81983170a46924ed21194e005087a999748a7e13e6762d6eefa76ed526fc21'
+INSTALLER_MEMBER='nats-rollout-preservation/installer.py'
+# Provisional exact GIS successor: e2b5e42abedaaaf50e9007c435e9c88cd4f48420,
+# observed installed binary pins, and this independently authorized installer.
+GIS_INSTALLED_TARGET_PROJECTION='d64f32b7383e06cd454d2f302ebce656ef7dfcb8b97b3012f20824f2b74615ef'
+GIS_INSTALLED_NEW_MEMBER='nats-rollout-preservation/gis_existing_update.py'
+# Exact full 23 prerequisite candidate: e49806531d5b05b6a521b249a9eed46e520699ab,
+# observed installed binary pins, and the independently authorized installer.
+FULL23_INSTALLED_TARGET_PROJECTION='8f5e1095a702b4bcde11ae5be2111457cf61a05010da1b2bfd95200ed8180dae'
+FULL23_NEW_MEMBERS=frozenset(('nats-rollout-preservation/realtime_bootstrap.py',
+                             'nats-rollout-preservation/realtime_bootstrap_existing.py'))
 
 # Closed source predecessor, not an assertion about the actual installed host.
 # Unchanged members/binaries must exactly match the reviewed successor bundle.
@@ -127,6 +142,13 @@ def tt_resource_journal_snapshot(installed):
         return {str(path):hashlib.sha256(path.read_bytes()).hexdigest()}
     except (OSError,ValueError,TypeError,KeyError,RuntimeError):
         raise Blocked('bridge_tt_upgrade_resource_reconciliation_required') from None
+
+def require_future_history_absent(installed):
+    """The exact legacy-cohort transition cannot adopt new private history."""
+    for name in ('source-authority','realtime-bootstrap'):
+        try:(Path(installed)/name).lstat()
+        except FileNotFoundError:continue
+        raise Blocked('bridge_full23_future_history_present')
 
 def binding_sha(code):
     return hashlib.sha256(json.dumps(root_cli.code_binding(code),sort_keys=True,separators=(',',':')).encode()).hexdigest()
@@ -307,12 +329,13 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                 raise Blocked('bridge_upgrade_directory_untrusted')
         inbox=installed/'inbox'
         if __import__('stat').S_IMODE(inbox.lstat().st_mode)!=0o1730:raise Blocked('bridge_upgrade_directory_untrusted')
+        if version=='idle-full23-installed-cohort-v1':require_future_history_absent(installed)
         inbox.chmod(0o700)
         try:
             if any(inbox.iterdir()) or any((installed/'processing').iterdir()):raise Blocked('bridge_upgrade_pending_request')
             tt_protected={}
             tt_copies=()
-            if version=='idle-tt-resource-fencing-v1':
+            if version in ('idle-tt-resource-fencing-v1','idle-installed-cohort-v1','idle-gis-installed-cohort-v1','idle-full23-installed-cohort-v1'):
                 tt_protected=tt_resource_journal_snapshot(installed)
                 tt_copies=(code,installed/'code',installed/('code-'+version+'-staged'),installed/('code-'+previous_version+'-preserved'))
                 for copy in tt_copies:
@@ -339,7 +362,9 @@ def _upgrade_idle_transition(code,predecessor,version,previous_version,result):
                 protected[str(path)]=retirement.file_sha(path)
             witnesses=story_witness.registry_snapshot()
             if kube.get('configmap','voice-nats-generation')!=marker:raise Blocked('bridge_upgrade_marker_changed')
+            if version=='idle-full23-installed-cohort-v1':require_future_history_absent(installed)
             _upgrade_code(code,installed,grp.getgrnam('pmd').gr_gid,predecessor,version,previous_version)
+            if version=='idle-full23-installed-cohort-v1':require_future_history_absent(installed)
             for copy in tt_copies:
                 if copy.exists():tt_code_inventory(copy,root_cli.code_binding(copy))
             if story_witness.registry_snapshot()!=witnesses or kube.get('configmap','voice-nats-generation')!=marker:
@@ -404,6 +429,62 @@ def upgrade_idle_tt_resource_fencing_v1(code):
     predecessor=hashlib.sha256(json.dumps(previous,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     _upgrade_idle_transition(code,predecessor,'idle-tt-resource-fencing-v1','tt-predecessor-f8624086',
         'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_TT_RESOURCE_FENCING_V1_HISTORY_PRESERVED')
+
+def upgrade_idle_installed_cohort_v1(code):
+    """Fixed public 81-member predecessor to one finite TT successor.
+
+    The caller must separately authorize the exact captured launcher and bundle;
+    comparing the running installer bytes does not establish source authority.
+    """
+    binding=root_cli.code_binding(Path(code))
+    if not isinstance(binding,dict) or set(binding)!=TT_FENCING_PREDECESSOR_MEMBERS|{TT_FENCING_NEW_MEMBER}:
+        raise Blocked('bridge_installed_cohort_successor_members_invalid')
+    projection={name:value for name,value in binding.items() if name!=INSTALLER_MEMBER}
+    if hashlib.sha256(json.dumps(projection,sort_keys=True,separators=(',',':')).encode()).hexdigest()!=INSTALLED_COHORT_TARGET_PROJECTION:
+        raise Blocked('bridge_installed_cohort_successor_drift')
+    if binding[INSTALLER_MEMBER]!=hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+        raise Blocked('bridge_installed_cohort_installer_drift')
+    predecessor=tt_fencing_predecessor(binding)
+    if hashlib.sha256(json.dumps(predecessor,sort_keys=True,separators=(',',':')).encode()).hexdigest()!=INSTALLED_COHORT_TT_PREDECESSOR:
+        raise Blocked('bridge_installed_cohort_tt_predecessor_drift')
+    _upgrade_idle_transition(code,INSTALLED_COHORT_BINDING,'idle-installed-cohort-v1','installed-78f5532c',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_INSTALLED_COHORT_V1_HISTORY_PRESERVED')
+
+def upgrade_idle_gis_installed_cohort_v1(code):
+    """Exact installed 81-member predecessor to the fixed GIS successor.
+
+    The exact executing installer and launcher must be independently authorized
+    as part of the full captured bundle before invoking this route.
+    """
+    binding=root_cli.code_binding(Path(code))
+    expected=TT_FENCING_PREDECESSOR_MEMBERS|{TT_FENCING_NEW_MEMBER,GIS_INSTALLED_NEW_MEMBER}
+    if not isinstance(binding,dict) or set(binding)!=expected:
+        raise Blocked('bridge_gis_cohort_successor_members_invalid')
+    projection={name:value for name,value in binding.items() if name!=INSTALLER_MEMBER}
+    if hashlib.sha256(json.dumps(projection,sort_keys=True,separators=(',',':')).encode()).hexdigest()!=GIS_INSTALLED_TARGET_PROJECTION:
+        raise Blocked('bridge_gis_cohort_successor_drift')
+    if binding[INSTALLER_MEMBER]!=hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+        raise Blocked('bridge_gis_cohort_installer_drift')
+    _upgrade_idle_transition(code,INSTALLED_COHORT_BINDING,'idle-gis-installed-cohort-v1','installed-78f5532c-gis',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_GIS_INSTALLED_COHORT_V1_HISTORY_PRESERVED')
+
+def upgrade_idle_full23_installed_cohort_v1(code):
+    """Exact observed 81-member predecessor to one full 23 successor.
+
+    An independently authorized wrapper must bind the full launcher and bundle,
+    including this executing installer, before the route is invoked.
+    """
+    binding=root_cli.code_binding(Path(code))
+    expected=TT_FENCING_PREDECESSOR_MEMBERS|{TT_FENCING_NEW_MEMBER,GIS_INSTALLED_NEW_MEMBER}|FULL23_NEW_MEMBERS
+    if not isinstance(binding,dict) or set(binding)!=expected:
+        raise Blocked('bridge_full23_cohort_successor_members_invalid')
+    projection={name:value for name,value in binding.items() if name!=INSTALLER_MEMBER}
+    if hashlib.sha256(json.dumps(projection,sort_keys=True,separators=(',',':')).encode()).hexdigest()!=FULL23_INSTALLED_TARGET_PROJECTION:
+        raise Blocked('bridge_full23_cohort_successor_drift')
+    if binding[INSTALLER_MEMBER]!=hashlib.sha256(Path(__file__).read_bytes()).hexdigest():
+        raise Blocked('bridge_full23_cohort_installer_drift')
+    _upgrade_idle_transition(code,INSTALLED_COHORT_BINDING,'idle-full23-installed-cohort-v1','installed-78f5532c-full23',
+        'NATS_ROLLOUT_BRIDGE=UPGRADED_IDLE_FULL23_INSTALLED_COHORT_V1_HISTORY_PRESERVED')
 
 SERVICE='''[Unit]
 Description=Voice NATS preservation fixed request bridge
@@ -483,8 +564,11 @@ def install(code,policy_path):
     print('NATS_ROLLOUT_BRIDGE=INSTALLED')
 
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-idle-tt-resource-fencing-v1 | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1 | --upgrade-idle-media-v1 | --upgrade-idle-story-fixture-v1')
-    if sys.argv[1]=='--upgrade-idle-tt-resource-fencing-v1':upgrade_idle_tt_resource_fencing_v1(Path(__file__).resolve().parents[1])
+    if len(sys.argv)!=2:raise SystemExit('usage: installer.py ROOT_PRIVATE_POLICY_JSON | --upgrade-idle-full23-installed-cohort-v1 | --upgrade-idle-gis-installed-cohort-v1 | --upgrade-idle-installed-cohort-v1 | --upgrade-idle-tt-resource-fencing-v1 | --upgrade-v4 | --upgrade-v5 | --upgrade-v6 | --upgrade-v7 | --upgrade-v8 | --upgrade-idle | --upgrade-idle-ceccb-v1 | --upgrade-idle-source-capture-v1 | --upgrade-idle-search-bootstrap-v1 | --upgrade-idle-expiry-reset-v1 | --upgrade-idle-media-v1 | --upgrade-idle-story-fixture-v1')
+    if sys.argv[1]=='--upgrade-idle-full23-installed-cohort-v1':upgrade_idle_full23_installed_cohort_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-gis-installed-cohort-v1':upgrade_idle_gis_installed_cohort_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-installed-cohort-v1':upgrade_idle_installed_cohort_v1(Path(__file__).resolve().parents[1])
+    elif sys.argv[1]=='--upgrade-idle-tt-resource-fencing-v1':upgrade_idle_tt_resource_fencing_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-story-fixture-v1':upgrade_idle_story_fixture_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-media-v1':upgrade_idle_media_v1(Path(__file__).resolve().parents[1])
     elif sys.argv[1]=='--upgrade-idle-expiry-reset-v1':upgrade_idle_expiry_reset_v1(Path(__file__).resolve().parents[1])

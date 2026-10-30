@@ -741,6 +741,13 @@ equality remain mandatory. Missing46–49 are not synthesized. Return success
 only after final complete evidence; no ordinary enrollment/new serving grants
 or provider activation occurs in this command.
 
+The maintenance-window checker permits PostgreSQL's own `autovacuum worker`
+backends, which do physical vacuum/analyze maintenance rather than application
+or competing DDL work. This is a finite exception: foreign client sessions
+(including idle or unnamed sessions), logical replication and unknown backend
+types still block the window. Session identity, effective role, advisory lock
+and freshly created database OID checks remain mandatory.
+
 The new Space Job has zero retries: interruption or output persistence failure
 can leave committed44/45/50 stages, and a later run must HOLD rather than infer
 provenance or resume from endpoint state. Retain partial output and original
@@ -1625,6 +1632,20 @@ See [the operator runbook](../scripts/staging/nats-rollout-preservation/README.m
 for the reviewed installer, authority, capacity and recovery boundaries.
 Source bootstrap43/deployed42durable compatibility remains an explicit
 pre-fence backend release prerequisite; the runtime inventory itself is dynamic.
+
+To request a canonical full application build, commit a changed
+`.github/ci/full-application-build-request.json` on master with exactly
+`{"schema":"voice-full-application-build-request-v1","cycle":1,"request_id":"<32 lowercase hex characters>"}`.
+The first request must be cycle 1. A later request may repeat its cycle with a
+new ID after an unsuccessful build, or advance from cycle 1 to 2 with a new ID;
+cycle 2 cannot return to cycle 1. The first-parent Git commit binds the request;
+the request commit SHA and successful push CI attempt identify the build. The
+request selects all 23 application builds and the canonical renderer/stack-lock
+jobs and suppresses automatic staging deployment. It does not prove DEV or
+STAGING acceptance, authorize an infrastructure change, or itself advance a
+release cycle. Before a protected staging operation, bind its complete target
+image map to the actual DEV PASS package, retaining the existing nonselected
+infrastructure identities, and use the normal resource and preservation gates.
 
 
 ## NATS operation checkpoints and reset boundaries

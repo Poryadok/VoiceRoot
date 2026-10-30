@@ -1,0 +1,25 @@
+name: Canonical application package verifier
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/workflows/canonical-application-package-test.yml
+      - scripts/dev/canonical_application_package.py
+      - scripts/dev/canonical_application_package_test.py
+      - scripts/dev/publish_candidate.py
+      - scripts/staging/nats-rollout-preservation/source_authority.py
+      - scripts/staging/nats-rollout-preservation/github_custody.py
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - run: python3 -B scripts/dev/canonical_application_package_test.py

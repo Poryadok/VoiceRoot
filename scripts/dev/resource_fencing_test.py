@@ -39,6 +39,41 @@ class FenceTests(unittest.TestCase):
         fence=fencing.Fence(context,check,store or MemoryLedger())
         return fence,current,check
 
+    def test_predecessor_begin_lost_reply_marks_uncertain(self):
+        import full_cohort_predecessor_phase as predecessor
+        context=identity(); context['operation_id']='media-c2-'+'a'*32
+        ledger=MemoryLedger(); ledger.row={'status':'complete'}
+        notices=[]; check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
+        def lost(previous,row):
+            ledger.row=copy.deepcopy(row); ledger.revision+=1
+            raise OSError('reply lost')
+        with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+             patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=lambda obj,reason:notices.append(reason)), \
+             patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), patch.object(ledger,'write',side_effect=lost):
+            fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
+            with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',None)
+        self.assertEqual(ledger.row['status'],'active')
+        self.assertEqual(ledger.row['predecessor']['snapshot_sha256'],'d'*64)
+        self.assertEqual(notices,['C2 predecessor begin outcome uncertain'])
+
+    def test_predecessor_requires_uncertainty_handler_before_capture(self):
+        context=identity(); context['operation_id']='media-c2-'+'a'*32
+        fence=fencing.Fence(context,lambda:card(context),MemoryLedger())
+        with self.assertRaises(RuntimeError): fence.begin_with_predecessor(None,None,'ns',None)
+
+    def test_predecessor_callback_failure_preserves_unknown_effect(self):
+        import full_cohort_predecessor_phase as predecessor
+        context=identity(); context['operation_id']='media-c2-'+'a'*32
+        ledger=MemoryLedger(); ledger.row={'status':'complete'}
+        check=fencing.ResourceCheck('http://192.168.0.109:30990',context)
+        def lost(previous,row): ledger.row=copy.deepcopy(row); raise OSError('reply lost')
+        with patch.object(fencing.ResourceCheck,'__call__',return_value=card(context)), \
+             patch.object(fencing.ResourceCheck,'mark_uncertain',autospec=True,side_effect=RuntimeError('notice failed')), \
+             patch.object(predecessor,'capture',return_value={'snapshot_sha256':'d'*64}), patch.object(ledger,'write',side_effect=lost):
+            fence=fencing.Fence(context,check,ledger,on_uncertain=check.mark_uncertain)
+            with self.assertRaises(OSError): fence.begin_with_predecessor(None,None,'ns',None)
+        self.assertEqual(ledger.row['status'],'active')
+
     def test_required_identity_and_exact_authority_not_actor_label(self):
         for key in identity():
             context=identity(); del context[key]

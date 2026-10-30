@@ -8,7 +8,7 @@ import shutil
 import tempfile
 import unittest
 from contextlib import ExitStack
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import bridge_root
 import encrypted_cut
 import github_custody
@@ -76,6 +76,7 @@ class CompositionTests(unittest.TestCase):
                     patch.object(actions,'_dispatcher',return_value=(123,{'head_sha':'d'*40})),\
                     patch.object(bridge_root.source_authority,'capture_source',return_value=approved),\
                     patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':'g','dataPVC':'pvc'}})),\
+                    patch('gis_existing_update.load_authority',return_value=None),\
                     patch.object(bridge_root.RolloutStage,'capture',return_value=stage),\
                     patch.object(bridge_root.source_authority,'same_image_content',return_value=matches) as identity,\
                     patch.object(bridge_root,'public_read',side_effect=ReachedContract) as contract:
@@ -130,19 +131,32 @@ class CompositionTests(unittest.TestCase):
                     return approved
                 def capture(args,body=b'',**kwargs):
                     if args[1]=='create':return json.dumps(fixtures.decoder(body)).encode()
+                    if args[3:5]==['get','--raw']:return json.dumps(kube.run(args[3:])).encode()
                     return json.dumps(kube.run(args[3:],None if not body else json.loads(body))).encode() if args[3] in ('apply','exec') else json.dumps(kube.get(args[4],args[5])).encode()
                 reached=[]
                 def prepare_value(value,*args,**kwargs):
                     import guard_test,datetime as dt
+                    self.assertEqual(kwargs['realtime_bootstrap_receipt'],bootstrap)
+                    self.assertEqual(value['target']['realtime_bootstrap_sha256'],bridge_root.transaction.canonical(bootstrap))
                     authorization=guard_test.receipt()
                     authorization.update(schema='nats-rollout-preservation-v1',target=copy.deepcopy(value['target']),
                         backup={'archive_sha256':'1'*64,'manifest_sha256':'2'*64,'census_sha256':'3'*64,'off_node_verified':True},
                         expires_at=(dt.datetime.now(dt.timezone.utc)+dt.timedelta(hours=1)).isoformat())
                     authorization['target']['input_template_hashes']=dict(value['target']['template_hashes'])
+                    import resource_claim,resource_claim_test
+                    authorization['resource_fence']={'schema':'voice-staging-resource-fence-v1',
+                        'context':resource_claim_test.context(),'operation':authorization['operation'],
+                        'helper_sha256':'b'*64,'target_sha256':resource_claim.digest(authorization['target'])}
                     bridge_root.guard.validate(authorization,value['target']['registry'],value['target']['tag'],mode,[],installed/'sources'/('a'*12))
                     reached.append(value);op=args[2];operation=base/('rollout-'+op);operation.mkdir()
                     return {'operation':op,'target':value['target']}
-                actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={}
+                actions=object.__new__(bridge_root.Actions);actions.code=code;actions.binding={};actions.tt_session=Mock()
+                actions.tt_session.context={'images':{'voice-gateway/gateway':old['voice-gateway/gateway']}}
+                if mode=='full':
+                    actions.tt_session.context['images'].update({bridge_root.HUB+'/nats':snapshots[bridge_root.HUB]['spec']['template']['spec']['containers'][0]['image'],
+                        bridge_root.HUB+'/nats-config-renderer':approved['images']['nats-hub-config-renderer']})
+                bootstrap={'schema':'voice-staging-realtime-bootstrap-existing-v1','fixture':'synthetic'}
+                import realtime_bootstrap
                 from nats_contract_plan import digest
                 prior={'fixture':'prior-enrollment'}
                 for filename,record in (
@@ -157,10 +171,19 @@ class CompositionTests(unittest.TestCase):
                     patches.enter_context(patch.object(actions,'_idle'))
                     patches.enter_context(patch.object(actions,'_dispatcher',return_value=(123,execution)))
                     patches.enter_context(patch.object(bridge_root.source_authority,'capture_source',capture_source))
+                    patches.enter_context(patch.object(bridge_root,'record_source_authority'))
+                    patches.enter_context(patch.object(realtime_bootstrap,'run_prepare',return_value=bootstrap))
+                    patches.enter_context(patch.object(realtime_bootstrap,'load_existing',return_value=bootstrap,create=True))
                     patches.enter_context(patch.object(bridge_root,'Kube',return_value=SimpleNamespace(get=lambda *a:{'data':{'generation':p['generation'],'dataPVC':p['dataPVC']}})))
+                    # This compiler fixture has no real Kubernetes GIS API; GIS
+                    # authority and actual capture are exercised separately.
+                    patches.enter_context(patch('gis_existing_update.load_authority',return_value=None))
                     patches.enter_context(patch.object(bridge_root.RolloutStage,'capture',return_value=stage))
                     patches.enter_context(patch('commands.capture',side_effect=capture))
                     patches.enter_context(patch.object(compiler,'capture',side_effect=capture))
+                    # This fixture tests compilation with its own producer; the
+                    # bridge Kube above only models marker reads.
+                    patches.enter_context(patch.object(compiler,'prebootstrap_image_inventory',return_value={'voice-gateway/gateway':old['voice-gateway/gateway']}))
                     patches.enter_context(patch.object(renderer_root,'prove',side_effect=renderer_proof))
                     patches.enter_context(patch.object(actor_root,'preflight',return_value=None))
                     patches.enter_context(patch('nats_root_plan.preflight',return_value={'scripts':{},'plan':{},'binding':{}}))

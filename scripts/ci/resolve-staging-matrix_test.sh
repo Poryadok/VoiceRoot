@@ -40,6 +40,9 @@ run_matrix() {
   ci_only_change="$(grep '^ci_only_change=' "${out}" | head -1 | cut -d= -f2-)"
   promote_from_sha="$(grep '^promote_from_sha=' "${out}" | head -1 | cut -d= -f2-)"
   run_admin="$(grep '^run_admin=' "${out}" | head -1 | cut -d= -f2-)"
+  run_auth="$(grep '^run_auth=' "${out}" | head -1 | cut -d= -f2-)"
+  run_web="$(grep '^run_web=' "${out}" | head -1 | cut -d= -f2-)"
+  run_developer_portal="$(grep '^run_developer_portal=' "${out}" | head -1 | cut -d= -f2-)"
   rm -f "${out}"
 }
 
@@ -116,6 +119,10 @@ echo "== FORCE_FULL builds all =="
 FORCE_FULL=true GO_SERVICES_JSON='[]' run_matrix
 count="$(echo "${build_services}" | jq 'length')"
 [[ "${count}" -eq 23 ]] || fail "expected 23 staging image services, got ${count}"
+[[ "${promote_services}" == '[]' ]] || fail "full build must not promote prior images"
+[[ "${run_auth}" == true && "${run_web}" == true && "${run_admin}" == true && "${run_developer_portal}" == true ]] || fail "full build must publish every non-Go application"
+expected="$(jq -c '[.images[].name] | sort' "${ROOT}/scripts/ci/staging-image-catalog.json")"
+[[ "$(echo "${build_services}" | jq -c 'sort')" == "${expected}" ]] || fail "full build must match the complete catalog"
 assert_contains "${build_services}" gameintegration
 prod_count="$(jq '[.images[] | select((.environments // ["dev", "staging", "prod"]) | index("prod"))] | length' "${ROOT}/scripts/ci/staging-image-catalog.json")"
 [[ "${prod_count}" -eq 22 ]] || fail "expected 22 production image services, got ${prod_count}"

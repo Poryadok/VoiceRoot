@@ -5,6 +5,7 @@ import grp
 import json
 import re
 import os
+import stat
 from pathlib import Path
 import secrets
 import shutil
@@ -29,6 +30,80 @@ def save(path,row):root_save(path,row,limit=128<<20)
 
 def summary(state):
     return {key:state[key] for key in ('operation','phase','status','fence_status','error') if key in state}
+
+def record_source_authority(session,approved,execution):
+    """Record only digests produced by this root-owned source capture."""
+    session.check()
+    if not re.fullmatch(r'[a-f0-9]{12}',session.operation):raise Blocked('bridge_source_capture_invalid')
+    row={'schema':'voice-staging-source-capture-v1','operation':session.operation,
+         'context':copy.deepcopy(session.context),'helper_sha256':session.helper,
+         'approved_sha256':transaction.canonical(approved),'execution_sha256':transaction.canonical(execution)}
+    raw=json.dumps(row,sort_keys=True,separators=(',',':')).encode()
+    parent=os.open(INSTALLED,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        pinfo=os.fstat(parent)
+        if pinfo.st_uid!=0 or pinfo.st_mode&0o022:raise Blocked('bridge_source_capture_directory_invalid')
+        try:os.mkdir('source-authority',0o700,dir_fd=parent);os.fsync(parent)
+        except FileExistsError:pass
+        dfd=os.open('source-authority',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+        try:
+            info=os.fstat(dfd)
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid!=0 or info.st_mode&0o077:
+                raise Blocked('bridge_source_capture_directory_invalid')
+            fd=os.open(session.operation+'.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=dfd)
+            with os.fdopen(fd,'wb') as output:
+                output.write(raw);output.flush();os.fsync(output.fileno())
+            os.fsync(dfd)
+        finally:os.close(dfd)
+    finally:os.close(parent)
+    session.check()
+    return row
+
+def actor_after_realtime_bootstrap(before,after,old_secret,new_secret):
+    """Allow only the bootstrap's proved app-secret RV change in actor proof."""
+    if before is None or before.get('story_schema') is None:
+        if before==after:return after
+        raise Blocked('realtime_bootstrap_actor_changed')
+    try:
+        expected=copy.deepcopy(before)
+        schema=expected['story_schema']
+        first=schema['database_secret'];second=schema['authority']['secret']
+        if (first['name']!='voice-app-secrets' or first['uid']!=old_secret['uid']
+            or second['uid']!=old_secret['uid'] or new_secret['uid']!=old_secret['uid']
+            or first['resourceVersion']!=old_secret['resourceVersion']
+            or second['resourceVersion']!=old_secret['resourceVersion']
+            or not isinstance(new_secret['resourceVersion'],str) or not new_secret['resourceVersion']):
+            raise ValueError()
+        first['resourceVersion']=second['resourceVersion']=new_secret['resourceVersion']
+        candidate=expected.get('compatible_story_candidate')
+        if candidate is not None:candidate['schema_sha256']=transaction.canonical(schema)
+        if expected!=after:raise ValueError()
+        return after
+    except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_actor_changed') from None
+
+def verify_bootstrap_candidate_images(session,images,renderer_authority,first_install,ordinary_target=None):
+    """Reject candidate pins outside the independently selected source images."""
+    allowed=dict(images);renderer={}
+    if renderer_authority is not None:
+        from stage_runtime import HUB
+        try:
+            spec=renderer_authority['descriptor']['target_template']['spec']
+            containers=spec.get('initContainers',[])+spec['containers']
+            renderer={HUB+'/'+c['name']:c['image'] for c in containers}
+            if len(renderer)!=len(containers):raise ValueError()
+        except (KeyError,TypeError,ValueError):raise Blocked('realtime_bootstrap_candidate_invalid') from None
+        allowed.update(renderer)
+    candidate=session.context.get('images')
+    if (not isinstance(candidate,dict) or not candidate
+        or any(key not in allowed or allowed[key]!=value for key,value in candidate.items())):
+        raise Blocked('realtime_bootstrap_candidate_changed')
+    if first_install:
+        expected={key:value for key,value in allowed.items() if key.startswith('voice-gameintegration/')}
+        expected.update(renderer)
+        if not any(key.startswith('voice-gameintegration/') for key in expected) or candidate!=expected:
+            raise Blocked('realtime_bootstrap_candidate_changed')
+    elif ordinary_target is not None:
+        if candidate!={**ordinary_target,**renderer}:raise Blocked('realtime_bootstrap_candidate_changed')
 
 class Actions:
     def resource_scope(self,request):
@@ -139,15 +214,50 @@ class Actions:
         if authority_guard is not None:authority_guard()
         row={'operation':state['operation'],'namespace_uid':state['context']['expected']['namespace_uid'],
             'pvc_uid':state['context']['expected']['source_claim_uid'],'target_sha256':state['target']['manifest_sha256']}
+        successor=state.get('gis_existing_update')
+        if successor is not None:
+            import gis_existing_update as existing
+            if state.get('status')!='PASS':raise Blocked('gis_existing_publication_not_pass')
+            saved=private_json(guard.ROOT/('rollout-'+state['operation'])/'checkpoint.json')
+            if saved!=state:raise Blocked('gis_existing_publication_checkpoint_changed')
+            receipt=successor['receipt'];anchor=receipt['anchor']
+            reference={'operation':state['operation'],'receipt_sha256':receipt['receipt_sha256']}
+            previous=private_json(INSTALLED/'active-release.json')
+            if previous.get('operation')==state['operation']:
+                if (previous.get('gis_first_install_transition')!=anchor
+                    or previous.get('gis_latest_transition')!=reference
+                    or any(previous.get(key)!=value for key,value in row.items())):
+                    raise Blocked('gis_existing_publication_stale')
+                return
+            if previous!=state.get('gis_expected_active'):
+                raise Blocked('gis_existing_publication_stale')
+            if (previous.get('gis_first_install_transition')!=anchor
+                    or receipt.get('predecessor')!=previous.get('gis_latest_transition',anchor)):
+                raise Blocked('gis_existing_publication_stale')
+            original=private_json(guard.ROOT/('rollout-'+anchor['operation'])/'checkpoint.json')
+            existing.load_successors(Kube(),anchor,original['gis_first_install_transition_receipt'],original,reference)
+            row['gis_first_install_transition']=copy.deepcopy(anchor)
+            row['gis_latest_transition']=reference
+            save(INSTALLED/'active-release.json',row)
+            return
         transition=state.get('gis_first_install_transition_receipt')
         if transition is not None:
-            row['gis_first_install_transition']={'operation':state['operation'],
+            reference={'operation':state['operation'],
                 'receipt_sha256':transition['receipt_sha256']}
-        elif state.get('gis_transition') is None:
+            try:previous=private_json(INSTALLED/'active-release.json')
+            except FileNotFoundError:previous={}
+            existing=previous.get('gis_first_install_transition')
+            if existing is not None:
+                if existing!=reference or any(previous.get(key)!=value for key,value in row.items()):
+                    raise Blocked('gis_first_install_publication_stale')
+                return
+            row['gis_first_install_transition']=reference
+        else:
             try:previous=private_json(INSTALLED/'active-release.json')
             except FileNotFoundError:previous={}
             if 'gis_first_install_transition' in previous:
-                row['gis_first_install_transition']=previous['gis_first_install_transition']
+                if all(previous.get(key)==value for key,value in row.items()):return
+                raise Blocked('gis_existing_publication_stale')
         save(INSTALLED/'active-release.json',row)
 
     def _previous_gis_transition(self,kube):
@@ -180,6 +290,9 @@ class Actions:
         self._report('source-capture','STARTED')
         approved=(source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace,provisional_staging=True)
             if provisional_mode else source_authority.capture_source(request['token'],source_run,execution['head_sha'],workspace))
+        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
+            if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
+            record_source_authority(self.tt_session,approved,execution)
         lifecycle=None
         if provisional_mode or repair is not None:
             import provisional
@@ -199,11 +312,19 @@ class Actions:
         renderer_selected=request['mode']=='full' or previous is not None and not full_story and previous.get('renderer_authority') is not None
         import source_plan
         publisher_selected=request['mode'] in ('full','app-only') and source_plan.principal_publisher_source(workspace,compiler.decode_yaml)
+        gis_binding=None
+        if request.get('gis_first_install') is not True:
+            import gis_existing_update
+            gis_binding=gis_existing_update.load_authority(kube)
+            if gis_binding is not None and (provisional_mode or repair is not None or previous is not None):
+                raise Blocked('gis_existing_lifecycle_path_unsupported')
+        gis_extra=['voice-gameintegration'] if gis_binding is not None else []
+        gis_capture_args={'gis_binding':gis_binding} if gis_binding is not None else {}
         stage=RolloutStage.capture(kube,operation,lambda event:None,['voice-'+s for s in frontends]+([HUB] if renderer_selected else [])+
-            ([source_plan.PRINCIPAL_PUBLISHER] if publisher_selected else []))
+            ([source_plan.PRINCIPAL_PUBLISHER] if publisher_selected else [])+gis_extra,**gis_capture_args)
         self._report('workload-capture','COMPLETE')
         gis_transition=None
-        if (request.get('gis_first_install') is not True and request['mode'] in ('full','app-only')
+        if (gis_binding is None and request.get('gis_first_install') is not True and request['mode'] in ('full','app-only')
             and not provisional_mode and repair is None and previous is None):
             gis_transition=self._previous_gis_transition(kube)
         self._report('policy-validation','STARTED')
@@ -266,6 +387,11 @@ class Actions:
         if request.get('gis_first_install') is True:
             if request['mode'] not in ('full','app-only') or 'gameintegration' not in approved['images']:
                 raise Blocked('gis_first_install_admission_invalid')
+            if 'voice-gameintegration' in parameters['enrolled']:
+                raise Blocked('gis_first_install_identity_present')
+            # The separately validated add-only pair is the only not-yet-live
+            # deployment admitted to the source compiler.
+            parameters['enrolled'].append('voice-gameintegration')
             parameters['gis_first_install']=True
         self._report('contract-selection','COMPLETE')
         self._report('nats-preflight','STARTED')
@@ -299,6 +425,29 @@ class Actions:
                 nats_authority=nats_root_plan.preflight(kube,workspace,enrollment,parameters['contract'],compiler.decode_yaml)
                 parameters['bootstrap_target_scripts']={part:row['sha256'] for part,row in nats_authority['scripts'].items()}
         self._report('nats-preflight','COMPLETE')
+        realtime_receipt=None
+        if request['mode'] in ('full','app-only') and not provisional_mode and repair is None and previous is None:
+            import realtime_bootstrap
+            if getattr(self,'tt_session',None) is None:raise Blocked('realtime_bootstrap_session_required')
+            first_install=request.get('gis_first_install') is True
+            ordinary_target=None if first_install else compiler.prebootstrap_image_inventory(workspace,parameters,kube)
+            verify_bootstrap_candidate_images(self.tt_session,images,renderer_authority,first_install,ordinary_target)
+            realtime_receipt=realtime_bootstrap.run_prepare(self,request,approved,execution,workspace,stage)
+            if realtime_receipt is None:raise Blocked('realtime_bootstrap_receipt_missing')
+            if realtime_receipt is not None:
+                schema=realtime_receipt.get('schema') if isinstance(realtime_receipt,dict) else None
+                if schema=='voice-staging-realtime-bootstrap-receipt-v1':
+                    if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
+                    bootstrap_plan=realtime_bootstrap.load_plan(self.tt_session)
+                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+                    if realtime_bootstrap.load_completed(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
+                    actor_authority=actor_after_realtime_bootstrap(actor_authority,refreshed,bootstrap_plan['secret'],realtime_receipt['secret'])
+                elif schema=='voice-staging-realtime-bootstrap-existing-v1':
+                    if realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:raise Blocked('realtime_bootstrap_receipt_changed')
+                    refreshed=actor_root.preflight(kube,workspace,self.code,self.binding,stage,names,compiler.decode_yaml)
+                    if refreshed!=actor_authority or realtime_bootstrap.load_existing(self.tt_session)!=realtime_receipt:
+                        raise Blocked('realtime_bootstrap_actor_changed')
+                else:raise Blocked('realtime_bootstrap_receipt_invalid')
         self._report('target-build','STARTED')
         build=workspace.parent/(operation+'-build');build.mkdir(mode=0o700)
         parameter_path=build/'parameters.json';save(parameter_path,parameters)
@@ -306,6 +455,8 @@ class Actions:
         compiler.main([str(workspace),str(parameter_path),str(output)])
         output.chmod(0o600)
         value=private_json(output)
+        if realtime_receipt is not None:
+            value['target']['realtime_bootstrap_sha256']=transaction.canonical(realtime_receipt)
         if lifecycle is not None and (value['migrations'] or value['nonnats']['actions']
             or nats_authority is not None and nats_authority['plan']['actions']):
             raise Blocked('provisional_migration_forbidden')
@@ -327,7 +478,8 @@ class Actions:
                 provisional.link_parent(guard.ROOT/('rollout-'+repair['operation']),repair,operation)
         lifecycle_args={'lifecycle':lifecycle} if lifecycle is not None else {}
         if getattr(self,'tt_session',None) is not None:lifecycle_args['resource_session']=self.tt_session
-        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,**lifecycle_args)
+        if realtime_receipt is not None:lifecycle_args['realtime_bootstrap_receipt']=realtime_receipt
+        state=root_cli.prepare_value(value,self.code,self.binding,operation,before_fence=authority_before_fence,nats_authority=nats_authority,actor_authority=actor_authority,actor_services=names,renderer_authority=renderer_authority,gis_source_authority=(approved if request.get('gis_first_install') is True or gis_binding is not None else None),gis_source_root=(workspace if request.get('gis_first_install') is True else None),gis_source_capture=(approved['source_files'] if request.get('gis_first_install') is True else None),gis_transition=gis_transition,gis_binding=gis_binding,**lifecycle_args)
         base=guard.ROOT/('rollout-'+operation)
         state['service_actor_authority']=actor_authority
         state['service_actor_services']=names
@@ -542,6 +694,8 @@ class Actions:
         import expired_recovery
         import paused_recovery
         base,state=self.state(request['operation'])
+        if state.get('gis_binding') is not None:
+            raise Blocked('gis_existing_recovery_unsupported')
         if request['operation']!=paused_recovery.OPERATION:
             raise Blocked('expired_recovery_operation_changed')
         source_run,execution=self._dispatcher(request)
@@ -572,6 +726,8 @@ class Actions:
         import expired_admission
         import expired_recovery
         base,state=self.state(request['operation'])
+        if state.get('gis_binding') is not None:
+            raise Blocked('gis_existing_recovery_unsupported')
         source_run,execution=self._dispatcher(request)
         execution['nonce']=request['nonce']
         workspace=INSTALLED/'sources'/('finish-'+request['nonce'])

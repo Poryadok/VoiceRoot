@@ -101,18 +101,25 @@ class PublicRecoveryTests(unittest.TestCase):
         self.assertIn('deployment_report.py',bundle.ROLLOUT)
         self.assertIn('nats_deliver_all.py',bundle.ROLLOUT)
         self.assertIn('release_policy_wiring.py',bundle.ROLLOUT)
-        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,86)
+        self.assertIn('gis_existing_update.py',bundle.ROLLOUT)
+        self.assertIn('realtime_bootstrap.py',bundle.ROLLOUT)
+        self.assertIn('realtime_bootstrap_existing.py',bundle.ROLLOUT)
+        self.assertEqual(len(bundle.KNOWN)+len(bundle.ROLLOUT)+5,89)
         self.assertIn('provisional.py',bundle.ROLLOUT)
         with tempfile.TemporaryDirectory() as folder:
             code=Path(folder)/'code';code.mkdir(mode=0o700)
             manifest={}
-            for index in range(86):
+            for index in range(89):
                 name='module'+str(index)+'.py';raw=('pinned source '+str(index)).encode()
                 path=code/name;path.write_bytes(raw);path.chmod(0o440);manifest[name]=hashlib.sha256(raw).hexdigest()
             def write():
                 path=code/'capture-manifest.json'
                 if path.exists():path.chmod(0o600)
                 path.write_text(json.dumps(manifest));path.chmod(0o440)
+            last=[(name,manifest.pop(name)) for name in ('module86.py','module87.py','module88.py')]
+            write();self.assertEqual(root_cli.code_binding(code),manifest)
+            manifest.update(last[:1]);write();self.assertEqual(root_cli.code_binding(code),manifest)
+            manifest.update(last[1:])
             write();self.assertEqual(root_cli.code_binding(code),manifest)
             manifest['extra.py']='a'*64;write()
             with self.assertRaises(root_cli.Blocked):root_cli.code_binding(code)
