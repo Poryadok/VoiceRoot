@@ -48,7 +48,7 @@ class TransferTests(unittest.TestCase):
             root.mkdir()
             with patch.object(runner.snapshot, 'capture', return_value=source), \
                  patch.object(runner.snapshot, 'verify_materialized'), \
-                 patch.object(runner, '_verify_workspace'):
+                 patch.object(runner, '_verify_workspace'), patch.object(runner, '_verify_modules'):
                 report = runner.discover_packages(ListOwner(), 'owned', root, source, root / 'copy',
                     'a' * 64, 'src/backend', Path(directory) / 'output')
             self.assertEqual(report['packages_with_tests'], ['example.test/module'])
@@ -66,7 +66,8 @@ class TransferTests(unittest.TestCase):
             root = Path(directory) / 'root'
             root.mkdir()
             with patch.object(runner.snapshot, 'capture', return_value=source), \
-                 patch.object(runner.snapshot, 'verify_materialized'), patch.object(runner, '_verify_workspace'):
+                 patch.object(runner.snapshot, 'verify_materialized'), patch.object(runner, '_verify_workspace'), \
+                 patch.object(runner, '_verify_modules'):
                 with self.assertRaisesRegex(ValueError, 'outside'):
                     runner.discover_packages(ListOwner(), 'owned', root, source, root / 'copy',
                         'a' * 64, 'src/backend', Path(directory) / 'output')
@@ -90,7 +91,8 @@ class TransferTests(unittest.TestCase):
             owner = GoOwner()
             with patch.object(runner.snapshot, 'capture', return_value=source), \
                  patch.object(runner.snapshot, 'verify_materialized'), \
-                 patch.object(runner, '_verify_workspace') as verify_workspace:
+                 patch.object(runner, '_verify_workspace') as verify_workspace, \
+                 patch.object(runner, '_verify_modules') as verify_modules:
                 report = runner.run_package_diagnostic(owner, 'owned', root, source, root / 'copy',
                     'a' * 64, 'src/backend', ['example.test/module'], Path(directory) / 'output')
             self.assertEqual(report['status'], 'incomplete')
@@ -98,6 +100,7 @@ class TransferTests(unittest.TestCase):
             self.assertIn('GOPROXY=off', owner.command[2])
             self.assertIn('example.test/module', owner.command)
             self.assertEqual(verify_workspace.call_count, 2)
+            self.assertEqual(verify_modules.call_count, 2)
 
     def test_go_diagnostic_rejects_changed_source_and_invalid_package(self):
         source = {'head': 'a' * 40}
@@ -133,10 +136,23 @@ class TransferTests(unittest.TestCase):
             root.mkdir()
             with patch.object(runner.snapshot, 'capture', side_effect=[source, {'head': 'b' * 40}]), \
                  patch.object(runner.snapshot, 'verify_materialized'), \
-                 patch.object(runner, '_verify_workspace'):
+                 patch.object(runner, '_verify_workspace'), patch.object(runner, '_verify_modules'):
                 with self.assertRaisesRegex(ValueError, 'source changed during'):
                     runner.run_package_diagnostic(FakeOwner(), 'owned', root, source, root / 'copy',
                         'a' * 64, 'src/backend', ['example.test/module'], Path(directory) / 'output')
+
+    def test_module_verifier_rejects_failure_and_unexpected_output(self):
+        class VerifyOwner:
+            def __init__(self, status, output):
+                self.status, self.output = status, output
+            def execute(self, name, command, stdout, stderr, timeout):
+                stdout.write(self.output)
+                return self.status
+        runner._verify_modules(VerifyOwner(0, b'all modules verified\n'), 'owned', 'module')
+        with self.assertRaisesRegex(ValueError, 'verification failed'):
+            runner._verify_modules(VerifyOwner(1, b''), 'owned', 'module')
+        with self.assertRaisesRegex(ValueError, 'unexpected'):
+            runner._verify_modules(VerifyOwner(0, b''), 'owned', 'module')
 
     def test_replaced_archive_path_prevents_remote_extraction(self):
         with tempfile.TemporaryDirectory() as directory:

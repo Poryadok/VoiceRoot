@@ -102,6 +102,24 @@ def _module_path(module_dir):
     return '/workspace/source/' + module_dir
 
 
+def _verify_modules(owner, name, module_dir):
+    """Reject changed cached module archives or extracted contents.
+
+    Go's verifier trusts cached ziphash files; acquiring and binding those
+    hashes to the captured source remains a separate preflight requirement.
+    """
+    _module_path(module_dir)
+    command = ['sh', '-c', 'cd "/workspace/source/$1" && '
+               'exec env GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local GOFLAGS=-mod=readonly '
+               'GOMODCACHE=/workspace/go-mod go mod verify', 'voice-go-verify', module_dir]
+    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+        if owner.execute(name, command, stdout, stderr, 1800) != 0:
+            raise ValueError('Go module cache verification failed')
+        stdout.seek(0)
+        if stdout.read() != b'all modules verified\n':
+            raise ValueError('unexpected Go module cache verification result')
+
+
 def discover_packages(owner, name, root, source, source_copy, archive_digest, module_dir, output):
     """Discover the complete current module inventory offline in the owned source."""
     module_path = _module_path(module_dir)
@@ -112,6 +130,7 @@ def discover_packages(owner, name, root, source, source_copy, archive_digest, mo
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed before Go discovery')
+    _verify_modules(owner, name, module_dir)
     _verify_workspace(owner, name, root, source, archive_digest)
     output.mkdir(parents=True)
     command = ['sh', '-c', 'cd "/workspace/source/$1" && '
@@ -123,6 +142,7 @@ def discover_packages(owner, name, root, source, source_copy, archive_digest, mo
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed during Go discovery')
     snapshot.verify_materialized(root, source, source_copy)
+    _verify_modules(owner, name, module_dir)
     _verify_workspace(owner, name, root, source, archive_digest)
     if result != 0:
         raise ValueError('Go package discovery failed')
@@ -184,6 +204,7 @@ def run_package_diagnostic(owner, name, root, source, source_copy, archive_diges
     snapshot.verify_materialized(root, source, source_copy)
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed before Go diagnostic')
+    _verify_modules(owner, name, module_dir)
     _verify_workspace(owner, name, root, source, archive_digest)
     output.mkdir(parents=True)
     command = ['sh', '-c',
@@ -196,6 +217,7 @@ def run_package_diagnostic(owner, name, root, source, source_copy, archive_diges
     if snapshot.capture(root, source['head']) != source:
         raise ValueError('source changed during Go diagnostic')
     snapshot.verify_materialized(root, source, source_copy)
+    _verify_modules(owner, name, module_dir)
     _verify_workspace(owner, name, root, source, archive_digest)
     if result != 0:
         raise ValueError('Go diagnostic command failed')
