@@ -165,6 +165,7 @@ def run(root, source, base, output, go_binary='go', buf_binary='buf'):
             ('buf-breaking', [str(buf), 'breaking', 'protos', '--against', str(output / 'baseline/protos')], snapshot, env),
             ('go-codegen-selftest', [str(bash), 'scripts/ci/buf-go-pb-check_test.sh'], snapshot, env),
             ('go-codegen', [str(bash), 'scripts/ci/buf-go-pb-check.sh'], snapshot, git_env),
+            ('auth-proto-sync', [str(bash), 'scripts/ci/check-auth-proto-sync.sh'], snapshot, env),
             ('auth-compile', [str(maven), '-B', '-DskipTests', 'compile'], snapshot / 'src/backend/auth', env),
             ('r23-contract', [str(go), 'test', '-json', '-count=1', '-v', './...'], snapshot / 'protos/voice/r23_contract_test', env),
         ]

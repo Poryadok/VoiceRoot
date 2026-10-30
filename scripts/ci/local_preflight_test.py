@@ -48,7 +48,7 @@ class LocalPreflightTests(unittest.TestCase):
         diagnostic = {'status': 'incomplete', 'source': self.source, 'base': 'c' * 40,
                       'commands': [{'name': name, 'exit_code': 0} for name in
                                    ('buf-lint', 'buf-format', 'buf-breaking', 'go-codegen-selftest',
-                                    'go-codegen', 'auth-compile', 'r23-contract')],
+                                    'go-codegen', 'auth-proto-sync', 'auth-compile', 'r23-contract')],
                       'r23': {'passed': 1, 'skipped': []}}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
