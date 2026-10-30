@@ -662,11 +662,14 @@ pkg non-short job, integrations, lint and other unimplemented checks remain
 when all implemented diagnostics succeed: it cannot authorize a PR handoff.
 
 When the plan selects `protobuf`, the local diagnostic runs Buf lint, format,
-breaking against the captured immutable base, and the R23 Go contract suite on
-an isolated source snapshot. It records tool versions, binary hashes, command
-logs and skipped tests. This diagnostic is still incomplete: Java generated
-consumers, generated-code drift, Auth proto sync, dependency provenance and
-consumer compilation are not yet complete preflight evidence.
+breaking against the captured immutable base, verifies Go generated-code drift
+with a private Git index, compiles Auth with a private Maven
+repository, and runs the R23 contract suite including its Java generated
+consumer on an isolated source snapshot. It records tool versions, binary hashes,
+command logs and test counts, and requires no skipped R23 tests. The output
+directory must not contain whitespace. This diagnostic is still incomplete:
+Auth proto sync, dependency provenance and other consumer
+compilation are not yet complete preflight evidence.
 
 The separate `flutter-music-proof` job retains the Music capture and playback
 artifacts. Its selector includes frontend sources, shared test support, assets,

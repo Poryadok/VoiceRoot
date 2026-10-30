@@ -47,8 +47,9 @@ class LocalPreflightTests(unittest.TestCase):
         plan = {'source': self.source, 'checks': {'protobuf': ['contract changed']}}
         diagnostic = {'status': 'incomplete', 'source': self.source, 'base': 'c' * 40,
                       'commands': [{'name': name, 'exit_code': 0} for name in
-                                   ('buf-lint', 'buf-format', 'buf-breaking', 'r23-contract')],
-                      'r23': {'passed': 1, 'skipped': [['package', 'Java']]}}
+                                   ('buf-lint', 'buf-format', 'buf-breaking', 'go-codegen-selftest',
+                                    'go-codegen', 'auth-compile', 'r23-contract')],
+                      'r23': {'passed': 1, 'skipped': []}}
         with patch.object(local_preflight.affected_check_plan, 'build_local_plan', return_value=plan), \
              patch.object(local_preflight.local_source_snapshot, 'capture', return_value=self.source), \
              patch.object(local_preflight.local_proto_execution, 'run', return_value=diagnostic) as proto:

@@ -8,6 +8,21 @@ import local_proto_execution as proto
 
 
 class LocalProtoExecutionTests(unittest.TestCase):
+    def test_java_consumer_requires_named_pass_and_no_skips(self):
+        package = 'voice/r23-contract-test'
+        name = 'TestR23GeneratedRuntimeConsumers/Java'
+        def stream(action):
+            events = [{'Action': 'start', 'Package': package},
+                      {'Action': 'run', 'Package': package, 'Test': name},
+                      {'Action': action, 'Package': package, 'Test': name},
+                      {'Action': 'pass', 'Package': package}]
+            return ''.join(json.dumps(item) + '\n' for item in events).encode()
+        self.assertEqual(proto.r23_java_summary(stream('pass'), 0)['skipped'], [])
+        with self.assertRaises(ValueError):
+            proto.r23_java_summary(stream('skip'), 0)
+        with self.assertRaises(ValueError):
+            proto.r23_java_summary(stream('pass').replace(name.encode(), b'Other'), 0)
+
     def test_r23_event_validation_records_skip_and_rejects_partial_or_failure(self):
         package = 'voice/r23-contract-test'
         events = [

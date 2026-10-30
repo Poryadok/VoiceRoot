@@ -35,11 +35,12 @@ def run(root, base, head, output, flutter, head_ref='', go_binary='go', buf_bina
             if (diagnostic.get('status') != 'incomplete' or diagnostic.get('source') != plan['source'] or
                     diagnostic.get('base') != base or not isinstance(commands, list) or
                     [item.get('name') for item in commands if isinstance(item, dict)] !=
-                    ['buf-lint', 'buf-format', 'buf-breaking', 'r23-contract'] or
+                    ['buf-lint', 'buf-format', 'buf-breaking', 'go-codegen-selftest', 'go-codegen',
+                     'auth-compile', 'r23-contract'] or
                     any(item.get('exit_code') != 0 for item in commands) or
                     not isinstance(diagnostic.get('r23'), dict) or
                     type(diagnostic['r23'].get('passed')) is not int or diagnostic['r23']['passed'] < 1 or
-                    not isinstance(diagnostic['r23'].get('skipped'), list)):
+                    diagnostic['r23'].get('skipped') != []):
                 raise ValueError('protobuf diagnostic failed or does not match the planned source and base')
             report['checks']['protobuf'] = {'status': 'diagnostic', 'report': 'protobuf/diagnostic.json'}
         if 'backend-go' in plan['checks']:
